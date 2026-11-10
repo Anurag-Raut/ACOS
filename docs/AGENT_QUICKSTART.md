@@ -295,3 +295,55 @@ it, your binary predates the `gfx_vector` work and should be rebuilt.
 shallow one-line blocker, and now also `details.root_cause` for a wrapped Java
 exception, so an agent can link the blocker without reading the `java-tail` by
 hand.
+
+---
+
+## 7. Flutter APKs (`flutter` field, semantics, the current boundary)
+
+Flutter apps ship no framework `View` tree; the engine draws everything itself.
+ACOS recognises them structurally and (in W137-A) exposes the pieces needed for
+the same `launch → observe → tap` loop, but the driver is not wired end to end
+yet. Read this before promising a Flutter result.
+
+### 7.1 Recognise one
+
+```bash
+acos inspect fixtures/build/apps/flutter-hello.apk --json
+# result.flutter = {
+#   "detected": true,
+#   "engine_abis": ["x86_64"],
+#   "snapshot_abis": ["x86_64"],
+#   "has_flutter_assets": true
+# }
+```
+
+Detection is structural (`lib/<abi>/libflutter.so`, `lib/<abi>/libapp.so`,
+`assets/flutter_assets/`), never a manifest guess. A framework APK reports
+`"detected": false`.
+
+### 7.2 What exists in the runtime
+
+The `acos-jni` crate now owns the two agent-facing primitives ([`results/flutter/FLUTTER_PARITY.md`](../results/flutter/FLUTTER_PARITY.md) §W137-A has the
+full wire format):
+
+* `acos_jni::flutter::detect*` — classification;
+* `acos_jni::flutter::decode_semantics_update(bytes, strings, attr_buffers)` —
+  a byte-for-byte port of the engine's `AccessibilityBridge` decoder, yielding
+  `SemanticsNode { id, rect, label, flags, actions, children, … }` with
+  `text()`, `bounds()`, `clickable()`, `enabled()`. This is the Flutter UI tree;
+  there is no `View` hierarchy to read;
+* `acos_jni::flutter::tap_packet(x, y, ts)` — the 576-byte `down`+`up`
+  `PointerData` packet; the caller scales by `devicePixelRatio` and passes
+  `packet.len()` as `position`.
+
+### 7.3 Current boundary (2026-11-11, HEAD `db844bd`)
+
+`acos launch <flutter.apk> --native`, `acos observe`, `acos tap --text` and the
+MCP session tools do **not** drive the Flutter engine yet: the driver (`Vm` +
+raw loader + software GLES + the engine's `ALooper` pump) still lives in the
+`crates/acos-jni/tests/flutter_hello.rs` test harness. That harness is the
+working evidence — it presents two 1080×2400 frames and the Increment tap takes
+the counter `0 → 1` (masked SSIM 0.9987 / 0.9968). Productising it means moving
+that driver into a `FlutterSession` held by the confined child (see
+FLUTTER_PARITY.md §W137-A "Not done"). Do not report a Flutter `pass` until that
+wiring lands.

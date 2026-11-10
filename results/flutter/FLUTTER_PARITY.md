@@ -280,3 +280,137 @@ gdb --batch -x tools/flutter-engine-gdb.py -ex run --args \
   `DARTINVOKEFIELD`), 47 total.
 * `results/flutter/w130a-frame-0.png`, `w130a-frame-tap.png`,
   `w130a-parity.json`, `w130a-engine-gdb.log`.
+
+---
+
+# W137-A — productisation, part 1: Flutter detection, the semantics decoder, and the pointer packet
+
+**Date:** 2026-11-11 (wave W137-A). **Base:** clean worktree of `HEAD`
+(`db844bd`, the W130-A commit). Built with `CARGO_TARGET_DIR=.cache/target-w137a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `tools/guarded.sh`. **Not committed.**
+
+This wave starts turning the W128-A/W130-A **test harness** into a product
+surface. The end goal (`acos launch <flutter.apk> --native` → frame in the
+FrameStore → semantic tree → `acos tap` → second frame) needs the engine to run
+in the confined child and a semantics decoder; this wave lands the
+independently-testable half of that and records the exact wire format, so the
+next wave can wire the driver without re-deriving it.
+
+## 1. What landed
+
+### 1.1 `acos-jni::flutter` — detection
+
+`acos_jni::flutter::detect(apk)` / `detect_bytes(zip)` recognise a Flutter APK
+**structurally** from its zip layout: `lib/<abi>/libflutter.so` (engine),
+`lib/<abi>/libapp.so` (AOT snapshot) and `assets/flutter_assets/`. It returns
+`FlutterApk { engine_abis, snapshot_abis, has_flutter_assets }`. A plain Android
+APK is never misclassified (unit-tested).
+
+`acos inspect` now carries a `flutter` object and a text line:
+
+```
+$ acos inspect fixtures/build/apps/flutter-hello.apk
+  ...
+  flutter: yes (engine abis ["x86_64"])
+```
+
+and for a framework APK:
+
+```
+$ acos inspect fixtures/build/apps/counter.apk
+  ...
+  (no flutter line; JSON `flutter.detected = false`)
+```
+
+### 1.2 `acos-jni::flutter::decode_semantics_update` — the semantic tree
+
+Flutter has no `View` tree, so the agent tree must come from the engine's
+**semantics** stream (`FlutterJNI.setSemanticsEnabled(true)` →
+`nativeSetSemanticsEnabled`), delivered to the embedder as a custom
+little-endian `ByteBuffer` and normally decoded by
+`io.flutter.view.AccessibilityBridge`. That decoder was extracted from the
+Flutter 3.47 embedding **inside the fixture APK**
+(`dexdump -d classes.dex` → `AccessibilityBridge$SemanticsNode.updateWith`) and
+ported byte-for-byte to Rust. The port is the authority-matched reader; it
+consumes every field, so a future driver can decode real updates without a
+second source of truth.
+
+Wire format (`updateSemantics(buffer, strings, attrBuffers)`): repeatedly
+
+```
+i32 node_id
+  i64 flags        # SemanticsFlag bitset (dart:ui bit positions)
+  i32 actions      # SemanticsAction bitset
+  i32 max_value_length, current_value_length
+  i32 text_selection_base, text_selection_extent
+  i32 platform_view_id, scroll_children, scroll_index, traversal_parent
+  f32 scroll_position, scroll_extent_max, scroll_extent_min
+  i32 role
+  string identifier, label, attrs(label)
+  string value, attrs(value)
+  string increasedValue, attrs; decreasedValue, attrs
+  string hint, attrs; tooltip; linkUrl; locale; minValue; maxValue
+  i32 heading_level, text_direction
+  f32 left, top, right, bottom
+  f32 transform[16]; f32 hit_test_transform[16]
+  i32 n; i32 children_in_traversal_order[n]
+  i32 n; i32 children_in_hit_test_order[n]
+  i32 n; i32 custom_action_ids[n]
+```
+
+`string` = `i32 index`; `-1` means null; otherwise `strings[index]`.
+`attrs` = `i32 count`; `-1` means null; else `count × (i32 start, i32 end,
+i32 kind, [kind==locale: i32 buffer_index])`.
+
+`SemanticsNode` exposes `text()` (label → value), `bounds()`
+(`[x0,y0,x1,y1]`), `clickable()` (`action::TAP`), `enabled()` and
+`has_flag`/`has_action` over the full `dart:ui` bitsets. Flags/actions are
+exported as bit constants in `flutter::flag` / `flutter::action`, so the ACOS
+tree can be built without the engine vocabulary leaking.
+
+### 1.3 `acos-jni::flutter::tap_packet` — the pointer packet
+
+`tap_packet(x, y, timestamp_micros)` builds the exact two-record
+`PointerData` (`down`+`up`, 36 LE field each, 576 bytes) that W130-A proved
+reaches `PlatformDispatcher.onPointerDataPacket`. It is the product form of the
+`FlutterProbe.buildTap` encoder; the caller applies `devicePixelRatio` and
+passes `packet.len()` as the `position` argument (the W128-A empty-packet bug).
+
+## 2. Tests
+
+| suite | result |
+|---|---|
+| `cargo test -p acos-jni --lib` | **21 pass / 0 fail** (8 new: detection, decoder, truncation, tap packet) |
+| `cargo clippy -p acos-jni -p acos-cli -p acos-mcp --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check --workspace --all-targets` | **clean** |
+| `cargo test -p acos-jni --test flutter_hello` | **2 pass / 0 fail** — W130-A e2e reproduced unchanged (`global_ssim 0.9987 / 0.9968`, tap delta 160 px at `[134,231,146,248]`) |
+
+## 3. Not done (honest boundary)
+
+The driver and the product wiring are **not** finished in this wave. Still
+missing, in dependency order:
+
+1. **Run the engine in the confined child.** The W130-A child lives in the
+   `flutter_hello` test, not in a product module. It must move to a
+   `FlutterSession` the `acos-mcp` confined child owns, so `acos launch --native`
+   publishes frames into the session `FrameStore`.
+2. **Semantics plumbing.** `FlutterJNI.setSemanticsEnabled(true)` +
+   `nativeSetSemanticsEnabled`, capture the `updateSemantics` buffer/strings/
+   attribute buffers at the JNI boundary, feed `decode_semantics_update`, and
+   map nodes to the ACOS tree (with `--text` lookup over `label`).
+3. **Tap dispatch.** Call `FlutterJNI.dispatchPointerDataPacket` with
+   `tap_packet` from the driver; `acos tap --text Increment` = semantics lookup
+   → node centre → packet.
+4. **CLI/MCP/session routing.** `acos launch`/`observe`/`tap`/`session` and the
+   MCP tools must route a detected Flutter APK to the driver instead of the
+   framework launch ladder.
+5. **`acos parity --flutter`.** A preset for the `[0,0,1080,108]` status and
+   `[0,2304,1080,2400]` navigation masks over the existing `acos frame-diff
+   --mask` machinery (this part already works; only the preset and the
+   tree-vs-uiautomator comparison across the process boundary are missing).
+6. **Fixture-gated product e2e.** `launch → frame → tap → frame2` driven through
+   the CLI/MCP (the W130-A test remains the evidence that the engine path works;
+   it is not a product path).
+
+This is recorded rather than papered over: `acos inspect` reports Flutter
+honestly, and the launch ladder does **not** claim a Flutter pass.

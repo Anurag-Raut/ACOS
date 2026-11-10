@@ -46,6 +46,7 @@
 pub mod broker;
 pub mod dispatch;
 pub mod error;
+pub mod flutter;
 pub mod jni;
 pub mod load;
 pub mod gles_host;

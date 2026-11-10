@@ -294,8 +294,22 @@ fn load_and_build(path: &PathBuf) -> Result<Value, ApkError> {
         }),
     };
 
+    // W137-A: structural Flutter detection (engine `.so` / `flutter_assets`),
+    // so an agent can tell a Flutter APK from a framework one before launch.
+    let flutter = acos_jni::flutter::detect(path).ok().flatten();
+    let flutter_json = match &flutter {
+        Some(info) => json!({
+            "detected": true,
+            "engine_abis": info.engine_abis,
+            "snapshot_abis": info.snapshot_abis,
+            "has_flutter_assets": info.has_flutter_assets,
+        }),
+        None => json!({"detected": false}),
+    };
+
     let result = json!({
         "apk_path": apk.source,
+        "flutter": flutter_json,
         "apk_size_bytes": apk.raw_bytes().len(),
         "zip_entries": apk.entries.len(),
         "package": manifest.package,
@@ -692,6 +706,17 @@ fn print_text(result: &Value) {
     let launcher = s("launcher_activity");
     if !launcher.is_empty() {
         println!("  launcher activity: {launcher}");
+    }
+    if result
+        .pointer("/flutter/detected")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let abis = result
+            .pointer("/flutter/engine_abis")
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        println!("  flutter: yes (engine abis {abis})");
     }
 
     if let Some(perms) = result.get("permissions").and_then(Value::as_array) {
