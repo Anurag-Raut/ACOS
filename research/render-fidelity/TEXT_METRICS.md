@@ -49,3 +49,33 @@ The A8 mask cache key includes the axis coordinates, and the shaping cache key
 now includes the effective variations, so `wght=400` and `wght=700` never
 collide. `cargo test -p acos-render` covers strictly-increasing coverage for
 `wght` 100..900 and instance-cache correctness.
+
+## Text-draw speed (T-33 regression check)
+
+Axis support must not cost steady-state draw speed. Same host, 3 runs each,
+`"Hello ACOS"` at 36.75px, 60 iterations:
+
+| Path | before p50 | after p50 | delta |
+|---|---:|---:|---:|
+| FreeType A8 mask | 12.20 us | 12.31 us | +0.9% |
+| `ttf-parser` outline + tiny-skia | 61.65 us | 66.20 us | +7.4% |
+
+The mask path is the ADR-0019 text path and stays at ~12 us (**5.4x** the
+outline path; ADR-0019 recorded 4.8x within host noise). Raw runs and method:
+`../../results/render/text-draw-bench.md`.
+
+## Known gaps (honest tier labels)
+
+* **Fallback selection** is script-agnostic: `FontCollection::fallback_chain`
+  puts the requested family first and then walks the `fonts.xml` order, and
+  `font_for_char` takes the first family with a glyph. The `<family lang="...">`
+  attribute is parsed into `Family::lang` but not used to order the chain by
+  script/locale. The ART fixtures are all en-US Latin, so the golden values do
+  not exercise fallback; CJK/Indic locale ordering is untested here.
+* **Vertical metrics under variation**: `font_metrics_for` reads the default
+  instance's `hhea`/`OS/2` values and does not re-read them after
+  `FT_Set_Var_Design_Coordinates`. For Roboto's `ital`/`wdth`/`wght` axes the
+  vertical metrics do not change, so the table above is unaffected; an `opsz`
+  face would need instance-aware metrics.
+* **Height**: `top`/`bottom` are set equal to `ascent`/`descent`, so the View
+  height delta (13-16%) is the known font-padding gap, not a shaping error.

@@ -23,6 +23,41 @@ use acos_render::RenderContext;
 
 const DENSITY: f32 = 2.625;
 
+/// Benchmark numbers live in `results/render/text-draw-bench.md`; this is the
+/// summary appended to the generated parity report so `TEXT_METRICS.md` is
+/// self-contained.
+const BENCH_SECTION: &str = r#"
+## Text-draw speed (T-33 regression check)
+
+Axis support must not cost steady-state draw speed. Same host, 3 runs each,
+`"Hello ACOS"` at 36.75px, 60 iterations:
+
+| Path | before p50 | after p50 | delta |
+|---|---:|---:|---:|
+| FreeType A8 mask | 12.20 us | 12.31 us | +0.9% |
+| `ttf-parser` outline + tiny-skia | 61.65 us | 66.20 us | +7.4% |
+
+The mask path is the ADR-0019 text path and stays at ~12 us (**5.4x** the
+outline path; ADR-0019 recorded 4.8x within host noise). Raw runs and method:
+`../../results/render/text-draw-bench.md`.
+
+## Known gaps (honest tier labels)
+
+* **Fallback selection** is script-agnostic: `FontCollection::fallback_chain`
+  puts the requested family first and then walks the `fonts.xml` order, and
+  `font_for_char` takes the first family with a glyph. The `<family lang="...">`
+  attribute is parsed into `Family::lang` but not used to order the chain by
+  script/locale. The ART fixtures are all en-US Latin, so the golden values do
+  not exercise fallback; CJK/Indic locale ordering is untested here.
+* **Vertical metrics under variation**: `font_metrics_for` reads the default
+  instance's `hhea`/`OS/2` values and does not re-read them after
+  `FT_Set_Var_Design_Coordinates`. For Roboto's `ital`/`wdth`/`wght` axes the
+  vertical metrics do not change, so the table above is unaffected; an `opsz`
+  face would need instance-aware metrics.
+* **Height**: `top`/`bottom` are set equal to `ascent`/`descent`, so the View
+  height delta (13-16%) is the known font-padding gap, not a shaping error.
+"#;
+
 fn workspace_path(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel)
 }
@@ -90,12 +125,54 @@ struct Case {
 }
 
 const CASES: &[Case] = &[
-    Case { app: "hello-views", label: "title", text: "Hello ACOS", size_sp: 14.0, id: "dev.acos.fixtures.helloviews:id/title", by_text: "" },
-    Case { app: "hello-views", label: "result", text: "clicks: 0", size_sp: 14.0, id: "dev.acos.fixtures.helloviews:id/result", by_text: "" },
-    Case { app: "counter", label: "count", text: "0", size_sp: 14.0, id: "dev.acos.fixtures.counter:id/count", by_text: "" },
-    Case { app: "hello-views", label: "app-title", text: "Hello Views", size_sp: 20.0, id: "", by_text: "Hello Views" },
-    Case { app: "counter", label: "app-title", text: "Counter", size_sp: 20.0, id: "", by_text: "Counter" },
-    Case { app: "todo-list", label: "app-title", text: "Todo List", size_sp: 20.0, id: "", by_text: "Todo List" },
+    Case {
+        app: "hello-views",
+        label: "title",
+        text: "Hello ACOS",
+        size_sp: 14.0,
+        id: "dev.acos.fixtures.helloviews:id/title",
+        by_text: "",
+    },
+    Case {
+        app: "hello-views",
+        label: "result",
+        text: "clicks: 0",
+        size_sp: 14.0,
+        id: "dev.acos.fixtures.helloviews:id/result",
+        by_text: "",
+    },
+    Case {
+        app: "counter",
+        label: "count",
+        text: "0",
+        size_sp: 14.0,
+        id: "dev.acos.fixtures.counter:id/count",
+        by_text: "",
+    },
+    Case {
+        app: "hello-views",
+        label: "app-title",
+        text: "Hello Views",
+        size_sp: 20.0,
+        id: "",
+        by_text: "Hello Views",
+    },
+    Case {
+        app: "counter",
+        label: "app-title",
+        text: "Counter",
+        size_sp: 20.0,
+        id: "",
+        by_text: "Counter",
+    },
+    Case {
+        app: "todo-list",
+        label: "app-title",
+        text: "Todo List",
+        size_sp: 20.0,
+        id: "",
+        by_text: "Todo List",
+    },
 ];
 
 struct Measured {
@@ -171,7 +248,9 @@ fn text_metrics_parity_vs_art() {
             variations: Vec::new(),
         };
         let mut engine = TextEngine::new(fonts.clone());
-        let tight = engine.text_bounds(&text, &style).map(|r| (r.width(), r.height()));
+        let tight = engine
+            .text_bounds(&text, &style)
+            .map(|r| (r.width(), r.height()));
 
         rows.push(Measured {
             app: case.app,
@@ -287,6 +366,7 @@ now includes the effective variations, so `wght=400` and `wght=700` never\n\
 collide. `cargo test -p acos-render` covers strictly-increasing coverage for\n\
 `wght` 100..900 and instance-cache correctness.\n",
     );
+    body.push_str(BENCH_SECTION);
     let _ = std::fs::write(dir.join("TEXT_METRICS.md"), body);
 }
 
