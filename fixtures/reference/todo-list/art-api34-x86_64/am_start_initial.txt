@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.todolist/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.todolist/.MainActivity
+TotalTime: 431
+WaitTime: 433
+Complete

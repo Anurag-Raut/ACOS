@@ -1,0 +1,3 @@
+android.widget.TextView |  | Multi Activity | [42,166][355,237]
+android.widget.TextView | dev.acos.fixtures.multiactivity:id/received | Received: Hello | [42,317][295,368]
+android.widget.Button | dev.acos.fixtures.multiactivity:id/finish | Finish | [42,368][273,494]

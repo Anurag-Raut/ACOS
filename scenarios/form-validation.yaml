@@ -1,0 +1,151 @@
+# form-validation: EditText validation, inline error, Toast, AlertDialog.
+#
+# Expected values come from fixtures/reference/form-validation/art-api34-x86_64/
+# (1080x2400 @ 420 dpi). The success dialog uses android:id/message.
+version: 1
+name: form-validation
+description: >-
+  Launch form-validation, submit empty (Name is required), name only (Email is
+  required), a malformed email (Invalid email) and finally a valid form which
+  raises the "Submitted: Ada" AlertDialog; verify the AcosForm log order.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: submit}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: name}
+      text: {exact: Name}
+      bounds: [42, 317, 1038, 435]
+
+  - assert_text:
+      selector: {id: email}
+      text: {exact: Email}
+      bounds: [42, 435, 1038, 553]
+
+  - assert_text:
+      selector: {id: submit}
+      text: {exact: Submit}
+      bounds: [42, 553, 273, 679]
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  # ---- empty form --------------------------------------------------------
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^validation_failed reason=name message=Name is required$'
+
+  - assert_text:
+      selector: {id: error}
+      text: {exact: "Name is required"}
+      bounds: [42, 679, 323, 730]
+
+  # ---- name only ---------------------------------------------------------
+  - tap:
+      selector: {id: name}
+  - type:
+      selector: {id: name}
+      text: Ada
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^validation_failed reason=email message=Email is required$'
+
+  - assert_text:
+      selector: {id: error}
+      text: {exact: "Email is required"}
+      bounds: [42, 679, 316, 730]
+
+  # ---- malformed email ---------------------------------------------------
+  - tap:
+      selector: {id: email}
+  - type:
+      selector: {id: email}
+      text: not-an-email
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^validation_failed reason=email_format message=Invalid email$'
+
+  - assert_text:
+      selector: {id: error}
+      text: {exact: "Invalid email"}
+      bounds: [42, 679, 248, 730]
+
+  - capture:
+      name: after-invalid-email
+      format: png
+      fresh: true
+
+  # ---- valid form: AlertDialog ------------------------------------------
+  - type:
+      selector: {id: email}
+      text: "ada@example.com"
+      clear: true
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^validation_ok name=Ada email=ada@example.com$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: "Submitted: Ada"}
+      bounds: [70, 1157, 1010, 1214]
+
+  - capture:
+      name: success-dialog
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

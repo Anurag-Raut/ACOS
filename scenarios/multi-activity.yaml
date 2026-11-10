@@ -1,0 +1,130 @@
+# multi-activity: Intent extras between two activities, back stack, state save.
+#
+# Expected values come from fixtures/reference/multi-activity/art-api34-x86_64/
+# (1080x2400 @ 420 dpi). Log tag AcosMulti, prefixed Main./Second.
+version: 1
+name: multi-activity
+description: >-
+  Launch multi-activity, type a message, send it to SecondActivity via an
+  Intent extra, verify the received text, Finish back to MainActivity, rotate
+  (the typed message is preserved via onSaveInstanceState), then verify the
+  AcosMulti lifecycle across both activities.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Message}
+      bounds: [42, 317, 1038, 435]
+
+  - assert_text:
+      selector: {id: send}
+      text: {exact: Send}
+      bounds: [42, 435, 273, 561]
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^Main.onCreate$'
+        - '^Main.onStart$'
+        - '^Main.onResume$'
+
+  # ---- send the message to the second activity ---------------------------
+  - tap:
+      selector: {id: message}
+  - type:
+      selector: {id: message}
+      text: Hello
+  - tap:
+      selector: {id: send}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Main.send message=Hello$'
+        - '^Second.onCreate$'
+        - '^Second.received=Hello$'
+
+  - assert_text:
+      selector: {id: received}
+      text: {exact: "Received: Hello"}
+      bounds: [42, 317, 295, 368]
+
+  - capture:
+      name: second-activity
+      format: png
+      fresh: true
+
+  # ---- Finish returns to MainActivity through the back stack -------------
+  - tap:
+      selector: {id: finish}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Second.finish$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+      bounds: [42, 317, 1038, 435]
+
+  # ---- rotate: MainActivity state saved and restored ---------------------
+  - rotate:
+      orientation: landscape
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Main.onSaveInstanceState message=Hello$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+      bounds: [170, 231, 2358, 349]
+
+  - rotate:
+      orientation: portrait
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+      bounds: [42, 317, 1038, 435]
+
+  - back: {}
+
+  - assert_no_crash: {}

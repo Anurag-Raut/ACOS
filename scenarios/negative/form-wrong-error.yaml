@@ -1,0 +1,22 @@
+# NEGATIVE: no validation has run, so the inline error is not shown.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: negative-form-wrong-error
+description: Assert a validation error before pressing Submit.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: submit}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: error}
+      text: {exact: "Name is required"}

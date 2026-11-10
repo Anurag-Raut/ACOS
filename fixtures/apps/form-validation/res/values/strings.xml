@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Form Validation</string>
+    <string name="hint_name">Name</string>
+    <string name="hint_email">Email</string>
+    <string name="submit">Submit</string>
+</resources>

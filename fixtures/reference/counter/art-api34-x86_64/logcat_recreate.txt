@@ -1,0 +1,14 @@
+--------- beginning of main
+11-10 19:04:35.836  4696  4696 I AcosCounter: onCreate
+11-10 19:04:35.861  4696  4696 I AcosCounter: onStart
+11-10 19:04:35.863  4696  4696 I AcosCounter: onResume
+11-10 19:04:39.705  4696  4696 I AcosCounter: increment value=1
+11-10 19:04:43.054  4696  4696 I AcosCounter: increment value=2
+11-10 19:04:46.373  4696  4696 I AcosCounter: onPause
+11-10 19:04:46.376  4696  4696 I AcosCounter: onStop
+11-10 19:04:46.378  4696  4696 I AcosCounter: onSaveInstanceState count=2
+11-10 19:04:46.378  4696  4696 I AcosCounter: onDestroy
+11-10 19:04:46.391  4696  4696 I AcosCounter: onCreate
+11-10 19:04:46.411  4696  4696 I AcosCounter: restored count=2
+11-10 19:04:46.411  4696  4696 I AcosCounter: onStart
+11-10 19:04:46.414  4696  4696 I AcosCounter: onResume

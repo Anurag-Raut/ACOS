@@ -1,0 +1,4 @@
+--------- beginning of main
+11-10 19:04:35.836  4696  4696 I AcosCounter: onCreate
+11-10 19:04:35.861  4696  4696 I AcosCounter: onStart
+11-10 19:04:35.863  4696  4696 I AcosCounter: onResume

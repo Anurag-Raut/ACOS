@@ -1,0 +1,4 @@
+--------- beginning of main
+11-10 19:05:54.512  5802  5802 I AcosForm: onCreate
+11-10 19:05:54.539  5802  5802 I AcosForm: onStart
+11-10 19:05:54.540  5802  5802 I AcosForm: onResume

@@ -1,0 +1,208 @@
+{
+  "fidelity": "art-reference",
+  "app": "form-validation",
+  "device_dir": "art-api34-x86_64",
+  "apk": "build/apps/form-validation.apk",
+  "apk_sha256": "bbfea2f5136deb47a2629e842bfe128368eb40c5e215a835f5e9c253946c97fe",
+  "artifacts": [
+    {
+      "path": "am_start_initial.txt",
+      "size": 196,
+      "sha256": "d1c5a1773a8e1a99e622927edd8545fc047b77bb9d8e86a42393cc4ad8a9621f"
+    },
+    {
+      "path": "commands.txt",
+      "size": 3572,
+      "sha256": "501dd8ba7e4e0fc190d5ca10a9324eec48b1f893d0d4a07f6e33f9d5c6e3d7c4"
+    },
+    {
+      "path": "device-config.json",
+      "size": 500,
+      "sha256": "6404cf16005f2909fbe114f8651fc7aaa6e373521c90affbe94521d3bde3d7f6"
+    },
+    {
+      "path": "display.txt",
+      "size": 20712,
+      "sha256": "587868aa3e07fe2e13709afc5084f8e1e42741e99b71ca0b1aa272b5e849e934"
+    },
+    {
+      "path": "install.txt",
+      "size": 134,
+      "sha256": "f65dccbe3958a861f09fb0a2b8e1402c681899792cd9afa6eafe87c784af175c"
+    },
+    {
+      "path": "lifecycle-summary.txt",
+      "size": 313,
+      "sha256": "ac2eba66d3e1b2f9ffaa7b62fe0e4338682cf17ebf23c0844166c2ce4e4ddf79"
+    },
+    {
+      "path": "logcat_final.txt",
+      "size": 572,
+      "sha256": "c7ecc07865c634cde16929ff4de0dec1f85d659c3add8bd0e1e9f8ec888488ad"
+    },
+    {
+      "path": "logcat_initial.txt",
+      "size": 183,
+      "sha256": "f4fcd59a1c1907389cde3acf8d8fd2bb109c17b6068d8110cb3065f0c464f786"
+    },
+    {
+      "path": "meminfo_initial.txt",
+      "size": 2923,
+      "sha256": "b785353666670a7b2a829c72958ebb7af57a1906f656998729f3ed9cec07fb2c"
+    },
+    {
+      "path": "observed-texts-after-bad-email.txt",
+      "size": 463,
+      "sha256": "922243bdc5b8f69eb8f234c0c09457dd3c44d59a55ff3434540b54dbd61de9c1"
+    },
+    {
+      "path": "observed-texts-after-empty.txt",
+      "size": 460,
+      "sha256": "ac5788d4e6dba2b02b8942a4697ac599945f783923350d9f2a51467c02f83d89"
+    },
+    {
+      "path": "observed-texts-after-name-only.txt",
+      "size": 460,
+      "sha256": "5c361b8a7d8c74f781cc3935cb2588033e4d2a27642148766bb7728008f50683"
+    },
+    {
+      "path": "observed-texts-after-success.txt",
+      "size": 237,
+      "sha256": "c8620b43c474649a2fe6b1ad665eb86829feec5c8281705137303b94ab3f7f20"
+    },
+    {
+      "path": "observed-texts-initial.txt",
+      "size": 353,
+      "sha256": "9a3a7d55804b5b72f363f2604c1912d34c009e2da6e16461a40cabaca50801a1"
+    },
+    {
+      "path": "screenshot_after_bad_email.png",
+      "size": 135077,
+      "sha256": "64a539c690286a2604857d4380412bf47202d81536c161d9940eefde1e42ac0e"
+    },
+    {
+      "path": "screenshot_after_empty.png",
+      "size": 61165,
+      "sha256": "02a2c5ebaeb0dac5e6fba6ce16ab03c9a8c313ae71ea965808c956c3e5f2d2d1"
+    },
+    {
+      "path": "screenshot_after_name_only.png",
+      "size": 117420,
+      "sha256": "4a9d7192898ba57ce080b00ef7f9b4d0803c55287cc4aa44d1f3aa7f996d7501"
+    },
+    {
+      "path": "screenshot_after_success.png",
+      "size": 136475,
+      "sha256": "098c64b2bbe3abfb496faf653b6b3a31947b30629739bda0c3fdd30e90bae2ec"
+    },
+    {
+      "path": "screenshot_initial.png",
+      "size": 39239,
+      "sha256": "ba1d3d835f3d7d15280dbb0dde87522d1934fddb210d57d712ef1879ebae2771"
+    },
+    {
+      "path": "ui_after_bad_email.json",
+      "size": 2712,
+      "sha256": "d2cbc5424221ffc6d2f6e001b809bca5d3e25e8a1f470a9750f342c9e54b0b36"
+    },
+    {
+      "path": "ui_after_bad_email.xml",
+      "size": 4858,
+      "sha256": "a0eaddccda6eaca75962b4c75d33a6b1b8acca21a8c8a1128ad0f143dcca5a58"
+    },
+    {
+      "path": "ui_after_empty.json",
+      "size": 2710,
+      "sha256": "a09d8f31bef2022752c68c093ec43bd1b4e5c4f3ee884cee97e72b1fea907fd7"
+    },
+    {
+      "path": "ui_after_empty.xml",
+      "size": 4856,
+      "sha256": "b5274879755db9b7c3f2af54b1bbd2760a9fee239abcdc2725efd5f1909742cc"
+    },
+    {
+      "path": "ui_after_name_only.json",
+      "size": 2709,
+      "sha256": "9ee5f3ff587d127dff28b9ebe27f28db3401665d9b7c71ed884b0e134ca6a566"
+    },
+    {
+      "path": "ui_after_name_only.xml",
+      "size": 4855,
+      "sha256": "98e1955c4636f9114fcd6f4db9c2c5ab750280df05c568d9e534d12f111f7fc9"
+    },
+    {
+      "path": "ui_after_success.json",
+      "size": 2653,
+      "sha256": "54aa45640619430ede72919ddfceb990e82751eae6e557a3959542c3b70cc560"
+    },
+    {
+      "path": "ui_after_success.xml",
+      "size": 5517,
+      "sha256": "a54414cb6f97b51ff6da373366fc0b4c35713adf376f40df6b4d8e0942d8c20f"
+    },
+    {
+      "path": "ui_initial.json",
+      "size": 2440,
+      "sha256": "5e5c52ddd9b9041b69883cfe397b4cf55fad2183853069f96f055fa28b49ee6f"
+    },
+    {
+      "path": "ui_initial.xml",
+      "size": 4463,
+      "sha256": "f5a2be49cc2baa86d4fa519bd4935a4cd8f5941ca73dd80957e311d38a3f511a"
+    }
+  ],
+  "commands": [
+    "$ adb -s emulator-5554 install -r -g fixtures/build/apps/form-validation.apk",
+    "$ adb -s emulator-5554 shell pm clear dev.acos.fixtures.formvalidation",
+    "$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.formvalidation",
+    "$ adb -s emulator-5554 shell logcat -c",
+    "$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.formvalidation/.MainActivity -> am_start_initial.txt",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_initial.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_initial.xml",
+    "$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/display.txt",
+    "$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.formvalidation > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/meminfo_initial.txt",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosForm:I > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/logcat_initial.txt",
+    "$ adb -s emulator-5554 shell input tap 157 616",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_empty.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_empty.xml",
+    "$ adb -s emulator-5554 shell input tap 540 376",
+    "$ adb -s emulator-5554 shell input text Ada",
+    "$ adb -s emulator-5554 shell input tap 157 616",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_name_only.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_name_only.xml",
+    "$ adb -s emulator-5554 shell input tap 540 494",
+    "$ adb -s emulator-5554 shell input text not-an-email",
+    "$ adb -s emulator-5554 shell input tap 157 616",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_bad_email.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_bad_email.xml",
+    "$ adb -s emulator-5554 shell input tap 540 494",
+    "$ adb -s emulator-5554 shell input keyevent KEYCODE_MOVE_END",
+    "$ adb -s emulator-5554 shell 'for i in $(seq 1 12); do input keyevent 67; done'",
+    "$ adb -s emulator-5554 shell input text ada@example.com",
+    "$ adb -s emulator-5554 shell input tap 157 616",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_success.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_success.xml",
+    "$ adb -s emulator-5554 shell input tap 894 1365",
+    "$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosForm:I > logcat_final.txt"
+  ],
+  "device_config": {
+    "resolution": "1080x2400",
+    "density_dpi": 420,
+    "locale": "en-US",
+    "font_scale": "1.0 (default; setting unset)",
+    "dark_light": "no",
+    "build_fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+    "api": "34",
+    "abi": "x86_64",
+    "serial": "emulator-5554",
+    "emulator": "qemu-system-x86_64-headless, KVM, 2048 MB RAM, 4 cores, swiftshader_indirect",
+    "raw_wm_size": "Physical size: 1080x2400",
+    "raw_wm_density": "Physical density: 420"
+  }
+}

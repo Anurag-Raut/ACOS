@@ -1,0 +1,132 @@
+[
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/decor_content_parent",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,0][1080,2337]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/action_bar_container",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,128][1080,275]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/action_bar",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,128][1080,275]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "",
+    "text": "Todo List",
+    "content_desc": "",
+    "bounds": "[42,166][262,237]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/content",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,275][1080,1517]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.EditText",
+    "resource_id": "dev.acos.fixtures.todolist:id/input",
+    "text": "New item",
+    "content_desc": "",
+    "bounds": "[42,317][1038,435]",
+    "clickable": true,
+    "focused": true,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "dev.acos.fixtures.todolist:id/add",
+    "text": "Add",
+    "content_desc": "",
+    "bounds": "[42,435][273,561]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "dev.acos.fixtures.todolist:id/clear",
+    "text": "Clear all",
+    "content_desc": "",
+    "bounds": "[273,435][504,561]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.ListView",
+    "resource_id": "dev.acos.fixtures.todolist:id/list",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[42,561][1038,1475]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "android:id/text1",
+    "text": "milk",
+    "content_desc": "",
+    "bounds": "[42,561][1038,687]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "android:id/text1",
+    "text": "bread",
+    "content_desc": "",
+    "bounds": "[42,690][1038,816]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/statusBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,0][1080,128]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/navigationBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,2337][1080,2400]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  }
+]

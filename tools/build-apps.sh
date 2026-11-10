@@ -6,10 +6,16 @@
 # NDK clang for hello-jni. A throwaway debug keystore is generated under
 # fixtures/build/apps/ (never committed).
 #
-# Outputs: fixtures/build/apps/hello-views.apk, fixtures/build/apps/hello-jni.apk
-# Both are signed + zipaligned and verified with `apksigner verify` and
-# `aapt2 dump badging`. Installation on a device is attempted only if one is
-# already attached; no emulator is ever started here.
+# Outputs (all signed + zipaligned, verified with `apksigner verify` and
+# `aapt2 dump badging`):
+#   fixtures/build/apps/hello-views.apk
+#   fixtures/build/apps/hello-jni.apk
+#   fixtures/build/apps/counter.apk
+#   fixtures/build/apps/todo-list.apk
+#   fixtures/build/apps/multi-activity.apk
+#   fixtures/build/apps/form-validation.apk
+# Installation on a device is attempted only if one is already attached; no
+# emulator is ever started here.
 set -euo pipefail
 
 SDK="${ANDROID_HOME:-/home/Qui/Android/Sdk}"
@@ -138,11 +144,22 @@ echo "build-apps: [hello-jni] compiling native libs"
     -o "$JNI_WORK/arm64-v8a/libhellojni.so" "$APPS_DIR/hello-jni/jni/hello-jni.c"
 build_apk hello-jni "$JNI_WORK:lib"
 
+# --- framework-only fixture apps (no AndroidX, no native libs) ---------------
+# Each is a plain android.app.Activity app exercising one Android subsystem:
+# counter (view state + onSaveInstanceState), todo-list (ListView + input +
+# SharedPreferences), multi-activity (Intent extras + back stack +
+# onSaveInstanceState) and form-validation (EditText validation + Toast +
+# AlertDialog).
+for app in counter todo-list multi-activity form-validation; do
+    build_apk "$app"
+done
+
 # --- optional device smoke test ---------------------------------------------
 if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | awk 'NR>1 && $2=="device"' | grep -q .; then
     echo "build-apps: device detected, installing smoke test"
-    adb install -r -g "$BUILD_DIR/hello-views.apk"
-    adb install -r -g "$BUILD_DIR/hello-jni.apk"
+    for apk in hello-views hello-jni counter todo-list multi-activity form-validation; do
+        adb install -r -g "$BUILD_DIR/$apk.apk"
+    done
     echo "build-apps: device-verified (installed)"
 else
     echo "build-apps: not device-verified (no attached device/emulator)"

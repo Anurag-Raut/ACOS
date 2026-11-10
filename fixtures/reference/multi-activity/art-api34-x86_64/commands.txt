@@ -1,0 +1,33 @@
+$ adb -s emulator-5554 install -r -g fixtures/build/apps/multi-activity.apk
+$ adb -s emulator-5554 shell pm clear dev.acos.fixtures.multiactivity
+$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.multiactivity
+$ adb -s emulator-5554 shell logcat -c
+$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.multiactivity/.MainActivity -> am_start_initial.txt
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/screenshot_initial.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/ui_initial.xml
+$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/display.txt
+$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.multiactivity > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/meminfo_initial.txt
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosMulti:I > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/logcat_initial.txt
+$ adb -s emulator-5554 shell input tap 540 376
+$ adb -s emulator-5554 shell input text Hello
+$ adb -s emulator-5554 shell input tap 157 498
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/screenshot_after_send.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/ui_after_send.xml
+$ adb -s emulator-5554 shell input tap 157 431
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/screenshot_after_finish.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/ui_after_finish.xml
+$ adb -s emulator-5554 shell settings put system accelerometer_rotation 0
+$ adb -s emulator-5554 shell settings put system user_rotation 1
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/screenshot_after_recreate.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/ui_after_recreate.xml
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosMulti:I > logcat_recreate.txt
+$ adb -s emulator-5554 shell settings put system accelerometer_rotation 0
+$ adb -s emulator-5554 shell settings put system user_rotation 0
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/multi-activity/art-api34-x86_64/ui_after_rotate_back.xml
+$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosMulti:I > logcat_final.txt

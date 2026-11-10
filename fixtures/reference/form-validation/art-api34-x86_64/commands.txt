@@ -1,0 +1,38 @@
+$ adb -s emulator-5554 install -r -g fixtures/build/apps/form-validation.apk
+$ adb -s emulator-5554 shell pm clear dev.acos.fixtures.formvalidation
+$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.formvalidation
+$ adb -s emulator-5554 shell logcat -c
+$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.formvalidation/.MainActivity -> am_start_initial.txt
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_initial.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_initial.xml
+$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/display.txt
+$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.formvalidation > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/meminfo_initial.txt
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosForm:I > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/logcat_initial.txt
+$ adb -s emulator-5554 shell input tap 157 616
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_empty.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_empty.xml
+$ adb -s emulator-5554 shell input tap 540 376
+$ adb -s emulator-5554 shell input text Ada
+$ adb -s emulator-5554 shell input tap 157 616
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_name_only.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_name_only.xml
+$ adb -s emulator-5554 shell input tap 540 494
+$ adb -s emulator-5554 shell input text not-an-email
+$ adb -s emulator-5554 shell input tap 157 616
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_bad_email.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_bad_email.xml
+$ adb -s emulator-5554 shell input tap 540 494
+$ adb -s emulator-5554 shell input keyevent KEYCODE_MOVE_END
+$ adb -s emulator-5554 shell 'for i in $(seq 1 12); do input keyevent 67; done'
+$ adb -s emulator-5554 shell input text ada@example.com
+$ adb -s emulator-5554 shell input tap 157 616
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_success.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/form-validation/art-api34-x86_64/ui_after_success.xml
+$ adb -s emulator-5554 shell input tap 894 1365
+$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosForm:I > logcat_final.txt

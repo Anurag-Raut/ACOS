@@ -1,0 +1,26 @@
+--------- beginning of main
+11-10 19:05:29.248  5440  5440 I AcosMulti: Main.onCreate
+11-10 19:05:29.267  5440  5440 I AcosMulti: Main.onStart
+11-10 19:05:29.269  5440  5440 I AcosMulti: Main.onResume
+11-10 19:05:33.137  5440  5440 I AcosMulti: Main.send message=Hello
+11-10 19:05:33.194  5440  5440 I AcosMulti: Main.onPause
+11-10 19:05:33.204  5440  5440 I AcosMulti: Second.onCreate
+11-10 19:05:33.214  5440  5440 I AcosMulti: Second.received=Hello
+11-10 19:05:33.214  5440  5440 I AcosMulti: Second.onStart
+11-10 19:05:33.215  5440  5440 I AcosMulti: Second.onResume
+11-10 19:05:33.788  5440  5440 I AcosMulti: Main.onStop
+11-10 19:05:33.788  5440  5440 I AcosMulti: Main.onSaveInstanceState message=Hello
+11-10 19:05:37.438  5440  5440 I AcosMulti: Second.finish
+11-10 19:05:37.452  5440  5440 I AcosMulti: Second.onPause
+11-10 19:05:37.471  5440  5440 I AcosMulti: Main.onStart
+11-10 19:05:37.472  5440  5440 I AcosMulti: Main.onResume
+11-10 19:05:38.003  5440  5440 I AcosMulti: Second.onStop
+11-10 19:05:38.003  5440  5440 I AcosMulti: Second.onDestroy
+11-10 19:05:41.833  5440  5440 I AcosMulti: Main.onPause
+11-10 19:05:41.835  5440  5440 I AcosMulti: Main.onStop
+11-10 19:05:41.837  5440  5440 I AcosMulti: Main.onSaveInstanceState message=Hello
+11-10 19:05:41.837  5440  5440 I AcosMulti: Main.onDestroy
+11-10 19:05:41.850  5440  5440 I AcosMulti: Main.onCreate
+11-10 19:05:41.874  5440  5440 I AcosMulti: Main.restored message=Hello
+11-10 19:05:41.874  5440  5440 I AcosMulti: Main.onStart
+11-10 19:05:41.877  5440  5440 I AcosMulti: Main.onResume

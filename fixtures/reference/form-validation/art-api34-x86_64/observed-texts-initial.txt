@@ -1,0 +1,4 @@
+android.widget.TextView |  | Form Validation | [42,166][420,237]
+android.widget.EditText | dev.acos.fixtures.formvalidation:id/name | Name | [42,317][1038,435]
+android.widget.EditText | dev.acos.fixtures.formvalidation:id/email | Email | [42,435][1038,553]
+android.widget.Button | dev.acos.fixtures.formvalidation:id/submit | Submit | [42,553][273,679]

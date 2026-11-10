@@ -1,0 +1,102 @@
+[
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/decor_content_parent",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,0][2400,1017]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/action_bar_container",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,63][2400,189]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/action_bar",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,63][2400,189]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "",
+    "text": "Counter",
+    "content_desc": "",
+    "bounds": "[170,100][302,151]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/content",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,189][2400,1017]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "dev.acos.fixtures.counter:id/count",
+    "text": "2",
+    "content_desc": "",
+    "bounds": "[170,231][191,282]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "dev.acos.fixtures.counter:id/inc",
+    "text": "Increment",
+    "content_desc": "",
+    "bounds": "[170,282][401,408]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "dev.acos.fixtures.counter:id/reset",
+    "text": "Reset",
+    "content_desc": "",
+    "bounds": "[170,408][401,534]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/statusBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,0][2400,63]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/navigationBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,1017][2400,1080]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  }
+]

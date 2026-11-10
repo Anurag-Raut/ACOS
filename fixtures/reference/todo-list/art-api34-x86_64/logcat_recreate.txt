@@ -1,0 +1,15 @@
+--------- beginning of main
+11-10 19:05:02.360  5068  5068 I AcosTodo: onCreate
+11-10 19:05:02.393  5068  5068 I AcosTodo: onStart
+11-10 19:05:02.395  5068  5068 I AcosTodo: onResume
+11-10 19:05:06.390  5068  5068 I AcosTodo: add item=milk size=1
+11-10 19:05:09.922  5068  5068 I AcosTodo: add item=bread size=2
+11-10 19:05:13.269  5068  5068 I AcosTodo: remove item=milk size=1
+11-10 19:05:16.533  5068  5068 I AcosTodo: onPause
+11-10 19:05:16.536  5068  5068 I AcosTodo: saved count=1
+11-10 19:05:16.537  5068  5068 I AcosTodo: onStop
+11-10 19:05:16.539  5068  5068 I AcosTodo: onDestroy
+11-10 19:05:16.558  5068  5068 I AcosTodo: onCreate
+11-10 19:05:16.578  5068  5068 I AcosTodo: loaded count=1
+11-10 19:05:16.578  5068  5068 I AcosTodo: onStart
+11-10 19:05:16.580  5068  5068 I AcosTodo: onResume

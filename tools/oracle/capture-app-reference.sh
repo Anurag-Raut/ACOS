@@ -182,6 +182,58 @@ sys.exit(1)
 PYEOF
 }
 
+assert_absent_text() { # <xml> <substring>  -> fails if the text is present
+    "$PY" - "$1" "$2" <<'PYEOF' || die "assertion failed: '$2' unexpectedly present in $1"
+import sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+needle = sys.argv[2]
+for n in root.iter('node'):
+    if needle in n.get('text', ''):
+        sys.exit(1)
+sys.exit(0)
+PYEOF
+}
+
+tap_text() { # <xml> <text-substring>
+    local xy
+    xy="$("$PY" - "$1" "$2" <<'PYEOF'
+import re, sys, html
+data = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+needle = sys.argv[2]
+for m in re.finditer(r'<node\b[^>]*>', data):
+    tag = m.group(0)
+    t = re.search(r'text="([^"]*)"', tag)
+    if not t or needle not in html.unescape(t.group(1)):
+        continue
+    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', tag)
+    if not b:
+        continue
+    x1, y1, x2, y2 = map(int, b.groups())
+    print((x1 + x2) // 2, (y1 + y2) // 2)
+    sys.exit(0)
+sys.exit("node text not found: " + needle)
+PYEOF
+)" || die "node text not found in $1: $2"
+    CMDLOG+="\$ adb -s $SERIAL shell input tap $xy"$'\n'
+    "$ADB" -s "$SERIAL" shell input tap $xy
+}
+
+type_text() { # <text> (no spaces; use %s for spaces if needed)
+    CMDLOG+="\$ adb -s $SERIAL shell input text $1"$'\n'
+    "$ADB" -s "$SERIAL" shell input text "$1"
+}
+
+clear_field() { # <count>  delete N chars at the cursor
+    CMDLOG+="\$ adb -s $SERIAL shell 'for i in \$(seq 1 $1); do input keyevent 67; done'"$'\n'
+    "$ADB" -s "$SERIAL" shell "for i in \$(seq 1 $1); do input keyevent 67; done" >/dev/null 2>&1 || true
+}
+
+rotate_to() { # <0|1>  user_rotation (0=portrait, 1=landscape)
+    sh_cmd settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+    sh_cmd settings put system user_rotation "$1" >/dev/null 2>&1 || true
+    sleep 3
+}
+
 capture_common() { # <pkg> <tag> <outdir>
     local pkg="$1" tag="$2" out="$3"
     sh_cmd am force-stop "$pkg" >/dev/null 2>&1 || true
@@ -401,7 +453,330 @@ ref_hello_jni() {
     log "hello-jni artifacts: $(ls "$out" | wc -l) files"
 }
 
+# ---------------------------------------------------------------------------
+# counter — Button + TextView state, rotation-safe via onSaveInstanceState
+# ---------------------------------------------------------------------------
+ref_counter() {
+    local pkg="dev.acos.fixtures.counter" tag="AcosCounter" out="$REF_ROOT/counter/$SUB"
+    rm -rf "$out"; mkdir -p "$out"
+    CMDLOG=""
+    log "installing counter.apk"
+    CMDLOG+="\$ adb -s $SERIAL install -r -g fixtures/build/apps/counter.apk"$'\n'
+    "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/counter.apk" >"$out/install.txt" 2>&1
+    grep -q Success "$out/install.txt" || die "counter install failed"
+    sh_cmd pm clear "$pkg" >/dev/null 2>&1 || true
+
+    capture_common "$pkg" "$tag" "$out"
+    assert_node_text "$out/ui_initial.xml" ":id/count" "0"
+
+    tap_id "$out/ui_initial.xml" ":id/inc"
+    sleep 1
+    screencap "$out/screenshot_after_inc1.png"
+    dump_ui "$out/ui_after_inc1.xml"
+    ui_texts "$out/ui_after_inc1.xml" >"$out/observed-texts-after-inc1.txt"
+    ui_state_json "$out/ui_after_inc1.xml" "$out/ui_after_inc1.json"
+    assert_node_text "$out/ui_after_inc1.xml" ":id/count" "1"
+
+    tap_id "$out/ui_after_inc1.xml" ":id/inc"
+    sleep 1
+    screencap "$out/screenshot_after_inc2.png"
+    dump_ui "$out/ui_after_inc2.xml"
+    ui_texts "$out/ui_after_inc2.xml" >"$out/observed-texts-after-inc2.txt"
+    ui_state_json "$out/ui_after_inc2.xml" "$out/ui_after_inc2.json"
+    assert_node_text "$out/ui_after_inc2.xml" ":id/count" "2"
+
+    # rotate to landscape: the activity is recreated and the count restored
+    rotate_to 1
+    screencap "$out/screenshot_after_recreate.png"
+    dump_ui "$out/ui_after_recreate.xml"
+    ui_texts "$out/ui_after_recreate.xml" >"$out/observed-texts-after-recreate.txt"
+    ui_state_json "$out/ui_after_recreate.xml" "$out/ui_after_recreate.json"
+    assert_node_text "$out/ui_after_recreate.xml" ":id/count" "2"
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_recreate.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_recreate.txt" 2>&1 || true
+    rotate_to 0
+    dump_ui "$out/ui_after_rotate_back.xml"
+    ui_state_json "$out/ui_after_rotate_back.xml" "$out/ui_after_rotate_back.json"
+
+    tap_id "$out/ui_after_rotate_back.xml" ":id/reset"
+    sleep 1
+    screencap "$out/screenshot_after_reset.png"
+    dump_ui "$out/ui_after_reset.xml"
+    ui_texts "$out/ui_after_reset.xml" >"$out/observed-texts-after-reset.txt"
+    ui_state_json "$out/ui_after_reset.xml" "$out/ui_after_reset.json"
+    assert_node_text "$out/ui_after_reset.xml" ":id/count" "0"
+
+    sh_cmd input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+    sleep 1
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_final.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_final.txt" 2>&1 || true
+    grep -o "$tag.*" "$out/logcat_final.txt" >"$out/lifecycle-summary.txt" || true
+    "$PY" - "$out/lifecycle-summary.txt" <<'PYEOF' || die "counter lifecycle assertion failed"
+import sys
+lines = [l.split('AcosCounter: ')[-1].strip() for l in open(sys.argv[1]) if 'AcosCounter' in l]
+if lines[:3] != ['onCreate', 'onStart', 'onResume']:
+    sys.exit('cold-start order wrong: %r' % lines[:3])
+for ev in ['increment value=1', 'increment value=2', 'onSaveInstanceState count=2', 'restored count=2', 'reset value=0']:
+    if ev not in lines:
+        sys.exit('missing event: ' + ev)
+sys.exit(0)
+PYEOF
+
+    device_config_json "$out"
+    printf '%s' "$CMDLOG" >"$out/commands.txt"
+    write_manifest counter "$out" "$APPS_DIR/counter.apk"
+    log "counter artifacts: $(ls "$out" | wc -l) files"
+}
+
+# ---------------------------------------------------------------------------
+# todo-list — EditText + ListView add/remove + SharedPreferences persistence
+# ---------------------------------------------------------------------------
+ref_todo() {
+    local pkg="dev.acos.fixtures.todolist" tag="AcosTodo" out="$REF_ROOT/todo-list/$SUB"
+    rm -rf "$out"; mkdir -p "$out"
+    CMDLOG=""
+    log "installing todo-list.apk"
+    CMDLOG+="\$ adb -s $SERIAL install -r -g fixtures/build/apps/todo-list.apk"$'\n'
+    "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/todo-list.apk" >"$out/install.txt" 2>&1
+    grep -q Success "$out/install.txt" || die "todo-list install failed"
+    sh_cmd pm clear "$pkg" >/dev/null 2>&1 || true
+
+    capture_common "$pkg" "$tag" "$out"
+
+    # add "milk"
+    tap_id "$out/ui_initial.xml" ":id/input"
+    type_text milk
+    tap_id "$out/ui_initial.xml" ":id/add"
+    sleep 1
+    screencap "$out/screenshot_after_add1.png"
+    dump_ui "$out/ui_after_add1.xml"
+    ui_texts "$out/ui_after_add1.xml" >"$out/observed-texts-after-add1.txt"
+    ui_state_json "$out/ui_after_add1.xml" "$out/ui_after_add1.json"
+    assert_contains "$out/ui_after_add1.xml" '-' 'milk'
+
+    # add "bread"
+    tap_id "$out/ui_after_add1.xml" ":id/input"
+    type_text bread
+    tap_id "$out/ui_after_add1.xml" ":id/add"
+    sleep 1
+    screencap "$out/screenshot_after_add2.png"
+    dump_ui "$out/ui_after_add2.xml"
+    ui_texts "$out/ui_after_add2.xml" >"$out/observed-texts-after-add2.txt"
+    ui_state_json "$out/ui_after_add2.xml" "$out/ui_after_add2.json"
+    assert_contains "$out/ui_after_add2.xml" '-' 'milk'
+    assert_contains "$out/ui_after_add2.xml" '-' 'bread'
+
+    # tap the "milk" row to remove it
+    tap_text "$out/ui_after_add2.xml" milk
+    sleep 1
+    screencap "$out/screenshot_after_remove.png"
+    dump_ui "$out/ui_after_remove.xml"
+    ui_texts "$out/ui_after_remove.xml" >"$out/observed-texts-after-remove.txt"
+    ui_state_json "$out/ui_after_remove.xml" "$out/ui_after_remove.json"
+    assert_contains "$out/ui_after_remove.xml" '-' 'bread'
+    assert_absent_text "$out/ui_after_remove.xml" 'milk'
+
+    # rotate: SharedPreferences must restore the remaining item
+    rotate_to 1
+    screencap "$out/screenshot_after_recreate.png"
+    dump_ui "$out/ui_after_recreate.xml"
+    ui_texts "$out/ui_after_recreate.xml" >"$out/observed-texts-after-recreate.txt"
+    ui_state_json "$out/ui_after_recreate.xml" "$out/ui_after_recreate.json"
+    assert_contains "$out/ui_after_recreate.xml" '-' 'bread'
+    assert_absent_text "$out/ui_after_recreate.xml" 'milk'
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_recreate.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_recreate.txt" 2>&1 || true
+    rotate_to 0
+    dump_ui "$out/ui_after_rotate_back.xml"
+    ui_state_json "$out/ui_after_rotate_back.xml" "$out/ui_after_rotate_back.json"
+
+    sh_cmd input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+    sleep 1
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_final.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_final.txt" 2>&1 || true
+    grep -o "$tag.*" "$out/logcat_final.txt" >"$out/lifecycle-summary.txt" || true
+    "$PY" - "$out/lifecycle-summary.txt" <<'PYEOF' || die "todo-list lifecycle assertion failed"
+import sys
+lines = [l.split('AcosTodo: ')[-1].strip() for l in open(sys.argv[1]) if 'AcosTodo' in l]
+if lines[:3] != ['onCreate', 'onStart', 'onResume']:
+    sys.exit('cold-start order wrong: %r' % lines[:3])
+for ev in ['add item=milk size=1', 'add item=bread size=2', 'remove item=milk size=1', 'saved count=1', 'loaded count=1']:
+    if ev not in lines:
+        sys.exit('missing event: ' + ev)
+sys.exit(0)
+PYEOF
+
+    device_config_json "$out"
+    printf '%s' "$CMDLOG" >"$out/commands.txt"
+    write_manifest todo-list "$out" "$APPS_DIR/todo-list.apk"
+    log "todo-list artifacts: $(ls "$out" | wc -l) files"
+}
+
+# ---------------------------------------------------------------------------
+# multi-activity — Intent extras, back stack, onSaveInstanceState
+# ---------------------------------------------------------------------------
+ref_multi() {
+    local pkg="dev.acos.fixtures.multiactivity" tag="AcosMulti" out="$REF_ROOT/multi-activity/$SUB"
+    rm -rf "$out"; mkdir -p "$out"
+    CMDLOG=""
+    log "installing multi-activity.apk"
+    CMDLOG+="\$ adb -s $SERIAL install -r -g fixtures/build/apps/multi-activity.apk"$'\n'
+    "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/multi-activity.apk" >"$out/install.txt" 2>&1
+    grep -q Success "$out/install.txt" || die "multi-activity install failed"
+    sh_cmd pm clear "$pkg" >/dev/null 2>&1 || true
+
+    capture_common "$pkg" "$tag" "$out"
+
+    # type a message and send it to the second activity
+    tap_id "$out/ui_initial.xml" ":id/message"
+    type_text Hello
+    tap_id "$out/ui_initial.xml" ":id/send"
+    sleep 2
+    screencap "$out/screenshot_after_send.png"
+    dump_ui "$out/ui_after_send.xml"
+    ui_texts "$out/ui_after_send.xml" >"$out/observed-texts-after-send.txt"
+    ui_state_json "$out/ui_after_send.xml" "$out/ui_after_send.json"
+    assert_contains "$out/ui_after_send.xml" '-' 'Received: Hello'
+
+    # Finish returns to MainActivity through the back stack; the typed message
+    # is still there because the activity was not destroyed.
+    tap_id "$out/ui_after_send.xml" ":id/finish"
+    sleep 2
+    screencap "$out/screenshot_after_finish.png"
+    dump_ui "$out/ui_after_finish.xml"
+    ui_texts "$out/ui_after_finish.xml" >"$out/observed-texts-after-finish.txt"
+    ui_state_json "$out/ui_after_finish.xml" "$out/ui_after_finish.json"
+    assert_node_text "$out/ui_after_finish.xml" ":id/message" "Hello"
+
+    # rotate: onSaveInstanceState must preserve the typed message
+    rotate_to 1
+    screencap "$out/screenshot_after_recreate.png"
+    dump_ui "$out/ui_after_recreate.xml"
+    ui_texts "$out/ui_after_recreate.xml" >"$out/observed-texts-after-recreate.txt"
+    ui_state_json "$out/ui_after_recreate.xml" "$out/ui_after_recreate.json"
+    assert_node_text "$out/ui_after_recreate.xml" ":id/message" "Hello"
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_recreate.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_recreate.txt" 2>&1 || true
+    rotate_to 0
+    dump_ui "$out/ui_after_rotate_back.xml"
+    ui_state_json "$out/ui_after_rotate_back.xml" "$out/ui_after_rotate_back.json"
+
+    sh_cmd input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+    sleep 1
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_final.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_final.txt" 2>&1 || true
+    grep -o "$tag.*" "$out/logcat_final.txt" >"$out/lifecycle-summary.txt" || true
+    "$PY" - "$out/lifecycle-summary.txt" <<'PYEOF' || die "multi-activity lifecycle assertion failed"
+import sys
+lines = [l.split('AcosMulti: ')[-1].strip() for l in open(sys.argv[1]) if 'AcosMulti' in l]
+for ev in ['Main.onCreate', 'Main.onStart', 'Main.onResume', 'Main.send message=Hello',
+           'Second.onCreate', 'Second.onResume', 'Second.received=Hello', 'Second.finish',
+           'Main.onSaveInstanceState message=Hello', 'Main.restored message=Hello']:
+    if ev not in lines:
+        sys.exit('missing event: ' + ev)
+if lines[:3] != ['Main.onCreate', 'Main.onStart', 'Main.onResume']:
+    sys.exit('Main cold-start order wrong: %r' % lines[:3])
+sys.exit(0)
+PYEOF
+
+    device_config_json "$out"
+    printf '%s' "$CMDLOG" >"$out/commands.txt"
+    write_manifest multi-activity "$out" "$APPS_DIR/multi-activity.apk"
+    log "multi-activity artifacts: $(ls "$out" | wc -l) files"
+}
+
+# ---------------------------------------------------------------------------
+# form-validation — EditText validation + Toast + AlertDialog
+# ---------------------------------------------------------------------------
+ref_form() {
+    local pkg="dev.acos.fixtures.formvalidation" tag="AcosForm" out="$REF_ROOT/form-validation/$SUB"
+    rm -rf "$out"; mkdir -p "$out"
+    CMDLOG=""
+    log "installing form-validation.apk"
+    CMDLOG+="\$ adb -s $SERIAL install -r -g fixtures/build/apps/form-validation.apk"$'\n'
+    "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/form-validation.apk" >"$out/install.txt" 2>&1
+    grep -q Success "$out/install.txt" || die "form-validation install failed"
+    sh_cmd pm clear "$pkg" >/dev/null 2>&1 || true
+
+    capture_common "$pkg" "$tag" "$out"
+
+    # submit with everything empty -> "Name is required"
+    tap_id "$out/ui_initial.xml" ":id/submit"
+    sleep 1
+    screencap "$out/screenshot_after_empty.png"
+    dump_ui "$out/ui_after_empty.xml"
+    ui_texts "$out/ui_after_empty.xml" >"$out/observed-texts-after-empty.txt"
+    ui_state_json "$out/ui_after_empty.xml" "$out/ui_after_empty.json"
+    assert_node_text "$out/ui_after_empty.xml" ":id/error" "Name is required"
+
+    # name only -> "Email is required"
+    tap_id "$out/ui_after_empty.xml" ":id/name"
+    type_text Ada
+    tap_id "$out/ui_after_empty.xml" ":id/submit"
+    sleep 1
+    screencap "$out/screenshot_after_name_only.png"
+    dump_ui "$out/ui_after_name_only.xml"
+    ui_texts "$out/ui_after_name_only.xml" >"$out/observed-texts-after-name-only.txt"
+    ui_state_json "$out/ui_after_name_only.xml" "$out/ui_after_name_only.json"
+    assert_node_text "$out/ui_after_name_only.xml" ":id/error" "Email is required"
+
+    # malformed email -> "Invalid email"
+    tap_id "$out/ui_after_name_only.xml" ":id/email"
+    type_text not-an-email
+    tap_id "$out/ui_after_name_only.xml" ":id/submit"
+    sleep 1
+    screencap "$out/screenshot_after_bad_email.png"
+    dump_ui "$out/ui_after_bad_email.xml"
+    ui_texts "$out/ui_after_bad_email.xml" >"$out/observed-texts-after-bad-email.txt"
+    ui_state_json "$out/ui_after_bad_email.xml" "$out/ui_after_bad_email.json"
+    assert_node_text "$out/ui_after_bad_email.xml" ":id/error" "Invalid email"
+
+    # valid email -> AlertDialog "Submitted: Ada"
+    tap_id "$out/ui_after_bad_email.xml" ":id/email"
+    sh_cmd input keyevent KEYCODE_MOVE_END >/dev/null 2>&1 || true
+    clear_field 12
+    type_text 'ada@example.com'
+    tap_id "$out/ui_after_bad_email.xml" ":id/submit"
+    sleep 2
+    screencap "$out/screenshot_after_success.png"
+    dump_ui "$out/ui_after_success.xml"
+    ui_texts "$out/ui_after_success.xml" >"$out/observed-texts-after-success.txt"
+    ui_state_json "$out/ui_after_success.xml" "$out/ui_after_success.json"
+    assert_contains "$out/ui_after_success.xml" '-' 'Submitted: Ada'
+
+    # dismiss the dialog, then leave
+    tap_text "$out/ui_after_success.xml" OK
+    sleep 1
+    sh_cmd input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+    sleep 1
+    CMDLOG+="\$ adb -s $SERIAL shell logcat -d -v threadtime -s $tag:I > logcat_final.txt"$'\n'
+    "$ADB" -s "$SERIAL" shell logcat -d -v threadtime -s "$tag:I" >"$out/logcat_final.txt" 2>&1 || true
+    grep -o "$tag.*" "$out/logcat_final.txt" >"$out/lifecycle-summary.txt" || true
+    "$PY" - "$out/lifecycle-summary.txt" <<'PYEOF' || die "form-validation lifecycle assertion failed"
+import sys
+lines = [l.split('AcosForm: ')[-1].strip() for l in open(sys.argv[1]) if 'AcosForm' in l]
+if lines[:3] != ['onCreate', 'onStart', 'onResume']:
+    sys.exit('cold-start order wrong: %r' % lines[:3])
+for ev in ['validation_failed reason=name message=Name is required',
+           'validation_failed reason=email message=Email is required',
+           'validation_failed reason=email_format message=Invalid email',
+           'validation_ok name=Ada email=ada@example.com']:
+    if ev not in lines:
+        sys.exit('missing event: ' + ev)
+sys.exit(0)
+PYEOF
+
+    device_config_json "$out"
+    printf '%s' "$CMDLOG" >"$out/commands.txt"
+    write_manifest form-validation "$out" "$APPS_DIR/form-validation.apk"
+    log "form-validation artifacts: $(ls "$out" | wc -l) files"
+}
+
 mkdir -p "$REF_ROOT"
 ref_hello_views
 ref_hello_jni
+ref_counter
+ref_todo
+ref_multi
+ref_form
 log "done -> $REF_ROOT"

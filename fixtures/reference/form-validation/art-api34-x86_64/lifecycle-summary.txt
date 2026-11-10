@@ -1,0 +1,7 @@
+AcosForm: onCreate
+AcosForm: onStart
+AcosForm: onResume
+AcosForm: validation_failed reason=name message=Name is required
+AcosForm: validation_failed reason=email message=Email is required
+AcosForm: validation_failed reason=email_format message=Invalid email
+AcosForm: validation_ok name=Ada email=ada@example.com

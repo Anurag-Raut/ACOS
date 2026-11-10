@@ -1,0 +1,3 @@
+android.widget.TextView | android:id/alertTitle | Success | [133,1065][947,1136]
+android.widget.TextView | android:id/message | Submitted: Ada | [70,1157][1010,1214]
+android.widget.Button | android:id/button1 | OK | [810,1294][978,1436]

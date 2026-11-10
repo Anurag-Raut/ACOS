@@ -90,7 +90,7 @@ fn every_checked_in_scenario_parses_and_validates() {
     let mut files = Vec::new();
     scenario_files(&scenarios_dir, &mut files);
     assert!(
-        files.len() >= 7,
+        files.len() >= 15,
         "expected fixture + negative scenarios, got {files:?}"
     );
 
@@ -134,8 +134,8 @@ fn every_checked_in_scenario_parses_and_validates() {
         }
         assert_eq!(scenario.display.label(), "1080x2400@420");
     }
-    assert_eq!(positive, 2);
-    assert_eq!(negative, 5);
+    assert_eq!(positive, 6);
+    assert_eq!(negative, 9);
 }
 
 #[test]

@@ -1,0 +1,33 @@
+AcosMulti: Main.onCreate
+AcosMulti: Main.onStart
+AcosMulti: Main.onResume
+AcosMulti: Main.send message=Hello
+AcosMulti: Main.onPause
+AcosMulti: Second.onCreate
+AcosMulti: Second.received=Hello
+AcosMulti: Second.onStart
+AcosMulti: Second.onResume
+AcosMulti: Main.onStop
+AcosMulti: Main.onSaveInstanceState message=Hello
+AcosMulti: Second.finish
+AcosMulti: Second.onPause
+AcosMulti: Main.onStart
+AcosMulti: Main.onResume
+AcosMulti: Second.onStop
+AcosMulti: Second.onDestroy
+AcosMulti: Main.onPause
+AcosMulti: Main.onStop
+AcosMulti: Main.onSaveInstanceState message=Hello
+AcosMulti: Main.onDestroy
+AcosMulti: Main.onCreate
+AcosMulti: Main.restored message=Hello
+AcosMulti: Main.onStart
+AcosMulti: Main.onResume
+AcosMulti: Main.onPause
+AcosMulti: Main.onStop
+AcosMulti: Main.onSaveInstanceState message=Hello
+AcosMulti: Main.onDestroy
+AcosMulti: Main.onCreate
+AcosMulti: Main.restored message=Hello
+AcosMulti: Main.onStart
+AcosMulti: Main.onResume

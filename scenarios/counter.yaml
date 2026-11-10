@@ -1,0 +1,149 @@
+# counter: Button + TextView state, rotation-safe via onSaveInstanceState.
+#
+# Expected values come from fixtures/reference/counter/art-api34-x86_64/
+# (1080x2400 @ 420 dpi, locale en-US, light theme, font scale 1.0).
+version: 1
+name: counter
+description: >-
+  Launch counter, verify the initial count and labels, increment twice, rotate
+  to landscape and back (count restored from onSaveInstanceState), reset to 0,
+  and verify the AcosCounter lifecycle/log order.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+      bounds: [42, 317, 63, 368]
+
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+      bounds: [42, 368, 273, 494]
+
+  - assert_text:
+      selector: {id: reset}
+      text: {exact: Reset}
+      bounds: [42, 494, 273, 620]
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  # ---- first increment ---------------------------------------------------
+  - tap:
+      selector: {id: inc}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^increment value=1$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+      bounds: [42, 317, 63, 368]
+
+  - capture:
+      name: after-inc1
+      format: png
+      fresh: true
+
+  # ---- second increment --------------------------------------------------
+  - tap:
+      selector: {id: inc}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^increment value=2$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+      bounds: [42, 317, 63, 368]
+
+  # ---- rotate: activity recreated, count restored ------------------------
+  - rotate:
+      orientation: landscape
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState count=2$'
+        - '^onDestroy$'
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+      bounds: [170, 231, 191, 282]
+
+  - rotate:
+      orientation: portrait
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+      bounds: [42, 317, 63, 368]
+
+  # ---- reset -------------------------------------------------------------
+  - tap:
+      selector: {id: reset}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^reset value=0$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+      bounds: [42, 317, 63, 368]
+
+  - back: {}
+
+  - assert_no_crash: {}

@@ -1,0 +1,22 @@
+# NEGATIVE: the message field never contains this value.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: negative-multi-wrong-message
+description: Assert a message that was never typed.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Goodbye}

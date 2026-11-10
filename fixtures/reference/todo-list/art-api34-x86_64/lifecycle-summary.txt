@@ -1,0 +1,22 @@
+AcosTodo: onCreate
+AcosTodo: onStart
+AcosTodo: onResume
+AcosTodo: add item=milk size=1
+AcosTodo: add item=bread size=2
+AcosTodo: remove item=milk size=1
+AcosTodo: onPause
+AcosTodo: saved count=1
+AcosTodo: onStop
+AcosTodo: onDestroy
+AcosTodo: onCreate
+AcosTodo: loaded count=1
+AcosTodo: onStart
+AcosTodo: onResume
+AcosTodo: onPause
+AcosTodo: saved count=1
+AcosTodo: onStop
+AcosTodo: onDestroy
+AcosTodo: onCreate
+AcosTodo: loaded count=1
+AcosTodo: onStart
+AcosTodo: onResume

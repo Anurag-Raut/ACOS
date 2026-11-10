@@ -1,0 +1,3 @@
+android.widget.TextView |  | Multi Activity | [170,100][384,151]
+android.widget.EditText | dev.acos.fixtures.multiactivity:id/message | Hello | [170,231][2358,349]
+android.widget.Button | dev.acos.fixtures.multiactivity:id/send | Send | [170,349][401,475]

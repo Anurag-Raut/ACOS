@@ -1,0 +1,4 @@
+android.widget.TextView |  | Counter | [170,100][302,151]
+android.widget.TextView | dev.acos.fixtures.counter:id/count | 2 | [170,231][191,282]
+android.widget.Button | dev.acos.fixtures.counter:id/inc | Increment | [170,282][401,408]
+android.widget.Button | dev.acos.fixtures.counter:id/reset | Reset | [170,408][401,534]

@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.formvalidation/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.formvalidation/.MainActivity
+TotalTime: 451
+WaitTime: 457
+Complete

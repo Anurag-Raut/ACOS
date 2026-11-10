@@ -1,0 +1,25 @@
+AcosCounter: onCreate
+AcosCounter: onStart
+AcosCounter: onResume
+AcosCounter: increment value=1
+AcosCounter: increment value=2
+AcosCounter: onPause
+AcosCounter: onStop
+AcosCounter: onSaveInstanceState count=2
+AcosCounter: onDestroy
+AcosCounter: onCreate
+AcosCounter: restored count=2
+AcosCounter: onStart
+AcosCounter: onResume
+AcosCounter: onPause
+AcosCounter: onStop
+AcosCounter: onSaveInstanceState count=2
+AcosCounter: onDestroy
+AcosCounter: onCreate
+AcosCounter: restored count=2
+AcosCounter: onStart
+AcosCounter: onResume
+AcosCounter: reset value=0
+AcosCounter: onPause
+AcosCounter: onStop
+AcosCounter: onDestroy

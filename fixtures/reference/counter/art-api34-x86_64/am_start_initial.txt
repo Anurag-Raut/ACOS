@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.counter/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.counter/.MainActivity
+TotalTime: 363
+WaitTime: 367
+Complete

@@ -1,0 +1,112 @@
+[
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/content",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1018][1010,1447]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.LinearLayout",
+    "resource_id": "android:id/parentPanel",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1018][1010,1447]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.LinearLayout",
+    "resource_id": "android:id/topPanel",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1018][1010,1157]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.LinearLayout",
+    "resource_id": "android:id/title_template",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1018][1010,1136]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "android:id/alertTitle",
+    "text": "Success",
+    "content_desc": "",
+    "bounds": "[133,1065][947,1136]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/titleDividerNoCustom",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1136][1010,1157]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/contentPanel",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1157][1010,1283]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.ScrollView",
+    "resource_id": "android:id/scrollView",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1157][1010,1214]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "android:id/message",
+    "text": "Submitted: Ada",
+    "content_desc": "",
+    "bounds": "[70,1157][1010,1214]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.ScrollView",
+    "resource_id": "android:id/buttonPanel",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[70,1283][1010,1447]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "android:id/button1",
+    "text": "OK",
+    "content_desc": "",
+    "bounds": "[810,1294][978,1436]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/decor_content_parent",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,0][2400,1017]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/action_bar_container",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,63][2400,189]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/action_bar",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,63][2400,189]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "",
+    "text": "Multi Activity",
+    "content_desc": "",
+    "bounds": "[170,100][384,151]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/content",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,189][2400,1017]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.EditText",
+    "resource_id": "dev.acos.fixtures.multiactivity:id/message",
+    "text": "Hello",
+    "content_desc": "",
+    "bounds": "[170,231][2358,349]",
+    "clickable": true,
+    "focused": true,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.Button",
+    "resource_id": "dev.acos.fixtures.multiactivity:id/send",
+    "text": "Send",
+    "content_desc": "",
+    "bounds": "[170,349][401,475]",
+    "clickable": true,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/statusBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,0][2400,63]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/navigationBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[128,1017][2400,1080]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  }
+]

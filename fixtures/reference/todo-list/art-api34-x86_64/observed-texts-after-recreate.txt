@@ -1,0 +1,5 @@
+android.widget.TextView |  | Todo List | [170,100][323,151]
+android.widget.EditText | dev.acos.fixtures.todolist:id/input | New item | [170,231][2358,349]
+android.widget.Button | dev.acos.fixtures.todolist:id/add | Add | [170,349][401,475]
+android.widget.Button | dev.acos.fixtures.todolist:id/clear | Clear all | [401,349][632,475]
+android.widget.TextView | android:id/text1 | bread | [170,475][2358,601]

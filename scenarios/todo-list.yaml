@@ -1,0 +1,158 @@
+# todo-list: EditText + framework ListView add/remove + SharedPreferences.
+#
+# Expected values come from fixtures/reference/todo-list/art-api34-x86_64/
+# (1080x2400 @ 420 dpi). Rows use android.R.layout.simple_list_item_1, so their
+# resource id is android:id/text1; they are selected by exact text.
+version: 1
+name: todo-list
+description: >-
+  Launch todo-list, add milk and bread to the ListView, tap the milk row to
+  remove it, rotate to landscape and back (the list persists through
+  SharedPreferences), then leave and verify the AcosTodo lifecycle/log order.
+app: fixtures/build/apps/todo-list.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.todolist/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: input}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: New item}
+      bounds: [42, 317, 1038, 435]
+
+  - assert_text:
+      selector: {id: add}
+      text: {exact: Add}
+      bounds: [42, 435, 273, 561]
+
+  - assert_text:
+      selector: {id: clear}
+      text: {exact: Clear all}
+      bounds: [273, 435, 504, 561]
+
+  - assert_log:
+      tag: AcosTodo
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  # ---- add milk ----------------------------------------------------------
+  - tap:
+      selector: {id: input}
+  - type:
+      selector: {id: input}
+      text: milk
+  - tap:
+      selector: {id: add}
+
+  - assert_log:
+      tag: AcosTodo
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^add item=milk size=1$'
+
+  - assert_text:
+      selector: {text: {exact: milk}}
+      text: {exact: milk}
+      bounds: [42, 561, 1038, 687]
+
+  - capture:
+      name: after-add-milk
+      format: png
+      fresh: true
+
+  # ---- add bread ---------------------------------------------------------
+  - tap:
+      selector: {id: input}
+  - type:
+      selector: {id: input}
+      text: bread
+  - tap:
+      selector: {id: add}
+
+  - assert_log:
+      tag: AcosTodo
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^add item=bread size=2$'
+
+  - assert_text:
+      selector: {text: {exact: bread}}
+      text: {exact: bread}
+      bounds: [42, 690, 1038, 816]
+
+  # ---- remove milk by tapping the row -----------------------------------
+  - tap:
+      selector: {text: {exact: milk}}
+
+  - assert_log:
+      tag: AcosTodo
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^remove item=milk size=1$'
+
+  - assert_not_visible:
+      selector: {text: {exact: milk}}
+
+  - assert_text:
+      selector: {text: {exact: bread}}
+      text: {exact: bread}
+      bounds: [42, 561, 1038, 687]
+
+  - capture:
+      name: after-remove
+      format: png
+      fresh: true
+
+  # ---- rotate: list restored from SharedPreferences ----------------------
+  - rotate:
+      orientation: landscape
+
+  - assert_text:
+      selector: {text: {exact: bread}}
+      text: {exact: bread}
+      bounds: [170, 475, 2358, 601]
+
+  - assert_not_visible:
+      selector: {text: {exact: milk}}
+
+  - rotate:
+      orientation: portrait
+
+  - assert_text:
+      selector: {text: {exact: bread}}
+      text: {exact: bread}
+      bounds: [42, 561, 1038, 687]
+
+  - back: {}
+
+  - assert_no_crash: {}
