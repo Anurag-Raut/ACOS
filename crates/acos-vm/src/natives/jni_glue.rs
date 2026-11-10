@@ -319,6 +319,41 @@ pub fn bridge() -> NativeFn {
     dispatch_native
 }
 
+// ---------------------------------------------------------------------------
+// Public native-memory surface for JNI direct buffers
+// ---------------------------------------------------------------------------
+//
+// `NewDirectByteBuffer` wraps a process address that, in ACOS, is a synthetic
+// (region id << 32 | offset) handle into the VM-owned native-memory substrate.
+// The JNI crate cannot name `natives::native_mem` (it is `pub(crate)`), so this
+// host module re-exports the small surface it needs. Addresses are opaque
+// `i64`s; nothing here ever dereferences a host pointer.
+
+/// Allocate a zero-filled native region and return its synthetic address.
+pub fn native_mem_alloc(len: usize) -> Result<i64, String> {
+    super::native_mem::alloc(len, false).map_err(|e| format!("{e:?}"))
+}
+
+/// True when `addr` names a live region with at least `len` accessible bytes.
+pub fn native_mem_check(addr: i64, len: usize) -> bool {
+    super::native_mem::with_bytes(addr, len, |_| ()).is_ok()
+}
+
+/// Read `len` bytes from a synthetic native region.
+pub fn native_mem_read(addr: i64, len: usize) -> Result<Vec<u8>, String> {
+    super::native_mem::read_bytes(addr, len).map_err(|e| format!("{e:?}"))
+}
+
+/// Write `bytes` into a synthetic native region.
+pub fn native_mem_write(addr: i64, bytes: &[u8]) -> Result<(), String> {
+    super::native_mem::write_bytes(addr, bytes).map_err(|e| format!("{e:?}"))
+}
+
+/// Free a synthetic native region. Returns whether it was live.
+pub fn native_mem_free(addr: i64) -> bool {
+    super::native_mem::free(addr)
+}
+
 /// True when a method's argument list fits the JNI host marshalling rules.
 ///
 /// Used by the host's DEX scan to reject impossible declarations early.

@@ -149,7 +149,7 @@ pub(crate) fn load_named(vm: &mut Vm, requested: &str) -> Result<String, CallFai
         }
         let rt = runtime_state().unwrap();
         let t = vm.current_thread;
-        refs::push_frame(&rt, t);
+        refs::push_frame(&rt, t, 0);
         let java_vm = rt.borrow().vm_slot as *mut std::os::raw::c_void;
         // SAFETY: `JNI_OnLoad` has the JNI-mandated signature
         // `jint (*)(JavaVM*, void*)`; the pointer came from a real export of a

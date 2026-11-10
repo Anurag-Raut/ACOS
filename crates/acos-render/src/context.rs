@@ -1752,8 +1752,19 @@ impl RenderContext {
             let mut rasterised = true;
             let mut pen_x = origin_x;
             'runs: for run in &shaped.runs {
+                // The same effective design coordinates the shaper used for
+                // this run, so the FreeType instance matches the advances.
+                // Normalise once per run; the glyph loop only clones the key.
+                let run_variations =
+                    crate::text::effective_variations(&run.font, &style.variations);
+                let run_coords = crate::text::freetype::VariationCoords::new(&run_variations);
                 for g in &run.glyphs {
-                    match crate::text::freetype::rasterize(&run.font, g.glyph_id, style.size) {
+                    match crate::text::freetype::rasterize_coords(
+                        &run.font,
+                        g.glyph_id,
+                        style.size,
+                        &run_coords,
+                    ) {
                         Some(mask) if !mask.is_empty() => {
                             // Android's unhinted grid places each mask on an
                             // integer pixel; the accumulated advances stay

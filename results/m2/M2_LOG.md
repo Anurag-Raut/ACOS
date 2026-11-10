@@ -888,3 +888,98 @@ Edited: `crates/acos-services/src/display.rs` (served-value cache),
 `crates/acos-runtime/src/{lib,pms_java,transport}.rs`,
 `crates/acos-vm/src/natives/{mod,vmrt}.rs`, `tools/extract-bootclasspath.sh`,
 `crates/acos-runtime/tests/m2.rs` (ignore reason).
+
+---
+
+# W29-A session — M2 chain: `Application.onCreate` reached; launch into `performLaunchActivity`/`PhoneWindow`
+
+Started at `1cc85a3`; the tree later advanced to `da35f21`. The `setxattr`
+blocker in §7 is cleared, and the chain now runs
+`ApplicationThread.bindApplication` → `Application.onCreate`
+(`app_created=true`) and the `ClientTransaction` launch into
+`ActivityThread.performLaunchActivity` → `Activity.attach` →
+`PhoneWindow.<init>`. The full gate is still `#[ignore]`d; the exact blocker is
+below.
+
+## What runs now (evidence)
+
+```
+cargo run -q -p acos-runtime --example lifecycle_probe -- fixtures/build/apps/hello-views.apk
+```
+
+| metric | value |
+|---|---:|
+| `bindApplication` delivered | yes |
+| `ActivityThread.mInitialApplication` non-null (`Application.onCreate` ran) | **yes** |
+| `ClientTransaction` scheduled | yes |
+| launch reached `performLaunchActivity`/`Activity.attach`/`PhoneWindow.<init>` | yes |
+| classes at block | ~1759 |
+| first structured blocker | `Settings.getPublicSettingsForClass` NPE |
+
+## Blockers cleared (each verified by the probe)
+
+| native/service | change | real semantics |
+| --- | --- | --- |
+| `Llibcore/io/Linux;.setxattr` | new VFS `user.*` xattr store (`vfs.rs`) + `setxattr`/`getxattr`/`listxattr`/`removexattr` (`io_linux.rs`); `/data/user_de/**` mapped and `data/user_de/0` created | the device data partition carries `user.inode_cache`; reads return exactly what was written |
+| `ApplicationInfo` data-dir siblings | `deviceProtectedDataDir`/`credentialProtectedDataDir` populated (`pms.rs`, `pms_java.rs`) | a device-protected `Context` resolves `/data/user_de/0/<pkg>` |
+| `Parcel` exception header | `write_exception` writes `code, String msg, int stackSize(0)[, errorCode]` for every failing code (`exception.rs`) | AOSP `writeException`/`readException` symmetry; a message-less header desynchronised the reply |
+| `ApplicationInfo` reply layout | spec + `to_parcelable` gained the two dir fields (`parcelable.rs`) | staging codec for the real-Java rewrite |
+| `HardwareRenderer.setupShadersDiskCache` | recorded no-op (`gfx_hwui.rs`) | no native GPU/Skia shader cache exists; the paths are recorded |
+| `NetworkUtils.getBoundNetworkHandleForProcess` | `0` (`fwk_m2_chain2.rs`) | the process is never bound; `getProcessDefaultNetwork` returns null |
+| `am_get_assigned_package_identifiers` | builds the real `SparseArray` fields directly (`fwk_res.rs`) | exact result; avoids the Java `put` → `GrowingArrayUtils.insert` → `Array.newInstance`/`System.arraycopy` path, which can unwind past a native frame |
+| `LaunchActivityItem.obtain` | `deviceId`/`procState` args swapped to the API 34 order (`client_transaction.rs`) | API 34 order is `… overrideConfig, deviceId, referrer, voiceInteractor, procState, …`; ACOS passed `2` as `deviceId`, so `ContextImpl.updateDeviceId` NPE'd on a null `VirtualDeviceManager` |
+| `Field.getAnnotationNative` | `null` (`fwk_m2_chain2.rs`) | ACOS does not parse annotation metadata (the same declared divergence as `Class.getDeclaredAnnotation`) |
+
+## Exact current blocker (root cause + owner)
+
+```text
+handleLaunchActivity -> performLaunchActivity -> Activity.attach
+  -> PhoneWindow.<init> -> Settings.Global.<clinit>
+  -> Settings.getPublicSettingsForClass   (pc=27: value.getClass())
+```
+
+`getPublicSettingsForClass` reads each static `String` field with `Field.get`
+and dereferences it; `Field.get` returned `null` for
+`Settings.Global.DEFAULT_DNS_SERVER` (declaration index 154). Root cause:
+`fwk_reflect::make_field` stores the **declaration index** in the `Field`
+mirror's `artFieldIndex`, but `Vm`'s `statics` vector is **slot-indexed** (a
+`long`/`double` reserves two slots), so every static field after a wide field
+reads the wrong slot. Fix: set `artFieldIndex` to `FieldDef::offset` (the slot
+offset) for static fields, or index `read_field`/`write_field` by
+`(offset - FIELD_BASE)/4`. Owner: reflection.
+
+With that one-line fix applied (not landed), the chain proceeds further and
+hits a second, VM-level bug: an exception thrown inside a nested `<clinit>`
+(via `initialize_class`) is caught by a handler below the synchronous Rust
+call's base frame, so `handle_exception_inner` unwinds past
+`initialize_class`/`execute` and the interpreter continues with a stale frame
+index (`set_ref` panics: `frames.len()=3, fi=13`). Fix: stop exception
+unwinding at the innermost `call_method`/`initialize_class` base (an
+`exception_floor`). W29-A prototyped the floor; it is correct in shape but
+regressed early boot, so it was not landed and the offset fix was reverted to
+keep the non-ignored suite green. Owner: interpreter/scheduler.
+
+## `client_transaction` test
+
+`cargo test -p acos-runtime --test client_transaction` still hangs
+(pre-existing, flagged by the coordinator). New finding: `interp::run` returns
+`Ok(())` in under a second and `parked=false`; the spin is **after** the run, in
+the test's post-run Java/reflection calls (`ActivityThread.getActivityClient`
+and the `Throwable.getCause` walk in the test helper). That is outside the
+lifecycle chain. No bound was landed: the `HostGuard` checks added to
+`run_current_until`/`native_poll_once` never reached the spin and were
+reverted.
+
+## Verification (W29-A, clean worktree `.cache/wt-w29a` @ HEAD)
+
+```
+cargo test -p acos-services -p acos-runtime -- \
+  --skip client_transaction_is_built_and_delivered_to_the_real_application_thread
+# all non-ignored pass (m2: 2 passed / 1 ignored; acos-services lib 25/25, etc.)
+cargo clippy -p acos-vm -p acos-runtime -p acos-services --all-targets
+# no warning in any touched file (one unrelated `IIT` warning in services_t38.rs)
+```
+
+Files: `crates/acos-services/src/{exception,pms,parcelable}.rs`,
+`crates/acos-runtime/src/{client_transaction,pms_java}.rs`,
+`crates/acos-vm/src/{vfs.rs,natives/{io_linux,gfx_hwui,fwk_res,fwk_m2_chain2,mod}.rs}`.

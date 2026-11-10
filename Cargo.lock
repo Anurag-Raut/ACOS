@@ -213,6 +213,8 @@ dependencies = [
  "sha2",
  "thiserror",
  "ttf-parser",
+ "unicode-properties",
+ "unicode-script",
  "zip",
 ]
 

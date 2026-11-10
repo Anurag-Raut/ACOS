@@ -36,6 +36,11 @@ libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# Unicode general-category / script tables backing `\p{...}` in the ICU regex
+# natives (`natives/icu_regex.rs`). Both are already in the workspace lock via
+# acos-render / rustybuzz; no new network dependency.
+unicode-properties = "0.1"
+unicode-script = "0.5"
 
 [dev-dependencies]
 

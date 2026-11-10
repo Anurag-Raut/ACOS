@@ -168,7 +168,16 @@ impl Buffer {
 #[derive(Default, Debug)]
 pub struct LocalFrame {
     pub refs: Vec<u32>,
+    /// `PushLocalFrame` capacity. `0` means the frame is unbounded (the base
+    /// frame and frames pushed by `PushLocalFrame(0)`); a positive value makes
+    /// the frame overflow once that many live locals exist.
+    pub cap: usize,
 }
+
+/// Cap on a single `PushLocalFrame`/`EnsureLocalCapacity` request. Larger
+/// requests are rejected with `OutOfMemoryError`, matching the JNI contract
+/// for an unsatisfiable capacity.
+pub const MAX_LOCAL_CAPACITY: i32 = 1_000_000;
 
 /// A pending Java exception plus whether this module added the GC root.
 #[derive(Debug)]
@@ -187,6 +196,8 @@ pub struct ThreadJni {
     /// References returned to Java by the previous native call. The Java frame
     /// roots them; this keeps them alive across the hand-off without leaking.
     pub return_roots: Vec<u32>,
+    /// Set when a JNI local exceeded the capacity of its `PushLocalFrame`.
+    pub frame_overflow: bool,
 }
 
 impl ThreadJni {
@@ -209,6 +220,12 @@ pub struct State {
     pub methods: Vec<Box<MethodInfo>>,
     pub fields: Vec<Box<FieldInfo>>,
     pub globals: Vec<u32>,
+    /// Weak global references. They are *not* GC roots; a referent may be
+    /// collected while one is held, which clears the reference.
+    pub weak_globals: Vec<u32>,
+    /// `NewDirectByteBuffer` buffers: `jobject` handle -> (region address,
+    /// capacity in bytes).
+    pub direct_buffers: HashMap<u32, (i64, i64)>,
     pub threads: HashMap<usize, ThreadJni>,
     /// DEX `native` declarations discovered by [`JniRuntime::scan_natives`].
     pub dex_natives: HashSet<(String, String, String)>,
@@ -228,6 +245,8 @@ impl std::fmt::Debug for State {
             .field("methods", &self.methods.len())
             .field("fields", &self.fields.len())
             .field("globals", &self.globals.len())
+            .field("weak_globals", &self.weak_globals.len())
+            .field("direct_buffers", &self.direct_buffers.len())
             .field("dex_natives", &self.dex_natives.len())
             .finish()
     }
@@ -355,6 +374,8 @@ impl JniRuntime {
             methods: Vec::new(),
             fields: Vec::new(),
             globals: Vec::new(),
+            weak_globals: Vec::new(),
+            direct_buffers: HashMap::new(),
             threads: HashMap::new(),
             dex_natives: HashSet::new(),
             overloads: HashMap::new(),

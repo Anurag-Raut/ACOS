@@ -16,14 +16,17 @@ use crate::state::{PendingException, State};
 
 type Shared = Rc<RefCell<State>>;
 
-/// Push a local frame.
-pub(crate) fn push_frame(rt: &Shared, t: usize) {
+/// Push a local frame with `capacity` reserved locals (`0` = unbounded).
+pub(crate) fn push_frame(rt: &Shared, t: usize, capacity: usize) {
     let mut st = rt.borrow_mut();
     st.threads
         .entry(t)
         .or_default()
         .frames
-        .push(crate::state::LocalFrame::default());
+        .push(crate::state::LocalFrame {
+            refs: Vec::new(),
+            cap: capacity,
+        });
 }
 
 /// Pop the top local frame, releasing every reference it owns.
@@ -66,6 +69,16 @@ pub(crate) fn local(vm: &mut Vm, rt: &Shared, t: usize, h: Handle) -> Handle {
         th.frames.push(crate::state::LocalFrame::default());
     }
     if let Some(f) = th.frames.last_mut() {
+        if f.cap > 0 && f.refs.len() >= f.cap {
+            th.frame_overflow = true;
+            // `OutOfMemoryError: local reference table overflow`. Recorded as
+            // a structured error so the enclosing native call aborts; the
+            // reference below is still tracked so `PopLocalFrame` frees it.
+            th.error = Some(crate::error::JniError::NativeFault {
+                message: "local reference table overflow (JNI local frame capacity exceeded)"
+                    .into(),
+            });
+        }
         f.refs.push(h);
     }
     h
@@ -102,6 +115,43 @@ pub(crate) fn global(vm: &mut Vm, rt: &Shared, h: Handle) -> Handle {
     vm.native_roots.push(h);
     rt.borrow_mut().globals.push(h);
     h
+}
+
+/// Create a weak global reference. The referent is *not* rooted: it may be
+/// collected, after which the reference is considered cleared (`null`).
+pub(crate) fn weak_global(rt: &Shared, h: Handle) -> Handle {
+    if h == NULL {
+        return NULL;
+    }
+    let mut st = rt.borrow_mut();
+    if !st.weak_globals.contains(&h) {
+        st.weak_globals.push(h);
+    }
+    h
+}
+
+/// Delete a weak global reference.
+pub(crate) fn delete_weak_global(rt: &Shared, h: Handle) {
+    if h == NULL {
+        return;
+    }
+    let mut st = rt.borrow_mut();
+    if let Some(i) = st.weak_globals.iter().rposition(|x| *x == h) {
+        st.weak_globals.remove(i);
+    }
+}
+
+/// True when `h` is a registered weak global reference.
+pub(crate) fn is_weak_global(rt: &Shared, h: Handle) -> bool {
+    h != NULL && rt.borrow().weak_globals.contains(&h)
+}
+
+/// True when the weak global reference `h` still refers to a live object.
+pub(crate) fn weak_is_live(vm: &Vm, rt: &Shared, h: Handle) -> bool {
+    // A weak reference whose handle is not live has been cleared. Handles are
+    // slot indices and may be recycled; accessors therefore re-check liveness
+    // (`Vm::gc` reclaims the slot before any reuse).
+    is_weak_global(rt, h) && vm.heap.is_live(h)
 }
 
 /// Delete a global reference.

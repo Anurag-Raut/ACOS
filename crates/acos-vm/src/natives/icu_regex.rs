@@ -47,6 +47,11 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use unicode_properties::general_category::{
+    GeneralCategory, GeneralCategoryGroup, UnicodeGeneralCategory,
+};
+use unicode_script::{Script, UnicodeScript};
+
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
 use crate::heap::{ArrayData, ArrayObj, Handle, Object};
@@ -60,7 +65,26 @@ const F_UNIX_LINES: u32 = 0x01;
 const F_CASE_INSENSITIVE: u32 = 0x02;
 const F_COMMENTS: u32 = 0x04;
 const F_MULTILINE: u32 = 0x08;
+const F_LITERAL: u32 = 0x10;
 const F_DOTALL: u32 = 0x20;
+/// ICU is always Unicode-aware; `UNICODE_CASE` is accepted as a no-op.
+const F_UNICODE_CASE: u32 = 0x40;
+
+/// Hard ceiling on backtracking steps for a single match attempt. Reached only
+/// by pathological patterns; the native returns a structured error instead of
+/// spinning until the `HostGuard` wall clock fires.
+const DEFAULT_MAX_MATCH_STEPS: u64 = 20_000_000;
+
+fn max_match_steps() -> u64 {
+    static LIMIT: OnceLock<u64> = OnceLock::new();
+    *LIMIT.get_or_init(|| {
+        std::env::var("ACOS_REGEX_MAX_STEPS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(DEFAULT_MAX_MATCH_STEPS)
+    })
+}
 
 // ===========================================================================
 // Instruction set
@@ -71,7 +95,11 @@ enum Inst {
     /// Match one code point (with optional simple case folding).
     Char(u32, bool),
     /// Match one code point against a character class.
-    Class(u16),
+    /// `u16` indexes `Pattern::classes`; `bool` is `CASE_INSENSITIVE`.
+    Class(u16, bool),
+    /// Match a case-insensitive literal run by full Unicode case folding.
+    /// `usize` indexes `Pattern::folds`.
+    FoldStr(u32),
     /// Match any code point honouring DOTALL / UNIX_LINES.
     Any { dotall: bool, unix: bool },
     /// Match a line break (`\R`): CRLF or a single line terminator.
@@ -124,9 +152,6 @@ enum Pred {
     Horiz,
     Vert,
     Ascii,
-    Alpha,
-    Upper,
-    Lower,
     Alnum,
     Punct,
     Graph,
@@ -134,22 +159,71 @@ enum Pred {
     Blank,
     Cntrl,
     XDigit,
-    Latin,
-    Greek,
     JavaLower,
     JavaUpper,
     JavaWhitespace,
+    Cat(GeneralCategory),
+    CatGroup(GeneralCategoryGroup),
+    Script(Script),
+    WhiteSpace,
+    Alphabetic,
+    Lowercase,
+    Uppercase,
 }
 
 impl ClassNode {
-    fn contains(&self, c: u32) -> bool {
+    /// Case-aware membership test. Folding is applied *inside* negation so that
+    /// `(?i)[^a]` rejects both `a` and `A`.
+    fn contains(&self, c: u32, ic: bool) -> bool {
         match self {
             ClassNode::Empty => false,
-            ClassNode::Range(a, b) => c >= *a && c <= *b,
-            ClassNode::Union(v) => v.iter().any(|n| n.contains(c)),
-            ClassNode::Inter(a, b) => a.contains(c) && b.contains(c),
-            ClassNode::Neg(n) => !n.contains(c),
-            ClassNode::Pred(p) => pred_match(*p, c),
+            ClassNode::Range(a, b) => {
+                if c >= *a && c <= *b {
+                    return true;
+                }
+                if ic {
+                    if let Some(ch) = char::from_u32(c) {
+                        for v in ch.to_lowercase().chain(ch.to_uppercase()) {
+                            let v = v as u32;
+                            if v >= *a && v <= *b {
+                                return true;
+                            }
+                        }
+                        let mut folded = Vec::new();
+                        fold_into(ch, &mut folded);
+                        if folded.len() == 1 {
+                            let f = folded[0] as u32;
+                            if f >= *a && f <= *b {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            ClassNode::Union(v) => v.iter().any(|n| n.contains(c, ic)),
+            ClassNode::Inter(a, b) => a.contains(c, ic) && b.contains(c, ic),
+            ClassNode::Neg(n) => !n.contains(c, ic),
+            ClassNode::Pred(p) => {
+                if pred_match(*p, c) {
+                    return true;
+                }
+                if ic {
+                    if let Some(ch) = char::from_u32(c) {
+                        for v in ch.to_lowercase().chain(ch.to_uppercase()) {
+                            if pred_match(*p, v as u32) {
+                                return true;
+                            }
+                        }
+                        let mut folded = Vec::new();
+                        fold_into(ch, &mut folded);
+                        if folded.len() == 1 && pred_match(*p, folded[0] as u32) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
         }
     }
 }
@@ -160,47 +234,72 @@ fn pred_match(p: Pred, c: u32) -> bool {
         None => return false,
     };
     match p {
-        Pred::Digit => ch.is_numeric(),
+        Pred::Digit => ch.general_category() == GeneralCategory::DecimalNumber,
         Pred::Word => is_word_cp(c),
-        Pred::Space => ch.is_whitespace(),
+        Pred::Space | Pred::WhiteSpace => ch.is_whitespace(),
         Pred::Horiz => matches!(c, 0x09 | 0x20 | 0xA0 | 0x1680 | 0x180E | 0x202F | 0x205F | 0x3000)
             || (0x2000..=0x200A).contains(&c),
         Pred::Vert => matches!(c, 0x0A | 0x0B | 0x0C | 0x0D | 0x85 | 0x2028 | 0x2029),
         Pred::Ascii => c <= 0x7F,
-        Pred::Alpha => ch.is_alphabetic(),
-        Pred::Upper | Pred::JavaUpper => ch.is_uppercase(),
-        Pred::Lower | Pred::JavaLower => ch.is_lowercase(),
+        Pred::Alphabetic => ch.is_alphabetic(),
+        Pred::JavaUpper | Pred::Uppercase => ch.is_uppercase(),
+        Pred::JavaLower | Pred::Lowercase => ch.is_lowercase(),
         Pred::Alnum => ch.is_alphanumeric(),
-        Pred::Punct => is_punct(c),
+        Pred::Punct => ch.general_category_group() == GeneralCategoryGroup::Punctuation,
         Pred::Graph => !ch.is_whitespace() && !ch.is_control(),
         Pred::Print => !ch.is_control(),
-        Pred::Blank => c == 0x09 || c == 0x20,
-        Pred::Cntrl => ch.is_control(),
-        Pred::XDigit => ch.is_ascii_hexdigit() || ch.is_numeric(),
-        Pred::Latin => is_latin(c),
-        Pred::Greek => (0x0370..=0x03FF).contains(&c) || (0x1F00..=0x1FFF).contains(&c),
-        Pred::JavaWhitespace => ch.is_whitespace(),
+        Pred::Blank => c == 0x09 || ch.general_category() == GeneralCategory::SpaceSeparator,
+        Pred::Cntrl => ch.general_category() == GeneralCategory::Control,
+        Pred::XDigit => is_hex_digit(c),
+        Pred::JavaWhitespace => java_whitespace(c),
+        Pred::Cat(gc) => ch.general_category() == gc,
+        Pred::CatGroup(g) => ch.general_category_group() == g,
+        Pred::Script(s) => ch.script() == s,
     }
 }
 
-fn is_punct(c: u32) -> bool {
-    matches!(c,
-        0x21..=0x23 | 0x25..=0x2A | 0x2C..=0x2F | 0x3A..=0x3B | 0x3F..=0x40
-        | 0x5B..=0x5D | 0x5F | 0x7B | 0x7D | 0xA1 | 0xA7 | 0xAB | 0xB6 | 0xB7
-        | 0xBB | 0xBF | 0x2010..=0x2027 | 0x2030..=0x205E)
+/// `Character.isWhitespace`: a space separator that is not non-breaking, or
+/// one of the ASCII/control whitespace characters. Note this differs from the
+/// Unicode `White_Space` property (`\s`) — notably NEL (U+0085) is *not*
+/// whitespace for `Character.isWhitespace`, and NBSP (U+00A0) is not either.
+fn java_whitespace(c: u32) -> bool {
+    if matches!(c, 0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1C | 0x1D | 0x1E | 0x1F) {
+        return true;
+    }
+    match char::from_u32(c) {
+        Some(ch) => {
+            ch.general_category_group() == GeneralCategoryGroup::Separator
+                && !matches!(c, 0xA0 | 0x2007 | 0x202F)
+        }
+        None => false,
+    }
 }
 
-fn is_latin(c: u32) -> bool {
-    (0x0041..=0x005A).contains(&c)
-        || (0x0061..=0x007A).contains(&c)
-        || (0x00C0..=0x024F).contains(&c)
-        || (0x1E00..=0x1EFF).contains(&c)
+/// Unicode `Hex_Digit`: ASCII `0-9A-Fa-f` plus the fullwidth forms.
+fn is_hex_digit(c: u32) -> bool {
+    ch_ascii_hex(c)
+        || (0xFF10..=0xFF19).contains(&c)
+        || (0xFF21..=0xFF26).contains(&c)
+        || (0xFF41..=0xFF46).contains(&c)
+}
+
+fn ch_ascii_hex(c: u32) -> bool {
+    matches!(c, 0x30..=0x39 | 0x41..=0x46 | 0x61..=0x66)
 }
 
 fn is_word_cp(c: u32) -> bool {
-    c == 0x200C
-        || c == 0x200D
-        || char::from_u32(c).map(|ch| ch.is_alphanumeric() || ch == '_').unwrap_or(false)
+    if matches!(c, 0x200C | 0x200D) {
+        return true;
+    }
+    match char::from_u32(c) {
+        Some(ch) => {
+            ch.is_alphabetic()
+                || ch.general_category() == GeneralCategory::DecimalNumber
+                || ch.general_category_group() == GeneralCategoryGroup::Mark
+                || ch.general_category() == GeneralCategory::ConnectorPunctuation
+        }
+        None => false,
+    }
 }
 
 // ===========================================================================
@@ -211,6 +310,9 @@ struct Pattern {
     /// Program list; index 0 is the main program.
     programs: Vec<Vec<Inst>>,
     classes: Vec<ClassNode>,
+    /// Full case-folded forms of case-insensitive literal runs, indexed by
+    /// `Inst::FoldStr`.
+    folds: Vec<Vec<char>>,
     group_count: usize,
     names: HashMap<String, usize>,
 }
@@ -230,9 +332,14 @@ struct Parser {
     pos: usize,
     classes: Vec<ClassNode>,
     programs: Vec<Vec<Inst>>,
+    folds: Vec<Vec<char>>,
     group_count: usize,
     names: HashMap<String, usize>,
     depth: usize,
+    /// Non-zero while parsing the body of a look-behind group; unbounded
+    /// quantifiers are rejected there because ICU requires a finite maximum
+    /// length.
+    lookbehind: usize,
 }
 
 const MAX_DEPTH: usize = 200;
@@ -244,9 +351,11 @@ impl Parser {
             pos: 0,
             classes: Vec::new(),
             programs: vec![Vec::new()],
+            folds: Vec::new(),
             group_count: 0,
             names: HashMap::new(),
             depth: 0,
+            lookbehind: 0,
         }
     }
 
@@ -295,18 +404,37 @@ impl Parser {
         self.group_count
     }
 
+    fn push_fold(&mut self, folded: Vec<char>) -> u32 {
+        self.folds.push(folded);
+        (self.folds.len() - 1) as u32
+    }
+
     fn parse(mut self, initial_flags: u32) -> Result<Pattern, PErr> {
         let mut flags = initial_flags;
-        let main = self.parse_alt(&mut flags)?;
-        if self.pos < self.pat.len() {
-            return Err(PErr::Syntax("Unmatched closing ')'".to_string(), self.pos));
+        let mut main;
+        if flags & F_LITERAL != 0 {
+            main = Vec::new();
+            if flags & F_CASE_INSENSITIVE != 0 {
+                let target = fold_string(&self.pat);
+                let idx = self.push_fold(target);
+                main.push(Inst::FoldStr(idx));
+            } else {
+                for &c in &self.pat {
+                    main.push(Inst::Char(c as u32, false));
+                }
+            }
+        } else {
+            main = self.parse_alt(&mut flags)?;
+            if self.pos < self.pat.len() {
+                return Err(PErr::Syntax("Unmatched closing ')'".to_string(), self.pos));
+            }
         }
-        let mut main = main;
         main.push(Inst::Match);
         self.programs[0] = main;
         Ok(Pattern {
             programs: self.programs,
             classes: self.classes,
+            folds: self.folds,
             group_count: self.group_count,
             names: self.names,
         })
@@ -378,16 +506,32 @@ impl Parser {
 
     fn parse_concat(&mut self, flags: &mut u32) -> Result<Vec<Inst>, PErr> {
         let mut buf: Vec<Inst> = Vec::new();
+        let mut run: Vec<char> = Vec::new();
         loop {
             self.skip_comments(*flags);
             match self.peek() {
                 None | Some('|') | Some(')') => break,
                 _ => {
                     let atom = self.parse_quantified(flags)?;
+                    // Coalesce runs of case-insensitive literals so that full
+                    // case folding can match across character boundaries
+                    // (e.g. pattern `ss` against input `\u00df`).
+                    if !atom.is_empty()
+                        && atom.iter().all(|i| matches!(i, Inst::Char(_, true)))
+                    {
+                        for inst in &atom {
+                            if let Inst::Char(c, true) = inst {
+                                run.push(char::from_u32(*c).unwrap_or('\u{FFFD}'));
+                            }
+                        }
+                        continue;
+                    }
+                    flush_fold_run(&mut buf, &mut run, self);
                     splice(&mut buf, atom);
                 }
             }
         }
+        flush_fold_run(&mut buf, &mut run, self);
         Ok(buf)
     }
 
@@ -437,6 +581,12 @@ impl Parser {
                     self.pos,
                 ));
             }
+        }
+        if max.is_none() && self.lookbehind > 0 {
+            return Err(PErr::Syntax(
+                "Look-behind group does not have an obvious maximum length".to_string(),
+                self.pos,
+            ));
         }
         Ok(Some(Quant { min, max, kind }))
     }
@@ -515,8 +665,11 @@ impl Parser {
         match c {
             '(' => self.parse_group(flags),
             '[' => {
-                let node = self.parse_class()?;
-                Ok(vec![Inst::Class(self.push_class(node))])
+                let node = self.parse_class(*flags)?;
+                Ok(vec![Inst::Class(
+                    self.push_class(node),
+                    *flags & F_CASE_INSENSITIVE != 0,
+                )])
             }
             '.' => {
                 self.pos += 1;
@@ -592,7 +745,9 @@ impl Parser {
             if self.eat('<') {
                 if self.eat('=') {
                     let mut inner = *flags;
+                    self.lookbehind += 1;
                     let body = self.parse_alt(&mut inner)?;
+                    self.lookbehind -= 1;
                     self.expect(')')?;
                     let sub = self.add_sub(body);
                     return Ok(vec![Inst::Look {
@@ -603,7 +758,9 @@ impl Parser {
                 }
                 if self.eat('!') {
                     let mut inner = *flags;
+                    self.lookbehind += 1;
                     let body = self.parse_alt(&mut inner)?;
+                    self.lookbehind -= 1;
                     self.expect(')')?;
                     let sub = self.add_sub(body);
                     return Ok(vec![Inst::Look {
@@ -682,7 +839,7 @@ impl Parser {
                         's' => F_DOTALL,
                         'x' => F_COMMENTS,
                         'd' => F_UNIX_LINES,
-                        'u' => 0,
+                        'u' => F_UNICODE_CASE,
                         _ => 0,
                     };
                     if neg {
@@ -754,7 +911,10 @@ impl Parser {
             _ => None,
         };
         if let Some(n) = node {
-            return Ok(vec![Inst::Class(self.push_class(n))]);
+            return Ok(vec![Inst::Class(
+                self.push_class(n),
+                *flags & F_CASE_INSENSITIVE != 0,
+            )]);
         }
         match c {
             'b' => Ok(vec![Inst::Assert(AssertKind::WordBoundary)]),
@@ -777,7 +937,10 @@ impl Parser {
                 if negate {
                     node = ClassNode::Neg(Box::new(node));
                 }
-                Ok(vec![Inst::Class(self.push_class(node))])
+                Ok(vec![Inst::Class(
+                    self.push_class(node),
+                    *flags & F_CASE_INSENSITIVE != 0,
+                )])
             }
             'k' => {
                 if !self.eat('<') {
@@ -978,16 +1141,16 @@ impl Parser {
 
     // ---- character classes ----------------------------------------------
 
-    fn parse_class(&mut self) -> Result<ClassNode, PErr> {
+    fn parse_class(&mut self, flags: u32) -> Result<ClassNode, PErr> {
         self.expect('[')?;
         let neg = self.eat('^');
-        let mut node = self.parse_class_body()?;
+        let mut node = self.parse_class_body(flags)?;
         while self.peek() == Some('&') && self.peek_at(1) == Some('&') {
             self.pos += 2;
             let rhs = if self.peek() == Some('[') {
-                self.parse_class()?
+                self.parse_class(flags)?
             } else {
-                self.parse_class_body()?
+                self.parse_class_body(flags)?
             };
             node = ClassNode::Inter(Box::new(node), Box::new(rhs));
         }
@@ -998,7 +1161,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_class_body(&mut self) -> Result<ClassNode, PErr> {
+    fn parse_class_body(&mut self, flags: u32) -> Result<ClassNode, PErr> {
         let mut items: Vec<ClassNode> = Vec::new();
         let mut first = true;
         loop {
@@ -1011,13 +1174,13 @@ impl Parser {
             if self.peek() == Some('&') && self.peek_at(1) == Some('&') {
                 break;
             }
-            let atom = self.parse_class_atom()?;
+            let atom = self.parse_class_atom(flags)?;
             first = false;
             match atom {
                 ClassAtom::Single(c) => {
                     if self.peek() == Some('-') && self.peek_at(1).is_some() && self.peek_at(1) != Some(']') {
                         self.pos += 1;
-                        match self.parse_class_atom()? {
+                        match self.parse_class_atom(flags)? {
                             ClassAtom::Single(d) => {
                                 if d < c {
                                     return Err(PErr::Syntax(
@@ -1048,9 +1211,12 @@ impl Parser {
         })
     }
 
-    fn parse_class_atom(&mut self) -> Result<ClassAtom, PErr> {
+    fn parse_class_atom(&mut self, flags: u32) -> Result<ClassAtom, PErr> {
+        if self.peek() == Some('[') && self.peek_at(1) == Some(':') {
+            return self.parse_posix_class();
+        }
         match self.peek() {
-            Some('[') => Ok(ClassAtom::Node(self.parse_class()?)),
+            Some('[') => Ok(ClassAtom::Node(self.parse_class(flags)?)),
             Some('\\') => self.parse_class_escape(),
             Some(c) => {
                 self.pos += 1;
@@ -1062,6 +1228,49 @@ impl Parser {
             }
             None => Err(PErr::Syntax("Unclosed character class".to_string(), self.pos)),
         }
+    }
+
+    /// `[[:name:]]` POSIX bracket expression.
+    fn parse_posix_class(&mut self) -> Result<ClassAtom, PErr> {
+        self.expect('[')?;
+        self.expect(':')?;
+        let mut name = String::new();
+        loop {
+            match self.bump() {
+                Some(':') => break,
+                Some(c) if c.is_ascii_alphanumeric() => name.push(c),
+                _ => {
+                    return Err(PErr::Syntax(
+                        "Unclosed POSIX character class".to_string(),
+                        self.pos,
+                    ))
+                }
+            }
+        }
+        self.expect(']')?;
+        let pred = match name.to_ascii_lowercase().as_str() {
+            "alpha" | "alphabetic" => Pred::Alphabetic,
+            "digit" => Pred::Digit,
+            "alnum" => Pred::Alnum,
+            "punct" => Pred::Punct,
+            "graph" => Pred::Graph,
+            "print" => Pred::Print,
+            "blank" => Pred::Blank,
+            "cntrl" => Pred::Cntrl,
+            "xdigit" => Pred::XDigit,
+            "space" => Pred::WhiteSpace,
+            "lower" => Pred::Lowercase,
+            "upper" => Pred::Uppercase,
+            "word" => Pred::Word,
+            "ascii" => Pred::Ascii,
+            _ => {
+                return Err(PErr::Syntax(
+                    format!("Unknown POSIX character class '{name}'"),
+                    self.pos,
+                ))
+            }
+        };
+        Ok(ClassAtom::Node(ClassNode::Pred(pred)))
     }
 
     fn parse_class_escape(&mut self) -> Result<ClassAtom, PErr> {
@@ -1153,6 +1362,36 @@ fn offset_jumps(inst: &mut Inst, base: u32) {
     }
 }
 
+// Full Unicode case-folding table (generated; see the file header).
+include!("icu_regex_casefold.rs");
+
+/// Applies full Unicode case folding to `c`, appending to `out`.
+fn fold_into(c: char, out: &mut Vec<char>) {
+    if !fold_special(c, out) {
+        out.extend(c.to_lowercase());
+    }
+}
+
+/// Full case fold of a literal run.
+fn fold_string(chars: &[char]) -> Vec<char> {
+    let mut out = Vec::with_capacity(chars.len());
+    for &c in chars {
+        fold_into(c, &mut out);
+    }
+    out
+}
+
+/// Emits the accumulated case-insensitive literal run as one `FoldStr`.
+fn flush_fold_run(buf: &mut Vec<Inst>, run: &mut Vec<char>, parser: &mut Parser) {
+    if run.is_empty() {
+        return;
+    }
+    let target = fold_string(run);
+    let idx = parser.push_fold(target);
+    buf.push(Inst::FoldStr(idx));
+    run.clear();
+}
+
 fn wrap_capture(idx: usize, mut body: Vec<Inst>) -> Vec<Inst> {
     for inst in body.iter_mut() {
         offset_jumps(inst, 1);
@@ -1207,31 +1446,164 @@ fn emit_repeat(
     Ok(())
 }
 
+/// Resolves a `\p{...}` property name to a class node, or `None` when the
+/// property is not modelled (the caller then raises a structured
+/// `UNSUPPORTED_JAVA_API`).
 fn resolve_property(name: &str) -> Option<ClassNode> {
-    let lower = name.to_ascii_lowercase();
-    let p = match lower.as_str() {
-        "l" | "alpha" | "alphabetic" | "isalphabetic" => Pred::Alpha,
-        "lu" | "uppercase" | "isuppercase" => Pred::Upper,
-        "ll" | "lowercase" | "islowercase" => Pred::Lower,
-        "n" | "nd" | "digit" | "isdigit" | "decimal_number" => Pred::Digit,
-        "alnum" => Pred::Alnum,
-        "space" | "whitespace" | "white_space" | "iswhite_space" => Pred::Space,
+    let raw = name.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // `key=value` forms: gc=/General_Category=, sc=/Script=.
+    if let Some((k, v)) = raw.split_once('=') {
+        let key = k.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+        let val = v.trim();
+        return match key.as_str() {
+            "gc" | "general_category" => resolve_general_category(val).map(ClassNode::Pred),
+            "sc" | "script" => resolve_script(val).map(|s| ClassNode::Pred(Pred::Script(s))),
+            // Blocks (`blk=`/`Block=`) are not modelled.
+            _ => None,
+        };
+    }
+    if let Some(n) = resolve_property_simple(raw) {
+        return Some(n);
+    }
+    let lower = raw.to_ascii_lowercase();
+    // `Is` prefix: binary property or script name.
+    if lower.len() > 2 && lower.starts_with("is") {
+        let rest = &raw[2..];
+        if let Some(n) = resolve_property_simple(rest) {
+            return Some(n);
+        }
+        if let Some(s) = resolve_script(rest) {
+            return Some(ClassNode::Pred(Pred::Script(s)));
+        }
+    }
+    // `In` prefix: block name. Only script-aligned blocks are approximated.
+    if lower.len() > 2 && lower.starts_with("in") {
+        let rest = &raw[2..];
+        if let Some(s) = resolve_script(rest) {
+            return Some(ClassNode::Pred(Pred::Script(s)));
+        }
+    }
+    // Bare script name (e.g. `\p{Greek}`).
+    resolve_script(raw).map(|s| ClassNode::Pred(Pred::Script(s)))
+}
+
+fn resolve_property_simple(name: &str) -> Option<ClassNode> {
+    let norm = name.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    if let Some(gc) = resolve_general_category(&norm) {
+        return Some(ClassNode::Pred(gc));
+    }
+    let pred = match norm.as_str() {
+        "alphabetic" | "alpha" => Pred::Alphabetic,
+        "white_space" | "whitespace" | "space" => Pred::WhiteSpace,
+        "lowercase" | "lower" => Pred::Lowercase,
+        "uppercase" | "upper" => Pred::Uppercase,
         "ascii" => Pred::Ascii,
-        "punct" | "ispunctuation" => Pred::Punct,
+        "alnum" => Pred::Alnum,
+        "punct" | "punctuation" => Pred::Punct,
         "graph" => Pred::Graph,
         "print" => Pred::Print,
         "blank" => Pred::Blank,
-        "cntrl" => Pred::Cntrl,
+        "cntrl" | "control" => Pred::Cntrl,
         "xdigit" => Pred::XDigit,
-        "islatin" | "latin" => Pred::Latin,
-        "isgreek" | "greek" => Pred::Greek,
-        "ingreek" => Pred::Greek,
+        "digit" => Pred::Digit,
+        "word" => Pred::Word,
         "javalowercase" => Pred::JavaLower,
         "javauppercase" => Pred::JavaUpper,
         "javawhitespace" => Pred::JavaWhitespace,
+        "javaalphabetic" => Pred::Alphabetic,
+        "javadigit" => Pred::Cat(GeneralCategory::DecimalNumber),
+        "javaletter" => Pred::CatGroup(GeneralCategoryGroup::Letter),
+        "javatitlecase" => Pred::Cat(GeneralCategory::TitlecaseLetter),
+        "javaletterordigit" => {
+            return Some(ClassNode::Union(vec![
+                ClassNode::Pred(Pred::CatGroup(GeneralCategoryGroup::Letter)),
+                ClassNode::Pred(Pred::Cat(GeneralCategory::DecimalNumber)),
+            ]))
+        }
         _ => return None,
     };
-    Some(ClassNode::Pred(p))
+    Some(ClassNode::Pred(pred))
+}
+
+fn resolve_general_category(name: &str) -> Option<Pred> {
+    let n = name.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    let p = match n.as_str() {
+        "l" | "letter" => Pred::CatGroup(GeneralCategoryGroup::Letter),
+        "lu" | "uppercase_letter" => Pred::Cat(GeneralCategory::UppercaseLetter),
+        "ll" | "lowercase_letter" => Pred::Cat(GeneralCategory::LowercaseLetter),
+        "lt" | "titlecase_letter" => Pred::Cat(GeneralCategory::TitlecaseLetter),
+        "lm" | "modifier_letter" => Pred::Cat(GeneralCategory::ModifierLetter),
+        "lo" | "other_letter" => Pred::Cat(GeneralCategory::OtherLetter),
+        "m" | "mark" => Pred::CatGroup(GeneralCategoryGroup::Mark),
+        "mn" | "nonspacing_mark" => Pred::Cat(GeneralCategory::NonspacingMark),
+        "mc" | "spacing_mark" => Pred::Cat(GeneralCategory::SpacingMark),
+        "me" | "enclosing_mark" => Pred::Cat(GeneralCategory::EnclosingMark),
+        "n" | "number" => Pred::CatGroup(GeneralCategoryGroup::Number),
+        "nd" | "decimal_number" | "decimal_digit_number" => {
+            Pred::Cat(GeneralCategory::DecimalNumber)
+        }
+        "nl" | "letter_number" => Pred::Cat(GeneralCategory::LetterNumber),
+        "no" | "other_number" => Pred::Cat(GeneralCategory::OtherNumber),
+        "p" | "punctuation" => Pred::CatGroup(GeneralCategoryGroup::Punctuation),
+        "pc" | "connector_punctuation" => Pred::Cat(GeneralCategory::ConnectorPunctuation),
+        "pd" | "dash_punctuation" => Pred::Cat(GeneralCategory::DashPunctuation),
+        "ps" | "open_punctuation" => Pred::Cat(GeneralCategory::OpenPunctuation),
+        "pe" | "close_punctuation" => Pred::Cat(GeneralCategory::ClosePunctuation),
+        "pi" | "initial_punctuation" => Pred::Cat(GeneralCategory::InitialPunctuation),
+        "pf" | "final_punctuation" => Pred::Cat(GeneralCategory::FinalPunctuation),
+        "po" | "other_punctuation" => Pred::Cat(GeneralCategory::OtherPunctuation),
+        "s" | "symbol" => Pred::CatGroup(GeneralCategoryGroup::Symbol),
+        "sm" | "math_symbol" => Pred::Cat(GeneralCategory::MathSymbol),
+        "sc" | "currency_symbol" => Pred::Cat(GeneralCategory::CurrencySymbol),
+        "sk" | "modifier_symbol" => Pred::Cat(GeneralCategory::ModifierSymbol),
+        "so" | "other_symbol" => Pred::Cat(GeneralCategory::OtherSymbol),
+        "z" | "separator" => Pred::CatGroup(GeneralCategoryGroup::Separator),
+        "zs" | "space_separator" => Pred::Cat(GeneralCategory::SpaceSeparator),
+        "zl" | "line_separator" => Pred::Cat(GeneralCategory::LineSeparator),
+        "zp" | "paragraph_separator" => Pred::Cat(GeneralCategory::ParagraphSeparator),
+        "c" | "other" => Pred::CatGroup(GeneralCategoryGroup::Other),
+        "cc" | "control" => Pred::Cat(GeneralCategory::Control),
+        "cf" | "format" => Pred::Cat(GeneralCategory::Format),
+        "cs" | "surrogate" => Pred::Cat(GeneralCategory::Surrogate),
+        "co" | "private_use" => Pred::Cat(GeneralCategory::PrivateUse),
+        "cn" | "unassigned" => Pred::Cat(GeneralCategory::Unassigned),
+        _ => return None,
+    };
+    Some(p)
+}
+
+fn resolve_script(name: &str) -> Option<Script> {
+    let n = name.trim();
+    if n.is_empty() {
+        return None;
+    }
+    if let Some(s) = Script::from_full_name(n) {
+        return Some(s);
+    }
+    let spaced = n.replace(['_', '-'], " ");
+    if let Some(s) = Script::from_full_name(&spaced) {
+        return Some(s);
+    }
+    if let Some(s) = Script::from_short_name(n) {
+        return Some(s);
+    }
+    // Common ICU short spellings.
+    match n.to_ascii_lowercase().as_str() {
+        "grek" => Some(Script::Greek),
+        "latn" => Some(Script::Latin),
+        "cyrl" => Some(Script::Cyrillic),
+        "arab" => Some(Script::Arabic),
+        "hani" => Some(Script::Han),
+        "hebr" => Some(Script::Hebrew),
+        "hira" => Some(Script::Hiragana),
+        "kana" => Some(Script::Katakana),
+        "hang" => Some(Script::Hangul),
+        "deva" => Some(Script::Devanagari),
+        _ => None,
+    }
 }
 
 // ===========================================================================
@@ -1296,6 +1668,11 @@ struct Ctx<'a> {
     prev_match_end: usize,
     hit_end: Cell<bool>,
     require_end: Cell<bool>,
+    /// Backtracking step counter shared across nested sub-programs.
+    steps: Cell<u64>,
+    /// Set when `steps` crosses `max_match_steps()`; the match aborts with a
+    /// structured error instead of hanging.
+    budget_hit: Cell<bool>,
 }
 
 impl Ctx<'_> {
@@ -1345,18 +1722,6 @@ fn is_final_newline(input: &Input, pos: usize, end: usize) -> bool {
     }
 }
 
-fn simple_fold_eq(a: char, b: char) -> bool {
-    if a == b {
-        return true;
-    }
-    let la = a.to_lowercase().next().unwrap_or(a);
-    let lb = b.to_lowercase().next().unwrap_or(b);
-    if la == lb {
-        return true;
-    }
-    a.to_uppercase().next().unwrap_or(a) == b.to_uppercase().next().unwrap_or(b)
-}
-
 fn char_eq(a: u32, b: u32, ic: bool) -> bool {
     if a == b {
         return true;
@@ -1365,31 +1730,19 @@ fn char_eq(a: u32, b: u32, ic: bool) -> bool {
         return false;
     }
     match (char::from_u32(a), char::from_u32(b)) {
-        (Some(x), Some(y)) => simple_fold_eq(x, y),
+        (Some(x), Some(y)) => {
+            let mut fa = Vec::new();
+            let mut fb = Vec::new();
+            fold_into(x, &mut fa);
+            fold_into(y, &mut fb);
+            fa == fb
+        }
         _ => false,
     }
 }
 
 fn class_contains(node: &ClassNode, c: u32, ic: bool) -> bool {
-    if node.contains(c) {
-        return true;
-    }
-    if !ic {
-        return false;
-    }
-    if let Some(ch) = char::from_u32(c) {
-        if let Some(l) = ch.to_lowercase().next() {
-            if node.contains(l as u32) {
-                return true;
-            }
-        }
-        if let Some(u) = ch.to_uppercase().next() {
-            if node.contains(u as u32) {
-                return true;
-            }
-        }
-    }
-    false
+    node.contains(c, ic)
 }
 
 impl Pattern {
@@ -1408,6 +1761,12 @@ impl Pattern {
         let mut caps = caps_in;
         let mut stack: Vec<(usize, usize, Vec<Option<usize>>)> = Vec::new();
         'main: loop {
+            let step = ctx.steps.get() + 1;
+            if step > max_match_steps() {
+                ctx.budget_hit.set(true);
+                return None;
+            }
+            ctx.steps.set(step);
             match &prog[pc] {
                 Inst::Match => return Some((pos, caps)),
                 Inst::Char(c, ic) => {
@@ -1418,10 +1777,10 @@ impl Pattern {
                     }
                     ctx.hit_end.set(true);
                 }
-                Inst::Class(ci) => {
+                Inst::Class(ci, ic) => {
                     if pos < limit {
                         let node = &self.classes[*ci as usize];
-                        if class_contains(node, ctx.input.cps[pos], false) {
+                        if class_contains(node, ctx.input.cps[pos], *ic) {
                             pos += 1;
                             pc += 1;
                             continue 'main;
@@ -1429,6 +1788,38 @@ impl Pattern {
                     } else {
                         ctx.hit_end.set(true);
                     }
+                }
+                Inst::FoldStr(fi) => {
+                    let target = &self.folds[*fi as usize];
+                    let max_k = target.len().min(limit.saturating_sub(pos));
+                    let mut buf: Vec<char> = Vec::with_capacity(target.len());
+                    let mut chosen: Option<usize> = None;
+                    let mut alts: Vec<usize> = Vec::new();
+                    for k in 0..=max_k {
+                        buf.clear();
+                        for &cp in &ctx.input.cps[pos..pos + k] {
+                            match char::from_u32(cp) {
+                                Some(ch) => fold_into(ch, &mut buf),
+                                None => buf.push('\u{FFFD}'),
+                            }
+                        }
+                        if buf == *target {
+                            if chosen.is_none() {
+                                chosen = Some(k);
+                            } else {
+                                alts.push(k);
+                            }
+                        }
+                    }
+                    if let Some(k) = chosen {
+                        for a in alts {
+                            stack.push((pc + 1, pos + a, caps.clone()));
+                        }
+                        pos += k;
+                        pc += 1;
+                        continue 'main;
+                    }
+                    ctx.hit_end.set(true);
                 }
                 Inst::Any { dotall, unix } => {
                     if pos < limit {
@@ -1664,6 +2055,8 @@ impl MatcherState {
             prev_match_end: prev_match_end_cp,
             hit_end: Cell::new(false),
             require_end: Cell::new(false),
+            steps: Cell::new(0),
+            budget_hit: Cell::new(false),
         }
     }
 }
@@ -1961,7 +2354,7 @@ fn write_offsets(vm: &mut Vm, h: Handle, vals: &[i32]) {
 }
 
 /// Run the matcher, returning `(found, offsets, hit_end, require_end)`.
-fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
+fn exec_match(mh: u64, mode: Mode) -> VmResult<(bool, Vec<i32>, bool, bool)> {
     let pat = {
         let reg = registry().lock().unwrap_or_else(|p| p.into_inner());
         match reg.matchers.get(&mh) {
@@ -1971,12 +2364,12 @@ fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
     };
     let pat = match pat {
         Some(p) => p,
-        None => return (false, Vec::new(), false, false),
+        None => return Ok((false, Vec::new(), false, false)),
     };
     let mut reg = registry().lock().unwrap_or_else(|p| p.into_inner());
     let m = match reg.matchers.get_mut(&mh) {
         Some(m) => m,
-        None => return (false, Vec::new(), false, false),
+        None => return Ok((false, Vec::new(), false, false)),
     };
     let (search_cp, _require_end, prev) = match mode {
         Mode::Find(start_u16) => {
@@ -1992,17 +2385,26 @@ fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
         Mode::Matches => (m.region_start, true, m.region_start),
         Mode::LookingAt => (m.region_start, false, m.region_start),
     };
-    let (r, hit, req) = {
+    let (r, hit, req, budget) = {
         let c = m.ctx(prev);
         let r = match mode {
             Mode::Matches => attempt(&pat, &c, search_cp, true),
             Mode::LookingAt => attempt(&pat, &c, search_cp, false),
             Mode::Find(_) | Mode::FindNext => find_from(&pat, &c, search_cp),
         };
-        (r, c.hit_end.get(), c.require_end.get())
+        (r, c.hit_end.get(), c.require_end.get(), c.budget_hit.get())
     };
     m.hit_end = hit;
     m.require_end = req;
+    if budget {
+        return Err(VmError::unsupported_api(
+            format!(
+                "UNSUPPORTED_REGEX: match step budget exceeded ({} steps)",
+                max_match_steps()
+            ),
+            "com.android.icu.util.regex.MatcherNative".to_string(),
+        ));
+    }
     match r {
         Some((end, caps)) => {
             let mstart = caps.first().copied().flatten().unwrap_or(search_cp);
@@ -2011,11 +2413,11 @@ fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
             m.last = Some((mstart, mend));
             m.prev_match_end = mend;
             m.next_search_cp = if mend > mstart { mend } else { mstart + 1 };
-            (true, offs, hit, req)
+            Ok((true, offs, hit, req))
         }
         None => {
             m.last = None;
-            (false, Vec::new(), hit, req)
+            Ok((false, Vec::new(), hit, req))
         }
     }
 }
@@ -2024,7 +2426,7 @@ fn find_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mh = vm.arg_u64(ctx, 0);
     let start = vm.arg_i32(ctx, 1).max(0) as usize;
     let offs = vm.arg_ref(ctx, 2);
-    let (found, vals, _, _) = exec_match(mh, Mode::Find(start));
+    let (found, vals, _, _) = exec_match(mh, Mode::Find(start))?;
     if found {
         write_offsets(vm, offs, &vals);
     }
@@ -2035,7 +2437,7 @@ fn find_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn find_next_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mh = vm.arg_u64(ctx, 0);
     let offs = vm.arg_ref(ctx, 1);
-    let (found, vals, _, _) = exec_match(mh, Mode::FindNext);
+    let (found, vals, _, _) = exec_match(mh, Mode::FindNext)?;
     if found {
         write_offsets(vm, offs, &vals);
     }
@@ -2046,7 +2448,7 @@ fn find_next_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn matches_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mh = vm.arg_u64(ctx, 0);
     let offs = vm.arg_ref(ctx, 1);
-    let (found, vals, _, _) = exec_match(mh, Mode::Matches);
+    let (found, vals, _, _) = exec_match(mh, Mode::Matches)?;
     if found {
         write_offsets(vm, offs, &vals);
     }
@@ -2057,7 +2459,7 @@ fn matches_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn looking_at_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mh = vm.arg_u64(ctx, 0);
     let offs = vm.arg_ref(ctx, 1);
-    let (found, vals, _, _) = exec_match(mh, Mode::LookingAt);
+    let (found, vals, _, _) = exec_match(mh, Mode::LookingAt)?;
     if found {
         write_offsets(vm, offs, &vals);
     }
@@ -2083,6 +2485,8 @@ mod tests {
             prev_match_end: 0,
             hit_end: Cell::new(false),
             require_end: Cell::new(false),
+            steps: Cell::new(0),
+            budget_hit: Cell::new(false),
         }
     }
 

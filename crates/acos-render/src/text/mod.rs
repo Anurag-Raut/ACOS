@@ -149,6 +149,25 @@ fn parse_variations(s: Option<&str>) -> Vec<(String, f32)> {
     out
 }
 
+/// The effective variable-font design coordinates for a run: the resolved
+/// face's `fonts.xml` axes overridden by the paint's `FontVariationSettings`.
+/// Shaping (`rustybuzz`) and FreeType rasterisation must be handed the same
+/// list so the instance that is shaped is the instance that is drawn.
+pub fn effective_variations(
+    font: &FontRef,
+    style_variations: &[(String, f32)],
+) -> Vec<(String, f32)> {
+    let mut out = font.axes.clone();
+    for (tag, value) in style_variations {
+        if let Some(slot) = out.iter_mut().find(|(t, _)| t == tag) {
+            slot.1 = *value;
+        } else {
+            out.push((tag.clone(), *value));
+        }
+    }
+    out
+}
+
 #[derive(PartialEq, Eq, Hash)]
 struct ShapeKey {
     font_id: u64,
@@ -157,6 +176,9 @@ struct ShapeKey {
     spacing_bits: u32,
     fake_bold: bool,
     features: Vec<(String, u32)>,
+    /// Effective variable-font design coordinates (f32 bits). Without this a
+    /// `wght=400` shape would be served for a `wght=700` paint.
+    variations: Vec<(String, u32)>,
     text: Vec<u16>,
 }
 
@@ -216,6 +238,10 @@ impl TextEngine {
             spacing_bits: style.letter_spacing.to_bits(),
             fake_bold: style.fake_bold,
             features: style.features.clone(),
+            variations: effective_variations(&style.font, &style.variations)
+                .into_iter()
+                .map(|(tag, value)| (tag, value.to_bits()))
+                .collect(),
             text: text.to_vec(),
         };
         if let Some(v) = self.cache.get(&key) {
@@ -400,17 +426,11 @@ impl TextEngine {
                 advance: 0.0,
             };
         };
-        let mut variations: Vec<rustybuzz::Variation> = Vec::new();
-        for (tag, value) in &font.axes {
-            if let Some(t) = tag_to_variation(tag, *value) {
-                variations.push(t);
-            }
-        }
-        for (tag, value) in &style.variations {
-            if let Some(t) = tag_to_variation(tag, *value) {
-                variations.push(t);
-            }
-        }
+        let effective = effective_variations(&font, &style.variations);
+        let variations: Vec<rustybuzz::Variation> = effective
+            .iter()
+            .filter_map(|(tag, value)| tag_to_variation(tag, *value))
+            .collect();
         if !variations.is_empty() {
             rb_face.set_variations(&variations);
         }

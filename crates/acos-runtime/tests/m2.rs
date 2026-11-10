@@ -7,10 +7,12 @@
 //! `app_created` is read from the real `ActivityThread.mInitialApplication`.
 //!
 //! State as of this commit: `bindApplication` is delivered to the real
-//! `ApplicationThread` and `handleBindApplication` starts on the main looper,
-//! but it blocks inside `android.graphics.Typeface.<clinit>` because the font
-//! config parse needs file I/O, the `/system` path mapping and ICU regex, none
-//! of which are wired yet (see `results/m2/M2_LOG.md`).
+//! `ApplicationThread`, `handleBindApplication` runs
+//! `Application.onCreate` (`app_created=true`), and the launch
+//! `ClientTransaction` reaches `ActivityThread.performLaunchActivity` ->
+//! `Activity.attach` -> `PhoneWindow.<init>`. It then blocks in
+//! `Settings.getPublicSettingsForClass` (a `Field.get` static-slot bug), before
+//! `MainActivity.onCreate` (see `results/m2/M2_LOG.md`, W29-A section).
 //! The full gate is therefore `#[ignore]`d with that exact reason rather than
 //! silently passing; the two non-ignored tests pin the progress and the
 //! honesty invariant (never report a transaction as delivered when it was
@@ -103,7 +105,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// before `Application.onCreate`; run with
 /// `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
 #[test]
-#[ignore = "M2 not reached: display reply + boot classpath are fixed and handleBindApplication now reaches ContextImpl.setupGraphicsSupport, which needs libcore.io.Linux.setxattr (guest VFS has no xattrs; should raise ErrnoException ENOTSUP); results/m2/M2_LOG.md"]
+#[ignore = "M2 not reached: Application.onCreate now runs (app_created=true) and the ClientTransaction launch reaches performLaunchActivity -> Activity.attach -> PhoneWindow.<init>, where Settings.getPublicSettingsForClass NPEs because Field.get reads the wrong static slot (artFieldIndex is the declaration index, not the slot offset); results/m2/M2_LOG.md §W29-A"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");

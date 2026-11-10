@@ -438,9 +438,17 @@ pub unsafe extern "C" fn jni_ExceptionCheck(_env: usize) -> u8 {
 // Local / global references
 // ---------------------------------------------------------------------------
 
-pub unsafe extern "C" fn jni_PushLocalFrame(_env: usize, _capacity: i32) -> i32 {
-    let ctx = guard!("PushLocalFrame", false, JNI_ERR);
-    refs::push_frame(&ctx.rt, ctx.t);
+pub unsafe extern "C" fn jni_PushLocalFrame(_env: usize, capacity: i32) -> i32 {
+    let mut ctx = guard!("PushLocalFrame", false, JNI_ERR);
+    if capacity < 0 || capacity > crate::state::MAX_LOCAL_CAPACITY {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/OutOfMemoryError;",
+            "PushLocalFrame: unsatisfiable local reference capacity",
+        );
+        return JNI_ERR;
+    }
+    refs::push_frame(&ctx.rt, ctx.t, capacity as usize);
     JNI_OK
 }
 
@@ -482,8 +490,27 @@ pub unsafe extern "C" fn jni_DeleteLocalRef(_env: usize, obj: usize) {
 }
 
 pub unsafe extern "C" fn jni_IsSameObject(_env: usize, a: usize, b: usize) -> u8 {
-    guard!("IsSameObject", false, 0);
-    (a == b) as u8
+    let mut ctx = guard!("IsSameObject", false, 0);
+    // A cleared weak global reference is treated as `NULL`; this is the JNI
+    // idiom `IsSameObject(env, weak, NULL)` for testing for collection.
+    let rt = ctx.rt.clone();
+    let vm: &Vm = ctx.vm();
+    let resolve = |h: usize| -> Option<Handle> {
+        let h = h as Handle;
+        if h == NULL {
+            return None;
+        }
+        if refs::is_weak_global(&rt, h) {
+            if refs::weak_is_live(vm, &rt, h) {
+                Some(h)
+            } else {
+                None
+            }
+        } else {
+            Some(h)
+        }
+    };
+    (resolve(a) == resolve(b)) as u8
 }
 
 pub unsafe extern "C" fn jni_NewLocalRef(_env: usize, obj: usize) -> usize {
@@ -499,20 +526,37 @@ pub unsafe extern "C" fn jni_NewLocalRef(_env: usize, obj: usize) -> usize {
     local(&mut ctx, h) as usize
 }
 
-pub unsafe extern "C" fn jni_EnsureLocalCapacity(_env: usize, capacity: i32) -> i32 {
-    let ctx = guard!("EnsureLocalCapacity", false, JNI_ERR);
-    if capacity < 0 {
-        record(
-            &ctx,
-            JniError::BadArgument {
-                function: "EnsureLocalCapacity".into(),
-                message: format!("negative capacity {capacity}"),
-            },
-        );
-        JNI_ERR
-    } else {
-        JNI_OK
+pub unsafe extern "C" fn jni_NewWeakGlobalRef(_env: usize, obj: usize) -> usize {
+    let mut ctx = guard!("NewWeakGlobalRef", false, 0);
+    if obj == 0 {
+        return 0;
     }
+    let h = or_fail!(
+        ctx,
+        0,
+        live(&mut ctx, obj as Handle, "jobject", "NewWeakGlobalRef")
+    );
+    refs::weak_global(&ctx.rt, h) as usize
+}
+
+pub unsafe extern "C" fn jni_DeleteWeakGlobalRef(_env: usize, obj: usize) {
+    let Some(ctx) = enter("DeleteWeakGlobalRef", true) else {
+        return;
+    };
+    refs::delete_weak_global(&ctx.rt, obj as Handle);
+}
+
+pub unsafe extern "C" fn jni_EnsureLocalCapacity(_env: usize, capacity: i32) -> i32 {
+    let mut ctx = guard!("EnsureLocalCapacity", false, JNI_ERR);
+    if capacity < 0 || capacity > crate::state::MAX_LOCAL_CAPACITY {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/OutOfMemoryError;",
+            "EnsureLocalCapacity: unsatisfiable local reference capacity",
+        );
+        return JNI_ERR;
+    }
+    JNI_OK
 }
 
 // ---------------------------------------------------------------------------
@@ -1128,6 +1172,35 @@ pub unsafe extern "C" fn jni_ReleaseStringChars(_env: usize, _s: usize, chars: *
     let _ = take_buffer(&mut ctx, chars as usize);
 }
 
+pub unsafe extern "C" fn jni_GetStringCritical(
+    _env: usize,
+    s: usize,
+    is_copy: *mut u8,
+) -> *const u16 {
+    let mut ctx = guard!("GetStringCritical", false, std::ptr::null());
+    if !is_copy.is_null() {
+        // ACOS always materialises a copy; JNI_GetStringCritical may report
+        // either, and a copy is the safe choice for a synthetic heap.
+        unsafe { *is_copy = 1 };
+    }
+    let units = or_fail!(
+        ctx,
+        std::ptr::null(),
+        string_units(&mut ctx, s as Handle, "GetStringCritical")
+    );
+    let boxed: Box<[u16]> = units.into_boxed_slice();
+    let ptr = boxed.as_ptr();
+    store_buffer(&mut ctx, ptr as usize, Buffer::Utf16(boxed));
+    ptr
+}
+
+pub unsafe extern "C" fn jni_ReleaseStringCritical(_env: usize, _s: usize, chars: *const u16) {
+    let Some(mut ctx) = enter("ReleaseStringCritical", true) else {
+        return;
+    };
+    let _ = take_buffer(&mut ctx, chars as usize);
+}
+
 pub unsafe extern "C" fn jni_GetStringUTFChars(
     _env: usize,
     s: usize,
@@ -1531,6 +1604,28 @@ release_elements_slot!(jni_ReleaseLongArrayElements, "J", i64);
 release_elements_slot!(jni_ReleaseFloatArrayElements, "F", f32);
 release_elements_slot!(jni_ReleaseDoubleArrayElements, "D", f64);
 
+fn region_in_bounds(ctx: &mut Ctx, array: Handle, start: i32, len: i32, function: &str) -> bool {
+    let vm = ctx.vm();
+    match vm.array_length(array) {
+        Ok(n)
+            if start >= 0
+                && len >= 0
+                && (start as usize)
+                    .checked_add(len as usize)
+                    .map(|end| end <= n)
+                    .unwrap_or(false) =>
+        {
+            true
+        }
+        _ => {
+            // JNI specifies `ArrayIndexOutOfBoundsException` for an
+            // out-of-range `Get/Set<Type>ArrayRegion`.
+            let _ = throw_class(ctx, "Ljava/lang/ArrayIndexOutOfBoundsException;", function);
+            false
+        }
+    }
+}
+
 macro_rules! region_get_slot {
     ($name:ident, $kind:literal, $ptr:ty, $conv:expr) => {
         pub unsafe extern "C" fn $name(
@@ -1545,12 +1640,7 @@ macro_rules! region_get_slot {
                 ctx,
                 live(&mut ctx, array as Handle, "jarray", stringify!($name))
             );
-            if start < 0 || len < 0 {
-                let _ = throw_class(
-                    &mut ctx,
-                    "Ljava/lang/ArrayIndexOutOfBoundsException;",
-                    stringify!($name),
-                );
+            if !region_in_bounds(&mut ctx, h, start, len, stringify!($name)) {
                 return;
             }
             let words = or_bail!(
@@ -1603,12 +1693,7 @@ macro_rules! region_set_slot {
                 ctx,
                 live(&mut ctx, array as Handle, "jarray", stringify!($name))
             );
-            if start < 0 || len < 0 {
-                let _ = throw_class(
-                    &mut ctx,
-                    "Ljava/lang/ArrayIndexOutOfBoundsException;",
-                    stringify!($name),
-                );
+            if !region_in_bounds(&mut ctx, h, start, len, stringify!($name)) {
                 return;
             }
             if buf.is_null() && len > 0 {
@@ -1878,7 +1963,7 @@ pub unsafe extern "C" fn jni_RegisterNatives(
         class_id(&mut ctx, cls as Handle, "RegisterNatives")
     );
     let class = ctx.vm().class_desc(cid).to_string();
-    if methods.is_null() || n_methods < 0 {
+    if (methods.is_null() && n_methods > 0) || n_methods < 0 {
         record(
             &ctx,
             JniError::BadArgument {
@@ -1888,8 +1973,13 @@ pub unsafe extern "C" fn jni_RegisterNatives(
         );
         return JNI_ERR;
     }
-    // SAFETY: the guest passes `n_methods` JNINativeMethod entries.
-    let list = unsafe { std::slice::from_raw_parts(methods, n_methods as usize) };
+    // SAFETY: the guest passes `n_methods` JNINativeMethod entries. A zero
+    // count is a valid no-op even with a null array.
+    let list: &[JNINativeMethod] = if n_methods == 0 {
+        &[]
+    } else {
+        unsafe { std::slice::from_raw_parts(methods, n_methods as usize) }
+    };
     let mut to_insert = Vec::with_capacity(list.len());
     for m in list {
         let name = cstr(m.name);
@@ -2027,11 +2117,109 @@ pub unsafe extern "C" fn jni_GetObjectRefType(_env: usize, obj: usize) -> i32 {
     }
     if refs::is_global(&ctx.rt, h) {
         crate::state::JNI_GLOBAL_REF_TYPE
+    } else if refs::is_weak_global(&ctx.rt, h) {
+        crate::state::JNI_WEAK_GLOBAL_REF_TYPE
     } else if refs::is_local(&ctx.rt, ctx.t, h) {
         crate::state::JNI_LOCAL_REF_TYPE
     } else {
         crate::state::JNI_INVALID_REF_TYPE
     }
+}
+
+// ---------------------------------------------------------------------------
+// Direct byte buffers
+// ---------------------------------------------------------------------------
+
+fn new_direct_buffer_object(ctx: &mut Ctx, _capacity: i64) -> Result<Handle, JniError> {
+    let vm = ctx.vm();
+    // The buffer's JNI identity (address/capacity) is carried in the JNI side
+    // table, so the marker object only needs a GC-visible identity. An empty
+    // `String` is used because allocating a fresh instance here interacts with
+    // a latent VM root-accounting issue; the JNI slots do not inspect the
+    // marker's Java type.
+    vm.new_string_utf16(Vec::new()).map_err(|e| JniError::NativeFault {
+        message: format!("NewDirectByteBuffer: cannot allocate marker: {e}"),
+    })
+}
+
+pub unsafe extern "C" fn jni_NewDirectByteBuffer(
+    _env: usize,
+    address: usize,
+    capacity: i64,
+) -> usize {
+    let mut ctx = guard!("NewDirectByteBuffer", false, 0);
+    if capacity < 0 {
+        record(
+            &ctx,
+            JniError::BadArgument {
+                function: "NewDirectByteBuffer".into(),
+                message: format!("negative capacity {capacity}"),
+            },
+        );
+        return 0;
+    }
+    // A zero address means "allocate the backing store"; a non-zero address is
+    // an existing native region owned by the caller (opaque to this layer).
+    let addr = if address == 0 {
+        match acos_vm::natives::jni_glue::native_mem_alloc(capacity as usize) {
+            Ok(a) => a,
+            Err(m) => {
+                let _ = throw_class(
+                    &mut ctx,
+                    "Ljava/lang/OutOfMemoryError;",
+                    &format!("NewDirectByteBuffer: {m}"),
+                );
+                return 0;
+            }
+        }
+    } else {
+        address as i64
+    };
+    let h = match new_direct_buffer_object(&mut ctx, capacity) {
+        Ok(h) => h,
+        Err(e) => {
+            record(&ctx, e);
+            return 0;
+        }
+    };
+    let lh = local(&mut ctx, h);
+    ctx.rt
+        .borrow_mut()
+        .direct_buffers
+        .insert(lh, (addr, capacity));
+    lh as usize
+}
+
+pub unsafe extern "C" fn jni_GetDirectBufferAddress(_env: usize, obj: usize) -> usize {
+    let ctx = guard!("GetDirectBufferAddress", false, 0);
+    let h = obj as Handle;
+    if h == NULL {
+        return 0;
+    }
+    let addr = ctx
+        .rt
+        .borrow()
+        .direct_buffers
+        .get(&h)
+        .map(|(addr, _)| *addr as usize)
+        .unwrap_or(0);
+    addr
+}
+
+pub unsafe extern "C" fn jni_GetDirectBufferCapacity(_env: usize, obj: usize) -> i64 {
+    let ctx = guard!("GetDirectBufferCapacity", false, -1);
+    let h = obj as Handle;
+    if h == NULL {
+        return -1;
+    }
+    let cap = ctx
+        .rt
+        .borrow()
+        .direct_buffers
+        .get(&h)
+        .map(|(_, cap)| *cap)
+        .unwrap_or(-1);
+    cap
 }
 
 // ---------------------------------------------------------------------------

@@ -63,7 +63,7 @@ pub(crate) fn host_call_native(
             let _ = vm.release_bridge_root(h);
         }
     }
-    refs::push_frame(&rt, t);
+    refs::push_frame(&rt, t, 0);
 
     let result = invoke_guest(vm, &rt, t, &call);
 

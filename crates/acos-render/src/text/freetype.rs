@@ -60,6 +60,45 @@ impl GlyphMask {
     }
 }
 
+/// Variable-font axis coordinates in a canonical, hashable form.
+///
+/// Each entry is an OpenType axis tag (`wght` = `0x77676874`) and the design
+/// value in 16.16 fixed point, the unit `FT_Set_Var_Design_Coordinates`
+/// expects. The list is sorted and deduplicated so two equivalent variation
+/// sets (including `fonts.xml` axes overridden by `FontVariationSettings`)
+/// produce the same cache key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct VariationCoords {
+    coords: Vec<(u32, i64)>,
+}
+
+impl VariationCoords {
+    /// Normalise `(tag, value)` pairs into the sorted, deduplicated 16.16
+    /// design-coordinate list FreeType wants.
+    pub fn new(variations: &[(String, f32)]) -> Self {
+        let mut coords: Vec<(u32, i64)> = variations
+            .iter()
+            .filter_map(|(tag, value)| {
+                let b = tag.as_bytes();
+                if b.len() != 4 || !value.is_finite() {
+                    return None;
+                }
+                Some((
+                    u32::from_be_bytes([b[0], b[1], b[2], b[3]]),
+                    (*value as f64 * 65536.0).round() as i64,
+                ))
+            })
+            .collect();
+        coords.sort_unstable_by_key(|(tag, _)| *tag);
+        coords.dedup_by_key(|(tag, _)| *tag);
+        VariationCoords { coords }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.coords.is_empty()
+    }
+}
+
 /// One open FreeType face plus the mmap that backs it.
 struct OpenFace {
     raw: ft::FT_Face,
@@ -68,6 +107,9 @@ struct OpenFace {
     /// The 26.6 character size FreeType is currently configured with, so a
     /// size change is only pushed down when it actually changes.
     char_size: i64,
+    /// The variation coordinates currently pushed to this face, so a change
+    /// is only applied when it differs (the same policy as `char_size`).
+    variations: VariationCoords,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -75,8 +117,9 @@ struct MaskKey {
     font_id: u64,
     glyph_id: u16,
     char_size: i64,
-    // NOTE: variable-font coordinates are intentionally absent; see
-    // `rasterize` (masks use the default instance, as the outline path did).
+    /// The variable-font instance, so masks for different weights/styles are
+    /// cached separately (ADR-0019 `T-33`).
+    variations: VariationCoords,
 }
 
 struct Rasterizer {
@@ -136,6 +179,7 @@ impl Rasterizer {
                     raw,
                     _file: file.clone(),
                     char_size: 0,
+                    variations: VariationCoords::default(),
                 },
             );
         }
@@ -149,7 +193,9 @@ impl Rasterizer {
         file: &Arc<FontFile>,
         glyph_id: u16,
         char_size: i64,
+        variations: &VariationCoords,
     ) -> Option<GlyphMask> {
+        let library = self.library;
         let face = self.face_for(file)?;
         if face.char_size != char_size {
             // SAFETY: `face.raw` is a live face owned by `self`; `char_size`
@@ -168,6 +214,9 @@ impl Rasterizer {
                 return None;
             }
             face.char_size = char_size;
+        }
+        if face.variations != *variations && !apply_variations(library, face, variations) {
+            return None;
         }
 
         // SAFETY: `face.raw` is live. `FT_LOAD_NO_HINTING` matches Android's
@@ -271,13 +320,29 @@ pub fn available() -> bool {
 /// Returns `None` if FreeType is unavailable, the font cannot be opened, or the
 /// glyph has no grayscale outline — the caller must then use the outline path.
 ///
-/// Variable-font axes (`FontRef::axes` / `TextStyle::variations`) are *not*
-/// pushed to FreeType here. The outline path did not apply them either, so this
-/// preserves the existing rendering contract: the default instance is used for
-/// the mask, while `rustybuzz` still applies the axes to shaping/advances.
-/// Enabling `FT_Set_Var_Design_Coordinates` is a fidelity improvement tracked
-/// separately (T-33).
-pub fn rasterize(font: &FontRef, glyph_id: u16, size_px: f32) -> Option<Arc<GlyphMask>> {
+/// Variable-font axes are pushed to FreeType with
+/// `FT_Set_Var_Design_Coordinates`, using the same design-space values
+/// `rustybuzz` shapes with, so the rasterised instance and the advances agree.
+/// The mask cache key includes the axis coordinates, so `wght=400` and
+/// `wght=700` never collide.
+pub fn rasterize(
+    font: &FontRef,
+    glyph_id: u16,
+    size_px: f32,
+    variations: &[(String, f32)],
+) -> Option<Arc<GlyphMask>> {
+    let coords = VariationCoords::new(variations);
+    rasterize_coords(font, glyph_id, size_px, &coords)
+}
+
+/// [`rasterize`] with an already-normalised coordinate set. The hot text-draw
+/// loop computes the coordinates once per shaped run instead of once per glyph.
+pub fn rasterize_coords(
+    font: &FontRef,
+    glyph_id: u16,
+    size_px: f32,
+    variations: &VariationCoords,
+) -> Option<Arc<GlyphMask>> {
     if !size_px.is_finite() || size_px <= 0.0 {
         return None;
     }
@@ -289,17 +354,81 @@ pub fn rasterize(font: &FontRef, glyph_id: u16, size_px: f32) -> Option<Arc<Glyp
         font_id: font.file.id,
         glyph_id,
         char_size,
+        variations: variations.clone(),
     };
     let mut guard = rasterizer()?.lock().ok()?;
     if let Some(cached) = guard.masks.get(&key) {
         return Some(cached.clone());
     }
-    let mask = Arc::new(guard.rasterize_uncached(&font.file, glyph_id, char_size)?);
+    let variation_coords = key.variations.clone();
+    let mask = Arc::new(guard.rasterize_uncached(
+        &font.file,
+        glyph_id,
+        char_size,
+        &variation_coords,
+    )?);
     if guard.masks.len() >= MASK_CACHE_CAPACITY {
         guard.masks.clear();
     }
     guard.masks.insert(key, mask.clone());
     Some(mask)
+}
+
+/// Push `variations` onto `face`, mapping design coordinates through the
+/// face's `fvar` axis order. Returns `false` when FreeType rejects the
+/// coordinates, which makes the caller fall back to the outline path.
+///
+/// `FT_Set_Var_Design_Coordinates` is used (not `FT_Set_Var_Blend_Coordinates`)
+/// because `rustybuzz` shapes with design-space values and the same
+/// `(tag, value)` pairs are handed to both. This is also the call Minikin's
+/// `MinikinFontFreeType::setVariationAxes` makes on Android.
+fn apply_variations(
+    library: ft::FT_Library,
+    face: &mut OpenFace,
+    variations: &VariationCoords,
+) -> bool {
+    let mut mm: *mut ft::FT_MM_Var = ptr::null_mut();
+    // SAFETY: `face.raw` is a live face and `mm` is a valid out-pointer; on
+    // success FreeType allocates an `FT_MM_Var` owned by the caller.
+    let err = unsafe { ft::FT_Get_MM_Var(face.raw, &mut mm) };
+    if err != 0 || mm.is_null() {
+        // A static face has no MM data: the (empty) request is satisfied.
+        face.variations = variations.clone();
+        return true;
+    }
+    // SAFETY: `mm` is the live FT_MM_Var returned above.
+    let num_axis = unsafe { (*mm).num_axis };
+    if num_axis == 0 {
+        // SAFETY: `mm` was allocated by FT_Get_MM_Var on this library.
+        unsafe { ft::FT_Done_MM_Var(library, mm) };
+        face.variations = variations.clone();
+        return true;
+    }
+    // Start from the face's own defaults, then override matching tags.
+    let mut coords = vec![0i64; num_axis as usize];
+    for (i, coord) in coords.iter_mut().enumerate() {
+        // SAFETY: `i < num_axis`, so the axis pointer is in bounds.
+        *coord = unsafe { (*(*mm).axis.add(i)).def };
+    }
+    for &(tag, value) in &variations.coords {
+        for (i, coord) in coords.iter_mut().enumerate() {
+            // SAFETY: `i < num_axis`.
+            if unsafe { (*(*mm).axis.add(i)).tag } == tag as ft::FT_ULong {
+                *coord = value;
+                break;
+            }
+        }
+    }
+    // SAFETY: `face.raw` is live and `coords` holds `num_axis` entries.
+    let err = unsafe { ft::FT_Set_Var_Design_Coordinates(face.raw, num_axis, coords.as_ptr()) };
+    // SAFETY: `mm` is no longer used after this call; it must be freed with
+    // the library that produced it.
+    unsafe { ft::FT_Done_MM_Var(library, mm) };
+    if err != 0 {
+        return false;
+    }
+    face.variations = variations.clone();
+    true
 }
 
 #[cfg(test)]
@@ -321,7 +450,7 @@ mod tests {
             let face = ttf_parser::Face::parse(&font.file.data, font.file.face_index).unwrap();
             face.glyph_index('H').unwrap().0
         };
-        let mask = rasterize(&font, glyph_id, 36.75).expect("FreeType mask");
+        let mask = rasterize(&font, glyph_id, 36.75, &[]).expect("FreeType mask");
         assert!(mask.width > 0 && mask.rows > 0);
         assert_eq!(mask.coverage.len(), (mask.width * mask.rows) as usize);
         // An 'H' stem must cover some pixels fully and some partially (AA).
@@ -332,7 +461,84 @@ mod tests {
             "unhinted grayscale mask should contain partial coverage"
         );
         // Second call must hit the cache and return an equal mask.
-        let again = rasterize(&font, glyph_id, 36.75).unwrap();
+        let again = rasterize(&font, glyph_id, 36.75, &[]).unwrap();
         assert_eq!(again.coverage, mask.coverage);
+    }
+
+    /// Total A8 coverage of a glyph mask (sum of every pixel's alpha).
+    fn ink(mask: &GlyphMask) -> u64 {
+        mask.coverage.iter().map(|&c| c as u64).sum()
+    }
+
+    fn glyph_h(font: &FontRef) -> u16 {
+        let face = ttf_parser::Face::parse(&font.file.data, font.file.face_index).unwrap();
+        face.glyph_index('H').unwrap().0
+    }
+
+    #[test]
+    fn variable_weight_masks_differ_and_are_monotonic() {
+        let Some(fonts) = crate::FontCollection::shared() else {
+            eprintln!("SKIP: no fonts available");
+            return;
+        };
+        assert!(available(), "bundled FreeType failed to initialise");
+        // The Android 14 sans-serif family is the Roboto variable font; each
+        // `<font>` entry carries the matching `wght` axis, so 100..900 selects
+        // nine distinct instances of the same file.
+        let mut last = 0u64;
+        let mut seen = Vec::new();
+        for weight in [100u16, 200, 300, 400, 500, 600, 700, 800, 900] {
+            let font = fonts.resolve_typeface(None, weight, false).unwrap();
+            let gid = glyph_h(&font);
+            let mask = rasterize(&font, gid, 36.75, &font.axes).expect("mask");
+            let total = ink(&mask);
+            seen.push((weight, total));
+            assert!(
+                total > last,
+                "wght {weight} coverage {total} did not exceed previous {last}"
+            );
+            last = total;
+        }
+        // Sanity: the lightest and heaviest instances must be clearly apart,
+        // not a rounding-level difference.
+        let light = seen.first().unwrap().1;
+        let heavy = seen.last().unwrap().1;
+        assert!(
+            heavy > light * 2,
+            "wght 900 ink {heavy} not > 2x wght 100 ink {light}: {seen:?}"
+        );
+    }
+
+    #[test]
+    fn variable_instance_cache_keys_do_not_collide() {
+        let Some(fonts) = crate::FontCollection::shared() else {
+            eprintln!("SKIP: no fonts available");
+            return;
+        };
+        let font = fonts.resolve_typeface(None, 400, false).unwrap();
+        let gid = glyph_h(&font);
+        let light = rasterize(&font, gid, 36.75, &[("wght".into(), 200.0)]).unwrap();
+        let heavy = rasterize(&font, gid, 36.75, &[("wght".into(), 800.0)]).unwrap();
+        assert_ne!(light.coverage, heavy.coverage, "instances must differ");
+        // The exact same coordinates must hit the cache and reproduce the
+        // mask bit-for-bit.
+        let light_again = rasterize(&font, gid, 36.75, &[("wght".into(), 200.0)]).unwrap();
+        assert_eq!(light_again.coverage, light.coverage);
+        // Out-of-order tag lists are canonicalised to the same key.
+        let ordered = rasterize(
+            &font,
+            gid,
+            36.75,
+            &[("wght".into(), 200.0), ("wdth".into(), 100.0)],
+        )
+        .unwrap();
+        let reordered = rasterize(
+            &font,
+            gid,
+            36.75,
+            &[("wdth".into(), 100.0), ("wght".into(), 200.0)],
+        )
+        .unwrap();
+        assert_eq!(reordered.coverage, ordered.coverage);
     }
 }
