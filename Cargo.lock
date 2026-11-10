@@ -160,6 +160,7 @@ dependencies = [
  "acos-aidl",
  "acos-apk",
  "acos-dex",
+ "acos-jni",
  "acos-parcel",
  "acos-render",
  "acos-services",

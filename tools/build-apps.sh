@@ -144,6 +144,32 @@ echo "build-apps: [hello-jni] compiling native libs"
     -o "$JNI_WORK/arm64-v8a/libhellojni.so" "$APPS_DIR/hello-jni/jni/hello-jni.c"
 build_apk hello-jni "$JNI_WORK:lib"
 
+# --- native-hello ------------------------------------------------------------
+# Java Application calls a bundled libnativehello.so from onCreate (String,
+# APK asset via AAssetManager, Bitmap via AndroidBitmap_lockPixels).
+NATIVE_JNI_WORK="$BUILD_DIR/native-hello-jni"
+rm -rf "$NATIVE_JNI_WORK"
+mkdir -p "$NATIVE_JNI_WORK/x86_64" "$NATIVE_JNI_WORK/arm64-v8a"
+echo "build-apps: [native-hello] compiling native libs"
+"$NDK_BIN/x86_64-linux-android26-clang" -shared -fPIC -O2 \
+    -o "$NATIVE_JNI_WORK/x86_64/libnativehello.so" "$APPS_DIR/native-hello/jni/nativehello.c"
+"$NDK_BIN/aarch64-linux-android26-clang" -shared -fPIC -O2 \
+    -o "$NATIVE_JNI_WORK/arm64-v8a/libnativehello.so" "$APPS_DIR/native-hello/jni/nativehello.c"
+build_apk native-hello "$NATIVE_JNI_WORK:lib" "$APPS_DIR/native-hello/assets:assets"
+
+# --- native-hostile ----------------------------------------------------------
+# Bundled library that attempts denied syscalls; used to assert the ADR-0022
+# confinement layers (execve, /etc/passwd, AF_INET, out-of-dir write, ptrace).
+HOSTILE_JNI_WORK="$BUILD_DIR/native-hostile-jni"
+rm -rf "$HOSTILE_JNI_WORK"
+mkdir -p "$HOSTILE_JNI_WORK/x86_64" "$HOSTILE_JNI_WORK/arm64-v8a"
+echo "build-apps: [native-hostile] compiling native libs"
+"$NDK_BIN/x86_64-linux-android26-clang" -shared -fPIC -O2 \
+    -o "$HOSTILE_JNI_WORK/x86_64/libhostile.so" "$APPS_DIR/native-hostile/jni/hostile.c"
+"$NDK_BIN/aarch64-linux-android26-clang" -shared -fPIC -O2 \
+    -o "$HOSTILE_JNI_WORK/arm64-v8a/libhostile.so" "$APPS_DIR/native-hostile/jni/hostile.c"
+build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
+
 # --- framework-only fixture apps (no AndroidX, no native libs) ---------------
 # Each is a plain android.app.Activity app exercising one Android subsystem:
 # counter (view state + onSaveInstanceState), todo-list (ListView + input +

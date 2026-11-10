@@ -278,7 +278,17 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "Boot an APK in the in-process session and return the honest launch stage ladder \
              (apk_parsed -> ... -> first_frame). `ok:true` is only returned when every rung ran; \
              otherwise the first blocked rung carries the structured blocker.",
-            with_base(json!({"apk": {"type": "string"}, "timeout_ms": {"type": "integer"}})),
+            with_base(json!({
+                "apk": {"type": "string"},
+                "timeout_ms": {"type": "integer"},
+                "native": {
+                    "type": "boolean",
+                    "description": "Run the APK's lib/<abi>/*.so under the ADR-0022 confinement. \
+                                    The server process must already be confined; otherwise \
+                                    the first System.loadLibrary fails closed with \
+                                    CONFINEMENT_UNAVAILABLE."
+                }
+            })),
         ),
         "acos_observe_tree" => (
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \

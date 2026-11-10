@@ -101,6 +101,13 @@ fn host() -> Option<Host> {
     *HOST.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Whether a JNI host is installed (a `--native` product launch has attached
+/// `acos-jni`). The framework edge (`natives::fwk_jni`) uses this to decide
+/// between the real JNI loader and its own "served by Rust natives" stub.
+pub fn host_installed() -> bool {
+    host().is_some()
+}
+
 /// Register the DEX-level library-loading natives. Safe to call more than once.
 pub fn install(vm: &mut Vm) -> VmResult<()> {
     // `java.lang.System.loadLibrary(String)` / `load(String)` are ordinary Java
@@ -187,10 +194,14 @@ fn map_load_failure(vm: &mut Vm, e: CallFailure, what: &str) -> VmError {
     }
 }
 
-fn load_library_impl(vm: &mut Vm, ctx: NativeCtx, return_path: bool) -> VmResult<()> {
+pub fn load_library_impl(vm: &mut Vm, ctx: NativeCtx, return_path: bool) -> VmResult<()> {
     let name = library_name_arg(vm, ctx)?;
     let h = host().ok_or_else(|| {
-        VmError::unsupported_api("JNI library loader", "acos_vm::natives::jni_glue")
+        VmError::unsupported_api(
+            "JNI library loader",
+            "no JNI host is installed; re-run with `acos launch --native` (ACOS_NATIVE=1) \
+             to run the APK's confined native code",
+        )
     })?;
     let vm_ptr: *mut Vm = vm;
     match (h.load_library)(vm_ptr, &name) {
@@ -269,7 +280,8 @@ pub fn dispatch_native(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = host().ok_or_else(|| {
         VmError::unsupported_api(
             format!("{class}->{name}{sig}"),
-            "JNI host not installed (acos_jni::JniRuntime::attach)",
+            "no JNI host is installed; re-run with `acos launch --native` (ACOS_NATIVE=1) \
+             to run the APK's confined native code",
         )
     })?;
     let vm_ptr: *mut Vm = vm;

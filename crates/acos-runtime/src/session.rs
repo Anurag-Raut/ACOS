@@ -223,6 +223,12 @@ pub struct SessionOptions {
     pub wall_secs: u64,
     /// Record native invocations (needed for the native tail on a blocker).
     pub trace_natives: bool,
+    /// Run the APK's native code under confinement (`--native` / `ACOS_NATIVE=1`).
+    ///
+    /// The confinement must already be active in this process (the launch gate
+    /// enters it before the session worker starts); the JNI runtime's loader
+    /// fails closed with `CONFINEMENT_UNAVAILABLE` otherwise.
+    pub native: bool,
 }
 
 impl Default for SessionOptions {
@@ -232,6 +238,7 @@ impl Default for SessionOptions {
             heap_max_bytes: 0,
             wall_secs: 120,
             trace_natives: true,
+            native: false,
         }
     }
 }
@@ -863,6 +870,23 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         }
     };
     runtime.vm_mut().host = HostGuard::new(state.limits.rss_max_bytes, state.limits.wall_secs);
+
+    // Route the APK's DEX `native` methods to the JNI dispatcher. This is
+    // unconditional: without a JNI host (the default) a native call reports
+    // `UNSUPPORTED_JAVA_API` with the `--native` hint.
+    if let Err(e) = runtime.register_app_natives(apk) {
+        state.stage_reached = "apk_parsed";
+        return Err(e);
+    }
+    // Opt-in native code (ADR-0018 update). Fail closed: without an active
+    // process confinement the first `System.loadLibrary` reports
+    // `CONFINEMENT_UNAVAILABLE` and the session still returns a report.
+    if state.limits.native {
+        if let Err(e) = runtime.enable_native(apk) {
+            state.stage_reached = "apk_parsed";
+            return Err(e);
+        }
+    }
 
     let report: LifecycleReport = runtime.boot_and_run_lifecycle(apk);
     let log_records = os_log::records();

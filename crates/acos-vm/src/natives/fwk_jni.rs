@@ -55,6 +55,14 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 /// `UNSUPPORTED_JAVA_API` naming it, so a missing library is never hidden past
 /// the point where its behaviour matters.
 fn jni_native_load(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // With a `--native` launch, `acos-jni` has installed the real JNI loader
+    // host: route `Runtime.nativeLoad` through it so the APK's `lib/<abi>/*.so`
+    // resolve, map and run `JNI_OnLoad`. Without a host (the default), keep the
+    // framework-edge behaviour: report the library as loaded and serve its
+    // natives from Rust.
+    if crate::natives::jni_glue::host_installed() {
+        return crate::natives::jni_glue::load_library_impl(vm, ctx, true);
+    }
     vm.ret_ref(ctx, NULL);
     Ok(())
 }

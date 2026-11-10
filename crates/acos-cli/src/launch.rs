@@ -61,8 +61,10 @@ pub fn run(args: LaunchArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    let native = crate::native_launch::native_requested(args.native);
     let session = AgentSession::start(SessionOptions {
         wall_secs: args.timeout,
+        native,
         ..SessionOptions::default()
     });
     let session_id = session.id().to_string();

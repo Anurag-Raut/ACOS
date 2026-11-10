@@ -984,7 +984,11 @@ impl Runtime {
             FIXTURE_PID,
         )));
         crate::input_java::install();
-        Runtime { vm, host }
+        Runtime {
+            vm,
+            host,
+            native: None,
+        }
     }
 }
 

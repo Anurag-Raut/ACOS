@@ -10,6 +10,7 @@ description = "ACOS runtime: owns the VM + in-process ServiceHost wiring and the
 acos-aidl = { path = "../acos-aidl" }
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
+acos-jni = { path = "../acos-jni" }
 acos-render = { path = "../acos-render" }
 acos-parcel = { path = "../acos-parcel" }
 acos-services = { path = "../acos-services" }

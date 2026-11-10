@@ -133,7 +133,18 @@ fn b_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
         Ok::<_, VmError>(handle)
     })?;
-    vm.ret_i64(ctx, gj(h));
+    // API 34 `nativeCreate` returns a real `android.graphics.Bitmap`; Java
+    // reads `mNativePtr` for `getPixel`/`getPixels` and the NDK host reads it
+    // for `AndroidBitmap_*`. ACOS stores the render handle in that long field.
+    let obj = vm
+        .new_instance("Landroid/graphics/Bitmap;")
+        .map_err(|e| VmError::Internal(format!("Bitmap.createBitmap: {e}")))?;
+    vm.set_field(obj, "mNativePtr", crate::javabridge::JavaValue::Long(gj(h)))
+        .map_err(|e| VmError::Internal(format!("Bitmap.mNativePtr: {e}")))?;
+    let _ = vm.set_field(obj, "mWidth", crate::javabridge::JavaValue::Int(width));
+    let _ = vm.set_field(obj, "mHeight", crate::javabridge::JavaValue::Int(height));
+    let _ = vm.set_field(obj, "mDensity", crate::javabridge::JavaValue::Int(0));
+    vm.ret_ref(ctx, obj);
     Ok(())
 }
 

@@ -38,6 +38,7 @@ pub mod display_java;
 pub mod ime_java;
 pub mod input_java;
 pub mod lifecycle;
+pub mod native_bridge;
 pub mod parcel_java;
 pub mod pms_java;
 pub mod session;
@@ -49,6 +50,7 @@ pub mod view_tree;
 pub mod wms_java;
 
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 
 use acos_parcel::registry::set_process_identity;
@@ -67,12 +69,17 @@ pub const FIXTURE_PID: i32 = 1000;
 pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
 pub use lifecycle::{LifecycleError, LifecycleReport};
+pub use session::SessionError;
 pub use view_tree::{TreeError, ViewNode, ViewTree};
 
 /// A booted ACOS runtime: VM + service host + Binder transport.
 pub struct Runtime {
     vm: Vm,
     host: Rc<RefCell<ServiceHost>>,
+    /// Attached JNI runtime for an opt-in native launch (ADR-0018 update,
+    /// ADR-0022). `None` means no JNI host is installed and native library
+    /// loads report `UNSUPPORTED_JAVA_API`.
+    native: Option<native_bridge::NativeBridge>,
 }
 
 impl core::fmt::Debug for Runtime {
@@ -118,7 +125,51 @@ impl Runtime {
         // The real `InputEventReceiver` ack path (`nativeFinishInputEvent`)
         // forwards to the service input dispatcher.
         crate::input_java::install();
-        Ok(Self { vm, host })
+        Ok(Self {
+            vm,
+            host,
+            native: None,
+        })
+    }
+
+    /// Enable APK native code for this runtime (opt-in `--native`).
+    ///
+    /// Extracts the APK's host-ABI `lib/<abi>/*.so` into the VFS lib directory
+    /// and attaches the real JNI runtime, so `System.loadLibrary` and friends
+    /// resolve the APK's libraries and `JNI_OnLoad` / `RegisterNatives` /
+    /// `Java_*` lookups bind the DEX `native` methods.
+    ///
+    /// The JNI runtime requires an active process confinement (ADR-0022), so a
+    /// process that is not confined fails closed at the first library load with
+    /// `CONFINEMENT_UNAVAILABLE`; this method never enters a sandbox.
+    pub fn enable_native(&mut self, apk_path: &Path) -> Result<(), SessionError> {
+        let vfs_root = self.vm.vfs.root().to_path_buf();
+        let Some(bridge) = native_bridge::NativeBridge::prepare(apk_path, &vfs_root)? else {
+            return Ok(());
+        };
+        bridge.attach(&mut self.vm)?;
+        self.native = Some(bridge);
+        Ok(())
+    }
+
+    /// Register the APK's DEX `native` methods with the JNI dispatcher.
+    ///
+    /// Called for every launch, even when native execution is off: without an
+    /// attached JNI host the dispatcher reports `UNSUPPORTED_JAVA_API` with a
+    /// hint to re-run with `--native`, instead of the bare "not implemented"
+    /// the unbound-native path would produce.
+    pub fn register_app_natives(&mut self, apk_path: &Path) -> Result<(), SessionError> {
+        for (class, name, sig) in native_bridge::NativeBridge::declarations(apk_path)? {
+            self.vm
+                .register_native(&class, &name, &sig, acos_vm::natives::jni_glue::bridge());
+        }
+        Ok(())
+    }
+
+    /// The attached native bridge, if `enable_native` ran.
+    #[must_use]
+    pub fn native_bridge(&self) -> Option<&native_bridge::NativeBridge> {
+        self.native.as_ref()
     }
 
     /// The shared service host.

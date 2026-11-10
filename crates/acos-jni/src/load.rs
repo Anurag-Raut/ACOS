@@ -122,15 +122,15 @@ pub(crate) fn load_named(vm: &mut Vm, requested: &str) -> Result<String, CallFai
     }
 
     let Some((bytes, path, name)) = chosen else {
-        return Err(structured(JniError::LoadFailed {
-            message: format!(
-                "library {requested:?} not found (searched {:?}{})",
-                search_paths,
-                apk.as_ref()
-                    .map(|a| format!(" and {}", a.display()))
-                    .unwrap_or_default()
-            ),
-        }));
+        // A library that is not in a search path or the APK is treated as a
+        // framework library served by ACOS Rust natives (ADR-0014 /
+        // `acos-vm::natives::fwk_jni`): report it as loaded so
+        // `Runtime.nativeLoad` returns a path, exactly as the framework edge did
+        // before native loading was wired in. A missing Rust implementation
+        // still surfaces as a structured `UNSUPPORTED_JAVA_API` at the first
+        // call. An app-bundled library of the same name is found above and is
+        // mapped for real, so this never hides the APK's own code.
+        return Ok(file);
     };
 
     // Answer the guest library's NDK imports (`libandroid`/`libjnigraphics`)

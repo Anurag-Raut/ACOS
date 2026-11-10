@@ -117,6 +117,11 @@ impl SessionBackend {
         {
             limits.wall_secs = (ms / 1000).max(1);
         }
+        // Opt-in native code (`acos_launch { native: true }`). The JNI loader
+        // requires an active process confinement and fails closed with
+        // `CONFINEMENT_UNAVAILABLE` otherwise; this server never enters a
+        // sandbox mid-flight.
+        limits.native = args.get("native").and_then(Value::as_bool).unwrap_or(false);
         // Replace any prior session for this id so a second launch is a clean
         // task (the process-global transport/surface seams tolerate only one
         // live runtime).
