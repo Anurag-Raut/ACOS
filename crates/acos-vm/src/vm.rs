@@ -33,6 +33,9 @@ pub enum ThreadStatus {
     BlockedMonitor(Handle),
     Sleeping,
     Waiting,
+    /// Parked in a native blocking poll (`android.os.MessageQueue.nativePollOnce`).
+    /// The scheduler treats it as not runnable; the looper pump wakes it.
+    Parked,
     Finished,
 }
 
@@ -1006,7 +1009,7 @@ impl Vm {
                     break;
                 }
                 let f = &statics[i];
-                let raw = self.encoded_to_slots(val, f)?;
+                let raw = self.encoded_to_slots(dex_idx, val, f)?;
                 let off = f.offset as usize;
                 for (j, slot) in raw.into_iter().enumerate() {
                     self.classes[id as usize].statics[off + j] = slot;
@@ -1024,7 +1027,12 @@ impl Vm {
         Ok(id)
     }
 
-    fn encoded_to_slots(&mut self, v: &EncodedValue, field: &FieldDef) -> VmResult<Vec<u32>> {
+    fn encoded_to_slots(
+        &mut self,
+        dex: u32,
+        v: &EncodedValue,
+        field: &FieldDef,
+    ) -> VmResult<Vec<u32>> {
         let _ = field;
         Ok(match v {
             EncodedValue::Boolean(b) => vec![*b as u32],
@@ -1036,7 +1044,9 @@ impl Vm {
             EncodedValue::Float(f) => vec![*f],
             EncodedValue::Double(d) => vec![*d as u32, (*d >> 32) as u32],
             EncodedValue::String(s) => {
-                let text = self.dexs[0].file.string(*s)?.to_string();
+                // The string id belongs to the DEX that declared this class, not
+                // necessarily `dexs[0]` (lazy boot-classpath jars load later).
+                let text = self.dexs[dex as usize].file.string(*s)?.to_string();
                 let h = self.intern_str(&text)?;
                 vec![h]
             }
@@ -1792,7 +1802,19 @@ impl Vm {
         crate::interp::push_frame_values(self, mid, NULL, &[arr as u64])?;
         self.native_roots.pop();
 
-        crate::interp::run(self)?;
+        // The interpreter returns when no green thread is runnable. If the
+        // remaining threads are parked in a looper, block the host on the
+        // process epoll set and then resume them. `pump` returns false when
+        // there is nothing left to wait for.
+        loop {
+            crate::interp::run(self)?;
+            if self.pending_exception != NULL || self.exit_request.is_some() {
+                break;
+            }
+            if !crate::natives::looper::pump(self) {
+                break;
+            }
+        }
 
         // Collect an uncaught exception if any.
         if self.pending_exception != NULL {

@@ -144,6 +144,47 @@ boot-classpath extractor writes `.cache/boot/android-34/` and cleans its
 `.work/` intermediates; the DEX differential uses a small `mktemp` under `/tmp`
 for tiny dex only.
 
+### F-0008 — `core.os` natives: `Build`'s identity comes from init-derived properties — 2026-11-10
+
+**Finding.** The extracted `.cache/boot/android-34/build.prop` is the **system
+partition's** file, so it stores no `ro.build.fingerprint` and no
+`ro.product.cpu.abilist*`: init derives the fingerprint from
+`ro.system.build.fingerprint` and the abi lists from
+`ro.system.product.cpu.abilist{,32,64}` (the legacy `ro.product.*` aliases come
+from `ro.product.system.*` the same way). Serving the file verbatim yields
+`Build.FINGERPRINT == ""` and `Build.SUPPORTED_ABIS == [""]`, while the reference
+emulator reports the `device-config.json` fingerprint and `[x86_64,
+arm64-v8a]`. The property seed (`crates/acos-vm/src/natives/os_props.rs`)
+reproduces init's derivations and records per-key provenance (`BuildProp` /
+`Derived` / `ArtCapture`), so `Build.SUPPORTED_32_BIT_ABIS` is `[]` (abilist32
+is empty) exactly like the ART path.
+
+Two related non-obvious points from the same task:
+
+1. `research/service-layer/natives_plan.tsv` suggests `nativeGetEnabledTags`
+   return `0x2a` "for compat". That makes `Trace.isTagEnabled` true for tags
+   1/3/5 and sends framework code down trace paths no sink records. ACOS
+   returns `0` (nothing traced) — honest for a VM without systrace/Perfetto.
+2. `Process.myPid/myTid/myUid` are **not** natives: their bytecode calls
+   `android.system.Os.getpid/gettid/getuid` → `libcore.io.Linux`. The app uid
+   (10192) and the kernel tid therefore have to come from the `Linux` natives
+   (`natives/os_misc.rs` re-registers them), not from `Process`.
+
+**Evidence.** `grep -n '^ro.build.fingerprint\|^ro.product.cpu.abilist'
+.cache/boot/android-34/build.prop` → no match; `grep -n
+'ro.system.build.fingerprint\|ro.system.product.cpu.abilist'
+.cache/boot/android-34/build.prop` → present;
+`fixtures/reference/hello-views/art-api34-x86_64/device-config.json`;
+`dexdump -d .cache/boot/android-34/dex/framework/classes3.dex` on
+`android.os.Build$VERSION.<clinit>` / `android.os.Process.myUid`;
+`cargo test -p acos-vm --test os_natives` (java-level assertions).
+
+**Design impact.** Property seeding is not a flat `build.prop` parse: init's
+derivation rules are part of the compatibility surface for `Build.*` and
+`android.sysprop.*`. `ro.product.*` still comes from the system partition here
+(`MODEL = mainline`, `DEVICE = generic`); a full image would take it from
+`vendor`/`odm`, which the boot cache does not extract.
+
 ## 2026-11-10 — Owner directive D5: V1 is not the end; dogfood with real agents
 
 The owner requires that ACOS keep being refined after version 1 as a real product. After V1, "dogfood" waves are mandatory: subagents act as Android-developing agents (write app code, build the APK, run `acos verify`, read evidence, fix, repeat) using every ACOS feature, and the friction they hit becomes first-class backlog. Source: owner message, 2026-11-10. Recorded by the lead.

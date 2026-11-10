@@ -9,13 +9,20 @@
 //!
 //! Modules mirror the Android class packages:
 //! `lang` (Object/String/System/Thread/Class/Throwable), `icu`, `io`, `vmrt`,
-//! `math`, `reflect`.
+//! `math`, `reflect`, `looper` (the real `android.os.MessageQueue` epoll
+//! looper) and the `os_*` framework-edge modules.
 
 mod character;
 mod icu;
 mod io;
 mod lang;
+pub mod looper;
 mod math;
+mod os_clock;
+mod parcel;
+pub mod os_log;
+pub mod os_misc;
+pub mod os_props;
 mod reflect;
 #[path = "unsafe.rs"]
 mod unsafe_natives;
@@ -33,6 +40,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vmrt::install(vm)?;
     math::install(vm)?;
     reflect::install(vm)?;
+    parcel::install(vm)?;
     unsafe_natives::install(vm)?;
+    looper::install(vm)?;
+    os_props::install(vm);
+    os_clock::install(vm);
+    os_log::install(vm);
+    os_misc::install(vm);
     Ok(())
 }
