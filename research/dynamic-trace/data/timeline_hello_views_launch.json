@@ -1,0 +1,109 @@
+{
+  "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_views_launch.trace",
+  "elapsed_time_usec": 506316,
+  "last_record_wall_usec": 917504,
+  "milestones": {
+    "activity_thread_main": {
+      "wall_usec": 27682,
+      "thread": 13292,
+      "class": "android.app.ActivityThread",
+      "method": "main"
+    },
+    "handle_bind_application": {
+      "wall_usec": 27686,
+      "thread": 13292,
+      "class": "android.app.ActivityThread",
+      "method": "handleBindApplication"
+    },
+    "application_onCreate": {
+      "wall_usec": 61927,
+      "thread": 13292,
+      "class": "android.app.Application",
+      "method": "onCreate"
+    },
+    "perform_launch_activity": {
+      "wall_usec": 64357,
+      "thread": 13292,
+      "class": "android.app.ActivityThread",
+      "method": "performLaunchActivity"
+    },
+    "activity_performCreate": {
+      "wall_usec": 76114,
+      "thread": 13292,
+      "class": "android.app.Activity",
+      "method": "performCreate"
+    },
+    "activity_onCreate_app": {
+      "wall_usec": 76170,
+      "thread": 13292,
+      "class": "dev.acos.fixtures.helloviews.MainActivity",
+      "method": "onCreate"
+    },
+    "activity_makeVisible": {
+      "wall_usec": 138632,
+      "thread": 13292,
+      "class": "android.app.ActivityThread",
+      "method": "handleResumeActivity"
+    },
+    "activity_performResume": {
+      "wall_usec": 138648,
+      "thread": 13292,
+      "class": "android.app.Activity",
+      "method": "performResume"
+    },
+    "activity_onResume_app": {
+      "wall_usec": 138678,
+      "thread": 13292,
+      "class": "dev.acos.fixtures.helloviews.MainActivity",
+      "method": "onResume"
+    },
+    "surface_control_ctor": {
+      "wall_usec": 140112,
+      "thread": 13292,
+      "class": "android.view.SurfaceControl",
+      "method": "<init>"
+    },
+    "viewroot_setView": {
+      "wall_usec": 142363,
+      "thread": 13292,
+      "class": "android.view.ViewRootImpl",
+      "method": "setView"
+    },
+    "choreographer_doFrame": {
+      "wall_usec": 152843,
+      "thread": 13292,
+      "class": "android.view.Choreographer",
+      "method": "doFrame"
+    },
+    "performTraversals": {
+      "wall_usec": 152930,
+      "thread": 13292,
+      "class": "android.view.ViewRootImpl",
+      "method": "performTraversals"
+    },
+    "performMeasure": {
+      "wall_usec": 161684,
+      "thread": 13292,
+      "class": "android.view.ViewRootImpl",
+      "method": "performMeasure"
+    },
+    "performLayout": {
+      "wall_usec": 174995,
+      "thread": 13292,
+      "class": "android.view.ViewRootImpl",
+      "method": "performLayout"
+    },
+    "performDraw": {
+      "wall_usec": 179078,
+      "thread": 13292,
+      "class": "android.view.ViewRootImpl",
+      "method": "performDraw"
+    },
+    "threaded_renderer_draw": {
+      "wall_usec": 201432,
+      "thread": 13292,
+      "class": "android.view.ThreadedRenderer",
+      "method": "draw"
+    }
+  }
+}

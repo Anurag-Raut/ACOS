@@ -1,0 +1,416 @@
+channel	method
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.<init>
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.pushViewStackEntry
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.writeNextEntryToParcel
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.writeToParcel
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.writeToParcelInner
+Binder internals	android.app.assist.AssistStructure$ParcelTransferWriter.writeView
+Binder internals	android.os.Binder.<init>
+Binder internals	android.os.Binder.allowBlocking
+Binder internals	android.os.Binder.attachInterface
+Binder internals	android.os.Binder.checkParcel
+Binder internals	android.os.Binder.clearCallingIdentity
+Binder internals	android.os.Binder.execTransact
+Binder internals	android.os.Binder.execTransactInternal
+Binder internals	android.os.Binder.flushPendingCommands
+Binder internals	android.os.Binder.getCallingPid
+Binder internals	android.os.Binder.getCallingUid
+Binder internals	android.os.Binder.getMaxTransactionId
+Binder internals	android.os.Binder.getNativeBBinderHolder
+Binder internals	android.os.Binder.isProxy
+Binder internals	android.os.Binder.isStackTrackingEnabled
+Binder internals	android.os.BinderProxy$ProxyMap.get
+Binder internals	android.os.BinderProxy$ProxyMap.hash
+Binder internals	android.os.BinderProxy$ProxyMap.set
+Binder internals	android.os.BinderProxy.<init>
+Binder internals	android.os.BinderProxy.getInstance
+Binder internals	android.os.BinderProxy.isBinderAlive
+Binder internals	android.os.BinderProxy.queryLocalInterface
+Binder internals	android.os.BinderProxy.transact
+Binder internals	android.os.BinderProxy.transactNative
+Binder internals	android.os.Parcel$LazyValue.<init>
+Binder internals	android.os.Parcel$LazyValue.apply
+Binder internals	android.os.Parcel$ReadWriteHelper.readString16
+Binder internals	android.os.Parcel$ReadWriteHelper.readString8
+Binder internals	android.os.Parcel$ReadWriteHelper.writeString16
+Binder internals	android.os.Parcel$ReadWriteHelper.writeString8
+Binder internals	android.os.Parcel.-$$Nest$mreadValue
+Binder internals	android.os.Parcel.<init>
+Binder internals	android.os.Parcel.addFlags
+Binder internals	android.os.Parcel.adoptClassCookies
+Binder internals	android.os.Parcel.appendFrom
+Binder internals	android.os.Parcel.createFloatArray
+Binder internals	android.os.Parcel.createString8Array
+Binder internals	android.os.Parcel.createTypedArray
+Binder internals	android.os.Parcel.createTypedArrayList
+Binder internals	android.os.Parcel.dataAvail
+Binder internals	android.os.Parcel.dataPosition
+Binder internals	android.os.Parcel.dataSize
+Binder internals	android.os.Parcel.enforceInterface
+Binder internals	android.os.Parcel.enforceNoDataAvail
+Binder internals	android.os.Parcel.ensureReadSquashableParcelables
+Binder internals	android.os.Parcel.freeBuffer
+Binder internals	android.os.Parcel.getValueType
+Binder internals	android.os.Parcel.hasFileDescriptors
+Binder internals	android.os.Parcel.hasFlags
+Binder internals	android.os.Parcel.hasReadWriteHelper
+Binder internals	android.os.Parcel.init
+Binder internals	android.os.Parcel.isForRpc
+Binder internals	android.os.Parcel.isLengthPrefixed
+Binder internals	android.os.Parcel.markForBinder
+Binder internals	android.os.Parcel.nativeAppendFrom
+Binder internals	android.os.Parcel.nativeCreate
+Binder internals	android.os.Parcel.nativeDataAvail
+Binder internals	android.os.Parcel.nativeDataPosition
+Binder internals	android.os.Parcel.nativeDataSize
+Binder internals	android.os.Parcel.nativeEnforceInterface
+Binder internals	android.os.Parcel.nativeFreeBuffer
+Binder internals	android.os.Parcel.nativeHasFileDescriptors
+Binder internals	android.os.Parcel.nativeIsForRpc
+Binder internals	android.os.Parcel.nativeMarkForBinder
+Binder internals	android.os.Parcel.nativePushAllowFds
+Binder internals	android.os.Parcel.nativeReadFileDescriptor
+Binder internals	android.os.Parcel.nativeReadFloat
+Binder internals	android.os.Parcel.nativeReadInt
+Binder internals	android.os.Parcel.nativeReadLong
+Binder internals	android.os.Parcel.nativeReadString16
+Binder internals	android.os.Parcel.nativeReadString8
+Binder internals	android.os.Parcel.nativeReadStrongBinder
+Binder internals	android.os.Parcel.nativeRestoreAllowFds
+Binder internals	android.os.Parcel.nativeSetDataPosition
+Binder internals	android.os.Parcel.nativeWriteFloat
+Binder internals	android.os.Parcel.nativeWriteInt
+Binder internals	android.os.Parcel.nativeWriteInterfaceToken
+Binder internals	android.os.Parcel.nativeWriteLong
+Binder internals	android.os.Parcel.nativeWriteString16
+Binder internals	android.os.Parcel.nativeWriteString8
+Binder internals	android.os.Parcel.nativeWriteStrongBinder
+Binder internals	android.os.Parcel.obtain
+Binder internals	android.os.Parcel.pushAllowFds
+Binder internals	android.os.Parcel.readArrayList
+Binder internals	android.os.Parcel.readArrayListInternal
+Binder internals	android.os.Parcel.readArrayMap
+Binder internals	android.os.Parcel.readBoolean
+Binder internals	android.os.Parcel.readBundle
+Binder internals	android.os.Parcel.readException
+Binder internals	android.os.Parcel.readExceptionCode
+Binder internals	android.os.Parcel.readFloat
+Binder internals	android.os.Parcel.readInt
+Binder internals	android.os.Parcel.readLazyValue
+Binder internals	android.os.Parcel.readLong
+Binder internals	android.os.Parcel.readParcelable
+Binder internals	android.os.Parcel.readParcelableCreatorInternal
+Binder internals	android.os.Parcel.readParcelableInternal
+Binder internals	android.os.Parcel.readRawFileDescriptor
+Binder internals	android.os.Parcel.readSparseArray
+Binder internals	android.os.Parcel.readSparseArrayInternal
+Binder internals	android.os.Parcel.readSquashed
+Binder internals	android.os.Parcel.readString
+Binder internals	android.os.Parcel.readString16
+Binder internals	android.os.Parcel.readString16NoHelper
+Binder internals	android.os.Parcel.readString8
+Binder internals	android.os.Parcel.readString8NoHelper
+Binder internals	android.os.Parcel.readStrongBinder
+Binder internals	android.os.Parcel.readTypedArray
+Binder internals	android.os.Parcel.readTypedList
+Binder internals	android.os.Parcel.readTypedObject
+Binder internals	android.os.Parcel.readValue
+Binder internals	android.os.Parcel.recycle
+Binder internals	android.os.Parcel.resetSqaushingState
+Binder internals	android.os.Parcel.restoreAllowFds
+Binder internals	android.os.Parcel.setDataPosition
+Binder internals	android.os.Parcel.writeArrayMapInternal
+Binder internals	android.os.Parcel.writeBoolean
+Binder internals	android.os.Parcel.writeBundle
+Binder internals	android.os.Parcel.writeCharSequence
+Binder internals	android.os.Parcel.writeFloat
+Binder internals	android.os.Parcel.writeInt
+Binder internals	android.os.Parcel.writeIntArray
+Binder internals	android.os.Parcel.writeInterfaceToken
+Binder internals	android.os.Parcel.writeLong
+Binder internals	android.os.Parcel.writeParcelable
+Binder internals	android.os.Parcel.writeParcelableCreator
+Binder internals	android.os.Parcel.writeString
+Binder internals	android.os.Parcel.writeString16
+Binder internals	android.os.Parcel.writeString16Array
+Binder internals	android.os.Parcel.writeString16NoHelper
+Binder internals	android.os.Parcel.writeString8
+Binder internals	android.os.Parcel.writeString8NoHelper
+Binder internals	android.os.Parcel.writeStringArray
+Binder internals	android.os.Parcel.writeStrongBinder
+Binder internals	android.os.Parcel.writeStrongInterface
+Binder internals	android.os.Parcel.writeTypedArray
+Binder internals	android.os.Parcel.writeTypedObject
+Binder internals	android.os.Parcel.writeValue
+Binder internals	android.os.ParcelFileDescriptor$2.createFromParcel
+Binder internals	android.os.ParcelFileDescriptor.<init>
+Binder internals	android.os.ParcelFileDescriptor.close
+Binder internals	android.os.ParcelFileDescriptor.closeWithStatus
+Binder internals	android.os.ParcelFileDescriptor.detachFd
+Binder internals	android.os.ParcelFileDescriptor.releaseResources
+Binder internals	android.os.ParcelFileDescriptor.writeCommStatusAndClose
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.<init>
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.equals
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.get
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.readCutoutFromParcel
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.readFromParcel
+Binder internals	android.view.DisplayCutout$ParcelableWrapper.set
+Binder internals	com.android.internal.util.Parcelling$BuiltIn$ForBoolean.unparcel
+Binder internals	com.android.internal.util.Parcelling$BuiltIn$ForStringSet.unparcel
+InputChannel	android.view.InputChannel$1.createFromParcel
+InputChannel	android.view.InputChannel.<init>
+InputChannel	android.view.InputChannel.getToken
+InputChannel	android.view.InputChannel.nativeGetToken
+InputChannel	android.view.InputChannel.nativeReadFromParcel
+InputChannel	android.view.InputChannel.readFromParcel
+InputChannel	android.view.InputChannel.setNativeInputChannel
+InputChannel	android.view.InputEvent.<init>
+InputChannel	android.view.InputEvent.getSequenceNumber
+InputChannel	android.view.InputEvent.isFromSource
+InputChannel	android.view.InputEvent.prepareForReuse
+InputChannel	android.view.InputEvent.recycle
+InputChannel	android.view.InputEvent.recycleIfNeededAfterDispatch
+InputChannel	android.view.InputEventAssigner.notifyFrameProcessed
+InputChannel	android.view.InputEventAssigner.processEvent
+InputChannel	android.view.InputEventCompatProcessor.processInputEventForCompatibility
+InputChannel	android.view.InputEventReceiver.dispatchInputEvent
+InputChannel	android.view.InputEventReceiver.finishInputEvent
+InputChannel	android.view.InputEventReceiver.nativeFinishInputEvent
+InputChannel	android.view.InputEventSender.<init>
+InputChannel	android.view.InputEventSender.dispatchInputEventFinished
+InputChannel	android.view.InputEventSender.nativeInit
+InputChannel	android.view.InputEventSender.nativeSendKeyEvent
+InputChannel	android.view.InputEventSender.sendInputEvent
+InputChannel	android.view.ViewRootImpl$QueuedInputEvent.<init>
+InputChannel	android.view.ViewRootImpl$QueuedInputEvent.shouldSendToSynthesizer
+InputChannel	android.view.ViewRootImpl$QueuedInputEvent.shouldSkipIme
+InputChannel	android.view.ViewRootImpl$WindowInputEventReceiver.onInputEvent
+InputChannel	android.view.ViewRootImpl$WindowInputEventReceiver.onTouchModeChanged
+InputChannel	android.view.inputmethod.InputMethodManager$ImeInputEventSender.<init>
+InputChannel	android.view.inputmethod.InputMethodManager$ImeInputEventSender.onInputEventFinished
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.nNotifyFramePending
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.nRegisterAnimatingRenderNode
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.nSetRtAnimationsEnabled
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.nSyncAndDrawFrame
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.notifyFramePending
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.registerAnimatingRenderNode
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.setFPSDivisor
+Surface/BLAST/graphics	android.graphics.HardwareRenderer.syncAndDrawFrame
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver$$ExternalSyntheticLambda0.<init>
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver$$ExternalSyntheticLambda0.run
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver.$r8$lambda$855nXbEL5hMAs0mUpabiiO2hQjM
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver.invokeDataAvailable
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver.lambda$notifyDataAvailable$0
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver.nGetNextBuffer
+Surface/BLAST/graphics	android.graphics.HardwareRendererObserver.notifyDataAvailable
+Surface/BLAST/graphics	android.graphics.RenderNode.<init>
+Surface/BLAST/graphics	android.graphics.RenderNode.addAnimator
+Surface/BLAST/graphics	android.graphics.RenderNode.beginRecording
+Surface/BLAST/graphics	android.graphics.RenderNode.clearStretch
+Surface/BLAST/graphics	android.graphics.RenderNode.create
+Surface/BLAST/graphics	android.graphics.RenderNode.endRecording
+Surface/BLAST/graphics	android.graphics.RenderNode.getElevation
+Surface/BLAST/graphics	android.graphics.RenderNode.getTranslationZ
+Surface/BLAST/graphics	android.graphics.RenderNode.hasDisplayList
+Surface/BLAST/graphics	android.graphics.RenderNode.hasIdentityMatrix
+Surface/BLAST/graphics	android.graphics.RenderNode.isAttached
+Surface/BLAST/graphics	android.graphics.RenderNode.nAddAnimator
+Surface/BLAST/graphics	android.graphics.RenderNode.nClearStretch
+Surface/BLAST/graphics	android.graphics.RenderNode.nCreate
+Surface/BLAST/graphics	android.graphics.RenderNode.nGetElevation
+Surface/BLAST/graphics	android.graphics.RenderNode.nGetTranslationZ
+Surface/BLAST/graphics	android.graphics.RenderNode.nHasIdentityMatrix
+Surface/BLAST/graphics	android.graphics.RenderNode.nIsValid
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetClipToBounds
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetHasOverlappingRendering
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetLeftTopRightBottom
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetOutlineRoundRect
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetProjectBackwards
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetProjectionReceiver
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetTranslationX
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetTranslationY
+Surface/BLAST/graphics	android.graphics.RenderNode.nSetTranslationZ
+Surface/BLAST/graphics	android.graphics.RenderNode.setClipToBounds
+Surface/BLAST/graphics	android.graphics.RenderNode.setHasOverlappingRendering
+Surface/BLAST/graphics	android.graphics.RenderNode.setLeftTopRightBottom
+Surface/BLAST/graphics	android.graphics.RenderNode.setOutline
+Surface/BLAST/graphics	android.graphics.RenderNode.setProjectBackwards
+Surface/BLAST/graphics	android.graphics.RenderNode.setProjectionReceiver
+Surface/BLAST/graphics	android.graphics.RenderNode.setTranslationX
+Surface/BLAST/graphics	android.graphics.RenderNode.setTranslationY
+Surface/BLAST/graphics	android.graphics.RenderNode.setTranslationZ
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator$$ExternalSyntheticLambda0.<init>
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator$$ExternalSyntheticLambda0.run
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.<init>
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.applyInterpolator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.callOnFinished
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.cancel
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.checkMutable
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.cloneListeners
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.doStart
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.end
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.getNativeAnimator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.init
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.isNativeInterpolator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.moveToRunningState
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nCreateCanvasPropertyFloatAnimator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nEnd
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nSetDuration
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nSetInterpolator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nSetListener
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nSetStartDelay
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.nStart
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.notifyStartListeners
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.onFinished
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.releaseNativePtr
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.setDuration
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.setInterpolator
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.setStartDelay
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.setTarget
+Surface/BLAST/graphics	android.graphics.animation.RenderNodeAnimator.start
+Surface/BLAST/graphics	android.view.Surface.getGenerationId
+Surface/BLAST/graphics	android.view.Surface.isValid
+Surface/BLAST/graphics	android.view.Surface.nativeIsValid
+Surface/BLAST/graphics	android.view.SurfaceControl$1.createFromParcel
+Surface/BLAST/graphics	android.view.SurfaceControl$JankData.<init>
+Surface/BLAST/graphics	android.view.SurfaceControl$OnJankDataListener.-$$Nest$fgetmNativePtr
+Surface/BLAST/graphics	android.view.SurfaceControl$OnJankDataListener.<init>
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.<init>
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.apply
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.applyResizedSurfaces
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.checkPreconditions
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.close
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.hide
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.notifyReparentedSurfaces
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.sendSurfaceFlushJankData
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.setAlpha
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.setFrameTimelineVsync
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.setMatrix
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.setPosition
+Surface/BLAST/graphics	android.view.SurfaceControl$Transaction.show
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$mcheckNotReleased
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeApplyTransaction
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeCreateJankDataListenerWrapper
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeCreateTransaction
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSetAlpha
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSetFlags
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSetFrameTimelineVsync
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSetMatrix
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSetPosition
+Surface/BLAST/graphics	android.view.SurfaceControl.-$$Nest$smnativeSurfaceFlushJankData
+Surface/BLAST/graphics	android.view.SurfaceControl.<init>
+Surface/BLAST/graphics	android.view.SurfaceControl.addJankDataListener
+Surface/BLAST/graphics	android.view.SurfaceControl.addToRegistry
+Surface/BLAST/graphics	android.view.SurfaceControl.assignNativeObject
+Surface/BLAST/graphics	android.view.SurfaceControl.checkNotReleased
+Surface/BLAST/graphics	android.view.SurfaceControl.copyFrom
+Surface/BLAST/graphics	android.view.SurfaceControl.getLayerId
+Surface/BLAST/graphics	android.view.SurfaceControl.isSameSurface
+Surface/BLAST/graphics	android.view.SurfaceControl.isValid
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeAddJankDataListener
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeApplyTransaction
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeCopyFromSurfaceControl
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeCreateJankDataListenerWrapper
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeCreateTransaction
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeGetHandle
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeGetLayerId
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeReadFromParcel
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeRemoveJankDataListener
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSetAlpha
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSetFlags
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSetFrameTimelineVsync
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSetMatrix
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSetPosition
+Surface/BLAST/graphics	android.view.SurfaceControl.nativeSurfaceFlushJankData
+Surface/BLAST/graphics	android.view.SurfaceControl.readFromParcel
+Surface/BLAST/graphics	android.view.SurfaceControl.release
+Surface/BLAST/graphics	android.view.SurfaceControl.removeFromRegistry
+Surface/BLAST/graphics	android.view.SurfaceControl.removeJankDataListener
+Surface/BLAST/graphics	android.view.SurfaceControl.setUnreleasedWarningCallSite
+Surface/BLAST/graphics	android.view.SurfaceControlRegistry.getProcessInstance
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams$Builder.<init>
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams$Builder.build
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams$Builder.withAlpha
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams$Builder.withMatrix
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams$Builder.withVisibility
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams.-$$Nest$fgetflags
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier$SurfaceParams.<init>
+Surface/BLAST/graphics	android.view.SyncRtSurfaceTransactionApplier.applyParams
+Surface/BLAST/graphics	android.widget.Editor$TextRenderNode.<init>
+Surface/BLAST/graphics	android.widget.Editor$TextRenderNode.needsRecord
+Surface/BLAST/graphics	com.android.internal.jank.FrameTracker$SurfaceControlWrapper.<init>
+Surface/BLAST/graphics	com.android.internal.jank.FrameTracker$SurfaceControlWrapper.addJankStatsListener
+Surface/BLAST/graphics	com.android.internal.jank.FrameTracker$SurfaceControlWrapper.removeJankStatsListener
+SystemProperties	android.os.SystemProperties$Handle.getLong
+SystemProperties	android.os.SystemProperties.-$$Nest$smnative_get_long
+SystemProperties	android.os.SystemProperties.getInt
+SystemProperties	android.os.SystemProperties.native_get_int
+SystemProperties	android.os.SystemProperties.native_get_long
+socket/pipe	android.os.ParcelFileDescriptor$2.createFromParcel
+socket/pipe	android.os.ParcelFileDescriptor.<init>
+socket/pipe	android.os.ParcelFileDescriptor.close
+socket/pipe	android.os.ParcelFileDescriptor.closeWithStatus
+socket/pipe	android.os.ParcelFileDescriptor.detachFd
+socket/pipe	android.os.ParcelFileDescriptor.releaseResources
+socket/pipe	android.os.ParcelFileDescriptor.writeCommStatusAndClose
+vsync/Choreographer	android.view.Choreographer$2.initialValue
+vsync/Choreographer	android.view.Choreographer$CallbackQueue.<init>
+vsync/Choreographer	android.view.Choreographer$CallbackQueue.addCallbackLocked
+vsync/Choreographer	android.view.Choreographer$CallbackQueue.extractDueCallbacksLocked
+vsync/Choreographer	android.view.Choreographer$CallbackQueue.removeCallbacksLocked
+vsync/Choreographer	android.view.Choreographer$CallbackRecord.<init>
+vsync/Choreographer	android.view.Choreographer$CallbackRecord.run
+vsync/Choreographer	android.view.Choreographer$FrameData.-$$Nest$fgetmFrameTimeNanos
+vsync/Choreographer	android.view.Choreographer$FrameData.<init>
+vsync/Choreographer	android.view.Choreographer$FrameData.allocateFrameTimelines
+vsync/Choreographer	android.view.Choreographer$FrameData.checkInCallback
+vsync/Choreographer	android.view.Choreographer$FrameData.getFrameTimeNanos
+vsync/Choreographer	android.view.Choreographer$FrameData.setInCallback
+vsync/Choreographer	android.view.Choreographer$FrameData.update
+vsync/Choreographer	android.view.Choreographer$FrameDisplayEventReceiver.<init>
+vsync/Choreographer	android.view.Choreographer$FrameDisplayEventReceiver.onVsync
+vsync/Choreographer	android.view.Choreographer$FrameDisplayEventReceiver.run
+vsync/Choreographer	android.view.Choreographer$FrameHandler.<init>
+vsync/Choreographer	android.view.Choreographer$FrameTimeline.-$$Nest$fgetmDeadlineNanos
+vsync/Choreographer	android.view.Choreographer$FrameTimeline.<init>
+vsync/Choreographer	android.view.Choreographer$FrameTimeline.setInCallback
+vsync/Choreographer	android.view.Choreographer$FrameTimeline.update
+vsync/Choreographer	android.view.Choreographer.-$$Nest$fgetmHandler
+vsync/Choreographer	android.view.Choreographer.-$$Nest$mobtainCallbackLocked
+vsync/Choreographer	android.view.Choreographer.-$$Nest$sfgetFRAME_CALLBACK_TOKEN
+vsync/Choreographer	android.view.Choreographer.-$$Nest$sfgetVSYNC_CALLBACK_TOKEN
+vsync/Choreographer	android.view.Choreographer.<init>
+vsync/Choreographer	android.view.Choreographer.doCallbacks
+vsync/Choreographer	android.view.Choreographer.doFrame
+vsync/Choreographer	android.view.Choreographer.getFrameTime
+vsync/Choreographer	android.view.Choreographer.getFrameTimeNanos
+vsync/Choreographer	android.view.Choreographer.getInstance
+vsync/Choreographer	android.view.Choreographer.getRefreshRate
+vsync/Choreographer	android.view.Choreographer.getSfInstance
+vsync/Choreographer	android.view.Choreographer.getVsyncId
+vsync/Choreographer	android.view.Choreographer.isRunningOnLooperThreadLocked
+vsync/Choreographer	android.view.Choreographer.obtainCallbackLocked
+vsync/Choreographer	android.view.Choreographer.postCallback
+vsync/Choreographer	android.view.Choreographer.postCallbackDelayed
+vsync/Choreographer	android.view.Choreographer.postCallbackDelayedInternal
+vsync/Choreographer	android.view.Choreographer.postFrameCallback
+vsync/Choreographer	android.view.Choreographer.postFrameCallbackDelayed
+vsync/Choreographer	android.view.Choreographer.recycleCallbackLocked
+vsync/Choreographer	android.view.Choreographer.removeCallbacks
+vsync/Choreographer	android.view.Choreographer.removeCallbacksInternal
+vsync/Choreographer	android.view.Choreographer.scheduleFrameLocked
+vsync/Choreographer	android.view.Choreographer.scheduleVsyncLocked
+vsync/Choreographer	android.view.Choreographer.setFPSDivisor
+vsync/Choreographer	android.view.DisplayEventReceiver$VsyncEventData$FrameTimeline.<init>
+vsync/Choreographer	android.view.DisplayEventReceiver$VsyncEventData$FrameTimeline.copyFrom
+vsync/Choreographer	android.view.DisplayEventReceiver$VsyncEventData.<init>
+vsync/Choreographer	android.view.DisplayEventReceiver$VsyncEventData.copyFrom
+vsync/Choreographer	android.view.DisplayEventReceiver$VsyncEventData.preferredFrameTimeline
+vsync/Choreographer	android.view.DisplayEventReceiver.<init>
+vsync/Choreographer	android.view.DisplayEventReceiver.dispatchVsync
+vsync/Choreographer	android.view.DisplayEventReceiver.nativeInit
+vsync/Choreographer	android.view.DisplayEventReceiver.nativeScheduleVsync
+vsync/Choreographer	android.view.DisplayEventReceiver.scheduleVsync
+vsync/Choreographer	com.android.internal.jank.FrameTracker$ChoreographerWrapper.-$$Nest$fgetmChoreographer
+vsync/Choreographer	com.android.internal.jank.FrameTracker$ChoreographerWrapper.<init>
+vsync/Choreographer	com.android.internal.jank.FrameTracker$ChoreographerWrapper.getVsyncId

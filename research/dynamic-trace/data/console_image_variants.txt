@@ -1,0 +1,6 @@
+01_hello boot-image / init variants (each run with -Xmethod-trace).
+columns: variant methods clinit natives bytes_exit
+DEFAULT methods=251 clinit=3 natives=21
+-Ximage: methods=274 clinit=14 natives=23
+-Xnoimage-dex2oat methods=251 clinit=3 natives=21
+-Xint methods=258 clinit=3 natives=21

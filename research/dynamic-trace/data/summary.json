@@ -1,0 +1,211 @@
+{
+  "phases": {
+    "println": {
+      "distinct_methods": 251,
+      "natives": 21,
+      "clinit": 3
+    },
+    "activity_onCreate": {
+      "natives": 139,
+      "first_order": 2108
+    },
+    "first_frame": {
+      "distinct_methods": 7018,
+      "natives": 379,
+      "clinit": 12,
+      "native_categories": {
+        "core": 92,
+        "android": 287,
+        "other": 0
+      },
+      "category_totals": {
+        "core": {
+          "methods": 1029,
+          "enters": 74329
+        },
+        "android": {
+          "methods": 5979,
+          "enters": 77980
+        },
+        "other": {
+          "methods": 10,
+          "enters": 12
+        }
+      }
+    },
+    "interaction": {
+      "distinct_methods": 5631,
+      "natives": 327,
+      "new_natives_vs_launch": 131,
+      "clinit": 4
+    },
+    "hello_jni_launch": {
+      "distinct_methods": 5980,
+      "natives": 379
+    }
+  },
+  "launch_packages": {
+    "java.lang": {
+      "methods": 315,
+      "enters": 55227
+    },
+    "android.view": {
+      "methods": 1523,
+      "enters": 15625
+    },
+    "android.content": {
+      "methods": 494,
+      "enters": 14252
+    },
+    "android.os": {
+      "methods": 442,
+      "enters": 13092
+    },
+    "android.graphics": {
+      "methods": 989,
+      "enters": 11592
+    },
+    "java.util": {
+      "methods": 341,
+      "enters": 10408
+    },
+    "android.util": {
+      "methods": 221,
+      "enters": 8614
+    },
+    "android.app": {
+      "methods": 591,
+      "enters": 4478
+    },
+    "java.nio": {
+      "methods": 49,
+      "enters": 3479
+    },
+    "android.text": {
+      "methods": 317,
+      "enters": 3264
+    },
+    "android.widget": {
+      "methods": 433,
+      "enters": 2224
+    },
+    "com.android.internal": {
+      "methods": 348,
+      "enters": 2039
+    },
+    "android.animation": {
+      "methods": 238,
+      "enters": 1637
+    },
+    "dalvik.system": {
+      "methods": 60,
+      "enters": 1356
+    },
+    "libcore.util": {
+      "methods": 14,
+      "enters": 1112
+    },
+    "sun.misc": {
+      "methods": 5,
+      "enters": 655
+    },
+    "sun.util": {
+      "methods": 64,
+      "enters": 650
+    },
+    "jdk.internal": {
+      "methods": 26,
+      "enters": 533
+    },
+    "libcore.io": {
+      "methods": 33,
+      "enters": 399
+    },
+    "java.io": {
+      "methods": 33,
+      "enters": 295
+    }
+  },
+  "interaction_packages": {
+    "java.lang": {
+      "methods": 334,
+      "enters": 109892
+    },
+    "android.text": {
+      "methods": 402,
+      "enters": 46813
+    },
+    "android.view": {
+      "methods": 1450,
+      "enters": 32292
+    },
+    "android.os": {
+      "methods": 326,
+      "enters": 28038
+    },
+    "android.graphics": {
+      "methods": 726,
+      "enters": 22899
+    },
+    "java.util": {
+      "methods": 364,
+      "enters": 14208
+    },
+    "android.util": {
+      "methods": 169,
+      "enters": 7255
+    },
+    "android.widget": {
+      "methods": 346,
+      "enters": 5379
+    },
+    "com.android.internal": {
+      "methods": 333,
+      "enters": 3664
+    },
+    "sun.util": {
+      "methods": 64,
+      "enters": 3343
+    },
+    "android.content": {
+      "methods": 208,
+      "enters": 2931
+    },
+    "android.app": {
+      "methods": 179,
+      "enters": 2872
+    },
+    "java.nio": {
+      "methods": 76,
+      "enters": 2864
+    },
+    "android.animation": {
+      "methods": 170,
+      "enters": 2722
+    },
+    "libcore.util": {
+      "methods": 15,
+      "enters": 1096
+    },
+    "libcore.io": {
+      "methods": 28,
+      "enters": 877
+    },
+    "dalvik.system": {
+      "methods": 16,
+      "enters": 827
+    },
+    "jdk.internal": {
+      "methods": 31,
+      "enters": 779
+    },
+    "android.icu": {
+      "methods": 149,
+      "enters": 657
+    },
+    "sun.misc": {
+      "methods": 5,
+      "enters": 552
+    }
+  }
+}

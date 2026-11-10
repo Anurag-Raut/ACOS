@@ -1,0 +1,51 @@
+order	direction	interface	method	signature	count	kind
+4409	app->system	android.view.autofill.IAutoFillManager	addClient	(Landroid/view/autofill/IAutoFillManagerClient;Landroid/content/ComponentName;ILcom/android/internal/os/IResultReceiver;)V	1	proxy
+4533	system->app	com.android.internal.os.IResultReceiver	onTransact		4	onTransact
+4544	system->app	com.android.internal.os.IResultReceiver	com.android.internal.util.SyncResultReceiver.send		2	handler
+5122	app->system	android.view.autofill.IAutoFillManager	startSession	(Landroid/os/IBinder;Landroid/os/IBinder;Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;IZILandroid/content/ComponentName;ZLcom/android/internal/os/IResultReceiver;)V	1	proxy
+5315	system->app	android.app.IApplicationThread	onTransact		2	onTransact
+5432	system->app	android.app.IApplicationThread	android.app.ActivityThread$ApplicationThread.requestAssistContextExtras		1	handler
+6914	app->system	android.content.pm.IPackageManager	hasSystemFeature	(Ljava/lang/String;I)Z	1	proxy
+9403	app->system	com.android.internal.view.IInputMethodManager	startInputOrWindowGainedFocus	(ILcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;IIILandroid/view/inputmethod/EditorInfo;Lcom/android/internal/inputmethod/IRemoteInputConnection;Lcom/android/internal/inputmethod/IRemoteAccessibilityInputConnection;IILandroid/window/ImeOnBackInvokedDispatcher;)Lcom/android/internal/inputmethod/InputBindResult;	1	proxy
+10401	app->system	com.android.internal.inputmethod.IInputMethodSession	viewClicked	(Z)V	1	proxy
+11307	app->system	com.android.internal.view.IInputMethodManager	getImeTrackerService	()Lcom/android/internal/inputmethod/IImeTracker;	1	proxy
+11399	app->system	com.android.internal.inputmethod.IImeTracker	onRequestShow	(Ljava/lang/String;III)Landroid/view/inputmethod/ImeTracker$Token;	1	proxy
+11711	app->system	com.android.internal.inputmethod.IImeTracker	onProgress	(Landroid/os/IBinder;I)V	22	proxy
+12244	app->system	com.android.internal.view.IInputMethodManager	showSoftInput	(Lcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;Landroid/view/inputmethod/ImeTracker$Token;IILandroid/os/ResultReceiver;I)Z	1	proxy
+18953	app->system	android.app.IActivityTaskManager	reportAssistContextExtras	(Landroid/os/IBinder;Landroid/os/Bundle;Landroid/app/assist/AssistStructure;Landroid/app/assist/AssistContent;Landroid/net/Uri;)V	1	proxy
+22039	system->app	com.android.internal.os.IResultReceiver	android.os.ResultReceiver$MyResultReceiver.send		2	handler
+22439	app->system	android.view.IWindowSession	setOnBackInvokedCallbackInfo	(Landroid/view/IWindow;Landroid/window/OnBackInvokedCallbackInfo;)V	2	proxy
+22532	system->app	android.view.IWindow	onTransact		13	onTransact
+23600	system->app	android.view.IWindow	android.view.ViewRootImpl$W.insetsControlChanged		4	handler
+26106	app->system	com.android.internal.view.IInputMethodManager	reportPerceptibleAsync	(Landroid/os/IBinder;Z)V	6	proxy
+28136	system->app	android.view.IWindow	android.view.ViewRootImpl$W.resized		7	handler
+32890	system->app	android.view.autofill.IAutoFillManagerClient	onTransact		1	onTransact
+32921	system->app	android.view.autofill.IAutoFillManagerClient	android.view.autofill.AutofillManager$AutofillManagerClient.setSessionFinished		1	handler
+39664	system->app	android.view.IWindow	android.view.ViewRootImpl$W.showInsets		1	handler
+41440	app->system	android.view.IWindowSession	updateRequestedVisibleTypes	(Landroid/view/IWindow;I)V	2	proxy
+58922	app->system	android.content.IContentService	registerContentObserver	(Landroid/net/Uri;ZLandroid/database/IContentObserver;II)V	1	proxy
+63977	app->system	android.view.IWindowManager	setInTouchMode	(ZI)V	2	proxy
+66868	app->system	com.android.internal.textservice.ITextServicesManager	isSpellCheckerEnabled	(I)Z	5	proxy
+66959	app->system	com.android.internal.textservice.ITextServicesManager	getCurrentSpellCheckerSubtype	(IZ)Landroid/view/textservice/SpellCheckerSubtype;	6	proxy
+67439	app->system	com.android.internal.textservice.ITextServicesManager	getCurrentSpellChecker	(ILjava/lang/String;)Landroid/view/textservice/SpellCheckerInfo;	1	proxy
+70710	app->system	com.android.internal.textservice.ITextServicesManager	getSpellCheckerService	(ILjava/lang/String;Ljava/lang/String;Lcom/android/internal/textservice/ITextServicesSessionListener;Lcom/android/internal/textservice/ISpellCheckerSessionListener;Landroid/os/Bundle;I)V	1	proxy
+73701	system->app	com.android.internal.textservice.ITextServicesSessionListener	onTransact		1	onTransact
+73894	system->app	com.android.internal.textservice.ITextServicesSessionListener	android.view.textservice.SpellCheckerSession$InternalListener.onServiceConnected		1	handler
+79950	app->system	android.view.IWindowSession	onRectangleOnScreenRequested	(Landroid/os/IBinder;Landroid/graphics/Rect;)V	18	proxy
+80117	app->system	com.android.internal.inputmethod.IInputMethodSession	updateSelection	(IIIIII)V	11	proxy
+80648	system->app	com.android.internal.inputmethod.IRemoteInputConnection	onTransact		15	onTransact
+80991	system->app	com.android.internal.inputmethod.IRemoteInputConnection	android.view.inputmethod.RemoteInputConnectionImpl.getSurroundingText		8	handler
+88007	app->system	com.android.internal.infra.IAndroidFuture	complete	(Lcom/android/internal/infra/AndroidFuture;)V	8	proxy
+88300	system->app	com.android.internal.inputmethod.IRemoteInputConnection	android.view.inputmethod.RemoteInputConnectionImpl.setComposingRegion		5	handler
+92703	system->app	com.android.internal.inputmethod.IRemoteInputConnection	android.view.inputmethod.RemoteInputConnectionImpl.clearMetaKeyStates		1	handler
+198341	app->system	com.android.internal.inputmethod.IImeTracker	onShown	(Landroid/view/inputmethod/ImeTracker$Token;)V	1	proxy
+221328	app->system	android.os.IServiceManager	checkService	(Ljava/lang/String;)Landroid/os/IBinder;	1	proxy
+221438	app->system	android.media.IAudioService	areNavigationRepeatSoundEffectsEnabled	()Z	1	proxy
+221488	app->system	android.media.IAudioService	playSoundEffect	(II)V	1	proxy
+243168	system->app	com.android.internal.inputmethod.IRemoteInputConnection	android.view.inputmethod.RemoteInputConnectionImpl.finishComposingText		1	handler
+246882	system->app	android.view.IWindow	android.view.ViewRootImpl$W.hideInsets		1	handler
+285655	app->system	com.android.internal.inputmethod.IImeTracker	onRequestHide	(Ljava/lang/String;III)Landroid/view/inputmethod/ImeTracker$Token;	1	proxy
+286052	app->system	com.android.internal.view.IInputMethodManager	hideSoftInput	(Lcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;Landroid/view/inputmethod/ImeTracker$Token;ILandroid/os/ResultReceiver;I)Z	1	proxy
+286204	app->system	com.android.internal.view.IInputMethodManager	removeImeSurfaceFromWindowAsync	(Landroid/os/IBinder;)V	1	proxy
+286322	app->system	com.android.internal.inputmethod.IImeTracker	onHidden	(Landroid/view/inputmethod/ImeTracker$Token;)V	1	proxy
+290725	system->app	android.app.IApplicationThread	android.app.ActivityThread$ApplicationThread.profilerControl		1	handler

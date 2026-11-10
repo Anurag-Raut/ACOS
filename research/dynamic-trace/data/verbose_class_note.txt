@@ -1,0 +1,5 @@
+-verbose:class observability on this image (userdebug, API 34):
+  logcat lines matching '\[Loaded': 0
+  logcat lines matching 'Initialized': 11
+  => class load/init order is compiled out of this libart (VLOG); derive
+     initialisation from <clinit> records in the method trace instead.

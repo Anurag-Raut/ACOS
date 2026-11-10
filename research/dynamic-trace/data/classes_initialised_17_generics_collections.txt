@@ -1,0 +1,3 @@
+java.nio.charset.StandardCharsets
+com.android.icu.charset.NativeConverter
+java.lang.ref.Reference$SinkHolder

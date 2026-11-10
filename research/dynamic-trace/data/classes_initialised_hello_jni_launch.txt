@@ -1,0 +1,11 @@
+android.net.ConnectivityManager
+android.net.NetworkRequest$Builder
+android.net.NetworkCapabilities
+android.net.UidRange
+android.net.connectivity.com.android.net.module.util.NetworkCapabilitiesUtils
+android.net.NetworkRequest
+android.net.NetworkRequest$Type
+android.net.NetworkUtils
+android.security.net.config.SystemCertificateSource$NoPreloadHolder
+dev.acos.fixtures.hellojni.MainActivity
+android.view.SurfaceControlRegistry

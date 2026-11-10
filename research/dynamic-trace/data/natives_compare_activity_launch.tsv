@@ -1,0 +1,766 @@
+class	method	signature	predicted	measured	enters	where
+android.animation.PropertyValuesHolder	nCallFloatMethod	(Ljava/lang/Object;JF)V	no	yes	12	program
+android.animation.PropertyValuesHolder	nGetFloatMethod	(Ljava/lang/Class;Ljava/lang/String;)J	no	yes	2	program
+android.app.Activity	getDlWarning	()Ljava/lang/String;	no	yes	1	program
+android.app.ActivityThread	nInitZygoteChildHeapProfiling	()V	no	yes	1	program
+android.content.res.ApkAssets	nativeDestroy	(J)V	yes	no		
+android.content.res.ApkAssets	nativeGetStringBlock	(J)J	yes	yes	6	program
+android.content.res.ApkAssets	nativeIsUpToDate	(J)Z	no	yes	57	program
+android.content.res.ApkAssets	nativeLoad	(ILjava/lang/String;ILandroid/content/res/loader/AssetsProvider;)J	yes	yes	6	program
+android.content.res.ApkAssets	nativeLoadFd	(ILjava/io/FileDescriptor;Ljava/lang/String;ILandroid/content/res/loader/AssetsProvider;)J	yes	no		
+android.content.res.ApkAssets	nativeOpenXml	(JLjava/lang/String;)J	yes	no		
+android.content.res.AssetManager	nativeApplyStyle	(JJIIJ[IJJ)V	yes	yes	138	program
+android.content.res.AssetManager	nativeAssetDestroy	(J)V	no	yes	6	program
+android.content.res.AssetManager	nativeAssetGetLength	(J)J	yes	yes	6	program
+android.content.res.AssetManager	nativeAssetRead	(J[BII)I	no	yes	57	program
+android.content.res.AssetManager	nativeAttributeResolutionStack	(JJIII)[I	yes	no		
+android.content.res.AssetManager	nativeCreate	()J	yes	yes	2	program
+android.content.res.AssetManager	nativeDestroy	(J)V	yes	no		
+android.content.res.AssetManager	nativeGetAssignedPackageIdentifiers	(JZZ)Landroid/util/SparseArray;	yes	yes	1	program
+android.content.res.AssetManager	nativeGetLocales	(JZ)[Ljava/lang/String;	yes	no		
+android.content.res.AssetManager	nativeGetResourceArray	(JI[I)I	yes	no		
+android.content.res.AssetManager	nativeGetResourceArraySize	(JI)I	yes	no		
+android.content.res.AssetManager	nativeGetResourceEntryName	(JI)Ljava/lang/String;	yes	no		
+android.content.res.AssetManager	nativeGetResourceIdentifier	(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)I	yes	no		
+android.content.res.AssetManager	nativeGetResourceName	(JI)Ljava/lang/String;	yes	no		
+android.content.res.AssetManager	nativeGetResourcePackageName	(JI)Ljava/lang/String;	yes	no		
+android.content.res.AssetManager	nativeGetResourceStringArray	(JI)[Ljava/lang/String;	yes	no		
+android.content.res.AssetManager	nativeGetResourceStringArrayInfo	(JI)[I	yes	no		
+android.content.res.AssetManager	nativeGetResourceTypeName	(JI)Ljava/lang/String;	yes	yes	5	program
+android.content.res.AssetManager	nativeGetResourceValue	(JISLandroid/util/TypedValue;Z)I	yes	yes	81	program
+android.content.res.AssetManager	nativeGetSizeConfigurations	(J)[Landroid/content/res/Configuration;	no	yes	1	program
+android.content.res.AssetManager	nativeGetThemeFreeFunction	()J	yes	no		
+android.content.res.AssetManager	nativeOpenAsset	(JLjava/lang/String;I)J	yes	no		
+android.content.res.AssetManager	nativeOpenAssetFd	(JLjava/lang/String;[J)Landroid/os/ParcelFileDescriptor;	yes	no		
+android.content.res.AssetManager	nativeOpenNonAsset	(JILjava/lang/String;I)J	yes	yes	6	program
+android.content.res.AssetManager	nativeOpenNonAssetFd	(JILjava/lang/String;[J)Landroid/os/ParcelFileDescriptor;	yes	no		
+android.content.res.AssetManager	nativeOpenXmlAsset	(JILjava/lang/String;)J	yes	yes	24	program
+android.content.res.AssetManager	nativeResolveAttrs	(JJII[I[I[I[I)Z	no	yes	16	program
+android.content.res.AssetManager	nativeRetrieveAttributes	(JJ[I[I[I)Z	yes	yes	59	program
+android.content.res.AssetManager	nativeSetApkAssets	(J[Landroid/content/res/ApkAssets;Z)V	yes	yes	2	program
+android.content.res.AssetManager	nativeSetConfiguration	(JIILjava/lang/String;IIIIIIIIIIIIIIII)V	yes	yes	4	program
+android.content.res.AssetManager	nativeThemeApplyStyle	(JJIZ)V	no	yes	8	program
+android.content.res.AssetManager	nativeThemeCopy	(JJJJ)V	no	yes	6	program
+android.content.res.AssetManager	nativeThemeCreate	(J)J	no	yes	8	program
+android.content.res.AssetManager	nativeThemeGetAttributeValue	(JJILandroid/util/TypedValue;Z)I	yes	yes	4	program
+android.content.res.StringBlock	nativeDestroy	(J)V	yes	no		
+android.content.res.StringBlock	nativeGetSize	(J)I	yes	yes	27	program
+android.content.res.StringBlock	nativeGetString	(JI)Ljava/lang/String;	yes	yes	128	program
+android.content.res.StringBlock	nativeGetStyle	(JI)[I	yes	yes	128	program
+android.content.res.XmlBlock	nativeCreateParseState	(JI)J	yes	yes	25	program
+android.content.res.XmlBlock	nativeDestroy	(J)V	yes	yes	20	program
+android.content.res.XmlBlock	nativeDestroyParseState	(J)V	no	yes	25	program
+android.content.res.XmlBlock	nativeGetAttributeCount	(J)I	no	yes	22	program
+android.content.res.XmlBlock	nativeGetAttributeData	(JI)I	no	yes	11	program
+android.content.res.XmlBlock	nativeGetAttributeDataType	(JI)I	no	yes	11	program
+android.content.res.XmlBlock	nativeGetAttributeResource	(JI)I	no	yes	38	program
+android.content.res.XmlBlock	nativeGetLineNumber	(J)I	yes	no		
+android.content.res.XmlBlock	nativeGetName	(J)I	no	yes	143	program
+android.content.res.XmlBlock	nativeGetSourceResId	(J)I	yes	yes	11	program
+android.content.res.XmlBlock	nativeGetStringBlock	(J)J	yes	yes	24	program
+android.content.res.XmlBlock	nativeNext	(J)I	no	yes	226	program
+android.graphics.BLASTBufferQueue	nativeCreate	(Ljava/lang/String;Z)J	yes	yes	1	program
+android.graphics.BLASTBufferQueue	nativeDestroy	(J)V	yes	no		
+android.graphics.BLASTBufferQueue	nativeGetSurface	(JZ)Landroid/view/Surface;	yes	yes	1	program
+android.graphics.BLASTBufferQueue	nativeIsSameSurfaceControl	(JJ)Z	yes	no		
+android.graphics.BLASTBufferQueue	nativeMergeWithNextTransaction	(JJJ)V	no	yes	2	program
+android.graphics.BLASTBufferQueue	nativeSetTransactionHangCallback	(JLandroid/graphics/BLASTBufferQueue$TransactionHangCallback;)V	yes	yes	1	program
+android.graphics.BLASTBufferQueue	nativeUpdate	(JJJJI)V	yes	yes	1	program
+android.graphics.BaseCanvas	nDrawArc	(JFFFFFFZJ)V	yes	no		
+android.graphics.BaseCanvas	nDrawBitmap	(JJFFFFFFFFJII)V	yes	no		
+android.graphics.BaseCanvas	nDrawBitmap	(JJFFJIII)V	yes	no		
+android.graphics.BaseCanvas	nDrawColor	(JII)V	yes	no		
+android.graphics.BaseCanvas	nDrawLine	(JFFFFJ)V	yes	no		
+android.graphics.BaseCanvas	nDrawLines	(J[FIIJ)V	yes	no		
+android.graphics.BaseCanvas	nDrawRect	(JFFFFJ)V	yes	no		
+android.graphics.BaseCanvas	nDrawTextRun	(JLjava/lang/String;IIIIFFZJ)V	yes	no		
+android.graphics.BaseCanvas	nDrawTextRun	(J[CIIIIFFZJJ)V	yes	no		
+android.graphics.BaseRecordingCanvas	nDrawNinePatch	(JJJFFFFJII)V	no	yes	2	program
+android.graphics.BaseRecordingCanvas	nDrawRect	(JFFFFJ)V	no	yes	6	program
+android.graphics.BaseRecordingCanvas	nDrawRoundRect	(JFFFFFFJ)V	no	yes	6	program
+android.graphics.BaseRecordingCanvas	nDrawText	(JLjava/lang/String;IIFFIJ)V	no	yes	11	program
+android.graphics.Bitmap	nativeConfig	(J)I	yes	no		
+android.graphics.Bitmap	nativeCopy	(JIZ)Landroid/graphics/Bitmap;	yes	no		
+android.graphics.Bitmap	nativeCreate	([IIIIIIZJ)Landroid/graphics/Bitmap;	yes	no		
+android.graphics.Bitmap	nativeErase	(JI)V	yes	no		
+android.graphics.Bitmap	nativeGetAllocationByteCount	(J)I	no	yes	6	program
+android.graphics.Bitmap	nativeGetHardwareBuffer	(J)Landroid/hardware/HardwareBuffer;	yes	no		
+android.graphics.Bitmap	nativeGetNativeFinalizer	()J	no	yes	6	program
+android.graphics.Bitmap	nativeHasAlpha	(J)Z	yes	yes	4	program
+android.graphics.Bitmap	nativeHasMipMap	(J)Z	no	yes	1	program
+android.graphics.Bitmap	nativeIsImmutable	(J)Z	yes	no		
+android.graphics.Bitmap	nativeIsPremultiplied	(J)Z	yes	yes	2	program
+android.graphics.Bitmap	nativeRecycle	(J)V	yes	no		
+android.graphics.Bitmap	nativeRowBytes	(J)I	no	yes	2	program
+android.graphics.Bitmap	nativeSetHasAlpha	(JZZ)V	yes	no		
+android.graphics.Bitmap	nativeSetHasMipMap	(JZ)V	no	yes	1	program
+android.graphics.Bitmap	nativeSetPremultiplied	(JZ)V	yes	no		
+android.graphics.BlendModeColorFilter	native_CreateBlendModeFilter	(II)J	no	yes	2	program
+android.graphics.Canvas	nClipRect	(JFFFFI)Z	yes	yes	18	program
+android.graphics.Canvas	nConcat	(JJ)V	yes	no		
+android.graphics.Canvas	nGetClipBounds	(JLandroid/graphics/Rect;)Z	no	yes	11	program
+android.graphics.Canvas	nGetMatrix	(JJ)V	yes	no		
+android.graphics.Canvas	nGetNativeFinalizer	()J	yes	no		
+android.graphics.Canvas	nGetSaveCount	(J)I	yes	no		
+android.graphics.Canvas	nInitRaster	(J)J	yes	yes	4	program
+android.graphics.Canvas	nIsOpaque	(J)Z	yes	no		
+android.graphics.Canvas	nQuickReject	(JFFFF)Z	yes	yes	20	program
+android.graphics.Canvas	nRestore	(J)Z	no	yes	11	program
+android.graphics.Canvas	nRestoreToCount	(JI)V	yes	yes	10	program
+android.graphics.Canvas	nRestoreUnclippedLayer	(JIJ)V	yes	no		
+android.graphics.Canvas	nSave	(JI)I	yes	yes	21	program
+android.graphics.Canvas	nSaveLayerAlpha	(JFFFFI)I	yes	no		
+android.graphics.Canvas	nSaveUnclippedLayer	(JIIII)I	yes	no		
+android.graphics.Canvas	nScale	(JFF)V	yes	yes	2	program
+android.graphics.Canvas	nSetBitmap	(JJ)V	yes	no		
+android.graphics.Canvas	nSetCompatibilityVersion	(I)V	no	yes	1	program
+android.graphics.Canvas	nSetMatrix	(JJ)V	yes	no		
+android.graphics.Canvas	nTranslate	(JFF)V	yes	yes	12	program
+android.graphics.ColorFilter	nativeGetFinalizer	()J	yes	no		
+android.graphics.ColorSpace$Rgb	nativeCreate	(FFFFFFF[F)J	yes	no		
+android.graphics.ColorSpace$Rgb	nativeGetNativeFinalizer	()J	yes	no		
+android.graphics.DashPathEffect	nativeCreate	([FF)J	yes	no		
+android.graphics.HardwareRenderer	nAddObserver	(JJ)V	no	yes	1	program
+android.graphics.HardwareRenderer	nAllocateBuffers	(J)V	no	yes	1	program
+android.graphics.HardwareRenderer	nCreateProxy	(ZJ)J	yes	yes	1	program
+android.graphics.HardwareRenderer	nCreateRootRenderNode	()J	yes	yes	1	program
+android.graphics.HardwareRenderer	nDestroy	(JJ)V	yes	no		
+android.graphics.HardwareRenderer	nFence	(J)V	yes	no		
+android.graphics.HardwareRenderer	nGetRenderThreadTid	(J)I	yes	yes	1	program
+android.graphics.HardwareRenderer	nInitDisplayInfo	(IIFIJJZZ)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nIsDrawingEnabled	()Z	yes	yes	1	program
+android.graphics.HardwareRenderer	nLoadSystemProperties	(J)Z	no	yes	1	program
+android.graphics.HardwareRenderer	nNotifyCallbackPending	(J)V	yes	no		
+android.graphics.HardwareRenderer	nNotifyExpensiveFrame	(J)V	yes	no		
+android.graphics.HardwareRenderer	nNotifyFramePending	(J)V	no	yes	5	program
+android.graphics.HardwareRenderer	nPause	(J)Z	no	yes	1	program
+android.graphics.HardwareRenderer	nSetASurfaceTransactionCallback	(JLandroid/graphics/HardwareRenderer$ASurfaceTransactionCallback;)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetDebuggingEnabled	(Z)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetFrameCallback	(JLandroid/graphics/HardwareRenderer$FrameDrawingCallback;)V	no	yes	2	program
+android.graphics.HardwareRenderer	nSetHighContrastText	(Z)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetIsHighEndGfx	(Z)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nSetIsLowRam	(Z)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nSetLightAlpha	(JFF)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetLightGeometry	(JFFFF)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetName	(JLjava/lang/String;)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetPrepareSurfaceControlForWebviewCallback	(JLandroid/graphics/HardwareRenderer$PrepareSurfaceControlForWebviewCallback;)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSetProcessStatsBuffer	(I)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nSetRtAnimationsEnabled	(Z)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nSetStopped	(JZ)V	no	yes	2	program
+android.graphics.HardwareRenderer	nSetSurface	(JLandroid/view/Surface;Z)V	yes	yes	1	program
+android.graphics.HardwareRenderer	nSetSurfaceControl	(JJ)V	yes	yes	2	program
+android.graphics.HardwareRenderer	nSetTargetSdrHdrRatio	(JF)V	no	yes	1	program
+android.graphics.HardwareRenderer	nSyncAndDrawFrame	(J[JI)I	yes	yes	5	program
+android.graphics.HardwareRenderer	preload	()V	no	yes	1	program
+android.graphics.HardwareRenderer	setupShadersDiskCache	(Ljava/lang/String;Ljava/lang/String;)V	no	yes	1	program
+android.graphics.HardwareRendererObserver	nCreateObserver	(Ljava/lang/ref/WeakReference;Z)J	yes	yes	1	program
+android.graphics.ImageDecoder	nClose	(J)V	yes	yes	6	program
+android.graphics.ImageDecoder	nCreate	(Ljava/io/InputStream;[BZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;	no	yes	6	program
+android.graphics.ImageDecoder	nDecodeBitmap	(JLandroid/graphics/ImageDecoder;ZIILandroid/graphics/Rect;ZIZZZJZ)Landroid/graphics/Bitmap;	yes	yes	6	program
+android.graphics.ImageDecoder	nGetColorSpace	(J)Landroid/graphics/ColorSpace;	yes	yes	6	program
+android.graphics.ImageDecoder	nGetMimeType	(J)Ljava/lang/String;	yes	yes	6	program
+android.graphics.ImageDecoder	nGetPadding	(JLandroid/graphics/Rect;)V	yes	yes	5	program
+android.graphics.Interpolator	nativeConstructor	(II)J	yes	no		
+android.graphics.Interpolator	nativeTimeToValues	(JI[F)I	yes	no		
+android.graphics.Matrix	nCreate	(J)J	yes	yes	11	program
+android.graphics.Matrix	nEquals	(JJ)Z	yes	no		
+android.graphics.Matrix	nGetNativeFinalizer	()J	yes	no		
+android.graphics.Matrix	nGetValues	(J[F)V	yes	no		
+android.graphics.Matrix	nIsIdentity	(J)Z	yes	no		
+android.graphics.Matrix	nMapPoints	(J[FI[FIIZ)V	yes	no		
+android.graphics.Matrix	nMapRect	(JLandroid/graphics/RectF;Landroid/graphics/RectF;)Z	yes	no		
+android.graphics.Matrix	nPostRotate	(JF)V	yes	no		
+android.graphics.Matrix	nPostTranslate	(JFF)V	yes	no		
+android.graphics.Matrix	nReset	(J)V	yes	no		
+android.graphics.Matrix	nSet	(JJ)V	yes	no		
+android.graphics.Matrix	nSetRectToRect	(JLandroid/graphics/RectF;Landroid/graphics/RectF;I)Z	yes	no		
+android.graphics.Matrix	nSetScale	(JFF)V	yes	no		
+android.graphics.Matrix	nSetTranslate	(JFF)V	yes	no		
+android.graphics.Matrix	nSetValues	(J[F)V	yes	no		
+android.graphics.NinePatch	isNinePatchChunk	([B)Z	yes	yes	5	program
+android.graphics.NinePatch	validateNinePatchChunk	([B)J	yes	yes	5	program
+android.graphics.Paint	nGetCharArrayBounds	(J[CIIILandroid/graphics/Rect;)V	yes	yes	2	program
+android.graphics.Paint	nGetEndHyphenEdit	(J)I	no	yes	13	program
+android.graphics.Paint	nGetFlags	(J)I	yes	yes	28	program
+android.graphics.Paint	nGetFontMetricsInt	(JLandroid/graphics/Paint$FontMetricsInt;)I	yes	yes	13	program
+android.graphics.Paint	nGetFontMetricsIntForText	(JLjava/lang/String;IIIIZLandroid/graphics/Paint$FontMetricsInt;)V	no	yes	7	program
+android.graphics.Paint	nGetNativeFinalizer	()J	yes	no		
+android.graphics.Paint	nGetRunCharacterAdvance	(J[CIIIIZI[FI)F	no	yes	13	program
+android.graphics.Paint	nGetStartHyphenEdit	(J)I	no	yes	13	program
+android.graphics.Paint	nGetTextSize	(J)F	no	yes	6	program
+android.graphics.Paint	nGetUnderlineThickness	(J)F	yes	no		
+android.graphics.Paint	nInit	()J	yes	yes	45	program
+android.graphics.Paint	nInitWithPaint	(J)J	yes	no		
+android.graphics.Paint	nSet	(JJ)V	yes	yes	31	program
+android.graphics.Paint	nSetAlpha	(JI)V	yes	yes	12	program
+android.graphics.Paint	nSetAntiAlias	(JZ)V	yes	yes	1	program
+android.graphics.Paint	nSetColor	(JI)V	yes	yes	35	program
+android.graphics.Paint	nSetColorFilter	(JJ)J	yes	yes	3	program
+android.graphics.Paint	nSetDither	(JZ)V	yes	yes	13	program
+android.graphics.Paint	nSetEndHyphenEdit	(JI)V	no	yes	30	program
+android.graphics.Paint	nSetFakeBoldText	(JZ)V	no	yes	6	program
+android.graphics.Paint	nSetFilterBitmap	(JZ)V	yes	yes	1	program
+android.graphics.Paint	nSetFlags	(JI)V	yes	yes	45	program
+android.graphics.Paint	nSetPathEffect	(JJ)J	yes	no		
+android.graphics.Paint	nSetShader	(JJ)J	yes	no		
+android.graphics.Paint	nSetStartHyphenEdit	(JI)V	no	yes	30	program
+android.graphics.Paint	nSetStrokeCap	(JI)V	yes	no		
+android.graphics.Paint	nSetStrokeWidth	(JF)V	yes	no		
+android.graphics.Paint	nSetStyle	(JI)V	yes	no		
+android.graphics.Paint	nSetTextLocales	(JLjava/lang/String;)I	yes	no		
+android.graphics.Paint	nSetTextLocalesByMinikinLocaleListId	(JI)V	yes	yes	45	program
+android.graphics.Paint	nSetTextScaleX	(JF)V	no	yes	9	program
+android.graphics.Paint	nSetTextSize	(JF)V	no	yes	6	program
+android.graphics.Paint	nSetTextSkewX	(JF)V	no	yes	6	program
+android.graphics.Paint	nSetTypeface	(JJ)V	no	yes	6	program
+android.graphics.Paint	nSetXfermode	(JI)V	yes	no		
+android.graphics.Path	nApproximate	(JF)[F	yes	yes	3	program
+android.graphics.Path	nCubicTo	(JFFFFFF)V	yes	yes	3	program
+android.graphics.Path	nGetFinalizer	()J	yes	no		
+android.graphics.Path	nInit	()J	yes	yes	12	program
+android.graphics.Path	nInit	(J)J	yes	yes	4	program
+android.graphics.Path	nIsEmpty	(J)Z	yes	no		
+android.graphics.Path	nMoveTo	(JFF)V	yes	yes	3	program
+android.graphics.Path	nQuadTo	(JFFFF)V	yes	no		
+android.graphics.Path	nRewind	(J)V	yes	no		
+android.graphics.RecordingCanvas	nCreateDisplayListCanvas	(JII)J	yes	yes	6	program
+android.graphics.RecordingCanvas	nDrawRenderNode	(JJ)V	yes	yes	34	program
+android.graphics.RecordingCanvas	nEnableZ	(JZ)V	yes	yes	22	program
+android.graphics.RecordingCanvas	nFinishRecording	(JJ)V	yes	yes	38	program
+android.graphics.RecordingCanvas	nResetDisplayListCanvas	(JJII)V	yes	yes	32	program
+android.graphics.Region	contains	(II)Z	yes	no		
+android.graphics.Region	isEmpty	()Z	yes	no		
+android.graphics.Region	nativeConstructor	()J	yes	yes	6	program
+android.graphics.Region	nativeEquals	(JJ)Z	yes	no		
+android.graphics.Region	nativeOp	(JIIIII)Z	yes	no		
+android.graphics.Region	nativeOp	(JJJI)Z	yes	no		
+android.graphics.Region	nativeSetRect	(JIIII)Z	yes	yes	1	program
+android.graphics.Region	nativeSetRegion	(JJ)V	yes	no		
+android.graphics.Region	scale	(FLandroid/graphics/Region;)V	yes	no		
+android.graphics.Region	translate	(IILandroid/graphics/Region;)V	yes	no		
+android.graphics.RenderNode	nClearStretch	(J)Z	yes	yes	37	program
+android.graphics.RenderNode	nCreate	(Ljava/lang/String;)J	yes	yes	23	program
+android.graphics.RenderNode	nDiscardDisplayList	(J)V	yes	no		
+android.graphics.RenderNode	nEndAllAnimators	(J)V	yes	no		
+android.graphics.RenderNode	nForceEndAnimators	(J)V	yes	no		
+android.graphics.RenderNode	nGetClipToOutline	(J)Z	yes	yes	1	program
+android.graphics.RenderNode	nGetElevation	(J)F	yes	yes	9	program
+android.graphics.RenderNode	nGetInverseTransformMatrix	(JJ)V	yes	no		
+android.graphics.RenderNode	nGetNativeFinalizer	()J	yes	no		
+android.graphics.RenderNode	nGetPivotX	(J)F	yes	no		
+android.graphics.RenderNode	nGetPivotY	(J)F	yes	no		
+android.graphics.RenderNode	nGetRotation	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetRotationX	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetRotationY	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetScaleX	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetScaleY	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetTransformMatrix	(JJ)V	yes	no		
+android.graphics.RenderNode	nGetTranslationX	(J)F	yes	yes	1	program
+android.graphics.RenderNode	nGetTranslationY	(J)F	yes	yes	4	program
+android.graphics.RenderNode	nGetTranslationZ	(J)F	yes	yes	11	program
+android.graphics.RenderNode	nHasIdentityMatrix	(J)Z	yes	yes	115	program
+android.graphics.RenderNode	nIsPivotExplicitlySet	(J)Z	yes	no		
+android.graphics.RenderNode	nIsValid	(J)Z	yes	yes	114	program
+android.graphics.RenderNode	nRequestPositionUpdates	(JLjava/lang/ref/WeakReference;)V	yes	yes	1	program
+android.graphics.RenderNode	nSetAllowForceDark	(JZ)Z	yes	no		
+android.graphics.RenderNode	nSetAlpha	(JF)Z	yes	yes	2	program
+android.graphics.RenderNode	nSetAmbientShadowColor	(JI)Z	yes	no		
+android.graphics.RenderNode	nSetAnimationMatrix	(JJ)Z	yes	no		
+android.graphics.RenderNode	nSetClipToBounds	(JZ)Z	yes	yes	38	program
+android.graphics.RenderNode	nSetClipToOutline	(JZ)Z	yes	yes	1	program
+android.graphics.RenderNode	nSetElevation	(JF)Z	yes	yes	5	program
+android.graphics.RenderNode	nSetHasOverlappingRendering	(JZ)Z	yes	yes	23	program
+android.graphics.RenderNode	nSetLayerPaint	(JJ)Z	yes	no		
+android.graphics.RenderNode	nSetLayerType	(JI)Z	yes	no		
+android.graphics.RenderNode	nSetLeftTopRightBottom	(JIIII)Z	yes	yes	29	program
+android.graphics.RenderNode	nSetOutlineEmpty	(J)Z	yes	yes	25	program
+android.graphics.RenderNode	nSetOutlineNone	(J)Z	yes	no		
+android.graphics.RenderNode	nSetOutlinePath	(JJF)Z	yes	no		
+android.graphics.RenderNode	nSetOutlineRoundRect	(JIIIIFF)Z	yes	yes	21	program
+android.graphics.RenderNode	nSetPivotX	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetPivotY	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetProjectBackwards	(JZ)Z	yes	yes	14	program
+android.graphics.RenderNode	nSetProjectionReceiver	(JZ)Z	yes	yes	14	program
+android.graphics.RenderNode	nSetRotation	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetRotationX	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetRotationY	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetScaleX	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetScaleY	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetSpotShadowColor	(JI)Z	yes	no		
+android.graphics.RenderNode	nSetStaticMatrix	(JJ)Z	yes	no		
+android.graphics.RenderNode	nSetTranslationX	(JF)Z	yes	yes	14	program
+android.graphics.RenderNode	nSetTranslationY	(JF)Z	yes	yes	14	program
+android.graphics.RenderNode	nSetTranslationZ	(JF)Z	yes	no		
+android.graphics.RenderNode	nSetUsageHint	(JI)V	yes	yes	6	program
+android.graphics.Shader	nativeGetFinalizer	()J	yes	no		
+android.graphics.Typeface	nativeAddFontCollections	(J)V	no	yes	33	program
+android.graphics.Typeface	nativeCreateFromArray	([JJII)J	yes	no		
+android.graphics.Typeface	nativeCreateFromTypeface	(JI)J	yes	yes	3	program
+android.graphics.Typeface	nativeCreateFromTypefaceWithExactStyle	(JIZ)J	yes	no		
+android.graphics.Typeface	nativeForceSetStaticFinalField	(Ljava/lang/String;Landroid/graphics/Typeface;)V	no	yes	5	program
+android.graphics.Typeface	nativeGetReleaseFunc	()J	yes	no		
+android.graphics.Typeface	nativeGetStyle	(J)I	yes	yes	36	program
+android.graphics.Typeface	nativeGetWeight	(J)I	yes	yes	36	program
+android.graphics.Typeface	nativeReadTypefaces	(Ljava/nio/ByteBuffer;I)[J	no	yes	1	program
+android.graphics.Typeface	nativeRegisterGenericFamily	(Ljava/lang/String;J)V	no	yes	5	program
+android.graphics.Typeface	nativeRegisterLocaleList	(Ljava/lang/String;)V	yes	no		
+android.graphics.Typeface	nativeSetDefault	(J)V	no	yes	1	program
+android.graphics.Typeface	nativeWarmUpCache	(Ljava/lang/String;)V	yes	no		
+android.graphics.drawable.AnimatedImageDrawable	nCreate	(JLandroid/graphics/ImageDecoder;IIJZLandroid/graphics/Rect;)J	yes	no		
+android.graphics.drawable.AnimatedImageDrawable	nGetNativeFinalizer	()J	yes	no		
+android.graphics.drawable.AnimatedImageDrawable	nNativeByteSize	(J)J	yes	no		
+android.graphics.drawable.AnimatedVectorDrawable	nCreateAnimatorSet	()J	yes	no		
+android.graphics.drawable.VectorDrawable	nAddChild	(JJ)V	yes	yes	48	program
+android.graphics.drawable.VectorDrawable	nCreateClipPath	(J)J	yes	no		
+android.graphics.drawable.VectorDrawable	nCreateFullPath	()J	no	yes	21	program
+android.graphics.drawable.VectorDrawable	nCreateFullPath	(J)J	yes	yes	27	program
+android.graphics.drawable.VectorDrawable	nCreateGroup	()J	yes	yes	2	program
+android.graphics.drawable.VectorDrawable	nCreateGroup	(J)J	yes	yes	7	program
+android.graphics.drawable.VectorDrawable	nCreateTree	(J)J	yes	yes	2	program
+android.graphics.drawable.VectorDrawable	nCreateTreeFromCopy	(JJ)J	yes	yes	7	program
+android.graphics.drawable.VectorDrawable	nGetFullPathProperties	(J[BI)Z	no	yes	21	program
+android.graphics.drawable.VectorDrawable	nGetRootAlpha	(J)F	no	yes	6	program
+android.graphics.drawable.VectorDrawable	nSetAllowCaching	(JZ)V	yes	no		
+android.graphics.drawable.VectorDrawable	nSetPathString	(JLjava/lang/String;I)V	no	yes	21	program
+android.graphics.drawable.VectorDrawable	nSetRendererViewportSize	(JFF)V	yes	yes	10	program
+android.graphics.drawable.VectorDrawable	nSetRootAlpha	(JF)Z	no	yes	3	program
+android.graphics.drawable.VectorDrawable	nUpdateFullPathFillGradient	(JJ)V	no	yes	21	program
+android.graphics.drawable.VectorDrawable	nUpdateFullPathProperties	(JFIFIFFFFFIII)V	no	yes	21	program
+android.graphics.drawable.VectorDrawable	nUpdateFullPathStrokeGradient	(JJ)V	no	yes	21	program
+android.graphics.fonts.Font	nGetAxisCount	(J)I	yes	no		
+android.graphics.fonts.Font	nGetAxisInfo	(JI)J	yes	no		
+android.graphics.fonts.Font	nGetIndex	(J)I	yes	no		
+android.graphics.fonts.Font	nGetPackedStyle	(J)I	yes	no		
+android.graphics.fonts.Font	nGetReleaseNativeFont	()J	yes	no		
+android.graphics.fonts.Font$Builder	nAddAxis	(JIF)V	yes	no		
+android.graphics.fonts.Font$Builder	nBuild	(JLjava/nio/ByteBuffer;Ljava/lang/String;Ljava/lang/String;IZI)J	yes	no		
+android.graphics.fonts.Font$Builder	nClone	(JJIZI)J	yes	no		
+android.graphics.fonts.Font$Builder	nInitBuilder	()J	yes	no		
+android.graphics.fonts.FontFamily	nGetFont	(JI)J	yes	no		
+android.graphics.fonts.FontFamily	nGetFontSize	(J)I	yes	no		
+android.graphics.fonts.FontFamily$Builder	nAddFont	(JJ)V	yes	no		
+android.graphics.fonts.FontFamily$Builder	nBuild	(JLjava/lang/String;IZZ)J	yes	no		
+android.graphics.fonts.FontFamily$Builder	nGetReleaseNativeFamily	()J	yes	no		
+android.graphics.fonts.FontFamily$Builder	nInitBuilder	()J	yes	no		
+android.graphics.text.LineBreaker	nComputeLineBreaks	(J[CJIFIF[FFI)J	yes	no		
+android.graphics.text.LineBreaker	nGetLineAscent	(JI)F	yes	no		
+android.graphics.text.LineBreaker	nGetLineBreakOffset	(JI)I	yes	no		
+android.graphics.text.LineBreaker	nGetLineCount	(J)I	yes	no		
+android.graphics.text.LineBreaker	nGetLineDescent	(JI)F	yes	no		
+android.graphics.text.LineBreaker	nGetLineFlag	(JI)I	yes	no		
+android.graphics.text.LineBreaker	nGetLineWidth	(JI)F	yes	no		
+android.graphics.text.LineBreaker	nGetReleaseFunc	()J	yes	no		
+android.graphics.text.LineBreaker	nGetReleaseResultFunc	()J	yes	no		
+android.graphics.text.LineBreaker	nInit	(IIZ[I)J	yes	yes	2	program
+android.graphics.text.MeasuredText	nGetBounds	(J[CIILandroid/graphics/Rect;)V	yes	no		
+android.graphics.text.MeasuredText	nGetCharWidthAt	(JI)F	yes	no		
+android.graphics.text.MeasuredText	nGetExtent	(J[CII)J	yes	no		
+android.graphics.text.MeasuredText	nGetReleaseFunc	()J	yes	no		
+android.graphics.text.MeasuredText	nGetWidth	(JII)F	yes	no		
+android.graphics.text.MeasuredText$Builder	nAddReplacementRun	(JJIIF)V	yes	no		
+android.graphics.text.MeasuredText$Builder	nAddStyleRun	(JJIIIIZ)V	yes	no		
+android.graphics.text.MeasuredText$Builder	nBuildMeasuredText	(JJ[CZZZ)J	yes	no		
+android.graphics.text.MeasuredText$Builder	nFreeBuilder	(J)V	yes	no		
+android.graphics.text.MeasuredText$Builder	nInitBuilder	()J	yes	no		
+android.graphics.text.PositionedGlyphs	nGetFont	(JI)J	yes	no		
+android.graphics.text.PositionedGlyphs	nGetGlyphCount	(J)I	yes	no		
+android.graphics.text.PositionedGlyphs	nReleaseFunc	()J	yes	no		
+android.graphics.text.TextRunShaper	nativeShapeTextRun	(Ljava/lang/String;IIIIZJ)J	yes	no		
+android.graphics.text.TextRunShaper	nativeShapeTextRun	([CIIIIZJ)J	yes	no		
+android.hardware.OverlayProperties	nGetDestructor	()J	yes	no		
+android.hardware.OverlayProperties	nReadOverlayPropertiesFromParcel	(Landroid/os/Parcel;)J	no	yes	1	program
+android.hardware.OverlayProperties	nSupportFp16ForHdr	(J)Z	yes	yes	1	program
+android.hardware.OverlayProperties	nSupportMixedColorSpaces	(J)Z	yes	yes	1	program
+android.hardware.display.DisplayManagerGlobal	nSignalNativeCallbacks	(F)V	no	yes	1	program
+android.os.Binder	clearCallingIdentity	()J	yes	yes	26	program
+android.os.Binder	flushPendingCommands	()V	no	yes	4	program
+android.os.Binder	getCallingPid	()I	no	yes	21	program
+android.os.Binder	getCallingUid	()I	yes	yes	29	program
+android.os.Binder	getNativeBBinderHolder	()J	yes	yes	18	program
+android.os.Binder	getNativeFinalizer	()J	yes	no		
+android.os.Binder	restoreCallingIdentity	(J)V	yes	yes	1	program
+android.os.Binder	setThreadStrictModePolicy	(I)V	yes	yes	4	program
+android.os.BinderProxy	isBinderAlive	()Z	no	yes	1	program
+android.os.BinderProxy	transactNative	(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z	no	yes	73	program
+android.os.GraphicsEnvironment	hintActivityLaunch	()V	no	yes	1	program
+android.os.GraphicsEnvironment	isDebuggable	()Z	no	yes	1	program
+android.os.GraphicsEnvironment	setGpuStats	(Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;I)V	no	yes	1	program
+android.os.GraphicsEnvironment	setLayerPaths	(Ljava/lang/ClassLoader;Ljava/lang/String;)V	no	yes	1	program
+android.os.MessageQueue	nativeInit	()J	no	yes	1	program
+android.os.MessageQueue	nativePollOnce	(JI)V	no	yes	28	program
+android.os.MessageQueue	nativeWake	(J)V	yes	yes	7	program
+android.os.Parcel	nativeAppendFrom	(JJII)V	yes	yes	6	program
+android.os.Parcel	nativeCreate	()J	yes	yes	1	program
+android.os.Parcel	nativeCreateByteArray	(J)[B	yes	no		
+android.os.Parcel	nativeDataAvail	(J)I	yes	yes	11	program
+android.os.Parcel	nativeDataPosition	(J)I	yes	yes	86	program
+android.os.Parcel	nativeDataSize	(J)I	yes	no		
+android.os.Parcel	nativeEnforceInterface	(JLjava/lang/String;)V	no	yes	6	program
+android.os.Parcel	nativeFreeBuffer	(J)V	yes	yes	141	program
+android.os.Parcel	nativeHasFileDescriptors	(J)Z	yes	yes	6	program
+android.os.Parcel	nativeIsForRpc	(J)Z	no	yes	6	program
+android.os.Parcel	nativeMarkForBinder	(JLandroid/os/IBinder;)V	no	yes	67	program
+android.os.Parcel	nativePushAllowFds	(JZ)Z	no	yes	5	program
+android.os.Parcel	nativeReadDouble	(J)D	yes	no		
+android.os.Parcel	nativeReadFileDescriptor	(J)Ljava/io/FileDescriptor;	no	yes	6	program
+android.os.Parcel	nativeReadFloat	(J)F	yes	yes	43	program
+android.os.Parcel	nativeReadInt	(J)I	yes	yes	1835	program
+android.os.Parcel	nativeReadLong	(J)J	yes	yes	23	program
+android.os.Parcel	nativeReadString16	(J)Ljava/lang/String;	yes	yes	173	program
+android.os.Parcel	nativeReadString8	(J)Ljava/lang/String;	no	yes	178	program
+android.os.Parcel	nativeReadStrongBinder	(J)Landroid/os/IBinder;	yes	yes	16	program
+android.os.Parcel	nativeRestoreAllowFds	(JZ)V	no	yes	5	program
+android.os.Parcel	nativeSetDataPosition	(JI)V	yes	yes	59	program
+android.os.Parcel	nativeWriteFloat	(JF)I	no	yes	19	program
+android.os.Parcel	nativeWriteInt	(JI)I	no	yes	289	program
+android.os.Parcel	nativeWriteInterfaceToken	(JLjava/lang/String;)V	no	yes	73	program
+android.os.Parcel	nativeWriteLong	(JJ)I	no	yes	11	program
+android.os.Parcel	nativeWriteString16	(JLjava/lang/String;)V	no	yes	68	program
+android.os.Parcel	nativeWriteString8	(JLjava/lang/String;)V	no	yes	9	program
+android.os.Parcel	nativeWriteStrongBinder	(JLandroid/os/IBinder;)V	no	yes	37	program
+android.os.Process	sendSignal	(II)V	yes	no		
+android.os.Process	setThreadPriority	(I)V	no	yes	1	program
+android.os.SystemClock	elapsedRealtime	()J	yes	yes	71	program
+android.os.SystemClock	elapsedRealtimeNanos	()J	no	yes	2	program
+android.os.SystemClock	uptimeMillis	()J	yes	yes	84	program
+android.os.SystemClock	uptimeNanos	()J	yes	yes	18	program
+android.os.SystemProperties	native_add_change_callback	()V	yes	no		
+android.os.SystemProperties	native_find	(Ljava/lang/String;)J	yes	yes	5	program
+android.os.SystemProperties	native_get	(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;	yes	yes	9	program
+android.os.SystemProperties	native_get_boolean	(Ljava/lang/String;Z)Z	yes	yes	5	program
+android.os.SystemProperties	native_get_int	(Ljava/lang/String;I)I	yes	yes	2	program
+android.os.SystemProperties	native_get_long	(JJ)J	yes	yes	49	program
+android.os.SystemProperties	native_get_long	(Ljava/lang/String;J)J	no	yes	1	program
+android.os.Trace	nativeAsyncTraceBegin	(JLjava/lang/String;I)V	yes	no		
+android.os.Trace	nativeAsyncTraceEnd	(JLjava/lang/String;I)V	yes	no		
+android.os.Trace	nativeAsyncTraceForTrackBegin	(JLjava/lang/String;Ljava/lang/String;I)V	yes	no		
+android.os.Trace	nativeAsyncTraceForTrackEnd	(JLjava/lang/String;I)V	yes	no		
+android.os.Trace	nativeGetEnabledTags	()J	yes	yes	292	program
+android.os.Trace	nativeInstant	(JLjava/lang/String;)V	yes	no		
+android.os.Trace	nativeInstantForTrack	(JLjava/lang/String;Ljava/lang/String;)V	yes	no		
+android.os.Trace	nativeSetAppTracingAllowed	(Z)V	no	yes	1	program
+android.os.Trace	nativeTraceBegin	(JLjava/lang/String;)V	yes	no		
+android.os.Trace	nativeTraceCounter	(JLjava/lang/String;J)V	yes	no		
+android.os.Trace	nativeTraceEnd	(J)V	yes	no		
+android.os.incremental.IncrementalManager	nativeIsIncrementalFd	(I)Z	yes	no		
+android.os.incremental.IncrementalManager	nativeUnsafeGetFileSignature	(Ljava/lang/String;)[B	yes	no		
+android.system.OsConstants	initConstants	()V	yes	no		
+android.util.EventLog	writeEvent	(I[Ljava/lang/Object;)I	yes	yes	4	program
+android.util.Log	isLoggable	(Ljava/lang/String;I)Z	yes	yes	1	program
+android.util.Log	logger_entry_max_payload_native	()I	yes	no		
+android.util.Log	println_native	(IILjava/lang/String;Ljava/lang/String;)I	yes	yes	12	program
+android.util.MemoryIntArray	nativeClose	(IJZ)V	yes	no		
+android.util.MemoryIntArray	nativeGet	(IJI)I	yes	yes	15	program
+android.util.MemoryIntArray	nativeOpen	(IZ)J	no	yes	5	program
+android.util.MemoryIntArray	nativeSize	(I)I	yes	yes	15	program
+android.util.PathParser	nCanMorph	(JJ)Z	yes	no		
+android.util.PathParser	nCreateEmptyPathData	()J	yes	no		
+android.util.PathParser	nCreatePathData	(J)J	yes	yes	27	program
+android.util.PathParser	nCreatePathDataFromString	(Ljava/lang/String;I)J	yes	yes	21	program
+android.util.PathParser	nParseStringForPath	(JLjava/lang/String;I)V	yes	yes	2	program
+android.util.jar.StrictJarFile	nativeClose	(J)V	yes	no		
+android.util.jar.StrictJarFile	nativeFindEntry	(JLjava/lang/String;)Ljava/util/zip/ZipEntry;	yes	no		
+android.util.jar.StrictJarFile	nativeOpenJarFile	(Ljava/lang/String;I)J	yes	no		
+android.util.jar.StrictJarFile	nativeStartIteration	(JLjava/lang/String;)J	yes	no		
+android.view.DisplayEventReceiver	nativeGetLatestVsyncEventData	(J)Landroid/view/DisplayEventReceiver$VsyncEventData;	no	yes	1	program
+android.view.DisplayEventReceiver	nativeInit	(Ljava/lang/ref/WeakReference;Ljava/lang/ref/WeakReference;Landroid/os/MessageQueue;IIJ)J	no	yes	1	program
+android.view.DisplayEventReceiver	nativeScheduleVsync	(J)V	no	yes	6	program
+android.view.InputChannel	nativeDispose	(J)V	yes	no		
+android.view.InputChannel	nativeGetFinalizer	()J	yes	no		
+android.view.InputChannel	nativeGetToken	(J)Landroid/os/IBinder;	yes	no		
+android.view.InputChannel	nativeReadFromParcel	(Landroid/os/Parcel;)J	no	yes	2	program
+android.view.InputEventReceiver	nativeInit	(Ljava/lang/ref/WeakReference;Landroid/view/InputChannel;Landroid/os/MessageQueue;)J	yes	yes	1	program
+android.view.InputQueue	nativeInit	(Ljava/lang/ref/WeakReference;Landroid/os/MessageQueue;)J	yes	no		
+android.view.KeyCharacterMap	nativeGetKeyboardType	(J)I	no	yes	1	program
+android.view.KeyCharacterMap	nativeReadFromParcel	(Landroid/os/Parcel;)J	no	yes	1	program
+android.view.MotionEvent	nativeAddBatch	(JJ[Landroid/view/MotionEvent$PointerCoords;I)V	yes	no		
+android.view.MotionEvent	nativeCopy	(JJZ)J	yes	no		
+android.view.MotionEvent	nativeGetAction	(J)I	yes	no		
+android.view.MotionEvent	nativeGetActionButton	(J)I	yes	no		
+android.view.MotionEvent	nativeGetAxisValue	(JIII)F	yes	no		
+android.view.MotionEvent	nativeGetButtonState	(J)I	yes	no		
+android.view.MotionEvent	nativeGetClassification	(J)I	yes	no		
+android.view.MotionEvent	nativeGetDeviceId	(J)I	yes	no		
+android.view.MotionEvent	nativeGetDisplayId	(J)I	yes	no		
+android.view.MotionEvent	nativeGetDownTimeNanos	(J)J	yes	no		
+android.view.MotionEvent	nativeGetEdgeFlags	(J)I	yes	no		
+android.view.MotionEvent	nativeGetEventTimeNanos	(JI)J	yes	no		
+android.view.MotionEvent	nativeGetFlags	(J)I	yes	no		
+android.view.MotionEvent	nativeGetHistorySize	(J)I	yes	no		
+android.view.MotionEvent	nativeGetMetaState	(J)I	yes	no		
+android.view.MotionEvent	nativeGetPointerCoords	(JIILandroid/view/MotionEvent$PointerCoords;)V	yes	no		
+android.view.MotionEvent	nativeGetPointerCount	(J)I	yes	no		
+android.view.MotionEvent	nativeGetPointerId	(JI)I	yes	no		
+android.view.MotionEvent	nativeGetPointerProperties	(JILandroid/view/MotionEvent$PointerProperties;)V	yes	no		
+android.view.MotionEvent	nativeGetSource	(J)I	yes	no		
+android.view.MotionEvent	nativeGetXCursorPosition	(J)F	yes	no		
+android.view.MotionEvent	nativeGetXOffset	(J)F	yes	no		
+android.view.MotionEvent	nativeGetXPrecision	(J)F	yes	no		
+android.view.MotionEvent	nativeGetYCursorPosition	(J)F	yes	no		
+android.view.MotionEvent	nativeGetYOffset	(J)F	yes	no		
+android.view.MotionEvent	nativeGetYPrecision	(J)F	yes	no		
+android.view.MotionEvent	nativeInitialize	(JIIIIIIIIIFFFFJJI[Landroid/view/MotionEvent$PointerProperties;[Landroid/view/MotionEvent$PointerCoords;)J	yes	no		
+android.view.MotionEvent	nativeIsTouchEvent	(J)Z	yes	no		
+android.view.MotionEvent	nativeOffsetLocation	(JFF)V	yes	no		
+android.view.MotionEvent	nativeSetAction	(JI)V	yes	no		
+android.view.MotionEvent	nativeSetCursorPosition	(JFF)V	yes	no		
+android.view.MotionEvent	nativeSetFlags	(JI)V	yes	no		
+android.view.MotionEvent	nativeSetSource	(JI)V	yes	no		
+android.view.MotionEvent	nativeTransform	(JLandroid/graphics/Matrix;)V	yes	no		
+android.view.Surface	nativeDestroy	(J)V	yes	no		
+android.view.Surface	nativeGetFromSurfaceControl	(JJ)J	yes	no		
+android.view.Surface	nativeIsValid	(J)Z	yes	yes	11	program
+android.view.Surface	nativeLockCanvas	(JLandroid/graphics/Canvas;Landroid/graphics/Rect;)J	yes	no		
+android.view.Surface	nativeRelease	(J)V	yes	no		
+android.view.Surface	nativeUnlockCanvasAndPost	(JLandroid/graphics/Canvas;)V	yes	no		
+android.view.SurfaceControl	nativeAddTransactionCommittedListener	(JLandroid/view/SurfaceControl$TransactionCommittedListener;)V	yes	no		
+android.view.SurfaceControl	nativeApplyTransaction	(JZ)V	yes	yes	4	program
+android.view.SurfaceControl	nativeClearTransaction	(J)V	no	yes	1	program
+android.view.SurfaceControl	nativeCopyFromSurfaceControl	(J)J	yes	no		
+android.view.SurfaceControl	nativeCreateTransaction	()J	yes	yes	10	program
+android.view.SurfaceControl	nativeGetHandle	(J)J	yes	yes	6	program
+android.view.SurfaceControl	nativeGetNativeSurfaceControlFinalizer	()J	yes	no		
+android.view.SurfaceControl	nativeGetNativeTransactionFinalizer	()J	yes	no		
+android.view.SurfaceControl	nativeMergeTransaction	(JJ)V	yes	yes	5	program
+android.view.SurfaceControl	nativeReadFromParcel	(Landroid/os/Parcel;)J	no	yes	6	program
+android.view.SurfaceControl	nativeReparent	(JJJ)V	yes	no		
+android.view.SurfaceControl	nativeSanitize	(JII)V	no	yes	1	program
+android.view.SurfaceControl	nativeSetAlpha	(JJF)V	yes	yes	3	program
+android.view.SurfaceControl	nativeSetDefaultFrameRateCompatibility	(JJI)V	yes	no		
+android.view.SurfaceControl	nativeSetExtendedRangeBrightness	(JJFF)V	yes	yes	1	program
+android.view.SurfaceControl	nativeSetFlags	(JJII)V	yes	yes	4	program
+android.view.SurfaceControl	nativeSetTransformHint	(JI)V	yes	yes	1	program
+android.view.SurfaceControl	nativeSetTransparentRegionHint	(JJLandroid/graphics/Region;)V	yes	no		
+android.view.SurfaceControl	nativeSetWindowCrop	(JJIIII)V	yes	no		
+android.view.SurfaceControl	nativeUpdateDefaultBufferSize	(JII)V	yes	no		
+android.view.SurfaceControl	nativeWriteTransactionToParcel	(JLandroid/os/Parcel;)V	no	yes	1	program
+android.view.SurfaceSession	nativeCreate	()J	no	yes	1	program
+android.view.SurfaceSession	nativeDestroy	(J)V	yes	no		
+com.android.icu.charset.NativeConverter	charsetForName	(Ljava/lang/String;)Ljava/nio/charset/Charset;	yes	no		
+com.android.icu.charset.NativeConverter	getAveCharsPerByte	(J)F	no	yes	2	program
+com.android.icu.charset.NativeConverter	getNativeFinalizer	()J	yes	no		
+com.android.icu.charset.NativeConverter	openConverter	(Ljava/lang/String;)J	no	yes	2	program
+com.android.icu.charset.NativeConverter	setCallbackDecode	(JIILjava/lang/String;)V	no	yes	8	program
+com.android.icu.util.CaseMapperNative	toLowerCase	(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;	yes	no		
+com.android.icu.util.CaseMapperNative	toUpperCase	(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;	yes	no		
+com.android.icu.util.LocaleNative	setDefaultNative	(Ljava/lang/String;)V	no	yes	3	program
+com.android.icu.util.regex.MatcherNative	findImpl	(JI[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	findNextImpl	(J[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	getNativeFinalizer	()J	yes	no		
+com.android.icu.util.regex.MatcherNative	groupCountImpl	(J)I	yes	no		
+com.android.icu.util.regex.MatcherNative	lookingAtImpl	(J[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	matchesImpl	(J[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	setInputImpl	(JLjava/lang/String;II)V	yes	no		
+com.android.icu.util.regex.MatcherNative	useAnchoringBoundsImpl	(JZ)V	yes	no		
+com.android.icu.util.regex.MatcherNative	useTransparentBoundsImpl	(JZ)V	yes	no		
+com.android.icu.util.regex.PatternNative	compileImpl	(Ljava/lang/String;I)J	yes	no		
+com.android.icu.util.regex.PatternNative	getMatchedGroupIndexImpl	(JLjava/lang/String;)I	yes	no		
+com.android.icu.util.regex.PatternNative	getNativeFinalizer	()J	yes	no		
+com.android.icu.util.regex.PatternNative	openMatcherImpl	(J)J	yes	no		
+com.android.internal.content.om.OverlayConfig	createIdmap	(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;Z)[Ljava/lang/String;	yes	no		
+com.android.internal.os.BinderInternal	getContextObject	()Landroid/os/IBinder;	yes	no		
+com.android.internal.os.ClassLoaderFactory	createClassloaderNamespace	(Ljava/lang/ClassLoader;ILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;	no	yes	1	program
+com.android.internal.util.VirtualRefBasePtr	nDecStrong	(J)V	no	yes	1	program
+com.android.internal.util.VirtualRefBasePtr	nIncStrong	(J)V	yes	yes	10	program
+dalvik.system.BaseDexClassLoader	computeClassLoaderContextsNative	()[Ljava/lang/String;	yes	yes	1	program
+dalvik.system.DexFile	isBackedByOatFile	(Ljava/lang/Object;)Z	yes	yes	1	program
+dalvik.system.DexFile	openDexFileNative	(Ljava/lang/String;Ljava/lang/String;ILjava/lang/ClassLoader;[Ldalvik/system/DexPathList$Element;)Ljava/lang/Object;	yes	yes	1	program
+dalvik.system.DexFile	setTrusted	(Ljava/lang/Object;)V	yes	no		
+dalvik.system.DexFile	verifyInBackgroundNative	(Ljava/lang/Object;Ljava/lang/ClassLoader;)V	yes	yes	1	program
+dalvik.system.VMDebug	startMethodTracingFd	(Ljava/lang/String;IIIZIZ)V	no	yes	1	program
+dalvik.system.VMDebug	stopMethodTracing	()V	no	yes	1	program
+dalvik.system.VMRuntime	addressOf	(Ljava/lang/Object;)J	yes	yes	24	program
+dalvik.system.VMRuntime	bootClassPath	()Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	clampGrowthLimit	()V	no	yes	1	program
+dalvik.system.VMRuntime	classPath	()Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	getNotifyNativeInterval	()I	yes	no		
+dalvik.system.VMRuntime	getSdkVersionNative	(I)I	yes	no		
+dalvik.system.VMRuntime	is64Bit	()Z	yes	no		
+dalvik.system.VMRuntime	newNonMovableArray	(Ljava/lang/Class;I)Ljava/lang/Object;	yes	yes	24	program
+dalvik.system.VMRuntime	newUnpaddedArray	(Ljava/lang/Class;I)Ljava/lang/Object;	yes	yes	184	program
+dalvik.system.VMRuntime	notifyNativeAllocationsInternal	()V	yes	yes	3	program
+dalvik.system.VMRuntime	properties	()[Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	registerAppInfo	(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V	no	yes	1	program
+dalvik.system.VMRuntime	registerNativeAllocation	(J)V	yes	yes	59	program
+dalvik.system.VMRuntime	registerNativeFree	(J)V	no	yes	5	program
+dalvik.system.VMRuntime	runHeapTasks	()V	no	yes	1	program
+dalvik.system.VMRuntime	setDedupeHiddenApiWarnings	(Z)V	no	yes	1	program
+dalvik.system.VMRuntime	vmInstructionSet	()Ljava/lang/String;	no	yes	1	program
+dalvik.system.VMRuntime	vmVersion	()Ljava/lang/String;	yes	no		
+dalvik.system.VMStack	getClosestUserClassLoader	()Ljava/lang/ClassLoader;	yes	no		
+dalvik.system.VMStack	getStackClass2	()Ljava/lang/Class;	yes	yes	7	program
+dalvik.system.VMStack	getThreadStackTrace	(Ljava/lang/Thread;)[Ljava/lang/StackTraceElement;	yes	no		
+java.io.FileDescriptor	isSocket	(I)Z	no	yes	1	program
+java.io.FileDescriptor	sync	()V	yes	no		
+java.io.ObjectInputStream	bytesToDoubles	([BI[DII)V	yes	no		
+java.io.ObjectInputStream	bytesToFloats	([BI[FII)V	yes	no		
+java.io.UnixFileSystem	getBooleanAttributes0	(Ljava/lang/String;)I	no	yes	7	program
+java.io.UnixFileSystem	initIDs	()V	yes	no		
+java.io.UnixFileSystem	list0	(Ljava/io/File;)[Ljava/lang/String;	no	yes	1	program
+java.lang.Character	digitImpl	(II)I	yes	no		
+java.lang.Character	getDirectionalityImpl	(I)B	yes	yes	7	program
+java.lang.Character	getTypeImpl	(I)I	yes	yes	7	program
+java.lang.Character	isDigitImpl	(I)Z	yes	no		
+java.lang.Character	isLetterImpl	(I)Z	yes	no		
+java.lang.Character	isLetterOrDigitImpl	(I)Z	yes	no		
+java.lang.Character	isLowerCaseImpl	(I)Z	yes	no		
+java.lang.Character	isSpaceCharImpl	(I)Z	yes	no		
+java.lang.Character	isTitleCaseImpl	(I)Z	yes	no		
+java.lang.Character	isUpperCaseImpl	(I)Z	yes	no		
+java.lang.Character	isWhitespaceImpl	(I)Z	yes	no		
+java.lang.Character	toLowerCaseImpl	(I)I	yes	no		
+java.lang.Character	toUpperCaseImpl	(I)I	yes	no		
+java.lang.Class	classForName	(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;	yes	yes	21	program
+java.lang.Class	getDeclaredClasses	()[Ljava/lang/Class;	yes	no		
+java.lang.Class	getDeclaredConstructorInternal	([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;	yes	yes	10	program
+java.lang.Class	getDeclaredConstructorsInternal	(Z)[Ljava/lang/reflect/Constructor;	yes	no		
+java.lang.Class	getDeclaredField	(Ljava/lang/String;)Ljava/lang/reflect/Field;	yes	no		
+java.lang.Class	getDeclaredFields	()[Ljava/lang/reflect/Field;	yes	no		
+java.lang.Class	getDeclaredMethodInternal	(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;	yes	yes	6	program
+java.lang.Class	getDeclaringClass	()Ljava/lang/Class;	yes	no		
+java.lang.Class	getEnclosingClass	()Ljava/lang/Class;	yes	no		
+java.lang.Class	getEnclosingConstructorNative	()Ljava/lang/reflect/Constructor;	yes	no		
+java.lang.Class	getEnclosingMethodNative	()Ljava/lang/reflect/Method;	yes	no		
+java.lang.Class	getInnerClassFlags	(I)I	yes	no		
+java.lang.Class	getInnerClassName	()Ljava/lang/String;	yes	no		
+java.lang.Class	getInterfacesInternal	()[Ljava/lang/Class;	yes	no		
+java.lang.Class	getNameNative	()Ljava/lang/String;	yes	yes	21	program
+java.lang.Class	getPrimitiveClass	(Ljava/lang/String;)Ljava/lang/Class;	yes	no		
+java.lang.Class	getPublicFieldRecursive	(Ljava/lang/String;)Ljava/lang/reflect/Field;	yes	yes	6	program
+java.lang.Class	getSignatureAnnotation	()[Ljava/lang/String;	yes	no		
+java.lang.Class	isAnonymousClass	()Z	yes	no		
+java.lang.Class	isRecord0	()Z	yes	no		
+java.lang.Class	newInstance	()Ljava/lang/Object;	yes	yes	2	program
+java.lang.Double	doubleToRawLongBits	(D)J	yes	yes	1	program
+java.lang.Double	longBitsToDouble	(J)D	yes	no		
+java.lang.Float	floatToRawIntBits	(F)I	yes	yes	106	program
+java.lang.Float	intBitsToFloat	(I)F	yes	yes	204	program
+java.lang.Math	atan2	(DD)D	yes	no		
+java.lang.Math	cbrt	(D)D	yes	no		
+java.lang.Math	ceil	(D)D	yes	yes	84	program
+java.lang.Math	cos	(D)D	yes	yes	16	program
+java.lang.Math	exp	(D)D	yes	no		
+java.lang.Math	floor	(D)D	yes	yes	33	program
+java.lang.Math	log	(D)D	yes	no		
+java.lang.Math	pow	(DD)D	yes	no		
+java.lang.Math	sin	(D)D	yes	no		
+java.lang.Math	sqrt	(D)D	yes	yes	1	program
+java.lang.Math	tan	(D)D	yes	yes	1	program
+java.lang.Object	identityHashCodeNative	(Ljava/lang/Object;)I	yes	yes	149	program
+java.lang.Object	internalClone	()Ljava/lang/Object;	yes	yes	118	program
+java.lang.Object	notifyAll	()V	yes	yes	15	program
+java.lang.Object	wait	(JI)V	yes	yes	5	program
+java.lang.Runtime	nativeExit	(I)V	yes	no		
+java.lang.Runtime	nativeLoad	(Ljava/lang/String;Ljava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/String;	no	yes	1	program
+java.lang.String	charAt	(I)C	yes	yes	22881	program
+java.lang.String	compareTo	(Ljava/lang/String;)I	yes	yes	31	program
+java.lang.String	doRepeat	(I)Ljava/lang/String;	yes	no		
+java.lang.String	doReplace	(CC)Ljava/lang/String;	yes	yes	5	program
+java.lang.String	fastSubstring	(II)Ljava/lang/String;	yes	yes	84	program
+java.lang.String	fillBytesLatin1	([BI)V	yes	yes	243	program
+java.lang.String	fillBytesUTF16	([BI)V	yes	no		
+java.lang.String	getCharsNoCheck	(II[CI)V	yes	yes	24	program
+java.lang.String	intern	()Ljava/lang/String;	yes	yes	7	program
+java.lang.String	toCharArray	()[C	yes	yes	30	program
+java.lang.StringFactory	newStringFromBytes	([BIII)Ljava/lang/String;	no	yes	119	program
+java.lang.StringFactory	newStringFromChars	(II[C)Ljava/lang/String;	yes	yes	7	program
+java.lang.StringFactory	newStringFromUtf16Bytes	([BII)Ljava/lang/String;	yes	no		
+java.lang.StringFactory	newStringFromUtf8Bytes	([BII)Ljava/lang/String;	no	yes	37	program
+java.lang.System	arraycopy	(Ljava/lang/Object;ILjava/lang/Object;II)V	yes	yes	964	program
+java.lang.System	currentTimeMillis	()J	yes	no		
+java.lang.System	log	(CLjava/lang/String;Ljava/lang/Throwable;)V	yes	no		
+java.lang.System	mapLibraryName	(Ljava/lang/String;)Ljava/lang/String;	no	yes	1	program
+java.lang.System	nanoTime	()J	yes	yes	68	program
+java.lang.System	specialProperties	()[Ljava/lang/String;	yes	no		
+java.lang.Thread	currentThread	()Ljava/lang/Thread;	yes	yes	363	program
+java.lang.Thread	interrupt0	()V	yes	no		
+java.lang.Thread	interrupted	()Z	no	yes	3	program
+java.lang.Thread	isInterrupted	()Z	no	yes	5	program
+java.lang.Thread	nativeCreate	(Ljava/lang/Thread;JZ)V	yes	yes	3	program
+java.lang.Thread	nativeGetStatus	(Z)I	yes	yes	5	program
+java.lang.Thread	yield	()V	yes	yes	1	program
+java.lang.Throwable	nativeFillInStackTrace	()Ljava/lang/Object;	yes	yes	3	program
+java.lang.Throwable	nativeGetStackTrace	(Ljava/lang/Object;)[Ljava/lang/StackTraceElement;	yes	no		
+java.lang.UNIXProcess	forkAndExec	([B[BI[BI[B[IZ)I	yes	no		
+java.lang.UNIXProcess	initIDs	()V	yes	no		
+java.lang.VMClassLoader	findLoadedClass	(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;	yes	yes	2	program
+java.lang.VMClassLoader	getBootClassPathEntries	()[Ljava/lang/String;	yes	no		
+java.lang.ref.FinalizerReference	getReferent	()Ljava/lang/Object;	yes	no		
+java.lang.ref.FinalizerReference	makeCircularListIfUnenqueued	()Z	yes	no		
+java.lang.ref.Reference	getReferent	()Ljava/lang/Object;	yes	yes	280	program
+java.lang.ref.Reference	refersTo0	(Ljava/lang/Object;)Z	no	yes	486	program
+java.lang.reflect.Array	createMultiArray	(Ljava/lang/Class;[I)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Array	createObjectArray	(Ljava/lang/Class;I)Ljava/lang/Object;	yes	yes	33	program
+java.lang.reflect.Constructor	newInstance0	([Ljava/lang/Object;)Ljava/lang/Object;	yes	yes	11	program
+java.lang.reflect.Constructor	newInstanceFromSerialization	(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Executable	getParameterTypesInternal	()[Ljava/lang/Class;	yes	no		
+java.lang.reflect.Field	get	(Ljava/lang/Object;)Ljava/lang/Object;	yes	yes	6	program
+java.lang.reflect.Field	getAnnotationNative	(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;	yes	no		
+java.lang.reflect.Field	getArtField	()J	yes	no		
+java.lang.reflect.Field	getNameInternal	()Ljava/lang/String;	yes	no		
+java.lang.reflect.Method	invoke	(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;	yes	yes	3	before_main
+java.util.concurrent.atomic.AtomicLong	VMSupportsCS8	()Z	yes	no		
+java.util.zip.Inflater	init	(Z)J	yes	no		
+java.util.zip.ZipFile	freeEntry	(JJ)V	yes	no		
+java.util.zip.ZipFile	getEntry	(J[BZ)J	yes	no		
+java.util.zip.ZipFile	getEntryBytes	(JI)[B	yes	no		
+java.util.zip.ZipFile	getEntryCSize	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryCrc	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryFlag	(J)I	yes	no		
+java.util.zip.ZipFile	getEntryMethod	(J)I	yes	no		
+java.util.zip.ZipFile	getEntrySize	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryTime	(J)J	yes	no		
+java.util.zip.ZipFile	getTotal	(J)I	yes	no		
+java.util.zip.ZipFile	open	(Ljava/lang/String;IJZ)J	yes	no		
+java.util.zip.ZipFile	startsWithLOC	(J)Z	yes	no		
+jdk.internal.misc.Unsafe	addressSize	()I	yes	no		
+jdk.internal.misc.Unsafe	compareAndSetInt	(Ljava/lang/Object;JII)Z	yes	yes	4	program
+jdk.internal.misc.Unsafe	compareAndSetLong	(Ljava/lang/Object;JJJ)Z	yes	no		
+jdk.internal.misc.Unsafe	compareAndSetReference	(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z	yes	no		
+jdk.internal.misc.Unsafe	getArrayBaseOffsetForComponentType	(Ljava/lang/Class;)I	yes	no		
+jdk.internal.misc.Unsafe	getArrayIndexScaleForComponentType	(Ljava/lang/Class;)I	yes	no		
+jdk.internal.misc.Unsafe	getByte	(Ljava/lang/Object;J)B	yes	no		
+jdk.internal.misc.Unsafe	getInt	(Ljava/lang/Object;J)I	yes	yes	12	program
+jdk.internal.misc.Unsafe	getLong	(Ljava/lang/Object;J)J	yes	no		
+jdk.internal.misc.Unsafe	getReferenceVolatile	(Ljava/lang/Object;J)Ljava/lang/Object;	yes	yes	12	program
+jdk.internal.misc.Unsafe	getShort	(Ljava/lang/Object;J)S	yes	no		
+jdk.internal.misc.Unsafe	park	(ZJ)V	yes	yes	2	program
+jdk.internal.misc.Unsafe	putInt	(Ljava/lang/Object;JI)V	yes	no		
+jdk.internal.misc.Unsafe	putLong	(Ljava/lang/Object;JJ)V	yes	no		
+jdk.internal.misc.Unsafe	putReferenceVolatile	(Ljava/lang/Object;JLjava/lang/Object;)V	yes	yes	2	program
+libcore.icu.ICU	getCldrVersion	()Ljava/lang/String;	yes	no		
+libcore.icu.ICU	getIcuVersion	()Ljava/lang/String;	yes	no		
+libcore.icu.ICU	getUnicodeVersion	()Ljava/lang/String;	yes	no		
+libcore.io.AsynchronousCloseMonitor	signalBlockedThreads	(Ljava/io/FileDescriptor;)V	yes	yes	1	program
+libcore.io.Linux	access	(Ljava/lang/String;I)Z	no	yes	7	program
+libcore.io.Linux	android_fdsan_exchange_owner_tag	(Ljava/io/FileDescriptor;JJ)V	no	yes	11	program
+libcore.io.Linux	close	(Ljava/io/FileDescriptor;)V	no	yes	1	program
+libcore.io.Linux	getpid	()I	no	yes	8	program
+libcore.io.Linux	gettid	()I	no	yes	1	program
+libcore.io.Linux	getuid	()I	no	yes	53	program
+libcore.io.Linux	mmap	(JJIILjava/io/FileDescriptor;J)J	no	yes	1	program
+libcore.io.Linux	setenv	(Ljava/lang/String;Ljava/lang/String;Z)V	no	yes	1	program
+libcore.io.Linux	stat	(Ljava/lang/String;)Landroid/system/StructStat;	no	yes	2	program
+libcore.io.Memory	memmove	(Ljava/lang/Object;ILjava/lang/Object;IJ)V	yes	no		
+libcore.io.Memory	peekByteArray	(J[BII)V	no	yes	33	program
+libcore.io.Memory	peekIntNative	(J)I	no	yes	34	program
+libcore.math.NativeBN	BN_div	(JJJJ)V	yes	no		
+libcore.math.NativeBN	BN_free	(J)V	yes	no		
+libcore.math.NativeBN	BN_mul	(JJJ)V	yes	no		
+libcore.math.NativeBN	BN_new	()J	yes	no		
+libcore.math.NativeBN	bn2litEndInts	(J)[I	yes	no		
+libcore.math.NativeBN	litEndInts2bn	([IIZJ)V	yes	no		
+libcore.util.CharsetUtils	toAsciiBytes	(Ljava/lang/String;II)[B	yes	no		
+libcore.util.CharsetUtils	toIsoLatin1Bytes	(Ljava/lang/String;II)[B	yes	no		
+libcore.util.CharsetUtils	toUtf8Bytes	(Ljava/lang/String;II)[B	yes	no		
+libcore.util.NativeAllocationRegistry	applyFreeFunction	(JJ)V	yes	yes	5	program
+sun.misc.Unsafe	putBoolean	(Ljava/lang/Object;JZ)V	yes	no		
+sun.misc.Unsafe	putByte	(Ljava/lang/Object;JB)V	yes	no		
+sun.misc.Unsafe	putChar	(Ljava/lang/Object;JC)V	yes	no		
+sun.misc.Unsafe	putDouble	(Ljava/lang/Object;JD)V	yes	no		
+sun.misc.Unsafe	putFloat	(Ljava/lang/Object;JF)V	yes	no		
+sun.misc.Unsafe	putInt	(Ljava/lang/Object;JI)V	yes	no		
+sun.misc.Unsafe	putLong	(Ljava/lang/Object;JJ)V	yes	no		
+sun.misc.Unsafe	putObject	(Ljava/lang/Object;JLjava/lang/Object;)V	yes	no		
+sun.misc.Unsafe	putShort	(Ljava/lang/Object;JS)V	yes	no		
+sun.nio.ch.FileChannelImpl	initIDs	()J	yes	no		

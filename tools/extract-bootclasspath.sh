@@ -81,6 +81,15 @@ debugfs_dump() { # <image> <abs-path-in-image> <dest>
     [ -f "$dest" ] || die "debugfs produced no file for $path"
 }
 
+debugfs_dump_optional() { # <image> <abs-path-in-image> <dest>
+    local img="$1" path="$2" dest="$3"
+    if printf '%s\n' "$("$DEBUGFS" -R "stat $path" "$img" 2>/dev/null)" | grep -q '^Inode:'; then
+        debugfs_dump "$img" "$path" "$dest"
+        return 0
+    fi
+    return 1
+}
+
 # --- 1. GPT -> super -> system.img ------------------------------------------
 log "reading GPT from $IMG_DIR/system.img"
 SUPER_INFO="$("$PYTHON" - "$IMG_DIR/system.img" <<'PYEOF'
@@ -167,6 +176,13 @@ while read -r _inode mode rest; do
     debugfs_dump "$SYSIMG" "/system/fonts/$name" "$OUT/fonts/$name"
 done < <(printf '%s\n' "$FONT_LIST" | tr -d '\r' | grep -E '\.(ttf|otf|ttc)$')
 debugfs_dump "$SYSIMG" "/system/etc/fonts.xml" "$OUT/fonts/fonts.xml"
+
+# Zygote preloaded-classes list (classes pre-initialised by the boot image).
+if debugfs_dump_optional "$SYSIMG" "/system/etc/preloaded-classes" "$OUT/preloaded-classes"; then
+    log "preloaded-classes: $(wc -l <"$OUT/preloaded-classes") classes"
+else
+    log "warning: /system/etc/preloaded-classes not present in image"
+fi
 
 # --- 3. APEX payloads (ART / i18n / conscrypt) ------------------------------
 # Extract the javalib jars and classpath config from these APEXes.

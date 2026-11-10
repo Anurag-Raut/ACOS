@@ -1,0 +1,60 @@
+order	direction	interface	method	signature	count	kind
+3767	app->system	android.hardware.display.IDisplayManager	getPreferredWideGamutColorSpaceId	()I	1	proxy
+3821	app->system	android.hardware.display.IDisplayManager	getOverlaySupport	()Landroid/hardware/OverlayProperties;	1	proxy
+3926	app->system	android.hardware.display.IDisplayManager	getDisplayInfo	(I)Landroid/view/DisplayInfo;	1	proxy
+5654	app->system	android.os.INetworkManagementService	setUidCleartextNetworkPolicy	(II)V	1	proxy
+7953	app->system	android.content.pm.IPackageManager	notifyDexLoad	(Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;)V	1	proxy
+11728	app->system	android.app.IActivityManager	checkPermission	(Ljava/lang/String;II)I	4	proxy
+12398	app->system	android.net.IConnectivityManager	getProxyForNetwork	(Landroid/net/Network;)Landroid/net/ProxyInfo;	1	proxy
+13343	app->system	android.content.pm.IPackageManager	getPackagesForUid	(I)[Ljava/lang/String;	1	proxy
+13588	app->system	android.content.pm.IPackageManager	getApplicationInfo	(Ljava/lang/String;JI)Landroid/content/pm/ApplicationInfo;	2	proxy
+14026	app->system	android.os.IServiceManager	checkService	(Ljava/lang/String;)Landroid/os/IBinder;	9	proxy
+14350	app->system	android.app.IGameManagerService	isAngleEnabled	(Ljava/lang/String;I)Z	1	proxy
+14549	app->system	android.content.pm.IPackageManager	hasSystemFeature	(Ljava/lang/String;I)Z	3	proxy
+15329	app->system	android.content.pm.IPackageManager	getPackageInfo	(Ljava/lang/String;JI)Landroid/content/pm/PackageInfo;	1	proxy
+17961	app->system	android.app.IActivityManager	finishAttachApplication	(J)V	1	proxy
+19401	app->system	android.view.IWindowManager	getCurrentAnimatorScale	()F	1	proxy
+19468	app->system	android.view.IWindowManager	useBLAST	()Z	1	proxy
+19596	app->system	android.hardware.display.IDisplayManager	registerCallbackWithEventMask	(Landroid/hardware/display/IDisplayManagerCallback;J)V	1	proxy
+19714	app->system	android.app.IActivityTaskManager	getActivityClientController	()Landroid/app/IActivityClientController;	1	proxy
+19806	app->system	android.app.IActivityClientController	getDisplayId	(Landroid/os/IBinder;)I	1	proxy
+21910	app->system	android.companion.virtual.IVirtualDeviceManager	getDeviceIdForDisplayId	(I)I	2	proxy
+25748	app->system	android.app.IActivityManager	getContentProvider	(Landroid/app/IApplicationThread;Ljava/lang/String;Ljava/lang/String;IZ)Landroid/app/ContentProviderHolder;	1	proxy
+29966	app->system	android.view.IWindowManager	hasNavigationBar	(I)Z	1	proxy
+30880	app->system	android.view.accessibility.IAccessibilityManager	addClient	(Landroid/view/accessibility/IAccessibilityManagerClient;I)J	1	proxy
+30940	app->system	android.view.accessibility.IAccessibilityManager	getRecommendedTimeoutMillis	()J	1	proxy
+30987	app->system	android.view.accessibility.IAccessibilityManager	getFocusStrokeWidth	()I	1	proxy
+31031	app->system	android.view.accessibility.IAccessibilityManager	getFocusColor	()I	1	proxy
+32341	app->system	android.app.IActivityClientController	setTaskDescription	(Landroid/os/IBinder;Landroid/app/ActivityManager$TaskDescription;)V	1	proxy
+64079	app->system	com.android.internal.view.IInputMethodManager	addClient	(Lcom/android/internal/inputmethod/IInputMethodClient;Lcom/android/internal/inputmethod/IRemoteInputConnection;I)V	1	proxy
+94989	app->system	android.app.IActivityClientController	reportSizeConfigurations	(Landroid/os/IBinder;Landroid/window/SizeConfigurationBuckets;)V	1	proxy
+98653	app->system	com.android.internal.app.IVoiceInteractionManagerService	notifyActivityEventChanged	(Landroid/os/IBinder;I)V	2	proxy
+99008	app->system	android.view.IWindowManager	openSession	(Landroid/view/IWindowSessionCallback;)Landroid/view/IWindowSession;	1	proxy
+101903	app->system	android.hardware.display.IDisplayManager	getDisplayIds	(Z)[I	1	proxy
+102249	app->system	android.app.IActivityManager	setRenderThread	(I)V	1	proxy
+102336	app->system	android.view.IGraphicsStats	requestBufferForProcess	(Ljava/lang/String;Landroid/view/IGraphicsStatsCallback;)Landroid/os/ParcelFileDescriptor;	1	proxy
+102692	app->system	android.view.IWindowSession	addToDisplayAsUser	(Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIIILandroid/view/InputChannel;Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;Landroid/graphics/Rect;[F)I	1	proxy
+104228	app->system	com.android.internal.view.IInputMethodManager	isImeTraceEnabled	()Z	1	proxy
+105437	app->system	android.app.IActivityClientController	activityResumed	(Landroid/os/IBinder;Z)V	1	proxy
+105780	app->system	android.view.contentcapture.IContentCaptureManager	registerContentCaptureOptionsCallback	(Ljava/lang/String;Landroid/view/contentcapture/IContentCaptureOptionsCallback;)V	1	proxy
+109241	app->system	com.android.internal.textservice.ITextServicesManager	getCurrentSpellCheckerSubtype	(IZ)Landroid/view/textservice/SpellCheckerSubtype;	2	proxy
+116276	app->system	android.view.IWindowSession	setOnBackInvokedCallbackInfo	(Landroid/view/IWindow;Landroid/window/OnBackInvokedCallbackInfo;)V	1	proxy
+120199	app->system	android.view.IWindowSession	relayout	(Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIIIIILandroid/window/ClientWindowFrames;Landroid/util/MergedConfiguration;Landroid/view/SurfaceControl;Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;Landroid/os/Bundle;)I	1	proxy
+124665	system->app	android.view.IWindow	onTransact		2	onTransact
+125933	system->app	android.view.IWindow	android.view.ViewRootImpl$W.insetsControlChanged		2	handler
+130724	app->system	android.view.IWindowManager	isInTouchMode	(I)Z	1	proxy
+132423	system->app	android.app.IApplicationThread	onTransact		1	onTransact
+132495	system->app	android.app.IApplicationThread	android.app.ActivityThread$ApplicationThread.scheduleEnterAnimationComplete		1	handler
+135777	app->system	android.view.IWindowSession	finishDrawing	(Landroid/view/IWindow;Landroid/view/SurfaceControl$Transaction;I)V	1	proxy
+138556	app->system	android.hardware.input.IInputManager	getVelocityTrackerStrategy	()Ljava/lang/String;	1	proxy
+138630	app->system	android.hardware.input.IInputManager	registerInputDevicesChangedListener	(Landroid/hardware/input/IInputDevicesChangedListener;)V	1	proxy
+138676	app->system	android.hardware.input.IInputManager	getInputDeviceIds	()[I	1	proxy
+138873	app->system	android.hardware.input.IInputManager	getInputDevice	(I)Landroid/view/InputDevice;	1	proxy
+145881	app->system	com.android.internal.view.IInputMethodManager	startInputOrWindowGainedFocus	(ILcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;IIILandroid/view/inputmethod/EditorInfo;Lcom/android/internal/inputmethod/IRemoteInputConnection;Lcom/android/internal/inputmethod/IRemoteAccessibilityInputConnection;IILandroid/window/ImeOnBackInvokedDispatcher;)Lcom/android/internal/inputmethod/InputBindResult;	1	proxy
+146199	system->app	com.android.internal.inputmethod.IInputMethodClient	onTransact		3	onTransact
+146211	system->app	com.android.internal.inputmethod.IInputMethodClient	android.view.inputmethod.InputMethodManager$2.setActive		1	handler
+146403	system->app	com.android.internal.inputmethod.IInputMethodClient	android.view.inputmethod.InputMethodManager$2.onBindMethod		1	handler
+150892	system->app	com.android.internal.inputmethod.IInputMethodClient	android.view.inputmethod.InputMethodManager$2.reportFullscreenMode		1	handler
+151712	app->system	com.android.internal.view.IInputMethodManager	reportPerceptibleAsync	(Landroid/os/IBinder;Z)V	1	proxy
+151824	app->system	com.android.internal.view.IInputMethodManager	removeImeSurfaceFromWindowAsync	(Landroid/os/IBinder;)V	1	proxy
+152178	app->system	android.app.IActivityClientController	activityIdle	(Landroid/os/IBinder;Landroid/content/res/Configuration;Z)V	1	proxy

@@ -1,0 +1,592 @@
+{
+  "activity_launch": {
+    "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_views_launch.trace",
+    "elapsed_time_usec": 506316,
+    "last_record_wall_usec": 917504,
+    "milestones": {
+      "activity_thread_main": {
+        "wall_usec": 27682,
+        "thread": 13292,
+        "class": "android.app.ActivityThread",
+        "method": "main"
+      },
+      "handle_bind_application": {
+        "wall_usec": 27686,
+        "thread": 13292,
+        "class": "android.app.ActivityThread",
+        "method": "handleBindApplication"
+      },
+      "application_onCreate": {
+        "wall_usec": 61927,
+        "thread": 13292,
+        "class": "android.app.Application",
+        "method": "onCreate"
+      },
+      "perform_launch_activity": {
+        "wall_usec": 64357,
+        "thread": 13292,
+        "class": "android.app.ActivityThread",
+        "method": "performLaunchActivity"
+      },
+      "activity_performCreate": {
+        "wall_usec": 76114,
+        "thread": 13292,
+        "class": "android.app.Activity",
+        "method": "performCreate"
+      },
+      "activity_onCreate_app": {
+        "wall_usec": 76170,
+        "thread": 13292,
+        "class": "dev.acos.fixtures.helloviews.MainActivity",
+        "method": "onCreate"
+      },
+      "activity_makeVisible": {
+        "wall_usec": 138632,
+        "thread": 13292,
+        "class": "android.app.ActivityThread",
+        "method": "handleResumeActivity"
+      },
+      "activity_performResume": {
+        "wall_usec": 138648,
+        "thread": 13292,
+        "class": "android.app.Activity",
+        "method": "performResume"
+      },
+      "activity_onResume_app": {
+        "wall_usec": 138678,
+        "thread": 13292,
+        "class": "dev.acos.fixtures.helloviews.MainActivity",
+        "method": "onResume"
+      },
+      "surface_control_ctor": {
+        "wall_usec": 140112,
+        "thread": 13292,
+        "class": "android.view.SurfaceControl",
+        "method": "<init>"
+      },
+      "viewroot_setView": {
+        "wall_usec": 142363,
+        "thread": 13292,
+        "class": "android.view.ViewRootImpl",
+        "method": "setView"
+      },
+      "choreographer_doFrame": {
+        "wall_usec": 152843,
+        "thread": 13292,
+        "class": "android.view.Choreographer",
+        "method": "doFrame"
+      },
+      "performTraversals": {
+        "wall_usec": 152930,
+        "thread": 13292,
+        "class": "android.view.ViewRootImpl",
+        "method": "performTraversals"
+      },
+      "performMeasure": {
+        "wall_usec": 161684,
+        "thread": 13292,
+        "class": "android.view.ViewRootImpl",
+        "method": "performMeasure"
+      },
+      "performLayout": {
+        "wall_usec": 174995,
+        "thread": 13292,
+        "class": "android.view.ViewRootImpl",
+        "method": "performLayout"
+      },
+      "performDraw": {
+        "wall_usec": 179078,
+        "thread": 13292,
+        "class": "android.view.ViewRootImpl",
+        "method": "performDraw"
+      },
+      "threaded_renderer_draw": {
+        "wall_usec": 201432,
+        "thread": 13292,
+        "class": "android.view.ThreadedRenderer",
+        "method": "draw"
+      }
+    }
+  },
+  "activity_interaction": {
+    "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_views_interaction.trace",
+    "elapsed_time_usec": 3203562,
+    "last_record_wall_usec": 3186258,
+    "milestones": {
+      "activity_thread_main": {
+        "wall_usec": 19190,
+        "thread": 13403,
+        "class": "android.app.ActivityThread",
+        "method": "main"
+      },
+      "choreographer_doFrame": {
+        "wall_usec": 533019,
+        "thread": 13403,
+        "class": "android.view.Choreographer",
+        "method": "doFrame"
+      },
+      "performTraversals": {
+        "wall_usec": 533086,
+        "thread": 13403,
+        "class": "android.view.ViewRootImpl",
+        "method": "performTraversals"
+      },
+      "performDraw": {
+        "wall_usec": 533310,
+        "thread": 13403,
+        "class": "android.view.ViewRootImpl",
+        "method": "performDraw"
+      },
+      "threaded_renderer_draw": {
+        "wall_usec": 533346,
+        "thread": 13403,
+        "class": "android.view.ThreadedRenderer",
+        "method": "draw"
+      },
+      "surface_control_ctor": {
+        "wall_usec": 586801,
+        "thread": 13417,
+        "class": "android.view.SurfaceControl",
+        "method": "<init>"
+      },
+      "performMeasure": {
+        "wall_usec": 1021385,
+        "thread": 13403,
+        "class": "android.view.ViewRootImpl",
+        "method": "performMeasure"
+      },
+      "performLayout": {
+        "wall_usec": 1024122,
+        "thread": 13403,
+        "class": "android.view.ViewRootImpl",
+        "method": "performLayout"
+      }
+    }
+  },
+  "jni_launch": {
+    "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_jni_launch.trace",
+    "elapsed_time_usec": 358131,
+    "last_record_wall_usec": 917504,
+    "milestones": {
+      "activity_thread_main": {
+        "wall_usec": 11386,
+        "thread": 13536,
+        "class": "android.app.ActivityThread",
+        "method": "main"
+      },
+      "handle_bind_application": {
+        "wall_usec": 11389,
+        "thread": 13536,
+        "class": "android.app.ActivityThread",
+        "method": "handleBindApplication"
+      },
+      "application_onCreate": {
+        "wall_usec": 35768,
+        "thread": 13536,
+        "class": "android.app.Application",
+        "method": "onCreate"
+      },
+      "perform_launch_activity": {
+        "wall_usec": 38547,
+        "thread": 13536,
+        "class": "android.app.ActivityThread",
+        "method": "performLaunchActivity"
+      },
+      "activity_performCreate": {
+        "wall_usec": 51466,
+        "thread": 13536,
+        "class": "android.app.Activity",
+        "method": "performCreate"
+      },
+      "activity_onCreate_app": {
+        "wall_usec": 51514,
+        "thread": 13536,
+        "class": "dev.acos.fixtures.hellojni.MainActivity",
+        "method": "onCreate"
+      },
+      "activity_makeVisible": {
+        "wall_usec": 84307,
+        "thread": 13536,
+        "class": "android.app.ActivityThread",
+        "method": "handleResumeActivity"
+      },
+      "activity_performResume": {
+        "wall_usec": 84322,
+        "thread": 13536,
+        "class": "android.app.Activity",
+        "method": "performResume"
+      },
+      "surface_control_ctor": {
+        "wall_usec": 85547,
+        "thread": 13536,
+        "class": "android.view.SurfaceControl",
+        "method": "<init>"
+      },
+      "viewroot_setView": {
+        "wall_usec": 87399,
+        "thread": 13536,
+        "class": "android.view.ViewRootImpl",
+        "method": "setView"
+      },
+      "choreographer_doFrame": {
+        "wall_usec": 99615,
+        "thread": 13536,
+        "class": "android.view.Choreographer",
+        "method": "doFrame"
+      },
+      "performTraversals": {
+        "wall_usec": 99735,
+        "thread": 13536,
+        "class": "android.view.ViewRootImpl",
+        "method": "performTraversals"
+      },
+      "performMeasure": {
+        "wall_usec": 103861,
+        "thread": 13536,
+        "class": "android.view.ViewRootImpl",
+        "method": "performMeasure"
+      },
+      "performLayout": {
+        "wall_usec": 118436,
+        "thread": 13536,
+        "class": "android.view.ViewRootImpl",
+        "method": "performLayout"
+      },
+      "performDraw": {
+        "wall_usec": 120621,
+        "thread": 13536,
+        "class": "android.view.ViewRootImpl",
+        "method": "performDraw"
+      },
+      "threaded_renderer_draw": {
+        "wall_usec": 150035,
+        "thread": 13536,
+        "class": "android.view.ThreadedRenderer",
+        "method": "draw"
+      }
+    }
+  },
+  "untraced_start_timings": {
+    "hello_views": {
+      "cold": {
+        "runs": 10,
+        "total_p50": 466,
+        "total_p95": 536,
+        "wait_p50": 471,
+        "wait_p95": 540,
+        "raw": [
+          {
+            "total_ms": 434,
+            "wait_ms": 436
+          },
+          {
+            "total_ms": 463,
+            "wait_ms": 466
+          },
+          {
+            "total_ms": 467,
+            "wait_ms": 473
+          },
+          {
+            "total_ms": 477,
+            "wait_ms": 479
+          },
+          {
+            "total_ms": 488,
+            "wait_ms": 490
+          },
+          {
+            "total_ms": 536,
+            "wait_ms": 540
+          },
+          {
+            "total_ms": 481,
+            "wait_ms": 487
+          },
+          {
+            "total_ms": 454,
+            "wait_ms": 456
+          },
+          {
+            "total_ms": 399,
+            "wait_ms": 402
+          },
+          {
+            "total_ms": 466,
+            "wait_ms": 471
+          }
+        ]
+      },
+      "warm": {
+        "runs": 10,
+        "total_p50": 17,
+        "total_p95": 44,
+        "wait_p50": 19,
+        "wait_p95": 46,
+        "raw": [
+          {
+            "total_ms": 22,
+            "wait_ms": 23
+          },
+          {
+            "total_ms": 15,
+            "wait_ms": 16
+          },
+          {
+            "total_ms": 14,
+            "wait_ms": 16
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 18
+          },
+          {
+            "total_ms": 44,
+            "wait_ms": 46
+          },
+          {
+            "total_ms": 27,
+            "wait_ms": 29
+          },
+          {
+            "total_ms": 18,
+            "wait_ms": 19
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 18
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 19
+          },
+          {
+            "total_ms": 18,
+            "wait_ms": 20
+          }
+        ]
+      }
+    }
+  },
+  "meminfo_idle": {
+    "hello_views_idle": {
+      "runs": [
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30303,
+          "total_rss_kb": 109140
+        },
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30455,
+          "total_rss_kb": 109148
+        },
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30508,
+          "total_rss_kb": 109228
+        }
+      ]
+    }
+  },
+  "memory_map": {
+    "hello_views_after_first_frame": {
+      "by_kind": {
+        "anon/deleted": {
+          "count": 188,
+          "mib": 968.88
+        },
+        "anon/reserved (virtual)": {
+          "count": 269,
+          "mib": 11569.04
+        },
+        "apk/jar": {
+          "count": 99,
+          "mib": 80.48
+        },
+        "ashmem/memfd": {
+          "count": 13,
+          "mib": 192.66
+        },
+        "dalvik heap (virtual)": {
+          "count": 152,
+          "mib": 564.91
+        },
+        "dex/oat/art": {
+          "count": 93,
+          "mib": 16.38
+        },
+        "fonts": {
+          "count": 2,
+          "mib": 2.56
+        },
+        "native .so": {
+          "count": 1126,
+          "mib": 102.89
+        },
+        "other file": {
+          "count": 131,
+          "mib": 66.84
+        }
+      },
+      "top": [
+        {
+          "path": "[anon:cfi shadow]",
+          "bytes": 1073831936,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:libwebview reservation]",
+          "bytes": 1073741824,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:cfi shadow]",
+          "bytes": 756826112,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:dalvik-main space (region space)]",
+          "bytes": 402653184,
+          "perms": "rw-p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268222464,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268210176,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268206080,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268201984,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268201984,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268197888,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268193792,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268185600,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268185600,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268169216,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268169216,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268161024,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268161024,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268156928,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268152832,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268152832,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268148736,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268144640,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268140544,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268128256,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267923456,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267911168,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267907072,
+          "perms": "---p"
+        }
+      ],
+      "total_mappings": 2073,
+      "total_virtual_mib": 13564.6,
+      "note": "sizes are virtual mapping sizes (end-start); anon reservations are not RSS"
+    }
+  }
+}

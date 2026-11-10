@@ -1,0 +1,143 @@
+{
+  "executed_classes": 1128,
+  "in_zygote_preloaded_classes": 1076,
+  "not_preloaded": [
+    "android.animation.Animator$AnimatorCaller",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda0",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda1",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda2",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda3",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda4",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda5",
+    "android.animation.Animator$AnimatorCaller$$ExternalSyntheticLambda6",
+    "android.app.usage.NetworkStatsManager",
+    "android.hardware.display.DisplayManager$$ExternalSyntheticLambda2",
+    "android.hardware.display.DisplayManager$WeakDisplayCache",
+    "android.hardware.input.InputManagerGlobal$InputDevicesChangedListener",
+    "android.hardware.input.InputSettings",
+    "android.net.ConnectivityFrameworkInitializer",
+    "android.net.ConnectivityFrameworkInitializer$$ExternalSyntheticLambda0",
+    "android.net.ConnectivityFrameworkInitializerTiramisu",
+    "android.net.ConnectivityFrameworkInitializerTiramisu$$ExternalSyntheticLambda2",
+    "android.net.ConnectivityManager",
+    "android.net.IConnectivityManager$Stub",
+    "android.net.IConnectivityManager$Stub$Proxy",
+    "android.net.INetworkStatsService$Stub",
+    "android.net.INetworkStatsService$Stub$Proxy",
+    "android.net.NetworkCapabilities",
+    "android.net.NetworkCapabilities$1",
+    "android.net.NetworkRequest",
+    "android.net.NetworkRequest$1",
+    "android.net.NetworkRequest$Builder",
+    "android.net.NetworkRequest$Type",
+    "android.net.NetworkUtils",
+    "android.net.TrafficStats",
+    "android.net.UidRange",
+    "android.net.UidRange$1",
+    "android.net.connectivity.com.android.net.module.util.BitUtils",
+    "android.net.connectivity.com.android.net.module.util.NetworkCapabilitiesUtils",
+    "android.permission.PermissionManager",
+    "android.provider.DeviceConfig",
+    "android.provider.DeviceConfig$Properties",
+    "android.security.net.config.SystemCertificateSource$NoPreloadHolder",
+    "android.util.StatsEvent",
+    "android.util.StatsEvent$Buffer",
+    "android.util.StatsEvent$Builder",
+    "android.util.StatsLog",
+    "android.view.SurfaceControlRegistry",
+    "android.view.SurfaceControlRegistry$DefaultReporter",
+    "android.view.ViewRootImpl$8$$ExternalSyntheticLambda1",
+    "android.window.SurfaceSyncGroup$$ExternalSyntheticLambda6",
+    "com.android.org.conscrypt.OpenSSLX509CertificateFactory",
+    "com.android.org.conscrypt.OpenSSLX509CertificateFactory$1",
+    "com.android.org.conscrypt.OpenSSLX509CertificateFactory$2",
+    "com.android.org.conscrypt.OpenSSLX509CertificateFactory$Parser",
+    "dev.acos.fixtures.helloviews.MainActivity",
+    "dev.acos.fixtures.helloviews.MainActivity$1"
+  ],
+  "launch_clinit": [
+    {
+      "class": "android.net.ConnectivityManager",
+      "first_order": 1093,
+      "first_wall_usec": 52120
+    },
+    {
+      "class": "android.net.NetworkRequest$Builder",
+      "first_order": 1095,
+      "first_wall_usec": 52167
+    },
+    {
+      "class": "android.net.NetworkCapabilities",
+      "first_order": 1097,
+      "first_wall_usec": 53056
+    },
+    {
+      "class": "android.net.UidRange",
+      "first_order": 1106,
+      "first_wall_usec": 53195
+    },
+    {
+      "class": "android.net.connectivity.com.android.net.module.util.NetworkCapabilitiesUtils",
+      "first_order": 1135,
+      "first_wall_usec": 53387
+    },
+    {
+      "class": "android.net.NetworkRequest",
+      "first_order": 1142,
+      "first_wall_usec": 53438
+    },
+    {
+      "class": "android.net.NetworkRequest$Type",
+      "first_order": 1144,
+      "first_wall_usec": 53445
+    },
+    {
+      "class": "android.net.NetworkUtils",
+      "first_order": 1162,
+      "first_wall_usec": 53669
+    },
+    {
+      "class": "android.security.net.config.SystemCertificateSource$NoPreloadHolder",
+      "first_order": 1466,
+      "first_wall_usec": 60620
+    },
+    {
+      "class": "android.provider.DeviceConfig",
+      "first_order": 3930,
+      "first_wall_usec": 113140
+    },
+    {
+      "class": "android.animation.Animator$AnimatorCaller",
+      "first_order": 5354,
+      "first_wall_usec": 158746
+    },
+    {
+      "class": "android.view.SurfaceControlRegistry",
+      "first_order": 5905,
+      "first_wall_usec": 168420
+    }
+  ],
+  "interaction_clinit": [
+    {
+      "class": "java.util.concurrent.ThreadLocalRandom",
+      "first_order": 1554,
+      "first_wall_usec": 528117
+    },
+    {
+      "class": "com.android.internal.util.LatencyTracker$SLatencyTrackerHolder",
+      "first_order": 1634,
+      "first_wall_usec": 529835
+    },
+    {
+      "class": "com.android.internal.jank.InteractionJankMonitor",
+      "first_order": 3179,
+      "first_wall_usec": 1031773
+    },
+    {
+      "class": "com.android.internal.jank.InteractionJankMonitor$InstanceHolder",
+      "first_order": 3280,
+      "first_wall_usec": 1033069
+    }
+  ],
+  "preloaded_classes_total": 17344
+}

@@ -1,0 +1,103 @@
+{
+  "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_jni_launch.trace",
+  "elapsed_time_usec": 358131,
+  "last_record_wall_usec": 917504,
+  "milestones": {
+    "activity_thread_main": {
+      "wall_usec": 11386,
+      "thread": 13536,
+      "class": "android.app.ActivityThread",
+      "method": "main"
+    },
+    "handle_bind_application": {
+      "wall_usec": 11389,
+      "thread": 13536,
+      "class": "android.app.ActivityThread",
+      "method": "handleBindApplication"
+    },
+    "application_onCreate": {
+      "wall_usec": 35768,
+      "thread": 13536,
+      "class": "android.app.Application",
+      "method": "onCreate"
+    },
+    "perform_launch_activity": {
+      "wall_usec": 38547,
+      "thread": 13536,
+      "class": "android.app.ActivityThread",
+      "method": "performLaunchActivity"
+    },
+    "activity_performCreate": {
+      "wall_usec": 51466,
+      "thread": 13536,
+      "class": "android.app.Activity",
+      "method": "performCreate"
+    },
+    "activity_onCreate_app": {
+      "wall_usec": 51514,
+      "thread": 13536,
+      "class": "dev.acos.fixtures.hellojni.MainActivity",
+      "method": "onCreate"
+    },
+    "activity_makeVisible": {
+      "wall_usec": 84307,
+      "thread": 13536,
+      "class": "android.app.ActivityThread",
+      "method": "handleResumeActivity"
+    },
+    "activity_performResume": {
+      "wall_usec": 84322,
+      "thread": 13536,
+      "class": "android.app.Activity",
+      "method": "performResume"
+    },
+    "surface_control_ctor": {
+      "wall_usec": 85547,
+      "thread": 13536,
+      "class": "android.view.SurfaceControl",
+      "method": "<init>"
+    },
+    "viewroot_setView": {
+      "wall_usec": 87399,
+      "thread": 13536,
+      "class": "android.view.ViewRootImpl",
+      "method": "setView"
+    },
+    "choreographer_doFrame": {
+      "wall_usec": 99615,
+      "thread": 13536,
+      "class": "android.view.Choreographer",
+      "method": "doFrame"
+    },
+    "performTraversals": {
+      "wall_usec": 99735,
+      "thread": 13536,
+      "class": "android.view.ViewRootImpl",
+      "method": "performTraversals"
+    },
+    "performMeasure": {
+      "wall_usec": 103861,
+      "thread": 13536,
+      "class": "android.view.ViewRootImpl",
+      "method": "performMeasure"
+    },
+    "performLayout": {
+      "wall_usec": 118436,
+      "thread": 13536,
+      "class": "android.view.ViewRootImpl",
+      "method": "performLayout"
+    },
+    "performDraw": {
+      "wall_usec": 120621,
+      "thread": 13536,
+      "class": "android.view.ViewRootImpl",
+      "method": "performDraw"
+    },
+    "threaded_renderer_draw": {
+      "wall_usec": 150035,
+      "thread": 13536,
+      "class": "android.view.ThreadedRenderer",
+      "method": "draw"
+    }
+  }
+}

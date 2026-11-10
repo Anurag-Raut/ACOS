@@ -1,0 +1,161 @@
+class	method	signature	predicted	measured	enters	where
+android.system.OsConstants	initConstants	()V	yes	no		
+com.android.icu.charset.NativeConverter	charsetForName	(Ljava/lang/String;)Ljava/nio/charset/Charset;	yes	yes	6	program
+com.android.icu.charset.NativeConverter	encode	(J[CI[BI[IZ)I	no	yes	16	program
+com.android.icu.charset.NativeConverter	getAveBytesPerChar	(J)F	no	yes	1	program
+com.android.icu.charset.NativeConverter	getMaxBytesPerChar	(J)I	no	yes	1	program
+com.android.icu.charset.NativeConverter	getNativeFinalizer	()J	yes	yes	1	program
+com.android.icu.charset.NativeConverter	openConverter	(Ljava/lang/String;)J	no	yes	1	program
+com.android.icu.charset.NativeConverter	setCallbackEncode	(JII[B)V	no	yes	3	program
+com.android.icu.util.CaseMapperNative	toLowerCase	(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;	yes	no		
+com.android.icu.util.CaseMapperNative	toUpperCase	(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;	yes	no		
+com.android.icu.util.regex.MatcherNative	findNextImpl	(J[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	getNativeFinalizer	()J	yes	no		
+com.android.icu.util.regex.MatcherNative	groupCountImpl	(J)I	yes	no		
+com.android.icu.util.regex.MatcherNative	matchesImpl	(J[I)Z	yes	no		
+com.android.icu.util.regex.MatcherNative	setInputImpl	(JLjava/lang/String;II)V	yes	no		
+com.android.icu.util.regex.MatcherNative	useAnchoringBoundsImpl	(JZ)V	yes	no		
+com.android.icu.util.regex.MatcherNative	useTransparentBoundsImpl	(JZ)V	yes	no		
+com.android.icu.util.regex.PatternNative	compileImpl	(Ljava/lang/String;I)J	yes	no		
+com.android.icu.util.regex.PatternNative	getMatchedGroupIndexImpl	(JLjava/lang/String;)I	yes	no		
+com.android.icu.util.regex.PatternNative	getNativeFinalizer	()J	yes	no		
+com.android.icu.util.regex.PatternNative	openMatcherImpl	(J)J	yes	no		
+dalvik.system.BaseDexClassLoader	computeClassLoaderContextsNative	()[Ljava/lang/String;	yes	no		
+dalvik.system.DexFile	isBackedByOatFile	(Ljava/lang/Object;)Z	yes	no		
+dalvik.system.DexFile	openDexFileNative	(Ljava/lang/String;Ljava/lang/String;ILjava/lang/ClassLoader;[Ldalvik/system/DexPathList$Element;)Ljava/lang/Object;	yes	no		
+dalvik.system.DexFile	setTrusted	(Ljava/lang/Object;)V	yes	no		
+dalvik.system.DexFile	verifyInBackgroundNative	(Ljava/lang/Object;Ljava/lang/ClassLoader;)V	yes	no		
+dalvik.system.VMRuntime	bootClassPath	()Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	classPath	()Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	getNotifyNativeInterval	()I	yes	yes	1	program
+dalvik.system.VMRuntime	getSdkVersionNative	(I)I	yes	no		
+dalvik.system.VMRuntime	notifyNativeAllocationsInternal	()V	yes	no		
+dalvik.system.VMRuntime	properties	()[Ljava/lang/String;	yes	no		
+dalvik.system.VMRuntime	registerNativeAllocation	(J)V	yes	no		
+dalvik.system.VMRuntime	stopHeapTaskProcessor	()V	no	yes	1	program
+dalvik.system.VMRuntime	vmVersion	()Ljava/lang/String;	yes	no		
+dalvik.system.VMStack	getClosestUserClassLoader	()Ljava/lang/ClassLoader;	yes	no		
+dalvik.system.VMStack	getStackClass2	()Ljava/lang/Class;	yes	no		
+java.io.ObjectInputStream	bytesToDoubles	([BI[DII)V	yes	no		
+java.io.ObjectInputStream	bytesToFloats	([BI[FII)V	yes	no		
+java.io.UnixFileSystem	initIDs	()V	yes	no		
+java.lang.Character	digitImpl	(II)I	yes	no		
+java.lang.Character	isDigitImpl	(I)Z	yes	no		
+java.lang.Character	isLowerCaseImpl	(I)Z	yes	no		
+java.lang.Character	isSpaceCharImpl	(I)Z	yes	no		
+java.lang.Character	isTitleCaseImpl	(I)Z	yes	no		
+java.lang.Character	isUpperCaseImpl	(I)Z	yes	no		
+java.lang.Character	isWhitespaceImpl	(I)Z	yes	no		
+java.lang.Character	toLowerCaseImpl	(I)I	yes	no		
+java.lang.Character	toUpperCaseImpl	(I)I	yes	no		
+java.lang.Class	classForName	(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;	yes	no		
+java.lang.Class	getDeclaredClasses	()[Ljava/lang/Class;	yes	no		
+java.lang.Class	getDeclaredConstructorInternal	([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;	yes	no		
+java.lang.Class	getDeclaredConstructorsInternal	(Z)[Ljava/lang/reflect/Constructor;	yes	no		
+java.lang.Class	getDeclaredField	(Ljava/lang/String;)Ljava/lang/reflect/Field;	yes	no		
+java.lang.Class	getDeclaredFields	()[Ljava/lang/reflect/Field;	yes	no		
+java.lang.Class	getDeclaredMethodInternal	(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;	yes	no		
+java.lang.Class	getDeclaringClass	()Ljava/lang/Class;	yes	no		
+java.lang.Class	getEnclosingClass	()Ljava/lang/Class;	yes	no		
+java.lang.Class	getEnclosingConstructorNative	()Ljava/lang/reflect/Constructor;	yes	no		
+java.lang.Class	getEnclosingMethodNative	()Ljava/lang/reflect/Method;	yes	no		
+java.lang.Class	getInnerClassFlags	(I)I	yes	no		
+java.lang.Class	getInnerClassName	()Ljava/lang/String;	yes	no		
+java.lang.Class	getInterfacesInternal	()[Ljava/lang/Class;	yes	no		
+java.lang.Class	getNameNative	()Ljava/lang/String;	yes	no		
+java.lang.Class	getPrimitiveClass	(Ljava/lang/String;)Ljava/lang/Class;	yes	no		
+java.lang.Class	getSignatureAnnotation	()[Ljava/lang/String;	yes	no		
+java.lang.Class	isAnonymousClass	()Z	yes	no		
+java.lang.Class	isRecord0	()Z	yes	no		
+java.lang.Class	newInstance	()Ljava/lang/Object;	yes	no		
+java.lang.Double	doubleToRawLongBits	(D)J	yes	no		
+java.lang.Double	longBitsToDouble	(J)D	yes	no		
+java.lang.Float	floatToRawIntBits	(F)I	yes	no		
+java.lang.Float	intBitsToFloat	(I)F	yes	no		
+java.lang.Math	floor	(D)D	yes	no		
+java.lang.Math	log	(D)D	yes	no		
+java.lang.Object	identityHashCodeNative	(Ljava/lang/Object;)I	yes	no		
+java.lang.Object	internalClone	()Ljava/lang/Object;	yes	yes	1	program
+java.lang.Object	notifyAll	()V	yes	yes	1	program
+java.lang.Object	wait	(JI)V	yes	yes	7	program
+java.lang.String	charAt	(I)C	yes	yes	1969	program
+java.lang.String	compareTo	(Ljava/lang/String;)I	yes	no		
+java.lang.String	doRepeat	(I)Ljava/lang/String;	yes	no		
+java.lang.String	doReplace	(CC)Ljava/lang/String;	yes	no		
+java.lang.String	fastSubstring	(II)Ljava/lang/String;	yes	no		
+java.lang.String	fillBytesLatin1	([BI)V	yes	no		
+java.lang.String	fillBytesUTF16	([BI)V	yes	no		
+java.lang.String	getCharsNoCheck	(II[CI)V	yes	yes	32	program
+java.lang.String	intern	()Ljava/lang/String;	yes	no		
+java.lang.String	toCharArray	()[C	yes	no		
+java.lang.StringFactory	newStringFromChars	(II[C)Ljava/lang/String;	yes	no		
+java.lang.StringFactory	newStringFromUtf16Bytes	([BII)Ljava/lang/String;	yes	no		
+java.lang.System	arraycopy	(Ljava/lang/Object;ILjava/lang/Object;II)V	yes	yes	25	program
+java.lang.System	currentTimeMillis	()J	yes	yes	4	program
+java.lang.System	log	(CLjava/lang/String;Ljava/lang/Throwable;)V	yes	no		
+java.lang.System	nanoTime	()J	yes	no		
+java.lang.System	specialProperties	()[Ljava/lang/String;	yes	no		
+java.lang.Thread	currentThread	()Ljava/lang/Thread;	yes	yes	21	program
+java.lang.Thread	interrupt0	()V	yes	yes	3	program
+java.lang.Thread	yield	()V	yes	no		
+java.lang.Throwable	nativeFillInStackTrace	()Ljava/lang/Object;	yes	yes	3	program
+java.lang.VMClassLoader	findLoadedClass	(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;	yes	no		
+java.lang.VMClassLoader	getBootClassPathEntries	()[Ljava/lang/String;	yes	no		
+java.lang.ref.Reference	getReferent	()Ljava/lang/Object;	yes	no		
+java.lang.ref.Reference	refersTo0	(Ljava/lang/Object;)Z	no	yes	17	program
+java.lang.reflect.Array	createMultiArray	(Ljava/lang/Class;[I)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Array	createObjectArray	(Ljava/lang/Class;I)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Constructor	newInstance0	([Ljava/lang/Object;)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Constructor	newInstanceFromSerialization	(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/Object;	yes	no		
+java.lang.reflect.Executable	getParameterTypesInternal	()[Ljava/lang/Class;	yes	no		
+java.lang.reflect.Field	getArtField	()J	yes	no		
+java.lang.reflect.Field	getNameInternal	()Ljava/lang/String;	yes	no		
+java.lang.reflect.Method	invoke	(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;	yes	no		
+java.util.concurrent.atomic.AtomicLong	VMSupportsCS8	()Z	yes	no		
+java.util.zip.ZipFile	freeEntry	(JJ)V	yes	no		
+java.util.zip.ZipFile	getEntry	(J[BZ)J	yes	no		
+java.util.zip.ZipFile	getEntryBytes	(JI)[B	yes	no		
+java.util.zip.ZipFile	getEntryCSize	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryCrc	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryFlag	(J)I	yes	no		
+java.util.zip.ZipFile	getEntryMethod	(J)I	yes	no		
+java.util.zip.ZipFile	getEntrySize	(J)J	yes	no		
+java.util.zip.ZipFile	getEntryTime	(J)J	yes	no		
+java.util.zip.ZipFile	getTotal	(J)I	yes	no		
+java.util.zip.ZipFile	open	(Ljava/lang/String;IJZ)J	yes	no		
+java.util.zip.ZipFile	startsWithLOC	(J)Z	yes	no		
+jdk.internal.misc.Unsafe	addressSize	()I	yes	no		
+jdk.internal.misc.Unsafe	compareAndSetInt	(Ljava/lang/Object;JII)Z	yes	no		
+jdk.internal.misc.Unsafe	compareAndSetLong	(Ljava/lang/Object;JJJ)Z	yes	no		
+jdk.internal.misc.Unsafe	compareAndSetReference	(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z	yes	no		
+jdk.internal.misc.Unsafe	getArrayBaseOffsetForComponentType	(Ljava/lang/Class;)I	yes	no		
+jdk.internal.misc.Unsafe	getArrayIndexScaleForComponentType	(Ljava/lang/Class;)I	yes	no		
+jdk.internal.misc.Unsafe	getInt	(Ljava/lang/Object;J)I	yes	no		
+jdk.internal.misc.Unsafe	getReferenceVolatile	(Ljava/lang/Object;J)Ljava/lang/Object;	yes	no		
+jdk.internal.misc.Unsafe	park	(ZJ)V	yes	no		
+jdk.internal.misc.Unsafe	putInt	(Ljava/lang/Object;JI)V	yes	no		
+jdk.internal.misc.Unsafe	putLong	(Ljava/lang/Object;JJ)V	yes	no		
+jdk.internal.misc.Unsafe	putReferenceVolatile	(Ljava/lang/Object;JLjava/lang/Object;)V	yes	no		
+libcore.icu.ICU	getCldrVersion	()Ljava/lang/String;	yes	no		
+libcore.icu.ICU	getIcuVersion	()Ljava/lang/String;	yes	no		
+libcore.icu.ICU	getUnicodeVersion	()Ljava/lang/String;	yes	no		
+libcore.io.AsynchronousCloseMonitor	signalBlockedThreads	(Ljava/io/FileDescriptor;)V	yes	no		
+libcore.io.Linux	writeBytes	(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I	no	yes	16	program
+libcore.io.Memory	memmove	(Ljava/lang/Object;ILjava/lang/Object;IJ)V	yes	no		
+libcore.math.NativeBN	BN_div	(JJJJ)V	yes	no		
+libcore.math.NativeBN	BN_free	(J)V	yes	no		
+libcore.math.NativeBN	BN_mul	(JJJ)V	yes	no		
+libcore.math.NativeBN	BN_new	()J	yes	no		
+libcore.math.NativeBN	bn2litEndInts	(J)[I	yes	no		
+libcore.math.NativeBN	litEndInts2bn	([IIZJ)V	yes	no		
+libcore.util.NativeAllocationRegistry	applyFreeFunction	(JJ)V	yes	no		
+sun.misc.Unsafe	putBoolean	(Ljava/lang/Object;JZ)V	yes	no		
+sun.misc.Unsafe	putByte	(Ljava/lang/Object;JB)V	yes	no		
+sun.misc.Unsafe	putChar	(Ljava/lang/Object;JC)V	yes	no		
+sun.misc.Unsafe	putDouble	(Ljava/lang/Object;JD)V	yes	no		
+sun.misc.Unsafe	putFloat	(Ljava/lang/Object;JF)V	yes	no		
+sun.misc.Unsafe	putInt	(Ljava/lang/Object;JI)V	yes	no		
+sun.misc.Unsafe	putLong	(Ljava/lang/Object;JJ)V	yes	no		
+sun.misc.Unsafe	putObject	(Ljava/lang/Object;JLjava/lang/Object;)V	yes	no		
+sun.misc.Unsafe	putShort	(Ljava/lang/Object;JS)V	yes	no		
+sun.nio.ch.FileChannelImpl	initIDs	()J	yes	no		

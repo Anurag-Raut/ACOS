@@ -1,0 +1,932 @@
+{
+  "timings": {
+    "hello_views": {
+      "cold": {
+        "runs": 10,
+        "total_p50": 466,
+        "total_p95": 536,
+        "wait_p50": 471,
+        "wait_p95": 540,
+        "raw": [
+          {
+            "total_ms": 434,
+            "wait_ms": 436
+          },
+          {
+            "total_ms": 463,
+            "wait_ms": 466
+          },
+          {
+            "total_ms": 467,
+            "wait_ms": 473
+          },
+          {
+            "total_ms": 477,
+            "wait_ms": 479
+          },
+          {
+            "total_ms": 488,
+            "wait_ms": 490
+          },
+          {
+            "total_ms": 536,
+            "wait_ms": 540
+          },
+          {
+            "total_ms": 481,
+            "wait_ms": 487
+          },
+          {
+            "total_ms": 454,
+            "wait_ms": 456
+          },
+          {
+            "total_ms": 399,
+            "wait_ms": 402
+          },
+          {
+            "total_ms": 466,
+            "wait_ms": 471
+          }
+        ]
+      },
+      "warm": {
+        "runs": 10,
+        "total_p50": 17,
+        "total_p95": 44,
+        "wait_p50": 19,
+        "wait_p95": 46,
+        "raw": [
+          {
+            "total_ms": 22,
+            "wait_ms": 23
+          },
+          {
+            "total_ms": 15,
+            "wait_ms": 16
+          },
+          {
+            "total_ms": 14,
+            "wait_ms": 16
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 18
+          },
+          {
+            "total_ms": 44,
+            "wait_ms": 46
+          },
+          {
+            "total_ms": 27,
+            "wait_ms": 29
+          },
+          {
+            "total_ms": 18,
+            "wait_ms": 19
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 18
+          },
+          {
+            "total_ms": 17,
+            "wait_ms": 19
+          },
+          {
+            "total_ms": 18,
+            "wait_ms": 20
+          }
+        ]
+      }
+    }
+  },
+  "meminfo": {
+    "hello_views_idle": {
+      "runs": [
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30303,
+          "total_rss_kb": 109140
+        },
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30455,
+          "total_rss_kb": 109148
+        },
+        {
+          "objects": {},
+          "categories": {},
+          "total_pss_kb": 30508,
+          "total_rss_kb": 109228
+        }
+      ]
+    }
+  },
+  "memory_map": {
+    "hello_views_after_first_frame": {
+      "by_kind": {
+        "anon/deleted": {
+          "count": 188,
+          "mib": 968.88
+        },
+        "anon/reserved (virtual)": {
+          "count": 269,
+          "mib": 11569.04
+        },
+        "apk/jar": {
+          "count": 99,
+          "mib": 80.48
+        },
+        "ashmem/memfd": {
+          "count": 13,
+          "mib": 192.66
+        },
+        "dalvik heap (virtual)": {
+          "count": 152,
+          "mib": 564.91
+        },
+        "dex/oat/art": {
+          "count": 93,
+          "mib": 16.38
+        },
+        "fonts": {
+          "count": 2,
+          "mib": 2.56
+        },
+        "native .so": {
+          "count": 1126,
+          "mib": 102.89
+        },
+        "other file": {
+          "count": 131,
+          "mib": 66.84
+        }
+      },
+      "top": [
+        {
+          "path": "[anon:cfi shadow]",
+          "bytes": 1073831936,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:libwebview reservation]",
+          "bytes": 1073741824,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:cfi shadow]",
+          "bytes": 756826112,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:dalvik-main space (region space)]",
+          "bytes": 402653184,
+          "perms": "rw-p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268222464,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268210176,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268206080,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268201984,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268201984,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268197888,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268193792,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268185600,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268185600,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268173312,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268169216,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268169216,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268161024,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268161024,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268156928,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268152832,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268152832,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268148736,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268144640,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268140544,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 268128256,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267923456,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267911168,
+          "perms": "---p"
+        },
+        {
+          "path": "[anon:scudo:primary_reserve]",
+          "bytes": 267907072,
+          "perms": "---p"
+        }
+      ],
+      "total_mappings": 2073,
+      "total_virtual_mib": 13564.6,
+      "note": "sizes are virtual mapping sizes (end-start); anon reservations are not RSS"
+    }
+  },
+  "fd_snapshot": {
+    "hello_views_after_first_frame": {
+      "counts": {
+        "/dev": 23,
+        "system file": 36,
+        "anon_inode": 29,
+        "socket": 11,
+        "other": 10,
+        "pipe": 2,
+        "ashmem/memfd": 6,
+        "data file": 1
+      },
+      "entries": [
+        {
+          "fd": 0,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 1,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 10,
+          "target": "/apex/com.android.art/javalib/apache-xml.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 100,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 101,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 102,
+          "target": "socket:[1155670]",
+          "kind": "socket"
+        },
+        {
+          "fd": 103,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 105,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 106,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 107,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 108,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 109,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 11,
+          "target": "/system/framework/framework.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 110,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 111,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 112,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 113,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 114,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 115,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 118,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 119,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 12,
+          "target": "/system/framework/framework-graphics.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 120,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 13,
+          "target": "/system/framework/ext.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 14,
+          "target": "/system/framework/telephony-common.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 15,
+          "target": "/system/framework/voip-common.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 16,
+          "target": "/system/framework/ims-common.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 17,
+          "target": "/apex/com.android.i18n/javalib/core-icu4j.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 18,
+          "target": "/apex/com.android.adservices/javalib/framework-adservices.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 19,
+          "target": "/apex/com.android.adservices/javalib/framework-sdksandbox.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 2,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 20,
+          "target": "/apex/com.android.appsearch/javalib/framework-appsearch.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 21,
+          "target": "/apex/com.android.btservices/javalib/framework-bluetooth.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 22,
+          "target": "/apex/com.android.configinfrastructure/javalib/framework-configinfrastructure.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 23,
+          "target": "/apex/com.android.conscrypt/javalib/conscrypt.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 24,
+          "target": "/apex/com.android.devicelock/javalib/framework-devicelock.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 25,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 26,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 27,
+          "target": "/apex/com.android.healthfitness/javalib/framework-healthfitness.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 28,
+          "target": "/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 29,
+          "target": "/apex/com.android.media/javalib/updatable-media.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 3,
+          "target": "socket:[1155649]",
+          "kind": "socket"
+        },
+        {
+          "fd": 30,
+          "target": "/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 31,
+          "target": "/apex/com.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 32,
+          "target": "/apex/com.android.os.statsd/javalib/framework-statsd.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 33,
+          "target": "/apex/com.android.permission/javalib/framework-permission.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 34,
+          "target": "/apex/com.android.permission/javalib/framework-permission-s.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 35,
+          "target": "/apex/com.android.scheduling/javalib/framework-scheduling.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 36,
+          "target": "/apex/com.android.sdkext/javalib/framework-sdkextensions.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 37,
+          "target": "/apex/com.android.tethering/javalib/framework-connectivity.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 38,
+          "target": "/apex/com.android.tethering/javalib/framework-connectivity-t.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 39,
+          "target": "/apex/com.android.tethering/javalib/framework-tethering.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 4,
+          "target": "/dev/pmsg0",
+          "kind": "/dev"
+        },
+        {
+          "fd": 40,
+          "target": "/apex/com.android.uwb/javalib/framework-uwb.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 41,
+          "target": "/apex/com.android.virt/javalib/framework-virtualization.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 42,
+          "target": "/apex/com.android.wifi/javalib/framework-wifi.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 43,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 44,
+          "target": "/dev/urandom",
+          "kind": "/dev"
+        },
+        {
+          "fd": 45,
+          "target": "/system/framework/framework-res.apk",
+          "kind": "system file"
+        },
+        {
+          "fd": 46,
+          "target": "/vendor/overlay/framework-res__auto_generated_rro_vendor.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 47,
+          "target": "/product/overlay/GoogleConfigOverlay.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 48,
+          "target": "/product/overlay/GoogleWebViewOverlay.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 49,
+          "target": "/product/overlay/LargeScreenConfigOverlay.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 5,
+          "target": "/sys/kernel/tracing/trace_marker",
+          "kind": "other"
+        },
+        {
+          "fd": 50,
+          "target": "/product/overlay/PixelConfigOverlayCommon.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 51,
+          "target": "/product/overlay/framework-res__auto_generated_rro_product.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 52,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 53,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 54,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 55,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 56,
+          "target": "/dev/null",
+          "kind": "/dev"
+        },
+        {
+          "fd": 57,
+          "target": "pipe:[1155650]",
+          "kind": "pipe"
+        },
+        {
+          "fd": 58,
+          "target": "pipe:[1155650]",
+          "kind": "pipe"
+        },
+        {
+          "fd": 59,
+          "target": "anon_inode:[eventfd]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 6,
+          "target": "/apex/com.android.art/javalib/core-oj.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 60,
+          "target": "anon_inode:[eventfd]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 61,
+          "target": "socket:[1155651]",
+          "kind": "socket"
+        },
+        {
+          "fd": 62,
+          "target": "socket:[1155652]",
+          "kind": "socket"
+        },
+        {
+          "fd": 63,
+          "target": "/dev/binderfs/binder",
+          "kind": "/dev"
+        },
+        {
+          "fd": 64,
+          "target": "anon_inode:[eventfd]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 65,
+          "target": "socket:[1153654]",
+          "kind": "socket"
+        },
+        {
+          "fd": 66,
+          "target": "anon_inode:[eventpoll]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 67,
+          "target": "socket:[1153661]",
+          "kind": "socket"
+        },
+        {
+          "fd": 68,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 69,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 7,
+          "target": "/apex/com.android.art/javalib/core-libart.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 70,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 71,
+          "target": "/data/app/~~Ic81u9gWqkdWqlfljFHkqw==/dev.acos.fixtures.helloviews-QULb2LdsOOZvBvf9aq8acA==/base.apk",
+          "kind": "data file"
+        },
+        {
+          "fd": 72,
+          "target": "/product/overlay/EmulationPixel6/EmulationPixel6Overlay.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 73,
+          "target": "/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk",
+          "kind": "other"
+        },
+        {
+          "fd": 74,
+          "target": "anon_inode:[eventfd]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 75,
+          "target": "anon_inode:[eventpoll]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 76,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 77,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 78,
+          "target": "socket:[1153664]",
+          "kind": "socket"
+        },
+        {
+          "fd": 79,
+          "target": "socket:[1153665]",
+          "kind": "socket"
+        },
+        {
+          "fd": 8,
+          "target": "/apex/com.android.art/javalib/okhttp.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 80,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 81,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 82,
+          "target": "/dev/ashmem69baa007-c451-4e4c-af6d-61a851445d16",
+          "kind": "ashmem/memfd"
+        },
+        {
+          "fd": 83,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 84,
+          "target": "socket:[1155663]",
+          "kind": "socket"
+        },
+        {
+          "fd": 85,
+          "target": "socket:[1151608]",
+          "kind": "socket"
+        },
+        {
+          "fd": 86,
+          "target": "socket:[1151609]",
+          "kind": "socket"
+        },
+        {
+          "fd": 87,
+          "target": "/sys/kernel/tracing/trace_marker",
+          "kind": "other"
+        },
+        {
+          "fd": 88,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 89,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 9,
+          "target": "/apex/com.android.art/javalib/bouncycastle.jar",
+          "kind": "system file"
+        },
+        {
+          "fd": 90,
+          "target": "anon_inode:[eventfd]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 91,
+          "target": "anon_inode:[eventpoll]",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 92,
+          "target": "/dev/binderfs/hwbinder",
+          "kind": "/dev"
+        },
+        {
+          "fd": 93,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 94,
+          "target": "/dev/goldfish_sync",
+          "kind": "/dev"
+        },
+        {
+          "fd": 95,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 96,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 97,
+          "target": "/dev/goldfish_pipe_dprctd",
+          "kind": "/dev"
+        },
+        {
+          "fd": 98,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        },
+        {
+          "fd": 99,
+          "target": "anon_inode:sync_file",
+          "kind": "anon_inode"
+        }
+      ],
+      "total": 118
+    }
+  }
+}

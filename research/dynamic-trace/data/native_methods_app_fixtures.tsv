@@ -1,0 +1,6 @@
+dev.acos.fixtures.hellojni.MainActivity	stringFromJNI	()Ljava/lang/String;
+dev.acos.fixtures.hellojni.MainActivity	add	(II)I
+dev.acos.fixtures.hellojni.MainActivity	sumArray	([I)I
+dev.acos.fixtures.hellojni.MainActivity	callBack	()V
+dev.acos.fixtures.hellojni.MainActivity	registeredEcho	(Ljava/lang/String;)Ljava/lang/String;
+dev.acos.fixtures.hellojni.MainActivity	throwFromJNI	()V

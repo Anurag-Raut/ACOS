@@ -1,0 +1,4 @@
+java.util.concurrent.ThreadLocalRandom
+com.android.internal.util.LatencyTracker$SLatencyTrackerHolder
+com.android.internal.jank.InteractionJankMonitor
+com.android.internal.jank.InteractionJankMonitor$InstanceHolder

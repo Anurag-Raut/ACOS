@@ -1,0 +1,55 @@
+{
+  "trace": "/home/Qui/Projects/acos/.cache/trace/app/hello_views_interaction.trace",
+  "elapsed_time_usec": 3203562,
+  "last_record_wall_usec": 3186258,
+  "milestones": {
+    "activity_thread_main": {
+      "wall_usec": 19190,
+      "thread": 13403,
+      "class": "android.app.ActivityThread",
+      "method": "main"
+    },
+    "choreographer_doFrame": {
+      "wall_usec": 533019,
+      "thread": 13403,
+      "class": "android.view.Choreographer",
+      "method": "doFrame"
+    },
+    "performTraversals": {
+      "wall_usec": 533086,
+      "thread": 13403,
+      "class": "android.view.ViewRootImpl",
+      "method": "performTraversals"
+    },
+    "performDraw": {
+      "wall_usec": 533310,
+      "thread": 13403,
+      "class": "android.view.ViewRootImpl",
+      "method": "performDraw"
+    },
+    "threaded_renderer_draw": {
+      "wall_usec": 533346,
+      "thread": 13403,
+      "class": "android.view.ThreadedRenderer",
+      "method": "draw"
+    },
+    "surface_control_ctor": {
+      "wall_usec": 586801,
+      "thread": 13417,
+      "class": "android.view.SurfaceControl",
+      "method": "<init>"
+    },
+    "performMeasure": {
+      "wall_usec": 1021385,
+      "thread": 13403,
+      "class": "android.view.ViewRootImpl",
+      "method": "performMeasure"
+    },
+    "performLayout": {
+      "wall_usec": 1024122,
+      "thread": 13403,
+      "class": "android.view.ViewRootImpl",
+      "method": "performLayout"
+    }
+  }
+}
