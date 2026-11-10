@@ -143,3 +143,7 @@ stored under `/tmp` consume RAM and can trip the 85 % host guard.
 boot-classpath extractor writes `.cache/boot/android-34/` and cleans its
 `.work/` intermediates; the DEX differential uses a small `mktemp` under `/tmp`
 for tiny dex only.
+
+## 2026-11-10 — Owner directive D5: V1 is not the end; dogfood with real agents
+
+The owner requires that ACOS keep being refined after version 1 as a real product. After V1, "dogfood" waves are mandatory: subagents act as Android-developing agents (write app code, build the APK, run `acos verify`, read evidence, fix, repeat) using every ACOS feature, and the friction they hit becomes first-class backlog. Source: owner message, 2026-11-10. Recorded by the lead.
