@@ -343,3 +343,120 @@ native path is unavailable; the harness delivers on the 60 Hz cadence whenever
 No `acos-gles`/Skia GLSL blocker was reached: the engine is still in the
 software-renderer configuration and never issued a GL draw, so no shader
 issue could be recorded.
+
+---
+
+# W108-A — real `AChoreographer` delivery via the caller's `ALooper`; next blocker
+
+**Date:** 2026-11-11 (wave W108-A). **Base:** clean worktree of `HEAD` =
+`791f14d` (W102-A boot-cache commit; the W103-A Flutter work is its parent
+`415809c`). Built with `CARGO_TARGET_DIR=.cache/target-w108a`,
+`CARGO_PROFILE_DEV_DEBUG=0`. Not committed.
+
+## 1. Engine symbol/dwarf facts (offline, no source needed)
+
+`.cache/flutter-1/lib-x86_64/libflutter.so` is the same engine hash the
+harness runs (`89c39edfdfae2949f6806e4a315c0c08522238b7`), **not stripped, with
+DWARF**. `ptype`/`objdump -dl` pin the relevant contract exactly:
+
+| symbol | file offset | shape |
+|---|---|---|
+| `VsyncWaiter::FireCallback(TimePoint,TimePoint,bool)` | `0x9d0010` | moves `callback_` (`+0x80`, invoker `+0xa0`) under `callback_mutex_` (`+0x50`); a null invoker emits the `MismatchedFrameCallback` trace |
+| `Animator::RequestFrame(bool)::$_0::operator()` | `0x9acf08` | sets `vsync_waiter_->callback_` then virtual-calls `AwaitVSync()` (vtable `+0x10`) |
+| `VsyncWaiterAndroid::AwaitVSync()` | `0x5387d6` | native path = `RunNowOrPostTask(task_runners_.ui_, $_0)`; `$_0` (`0x538a74`) resolves `AChoreographer_postFrameCallback(64)` from the proc table and posts `Choreographer::PostFrameCallback(...)::$_0::__invoke` (`0x9ab0f6`) with an `InFlightData*` |
+| `VsyncWaiterAndroid::ConsumePendingCallback(weak_ptr,TimePoint,TimePoint)` | `0x538d42` | `FireCallback(this, start, target, /*pause_rendering=*/true)` |
+
+`InFlightData::__invoke` (`0x9ab0f6`) calls the `std::function` at `data+0x20`
+and then `free(data, 0x30)` — the callback/data pointers are one-shot and must
+be round-tripped verbatim. Our shim already does this. The native callback is
+the only AChoreographer entry the engine resolves (`getInstance`,
+`postFrameCallback`, `postFrameCallback64`; no refresh-rate callback).
+
+## 2. The fix: deliver from the looper, never inline
+
+W103-A invoked the frame callback **synchronously inside
+`AChoreographer_postFrameCallback`**. Real bionic queues the callback on the
+calling thread's `ALooper` and runs it at the next `ALooper_pollOnce`; running
+it inline re-enters the engine while `Animator::RequestFrame`'s task is still
+on the stack. Implemented (native-loader, additive):
+
+* `bionic/ndk/ndk_looper.rs` — each `Looper` gains a
+  `posted: Mutex<VecDeque<PostedFrame>>`. New
+  `post_frame_callback(frame_time, cb, data)` enqueues on the **calling
+  thread's** looper and wakes its `eventfd`. `poll_once` runs one queued frame
+  callback (before the wait and again after a woken/empty wait) on the polling
+  thread; `ALooper_pollAll` picks it up through `pollOnce` unchanged.
+* `acos-jni/src/ndk_host.rs` — `choreographer_post` computes the monotonic
+  60 Hz frame time exactly as before, then hands the callback to the looper
+  instead of invoking it; only when the thread has no prepared `ALooper` does
+  it fall back to a direct call.
+* Loader-level bounded trace, no env gate (confinement sanitises the
+  environment so a debug env var cannot reach the child):
+  `AChoreographer_postFrameCallback … cb=… data=… tid=…`,
+  `choreographer_post … queued looper=…`, `choreographer_deliver …`.
+
+This was confirmed end-to-end: the post is enqueued on `ThreadId(2)`
+looper `0x1` and the callback runs later from that looper, on `ThreadId(2)`,
+with the same `cb`/`data`/`frame_time`. The synchronous re-entrancy is gone.
+
+## 3. Remaining blocker: the primary frame request never re-arms
+
+The async delivery is necessary but **not sufficient** in this harness. With
+the fix in place the run still produces no frame:
+
+* exactly **one** `AChoreographer_postFrameCallback` (delay 0) is ever made,
+  it is delivered asynchronously, and no second post follows — not even when
+  the harness calls `scheduleFrame()` from the platform thread every 20 pump
+  iterations for the whole run;
+* Dart `main()` runs (`ACOS_DART_MAIN entered`), but `onBeginFrame`,
+  `onDrawFrame` and `onPointerDataPacket` **never** run (verified by adding
+  `ACOS_DART_BEGINFRAME` / `ACOS_DART_POINTER` / existing
+  `ACOS_DART_FRAME draw` prints to the instrumented snapshot);
+* the UI/raster task-queue fds (`ThreadId(3) fd=8`, `ThreadId(4) fd=11`) and
+  the platform fd (`ThreadId(2) fd=5`) are all serviced by the loader looper,
+  so the engine's message loops are pumping — the missing piece is upstream of
+  the looper.
+
+`Animator::RequestFrame` early-returns when its `Semaphore::TryWait()` fails
+(`animator.cc:250`); that semaphore is re-signalled only by the frame callback
+(`Animator::AwaitVSync::$_0`). One post/one delivery therefore means the first
+`RequestFrame` consumed the permit and its
+`AsyncWaitForVsync` → `FireCallback` chain did not invoke the primary
+`callback_`: the most consistent reading of the evidence (W103-A already saw
+the same `MismatchedFrameCallback`) is that the single native post is the
+`AwaitVSyncForSecondaryCallback` path, which bypasses `callback_`, while the
+primary `Animator::RequestFrame` never reaches `AsyncWaitForVsync` on the
+thread that owns the posting looper. The next wave needs a breakpoint/trace on
+`VsyncWaiter::FireCallback` `+0xa0` (or on
+`Animator::RequestFrame(bool)::$_0::operator()` `0x9acf08`) to settle whether
+the primary lambda runs and which runner posts it; then the Dart frame
+dispatch (`onBeginFrame`) and only after that the software rasterizer
+(`acos-gles` GL/Skia) and `ANativeWindow_lock`/`unlockAndPost` become the
+blockers.
+
+## 4. Acceptance (W108-A worktree)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-jni --test flutter_hello` | **pass** (2/2) |
+| `cargo clippy -p acos-jni -p acos-native-loader --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check -p acos-jni -p acos-native-loader --all-targets` | **clean** |
+| `cargo check --workspace --all-targets` | **fails in `acos-runtime`** — 9 errors, all references to uncommitted W102-A boot-cache symbols (`BinderTransport::seed_binder`, `acos_vm::snapshot::boot_dir_fingerprint`, `Vm::reseed_after_restore`, `ServiceHost::import/export_binder_layout`, `seed_attached_process`, …) that are absent at `791f14d`. Pre-existing, unrelated to W108-A (my diff touches only `acos-native-loader` and `acos-jni`). |
+| `tools/diff-dexprogs.sh --corelib real` | not run — needs a release `acos-cli`; blocked by the same incomplete `acos-runtime` at `791f14d` |
+| confined flutter run | `confined:true`, `error:null`, exit 0 |
+| native `AChoreographer` callback | queued + delivered **asynchronously** from the caller's `ALooper` (proven by trace) |
+| Dart `onBeginFrame` / `onDrawFrame` / pointer | **still never run** (see §3) |
+| PNG / `acos frame-diff` | not reached |
+
+## 5. W108-A files
+
+* `crates/acos-native-loader/src/bionic/ndk/ndk_looper.rs` — per-looper posted
+  frame-callback queue; `post_frame_callback`; delivery from
+  `ALooper_pollOnce`; bounded symbolised trace.
+* `crates/acos-native-loader/src/bionic/ndk/ndk_misc.rs` — bounded
+  `AChoreographer_postFrameCallback*` entry trace.
+* `crates/acos-jni/src/ndk_host.rs` — queue instead of synchronous invoke.
+* `crates/acos-jni/tests/flutter_hello.rs` — output PNGs named
+  `w108a-frame-{i}.png`.
+* `crates/acos-jni/tests/data/flutter_probe_main.dart` — `onBeginFrame` /
+  pointer heartbeat prints used as the diagnosis above.
