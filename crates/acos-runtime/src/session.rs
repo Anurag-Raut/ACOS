@@ -194,6 +194,49 @@ pub struct SessionError {
     pub details: Vec<(String, String)>,
 }
 
+/// Situation-specific hint for a session error, overriding the code's generic
+/// [`acos_protocol::ErrorCode::hint`].
+///
+/// The generic hints are written for a backend-selection problem (`Choose a
+/// backend...`); an agent that hits a `not_ready` tree/frame or taps before the
+/// app has a window needs a different next action. Kept here (rather than in
+/// each front-end) so the CLI and MCP server answer identically.
+#[must_use]
+pub fn session_error_hint(code: &str, details: &[(String, String)]) -> Option<&'static str> {
+    let get = |key: &str| details.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    match code {
+        "UNSUPPORTED_BACKEND" => match get("capability") {
+            Some("ui.tree") => Some(
+                "The app has not added a window yet, so there is no View hierarchy to walk. \
+                 Run `acos launch` and read its ladder: a tree only exists after \
+                 `activity_on_create` completes. Do not treat this as a pass.",
+            ),
+            Some("ui.frame") => Some(
+                "No frame has been published yet. Run `acos launch` and read its ladder: a frame \
+                 only exists after the render/handoff path completes. Do not treat this as a pass.",
+            ),
+            _ => None,
+        },
+        "ELEMENT_NOT_FOUND" => match get("kind") {
+            Some("NoUiTree") => Some(
+                "The session has no UI tree yet, so a text label cannot be resolved. Launch the \
+                 app first (`acos_launch` / `acos launch`) and confirm the launch ladder, then \
+                 `acos_observe_tree` before tapping by text.",
+            ),
+            Some("NoWindowAtPoint") => Some(
+                "No window covers that point because the app has not published a frame. Launch and \
+                 observe first; then tap inside the observed node bounds.",
+            ),
+            Some("NoFocusedWindow") => Some(
+                "No window holds input focus yet. Launch and observe first; the app must add and \
+                 focus a window before key input is delivered.",
+            ),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 impl SessionError {
     fn new(code: &'static str, message: impl Into<String>) -> Self {
         SessionError {
@@ -1005,10 +1048,52 @@ fn blocker_for(idx: usize, report: &LifecycleReport, msgs: &[String]) -> StageBl
     if stage == "on_resume" {
         details.push(("last_lifecycle_events".to_string(), msgs.join("; ")));
     }
+    // The protocol hints for `UNSUPPORTED_JAVA_API`/`UNSUPPORTED_ANDROID_API`
+    // tell the agent to read `details.api`/`details.at`; make that true by
+    // pulling the first `Lclass;->name(sig)` and the `(at ... pc=...)` frame out
+    // of the runtime message.
+    if code.starts_with("UNSUPPORTED") {
+        if let Some(api) = extract_api(&raw) {
+            details.push(("api".to_string(), api));
+        }
+        if let Some(at) = extract_at(&raw) {
+            details.push(("at".to_string(), at));
+        }
+    }
     StageBlocker {
         code: code.to_string(),
         message: raw,
         details,
+    }
+}
+
+/// First `Lclass;->name(sig)` token in a runtime error message.
+fn extract_api(raw: &str) -> Option<String> {
+    let head = raw.lines().next().unwrap_or(raw);
+    let start = head.find('L')?;
+    let tail = &head[start..];
+    let end = tail
+        .find(" is not implemented")
+        .unwrap_or_else(|| tail.find(' ').unwrap_or(tail.len()));
+    let api = tail[..end].trim();
+    if api.contains("->") {
+        Some(api.to_string())
+    } else {
+        None
+    }
+}
+
+/// The `Lclass;.name` inside a `(at ... pc=...)` runtime frame, if present.
+fn extract_at(raw: &str) -> Option<String> {
+    let head = raw.lines().next().unwrap_or(raw);
+    let start = head.find("(at ")? + 4;
+    let tail = &head[start..];
+    let end = tail.find(" pc=").unwrap_or(tail.len());
+    let at = tail[..end].trim();
+    if at.is_empty() {
+        None
+    } else {
+        Some(at.to_string())
     }
 }
 
@@ -1059,6 +1144,38 @@ mod tests {
         assert!(png.windows(4).any(|w| w == b"IHDR"));
         assert!(png.windows(4).any(|w| w == b"IDAT"));
         assert!(png.windows(4).any(|w| w == b"IEND"));
+    }
+
+    #[test]
+    fn unsupported_message_yields_api_and_at_details() {
+        let raw = "vm: Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J is not implemented \
+                   (at Landroid/graphics/drawable/VectorDrawable;.nCreateGroup pc=0)\n  java-tail: \n    Lx;->y()V";
+        assert_eq!(
+            extract_api(raw).as_deref(),
+            Some("Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J")
+        );
+        assert_eq!(
+            extract_at(raw).as_deref(),
+            Some("Landroid/graphics/drawable/VectorDrawable;.nCreateGroup")
+        );
+        assert_eq!(extract_api("plain failure with no api token"), None);
+    }
+
+    #[test]
+    fn not_ready_hints_override_the_generic_backend_hint() {
+        let details = vec![
+            ("reason".to_string(), "not_ready".to_string()),
+            ("capability".to_string(), "ui.tree".to_string()),
+        ];
+        let hint = session_error_hint("UNSUPPORTED_BACKEND", &details).expect("hint");
+        assert!(hint.contains("acos launch"), "{hint}");
+        assert!(hint.contains("not treat this as a pass"), "{hint}");
+
+        let details = vec![("kind".to_string(), "NoUiTree".to_string())];
+        let hint = session_error_hint("ELEMENT_NOT_FOUND", &details).expect("hint");
+        assert!(hint.contains("acos_observe_tree"), "{hint}");
+
+        assert_eq!(session_error_hint("TIMEOUT", &[]), None);
     }
 
     #[test]

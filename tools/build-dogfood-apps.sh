@@ -39,17 +39,42 @@ KEYSTORE="$BUILD_DIR/debug.keystore"
 KEY_ALIAS="androiddebugkey"
 KEY_PASS="android"
 
-ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu)
+ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu todo-dogfood)
 
 die() { echo "build-dogfood-apps: error: $*" >&2; exit 1; }
 
-command -v javac >/dev/null 2>&1 || die "javac not found on PATH"
+available_apps() { (IFS=', '; echo "${ALL_APPS[*]}"); }
+
+usage() {
+    cat <<EOF
+build-dogfood-apps: build framework-only fixture APKs with the Gradle-free
+android toolchain (aapt2 + javac + d8 + zipalign + apksigner).
+
+Usage:
+  tools/build-dogfood-apps.sh [name ...]   build the named apps (default: all)
+  tools/build-dogfood-apps.sh --list       print the app names, one per line
+  tools/build-dogfood-apps.sh --help       print this help
+
+Apps: $(available_apps)
+Outputs: fixtures/build/apps/<name>.apk (gitignored)
+
+Env: ANDROID_HOME (default $SDK), BUILD_TOOLS_VERSION (default $BUILD_TOOLS_VERSION).
+If a tool is missing, run \`acos doctor\` for a preflight report.
+EOF
+}
+
+case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+    --list) printf '%s\n' "${ALL_APPS[@]}"; exit 0 ;;
+esac
+
+command -v javac >/dev/null 2>&1 || die "javac not found on PATH; install a JDK 11+ or run \`acos doctor\`"
 command -v python3 >/dev/null 2>&1 || die "python3 not found on PATH"
 for t in "$AAPT2" "$D8" "$ZIPALIGN" "$APKSIGNER"; do
-    [ -x "$t" ] || die "missing tool: $t (set ANDROID_HOME / BUILD_TOOLS_VERSION)"
+    [ -x "$t" ] || die "missing tool: $t (set ANDROID_HOME / BUILD_TOOLS_VERSION, or run \`acos doctor\`)"
 done
-[ -f "$ANDROID_JAR" ] || die "android.jar not found: $ANDROID_JAR"
-[ -f "$APPEND_PY" ] || die "helper not found: $APPEND_PY"
+[ -f "$ANDROID_JAR" ] || die "android.jar not found: $ANDROID_JAR (install platforms;android-34, or run \`acos doctor\`)"
+[ -f "$APPEND_PY" ] || die "helper not found: $APPEND_PY (restore tools/apk_append.py)"
 
 mkdir -p "$BUILD_DIR"
 
@@ -71,7 +96,10 @@ build_apk() {
     local work="$BUILD_DIR/$name"
     local out="$BUILD_DIR/$name.apk"
 
-    [ -d "$app_dir" ] || die "no source at $app_dir"
+    [ -d "$app_dir" ] || die "no source at $app_dir; available apps: $(available_apps)"
+    [ -d "$app_dir/res" ] || die "[$name] missing $app_dir/res (aapt2 needs a res/ directory)"
+    [ -d "$app_dir/src" ] || die "[$name] missing $app_dir/src (no Java to compile)"
+    [ -f "$app_dir/AndroidManifest.xml" ] || die "[$name] missing $app_dir/AndroidManifest.xml"
     rm -rf "$work"
     mkdir -p "$work/compiled" "$work/gen" "$work/classes" "$work/dex"
 
@@ -129,4 +157,4 @@ else
     for app in "${ALL_APPS[@]}"; do build_apk "$app"; done
 fi
 
-echo "build-dogfood-apps: done -> $BUILD_DIR/{sqlite-crud,canvas-shapes,service-provider,two-activity,list-scroll,text-input,dialog-menu}.apk"
+echo "build-dogfood-apps: done -> $BUILD_DIR/{$(IFS=,; echo "${ALL_APPS[*]}")}.apk"

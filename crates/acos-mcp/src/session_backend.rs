@@ -498,6 +498,7 @@ impl SessionBackend {
         }
         self.with_session(&id, |session| match session.logs() {
             Ok(lines) => {
+                let status = session.status().ok();
                 let records: Vec<Value> = lines
                     .iter()
                     .map(|line| {
@@ -509,6 +510,10 @@ impl SessionBackend {
                         })
                     })
                     .collect();
+                // An empty buffer is a real pass, but it is misleading right
+                // after a launch that stopped before `Activity.onCreate`; carry
+                // the launch stage so the agent can tell the two apart.
+                let stage_reached = status.as_ref().map(|s| s.stage_reached).unwrap_or("none");
                 Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,
@@ -518,8 +523,15 @@ impl SessionBackend {
                 .with_session_id(id.clone())
                 .with_value_result(json!({
                     "session_id": id,
+                    "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
+                    "stage_reached": stage_reached,
                     "count": records.len(),
                     "logs": records,
+                    "note": if records.is_empty() {
+                        "empty is valid only if the app reached onCreate; check stage_reached (and `acos_launch`) before concluding anything"
+                    } else {
+                        ""
+                    },
                 }))
                 .with_capabilities(["logs"])
             }
@@ -732,6 +744,9 @@ fn session_error_envelope(
 ) -> Envelope {
     let code = ErrorCode::from_str_opt(err.code).unwrap_or(ErrorCode::Internal);
     let mut error = ProtocolError::new(code, err.message.clone());
+    if let Some(hint) = acos_runtime::session::session_error_hint(err.code, &err.details) {
+        error = error.with_hint(hint);
+    }
     if !err.details.is_empty() {
         error = error.with_details(details_json(&err.details));
     }
@@ -802,12 +817,17 @@ fn unsafe_path(request_id: &str, path: &str, reason: &str) -> Envelope {
 }
 
 fn unsupported(request_id: &str, capability: &str, message: &str) -> Envelope {
+    let mut error = ProtocolError::new(ErrorCode::UnsupportedBackend, message)
+        .with_details(json!({"capability": capability}));
+    let owned = vec![("capability".to_string(), capability.to_string())];
+    if let Some(hint) = acos_runtime::session::session_error_hint("UNSUPPORTED_BACKEND", &owned) {
+        error = error.with_hint(hint);
+    }
     Envelope::failure(
         request_id,
         ProtocolBackend::AcosNative,
         Fidelity::NativeRuntime,
-        ProtocolError::new(ErrorCode::UnsupportedBackend, message)
-            .with_details(json!({"capability": capability})),
+        error,
         Metrics::wall_ms(0),
     )
 }
@@ -1025,5 +1045,19 @@ mod tests {
             envelope.error().unwrap().details.as_ref().unwrap()["reason"],
             "not_ready"
         );
+    }
+
+    #[test]
+    fn logs_on_an_unlaunched_session_carry_the_stage() {
+        let backend = SessionBackend::with_cli(
+            CliBackend::new(BackendConfig::for_binary("/nonexistent/acos")),
+            SessionOptions::default(),
+        );
+        let envelope = backend.call_logs("req_1", &json!({"base": {"session_id": "s_test"}}));
+        assert_eq!(envelope.status(), acos_protocol::Status::Pass);
+        let result = envelope.result().expect("result");
+        assert_eq!(result["launched"], false);
+        assert_eq!(result["stage_reached"], "none");
+        assert!(result["note"].as_str().unwrap().contains("onCreate"));
     }
 }

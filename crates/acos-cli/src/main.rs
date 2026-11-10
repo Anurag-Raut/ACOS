@@ -5,6 +5,7 @@
 
 mod bench;
 mod bench_pool;
+mod doctor;
 mod bench_sessions;
 mod frame_diff;
 mod launch;
@@ -71,6 +72,8 @@ enum Command {
     Bench(bench::BenchArgs),
     /// Probe confinement capabilities and report which layers are active (JSON).
     SandboxProbe,
+    /// Preflight the host toolchain (SDK, JDK, helper, memory) before building.
+    Doctor(doctor::DoctorArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -163,6 +166,7 @@ fn main() -> ExitCode {
         Command::Bench(args) => bench::run(args),
         Command::NativeInventory(args) => native_inventory::run(args),
         Command::SandboxProbe => sandbox_probe::run(),
+        Command::Doctor(args) => doctor::run(args),
     }
 }
 

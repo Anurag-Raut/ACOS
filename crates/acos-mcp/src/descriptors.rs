@@ -275,12 +275,19 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
     };
     match name {
         "acos_launch" => (
-            "Boot an APK in the in-process session and return the honest launch stage ladder \
-             (apk_parsed -> ... -> first_frame). `ok:true` is only returned when every rung ran; \
-             otherwise the first blocked rung carries the structured blocker.",
+            "Call this FIRST for an app you want to drive: it boots the APK in an in-process \
+             session that persists across MCP calls (the CLI relaunches per invocation). Returns \
+             the honest launch stage ladder (apk_parsed -> process_booted -> bind_application -> \
+             application_on_create -> client_transaction -> activity_on_create -> on_resume -> \
+             first_frame) plus `session_id`, `reached_stage` and `classes_loaded`. `ok:true` is \
+             only returned when every rung ran; otherwise the first blocked rung carries the \
+             structured blocker with a code and `details`. Re-launching the same session id \
+             replaces the previous task. Common errors: APK_*, WRONG_ABI, CONFINEMENT_UNAVAILABLE \
+             (native), TIMEOUT, RESOURCE_LIMIT, UNSUPPORTED_JAVA_API/UNSUPPORTED_ANDROID_API (a \
+             framework native the engine does not implement yet, naming `details.api`).",
             with_base(json!({
-                "apk": {"type": "string"},
-                "timeout_ms": {"type": "integer"},
+                "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
+                "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
                 "native": {
                     "type": "boolean",
                     "description": "Run the APK's lib/<abi>/*.so under the ADR-0022 confinement. \
@@ -294,38 +301,55 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_observe_tree" => (
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
              ViewRootImpl -> ViewGroup) and return the structured node tree (class, bounds, text, \
-             resource_id, clickable/enabled/focused, children). No screenshot is taken. Before the \
-             app adds a window this returns `UNSUPPORTED_BACKEND` with `details.reason=not_ready`, \
-             never an empty tree.",
-            with_base(json!({"max_nodes": {"type": "integer"}})),
+             resource_id, clickable/enabled/focused/scrollable, children). Call it after \
+             `acos_launch`, before any selector-based tap. Before the app adds a window it returns \
+             `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
+             never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
+            with_base(json!({
+                "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."}
+            })),
         ),
         "acos_tap" => (
-            "Tap a point (`x`,`y`) or a text label in the held session. No window returns \
-             `ELEMENT_NOT_FOUND` with `details.kind=NoWindowAtPoint`/`NoUiTree`.",
+            "Tap in the held session. Identify the target either by `text` (a node whose text or \
+             content-desc equals it; requires `acos_observe_tree` first) or by a point `x`,`y` \
+             (both required). `text` wins when both are given. Returns action/accepted/input_ack_seq. \
+             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoUiTree` (observe first), \
+             `NoWindowAtPoint` (no frame yet), TIMEOUT.",
             with_base(json!({
-                "x": {"type": "integer"}, "y": {"type": "integer"}, "text": {"type": "string"}
+                "x": {"type": "integer", "description": "X coordinate for a point tap (requires `y`)."},
+                "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
+                "text": {"type": "string", "description": "Node label to tap; takes precedence over x/y."}
             })),
         ),
         "acos_key" => (
-            "Press a key code (4=BACK, 66=ENTER) or name in the held session. No focused \
-             window returns `ELEMENT_NOT_FOUND` with `details.kind=NoFocusedWindow`.",
-            with_base(json!({"code": {"type": ["integer", "string"]}})),
+            "Press a key in the held session. `code` is an Android key code (4=BACK, 66=ENTER, \
+             3=HOME) or a name (`back`, `home`, `enter`, `menu`, `tab`, `escape`, `delete`). \
+             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedWindow` (launch/observe first).",
+            with_base(json!({
+                "code": {"type": ["integer", "string"], "description": "Numeric key code or name."}
+            })),
         ),
         "acos_swipe" => (
-            "Swipe between two points in the held session. No window returns \
-             `ELEMENT_NOT_FOUND` with `details.kind=NoWindowAtPoint`.",
+            "Swipe in the held session from `from` to `to`; each point is an object with integer \
+             `x` and `y`. `duration_ms` defaults to 300. Common errors: ELEMENT_NOT_FOUND with \
+             `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
             with_base(json!({
-                "from": {"type": "object"}, "to": {"type": "object"}, "duration_ms": {"type": "integer"}
+                "from": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
+                "to": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
+                "duration_ms": {"type": "integer", "minimum": 1}
             })),
         ),
         "acos_logs" => (
-            "Read the guest log buffer of the held session. Empty is a valid pass; it never \
-             fabricates lifecycle lines.",
+            "Read the guest log buffer of the held session. Returns `count` plus `launched` and \
+             `stage_reached`. An empty buffer is a valid pass, but is only meaningful once the \
+             app reached `onCreate`; check `stage_reached` before concluding the run was clean. \
+             It never fabricates lifecycle lines.",
             with_base(json!({})),
         ),
         "acos_status" => (
-            "Report whether the held session has launched, the last stage reached, and the \
-             published frame count.",
+            "Report whether the held session has launched, the last launch stage reached, and the \
+             published frame count. Use it to tell 'app never started' from 'app started but no \
+             window/frame yet' before reading logs or observing.",
             with_base(json!({})),
         ),
         _ => ("In-process session tool.", with_base(json!({}))),

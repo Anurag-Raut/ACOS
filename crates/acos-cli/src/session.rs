@@ -453,6 +453,7 @@ pub fn logs(args: LogsArgs) -> ExitCode {
     }
     let envelope = match session.logs() {
         Ok(lines) => {
+            let status = session.status().ok();
             let records: Vec<Value> = lines
                 .iter()
                 .map(|line| {
@@ -464,6 +465,10 @@ pub fn logs(args: LogsArgs) -> ExitCode {
                     })
                 })
                 .collect();
+            // An empty buffer is a real pass, but it is misleading right after a
+            // launch that stopped before `Activity.onCreate`; carry the launch
+            // stage so the agent can tell the two apart.
+            let stage_reached = status.as_ref().map(|s| s.stage_reached).unwrap_or("none");
             Envelope::pass(
                 &request_id,
                 ProtocolBackend::AcosNative,
@@ -473,8 +478,15 @@ pub fn logs(args: LogsArgs) -> ExitCode {
             .with_session_id(args.session.clone())
             .with_value_result(json!({
                 "session_id": args.session,
+                "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
+                "stage_reached": stage_reached,
                 "count": records.len(),
                 "logs": records,
+                "note": if records.is_empty() {
+                    "empty is valid only if the app reached onCreate; check stage_reached (and `acos launch`) before concluding anything"
+                } else {
+                    ""
+                },
             }))
             .with_capabilities(["logs"])
         }

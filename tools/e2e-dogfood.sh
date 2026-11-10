@@ -19,7 +19,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/results/dogfood/launch"
 TIMEOUT="${ACOS_LAUNCH_TIMEOUT:-300}"
-ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu)
+ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu todo-dogfood)
 
 die() { echo "e2e-dogfood: error: $*" >&2; exit 1; }
 
@@ -44,7 +44,7 @@ if [ "${#APPS[@]}" -eq 0 ]; then APPS=("${ALL_APPS[@]}"); fi
 
 for app in "${APPS[@]}"; do
     apk="$ROOT/fixtures/build/apps/$app.apk"
-    [ -f "$apk" ] || die "missing APK: $apk (run tools/build-dogfood-apps.sh first)"
+    [ -f "$apk" ] || die "missing APK: $apk (run tools/build-dogfood-apps.sh $app)"
 
     echo "e2e-dogfood: [$app] acos launch (timeout ${TIMEOUT}s)"
     # A non-zero exit is expected while the runtime is partial; keep the JSON.

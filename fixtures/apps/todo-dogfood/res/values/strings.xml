@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Todo Dogfood</string>
+    <string name="count_fmt">Count: %1$d</string>
+    <string name="inc">+1</string>
+    <string name="dec">-1</string>
+    <string name="snapshot">Save snapshot</string>
+    <string name="reset">Reset</string>
+    <string name="empty_history">No snapshots yet</string>
+    <string name="count_zero">Count: 0</string>
+</resources>

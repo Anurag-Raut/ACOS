@@ -181,6 +181,9 @@ pub fn launch_envelope(request_id: &str, session_id: &str, report: &LaunchReport
 pub fn session_error_envelope(request_id: &str, err: &SessionError) -> Envelope {
     let code = error_code(err.code);
     let mut error = ProtocolError::new(code, err.message.clone());
+    if let Some(hint) = acos_runtime::session::session_error_hint(err.code, &err.details) {
+        error = error.with_hint(hint);
+    }
     if !err.details.is_empty() {
         error = error.with_details(details_json(&err.details));
     }
