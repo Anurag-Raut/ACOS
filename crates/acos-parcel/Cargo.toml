@@ -1,0 +1,18 @@
+[package]
+name = "acos-parcel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Android 14 libbinder Parcel binary codec + Binder handle registry, standalone of the ACOS VM"
+
+[dependencies]
+rustix = { version = "1.1", features = ["fs"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+
+[[bench]]
+name = "parcel_bench"
+harness = false
