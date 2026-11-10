@@ -83,6 +83,13 @@ pub struct LayerRecord {
     pub buffer_frame: Option<u64>,
     /// Live flag (`nativeDisconnect` clears it).
     pub alive: bool,
+    /// Client-side references: one per `SurfaceControl` Java wrapper that read
+    /// this handle from a parcel. A wrapper's `release()` drops one reference;
+    /// the layer is only dead once the count reaches zero (AOSP `sp<>`
+    /// semantics). The window manager's own server reference is implicit — a
+    /// released client wrapper must not invalidate the layer the WMS still
+    /// owns and re-sends.
+    pub refs: u32,
     /// Generation at the last apply that touched this layer.
     pub generation: u64,
 }
@@ -104,6 +111,7 @@ impl LayerRecord {
             transform_hint: 0,
             buffer_frame: None,
             alive: true,
+            refs: 1,
             generation: 0,
         }
     }
@@ -460,7 +468,10 @@ fn apply_free_function(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         with_state(|st| match free {
             FREE_SURFACE_CONTROL => {
                 if let Some(l) = st.layers.get_mut(&ptr) {
-                    l.alive = false;
+                    l.refs = l.refs.saturating_sub(1);
+                    if l.refs == 0 {
+                        l.alive = false;
+                    }
                 }
                 if let Some(s) = st.surfaces.get_mut(&ptr) {
                     s.valid = false;
@@ -1368,6 +1379,17 @@ fn native_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             // this thread's table; materialise a mirror record with the same id.
             e.insert(LayerRecord::new(handle, "remote".to_string(), 0, 0));
             st.next_handle = st.next_handle.max(handle + 1);
+        } else if let Some(l) = st.layers.get_mut(&handle) {
+            // Every read builds a distinct Java wrapper owning one reference;
+            // releasing one wrapper must not free the layer out from under the
+            // others (the WMS re-sends the same leash on every reply).
+            l.refs = l.refs.saturating_add(1);
+            if !l.alive {
+                // A previous client released its wrapper while the WMS still
+                // held the layer; re-reading from a server reply revives the
+                // server's reference.
+                l.alive = true;
+            }
         }
     });
     vm.ret_i64(ctx, handle as i64);
@@ -1418,6 +1440,7 @@ fn native_copy_from_surface_control(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()>
         let handle = st.alloc();
         let mut rec = rec;
         rec.id = handle;
+        rec.refs = 1;
         st.layers.insert(handle, rec);
         Some(handle)
     });

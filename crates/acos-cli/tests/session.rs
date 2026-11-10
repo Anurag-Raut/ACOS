@@ -64,20 +64,14 @@ fn launch_counter_reports_the_honest_stage_ladder() {
         "--timeout",
         "180",
     ]);
-    assert!(
-        !out.status.success(),
-        "a launch that has not reached first_frame must not be a pass"
-    );
     let v = parse_json(&out.stdout);
-
-    // A non-pass envelope carries an error and `ok:false`.
-    assert_eq!(v["ok"], false);
-    assert_ne!(v["status"], "pass");
-    let error = &v["error"];
-    assert!(error["code"].as_str().is_some_and(|c| !c.is_empty()));
+    let passed = v["status"] == "pass";
 
     // The boot classpath may be absent on a non-oracle host: skip loudly.
     let Some(result) = v.get("result").filter(|r| !r.is_null()) else {
+        assert!(!out.status.success(), "a launch without a ladder cannot pass");
+        assert_eq!(v["ok"], false);
+        let error = &v["error"];
         let message = error["message"].as_str().unwrap_or("");
         if message.to_ascii_lowercase().contains("boot classpath")
             || message.to_ascii_lowercase().contains("bootclasspath")
@@ -85,8 +79,16 @@ fn launch_counter_reports_the_honest_stage_ladder() {
             eprintln!("SKIP launch_counter...: boot classpath missing: {message}");
             return;
         }
-        panic!("launch produced no ladder: {error}");
+        panic!("launch produced no ladder: {message}");
     };
+
+    if !passed {
+        // A non-pass envelope carries an error and `ok:false`.
+        assert!(!out.status.success(), "a non-pass launch must exit non-zero");
+        assert_eq!(v["ok"], false);
+        let error = &v["error"];
+        assert!(error["code"].as_str().is_some_and(|c| !c.is_empty()));
+    }
 
     // The ladder is present, ordered and complete.
     let stages = result["stages"].as_array().expect("stages array");
@@ -108,8 +110,18 @@ fn launch_counter_reports_the_honest_stage_ladder() {
     assert_eq!(status_of("process_booted")["ok"], true);
     assert_eq!(status_of("apk_parsed")["ok"], true);
 
-    // `first_frame` is not reached and carries the structured blocker.
+    // `first_frame` is reached on the oracle host (W133-A's real
+    // `ThreadedRenderer.draw` pipeline); otherwise it carries the structured
+    // blocker.
     let first_frame = status_of("first_frame");
+    if passed {
+        assert_eq!(first_frame["ok"], true, "a pass must reach first_frame");
+        assert_eq!(result["reached_stage"], "first_frame");
+        for (idx, stage) in stages.iter().enumerate() {
+            assert_eq!(stage["ok"], true, "stage {idx} must be ok on a pass");
+        }
+        return;
+    }
     assert_eq!(first_frame["ok"], false);
     assert!(
         first_frame["blocker"].is_object(),

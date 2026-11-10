@@ -129,7 +129,7 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
 }
 
 #[test]
-#[ignore = "blocked: the injected MotionEvent reaches ViewRootImpl, but the framework NPEs on a released SurfaceControl IME inset-animation leash before the click listener runs (results/m2/M2_LOG.md §W133-A)"]
+#[ignore = "blocked: the injected MotionEvent now reaches ViewRootImpl and the tap pump runs, but the framework re-delivers an `InsetsSourceControl` whose IME animation-leash `SurfaceControl` was already Java-released (`SurfaceControl.checkNotReleased` NPE in `InsetsSourceConsumer.applyRequestedVisibilityToControl`); see results/m2/M2_LOG.md §W144-A"]
 fn counter_tap_increment_updates_the_tree() {
     seed_boot_dir();
     let Some(apk) = counter_apk() else {

@@ -47,12 +47,9 @@ public final class SurfaceNativesMain {
         t3.apply();
         System.out.println("applied=2");
 
-        // A stale handle must surface as a structured Java exception, never a
-        // silent success. `release()` zeroes the Java `mNativeObject` and would
-        // make the framework's own `checkNotReleased` throw first, so read a
-        // fresh Java wrapper for the same native handle out of a parcel first,
-        // then release the original: the wrapper now carries a disconnected
-        // layer handle that only the native apply can detect.
+        // A parcel-read wrapper is an independent native reference: releasing
+        // the original must not disconnect the layer under it (AOSP
+        // `sp<SurfaceControl>` semantics). The alias stays applicable.
         Parcel handleParcel = Parcel.obtain();
         sc.writeToParcel(handleParcel, 0);
         handleParcel.setDataPosition(0);

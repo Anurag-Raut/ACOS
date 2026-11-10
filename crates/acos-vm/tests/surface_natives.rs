@@ -157,20 +157,23 @@ fn surface_control_natives_on_the_real_framework() {
     );
     assert_eq!(
         get("stale"),
-        "java.lang.IllegalStateException",
-        "a released SurfaceControl handle must raise a structured error"
+        "no-exception",
+        "a parcel-read alias must outlive the original wrapper's release (AOSP sp<> refcounts)"
     );
     assert!(outcome.stdout.ends_with("done\n"), "main did not finish");
 
-    // Two applied transactions, each with ops => generation 2. No buffer was
-    // submitted, so no frame was published.
-    assert_eq!(fwk_surface::generation(), 2, "apply must bump the generation");
+    // Three applied transactions with ops => generation 3 (the parcel alias's
+    // apply is the third; the released original's refcount drop does not
+    // disconnect the layer). No buffer was submitted, so no frame was
+    // published.
+    assert_eq!(fwk_surface::generation(), 3, "apply must bump the generation");
     assert_eq!(
         fwk_surface::presented_frames(),
         0,
         "finishDrawing/apply alone must not publish a frame"
     );
 
-    // The released layer is no longer live; the stale apply did not resurrect it.
+    // The released original dropped one reference; the parcel alias keeps the
+    // layer live (it is still referenced by `stale`).
     assert!(fwk_surface::live_layers() <= 1);
 }

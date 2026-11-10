@@ -1202,10 +1202,43 @@ fn me_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Err(unsupported("MotionEvent.nativeWriteToParcel"))
 }
 
+/// `MotionEvent.nativeTransform(J nativePtr, Matrix matrix)`.
+///
+/// API-34's `MotionEvent.transform(Matrix)` passes the Java `Matrix` object; the
+/// native matrix is `Matrix.native_instance` (the `jlong` returned by
+/// `Matrix.nCreate`). AOSP maps every pointer through the 3x3 affine transform
+/// and maps the raw `(mXOffset, mYOffset)` too, so `getRawX/Y` stay consistent
+/// with `getX/Y`. `gfx_matrix` owns the handle table and exposes the nine
+/// row-major values; a stale handle is a structured error, not silence.
 fn me_apply_transform(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let _ = vm.arg_i64(ctx, 0);
-    let _ = vm.arg_ref(ctx, 1);
-    Err(unsupported("MotionEvent.nativeApplyTransform"))
+    me_hit(ctx, "nativeTransform");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let matrix_obj = vm.arg_ref(ctx, 1);
+    let matrix_handle = match vm.get_field(matrix_obj, "native_instance") {
+        Ok(JavaValue::Long(v)) => v,
+        Ok(JavaValue::Int(v)) => v as i64,
+        _ => 0,
+    };
+    let m = crate::natives::gfx_matrix::matrix_values(matrix_handle)?;
+    let map = |x: f32, y: f32| (m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5]);
+    with_motion(ptr, |s| {
+        for p in &mut s.pointers {
+            let (nx, ny) = map(p.x, p.y);
+            p.x = nx;
+            p.y = ny;
+        }
+        for (_, ptrs) in &mut s.history {
+            for p in ptrs.iter_mut() {
+                let (nx, ny) = map(p.x, p.y);
+                p.x = nx;
+                p.y = ny;
+            }
+        }
+        let (nx, ny) = map(s.x_offset, s.y_offset);
+        s.x_offset = nx;
+        s.y_offset = ny;
+    });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
