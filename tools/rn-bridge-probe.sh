@@ -17,6 +17,11 @@ SDK="${ANDROID_HOME:-/home/Qui/Android/Sdk}"
 BT="${BUILD_TOOLS_VERSION:-35.0.0}"
 D8="$SDK/build-tools/$BT/d8"
 ANDROID_JAR="$SDK/platforms/android-34/android.jar"
+# Compile-time stubs for @hide framework APIs (`AssetManager()` /
+# `addAssetPath(String)`, used by the AssetManager bundle loader). The stubs
+# are a javac classpath entry only and are never packaged: d8 resolves
+# `android.content.res.AssetManager` from `android.jar`.
+STUBS="$ROOT/crates/acos-vm/tests/java/stubs"
 CACHE_RN="$ROOT/.cache/rn-0.81.4"
 WORK="$ROOT/target/tmp/rn-bridge-probe"
 SRC="$ROOT/crates/acos-jni/tests/java/dev/acos/fixtures/rnhello/BridgeProbe.java"
@@ -72,9 +77,9 @@ for aar in react-android hermes-android; do
     CP_ENTRIES+=("$d/classes.jar")
 done
 
-CP="$ANDROID_JAR:$(IFS=:; echo "${CP_ENTRIES[*]}")"
+CP="$STUBS:$ANDROID_JAR:$(IFS=:; echo "${CP_ENTRIES[*]}")"
 log "javac BridgeProbe (classpath: $(echo "${CP_ENTRIES[*]}" | wc -w) entries)"
-javac --release 11 -encoding UTF-8 -cp "$CP" -d "$WORK/classes" "$SRC"
+javac --release 11 -encoding UTF-8 -sourcepath "$STUBS" -cp "$CP" -d "$WORK/classes" "$SRC"
 
 log "d8 BridgeProbe"
 mapfile -t CLASSES < <(find "$WORK/classes" -name '*.class' | sort)
