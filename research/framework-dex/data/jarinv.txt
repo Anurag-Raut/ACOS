@@ -1,0 +1,324 @@
+### JAR android.test.base
+DEX_FILES 1
+TOTAL_SIZE 33144
+DEX_VERSIONS 039
+CLASSES 29
+METHODS 176
+NATIVE_METHODS 0
+CLINIT_METHODS 0
+CLASSES_WITH_CLINIT 0
+
+### JAR apache-xml
+DEX_FILES 1
+TOTAL_SIZE 1192504
+DEX_VERSIONS 039
+CLASSES 679
+METHODS 6427
+NATIVE_METHODS 0
+CLINIT_METHODS 63
+CLASSES_WITH_CLINIT 63
+
+### JAR bouncycastle
+DEX_FILES 1
+TOTAL_SIZE 1479136
+DEX_VERSIONS 039
+CLASSES 1189
+METHODS 7836
+NATIVE_METHODS 0
+CLINIT_METHODS 186
+CLASSES_WITH_CLINIT 186
+
+### JAR com.android.location.provider
+DEX_FILES 1
+TOTAL_SIZE 26680
+DEX_VERSIONS 039
+CLASSES 27
+METHODS 143
+NATIVE_METHODS 0
+CLINIT_METHODS 3
+CLASSES_WITH_CLINIT 3
+
+### JAR conscrypt
+DEX_FILES 1
+TOTAL_SIZE 466672
+DEX_VERSIONS 039
+CLASSES 347
+METHODS 2863
+NATIVE_METHODS 294
+CLINIT_METHODS 68
+CLASSES_WITH_CLINIT 68
+TOPNATIVE	294	Lcom/android/org/conscrypt/NativeCrypto;
+
+### JAR core-icu4j
+DEX_FILES 1
+TOTAL_SIZE 2943700
+DEX_VERSIONS 039
+CLASSES 1871
+METHODS 14076
+NATIVE_METHODS 66
+CLINIT_METHODS 635
+CLASSES_WITH_CLINIT 635
+TOPNATIVE	22	Lcom/android/i18n/timezone/internal/Memory;
+TOPNATIVE	16	Lcom/android/icu/charset/NativeConverter;
+TOPNATIVE	11	Lcom/android/icu/util/regex/MatcherNative;
+TOPNATIVE	5	Lcom/android/icu/util/LocaleNative;
+TOPNATIVE	4	Lcom/android/icu/util/Icu4cMetadata;
+TOPNATIVE	4	Lcom/android/icu/util/regex/PatternNative;
+TOPNATIVE	2	Lcom/android/icu/util/CaseMapperNative;
+TOPNATIVE	1	Lcom/android/i18n/util/Log;
+TOPNATIVE	1	Lcom/android/icu/text/TimeZoneNamesNative;
+
+### JAR core-libart
+DEX_FILES 1
+TOTAL_SIZE 572248
+DEX_VERSIONS 039
+CLASSES 468
+METHODS 4114
+NATIVE_METHODS 329
+CLINIT_METHODS 74
+CLASSES_WITH_CLINIT 74
+TOPNATIVE	134	Llibcore/io/Linux;
+TOPNATIVE	48	Ldalvik/system/VMRuntime;
+TOPNATIVE	27	Ldalvik/system/VMDebug;
+TOPNATIVE	25	Llibcore/io/Memory;
+TOPNATIVE	21	Ldalvik/system/DexFile;
+TOPNATIVE	11	Lorg/apache/harmony/xml/ExpatParser;
+TOPNATIVE	10	Llibcore/icu/ICU;
+TOPNATIVE	9	Lorg/apache/harmony/xml/ExpatAttributes;
+TOPNATIVE	7	Ldalvik/system/ZygoteHooks;
+TOPNATIVE	7	Llibcore/math/NativeBN;
+TOPNATIVE	6	Ldalvik/system/VMStack;
+TOPNATIVE	5	Ljava/lang/StringFactory;
+TOPNATIVE	4	Llibcore/util/CharsetUtils;
+TOPNATIVE	4	Lorg/apache/harmony/dalvik/ddmc/DdmVmInternal;
+TOPNATIVE	2	Ldalvik/system/NativeStart;
+TOPNATIVE	2	Ljava/lang/VMClassLoader;
+TOPNATIVE	2	Ljava/lang/ref/FinalizerReference;
+TOPNATIVE	1	Landroid/system/OsConstants;
+TOPNATIVE	1	Ldalvik/system/BaseDexClassLoader;
+TOPNATIVE	1	Llibcore/io/AsynchronousCloseMonitor;
+TOPNATIVE	1	Llibcore/util/NativeAllocationRegistry;
+TOPNATIVE	1	Lorg/apache/harmony/dalvik/ddmc/DdmServer;
+
+### JAR core-oj
+DEX_FILES 1
+TOTAL_SIZE 5579712
+DEX_VERSIONS 039
+CLASSES 4053
+METHODS 36686
+NATIVE_METHODS 601
+CLINIT_METHODS 810
+CLASSES_WITH_CLINIT 810
+TOPNATIVE	61	Ljdk/internal/misc/Unsafe;
+TOPNATIVE	60	Lsun/misc/Unsafe;
+TOPNATIVE	47	Lsun/nio/fs/UnixNativeDispatcher;
+TOPNATIVE	32	Ljava/lang/Class;
+TOPNATIVE	31	Ljava/lang/invoke/VarHandle;
+TOPNATIVE	30	Lsun/nio/ch/Net;
+TOPNATIVE	24	Ljava/lang/reflect/Field;
+TOPNATIVE	23	Ljava/lang/Character;
+TOPNATIVE	23	Ljava/lang/Math;
+TOPNATIVE	20	Ljava/lang/StrictMath;
+TOPNATIVE	18	Ljava/util/zip/ZipFile;
+TOPNATIVE	17	Ljava/lang/System;
+TOPNATIVE	14	Lsun/nio/ch/FileDispatcherImpl;
+TOPNATIVE	12	Ljava/io/UnixFileSystem;
+TOPNATIVE	11	Ljava/lang/String;
+TOPNATIVE	11	Ljava/lang/Thread;
+TOPNATIVE	11	Ljava/lang/reflect/Executable;
+TOPNATIVE	8	Lsun/nio/ch/IOUtil;
+TOPNATIVE	8	Lsun/nio/fs/LinuxNativeDispatcher;
+TOPNATIVE	8	Lsun/nio/fs/LinuxWatchService;
+TOPNATIVE	6	Ljava/lang/Runtime;
+TOPNATIVE	6	Ljava/util/zip/Deflater;
+TOPNATIVE	6	Ljava/util/zip/Inflater;
+TOPNATIVE	6	Lsun/nio/ch/EPoll;
+TOPNATIVE	6	Lsun/nio/ch/UnixDomainSockets;
+TOPNATIVE	5	Ljava/lang/Object;
+TOPNATIVE	5	Lsun/nio/ch/FileChannelImpl;
+TOPNATIVE	4	Ljava/lang/UNIXProcess;
+TOPNATIVE	4	Lsun/misc/Version;
+TOPNATIVE	4	Lsun/nio/ch/DatagramChannelImpl;
+TOPNATIVE	4	Lsun/nio/ch/DatagramDispatcher;
+TOPNATIVE	4	Lsun/nio/ch/EPollPort;
+TOPNATIVE	3	Ljava/io/Console;
+TOPNATIVE	3	Ljava/lang/invoke/MethodHandle;
+TOPNATIVE	3	Ljava/lang/ref/Reference;
+TOPNATIVE	3	Ljava/lang/reflect/Constructor;
+TOPNATIVE	3	Ljava/lang/reflect/Method;
+TOPNATIVE	3	Ljava/nio/MappedByteBuffer;
+TOPNATIVE	3	Ljava/util/prefs/FileSystemPreferences;
+TOPNATIVE	3	Ljava/util/zip/Adler32;
+
+### JAR ext
+DEX_FILES 1
+TOTAL_SIZE 293836
+DEX_VERSIONS 039
+CLASSES 108
+METHODS 1014
+NATIVE_METHODS 0
+CLINIT_METHODS 30
+CLASSES_WITH_CLINIT 30
+
+### JAR framework-graphics
+DEX_FILES 1
+TOTAL_SIZE 3528
+DEX_VERSIONS 039
+CLASSES 1
+METHODS 16
+NATIVE_METHODS 0
+CLINIT_METHODS 0
+CLASSES_WITH_CLINIT 0
+
+### JAR framework
+DEX_FILES 5
+TOTAL_SIZE 39961748
+DEX_VERSIONS 039
+CLASSES 29344
+METHODS 224883
+NATIVE_METHODS 4311
+CLINIT_METHODS 3676
+CLASSES_WITH_CLINIT 3676
+TOPNATIVE	250	Lcom/google/android/gles_jni/GLImpl;
+TOPNATIVE	194	Landroid/opengl/GLES20;
+TOPNATIVE	164	Landroid/opengl/GLES30;
+TOPNATIVE	128	Landroid/renderscript/RenderScript;
+TOPNATIVE	124	Landroid/opengl/GLES10;
+TOPNATIVE	121	Landroid/opengl/GLES11Ext;
+TOPNATIVE	109	Landroid/view/SurfaceControl;
+TOPNATIVE	100	Landroid/opengl/GLES31;
+TOPNATIVE	99	Landroid/media/AudioSystem;
+TOPNATIVE	89	Landroid/graphics/RenderNode;
+TOPNATIVE	85	Landroid/graphics/Paint;
+TOPNATIVE	72	Landroid/graphics/HardwareRenderer;
+TOPNATIVE	70	Landroid/opengl/GLES11;
+TOPNATIVE	61	Landroid/opengl/GLES32;
+TOPNATIVE	55	Landroid/content/res/AssetManager;
+TOPNATIVE	54	Landroid/graphics/drawable/VectorDrawable;
+TOPNATIVE	54	Landroid/media/AudioTrack;
+TOPNATIVE	54	Landroid/os/HwParcel;
+TOPNATIVE	51	Landroid/os/Parcel;
+TOPNATIVE	51	Landroid/view/MotionEvent;
+TOPNATIVE	49	Landroid/media/MediaPlayer;
+TOPNATIVE	49	Landroid/opengl/GLES31Ext;
+TOPNATIVE	46	Landroid/graphics/Bitmap;
+TOPNATIVE	44	Landroid/media/tv/tuner/Tuner;
+TOPNATIVE	43	Landroid/graphics/Path;
+TOPNATIVE	43	Landroid/media/MediaCodec;
+TOPNATIVE	43	Landroid/media/MediaDrm;
+TOPNATIVE	42	Landroid/graphics/Matrix;
+TOPNATIVE	37	Landroid/opengl/EGL14;
+TOPNATIVE	37	Landroid/os/Process;
+TOPNATIVE	36	Landroid/media/MediaRecorder;
+TOPNATIVE	36	Landroid/os/HwBlob;
+TOPNATIVE	32	Landroid/graphics/BaseCanvas;
+TOPNATIVE	32	Landroid/graphics/BaseRecordingCanvas;
+TOPNATIVE	30	Landroid/graphics/Canvas;
+TOPNATIVE	29	Landroid/hardware/Camera;
+TOPNATIVE	28	Landroid/os/Debug;
+TOPNATIVE	28	Lcom/google/android/gles_jni/EGLImpl;
+TOPNATIVE	27	Landroid/database/sqlite/SQLiteConnection;
+TOPNATIVE	27	Landroid/media/AudioRecord;
+
+### JAR ims-common
+DEX_FILES 1
+TOTAL_SIZE 598160
+DEX_VERSIONS 039
+CLASSES 382
+METHODS 2948
+NATIVE_METHODS 0
+CLINIT_METHODS 54
+CLASSES_WITH_CLINIT 54
+
+### JAR okhttp
+DEX_FILES 1
+TOTAL_SIZE 405312
+DEX_VERSIONS 039
+CLASSES 241
+METHODS 2429
+NATIVE_METHODS 0
+CLINIT_METHODS 53
+CLASSES_WITH_CLINIT 53
+
+### JAR service-art
+DEX_FILES 1
+TOTAL_SIZE 397676
+DEX_VERSIONS 039
+CLASSES 389
+METHODS 2825
+NATIVE_METHODS 0
+CLINIT_METHODS 83
+CLASSES_WITH_CLINIT 83
+
+### JAR services
+DEX_FILES 3
+TOTAL_SIZE 20586180
+DEX_VERSIONS 039
+CLASSES 13543
+METHODS 105295
+NATIVE_METHODS 345
+CLINIT_METHODS 1029
+CLASSES_WITH_CLINIT 1029
+TOPNATIVE	78	Lcom/android/server/input/NativeInputManagerService$NativeImpl;
+TOPNATIVE	49	Lcom/android/server/location/gnss/hal/GnssNative;
+TOPNATIVE	15	Lcom/android/server/broadcastradio/hal1/Tuner;
+TOPNATIVE	13	Lcom/android/server/vibrator/VibratorController$NativeWrapper;
+TOPNATIVE	11	Lcom/android/server/am/CachedAppOptimizer;
+TOPNATIVE	11	Lcom/android/server/companion/virtual/InputController;
+TOPNATIVE	10	Lcom/android/server/location/gnss/GnssConfiguration;
+TOPNATIVE	10	Lcom/android/server/power/hint/HintManagerService$NativeWrapper;
+TOPNATIVE	10	Lcom/android/server/tv/UinputBridge;
+TOPNATIVE	9	Lcom/android/server/display/DisplayControl;
+TOPNATIVE	8	Lcom/android/server/SystemServer;
+TOPNATIVE	7	Lcom/android/server/connectivity/Vpn;
+TOPNATIVE	7	Lcom/android/server/power/PowerManagerService;
+TOPNATIVE	7	Lcom/android/server/vibrator/VibratorManagerService;
+TOPNATIVE	6	Lcom/android/server/alarm/AlarmManagerService;
+TOPNATIVE	6	Lcom/android/server/sensors/SensorService;
+TOPNATIVE	6	Lcom/android/server/storage/AppFuseBridge;
+TOPNATIVE	6	Lcom/android/server/tv/TvInputHal;
+TOPNATIVE	5	Lcom/android/server/location/gnss/GnssNetworkConnectivityHandler;
+TOPNATIVE	5	Lcom/android/server/powerstats/PowerStatsHALWrapper$PowerStatsHAL10WrapperImpl;
+TOPNATIVE	5	Lcom/android/server/usb/UsbDeviceManager;
+TOPNATIVE	5	Lcom/google/security/cryptauth/lib/securegcm/D2DHandshakeContext;
+TOPNATIVE	4	Lcom/android/server/HardwarePropertiesManagerService;
+TOPNATIVE	4	Lcom/android/server/broadcastradio/hal1/BroadcastRadioService;
+TOPNATIVE	4	Lcom/android/server/usb/UsbAlsaJackDetector;
+TOPNATIVE	3	Lcom/android/server/ConsumerIrService;
+TOPNATIVE	3	Lcom/android/server/adb/AdbDebuggingManager$PairingThread;
+TOPNATIVE	3	Lcom/android/server/broadcastradio/hal1/TunerCallback;
+TOPNATIVE	3	Lcom/google/security/cryptauth/lib/securegcm/D2DConnectionContextV1;
+TOPNATIVE	2	Lcom/android/server/PersistentDataBlockService;
+TOPNATIVE	2	Lcom/android/server/SystemClockTime;
+TOPNATIVE	2	Lcom/android/server/am/BatteryStatsService;
+TOPNATIVE	2	Lcom/android/server/am/LowMemDetector;
+TOPNATIVE	2	Lcom/android/server/biometrics/sensors/face/FaceService;
+TOPNATIVE	2	Lcom/android/server/soundtrigger_middleware/AudioSessionProviderImpl;
+TOPNATIVE	2	Lcom/android/server/usb/UsbAlsaMidiDevice;
+TOPNATIVE	2	Lcom/android/server/usb/UsbHostManager;
+TOPNATIVE	2	Lcom/android/server/usb/descriptors/UsbDescriptorParser;
+TOPNATIVE	2	Lcom/android/server/vr/VrManagerService;
+TOPNATIVE	2	Lcom/android/server/wm/TaskFpsCallbackController;
+
+### JAR telephony-common
+DEX_FILES 1
+TOTAL_SIZE 3898980
+DEX_VERSIONS 039
+CLASSES 2546
+METHODS 20132
+NATIVE_METHODS 0
+CLINIT_METHODS 245
+CLASSES_WITH_CLINIT 245
+
+### JAR voip-common
+DEX_FILES 1
+TOTAL_SIZE 821916
+DEX_VERSIONS 039
+CLASSES 600
+METHODS 4928
+NATIVE_METHODS 6
+CLINIT_METHODS 38
+CLASSES_WITH_CLINIT 38
+TOPNATIVE	4	Landroid/net/rtp/AudioGroup;
+TOPNATIVE	2	Landroid/net/rtp/RtpStream;
+

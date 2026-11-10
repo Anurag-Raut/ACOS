@@ -1,0 +1,793 @@
+INTERFACES_IN_CLOSURE 193
+IFACE	Landroid/animation/AnimationHandler$AnimationFrameCallbackProvider;	calls=1	methods=postFrameCallback(Landroid/view/Choreographer$FrameCallback;)V
+	CALLER	Landroid/animation/AnimationHandler;->addAnimationFrameCallback(Landroid/animation/AnimationHandler$AnimationFrameCallback;J)V
+IFACE	Landroid/animation/Animator$AnimatorCaller;	calls=1	methods=call(Ljava/lang/Object;Ljava/lang/Object;Z)V
+	CALLER	Landroid/animation/Animator;->callOnList(Ljava/util/ArrayList;Landroid/animation/Animator$AnimatorCaller;Ljava/lang/Object;Z)V
+IFACE	Landroid/animation/Keyframes;	calls=6	methods=clone()Landroid/animation/Keyframes;,getType()Ljava/lang/Class;,getValue(F)Ljava/lang/Object;,setEvaluator(Landroid/animation/TypeEvaluator;)V
+	CALLER	Landroid/animation/PropertyValuesHolder;->calculateValue(F)V
+	CALLER	Landroid/animation/PropertyValuesHolder;->clone()Landroid/animation/PropertyValuesHolder;
+	CALLER	Landroid/animation/PropertyValuesHolder;->init()V
+	CALLER	Landroid/animation/PropertyValuesHolder;->ofKeyframes(Ljava/lang/String;Landroid/animation/Keyframes;)Landroid/animation/PropertyValuesHolder;
+	CALLER	Landroid/animation/PropertyValuesHolder;->setEvaluator(Landroid/animation/TypeEvaluator;)V
+	CALLER	Landroid/animation/PropertyValuesHolder;->setObjectValues([Ljava/lang/Object;)V
+IFACE	Landroid/animation/LayoutTransition$TransitionListener;	calls=4	methods=endTransition(Landroid/animation/LayoutTransition;Landroid/view/ViewGroup;Landroid/view/View;I)V,startTransition(Landroid/animation/LayoutTransition;Landroid/view/ViewGroup;Landroid/view/View;I)V
+	CALLER	Landroid/animation/LayoutTransition;->addChild(Landroid/view/ViewGroup;Landroid/view/View;Z)V
+	CALLER	Landroid/animation/LayoutTransition;->removeChild(Landroid/view/ViewGroup;Landroid/view/View;Z)V
+	CALLER	Landroid/animation/LayoutTransition;->runAppearingTransition(Landroid/view/ViewGroup;Landroid/view/View;)V
+	CALLER	Landroid/animation/LayoutTransition;->runDisappearingTransition(Landroid/view/ViewGroup;Landroid/view/View;)V
+IFACE	Landroid/animation/TimeInterpolator;	calls=1	methods=getInterpolation(F)F
+	CALLER	Landroid/animation/ValueAnimator;->animateValue(F)V
+IFACE	Landroid/animation/ValueAnimator$DurationScaleChangeListener;	calls=1	methods=onChanged(F)V
+	CALLER	Landroid/animation/ValueAnimator;->setDurationScale(F)V
+IFACE	Landroid/app/ActivityThreadInternal;	calls=1	methods=isInDensityCompatMode()Z
+	CALLER	Landroid/app/ConfigurationController;->updateDefaultDensity(I)V
+IFACE	Landroid/app/Application$ActivityLifecycleCallbacks;	calls=6	methods=onActivityCreated(Landroid/app/Activity;Landroid/os/Bundle;)V,onActivityPostCreated(Landroid/app/Activity;Landroid/os/Bundle;)V,onActivityPreCreated(Landroid/app/Activity;Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Activity;->dispatchActivityCreated(Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Activity;->dispatchActivityPostCreated(Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Activity;->dispatchActivityPreCreated(Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Application;->dispatchActivityCreated(Landroid/app/Activity;Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Application;->dispatchActivityPostCreated(Landroid/app/Activity;Landroid/os/Bundle;)V
+	CALLER	Landroid/app/Application;->dispatchActivityPreCreated(Landroid/app/Activity;Landroid/os/Bundle;)V
+IFACE	Landroid/app/Fragment$OnStartEnterTransitionListener;	calls=2	methods=onStartEnterTransition()V,startListening()V
+	CALLER	Landroid/app/Fragment;->callStartTransitionListener()V
+	CALLER	Landroid/app/Fragment;->setOnStartEnterTransitionListener(Landroid/app/Fragment$OnStartEnterTransitionListener;)V
+IFACE	Landroid/app/FragmentManager$OnBackStackChangedListener;	calls=1	methods=onBackStackChanged()V
+	CALLER	Landroid/app/FragmentManagerImpl;->reportBackStackChanged()V
+IFACE	Landroid/app/FragmentManagerImpl$OpGenerator;	calls=1	methods=generateOps(Ljava/util/ArrayList;Ljava/util/ArrayList;)Z
+	CALLER	Landroid/app/FragmentManagerImpl;->generateOpsForPendingActions(Ljava/util/ArrayList;Ljava/util/ArrayList;)Z
+IFACE	Landroid/app/IActivityClientController;	calls=1	methods=getDisplayId(Landroid/os/IBinder;)I
+	CALLER	Landroid/app/ActivityClient;->getDisplayId(Landroid/os/IBinder;)I
+IFACE	Landroid/app/IActivityManager;	calls=16	methods=addPackageDependency(Ljava/lang/String;)V,attachApplication(Landroid/app/IApplicationThread;J)V,finishAttachApplication(J)V,getMimeTypeFilterAsync(Landroid/net/Uri;ILandroid/os/RemoteCallback;)V,handleApplicationStrictModeViolation(Landroid/os/IBinder;ILandroid/os/StrictMode$ViolationInfo;)V,publishContentProviders(Landroid/app/IApplicationThread;Ljava/util/List;)V,refContentProvider(Landroid/os/IBinder;II)Z,registerStrictModeCallback(Landroid/os/IBinder;)V,removeContentProvider(Landroid/os/IBinder;Z)V,setRenderThread(I)V,showWaitingForDebugger(Landroid/app/IApplicationThread;Z)V,waitForNetworkStateUpdate(J)V
+	CALLER	Landroid/app/ActivityThread;->attach(ZJ)V
+	CALLER	Landroid/app/ActivityThread;->checkAndBlockForNetworkAccess()V
+	CALLER	Landroid/app/ActivityThread;->handleBindApplication(Landroid/app/ActivityThread$AppBindData;)V
+	CALLER	Landroid/app/ActivityThread;->incProviderRefLocked(Landroid/app/ActivityThread$ProviderRefCount;Z)V
+	CALLER	Landroid/app/ActivityThread;->installContentProviders(Landroid/content/Context;Ljava/util/List;)V
+	CALLER	Landroid/app/ActivityThread;->installProvider(Landroid/content/Context;Landroid/app/ContentProviderHolder;Landroid/content/pm/ProviderInfo;ZZZ)Landroid/app/ContentProviderHolder;
+	CALLER	Landroid/app/ActivityThread;->suspendAllAndSendVmStart(Landroid/app/ActivityThread$AppBindData;)V
+	CALLER	Landroid/app/ActivityThread;->waitForDebugger(Landroid/app/ActivityThread$AppBindData;)V
+	CALLER	Landroid/app/LoadedApk;->createOrUpdateClassLoaderLocked(Ljava/util/List;)V
+	CALLER	Landroid/content/ContentResolver;->getType(Landroid/net/Uri;)Ljava/lang/String;
+	CALLER	Landroid/graphics/HardwareRenderer$ProcessInitializer;->initSched(J)V
+	CALLER	Landroid/os/StrictMode;->handleApplicationStrictModeViolation(ILandroid/os/StrictMode$ViolationInfo;)V
+IFACE	Landroid/app/IGameManagerService;	calls=2	methods=isAngleEnabled(Ljava/lang/String;I)Z,notifyGraphicsEnvironmentSetup(Ljava/lang/String;I)V
+	CALLER	Landroid/app/GameManager;->isAngleEnabled(Ljava/lang/String;)Z
+	CALLER	Landroid/app/GameManager;->notifyGraphicsEnvironmentSetup()V
+IFACE	Landroid/app/LoaderManager$LoaderCallbacks;	calls=3	methods=onCreateLoader(ILandroid/os/Bundle;)Landroid/content/Loader;,onLoadFinished(Landroid/content/Loader;Ljava/lang/Object;)V,onLoaderReset(Landroid/content/Loader;)V
+	CALLER	Landroid/app/LoaderManagerImpl$LoaderInfo;->callOnLoadFinished(Landroid/content/Loader;Ljava/lang/Object;)V
+	CALLER	Landroid/app/LoaderManagerImpl$LoaderInfo;->destroy()V
+	CALLER	Landroid/app/LoaderManagerImpl$LoaderInfo;->start()V
+IFACE	Landroid/companion/virtual/IVirtualDeviceManager;	calls=1	methods=getDeviceIdForDisplayId(I)I
+	CALLER	Landroid/companion/virtual/VirtualDeviceManager;->getDeviceIdForDisplayId(I)I
+IFACE	Landroid/compat/Compatibility$BehaviorChangeDelegate;	calls=1	methods=isChangeEnabled(J)Z
+	CALLER	Landroid/compat/Compatibility;->isChangeEnabled(J)Z
+IFACE	Landroid/content/ContentInterface;	calls=1	methods=getType(Landroid/net/Uri;)Ljava/lang/String;
+	CALLER	Landroid/content/ContentResolver;->getType(Landroid/net/Uri;)Ljava/lang/String;
+IFACE	Landroid/content/IContentProvider;	calls=7	methods=asBinder()Landroid/os/IBinder;,call(Landroid/content/AttributionSource;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/os/Bundle;)Landroid/os/Bundle;,getTypeAsync(Landroid/content/AttributionSource;Landroid/net/Uri;Landroid/os/RemoteCallback;)V,query(Landroid/content/AttributionSource;Landroid/net/Uri;[Ljava/lang/String;Landroid/os/Bundle;Landroid/os/ICancellationSignal;)Landroid/database/Cursor;
+	CALLER	Landroid/app/ActivityThread;->installProvider(Landroid/content/Context;Landroid/app/ContentProviderHolder;Landroid/content/pm/ProviderInfo;ZZZ)Landroid/app/ContentProviderHolder;
+	CALLER	Landroid/app/ActivityThread;->installProviderAuthoritiesLocked(Landroid/content/IContentProvider;Landroid/content/ContentProvider;Landroid/app/ContentProviderHolder;)Landroid/app/ActivityThread$ProviderClientRecord;
+	CALLER	Landroid/content/ContentResolver;->getType(Landroid/net/Uri;)Ljava/lang/String;
+	CALLER	Landroid/provider/Settings$NameValueCache;->getStringForUser(Landroid/content/ContentResolver;Ljava/lang/String;I)Ljava/lang/String;
+IFACE	Landroid/content/pm/IPackageManager;	calls=9	methods=getApplicationInfo(Ljava/lang/String;JI)Landroid/content/pm/ApplicationInfo;,getInstrumentationInfoAsUser(Landroid/content/ComponentName;II)Landroid/content/pm/InstrumentationInfo;,getPackagesForUid(I)[Ljava/lang/String;,notifyPackageUse(Ljava/lang/String;I)V
+	CALLER	Landroid/app/ActivityThread;->handleBindApplication(Landroid/app/ActivityThread$AppBindData;)V
+	CALLER	Landroid/app/ActivityThread;->initInstrumentation(Landroid/content/pm/InstrumentationInfo;Landroid/app/ActivityThread$AppBindData;Landroid/app/ContextImpl;)V
+	CALLER	Landroid/app/ActivityThread;->prepareInstrumentation(Landroid/app/ActivityThread$AppBindData;)Landroid/content/pm/InstrumentationInfo;
+	CALLER	Landroid/app/ActivityThread;->setupGraphicsSupport(Landroid/content/Context;)V
+	CALLER	Landroid/app/LoadedApk;->createOrUpdateClassLoaderLocked(Ljava/util/List;)V
+	CALLER	Landroid/app/LoadedApk;->getLibrariesFor(Ljava/lang/String;)[Ljava/lang/String;
+	CALLER	Landroid/os/GraphicsEnvironment;->getDebugLayerAppPaths(Landroid/content/pm/IPackageManager;Ljava/lang/String;)Ljava/lang/String;
+	CALLER	Landroid/os/storage/StorageManager;->getVolumeList(II)[Landroid/os/storage/StorageVolume;
+IFACE	Landroid/content/pm/parsing/result/ParseInput;	calls=62	methods=error(ILjava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;,error(ILjava/lang/String;Ljava/lang/Exception;)Landroid/content/pm/parsing/result/ParseResult;,error(Landroid/content/pm/parsing/result/ParseResult;)Landroid/content/pm/parsing/result/ParseResult;,error(Ljava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;,skip(Ljava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;,success(Ljava/lang/Object;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseApkLite(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;Landroid/content/res/XmlResourceParser;Landroid/content/pm/SigningDetails;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseApkLiteInner(Landroid/content/pm/parsing/result/ParseInput;Ljava/io/File;Ljava/io/FileDescriptor;Ljava/lang/String;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parsePackageSplitNames(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseRequiredSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->separateAndValidateSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/FrameworkParsingPackageUtils;->computeMinSdkVersion(ILjava/lang/String;I[Ljava/lang/String;Landroid/content/pm/parsing/result/ParseInput;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/FrameworkParsingPackageUtils;->computeTargetSdkVersion(ILjava/lang/String;[Ljava/lang/String;Landroid/content/pm/parsing/result/ParseInput;Z)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/FrameworkParsingPackageUtils;->getSigningDetails(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;ZZLandroid/content/pm/SigningDetails;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/FrameworkParsingPackageUtils;->validateName(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;ZZ)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->loadCertificates(Landroid/content/pm/parsing/result/ParseInput;Landroid/util/jar/StrictJarFile;Ljava/util/zip/ZipEntry;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->verifySignatures(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;IZ)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->verifySignaturesInternal(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;IZ)Landroid/content/pm/parsing/result/ParseResult;
+IFACE	Landroid/content/pm/parsing/result/ParseResult;	calls=31	methods=getErrorMessage()Ljava/lang/String;,getException()Ljava/lang/Exception;,getResult()Ljava/lang/Object;,isError()Z
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseApkLite(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;Landroid/content/res/XmlResourceParser;Landroid/content/pm/SigningDetails;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseApkLiteInner(Landroid/content/pm/parsing/result/ParseInput;Ljava/io/File;Ljava/io/FileDescriptor;Ljava/lang/String;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parsePackageSplitNames(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseRequiredSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->separateAndValidateSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/FrameworkParsingPackageUtils;->getSigningDetails(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;ZZLandroid/content/pm/SigningDetails;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->verifySignatures(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;IZ)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->verifyV1Signature(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;Z)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Lcom/android/internal/content/om/OverlayScanner;->parseOverlayManifest(Ljava/io/File;Ljava/util/List;)Lcom/android/internal/content/om/OverlayScanner$ParsedOverlayInfo;
+IFACE	Landroid/content/res/Resources$UpdateCallbacks;	calls=1	methods=onLoadersChanged(Landroid/content/res/Resources;Ljava/util/List;)V
+	CALLER	Landroid/content/res/Resources;->addLoaders([Landroid/content/res/loader/ResourcesLoader;)V
+IFACE	Landroid/content/res/XmlResourceParser;	calls=81	methods=close()V,getAttributeBooleanValue(Ljava/lang/String;Ljava/lang/String;Z)Z,getAttributeIntValue(Ljava/lang/String;Ljava/lang/String;I)I,getAttributeValue(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;,getDepth()I,getName()Ljava/lang/String;,next()I
+	CALLER	Landroid/animation/AnimatorInflater;->loadAnimator(Landroid/content/res/Resources;Landroid/content/res/Resources$Theme;IF)Landroid/animation/Animator;
+	CALLER	Landroid/animation/AnimatorInflater;->loadStateListAnimator(Landroid/content/Context;I)Landroid/animation/StateListAnimator;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->isDeviceAdminReceiver(Landroid/content/res/XmlResourceParser;Z)Z
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseApkLite(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;Landroid/content/res/XmlResourceParser;Landroid/content/pm/SigningDetails;I)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parsePackageSplitNames(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseRequiredSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Landroid/content/res/XmlResourceParser;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/res/ResourcesImpl;->loadComplexColorForCookie(Landroid/content/res/Resources;Landroid/util/TypedValue;ILandroid/content/res/Resources$Theme;)Landroid/content/res/ComplexColor;
+	CALLER	Landroid/content/res/ResourcesImpl;->loadXmlDrawable(Landroid/content/res/Resources;Landroid/util/TypedValue;IILjava/lang/String;)Landroid/graphics/drawable/Drawable;
+	CALLER	Landroid/view/LayoutInflater;->inflate(ILandroid/view/ViewGroup;Z)Landroid/view/View;
+	CALLER	Landroid/view/LayoutInflater;->parseInclude(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/Context;Landroid/view/View;Landroid/util/AttributeSet;)V
+	CALLER	Landroid/view/LayoutInflater;->tryInflatePrecompiled(ILandroid/content/res/Resources;Landroid/view/ViewGroup;Z)Landroid/view/View;
+	CALLER	Landroid/view/PointerIcon;->loadResource(Landroid/content/Context;Landroid/content/res/Resources;I)V
+IFACE	Landroid/database/Cursor;	calls=6	methods=close()V,getString(I)Ljava/lang/String;,moveToNext()Z
+	CALLER	Landroid/provider/Settings$NameValueCache;->getStringForUser(Landroid/content/ContentResolver;Ljava/lang/String;I)Ljava/lang/String;
+IFACE	Landroid/graphics/ImageDecoder$OnHeaderDecodedListener;	calls=1	methods=onHeaderDecoded(Landroid/graphics/ImageDecoder;Landroid/graphics/ImageDecoder$ImageInfo;Landroid/graphics/ImageDecoder$Source;)V
+	CALLER	Landroid/graphics/ImageDecoder;->callHeaderDecoded(Landroid/graphics/ImageDecoder$OnHeaderDecodedListener;Landroid/graphics/ImageDecoder$Source;)V
+IFACE	Landroid/graphics/drawable/Drawable$Callback;	calls=1	methods=invalidateDrawable(Landroid/graphics/drawable/Drawable;)V
+	CALLER	Landroid/graphics/drawable/Drawable;->invalidateSelf()V
+IFACE	Landroid/hardware/display/IDisplayManager;	calls=5	methods=getDisplayIds(Z)[I,getDisplayInfo(I)Landroid/view/DisplayInfo;,getOverlaySupport()Landroid/hardware/OverlayProperties;,getPreferredWideGamutColorSpaceId()I,registerCallbackWithEventMask(Landroid/hardware/display/IDisplayManagerCallback;J)V
+	CALLER	Landroid/hardware/display/DisplayManagerGlobal;-><init>(Landroid/hardware/display/IDisplayManager;)V
+	CALLER	Landroid/hardware/display/DisplayManagerGlobal;->getDisplayIds(Z)[I
+	CALLER	Landroid/hardware/display/DisplayManagerGlobal;->getDisplayInfoLocked(I)Landroid/view/DisplayInfo;
+	CALLER	Landroid/hardware/display/DisplayManagerGlobal;->updateCallbackIfNeededLocked()V
+IFACE	Landroid/os/CancellationSignal$OnCancelListener;	calls=1	methods=onCancel()V
+	CALLER	Landroid/os/CancellationSignal;->setOnCancelListener(Landroid/os/CancellationSignal$OnCancelListener;)V
+IFACE	Landroid/os/Handler$Callback;	calls=1	methods=handleMessage(Landroid/os/Message;)Z
+	CALLER	Landroid/os/Handler;->dispatchMessage(Landroid/os/Message;)V
+IFACE	Landroid/os/IBinder;	calls=16	methods=getInterfaceDescriptor()Ljava/lang/String;,linkToDeath(Landroid/os/IBinder$DeathRecipient;I)V,queryLocalInterface(Ljava/lang/String;)Landroid/os/IInterface;
+	CALLER	Landroid/content/pm/IPackageManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/content/pm/IPackageManager;
+	CALLER	Landroid/hardware/display/IDisplayManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/hardware/display/IDisplayManager;
+	CALLER	Landroid/os/Binder;->allowBlocking(Landroid/os/IBinder;)Landroid/os/IBinder;
+	CALLER	Landroid/os/INetworkManagementService$Stub;->asInterface(Landroid/os/IBinder;)Landroid/os/INetworkManagementService;
+	CALLER	Landroid/os/IServiceManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/os/IServiceManager;
+	CALLER	Landroid/os/storage/IStorageManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/os/storage/IStorageManager;
+	CALLER	Landroid/permission/IPermissionManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/permission/IPermissionManager;
+	CALLER	Landroid/telephony/TelephonyManager;->getSubscriptionService()Lcom/android/internal/telephony/ISub;
+	CALLER	Landroid/view/IGraphicsStats$Stub;->asInterface(Landroid/os/IBinder;)Landroid/view/IGraphicsStats;
+	CALLER	Landroid/view/IWindowManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/view/IWindowManager;
+	CALLER	Landroid/view/accessibility/IAccessibilityManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/view/accessibility/IAccessibilityManager;
+	CALLER	Lcom/android/internal/telephony/ISub$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/telephony/ISub;
+IFACE	Landroid/os/IInterface;	calls=1	methods=asBinder()Landroid/os/IBinder;
+	CALLER	Landroid/os/Binder;->isProxy(Landroid/os/IInterface;)Z
+IFACE	Landroid/os/INetworkManagementService;	calls=1	methods=setUidCleartextNetworkPolicy(II)V
+	CALLER	Landroid/os/StrictMode;->setVmPolicy(Landroid/os/StrictMode$VmPolicy;)V
+IFACE	Landroid/os/IServiceManager;	calls=1	methods=getService(Ljava/lang/String;)Landroid/os/IBinder;
+	CALLER	Landroid/os/ServiceManager;->rawGetService(Ljava/lang/String;)Landroid/os/IBinder;
+IFACE	Landroid/os/Looper$Observer;	calls=3	methods=dispatchingThrewException(Ljava/lang/Object;Landroid/os/Message;Ljava/lang/Exception;)V,messageDispatchStarting()Ljava/lang/Object;,messageDispatched(Ljava/lang/Object;Landroid/os/Message;)V
+	CALLER	Landroid/os/Looper;->loopOnce(Landroid/os/Looper;JI)Z
+IFACE	Landroid/os/MessageQueue$IdleHandler;	calls=1	methods=queueIdle()Z
+	CALLER	Landroid/os/MessageQueue;->next()Landroid/os/Message;
+IFACE	Landroid/os/Parcelable$ClassLoaderCreator;	calls=1	methods=createFromParcel(Landroid/os/Parcel;Ljava/lang/ClassLoader;)Ljava/lang/Object;
+	CALLER	Landroid/os/Parcel;->readParcelableInternal(Ljava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Object;
+IFACE	Landroid/os/Parcelable$Creator;	calls=2	methods=createFromParcel(Landroid/os/Parcel;)Ljava/lang/Object;
+	CALLER	Landroid/os/Parcel;->readCharSequence()Ljava/lang/CharSequence;
+	CALLER	Landroid/os/Parcel;->readParcelableInternal(Ljava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Object;
+IFACE	Landroid/os/StrictMode$ViolationLogger;	calls=2	methods=log(Landroid/os/StrictMode$ViolationInfo;)V
+	CALLER	Landroid/os/StrictMode$AndroidBlockGuardPolicy;->onThreadPolicyViolation(Landroid/os/StrictMode$ViolationInfo;)V
+	CALLER	Landroid/os/StrictMode;->onVmPolicyViolation(Landroid/os/strictmode/Violation;Z)V
+IFACE	Landroid/os/TraceNameSupplier;	calls=1	methods=getTraceName()Ljava/lang/String;
+	CALLER	Landroid/os/Handler;->getTraceName(Landroid/os/Message;)Ljava/lang/String;
+IFACE	Landroid/os/storage/IStorageManager;	calls=1	methods=getVolumeList(ILjava/lang/String;I)[Landroid/os/storage/StorageVolume;
+	CALLER	Landroid/os/storage/StorageManager;->getVolumeList(II)[Landroid/os/storage/StorageVolume;
+IFACE	Landroid/permission/IPermissionManager;	calls=2	methods=getPermissionInfo(Ljava/lang/String;Ljava/lang/String;I)Landroid/content/pm/PermissionInfo;,registerAttributionSource(Landroid/content/AttributionSourceState;)V
+	CALLER	Landroid/app/ActivityThread;->isProtectedComponent(Landroid/content/pm/ComponentInfo;Ljava/lang/String;)Z
+	CALLER	Landroid/permission/PermissionManager;->registerAttributionSource(Landroid/content/AttributionSource;)Landroid/content/AttributionSource;
+IFACE	Landroid/provider/Settings$Readable;	calls=1	methods=maxTargetSdk()I
+	CALLER	Landroid/provider/Settings;->getPublicSettingsForClass(Ljava/lang/Class;Ljava/util/Set;Ljava/util/Set;Landroid/util/ArrayMap;)V
+IFACE	Landroid/security/net/config/ConfigSource;	calls=2	methods=getDefaultConfig()Landroid/security/net/config/NetworkSecurityConfig;,getPerDomainConfigs()Ljava/util/Set;
+	CALLER	Landroid/security/net/config/ApplicationConfig;->ensureInitialized()V
+IFACE	Landroid/text/Editable;	calls=22	methods=getSpanEnd(Ljava/lang/Object;)I,getSpanStart(Ljava/lang/Object;)I,getSpans(IILjava/lang/Class;)[Ljava/lang/Object;,length()I,removeSpan(Ljava/lang/Object;)V,setFilters([Landroid/text/InputFilter;)V,setSpan(Ljava/lang/Object;III)V
+	CALLER	Landroid/widget/SpellChecker$SpellParser;->isFinished()Z
+	CALLER	Landroid/widget/SpellChecker$SpellParser;->parse()V
+	CALLER	Landroid/widget/SpellChecker$SpellParser;->removeRangeSpan(Landroid/text/Editable;)V
+	CALLER	Landroid/widget/SpellChecker$SpellParser;->setRangeSpan(Landroid/text/Editable;II)V
+	CALLER	Landroid/widget/SpellChecker;->addSpellCheckSpan(Landroid/text/Editable;II)V
+	CALLER	Landroid/widget/SpellChecker;->haveWordBoundariesChanged(Landroid/text/Editable;IIII)Z
+	CALLER	Landroid/widget/SpellChecker;->spellCheck(Z)V
+	CALLER	Landroid/widget/TextView;->removeAdjacentSuggestionSpans(I)V
+	CALLER	Landroid/widget/TextView;->removeIntersectingNonAdjacentSpans(IILjava/lang/Class;)V
+	CALLER	Landroid/widget/TextView;->setFilters(Landroid/text/Editable;[Landroid/text/InputFilter;)V
+IFACE	Landroid/text/GetChars;	calls=1	methods=getChars(II[CI)V
+	CALLER	Landroid/text/TextUtils;->getChars(Ljava/lang/CharSequence;II[CI)V
+IFACE	Landroid/text/GraphicsOperations;	calls=1	methods=drawTextRun(Landroid/graphics/BaseCanvas;IIIIFFZLandroid/graphics/Paint;)V
+	CALLER	Landroid/graphics/BaseCanvas;->drawTextRun(Ljava/lang/CharSequence;IIIIFFZLandroid/graphics/Paint;)V
+IFACE	Landroid/text/InputFilter;	calls=2	methods=filter(Ljava/lang/CharSequence;IILandroid/text/Spanned;II)Ljava/lang/CharSequence;
+	CALLER	Landroid/text/SpannableStringBuilder;->replace(IILjava/lang/CharSequence;II)Landroid/text/SpannableStringBuilder;
+	CALLER	Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;Landroid/widget/TextView$BufferType;ZI)V
+IFACE	Landroid/text/SpanWatcher;	calls=5	methods=onSpanAdded(Landroid/text/Spannable;Ljava/lang/Object;II)V,onSpanChanged(Landroid/text/Spannable;Ljava/lang/Object;IIII)V,onSpanRemoved(Landroid/text/Spannable;Ljava/lang/Object;II)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendSpanAdded(Ljava/lang/Object;II)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendSpanChanged(Ljava/lang/Object;IIII)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendSpanRemoved(Ljava/lang/Object;II)V
+	CALLER	Landroid/text/SpannableStringInternal;->sendSpanAdded(Ljava/lang/Object;II)V
+	CALLER	Landroid/text/SpannableStringInternal;->sendSpanChanged(Ljava/lang/Object;IIII)V
+IFACE	Landroid/text/Spannable;	calls=39	methods=charAt(I)C,getSpans(IILjava/lang/Class;)[Ljava/lang/Object;,length()I,removeSpan(Ljava/lang/Object;)V,removeSpan(Ljava/lang/Object;I)V,setSpan(Ljava/lang/Object;III)V
+	CALLER	Landroid/content/res/StringBlock;->addParagraphSpan(Landroid/text/Spannable;Ljava/lang/Object;II)V
+	CALLER	Landroid/text/DynamicLayout;->generate(Landroid/text/DynamicLayout$Builder;)V
+	CALLER	Landroid/text/Selection;->removeMemory(Landroid/text/Spannable;)V
+	CALLER	Landroid/text/Selection;->removeSelection(Landroid/text/Spannable;)V
+	CALLER	Landroid/text/Selection;->setSelection(Landroid/text/Spannable;III)V
+	CALLER	Landroid/text/Selection;->updateMemory(Landroid/text/Spannable;I)V
+	CALLER	Landroid/text/Spannable;->removeSpan(Ljava/lang/Object;I)V
+	CALLER	Landroid/text/TextUtils;->copySpansFrom(Landroid/text/Spanned;IILjava/lang/Class;Landroid/text/Spannable;I)V
+	CALLER	Landroid/text/util/Linkify;->addLinks(Landroid/text/Spannable;ILandroid/content/Context;Ljava/util/function/Function;)Z
+	CALLER	Landroid/text/util/Linkify;->applyLink(Ljava/lang/String;IILandroid/text/Spannable;Ljava/util/function/Function;)V
+	CALLER	Landroid/widget/Editor;->addSpanWatchers(Landroid/text/Spannable;)V
+	CALLER	Landroid/widget/TextView;->removeMisspelledSpans(Landroid/text/Spannable;)V
+IFACE	Landroid/text/Spanned;	calls=58	methods=charAt(I)C,getSpanEnd(Ljava/lang/Object;)I,getSpanFlags(Ljava/lang/Object;)I,getSpanStart(Ljava/lang/Object;)I,getSpans(IILjava/lang/Class;)[Ljava/lang/Object;,length()I,nextSpanTransition(IILjava/lang/Class;)I
+	CALLER	Landroid/text/BoringLayout;->isBoring(Ljava/lang/CharSequence;Landroid/text/TextPaint;Landroid/text/TextDirectionHeuristic;ZLandroid/text/BoringLayout$Metrics;)Landroid/text/BoringLayout$Metrics;
+	CALLER	Landroid/text/DynamicLayout;->contentMayProtrudeFromLineTopOrBottom(Ljava/lang/CharSequence;II)Z
+	CALLER	Landroid/text/DynamicLayout;->reflow(Ljava/lang/CharSequence;III)V
+	CALLER	Landroid/text/Layout;->getJustifyWidth(I)F
+	CALLER	Landroid/text/Layout;->getParagraphLeadingMargin(I)I
+	CALLER	Landroid/text/Layout;->getParagraphSpans(Landroid/text/Spanned;IILjava/lang/Class;)[Ljava/lang/Object;
+	CALLER	Landroid/text/Layout;->measurePara(Landroid/text/TextPaint;Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;)F
+	CALLER	Landroid/text/MeasuredParagraph;->buildForMeasurement(Landroid/text/TextPaint;Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;Landroid/text/MeasuredParagraph;)Landroid/text/MeasuredParagraph;
+	CALLER	Landroid/text/MeasuredParagraph;->buildForStaticLayout(Landroid/text/TextPaint;Landroid/graphics/text/LineBreakConfig;Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;IZLandroid/text/MeasuredParagraph;Landroid/text/MeasuredParagraph;)Landroid/text/MeasuredParagraph;
+	CALLER	Landroid/text/MeasuredParagraph;->resetAndAnalyzeBidi(Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;)V
+	CALLER	Landroid/text/Selection;->getSelectionEnd(Ljava/lang/CharSequence;)I
+	CALLER	Landroid/text/Selection;->getSelectionMemory(Ljava/lang/CharSequence;)I
+IFACE	Landroid/text/TextDirectionHeuristic;	calls=2	methods=isRtl(Ljava/lang/CharSequence;II)Z,isRtl([CII)Z
+	CALLER	Landroid/text/BoringLayout;->isBoring(Ljava/lang/CharSequence;Landroid/text/TextPaint;Landroid/text/TextDirectionHeuristic;ZLandroid/text/BoringLayout$Metrics;)Landroid/text/BoringLayout$Metrics;
+	CALLER	Landroid/text/MeasuredParagraph;->resetAndAnalyzeBidi(Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;)V
+IFACE	Landroid/text/TextShaper$GlyphsConsumer;	calls=1	methods=accept(IILandroid/graphics/text/PositionedGlyphs;Landroid/text/TextPaint;)V
+	CALLER	Landroid/text/TextLine;->shapeTextRun(Landroid/text/TextShaper$GlyphsConsumer;Landroid/text/TextPaint;IIIIZF)V
+IFACE	Landroid/text/TextUtils$EllipsizeCallback;	calls=2	methods=ellipsized(II)V
+	CALLER	Landroid/text/TextUtils;->ellipsize(Ljava/lang/CharSequence;Landroid/text/TextPaint;FLandroid/text/TextUtils$TruncateAt;ZLandroid/text/TextUtils$EllipsizeCallback;Landroid/text/TextDirectionHeuristic;Ljava/lang/String;)Ljava/lang/CharSequence;
+IFACE	Landroid/text/TextWatcher;	calls=6	methods=afterTextChanged(Landroid/text/Editable;)V,beforeTextChanged(Ljava/lang/CharSequence;III)V,onTextChanged(Ljava/lang/CharSequence;III)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendAfterTextChanged([Landroid/text/TextWatcher;)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendBeforeTextChanged([Landroid/text/TextWatcher;III)V
+	CALLER	Landroid/text/SpannableStringBuilder;->sendTextChanged([Landroid/text/TextWatcher;III)V
+	CALLER	Landroid/widget/TextView;->sendAfterTextChanged(Landroid/text/Editable;)V
+	CALLER	Landroid/widget/TextView;->sendBeforeTextChanged(Ljava/lang/CharSequence;III)V
+	CALLER	Landroid/widget/TextView;->sendOnTextChanged(Ljava/lang/CharSequence;III)V
+IFACE	Landroid/text/method/MovementMethod;	calls=2	methods=canSelectArbitrarily()Z,initialize(Landroid/widget/TextView;Landroid/text/Spannable;)V
+	CALLER	Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;Landroid/widget/TextView$BufferType;ZI)V
+	CALLER	Landroid/widget/TextView;->textCanBeSelected()Z
+IFACE	Landroid/text/method/TransformationMethod;	calls=1	methods=getTransformation(Ljava/lang/CharSequence;Landroid/view/View;)Ljava/lang/CharSequence;
+	CALLER	Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;Landroid/widget/TextView$BufferType;ZI)V
+IFACE	Landroid/text/style/AlignmentSpan;	calls=1	methods=getAlignment()Landroid/text/Layout$Alignment;
+	CALLER	Landroid/text/Layout;->getJustifyWidth(I)F
+IFACE	Landroid/text/style/LeadingMarginSpan$LeadingMarginSpan2;	calls=3	methods=getLeadingMarginLineCount()I
+	CALLER	Landroid/text/Layout;->getJustifyWidth(I)F
+	CALLER	Landroid/text/Layout;->getParagraphLeadingMargin(I)I
+	CALLER	Landroid/text/StaticLayout;->generate(Landroid/text/StaticLayout$Builder;ZZ)V
+IFACE	Landroid/text/style/LeadingMarginSpan;	calls=6	methods=getLeadingMargin(Z)I
+	CALLER	Landroid/text/Layout;->getJustifyWidth(I)F
+	CALLER	Landroid/text/Layout;->getParagraphLeadingMargin(I)I
+	CALLER	Landroid/text/Layout;->measurePara(Landroid/text/TextPaint;Ljava/lang/CharSequence;IILandroid/text/TextDirectionHeuristic;)F
+	CALLER	Landroid/text/StaticLayout;->generate(Landroid/text/StaticLayout$Builder;ZZ)V
+IFACE	Landroid/text/style/LineHeightSpan$WithDensity;	calls=1	methods=chooseHeight(Ljava/lang/CharSequence;IIIILandroid/graphics/Paint$FontMetricsInt;Landroid/text/TextPaint;)V
+	CALLER	Landroid/text/StaticLayout;->out(Ljava/lang/CharSequence;IIIIIIIFF[Landroid/text/style/LineHeightSpan;[ILandroid/graphics/Paint$FontMetricsInt;ZIZLandroid/text/MeasuredParagraph;IZZZ[CILandroid/text/TextUtils$TruncateAt;FFLandroid/text/TextPaint;Z)I
+IFACE	Landroid/text/style/LineHeightSpan;	calls=1	methods=chooseHeight(Ljava/lang/CharSequence;IIIILandroid/graphics/Paint$FontMetricsInt;)V
+	CALLER	Landroid/text/StaticLayout;->out(Ljava/lang/CharSequence;IIIIIIIFF[Landroid/text/style/LineHeightSpan;[ILandroid/graphics/Paint$FontMetricsInt;ZIZLandroid/text/MeasuredParagraph;IZZZ[CILandroid/text/TextUtils$TruncateAt;FFLandroid/text/TextPaint;Z)I
+IFACE	Landroid/text/style/TabStopSpan;	calls=2	methods=getTabStop()I
+	CALLER	Landroid/text/Layout$TabStops;->reset(F[Ljava/lang/Object;)V
+	CALLER	Landroid/text/StaticLayout;->generate(Landroid/text/StaticLayout$Builder;ZZ)V
+IFACE	Landroid/text/util/Linkify$MatchFilter;	calls=1	methods=acceptMatch(Ljava/lang/CharSequence;II)Z
+	CALLER	Landroid/text/util/Linkify;->gatherLinks(Ljava/util/ArrayList;Landroid/text/Spannable;Ljava/util/regex/Pattern;[Ljava/lang/String;Landroid/text/util/Linkify$MatchFilter;Landroid/text/util/Linkify$TransformFilter;)V
+IFACE	Landroid/text/util/Linkify$TransformFilter;	calls=1	methods=transformUrl(Ljava/util/regex/Matcher;Ljava/lang/String;)Ljava/lang/String;
+	CALLER	Landroid/text/util/Linkify;->makeUrl(Ljava/lang/String;[Ljava/lang/String;Ljava/util/regex/Matcher;Landroid/text/util/Linkify$TransformFilter;)Ljava/lang/String;
+IFACE	Landroid/transition/Transition$TransitionListener;	calls=1	methods=onTransitionPause(Landroid/transition/Transition;)V
+	CALLER	Landroid/transition/Transition;->pause(Landroid/view/View;)V
+IFACE	Landroid/util/AttributeSet;	calls=19	methods=getAttributeBooleanValue(IZ)Z,getAttributeCount()I,getAttributeName(I)Ljava/lang/String;,getAttributeNameResource(I)I,getAttributeResourceValue(II)I,getAttributeResourceValue(Ljava/lang/String;Ljava/lang/String;I)I,getAttributeValue(I)Ljava/lang/String;,getAttributeValue(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;,getPositionDescription()Ljava/lang/String;,getStyleAttribute()I
+	CALLER	Landroid/animation/AnimatorInflater;->createStateListAnimatorFromXml(Landroid/content/Context;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;)Landroid/animation/StateListAnimator;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->parseVerifier(Landroid/util/AttributeSet;)Landroid/content/pm/VerifierInfo;
+	CALLER	Landroid/content/res/ColorStateList;->inflate(Landroid/content/res/Resources;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/content/res/Resources$Theme;)V
+	CALLER	Landroid/content/res/Resources$Theme;->getExplicitStyle(Landroid/util/AttributeSet;)I
+	CALLER	Landroid/graphics/drawable/DrawableInflater;->inflateFromXmlForDensity(Ljava/lang/String;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;ILandroid/content/res/Resources$Theme;)Landroid/graphics/drawable/Drawable;
+	CALLER	Landroid/view/LayoutInflater;->createViewFromTag(Landroid/view/View;Ljava/lang/String;Landroid/content/Context;Landroid/util/AttributeSet;Z)Landroid/view/View;
+	CALLER	Landroid/view/LayoutInflater;->getParserStateDescription(Landroid/content/Context;Landroid/util/AttributeSet;)Ljava/lang/String;
+	CALLER	Landroid/view/LayoutInflater;->parseInclude(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/Context;Landroid/view/View;Landroid/util/AttributeSet;)V
+	CALLER	Landroid/view/View;->saveAttributeData(Landroid/util/AttributeSet;Landroid/content/res/TypedArray;)V
+IFACE	Landroid/util/Log$TerribleFailureHandler;	calls=2	methods=onTerribleFailure(Ljava/lang/String;Landroid/util/Log$TerribleFailure;Z)V
+	CALLER	Landroid/util/Log;->wtf(ILjava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;ZZ)I
+	CALLER	Landroid/util/Log;->wtfQuiet(ILjava/lang/String;Ljava/lang/String;Z)V
+IFACE	Landroid/util/Printer;	calls=2	methods=println(Ljava/lang/String;)V
+	CALLER	Landroid/os/Looper;->loopOnce(Landroid/os/Looper;JI)Z
+IFACE	Landroid/util/apk/ByteBufferFactory;	calls=1	methods=create(I)Ljava/nio/ByteBuffer;
+	CALLER	Landroid/util/apk/VerityBuilder;->generateVerityTreeInternal(Ljava/io/RandomAccessFile;Landroid/util/apk/ByteBufferFactory;Landroid/util/apk/SignatureInfo;)Landroid/util/apk/VerityBuilder$VerityResult;
+IFACE	Landroid/util/apk/DataSource;	calls=10	methods=create(Ljava/io/FileDescriptor;JJ)Landroid/util/apk/DataSource;,feedIntoDataDigester(Landroid/util/apk/DataDigester;JI)V,size()J
+	CALLER	Landroid/util/apk/ApkSigningBlockUtils;->computeContentDigestsPer1MbChunk([ILjava/io/FileDescriptor;Landroid/util/apk/SignatureInfo;)[[B
+	CALLER	Landroid/util/apk/ApkSigningBlockUtils;->computeContentDigestsPer1MbChunk([I[Landroid/util/apk/DataSource;)[[B
+	CALLER	Landroid/util/apk/VerityBuilder;->consumeByChunk(Landroid/util/apk/DataDigester;Landroid/util/apk/DataSource;I)V
+	CALLER	Landroid/util/apk/VerityBuilder;->generateApkVerityDigestAtLeafLevel(Ljava/io/RandomAccessFile;Landroid/util/apk/SignatureInfo;[BLjava/nio/ByteBuffer;)V
+IFACE	Landroid/view/FallbackEventHandler;	calls=3	methods=setView(Landroid/view/View;)V
+	CALLER	Landroid/view/ViewRootImpl;->setView(Landroid/view/View;Landroid/view/WindowManager$LayoutParams;Landroid/view/View;I)V
+IFACE	Landroid/view/IGraphicsStats;	calls=1	methods=requestBufferForProcess(Ljava/lang/String;Landroid/view/IGraphicsStatsCallback;)Landroid/os/ParcelFileDescriptor;
+	CALLER	Landroid/graphics/HardwareRenderer$ProcessInitializer;->requestBuffer()V
+IFACE	Landroid/view/IWindowId;	calls=2	methods=asBinder()Landroid/os/IBinder;
+	CALLER	Landroid/view/WindowId;->equals(Ljava/lang/Object;)Z
+IFACE	Landroid/view/IWindowManager;	calls=4	methods=getCurrentAnimatorScale()F,hasNavigationBar(I)Z,showStrictModeViolation(Z)V,useBLAST()Z
+	CALLER	Landroid/os/StrictMode$AndroidBlockGuardPolicy;->handleViolationWithTimingAttempt(Landroid/os/StrictMode$ViolationInfo;)V
+	CALLER	Landroid/view/ViewConfiguration;-><init>(Landroid/content/Context;)V
+	CALLER	Landroid/view/WindowManagerGlobal;->getWindowManagerService()Landroid/view/IWindowManager;
+IFACE	Landroid/view/IWindowSession;	calls=6	methods=addToDisplayAsUser(Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIIILandroid/view/InputChannel;Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;Landroid/graphics/Rect;[F)I,getWindowId(Landroid/os/IBinder;)Landroid/view/IWindowId;,outOfMemory(Landroid/view/IWindow;)Z,pokeDrawLock(Landroid/os/IBinder;)V,setOnBackInvokedCallbackInfo(Landroid/view/IWindow;Landroid/window/OnBackInvokedCallbackInfo;)V,updatePointerIcon(Landroid/view/IWindow;)V
+	CALLER	Landroid/view/View;->getWindowId()Landroid/view/WindowId;
+	CALLER	Landroid/view/View;->setPointerIcon(Landroid/view/PointerIcon;)V
+	CALLER	Landroid/view/ViewRootImpl;->dispatchFocusEvent(ZZ)V
+	CALLER	Landroid/view/ViewRootImpl;->pokeDrawLockIfNeeded()V
+	CALLER	Landroid/view/ViewRootImpl;->setView(Landroid/view/View;Landroid/view/WindowManager$LayoutParams;Landroid/view/View;I)V
+	CALLER	Landroid/window/WindowOnBackInvokedDispatcher;->setTopOnBackInvokedCallback(Landroid/window/OnBackInvokedCallback;)V
+IFACE	Landroid/view/ImeFocusController$InputMethodManagerDelegate;	calls=4	methods=onPreWindowGainedFocus(Landroid/view/ViewRootImpl;)V,onViewDetachedFromWindow(Landroid/view/View;Landroid/view/ViewRootImpl;)V,onViewFocusChanged(Landroid/view/View;Z)V,onWindowLostFocus(Landroid/view/ViewRootImpl;)V
+	CALLER	Landroid/view/ImeFocusController;->onPreWindowFocus(ZLandroid/view/WindowManager$LayoutParams;)V
+	CALLER	Landroid/view/ImeFocusController;->onViewDetachedFromWindow(Landroid/view/View;)V
+	CALLER	Landroid/view/ImeFocusController;->onViewFocusChanged(Landroid/view/View;Z)V
+IFACE	Landroid/view/InputQueue$Callback;	calls=1	methods=onInputQueueCreated(Landroid/view/InputQueue;)V
+	CALLER	Landroid/view/ViewRootImpl;->setView(Landroid/view/View;Landroid/view/WindowManager$LayoutParams;Landroid/view/View;I)V
+IFACE	Landroid/view/InsetsAnimationControlCallbacks;	calls=1	methods=startAnimation(Landroid/view/InsetsAnimationControlRunner;Landroid/view/WindowInsetsAnimationControlListener;ILandroid/view/WindowInsetsAnimation;Landroid/view/WindowInsetsAnimation$Bounds;)V
+	CALLER	Landroid/view/InsetsAnimationControlImpl;-><init>(Landroid/util/SparseArray;Landroid/graphics/Rect;Landroid/view/InsetsState;Landroid/view/WindowInsetsAnimationControlListener;ILandroid/view/InsetsAnimationControlCallbacks;JLandroid/view/animation/Interpolator;IILandroid/content/res/CompatibilityInfo$Translator;Landroid/view/inputmethod/ImeTracker$Token;)V
+IFACE	Landroid/view/InsetsAnimationControlRunner;	calls=11	methods=cancel()V,controlsType(I)Z,getAnimation()Landroid/view/WindowInsetsAnimation;,getControllingTypes()I,getStatsToken()Landroid/view/inputmethod/ImeTracker$Token;,getTypes()I,notifyControlRevoked(I)V,updateSurfacePosition(Landroid/util/SparseArray;)V
+	CALLER	Landroid/view/InsetsAnimationControlRunner;->controlsType(I)Z
+	CALLER	Landroid/view/InsetsController;->cancelAnimation(Landroid/view/InsetsAnimationControlRunner;Z)V
+	CALLER	Landroid/view/InsetsController;->cancelExistingControllers(I)V
+	CALLER	Landroid/view/InsetsController;->getAnimationType(I)I
+	CALLER	Landroid/view/InsetsController;->notifyControlRevoked(Landroid/view/InsetsSourceConsumer;)V
+	CALLER	Landroid/view/InsetsController;->onControlsChanged([Landroid/view/InsetsSourceControl;)V
+IFACE	Landroid/view/InsetsController$Host;	calls=18	methods=dipToPx(I)I,dispatchWindowInsetsAnimationEnd(Landroid/view/WindowInsetsAnimation;)V,getHandler()Landroid/os/Handler;,getInputMethodManager()Landroid/view/inputmethod/InputMethodManager;,getSystemBarsBehavior()I,getTranslator()Landroid/content/res/CompatibilityInfo$Translator;,hasAnimationCallbacks()Z,notifyInsetsChanged()V,setSystemBarsAppearance(II)V,setSystemBarsBehavior(I)V,updateCompatSysUiVisibility(III)V,updateRequestedVisibleTypes(I)V
+	CALLER	Landroid/view/InsetsController;->applyAnimation(IZZZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/InsetsController;->controlAnimationUncheckedInner(ILandroid/os/CancellationSignal;Landroid/view/WindowInsetsAnimationControlListener;Landroid/graphics/Rect;ZJLandroid/view/animation/Interpolator;IIZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/InsetsController;->dispatchAnimationEnd(Landroid/view/WindowInsetsAnimation;)V
+	CALLER	Landroid/view/InsetsController;->hide(IZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/InsetsController;->notifyVisibilityChanged()V
+	CALLER	Landroid/view/InsetsController;->onFrameChanged(Landroid/graphics/Rect;)V
+	CALLER	Landroid/view/InsetsController;->onStateChanged(Landroid/view/InsetsState;)Z
+	CALLER	Landroid/view/InsetsController;->reportRequestedVisibleTypes()V
+	CALLER	Landroid/view/InsetsController;->setCaptionInsetsHeight(I)V
+	CALLER	Landroid/view/InsetsController;->setSystemBarsAppearance(II)V
+	CALLER	Landroid/view/InsetsController;->setSystemBarsBehavior(I)V
+	CALLER	Landroid/view/InsetsController;->show(IZLandroid/view/inputmethod/ImeTracker$Token;)V
+IFACE	Landroid/view/InsetsState$OnTraverseCallbacks;	calls=7	methods=onFinish(Landroid/view/InsetsState;Landroid/view/InsetsState;)V,onIdMatch(Landroid/view/InsetsSource;Landroid/view/InsetsSource;)V,onIdNotFoundInState1(ILandroid/view/InsetsSource;)V,onIdNotFoundInState2(ILandroid/view/InsetsSource;)V,onStart(Landroid/view/InsetsState;Landroid/view/InsetsState;)V
+	CALLER	Landroid/view/InsetsState;->traverse(Landroid/view/InsetsState;Landroid/view/InsetsState;Landroid/view/InsetsState$OnTraverseCallbacks;)V
+IFACE	Landroid/view/LayoutInflater$Factory2;	calls=2	methods=onCreateView(Landroid/view/View;Ljava/lang/String;Landroid/content/Context;Landroid/util/AttributeSet;)Landroid/view/View;
+	CALLER	Landroid/view/LayoutInflater;->tryCreateView(Landroid/view/View;Ljava/lang/String;Landroid/content/Context;Landroid/util/AttributeSet;)Landroid/view/View;
+IFACE	Landroid/view/LayoutInflater$Factory;	calls=1	methods=onCreateView(Ljava/lang/String;Landroid/content/Context;Landroid/util/AttributeSet;)Landroid/view/View;
+	CALLER	Landroid/view/LayoutInflater;->tryCreateView(Landroid/view/View;Ljava/lang/String;Landroid/content/Context;Landroid/util/AttributeSet;)Landroid/view/View;
+IFACE	Landroid/view/LayoutInflater$Filter;	calls=2	methods=onLoadClass(Ljava/lang/Class;)Z
+	CALLER	Landroid/view/LayoutInflater;->createView(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Landroid/util/AttributeSet;)Landroid/view/View;
+IFACE	Landroid/view/OnReceiveContentListener;	calls=1	methods=onReceiveContent(Landroid/view/View;Landroid/view/ContentInfo;)Landroid/view/ContentInfo;
+	CALLER	Landroid/view/View;->performReceiveContent(Landroid/view/ContentInfo;)Landroid/view/ContentInfo;
+IFACE	Landroid/view/PendingInsetsController$PendingRequest;	calls=1	methods=replay(Landroid/view/InsetsController;)V
+	CALLER	Landroid/view/PendingInsetsController;->replayAndAttach(Landroid/view/InsetsController;)V
+IFACE	Landroid/view/SurfaceControl$OnReparentListener;	calls=1	methods=onReparent(Landroid/view/SurfaceControl$Transaction;Landroid/view/SurfaceControl;)V
+	CALLER	Landroid/view/SurfaceControl$Transaction;->notifyReparentedSurfaces()V
+IFACE	Landroid/view/SurfaceControlRegistry$Reporter;	calls=1	methods=onMaxLayersExceeded(Ljava/util/WeakHashMap;ILjava/io/PrintWriter;)V
+	CALLER	Landroid/view/SurfaceControlRegistry;->add(Landroid/view/SurfaceControl;)V
+IFACE	Landroid/view/View$AttachInfo$Callbacks;	calls=2	methods=performHapticFeedback(IZ)Z,playSoundEffect(I)V
+	CALLER	Landroid/view/View;->performHapticFeedback(II)Z
+	CALLER	Landroid/view/View;->playSoundEffect(I)V
+IFACE	Landroid/view/View$OnAttachStateChangeListener;	calls=2	methods=onViewAttachedToWindow(Landroid/view/View;)V,onViewDetachedFromWindow(Landroid/view/View;)V
+	CALLER	Landroid/view/View;->dispatchAttachedToWindow(Landroid/view/View$AttachInfo;I)V
+	CALLER	Landroid/view/View;->dispatchDetachedFromWindow()V
+IFACE	Landroid/view/View$OnClickListener;	calls=1	methods=onClick(Landroid/view/View;)V
+	CALLER	Landroid/view/View;->performClick()Z
+IFACE	Landroid/view/View$OnContextClickListener;	calls=1	methods=onContextClick(Landroid/view/View;)Z
+	CALLER	Landroid/view/View;->performContextClick()Z
+IFACE	Landroid/view/View$OnDragListener;	calls=1	methods=onDrag(Landroid/view/View;Landroid/view/DragEvent;)Z
+	CALLER	Landroid/view/View;->callDragEventHandler(Landroid/view/DragEvent;)Z
+IFACE	Landroid/view/View$OnFocusChangeListener;	calls=1	methods=onFocusChange(Landroid/view/View;Z)V
+	CALLER	Landroid/view/View;->onFocusChanged(ZILandroid/graphics/Rect;)V
+IFACE	Landroid/view/View$OnGenericMotionListener;	calls=1	methods=onGenericMotion(Landroid/view/View;Landroid/view/MotionEvent;)Z
+	CALLER	Landroid/view/View;->dispatchGenericMotionEventInternal(Landroid/view/MotionEvent;)Z
+IFACE	Landroid/view/View$OnHoverListener;	calls=1	methods=onHover(Landroid/view/View;Landroid/view/MotionEvent;)Z
+	CALLER	Landroid/view/View;->dispatchHoverEvent(Landroid/view/MotionEvent;)Z
+IFACE	Landroid/view/View$OnScrollChangeListener;	calls=1	methods=onScrollChange(Landroid/view/View;IIII)V
+	CALLER	Landroid/view/View;->onScrollChanged(IIII)V
+IFACE	Landroid/view/View$OnTouchListener;	calls=1	methods=onTouch(Landroid/view/View;Landroid/view/MotionEvent;)Z
+	CALLER	Landroid/view/View;->dispatchTouchEvent(Landroid/view/MotionEvent;)Z
+IFACE	Landroid/view/ViewGroup$OnHierarchyChangeListener;	calls=2	methods=onChildViewAdded(Landroid/view/View;Landroid/view/View;)V,onChildViewRemoved(Landroid/view/View;Landroid/view/View;)V
+	CALLER	Landroid/view/ViewGroup;->dispatchViewAdded(Landroid/view/View;)V
+	CALLER	Landroid/view/ViewGroup;->dispatchViewRemoved(Landroid/view/View;)V
+IFACE	Landroid/view/ViewParent;	calls=38	methods=childDrawableStateChanged(Landroid/view/View;)V,childHasTransientStateChanged(Landroid/view/View;Z)V,clearChildFocus(Landroid/view/View;)V,focusableViewAvailable(Landroid/view/View;)V,getChildVisibleRect(Landroid/view/View;Landroid/graphics/Rect;Landroid/graphics/Point;)Z,getParent()Landroid/view/ViewParent;,getParentForAccessibility()Landroid/view/ViewParent;,invalidateChild(Landroid/view/View;Landroid/graphics/Rect;)V,isLayoutRequested()Z,notifySubtreeAccessibilityStateChanged(Landroid/view/View;Landroid/view/View;I)V,onDescendantInvalidated(Landroid/view/View;Landroid/view/View;)V,onDescendantUnbufferedRequested()V,onStopNestedScroll(Landroid/view/View;)V,recomputeViewAttributes(Landroid/view/View;)V,requestChildFocus(Landroid/view/View;Landroid/view/View;)V,requestLayout()V,requestSendAccessibilityEvent(Landroid/view/View;Landroid/view/accessibility/AccessibilityEvent;)Z,requestTransparentRegion(Landroid/view/View;)V,showContextMenuForChild(Landroid/view/View;FF)Z
+	CALLER	Landroid/view/HandwritingInitiator;->getViewHandwritingArea(Landroid/view/View;)Landroid/graphics/Rect;
+	CALLER	Landroid/view/View;->calculateIsImportantForContentCapture()Z
+	CALLER	Landroid/view/View;->clearFocusInternal(Landroid/view/View;ZZ)V
+	CALLER	Landroid/view/View;->damageInParent()V
+	CALLER	Landroid/view/View;->getGlobalVisibleRect(Landroid/graphics/Rect;Landroid/graphics/Point;)Z
+	CALLER	Landroid/view/View;->getParentForAccessibility()Landroid/view/ViewParent;
+	CALLER	Landroid/view/View;->getProjectionReceiver()Landroid/view/View;
+	CALLER	Landroid/view/View;->handleFocusGainInternal(ILandroid/graphics/Rect;)V
+	CALLER	Landroid/view/View;->invalidateInternal(IIIIZZ)V
+	CALLER	Landroid/view/View;->isImportantForAccessibility()Z
+	CALLER	Landroid/view/View;->isImportantForAutofill()Z
+	CALLER	Landroid/view/View;->isInScrollingContainer()Z
+IFACE	Landroid/view/ViewTreeObserver$OnGlobalFocusChangeListener;	calls=1	methods=onGlobalFocusChanged(Landroid/view/View;Landroid/view/View;)V
+	CALLER	Landroid/view/ViewTreeObserver;->dispatchOnGlobalFocusChange(Landroid/view/View;Landroid/view/View;)V
+IFACE	Landroid/view/ViewTreeObserver$OnWindowFocusChangeListener;	calls=1	methods=onWindowFocusChanged(Z)V
+	CALLER	Landroid/view/ViewTreeObserver;->dispatchOnWindowFocusChange(Z)V
+IFACE	Landroid/view/Window$Callback;	calls=1	methods=onWindowAttributesChanged(Landroid/view/WindowManager$LayoutParams;)V
+	CALLER	Landroid/view/Window;->dispatchWindowAttributesChanged(Landroid/view/WindowManager$LayoutParams;)V
+IFACE	Landroid/view/WindowCallbacks;	calls=1	methods=onWindowDragResizeEnd()V
+	CALLER	Landroid/view/ViewRootImpl;->endDragResizing()V
+IFACE	Landroid/view/WindowInsetsAnimationControlListener;	calls=3	methods=onCancelled(Landroid/view/WindowInsetsAnimationController;)V
+	CALLER	Landroid/view/InsetsController;->abortPendingImeControlRequest()V
+	CALLER	Landroid/view/InsetsController;->controlAnimationUncheckedInner(ILandroid/os/CancellationSignal;Landroid/view/WindowInsetsAnimationControlListener;Landroid/graphics/Rect;ZJLandroid/view/animation/Interpolator;IIZLandroid/view/inputmethod/ImeTracker$Token;)V
+IFACE	Landroid/view/WindowInsetsController$OnControllableInsetsChangedListener;	calls=2	methods=onControllableInsetsChanged(Landroid/view/WindowInsetsController;I)V
+	CALLER	Landroid/view/InsetsController;->addOnControllableInsetsChangedListener(Landroid/view/WindowInsetsController$OnControllableInsetsChangedListener;)V
+	CALLER	Landroid/view/InsetsController;->invokeControllableInsetsChangedListeners()I
+IFACE	Landroid/view/WindowManager;	calls=1	methods=removeView(Landroid/view/View;)V
+	CALLER	Lcom/android/internal/view/TooltipPopup;->hide()V
+IFACE	Landroid/view/accessibility/AccessibilityManager$AccessibilityPolicy;	calls=1	methods=isEnabled(Z)Z
+	CALLER	Landroid/view/accessibility/AccessibilityManager;->isEnabled()Z
+IFACE	Landroid/view/accessibility/IAccessibilityManager;	calls=6	methods=addAccessibilityInteractionConnection(Landroid/view/IWindow;Landroid/os/IBinder;Landroid/view/accessibility/IAccessibilityInteractionConnection;Ljava/lang/String;I)I,addClient(Landroid/view/accessibility/IAccessibilityManagerClient;I)J,getFocusColor()I,getFocusStrokeWidth()I,getRecommendedTimeoutMillis()J,setAccessibilityWindowAttributes(IIILandroid/view/accessibility/AccessibilityWindowAttributes;)V
+	CALLER	Landroid/view/accessibility/AccessibilityManager;->addAccessibilityInteractionConnection(Landroid/view/IWindow;Landroid/os/IBinder;Ljava/lang/String;Landroid/view/accessibility/IAccessibilityInteractionConnection;)I
+	CALLER	Landroid/view/accessibility/AccessibilityManager;->setAccessibilityWindowAttributes(IILandroid/view/accessibility/AccessibilityWindowAttributes;)V
+	CALLER	Landroid/view/accessibility/AccessibilityManager;->tryConnectToServiceLocked(Landroid/view/accessibility/IAccessibilityManager;)V
+IFACE	Landroid/view/animation/Animation$AnimationListener;	calls=1	methods=onAnimationEnd(Landroid/view/animation/Animation;)V
+	CALLER	Landroid/view/animation/Animation;->dispatchAnimationEnd()V
+IFACE	Landroid/view/autofill/AutofillManager$AutofillClient;	calls=14	methods=autofillClientGetActivityToken()Landroid/os/IBinder;,autofillClientGetComponentName()Landroid/content/ComponentName;,autofillClientIsVisibleForAutofill()Z,autofillClientRequestHideFillUi()Z,autofillClientResetableStateAvailable()V,isDisablingEnterExitEventForAutofill()Z
+	CALLER	Landroid/content/AutofillOptions;->isAugmentedAutofillEnabled(Landroid/content/Context;)Z
+	CALLER	Landroid/view/autofill/AutofillManager;->isActivityAllowedForAutofill()Z
+	CALLER	Landroid/view/autofill/AutofillManager;->isActivityDeniedForAutofill()Z
+	CALLER	Landroid/view/autofill/AutofillManager;->isClientDisablingEnterExitEvent()Z
+	CALLER	Landroid/view/autofill/AutofillManager;->isClientVisibleForAutofillLocked()Z
+	CALLER	Landroid/view/autofill/AutofillManager;->newLog(I)Landroid/metrics/LogMaker;
+	CALLER	Landroid/view/autofill/AutofillManager;->onCreate(Landroid/os/Bundle;)V
+	CALLER	Landroid/view/autofill/AutofillManager;->requestHideFillUi(Landroid/view/autofill/AutofillId;Landroid/view/View;)V
+	CALLER	Landroid/view/autofill/AutofillManager;->startSessionLocked(Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;I)V
+	CALLER	Landroid/view/autofill/AutofillManager;->tryAddServiceClientIfNeededLocked()Z
+IFACE	Landroid/view/autofill/IAutoFillManager;	calls=6	methods=addClient(Landroid/view/autofill/IAutoFillManagerClient;Landroid/content/ComponentName;ILcom/android/internal/os/IResultReceiver;)V,finishSession(III)V,removeClient(Landroid/view/autofill/IAutoFillManagerClient;I)V,restoreSession(ILandroid/os/IBinder;Landroid/os/IBinder;Lcom/android/internal/os/IResultReceiver;)V,startSession(Landroid/os/IBinder;Landroid/os/IBinder;Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;IZILandroid/content/ComponentName;ZLcom/android/internal/os/IResultReceiver;)V,updateSession(ILandroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;III)V
+	CALLER	Landroid/view/autofill/AutofillManager;->finishSessionLocked(I)V
+	CALLER	Landroid/view/autofill/AutofillManager;->onCreate(Landroid/os/Bundle;)V
+	CALLER	Landroid/view/autofill/AutofillManager;->startSessionLocked(Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;I)V
+	CALLER	Landroid/view/autofill/AutofillManager;->tryAddServiceClientIfNeededLocked()Z
+	CALLER	Landroid/view/autofill/AutofillManager;->updateSessionLocked(Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;II)V
+IFACE	Landroid/view/autofill/IAutoFillManagerClient;	calls=2	methods=asBinder()Landroid/os/IBinder;
+	CALLER	Landroid/view/autofill/AutofillManager;->onCreate(Landroid/os/Bundle;)V
+	CALLER	Landroid/view/autofill/AutofillManager;->startSessionLocked(Landroid/view/autofill/AutofillId;Landroid/graphics/Rect;Landroid/view/autofill/AutofillValue;I)V
+IFACE	Landroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;	calls=5	methods=getAppContext()Landroid/content/Context;
+	CALLER	Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;->onHidden(Landroid/view/inputmethod/ImeTracker$Token;Landroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;)V
+	CALLER	Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;->onHideCancelled(Landroid/view/inputmethod/ImeTracker$Token;ILandroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;)V
+	CALLER	Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;->onRequestHide(Landroid/view/inputmethod/ImeTracker$Token;IILandroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;)V
+	CALLER	Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;->onShowCancelled(Landroid/view/inputmethod/ImeTracker$Token;ILandroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;)V
+	CALLER	Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;->onShown(Landroid/view/inputmethod/ImeTracker$Token;Landroid/view/inputmethod/ImeTracker$InputMethodLatencyContext;)V
+IFACE	Landroid/view/inputmethod/ImeTracker;	calls=41	methods=forLatency()Landroid/view/inputmethod/ImeTracker$ImeLatencyTracker;,forLogging()Landroid/view/inputmethod/ImeTracker;,onCancelled(Landroid/view/inputmethod/ImeTracker$Token;I)V,onFailed(Landroid/view/inputmethod/ImeTracker$Token;I)V,onProgress(Landroid/view/inputmethod/ImeTracker$Token;I)V,onRequestHide(Ljava/lang/String;III)Landroid/view/inputmethod/ImeTracker$Token;,onRequestShow(Ljava/lang/String;III)Landroid/view/inputmethod/ImeTracker$Token;
+	CALLER	Landroid/view/InsetsController;->cancelAnimation(Landroid/view/InsetsAnimationControlRunner;Z)V
+	CALLER	Landroid/view/InsetsController;->collectSourceControls(ZILandroid/util/SparseArray;ILandroid/view/inputmethod/ImeTracker$Token;)Landroid/util/Pair;
+	CALLER	Landroid/view/InsetsController;->controlAnimationUncheckedInner(ILandroid/os/CancellationSignal;Landroid/view/WindowInsetsAnimationControlListener;Landroid/graphics/Rect;ZJLandroid/view/animation/Interpolator;IIZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/InsetsController;->hide(I)V
+	CALLER	Landroid/view/InsetsController;->hide(IZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/InsetsController;->show(I)V
+	CALLER	Landroid/view/InsetsController;->show(IZLandroid/view/inputmethod/ImeTracker$Token;)V
+	CALLER	Landroid/view/inputmethod/InputMethodManager;->closeCurrentInput()V
+IFACE	Landroid/view/inputmethod/InputConnection;	calls=1	methods=getHandler()Landroid/os/Handler;
+	CALLER	Landroid/view/inputmethod/InputMethodManager;->startInputInner(ILandroid/os/IBinder;III)Z
+IFACE	Landroid/view/textclassifier/TextClassifier;	calls=6	methods=destroy()V,isDestroyed()Z,onSelectionEvent(Landroid/view/textclassifier/SelectionEvent;)V,onTextClassifierEvent(Landroid/view/textclassifier/TextClassifierEvent;)V
+	CALLER	Landroid/widget/SelectionActionModeHelper$SelectionMetricsLogger;->endTextClassificationSession()V
+	CALLER	Landroid/widget/SelectionActionModeHelper$SelectionMetricsLogger;->hasActiveClassificationSession()Z
+	CALLER	Landroid/widget/SelectionActionModeHelper$SelectionMetricsLogger;->logSelectionAction(IIILjava/lang/String;Landroid/view/textclassifier/TextClassification;)V
+	CALLER	Landroid/widget/SelectionActionModeHelper$SelectionMetricsLogger;->maybeReportTranslateEvents()V
+IFACE	Landroid/view/translation/ViewTranslationCallback;	calls=1	methods=onClearTranslation(Landroid/view/View;)Z
+	CALLER	Landroid/view/View;->clearTranslationState()V
+IFACE	Landroid/widget/ListAdapter;	calls=1	methods=hasStableIds()Z
+	CALLER	Landroid/transition/Transition;->addViewValues(Landroid/transition/TransitionValuesMaps;Landroid/view/View;Landroid/transition/TransitionValues;)V
+IFACE	Landroid/window/OnBackAnimationCallback;	calls=1	methods=onBackCancelled()V
+	CALLER	Landroid/window/WindowOnBackInvokedDispatcher;->sendCancelledIfInProgress(Landroid/window/OnBackInvokedCallback;)V
+IFACE	Landroid/window/OnBackInvokedDispatcher;	calls=5	methods=registerOnBackInvokedCallback(ILandroid/window/OnBackInvokedCallback;)V,registerSystemOnBackInvokedCallback(Landroid/window/OnBackInvokedCallback;)V,setImeOnBackInvokedDispatcher(Landroid/window/ImeOnBackInvokedDispatcher;)V,unregisterOnBackInvokedCallback(Landroid/window/OnBackInvokedCallback;)V
+	CALLER	Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V
+	CALLER	Landroid/window/ProxyOnBackInvokedDispatcher;->clearCallbacksOnDispatcher()V
+	CALLER	Landroid/window/ProxyOnBackInvokedDispatcher;->transferCallbacksToDispatcher()V
+IFACE	Lcom/android/internal/app/IVoiceInteractor;	calls=1	methods=setKillCallback(Landroid/os/ICancellationSignal;)V
+	CALLER	Landroid/app/VoiceInteractor;-><init>(Lcom/android/internal/app/IVoiceInteractor;Landroid/content/Context;Landroid/app/Activity;Landroid/os/Looper;)V
+IFACE	Lcom/android/internal/content/om/OverlayConfig$PackageProvider;	calls=1	methods=forEachPackage(Lcom/android/internal/util/function/TriConsumer;)V
+	CALLER	Lcom/android/internal/content/om/OverlayConfig;->getOverlayPackageInfos(Lcom/android/internal/content/om/OverlayConfig$PackageProvider;)Ljava/util/Map;
+IFACE	Lcom/android/internal/inputmethod/IInputMethodSession;	calls=1	methods=displayCompletions([Landroid/view/inputmethod/CompletionInfo;)V
+	CALLER	Landroid/view/inputmethod/IInputMethodSessionInvoker;->displayCompletionsInternal([Landroid/view/inputmethod/CompletionInfo;)V
+IFACE	Lcom/android/internal/os/IResultReceiver;	calls=1	methods=send(ILandroid/os/Bundle;)V
+	CALLER	Landroid/os/ResultReceiver;->send(ILandroid/os/Bundle;)V
+IFACE	Lcom/android/internal/telephony/ISub;	calls=1	methods=asBinder()Landroid/os/IBinder;
+	CALLER	Landroid/telephony/TelephonyManager;->getSubscriptionService()Lcom/android/internal/telephony/ISub;
+IFACE	Lcom/android/internal/textservice/ISpellCheckerSession;	calls=4	methods=onCancel()V,onClose()V,onGetSentenceSuggestionsMultiple([Landroid/view/textservice/TextInfo;I)V,onGetSuggestionsMultiple([Landroid/view/textservice/TextInfo;IZ)V
+	CALLER	Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListenerImpl;->processTask(Lcom/android/internal/textservice/ISpellCheckerSession;Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListenerImpl$SpellCheckerParams;Z)V
+IFACE	Lcom/android/internal/textservice/ITextServicesManager;	calls=5	methods=finishSpellCheckerService(ILcom/android/internal/textservice/ISpellCheckerSessionListener;)V,getCurrentSpellChecker(ILjava/lang/String;)Landroid/view/textservice/SpellCheckerInfo;,getCurrentSpellCheckerSubtype(IZ)Landroid/view/textservice/SpellCheckerSubtype;,getSpellCheckerService(ILjava/lang/String;Ljava/lang/String;Lcom/android/internal/textservice/ITextServicesSessionListener;Lcom/android/internal/textservice/ISpellCheckerSessionListener;Landroid/os/Bundle;I)V,isSpellCheckerEnabled(I)Z
+	CALLER	Landroid/view/textservice/TextServicesManager;->finishSpellCheckerService(Lcom/android/internal/textservice/ISpellCheckerSessionListener;)V
+	CALLER	Landroid/view/textservice/TextServicesManager;->getCurrentSpellCheckerSubtype(Z)Landroid/view/textservice/SpellCheckerSubtype;
+	CALLER	Landroid/view/textservice/TextServicesManager;->isSpellCheckerEnabled()Z
+	CALLER	Landroid/view/textservice/TextServicesManager;->newSpellCheckerSession(Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionParams;Ljava/util/concurrent/Executor;Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListener;)Landroid/view/textservice/SpellCheckerSession;
+IFACE	Lcom/android/internal/util/function/TriFunction;	calls=1	methods=apply(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Landroid/view/InsetsController;->getSourceConsumer(II)Landroid/view/InsetsSourceConsumer;
+IFACE	Lcom/android/internal/view/IDragAndDropPermissions;	calls=1	methods=takeTransient()V
+	CALLER	Landroid/view/DragAndDropPermissions;->takeTransient()Z
+IFACE	Lcom/android/internal/view/IInputMethodManager;	calls=5	methods=acceptStylusHandwritingDelegation(Lcom/android/internal/inputmethod/IInputMethodClient;ILjava/lang/String;Ljava/lang/String;)Z,hideSoftInput(Lcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;Landroid/view/inputmethod/ImeTracker$Token;ILandroid/os/ResultReceiver;I)Z,isImeTraceEnabled()Z,startInputOrWindowGainedFocus(ILcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;IIILandroid/view/inputmethod/EditorInfo;Lcom/android/internal/inputmethod/IRemoteInputConnection;Lcom/android/internal/inputmethod/IRemoteAccessibilityInputConnection;IILandroid/window/ImeOnBackInvokedDispatcher;)Lcom/android/internal/inputmethod/InputBindResult;,startStylusHandwriting(Lcom/android/internal/inputmethod/IInputMethodClient;)V
+	CALLER	Landroid/view/inputmethod/IInputMethodManagerGlobalInvoker;->acceptStylusHandwritingDelegation(Lcom/android/internal/inputmethod/IInputMethodClient;ILjava/lang/String;Ljava/lang/String;)Z
+	CALLER	Landroid/view/inputmethod/IInputMethodManagerGlobalInvoker;->hideSoftInput(Lcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;Landroid/view/inputmethod/ImeTracker$Token;ILandroid/os/ResultReceiver;I)Z
+	CALLER	Landroid/view/inputmethod/IInputMethodManagerGlobalInvoker;->isImeTraceEnabled()Z
+	CALLER	Landroid/view/inputmethod/IInputMethodManagerGlobalInvoker;->startInputOrWindowGainedFocus(ILcom/android/internal/inputmethod/IInputMethodClient;Landroid/os/IBinder;IIILandroid/view/inputmethod/EditorInfo;Lcom/android/internal/inputmethod/IRemoteInputConnection;Lcom/android/internal/inputmethod/IRemoteAccessibilityInputConnection;IILandroid/window/ImeOnBackInvokedDispatcher;)Lcom/android/internal/inputmethod/InputBindResult;
+	CALLER	Landroid/view/inputmethod/IInputMethodManagerGlobalInvoker;->startStylusHandwriting(Lcom/android/internal/inputmethod/IInputMethodClient;)V
+IFACE	Lcom/android/internal/view/RootViewSurfaceTaker;	calls=3	methods=providePendingInsetsController()Landroid/view/PendingInsetsController;,willYouTakeTheInputQueue()Landroid/view/InputQueue$Callback;,willYouTakeTheSurface()Landroid/view/SurfaceHolder$Callback2;
+	CALLER	Landroid/view/ViewRootImpl;->setView(Landroid/view/View;Landroid/view/WindowManager$LayoutParams;Landroid/view/View;I)V
+IFACE	Ldalvik/system/BaseDexClassLoader$Reporter;	calls=1	methods=report(Ljava/util/Map;)V
+	CALLER	Ldalvik/system/BaseDexClassLoader;->reportClassLoaderChain()V
+IFACE	Ldalvik/system/BlockGuard$Policy;	calls=1	methods=onUnbufferedIO()V
+	CALLER	Llibcore/io/IoTracker;->trackIo(I)V
+IFACE	Ldalvik/system/CloseGuard$Tracker;	calls=2	methods=close(Ljava/lang/Throwable;)V,open(Ljava/lang/Throwable;)V
+	CALLER	Ldalvik/system/CloseGuard;->close()V
+	CALLER	Ldalvik/system/CloseGuard;->openWithCallSite(Ljava/lang/String;Ljava/lang/String;)V
+IFACE	Ljava/io/Externalizable;	calls=1	methods=readExternal(Ljava/io/ObjectInput;)V
+	CALLER	Ljava/io/ObjectInputStream;->readExternalData(Ljava/io/Externalizable;Ljava/io/ObjectStreamClass;)V
+IFACE	Ljava/lang/AutoCloseable;	calls=1	methods=close()V
+	CALLER	Llibcore/io/IoUtils;->closeQuietly(Ljava/lang/AutoCloseable;)V
+IFACE	Ljava/lang/CharSequence;	calls=123	methods=charAt(I)C,length()I,subSequence(II)Ljava/lang/CharSequence;,toString()Ljava/lang/String;
+	CALLER	Landroid/content/pm/PackageItemInfo;-><init>(Landroid/content/pm/PackageItemInfo;)V
+	CALLER	Landroid/content/res/Resources;->getString(I)Ljava/lang/String;
+	CALLER	Landroid/content/res/Resources;->loadXmlResourceParser(ILjava/lang/String;)Landroid/content/res/XmlResourceParser;
+	CALLER	Landroid/content/res/ResourcesImpl;->loadComplexColorForCookie(Landroid/content/res/Resources;Landroid/util/TypedValue;ILandroid/content/res/Resources$Theme;)Landroid/content/res/ComplexColor;
+	CALLER	Landroid/content/res/ResourcesImpl;->loadDrawableForCookie(Landroid/content/res/Resources;Landroid/util/TypedValue;II)Landroid/graphics/drawable/Drawable;
+	CALLER	Landroid/content/res/ResourcesImpl;->loadFont(Landroid/content/res/Resources;Landroid/util/TypedValue;I)Landroid/graphics/Typeface;
+	CALLER	Landroid/content/res/TypedArray;->getFloat(IF)F
+	CALLER	Landroid/content/res/TypedArray;->getString(I)Ljava/lang/String;
+	CALLER	Landroid/graphics/BaseCanvas;->drawTextRun(Ljava/lang/CharSequence;IIIIFFZLandroid/graphics/Paint;)V
+	CALLER	Landroid/graphics/Paint;->getTextBounds(Ljava/lang/CharSequence;IILandroid/graphics/Rect;)V
+	CALLER	Landroid/text/BoringLayout;->init(Ljava/lang/CharSequence;Landroid/text/TextPaint;Landroid/text/Layout$Alignment;Landroid/text/BoringLayout$Metrics;ZZZ)V
+	CALLER	Landroid/text/BoringLayout;->isBoring(Ljava/lang/CharSequence;Landroid/text/TextPaint;Landroid/text/TextDirectionHeuristic;ZLandroid/text/BoringLayout$Metrics;)Landroid/text/BoringLayout$Metrics;
+IFACE	Ljava/lang/Comparable;	calls=20	methods=compareTo(Ljava/lang/Object;)I
+	CALLER	Landroid/util/Range;-><init>(Ljava/lang/Comparable;Ljava/lang/Comparable;)V
+	CALLER	Ljava/util/Arrays;->binarySearch0([Ljava/lang/Object;IILjava/lang/Object;)I
+	CALLER	Ljava/util/ComparableTimSort;->binarySort([Ljava/lang/Object;III)V
+	CALLER	Ljava/util/ComparableTimSort;->countRunAndMakeAscending([Ljava/lang/Object;II)I
+	CALLER	Ljava/util/ComparableTimSort;->gallopLeft(Ljava/lang/Comparable;[Ljava/lang/Object;III)I
+	CALLER	Ljava/util/ComparableTimSort;->gallopRight(Ljava/lang/Comparable;[Ljava/lang/Object;III)I
+	CALLER	Ljava/util/ComparableTimSort;->mergeHi(IIII)V
+	CALLER	Ljava/util/ComparableTimSort;->mergeLo(IIII)V
+	CALLER	Ljava/util/HashMap;->compareComparables(Ljava/lang/Class;Ljava/lang/Object;Ljava/lang/Object;)I
+	CALLER	Ljava/util/TreeMap;->compare(Ljava/lang/Object;Ljava/lang/Object;)I
+	CALLER	Ljava/util/TreeMap;->getEntry(Ljava/lang/Object;)Ljava/util/TreeMap$TreeMapEntry;
+	CALLER	Ljava/util/concurrent/ConcurrentHashMap;->compareComparables(Ljava/lang/Class;Ljava/lang/Object;Ljava/lang/Object;)I
+IFACE	Ljava/lang/Iterable;	calls=3	methods=iterator()Ljava/util/Iterator;
+	CALLER	Landroid/text/TextUtils;->join(Ljava/lang/CharSequence;Ljava/lang/Iterable;)Ljava/lang/String;
+	CALLER	Landroid/text/util/Linkify;->gatherTelLinks(Ljava/util/ArrayList;Landroid/text/Spannable;Landroid/content/Context;)V
+	CALLER	Ljava/lang/String;->join(Ljava/lang/CharSequence;Ljava/lang/Iterable;)Ljava/lang/String;
+IFACE	Ljava/lang/Runnable;	calls=7	methods=run()V
+	CALLER	Landroid/app/BackStackRecord;->runOnCommitRunnables()V
+	CALLER	Landroid/graphics/Shader;->discardNativeInstanceLocked()V
+	CALLER	Landroid/os/Handler;->handleCallback(Landroid/os/Message;)V
+	CALLER	Landroid/transition/Scene;->exit()V
+	CALLER	Landroid/view/SurfaceControl$Transaction;->close()V
+	CALLER	Landroid/view/SurfaceControl;->release()V
+	CALLER	Landroid/view/inputmethod/RemoteInputConnectionImpl;->dispatch(Ljava/lang/Runnable;)V
+IFACE	Ljava/lang/reflect/ParameterizedType;	calls=4	methods=getActualTypeArguments()[Ljava/lang/reflect/Type;,getRawType()Ljava/lang/reflect/Type;
+	CALLER	Ljava/util/HashMap;->comparableClassFor(Ljava/lang/Object;)Ljava/lang/Class;
+	CALLER	Ljava/util/concurrent/ConcurrentHashMap;->comparableClassFor(Ljava/lang/Object;)Ljava/lang/Class;
+IFACE	Ljava/net/InetAddressImpl;	calls=1	methods=lookupAllHostAddr(Ljava/lang/String;I)[Ljava/net/InetAddress;
+	CALLER	Ljava/net/InetAddress;->getByName(Ljava/lang/String;)Ljava/net/InetAddress;
+IFACE	Ljava/nio/channels/WritableByteChannel;	calls=1	methods=write(Ljava/nio/ByteBuffer;)I
+	CALLER	Lsun/nio/cs/StreamEncoder;->writeBytes()V
+IFACE	Ljava/nio/file/Path;	calls=2	methods=getParent()Ljava/nio/file/Path;,toString()Ljava/lang/String;
+	CALLER	Landroid/app/LoadedApk;->createOrUpdateClassLoaderLocked(Ljava/util/List;)V
+IFACE	Ljava/security/Key;	calls=2	methods=getAlgorithm()Ljava/lang/String;
+	CALLER	Lsun/security/util/DisabledAlgorithmConstraints$Constraints;->permits(Ljava/security/Key;)Z
+	CALLER	Lsun/security/util/DisabledAlgorithmConstraints;->checkConstraints(Ljava/util/Set;Ljava/lang/String;Ljava/security/Key;Ljava/security/AlgorithmParameters;)Z
+IFACE	Ljava/security/Principal;	calls=3	methods=equals(Ljava/lang/Object;)Z
+	CALLER	Lsun/security/pkcs/SignerInfo;->getCertificateChain(Lsun/security/pkcs/PKCS7;)Ljava/util/ArrayList;
+IFACE	Ljava/security/PrivilegedAction;	calls=1	methods=run()Ljava/lang/Object;
+	CALLER	Ljava/security/AccessController;->doPrivileged(Ljava/security/PrivilegedAction;)Ljava/lang/Object;
+IFACE	Ljava/security/PrivilegedExceptionAction;	calls=1	methods=run()Ljava/lang/Object;
+	CALLER	Ljava/security/AccessController;->doPrivileged(Ljava/security/PrivilegedExceptionAction;)Ljava/lang/Object;
+IFACE	Ljava/security/PublicKey;	calls=4	methods=getAlgorithm()Ljava/lang/String;,getEncoded()[B
+	CALLER	Landroid/util/apk/ApkSignatureSchemeV2Verifier;->verifySigner(Ljava/nio/ByteBuffer;Ljava/util/Map;Ljava/security/cert/CertificateFactory;)[Ljava/security/cert/X509Certificate;
+	CALLER	Landroid/util/apk/ApkSignatureSchemeV3Verifier;->verifySigner(Ljava/nio/ByteBuffer;Ljava/util/Map;Ljava/security/cert/CertificateFactory;)Landroid/util/Pair;
+	CALLER	Landroid/util/apk/ApkSignatureSchemeV4Verifier;->verifySigner(Landroid/os/incremental/V4Signature$SigningInfo;[B)Landroid/util/Pair;
+	CALLER	Lsun/security/pkcs/SignerInfo;->verify(Lsun/security/pkcs/PKCS7;Ljava/io/InputStream;)Lsun/security/pkcs/SignerInfo;
+IFACE	Ljava/security/interfaces/DSAKey;	calls=1	methods=getParams()Ljava/security/interfaces/DSAParams;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljava/security/interfaces/DSAParams;	calls=1	methods=getP()Ljava/math/BigInteger;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljava/security/interfaces/ECKey;	calls=1	methods=getParams()Ljava/security/spec/ECParameterSpec;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljava/security/interfaces/RSAKey;	calls=1	methods=getModulus()Ljava/math/BigInteger;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljava/util/Collection;	calls=27	methods=add(Ljava/lang/Object;)Z,contains(Ljava/lang/Object;)Z,isEmpty()Z,iterator()Ljava/util/Iterator;,size()I,toArray()[Ljava/lang/Object;
+	CALLER	Landroid/animation/LayoutTransition;->cancel()V
+	CALLER	Landroid/animation/LayoutTransition;->cancel(I)V
+	CALLER	Landroid/app/FragmentTransition;->addSharedElementsWithMatchingNames(Ljava/util/ArrayList;Landroid/util/ArrayMap;Ljava/util/Collection;)V
+	CALLER	Landroid/app/ResourcesManager;->redirectResourcesToNewImplLocked(Landroid/util/ArrayMap;)V
+	CALLER	Landroid/content/IntentFilter;->matchAction(Ljava/lang/String;ZLjava/util/Collection;)Z
+	CALLER	Landroid/os/LocaleList;->computeFirstMatchIndex(Ljava/util/Collection;Z)I
+	CALLER	Landroid/util/ArraySet;->addAll(Ljava/util/Collection;)Z
+	CALLER	Landroid/util/MapCollections;->retainAllHelper(Ljava/util/Map;Ljava/util/Collection;)Z
+	CALLER	Landroid/util/apk/ApkSignatureVerifier;->verifyV4Signature(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;IZ)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Lcom/android/internal/util/ArrayUtils;->isEmpty(Ljava/util/Collection;)Z
+	CALLER	Lcom/android/internal/util/CollectionUtils;->size(Ljava/util/Collection;)I
+	CALLER	Ljava/lang/reflect/WeakCache$CacheKey;->expungeFrom(Ljava/util/concurrent/ConcurrentMap;Ljava/util/concurrent/ConcurrentMap;)V
+IFACE	Ljava/util/Comparator;	calls=22	methods=compare(Ljava/lang/Object;Ljava/lang/Object;)I,comparingDouble(Ljava/util/function/ToDoubleFunction;)Ljava/util/Comparator;,comparingInt(Ljava/util/function/ToIntFunction;)Ljava/util/Comparator;,thenComparing(Ljava/util/Comparator;)Ljava/util/Comparator;,thenComparingDouble(Ljava/util/function/ToDoubleFunction;)Ljava/util/Comparator;
+	CALLER	Landroid/widget/SmartSelectSprite;-><clinit>()V
+	CALLER	Lcom/android/internal/content/om/OverlayConfig;->getSortedOverlays()Ljava/util/ArrayList;
+	CALLER	Ljava/lang/String;->compareToIgnoreCase(Ljava/lang/String;)I
+	CALLER	Ljava/util/Comparator;->thenComparingDouble(Ljava/util/function/ToDoubleFunction;)Ljava/util/Comparator;
+	CALLER	Ljava/util/TimSort;->binarySort([Ljava/lang/Object;IIILjava/util/Comparator;)V
+	CALLER	Ljava/util/TimSort;->countRunAndMakeAscending([Ljava/lang/Object;IILjava/util/Comparator;)I
+	CALLER	Ljava/util/TimSort;->gallopLeft(Ljava/lang/Object;[Ljava/lang/Object;IIILjava/util/Comparator;)I
+	CALLER	Ljava/util/TimSort;->gallopRight(Ljava/lang/Object;[Ljava/lang/Object;IIILjava/util/Comparator;)I
+	CALLER	Ljava/util/TimSort;->mergeHi(IIII)V
+	CALLER	Ljava/util/TimSort;->mergeLo(IIII)V
+	CALLER	Ljava/util/TreeMap;->compare(Ljava/lang/Object;Ljava/lang/Object;)I
+	CALLER	Ljava/util/TreeMap;->getEntryUsingComparator(Ljava/lang/Object;)Ljava/util/TreeMap$TreeMapEntry;
+IFACE	Ljava/util/Deque;	calls=1	methods=iterator()Ljava/util/Iterator;
+	CALLER	Landroid/os/StrictMode$ViolationInfo;->getStackTrace()Ljava/lang/String;
+IFACE	Ljava/util/Enumeration;	calls=2	methods=hasMoreElements()Z,nextElement()Ljava/lang/Object;
+	CALLER	Lsun/security/x509/AlgorithmId;->reinitializeMappingTableLocked()V
+IFACE	Ljava/util/Formatter$FormatString;	calls=8	methods=index()I,print(Ljava/lang/Object;Ljava/util/Locale;)V,toString()Ljava/lang/String;
+	CALLER	Ljava/util/Formatter;->format(Ljava/util/Locale;Ljava/lang/String;[Ljava/lang/Object;)Ljava/util/Formatter;
+IFACE	Ljava/util/Iterator;	calls=217	methods=hasNext()Z,next()Ljava/lang/Object;,remove()V
+	CALLER	Landroid/animation/AnimatorInflater;->createAnimatorFromXml(Landroid/content/res/Resources;Landroid/content/res/Resources$Theme;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/animation/AnimatorSet;IF)Landroid/animation/Animator;
+	CALLER	Landroid/animation/LayoutTransition;->addChild(Landroid/view/ViewGroup;Landroid/view/View;Z)V
+	CALLER	Landroid/animation/LayoutTransition;->cancel()V
+	CALLER	Landroid/animation/LayoutTransition;->cancel(I)V
+	CALLER	Landroid/animation/LayoutTransition;->removeChild(Landroid/view/ViewGroup;Landroid/view/View;Z)V
+	CALLER	Landroid/animation/LayoutTransition;->runAppearingTransition(Landroid/view/ViewGroup;Landroid/view/View;)V
+	CALLER	Landroid/animation/LayoutTransition;->runDisappearingTransition(Landroid/view/ViewGroup;Landroid/view/View;)V
+	CALLER	Landroid/app/ActivityThread;->installContentProviders(Landroid/content/Context;Ljava/util/List;)V
+	CALLER	Landroid/app/ContextImpl;->notifyOnDeviceChangedListeners(I)V
+	CALLER	Landroid/app/FragmentManagerImpl;->dispatchOnFragmentActivityCreated(Landroid/app/Fragment;Landroid/os/Bundle;Z)V
+	CALLER	Landroid/app/FragmentManagerImpl;->dispatchOnFragmentAttached(Landroid/app/Fragment;Landroid/content/Context;Z)V
+	CALLER	Landroid/app/FragmentManagerImpl;->dispatchOnFragmentCreated(Landroid/app/Fragment;Landroid/os/Bundle;Z)V
+IFACE	Ljava/util/List;	calls=330	methods=add(ILjava/lang/Object;)V,add(Ljava/lang/Object;)Z,addAll(Ljava/util/Collection;)Z,clear()V,contains(Ljava/lang/Object;)Z,containsAll(Ljava/util/Collection;)Z,equals(Ljava/lang/Object;)Z,get(I)Ljava/lang/Object;,indexOf(Ljava/lang/Object;)I,isEmpty()Z,iterator()Ljava/util/Iterator;,listIterator()Ljava/util/ListIterator;,listIterator(I)Ljava/util/ListIterator;,of([Ljava/lang/Object;)Ljava/util/List;,set(ILjava/lang/Object;)Ljava/lang/Object;,size()I,sort(Ljava/util/Comparator;)V,stream()Ljava/util/stream/Stream;,toArray()[Ljava/lang/Object;,toArray([Ljava/lang/Object;)[Ljava/lang/Object;
+	CALLER	Landroid/animation/ValueAnimator;->setDurationScale(F)V
+	CALLER	Landroid/app/ActivityThread;->installContentProviders(Landroid/content/Context;Ljava/util/List;)V
+	CALLER	Landroid/app/ActivityThread;->performLaunchActivity(Landroid/app/ActivityThread$ActivityClientRecord;Landroid/content/Intent;)Landroid/app/Activity;
+	CALLER	Landroid/app/ApplicationLoaders;->getSharedLibraryClassLoaderWithSharedLibraries(Ljava/lang/String;IZLjava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Ljava/lang/ClassLoader;
+	CALLER	Landroid/app/ApplicationLoaders;->sharedLibrariesEquals(Ljava/util/List;Ljava/util/List;)Z
+	CALLER	Landroid/app/FragmentManagerImpl;->modifiesAlpha(Landroid/animation/Animator;)Z
+	CALLER	Landroid/app/FragmentManagerImpl;->restoreAllState(Landroid/os/Parcelable;Landroid/app/FragmentManagerNonConfig;)V
+	CALLER	Landroid/app/FragmentTransition;->bfsAddViewChildren(Ljava/util/List;Landroid/view/View;)V
+	CALLER	Landroid/app/FragmentTransition;->configureTransitionsReordered(Landroid/app/FragmentManagerImpl;ILandroid/app/FragmentTransition$FragmentContainerTransition;Landroid/view/View;Landroid/util/ArrayMap;)V
+	CALLER	Landroid/app/FragmentTransition;->containedBeforeIndex(Ljava/util/List;Landroid/view/View;I)Z
+	CALLER	Landroid/app/FragmentTransition;->isNullOrEmpty(Ljava/util/List;)Z
+	CALLER	Landroid/app/FragmentTransition;->replaceTargets(Landroid/transition/Transition;Ljava/util/ArrayList;Ljava/util/ArrayList;)V
+IFACE	Ljava/util/ListIterator;	calls=8	methods=next()Ljava/lang/Object;,previous()Ljava/lang/Object;,set(Ljava/lang/Object;)V
+	CALLER	Ljava/util/Collections;->reverse(Ljava/util/List;)V
+	CALLER	Ljava/util/Collections;->sort(Ljava/util/List;Ljava/util/Comparator;)V
+	CALLER	Ljava/util/List;->sort(Ljava/util/Comparator;)V
+IFACE	Ljava/util/Map$Entry;	calls=39	methods=getKey()Ljava/lang/Object;,getValue()Ljava/lang/Object;
+	CALLER	Landroid/graphics/Typeface;->initSystemDefaultTypefaces(Ljava/util/Map;Ljava/util/List;Ljava/util/Map;)V
+	CALLER	Landroid/util/LruCache;->trimToSize(I)V
+	CALLER	Landroid/util/jar/StrictJarVerifier;->initEntry(Ljava/lang/String;)Landroid/util/jar/StrictJarVerifier$VerifierEntry;
+	CALLER	Landroid/util/jar/StrictJarVerifier;->verifyCertificate(Ljava/lang/String;)V
+	CALLER	Landroid/view/textclassifier/EntityConfidence;-><init>(Ljava/util/Map;)V
+	CALLER	Ljava/lang/ProcessEnvironment$StringEnvironment;->toEnvironmentBlock([I)[B
+	CALLER	Ljava/nio/charset/Charset;->lookup(Ljava/lang/String;)Ljava/nio/charset/Charset;
+	CALLER	Ljava/security/Provider;->ensureLegacyParsed()V
+	CALLER	Ljava/security/Provider;->removeInvalidServices(Ljava/util/Map;)V
+	CALLER	Ljava/util/Map;->ofEntries([Ljava/util/Map$Entry;)Ljava/util/Map;
+	CALLER	Llibcore/util/BasicLruCache;->trimToSize(I)V
+	CALLER	Lorg/xmlpull/v1/XmlPullParserFactory;->newPullParser()Lorg/xmlpull/v1/XmlPullParser;
+IFACE	Ljava/util/Map;	calls=326	methods=clear()V,computeIfAbsent(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;,containsKey(Ljava/lang/Object;)Z,containsValue(Ljava/lang/Object;)Z,copyOf(Ljava/util/Map;)Ljava/util/Map;,entrySet()Ljava/util/Set;,get(Ljava/lang/Object;)Ljava/lang/Object;,isEmpty()Z,keySet()Ljava/util/Set;,of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;,of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;,ofEntries([Ljava/util/Map$Entry;)Ljava/util/Map;,put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;,putAll(Ljava/util/Map;)V,putIfAbsent(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;,size()I,values()Ljava/util/Collection;
+	CALLER	Landroid/app/ApplicationLoaders;->getCachedNonBootclasspathSystemLib(Ljava/lang/String;Ljava/lang/ClassLoader;Ljava/lang/String;Ljava/util/List;)Ljava/lang/ClassLoader;
+	CALLER	Landroid/app/SystemServiceRegistry;-><clinit>()V
+	CALLER	Landroid/app/SystemServiceRegistry;->registerService(Ljava/lang/String;Ljava/lang/Class;Landroid/app/SystemServiceRegistry$ServiceFetcher;)V
+	CALLER	Landroid/graphics/FontListParser;->findUpdatedFontFile(Ljava/lang/String;Ljava/util/Map;)Ljava/lang/String;
+	CALLER	Landroid/graphics/FontListParser;->readFamilies(Lorg/xmlpull/v1/XmlPullParser;Ljava/lang/String;Landroid/graphics/fonts/FontCustomizationParser$Result;Ljava/util/Map;JIZ)Landroid/text/FontConfig;
+	CALLER	Landroid/graphics/Typeface;->deserializeFontMap(Ljava/nio/ByteBuffer;Ljava/util/Map;)[J
+	CALLER	Landroid/graphics/Typeface;->getSystemDefaultTypeface(Ljava/lang/String;)Landroid/graphics/Typeface;
+	CALLER	Landroid/graphics/Typeface;->hasFontFamily(Ljava/lang/String;)Z
+	CALLER	Landroid/graphics/Typeface;->initSystemDefaultTypefaces(Ljava/util/Map;Ljava/util/List;Ljava/util/Map;)V
+	CALLER	Landroid/graphics/Typeface;->setSystemFontMap(Ljava/util/Map;)V
+	CALLER	Landroid/graphics/drawable/VectorDrawable$VFullPath;-><clinit>()V
+	CALLER	Landroid/graphics/drawable/VectorDrawable$VGroup;-><clinit>()V
+IFACE	Ljava/util/NavigableMap;	calls=1	methods=navigableKeySet()Ljava/util/NavigableSet;
+	CALLER	Ljava/util/TreeMap;->descendingKeySet()Ljava/util/NavigableSet;
+IFACE	Ljava/util/NavigableSet;	calls=1	methods=iterator()Ljava/util/Iterator;
+	CALLER	Landroid/window/WindowOnBackInvokedDispatcher;->getTopCallback()Landroid/window/OnBackInvokedCallback;
+IFACE	Ljava/util/Queue;	calls=7	methods=clear()V,isEmpty()Z,iterator()Ljava/util/Iterator;,offer(Ljava/lang/Object;)Z,poll()Ljava/lang/Object;
+	CALLER	Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListenerImpl;->processCloseLocked()V
+	CALLER	Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListenerImpl;->processOrEnqueueTask(Landroid/view/textservice/SpellCheckerSession$SpellCheckerSessionListenerImpl$SpellCheckerParams;)V
+	CALLER	Lcom/android/internal/util/TraceBuffer;->resetBuffer()V
+IFACE	Ljava/util/Set;	calls=246	methods=add(Ljava/lang/Object;)Z,addAll(Ljava/util/Collection;)Z,clear()V,contains(Ljava/lang/Object;)Z,isEmpty()Z,iterator()Ljava/util/Iterator;,of(Ljava/lang/Object;)Ljava/util/Set;,of(Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Set;,of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Set;,of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Set;,size()I,toArray([Ljava/lang/Object;)[Ljava/lang/Object;
+	CALLER	Landroid/app/ContextImpl;->createAttributionSource(Ljava/lang/String;Landroid/content/AttributionSource;Ljava/util/Set;)Landroid/content/AttributionSource;
+	CALLER	Landroid/app/DexLoadReporter;->registerAppDataDir(Ljava/lang/String;Ljava/lang/String;)V
+	CALLER	Landroid/app/LoadedApk;->appendSharedLibrariesLibPathsIfNeeded(Ljava/util/List;Landroid/content/pm/ApplicationInfo;Ljava/util/Set;Ljava/util/List;)V
+	CALLER	Landroid/app/LoadedApk;->makePaths(Landroid/app/ActivityThread;ZLandroid/content/pm/ApplicationInfo;Ljava/util/List;Ljava/util/List;)V
+	CALLER	Landroid/content/IntentFilter;->matchCategories(Ljava/util/Set;)Ljava/lang/String;
+	CALLER	Landroid/content/IntentFilter;->matchExtras(Landroid/os/Bundle;)Ljava/lang/String;
+	CALLER	Landroid/content/pm/parsing/ApkLiteParseUtils;->separateAndValidateSplitTypes(Landroid/content/pm/parsing/result/ParseInput;Ljava/lang/String;)Landroid/content/pm/parsing/result/ParseResult;
+	CALLER	Landroid/content/res/Resources;-><init>(Ljava/lang/ClassLoader;)V
+	CALLER	Landroid/graphics/FontListParser;->readFamilies(Lorg/xmlpull/v1/XmlPullParser;Ljava/lang/String;Landroid/graphics/fonts/FontCustomizationParser$Result;Ljava/util/Map;JIZ)Landroid/text/FontConfig;
+	CALLER	Landroid/graphics/Typeface;->initSystemDefaultTypefaces(Ljava/util/Map;Ljava/util/List;Ljava/util/Map;)V
+	CALLER	Landroid/internal/modules/utils/build/UnboundedSdkLevel;-><clinit>()V
+	CALLER	Landroid/internal/modules/utils/build/UnboundedSdkLevel;->isAtMostInternal(Ljava/lang/String;)Z
+IFACE	Ljava/util/SortedMap;	calls=5	methods=entrySet()Ljava/util/Set;,isEmpty()Z,put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Lsun/util/locale/LocaleExtensions;-><init>(Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;)V
+	CALLER	Lsun/util/locale/LocaleExtensions;->toID(Ljava/util/SortedMap;)Ljava/lang/String;
+IFACE	Ljava/util/SortedSet;	calls=1	methods=add(Ljava/lang/Object;)Z
+	CALLER	Lsun/util/locale/LocaleExtensions;-><init>(Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;)V
+IFACE	Ljava/util/concurrent/ConcurrentMap;	calls=28	methods=containsKey(Ljava/lang/Object;)Z,get(Ljava/lang/Object;)Ljava/lang/Object;,put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;,putIfAbsent(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;,remove(Ljava/lang/Object;)Ljava/lang/Object;,remove(Ljava/lang/Object;Ljava/lang/Object;)Z,replace(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Z,values()Ljava/util/Collection;
+	CALLER	Ljava/io/ObjectInputStream;->verifySubclass()V
+	CALLER	Ljava/io/ObjectStreamClass;->getReflector([Ljava/io/ObjectStreamField;Ljava/io/ObjectStreamClass;)Ljava/io/ObjectStreamClass$FieldReflector;
+	CALLER	Ljava/io/ObjectStreamClass;->lookup(Ljava/lang/Class;Z)Ljava/io/ObjectStreamClass;
+	CALLER	Ljava/io/ObjectStreamClass;->processQueue(Ljava/lang/ref/ReferenceQueue;Ljava/util/concurrent/ConcurrentMap;)V
+	CALLER	Ljava/lang/invoke/MethodType$ConcurrentWeakInternSet;->add(Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Ljava/lang/invoke/MethodType$ConcurrentWeakInternSet;->expungeStaleElements()V
+	CALLER	Ljava/lang/invoke/MethodType$ConcurrentWeakInternSet;->get(Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Ljava/lang/reflect/WeakCache$CacheKey;->expungeFrom(Ljava/util/concurrent/ConcurrentMap;Ljava/util/concurrent/ConcurrentMap;)V
+	CALLER	Ljava/lang/reflect/WeakCache;->containsValue(Ljava/lang/Object;)Z
+	CALLER	Ljava/lang/reflect/WeakCache;->get(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Ljava/util/Calendar;->setWeekCountData(Ljava/util/Locale;)V
+	CALLER	Lsun/util/calendar/CalendarSystem;->forName(Ljava/lang/String;)Lsun/util/calendar/CalendarSystem;
+IFACE	Ljava/util/concurrent/Executor;	calls=6	methods=execute(Ljava/lang/Runnable;)V
+	CALLER	Landroid/app/ContextImpl;->notifyOnDeviceChangedListeners(I)V
+	CALLER	Landroid/os/AsyncTask;->execute(Ljava/lang/Runnable;)V
+	CALLER	Landroid/os/StrictMode$AndroidBlockGuardPolicy;->onThreadPolicyViolation(Landroid/os/StrictMode$ViolationInfo;)V
+	CALLER	Landroid/os/StrictMode;->onVmPolicyViolation(Landroid/os/strictmode/Violation;Z)V
+	CALLER	Landroid/view/accessibility/AccessibilityManager;->notifyAudioDescriptionbyDefaultStateChanged()V
+	CALLER	Landroid/view/textservice/SpellCheckerSession;->handleOnGetSentenceSuggestionsMultiple([Landroid/view/textservice/SentenceSuggestionsInfo;)V
+IFACE	Ljava/util/concurrent/locks/Condition;	calls=1	methods=awaitNanos(J)J
+	CALLER	Landroid/provider/FontsContract;->getFontSync(Landroid/provider/FontRequest;)Landroid/graphics/Typeface;
+IFACE	Ljava/util/concurrent/locks/Lock;	calls=6	methods=lock()V,newCondition()Ljava/util/concurrent/locks/Condition;,unlock()V
+	CALLER	Landroid/provider/FontsContract;->getFontSync(Landroid/provider/FontRequest;)Landroid/graphics/Typeface;
+IFACE	Ljava/util/function/BiFunction;	calls=3	methods=apply(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Landroid/os/BaseBundle;->unwrapLazyValueFromMapLocked(ILjava/lang/Class;[Ljava/lang/Class;)Ljava/lang/Object;
+	CALLER	Ljava/lang/reflect/WeakCache;->get(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Ljdk/internal/util/Preconditions;->outOfBounds(Ljava/util/function/BiFunction;Ljava/lang/String;[Ljava/lang/Number;)Ljava/lang/RuntimeException;
+IFACE	Ljava/util/function/Consumer;	calls=3	methods=accept(Ljava/lang/Object;)V
+	CALLER	Landroid/provider/Settings$GenerationTracker;->readCurrentGeneration()I
+	CALLER	Landroid/view/InsetsSourceControl;->release(Ljava/util/function/Consumer;)V
+	CALLER	Lcom/android/internal/util/TraceBuffer;->resetBuffer()V
+IFACE	Ljava/util/function/DoubleUnaryOperator;	calls=6	methods=andThen(Ljava/util/function/DoubleUnaryOperator;)Ljava/util/function/DoubleUnaryOperator;,applyAsDouble(D)D,identity()Ljava/util/function/DoubleUnaryOperator;
+	CALLER	Landroid/graphics/ColorSpace$Rgb;-><init>(Ljava/lang/String;[F[FDFFI)V
+	CALLER	Landroid/graphics/ColorSpace$Rgb;-><init>(Ljava/lang/String;[F[F[FLjava/util/function/DoubleUnaryOperator;Ljava/util/function/DoubleUnaryOperator;FFLandroid/graphics/ColorSpace$Rgb$TransferParameters;I)V
+	CALLER	Landroid/graphics/ColorSpace$Rgb;->compare(DLjava/util/function/DoubleUnaryOperator;Ljava/util/function/DoubleUnaryOperator;)Z
+IFACE	Ljava/util/function/Function;	calls=6	methods=apply(Ljava/lang/Object;)Ljava/lang/Object;,identity()Ljava/util/function/Function;
+	CALLER	Landroid/app/ResourcesManager;->cleanupReferences(Ljava/util/ArrayList;Ljava/lang/ref/ReferenceQueue;)V
+	CALLER	Landroid/content/pm/PackagePartitions;->getOrderedPartitions(Ljava/util/function/Function;)Ljava/util/ArrayList;
+	CALLER	Landroid/sysprop/TelephonyProperties;->tryParseList(Ljava/util/function/Function;Ljava/lang/String;)Ljava/util/List;
+	CALLER	Landroid/text/util/Linkify;->applyLink(Ljava/lang/String;IILandroid/text/Spannable;Ljava/util/function/Function;)V
+	CALLER	Ljava/util/Map;->computeIfAbsent(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;
+	CALLER	Ljava/util/Optional;->map(Ljava/util/function/Function;)Ljava/util/Optional;
+IFACE	Ljava/util/function/Predicate;	calls=6	methods=test(Ljava/lang/Object;)Z
+	CALLER	Landroid/hardware/display/DisplayManager;->getDisplays([ILjava/util/function/Predicate;)[Landroid/view/Display;
+	CALLER	Lcom/android/internal/util/ArrayUtils;->unstableRemoveIf(Ljava/util/ArrayList;Ljava/util/function/Predicate;)I
+	CALLER	Ljava/util/ArrayList;->removeIf(Ljava/util/function/Predicate;II)Z
+	CALLER	Ljava/util/Optional;->filter(Ljava/util/function/Predicate;)Ljava/util/Optional;
+IFACE	Ljava/util/function/Supplier;	calls=5	methods=get()Ljava/lang/Object;
+	CALLER	Landroid/view/InsetsSourceConsumer;->applyRequestedVisibilityToControl()V
+	CALLER	Lcom/android/internal/content/om/OverlayConfig;-><init>(Ljava/io/File;Ljava/util/function/Supplier;Lcom/android/internal/content/om/OverlayConfig$PackageProvider;)V
+	CALLER	Ljava/lang/reflect/WeakCache;->get(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+	CALLER	Ljava/text/Normalizer;->normalize(Ljava/lang/CharSequence;Ljava/text/Normalizer$Form;)Ljava/lang/String;
+	CALLER	Ljava/util/TimeZone;->getDefaultRef()Ljava/util/TimeZone;
+IFACE	Ljava/util/regex/MatchResult;	calls=8	methods=end()I,group(I)Ljava/lang/String;,groupCount()I
+	CALLER	Landroid/webkit/FindAddress;->attemptMatch(Ljava/lang/String;Ljava/util/regex/MatchResult;)I
+	CALLER	Landroid/webkit/FindAddress;->isValidZipCode(Ljava/lang/String;Ljava/util/regex/MatchResult;)Z
+	CALLER	Landroid/webkit/FindAddress;->matchHouseNumber(Ljava/lang/String;I)Ljava/util/regex/MatchResult;
+IFACE	Ljava/util/stream/Stream;	calls=2	methods=collect(Ljava/util/stream/Collector;)Ljava/lang/Object;,map(Ljava/util/function/Function;)Ljava/util/stream/Stream;
+	CALLER	Landroid/os/Build;->joinListOrElse(Ljava/util/List;Ljava/lang/String;)Ljava/lang/String;
+IFACE	Ljavax/crypto/SecretKey;	calls=3	methods=getEncoded()[B,getFormat()Ljava/lang/String;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljavax/crypto/interfaces/DHKey;	calls=1	methods=getParams()Ljavax/crypto/spec/DHParameterSpec;
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Ljdk/internal/math/FloatingDecimal$ASCIIToBinaryConverter;	calls=1	methods=floatValue()F
+	CALLER	Ljdk/internal/math/FloatingDecimal;->parseFloat(Ljava/lang/String;)F
+IFACE	Ljdk/internal/math/FloatingDecimal$BinaryToASCIIConverter;	calls=4	methods=appendTo(Ljava/lang/Appendable;)V,toJavaFormatString()Ljava/lang/String;
+	CALLER	Ljdk/internal/math/FloatingDecimal;->appendTo(DLjava/lang/Appendable;)V
+	CALLER	Ljdk/internal/math/FloatingDecimal;->appendTo(FLjava/lang/Appendable;)V
+	CALLER	Ljdk/internal/math/FloatingDecimal;->toJavaFormatString(D)Ljava/lang/String;
+	CALLER	Ljdk/internal/math/FloatingDecimal;->toJavaFormatString(F)Ljava/lang/String;
+IFACE	Llibcore/io/Os;	calls=29	methods=android_fdsan_exchange_owner_tag(Ljava/io/FileDescriptor;JJ)V,close(Ljava/io/FileDescriptor;)V,compareAndSetDefault(Llibcore/io/Os;Llibcore/io/Os;)Z,fdatasync(Ljava/io/FileDescriptor;)V,fstat(Ljava/io/FileDescriptor;)Landroid/system/StructStat;,getDefault()Llibcore/io/Os;,getenv(Ljava/lang/String;)Ljava/lang/String;,getpid()I,getpwuid(I)Landroid/system/StructPasswd;,getuid()I,lseek(Ljava/io/FileDescriptor;JI)J,mmap(JJIILjava/io/FileDescriptor;J)J,open(Ljava/lang/String;II)Ljava/io/FileDescriptor;,read(Ljava/io/FileDescriptor;[BII)I,setenv(Ljava/lang/String;Ljava/lang/String;Z)V,stat(Ljava/lang/String;)Landroid/system/StructStat;,strerror(I)Ljava/lang/String;,sysconf(I)J,uname()Landroid/system/StructUtsname;,write(Ljava/io/FileDescriptor;[BII)I
+	CALLER	Landroid/app/ActivityThread$AndroidOs;->install()V
+	CALLER	Landroid/system/ErrnoException;->getMessage()Ljava/lang/String;
+	CALLER	Landroid/system/Os;->fdatasync(Ljava/io/FileDescriptor;)V
+	CALLER	Landroid/system/Os;->fstat(Ljava/io/FileDescriptor;)Landroid/system/StructStat;
+	CALLER	Landroid/system/Os;->getpid()I
+	CALLER	Landroid/system/Os;->getuid()I
+	CALLER	Landroid/system/Os;->mmap(JJIILjava/io/FileDescriptor;J)J
+	CALLER	Landroid/system/Os;->open(Ljava/lang/String;II)Ljava/io/FileDescriptor;
+	CALLER	Landroid/system/Os;->read(Ljava/io/FileDescriptor;[BII)I
+	CALLER	Landroid/system/Os;->setenv(Ljava/lang/String;Ljava/lang/String;Z)V
+	CALLER	Landroid/system/Os;->sysconf(I)J
+	CALLER	Landroid/system/Os;->write(Ljava/io/FileDescriptor;[BII)I
+IFACE	Lorg/xmlpull/v1/XmlPullParser;	calls=156	methods=getAttributeCount()I,getAttributeName(I)Ljava/lang/String;,getAttributeValue(I)Ljava/lang/String;,getAttributeValue(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;,getDepth()I,getEventType()I,getLineNumber()I,getName()Ljava/lang/String;,getPositionDescription()Ljava/lang/String;,getText()Ljava/lang/String;,next()I,nextTag()I,require(ILjava/lang/String;Ljava/lang/String;)V,setFeature(Ljava/lang/String;Z)V,setInput(Ljava/io/InputStream;Ljava/lang/String;)V,setInput(Ljava/io/Reader;)V
+	CALLER	Landroid/animation/AnimatorInflater;->createAnimatorFromXml(Landroid/content/res/Resources;Landroid/content/res/Resources$Theme;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/animation/AnimatorSet;IF)Landroid/animation/Animator;
+	CALLER	Landroid/animation/AnimatorInflater;->createStateListAnimatorFromXml(Landroid/content/Context;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;)Landroid/animation/StateListAnimator;
+	CALLER	Landroid/animation/AnimatorInflater;->loadPvh(Landroid/content/res/Resources;Landroid/content/res/Resources$Theme;Lorg/xmlpull/v1/XmlPullParser;Ljava/lang/String;I)Landroid/animation/PropertyValuesHolder;
+	CALLER	Landroid/animation/AnimatorInflater;->loadValues(Landroid/content/res/Resources;Landroid/content/res/Resources$Theme;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;)[Landroid/animation/PropertyValuesHolder;
+	CALLER	Landroid/content/res/ColorStateList;->createFromXmlInner(Landroid/content/res/Resources;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/content/res/Resources$Theme;)Landroid/content/res/ColorStateList;
+	CALLER	Landroid/content/res/ColorStateList;->inflate(Landroid/content/res/Resources;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/content/res/Resources$Theme;)V
+	CALLER	Landroid/content/res/FontResourcesParser;->parse(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/res/Resources;)Landroid/content/res/FontResourcesParser$FamilyResourceEntry;
+	CALLER	Landroid/content/res/FontResourcesParser;->readFamilies(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/res/Resources;)Landroid/content/res/FontResourcesParser$FamilyResourceEntry;
+	CALLER	Landroid/content/res/FontResourcesParser;->readFamily(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/res/Resources;)Landroid/content/res/FontResourcesParser$FamilyResourceEntry;
+	CALLER	Landroid/content/res/FontResourcesParser;->readFont(Lorg/xmlpull/v1/XmlPullParser;Landroid/content/res/Resources;)Landroid/content/res/FontResourcesParser$FontFileResourceEntry;
+	CALLER	Landroid/content/res/FontResourcesParser;->skip(Lorg/xmlpull/v1/XmlPullParser;)V
+	CALLER	Landroid/content/res/GradientColor;->createFromXmlInner(Landroid/content/res/Resources;Lorg/xmlpull/v1/XmlPullParser;Landroid/util/AttributeSet;Landroid/content/res/Resources$Theme;)Landroid/content/res/GradientColor;
+IFACE	Lsun/nio/ch/Interruptible;	calls=1	methods=interrupt(Ljava/lang/Thread;)V
+	CALLER	Ljava/lang/Thread;->interrupt()V
+IFACE	Lsun/security/util/DerEncoder;	calls=1	methods=derEncode(Ljava/io/OutputStream;)V
+	CALLER	Lsun/security/util/DerOutputStream;->putOrderedSet(B[Lsun/security/util/DerEncoder;Ljava/util/Comparator;)V
+IFACE	Lsun/security/util/Length;	calls=1	methods=length()I
+	CALLER	Lsun/security/util/KeyUtil;->getKeySize(Ljava/security/Key;)I
+IFACE	Lsun/security/x509/CertAttrSet;	calls=2	methods=getName()Ljava/lang/String;
+	CALLER	Lsun/security/x509/CRLExtensions;->parseExtension(Lsun/security/x509/Extension;)V
+	CALLER	Lsun/security/x509/CertificateExtensions;->parseExtension(Lsun/security/x509/Extension;)V
