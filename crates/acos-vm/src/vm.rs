@@ -8,7 +8,7 @@ use std::time::Instant;
 use acos_dex::{DexFile, EncodedValue};
 
 use crate::class::{
-    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, Insn,
+    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, FieldSign, Insn,
     Method, MethodCode, MethodId, MethodImpl, ResolvedField, TryEntry, TypeId, TypeInfo, TypeKind,
 };
 use crate::error::{VmError, VmResult};
@@ -163,6 +163,13 @@ pub struct Vm {
     pub builtin_alloc: HashMap<ClassId, crate::corelib::BuiltinAlloc>,
     pub int_cache: HashMap<i32, Handle>,
     pub monitors: HashMap<Handle, (usize, u32)>,
+    /// Global inline cache for `invoke-virtual` / `invoke-interface`: maps
+    /// `(dex, method_ref index, receiver class)` to the resolved target. The
+    /// mapping is a pure function of the declared signature and the receiver's
+    /// dynamic class, so it never needs invalidation (classes are never
+    /// unloaded). This removes the per-call `name`/`sig` string allocations and
+    /// `HashMap<String,_>` probes from virtual/interface dispatch.
+    pub dispatch_cache: HashMap<(u32, u32, ClassId), MethodId>,
 
     pub metrics: Metrics,
     /// Execution histogram for the 256 opcode bytes (populated when
@@ -216,6 +223,7 @@ impl Vm {
             builtin_alloc: HashMap::new(),
             int_cache: HashMap::new(),
             monitors: HashMap::new(),
+            dispatch_cache: HashMap::new(),
             metrics: Metrics::default(),
             opcode_counts: [0; 256],
             count_opcodes: false,
@@ -1069,6 +1077,7 @@ impl Vm {
             (f.class.to_string(), f.name.to_string(), f.type_.to_string())
         };
         let cid = self.load_class(&class_desc)?;
+        let sign = FieldSign::of_desc(&fdesc);
         let mut c = Some(cid);
         let mut found: Option<ResolvedField> = None;
         while let Some(cur) = c {
@@ -1085,6 +1094,7 @@ impl Vm {
                         is_static: false,
                         is_ref: f.is_ref,
                         width: f.width,
+                        sign,
                     });
                     break;
                 }
@@ -1099,6 +1109,7 @@ impl Vm {
                         is_static: true,
                         is_ref: f.is_ref,
                         width: f.width,
+                        sign,
                     });
                     break;
                 }

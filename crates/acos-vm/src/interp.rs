@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use crate::class::{ClassId, Insn, MethodCode, MethodImpl, MethodId, NativeCtx};
+use crate::class::{ClassId, FieldSign, Insn, MethodCode, MethodImpl, MethodId, NativeCtx};
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
 use crate::heap::{ArrayData, Handle, Object, NULL};
@@ -138,65 +138,62 @@ fn step(vm: &mut Vm) -> VmResult<()> {
     }
     let fi = vm.threads[t].frames.len() - 1;
     let method = vm.threads[t].frames[fi].method;
-    let imp = vm.methods[method as usize].imp.clone();
-    match imp {
-        MethodImpl::Native(f) => {
-            vm.metrics.invokes += 1;
-            let ctx = NativeCtx { thread: t, frame: fi };
-            match f(vm, ctx) {
-                Ok(()) => {
-                    pop_frame(vm, t);
-                    Ok(())
-                }
-                Err(VmError::JavaException(h)) => {
-                    pop_frame_quiet(vm, t);
-                    handle_exception(vm, h)
-                }
-                Err(e) => Err(e),
+
+    // Copy the native function pointer out (if any) instead of cloning the
+    // whole `MethodImpl` for every single instruction.
+    let native = match &vm.methods[method as usize].imp {
+        MethodImpl::Native(f) => Some(*f),
+        _ => None,
+    };
+    if let Some(f) = native {
+        vm.metrics.invokes += 1;
+        let ctx = NativeCtx { thread: t, frame: fi };
+        return match f(vm, ctx) {
+            Ok(()) => {
+                pop_frame(vm, t);
+                Ok(())
+            }
+            Err(VmError::JavaException(h)) => {
+                pop_frame_quiet(vm, t);
+                handle_exception(vm, h)
+            }
+            Err(e) => Err(e),
+        };
+    }
+
+    if !matches!(
+        &vm.methods[method as usize].imp,
+        MethodImpl::Dex { code: Some(_), .. }
+    ) {
+        let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
+        let name = vm.methods[method as usize].name.clone();
+        let sig = vm.methods[method as usize].sig.clone();
+        let e = vm.throw_new(
+            "Ljava/lang/AbstractMethodError;",
+            Some(&format!("{desc}.{name}{sig}")),
+        );
+        return Err(e);
+    }
+
+    let insn = {
+        let f = &vm.threads[t].frames[fi];
+        match f.code.insns.get(f.insn_index) {
+            Some(i) => *i,
+            None => {
+                return Err(VmError::Internal(format!(
+                    "pc out of range in {}",
+                    vm.methods[method as usize].name
+                )))
             }
         }
-        MethodImpl::Dex { code, .. } => {
-            if code.is_none() {
-                let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
-                let name = vm.methods[method as usize].name.clone();
-                let sig = vm.methods[method as usize].sig.clone();
-                let e = vm.throw_new(
-                    "Ljava/lang/AbstractMethodError;",
-                    Some(&format!("{desc}.{name}{sig}")),
-                );
-                return Err(e);
-            }
-            let insn = {
-                let f = &vm.threads[t].frames[fi];
-                match f.code.insns.get(f.insn_index) {
-                    Some(i) => *i,
-                    None => {
-                        return Err(VmError::Internal(format!(
-                            "pc out of range in {}",
-                            vm.methods[method as usize].name
-                        )))
-                    }
-                }
-            };
-            match execute(vm, t, fi, &insn) {
-                Ok(()) => Ok(()),
-                Err(VmError::JavaException(h)) => {
-                    handle_exception(vm, h)?;
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            }
+    };
+    match execute(vm, t, fi, &insn) {
+        Ok(()) => Ok(()),
+        Err(VmError::JavaException(h)) => {
+            handle_exception(vm, h)?;
+            Ok(())
         }
-        MethodImpl::Abstract => {
-            let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
-            let name = vm.methods[method as usize].name.clone();
-            let sig = vm.methods[method as usize].sig.clone();
-            let e = vm.throw_new(
-                "Ljava/lang/AbstractMethodError;",
-                Some(&format!("{desc}.{name}{sig}")),
-            );
-            Err(e)
-        }
+        Err(e) => Err(e),
     }
 }
 
@@ -767,7 +764,6 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let dex = frame_dex(vm, t, fi);
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
-            let desc = field_desc(vm, dex, insn.index)?;
             if f.width == 2 {
                 let (lo, hi) = match vm.heap.get(obj) {
                     Some(Object::Instance { fields, .. }) => (fields[off], fields[off + 1]),
@@ -785,7 +781,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                     Some(Object::Instance { fields, .. }) => fields[off],
                     _ => 0,
                 };
-                set_reg(vm, t, fi, r0, narrow_field(v, &desc));
+                set_reg(vm, t, fi, r0, apply_sign(v, f.sign));
             }
             advance(vm, t, fi, insn.size);
         }
@@ -797,7 +793,6 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let dex = frame_dex(vm, t, fi);
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
-            let desc = field_desc(vm, dex, insn.index)?;
             if f.width == 2 {
                 let val = get_wide(vm, t, fi, r0);
                 if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
@@ -812,7 +807,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             } else {
                 let val = reg(vm, t, fi, r0);
                 if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
-                    fields[off] = widen_field(val, &desc);
+                    fields[off] = apply_sign(val, f.sign);
                 }
             }
             advance(vm, t, fi, insn.size);
@@ -835,8 +830,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             } else if op == 0x62 {
                 set_ref(vm, t, fi, r0, val as u32);
             } else {
-                let desc = field_desc(vm, dex, insn.index)?;
-                set_reg(vm, t, fi, r0, narrow_field(val as u32, &desc));
+                set_reg(vm, t, fi, r0, apply_sign(val as u32, f.sign));
             }
             advance(vm, t, fi, insn.size);
         }
@@ -845,7 +839,6 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let f = vm.resolve_field(dex, insn.index)?;
             vm.initialize_class(f.class)?;
             let off = f.offset as usize;
-            let desc = field_desc(vm, dex, insn.index)?;
             if f.width == 2 {
                 let val = get_wide(vm, t, fi, r0);
                 let c = &mut vm.classes[f.class as usize];
@@ -857,7 +850,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                 c.statics[off] = if op == 0x69 {
                     val
                 } else {
-                    widen_field(val, &desc)
+                    apply_sign(val, f.sign)
                 };
             }
             advance(vm, t, fi, insn.size);
@@ -956,28 +949,16 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
 // Field descriptor helpers
 // ---------------------------------------------------------------------------
 
-fn field_desc(vm: &mut Vm, dex: u32, field_idx: u32) -> VmResult<String> {
-    let d = vm.dexs[dex as usize].file.field_ref(field_idx)?.type_.to_string();
-    Ok(d)
-}
-
-fn narrow_field(v: u32, desc: &str) -> u32 {
-    match desc.as_bytes().first() {
-        Some(b'B') => (v as i8) as i32 as u32,
-        Some(b'S') => (v as i16) as i32 as u32,
-        Some(b'C') => (v as u16) as u32,
-        Some(b'Z') => (v != 0) as u32,
-        _ => v,
-    }
-}
-
-fn widen_field(v: u32, desc: &str) -> u32 {
-    match desc.as_bytes().first() {
-        Some(b'B') => (v as i8) as i32 as u32,
-        Some(b'S') => (v as i16) as i32 as u32,
-        Some(b'C') => (v as u16) as u32,
-        Some(b'Z') => (v != 0) as u32,
-        _ => v,
+/// Narrow/widen a stored field word to the register representation. `sign` is
+/// cached in the resolved-field entry, so no descriptor string is built.
+#[inline]
+fn apply_sign(v: u32, sign: FieldSign) -> u32 {
+    match sign {
+        FieldSign::Byte => (v as i8) as i32 as u32,
+        FieldSign::Short => (v as i16) as i32 as u32,
+        FieldSign::Char => (v as u16) as u32,
+        FieldSign::Bool => (v != 0) as u32,
+        FieldSign::None => v,
     }
 }
 
@@ -1563,73 +1544,67 @@ fn arith_lit8(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
 fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     let (kind, range) = invoke_kind(insn.op);
     let dex = frame_dex(vm, t, fi);
-    let (ref_class, name, sig) = {
-        let r = vm.dexs[dex as usize].file.method_ref(insn.index)?;
-        (
-            r.class.to_string(),
-            r.name.to_string(),
-            format!("({}){}", r.parameters.concat(), r.return_type),
-        )
-    };
+    let count = insn.reg_count as usize;
+    // Argument word registers: a 35c invoke lists one register per argument
+    // *word* (a wide argument contributes two entries); a range invoke uses
+    // `count` consecutive registers starting at regs[0].
+    let base = insn.regs[0];
 
-    // Argument word registers (35c lists one register per argument *word*,
-    // so a wide argument contributes two entries).
-    let arg_starts: Vec<u16> = if range {
-        let base = insn.regs[0];
-        (0..insn.reg_count as u16)
-            .map(|i| base.wrapping_add(i))
-            .collect()
-    } else {
-        insn.regs[..insn.reg_count as usize].to_vec()
-    };
-
-    // Resolve the target.
-    let method = if kind == InvokeKind::Virtual || kind == InvokeKind::Interface {
-        let receiver = reg(vm, t, fi, arg_starts[0]);
-        if receiver == NULL {
-            return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+    let method = match kind {
+        InvokeKind::Virtual | InvokeKind::Interface => {
+            let recv_reg = if range { base } else { insn.regs[0] };
+            let receiver = reg(vm, t, fi, recv_reg);
+            if receiver == NULL {
+                return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+            }
+            // Inline cache keyed by the receiver's dynamic class. The mapping
+            // is a pure function of the declared signature and the receiver
+            // class, so it never needs invalidation; a differently-typed
+            // receiver probes a different key and resolves normally. This
+            // removes the per-call name/signature allocations and the
+            // `HashMap<String,_>` probes from the hot virtual/interface path.
+            let mut rclass = vm.class_of_object(receiver);
+            if rclass.is_none() {
+                rclass = vm.array_class(receiver);
+            }
+            match rclass {
+                Some(rc) => match vm.dispatch_cache.get(&(dex, insn.index, rc)) {
+                    Some(&m) => m,
+                    None => {
+                        let m = dispatch_uncached(vm, dex, insn.index, receiver, t, fi)?;
+                        vm.dispatch_cache.insert((dex, insn.index, rc), m);
+                        m
+                    }
+                },
+                None => dispatch_uncached(vm, dex, insn.index, receiver, t, fi)?,
+            }
         }
-        match vm.dispatch(receiver, &name, &sig) {
+        // Static/direct/super targets are resolved through the DEX method
+        // cache, so this is a single Vec index after the first call.
+        _ => match vm.resolve_method_ref(dex, insn.index, kind) {
             Ok(m) => m,
-            Err(_) => {
-                let api = format!("{ref_class}->{name}{sig}");
-                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
-                return Err(VmError::unsupported_api(api, at));
-            }
-        }
-    } else {
-        let cid = match vm.load_class(&ref_class) {
-            Ok(c) => c,
-            Err(_) => {
-                let api = format!("{ref_class}->{name}{sig}");
-                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
-                return Err(VmError::unsupported_api(api, at));
-            }
-        };
-        match vm.find_method(cid, &name, &sig, kind) {
-            Ok(m) => m,
-            Err(_) => {
-                let api = format!("{ref_class}->{name}{sig}");
-                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
-                return Err(VmError::unsupported_api(api, at));
-            }
-        }
+            Err(_) => return Err(unsupported_call_site(vm, dex, insn.index, t, fi)),
+        },
     };
 
+    let (ins_size, is_static, is_synchronized, mclass) = {
+        let m = &vm.methods[method as usize];
+        (m.ins_size, m.is_static(), m.is_synchronized(), m.class)
+    };
     // Class initialization for static calls.
-    let m = vm.methods[method as usize].clone();
-    if m.is_static() {
-        vm.initialize_class(m.class)?;
+    if is_static {
+        vm.initialize_class(mclass)?;
     }
 
-    let mut frame = build_frame(vm, method, &arg_starts)?;
+    let list = if range { &insn.regs[..0] } else { &insn.regs[..count] };
+    let mut frame = build_frame(vm, method, range, base, list, count)?;
     // Synchronized method: acquire the monitor, blocking if another thread
     // holds it. On block we leave the pc at the invoke so it is retried.
-    if m.is_synchronized() {
-        let target = if m.is_static() {
-            vm.class_object(m.class)?
+    if is_synchronized {
+        let target = if is_static {
+            vm.class_object(mclass)?
         } else {
-            frame.regs[frame.regs.len() - m.ins_size as usize]
+            frame.regs[frame.regs.len() - ins_size as usize]
         };
         if !try_enter_monitor(vm, target, t) {
             vm.threads[t].status = ThreadStatus::BlockedMonitor(target);
@@ -1640,6 +1615,44 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     vm.threads[t].frames.push(frame);
     vm.metrics.invokes += 1;
     Ok(())
+}
+
+/// Slow path for an `invoke-virtual`/`invoke-interface` inline-cache miss:
+/// decode the declared name/signature and dispatch on the dynamic class.
+fn dispatch_uncached(
+    vm: &mut Vm,
+    dex: u32,
+    method_idx: u32,
+    receiver: Handle,
+    t: usize,
+    fi: usize,
+) -> VmResult<MethodId> {
+    let r = vm.dexs[dex as usize].file.method_ref(method_idx)?;
+    let name = r.name.to_string();
+    let sig = format!("({}){}", r.parameters.concat(), r.return_type);
+    match vm.dispatch(receiver, &name, &sig) {
+        Ok(m) => Ok(m),
+        Err(_) => Err(unsupported_call_site(vm, dex, method_idx, t, fi)),
+    }
+}
+
+/// Build the structured `UNSUPPORTED_JAVA_API` error naming the exact call
+/// site, preserving the pre-optimisation reporting contract.
+fn unsupported_call_site(vm: &mut Vm, dex: u32, method_idx: u32, t: usize, fi: usize) -> VmError {
+    let (ref_class, name, sig) = match vm.dexs[dex as usize]
+        .file
+        .method_ref(method_idx)
+        .map_err(VmError::from)
+    {
+        Ok(r) => (
+            r.class.to_string(),
+            r.name.to_string(),
+            format!("({}){}", r.parameters.concat(), r.return_type),
+        ),
+        Err(e) => return e,
+    };
+    let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+    VmError::unsupported_api(format!("{ref_class}->{name}{sig}"), at)
 }
 
 fn invoke_kind(op: u8) -> (InvokeKind, bool) {
@@ -1659,34 +1672,56 @@ fn invoke_kind(op: u8) -> (InvokeKind, bool) {
 }
 
 /// Build a callee frame by copying argument *words* from the caller.
-fn build_frame(vm: &mut Vm, method: MethodId, arg_words: &[u16]) -> VmResult<Frame> {
+///
+/// `range` selects the consecutive-register form, otherwise `list` holds the
+/// explicit argument words. `count` is the number of argument words. No
+/// `Method` clone and no per-call `Vec` are allocated here (both used to be on
+/// the hot call path).
+fn build_frame(
+    vm: &mut Vm,
+    method: MethodId,
+    range: bool,
+    base: u16,
+    list: &[u16],
+    count: usize,
+) -> VmResult<Frame> {
     if vm.threads[vm.current_thread].frames.len() >= vm.max_frames
         && vm.stack_overflow_object != NULL
     {
         return Err(VmError::JavaException(vm.stack_overflow_object));
     }
-    let m = vm.methods[method as usize].clone();
-    let (regs_size, code) = match &m.imp {
-        MethodImpl::Dex { code: Some(c), .. } => (c.registers_size as usize, c.clone()),
-        _ => (m.ins_size as usize, empty_code()),
+    let (regs_size, ins_size, code, class_id) = {
+        let m = &vm.methods[method as usize];
+        match &m.imp {
+            MethodImpl::Dex { code: Some(c), .. } => {
+                (c.registers_size as usize, m.ins_size as usize, c.clone(), m.class)
+            }
+            _ => (m.ins_size as usize, m.ins_size as usize, empty_code(), m.class),
+        }
     };
     let t = vm.current_thread;
-    let caller = vm.threads[t].frames.last().unwrap();
-    let caller_regs = &caller.regs;
-
-    let base = regs_size - m.ins_size as usize;
-    let mut slots = vec![0u32; regs_size];
-    let n = (m.ins_size as usize).min(arg_words.len());
-    for i in 0..n {
-        slots[base + i] = caller_regs[arg_words[i] as usize];
-    }
-    let mut frame = Frame::new(method, m.class, code, regs_size);
-    frame.regs = slots;
+    let base_slot = regs_size - ins_size;
+    let n = ins_size.min(count);
+    let mut frame = Frame::new(method, class_id, code, regs_size);
     frame.advance_on_return = true;
-    // Reference map for incoming slots.
-    for (i, &is_ref) in m.ins_ref.iter().enumerate() {
-        if base + i < frame.refs.len() {
-            frame.refs[base + i] = is_ref;
+    {
+        let caller_regs = &vm.threads[t].frames.last().unwrap().regs;
+        for i in 0..n {
+            let r = if range {
+                base.wrapping_add(i as u16)
+            } else {
+                list[i]
+            };
+            frame.regs[base_slot + i] = caller_regs[r as usize];
+        }
+    }
+    // Reference map for incoming slots (used by the GC).
+    {
+        let m = &vm.methods[method as usize];
+        for (i, &is_ref) in m.ins_ref.iter().enumerate() {
+            if base_slot + i < frame.refs.len() {
+                frame.refs[base_slot + i] = is_ref;
+            }
         }
     }
     Ok(frame)
