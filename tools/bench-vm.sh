@@ -48,6 +48,11 @@ bench_srcs = {
     "BenchLoop": os.path.join(root, "crates/acos-vm/benches/java/BenchLoop.java"),
     "BenchString": os.path.join(root, "crates/acos-vm/benches/java/BenchString.java"),
     "BenchAlloc": os.path.join(root, "crates/acos-vm/benches/java/BenchAlloc.java"),
+    # Framework-shaped programs (ADR-0013 step 1): polymorphic interface
+    # dispatch, field-heavy graph walk, and ArrayList/HashMap/StringBuilder.
+    "BenchVirtual": os.path.join(root, "crates/acos-vm/benches/java/BenchVirtual.java"),
+    "BenchFields": os.path.join(root, "crates/acos-vm/benches/java/BenchFields.java"),
+    "BenchCollections": os.path.join(root, "crates/acos-vm/benches/java/BenchCollections.java"),
 }
 bench = {}
 for name, src in bench_srcs.items():
@@ -121,7 +126,10 @@ def acos_instructions(dex, main):
         return 0
 
 cpu = []
-for name in ["BenchFib", "BenchString", "BenchLoop", "BenchAlloc"]:
+for name in [
+    "BenchFib", "BenchString", "BenchLoop", "BenchAlloc",
+    "BenchVirtual", "BenchFields", "BenchCollections",
+]:
     dex = bench[name]["dex"]
     classes = bench[name]["classes"]
     insns = acos_instructions(dex, name)

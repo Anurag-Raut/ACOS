@@ -90,6 +90,31 @@ pub struct FieldDef {
     pub width: u32,
 }
 
+/// How a field's storage narrows/widens on load/store (the Java primitive
+/// sub-word kinds). Cached in [`ResolvedField`] so the interpreter never has
+/// to look up the descriptor string on a field access.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldSign {
+    None,
+    Byte,
+    Short,
+    Char,
+    Bool,
+}
+
+impl FieldSign {
+    /// Classify a field descriptor, e.g. `B` / `S` / `C` / `Z`.
+    pub fn of_desc(desc: &str) -> FieldSign {
+        match desc.as_bytes().first() {
+            Some(b'B') => FieldSign::Byte,
+            Some(b'S') => FieldSign::Short,
+            Some(b'C') => FieldSign::Char,
+            Some(b'Z') => FieldSign::Bool,
+            _ => FieldSign::None,
+        }
+    }
+}
+
 /// A prototype for resolving field references.
 #[derive(Clone, Copy, Debug)]
 pub struct ResolvedField {
@@ -98,6 +123,7 @@ pub struct ResolvedField {
     pub is_static: bool,
     pub is_ref: bool,
     pub width: u32,
+    pub sign: FieldSign,
 }
 
 /// The implementation of a method.

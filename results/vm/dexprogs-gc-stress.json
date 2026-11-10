@@ -115,7 +115,7 @@
         "instructions": 22840,
         "invokes": 3549,
         "startup_ms": 0,
-        "wall_ms": 1
+        "wall_ms": 0
       }
     },
     {
@@ -304,10 +304,10 @@
         "gc_count": 44,
         "gc_ms": 0,
         "heap_peak_bytes": 3728,
-        "instructions": 1300514,
+        "instructions": 1300475,
         "invokes": 100168,
         "startup_ms": 0,
-        "wall_ms": 43
+        "wall_ms": 24
       }
     },
     {

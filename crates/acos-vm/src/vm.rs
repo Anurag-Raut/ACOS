@@ -9,7 +9,7 @@ use std::time::Instant;
 use acos_dex::{DexFile, EncodedValue};
 
 use crate::class::{
-    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, Insn,
+    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, FieldSign, Insn,
     Method, MethodCode, MethodId, MethodImpl, ResolvedField, TryEntry, TypeId, TypeInfo, TypeKind,
 };
 use crate::error::{VmError, VmResult};
@@ -48,6 +48,10 @@ pub struct ThreadRT {
     pub wake_at: Option<Instant>,
     /// The object this thread is blocked in `Object.wait` on, if any.
     pub wait_monitor: Option<Handle>,
+    /// Reusable register buffers for popped frames. Java calls happen in tight
+    /// loops in real framework code; allocating a fresh `regs`/`refs` pair for
+    /// every call dominated invoke cost. The pool is per-thread and capped.
+    pub(crate) frame_pool: Vec<Frame>,
 }
 
 impl ThreadRT {
@@ -59,6 +63,7 @@ impl ThreadRT {
             joiners: Vec::new(),
             wake_at: None,
             wait_monitor: None,
+            frame_pool: Vec::new(),
         }
     }
 
@@ -324,6 +329,13 @@ pub struct Vm {
     pub string_hashes: HashMap<Handle, i32>,
     /// The process main `ThreadGroup` (real mode).
     pub main_thread_group: Handle,
+    /// Global inline cache for `invoke-virtual` / `invoke-interface`: maps
+    /// `(dex, method_ref index, receiver class)` to the resolved target. The
+    /// mapping is a pure function of the declared signature and the receiver's
+    /// dynamic class, so it never needs invalidation (classes are never
+    /// unloaded). This removes the per-call `name`/`sig` string allocations and
+    /// `HashMap<String,_>` probes from virtual/interface dispatch.
+    pub(crate) dispatch_cache: HashMap<(u32, u32, ClassId), MethodId>,
 
     pub metrics: Metrics,
     /// Execution histogram for the 256 opcode bytes (populated when
@@ -365,7 +377,7 @@ impl Vm {
             throwable_stacks: HashMap::new(),
             pending_exception: NULL,
             gc_stress: options.gc_stress,
-            gc_threshold: (options.heap_max_bytes / 4).max(1 << 20),
+            gc_threshold: (options.heap_max_bytes / 16).max(1 << 20),
             oom_object: NULL,
             stack_overflow_object: NULL,
             c_object: 0,
@@ -391,6 +403,7 @@ impl Vm {
             next_converter: 1,
             string_hashes: HashMap::new(),
             main_thread_group: NULL,
+            dispatch_cache: HashMap::new(),
             metrics: Metrics::default(),
             opcode_counts: [0; 256],
             count_opcodes: false,
@@ -1246,10 +1259,8 @@ impl Vm {
 
     pub fn alloc_instance(&mut self, class: ClassId) -> VmResult<Handle> {
         let slots = self.classes[class as usize].instance_slot_count as usize;
-        self.alloc(Object::Instance {
-            class,
-            fields: vec![0; slots],
-        })
+        let fields = self.heap.take_field_vec(slots);
+        self.alloc(Object::Instance { class, fields })
     }
 
     pub fn new_string_utf16(&mut self, units: Vec<u16>) -> VmResult<Handle> {
@@ -1399,7 +1410,9 @@ impl Vm {
         self.heap.gc_count += 1;
         self.heap.gc_nanos += start.elapsed().as_nanos() as u64;
         self.metrics.gc_count = self.heap.gc_count;
-        self.gc_threshold = (self.heap.live_bytes * 2).max(1 << 20);
+        self.gc_threshold = (self.heap.live_bytes * 2)
+            .max(self.heap.max_bytes / 16)
+            .max(1 << 20);
     }
 
     // ---- class objects ---------------------------------------------------
@@ -1514,6 +1527,7 @@ impl Vm {
             (f.class.to_string(), f.name.to_string(), f.type_.to_string())
         };
         let cid = self.load_class(&class_desc)?;
+        let sign = FieldSign::of_desc(&fdesc);
         let mut c = Some(cid);
         let mut found: Option<ResolvedField> = None;
         while let Some(cur) = c {
@@ -1530,6 +1544,7 @@ impl Vm {
                         is_static: false,
                         is_ref: f.is_ref,
                         width: f.width,
+                        sign,
                     });
                     break;
                 }
@@ -1544,6 +1559,7 @@ impl Vm {
                         is_static: true,
                         is_ref: f.is_ref,
                         width: f.width,
+                        sign,
                     });
                     break;
                 }
