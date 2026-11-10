@@ -27,7 +27,9 @@
 #![warn(missing_debug_implementations)]
 
 pub mod atms_boot;
+pub mod bind_app;
 pub mod boot;
+pub mod lifecycle;
 pub mod pms_java;
 pub mod settings_java;
 pub mod transport;
@@ -50,6 +52,7 @@ pub const FIXTURE_PID: i32 = 1000;
 
 pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
+pub use lifecycle::{LifecycleError, LifecycleReport};
 
 /// A booted ACOS runtime: VM + service host + Binder transport.
 pub struct Runtime {

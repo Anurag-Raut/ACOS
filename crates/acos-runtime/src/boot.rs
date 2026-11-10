@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 
 use acos_apk::Apk;
 use acos_dex::DexFile;
+use acos_vm::heap::Handle;
 use acos_vm::javabridge::{BridgeError, JavaValue};
 use acos_vm::VmError;
 
@@ -60,6 +61,8 @@ pub struct BootReport {
     pub stages: Vec<&'static str>,
     /// The recorded `attachApplication` handshake.
     pub attach: AttachRecord,
+    /// The live `android.app.ActivityThread` instance `attach` ran on.
+    pub activity_thread: Handle,
     /// Number of VM classes loaded when `attach` returned.
     pub classes_loaded: usize,
     /// Number of VM classes loaded after the boot-classpath load and before the
@@ -172,6 +175,7 @@ impl Runtime {
         Ok(BootReport {
             stages,
             attach,
+            activity_thread: thread,
             classes_loaded: self.vm().classes.len(),
             boot_classpath_classes,
             natives_invoked,

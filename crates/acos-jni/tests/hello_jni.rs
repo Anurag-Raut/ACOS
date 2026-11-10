@@ -1,0 +1,172 @@
+//! End-to-end JNI: the fixture APK's real `libhellojni.so` runs through the VM.
+//!
+//! The driver DEX (`tests/data/hellojni-driver.dex`) is compiled from
+//! `tests/java/.../MainActivity.java`, which declares the same native methods as
+//! the fixture app. The test loads the library **from the APK** via
+//! `System.loadLibrary("hellojni")`, so the native-loader, `JNI_OnLoad`,
+//! `RegisterNatives`, Java→native dispatch and native→Java callbacks all run.
+//!
+//! Expected lines are read from the ART reference capture
+//! (`fixtures/reference/hello-jni/art-api34-x86_64/observed-texts-initial.txt`).
+
+use std::path::{Path, PathBuf};
+
+use acos_dex::DexFile;
+use acos_jni::{JniConfig, JniRuntime};
+use acos_vm::{CoreLib, Vm, VmOptions};
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn boot_available() -> bool {
+    repo_root()
+        .join(".cache/boot/android-34/BOOTCLASSPATH")
+        .is_file()
+}
+
+fn reference_lines() -> Vec<String> {
+    let text = std::fs::read_to_string(
+        repo_root()
+            .join("fixtures/reference/hello-jni/art-api34-x86_64/observed-texts-initial.txt"),
+    )
+    .expect("ART reference capture");
+    // UI captures prefix the text view content (`android.widget.TextView | ...`),
+    // so locate the fixture marker inside each line rather than at column 0.
+    let markers = [
+        "stringFromJNI=",
+        "add(20,22)=",
+        "sumArray(",
+        "javaCallbackResult=",
+        "voidCallback=",
+        "registeredEcho=",
+        "throwFromJNI ",
+    ];
+    text.lines()
+        .filter_map(|line| {
+            markers
+                .iter()
+                .find_map(|m| line.find(m).map(|i| line[i..].to_string()))
+        })
+        .collect()
+}
+
+#[test]
+fn hello_jni_runs_through_the_vm() {
+    if !boot_available() {
+        eprintln!(
+            "SKIP hello_jni_runs_through_the_vm: .cache/boot/android-34 is absent \
+             (run tools/extract-bootclasspath.sh)"
+        );
+        return;
+    }
+
+    let dex_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/hellojni-driver.dex");
+    let dex = DexFile::parse(std::fs::read(&dex_path).expect("driver dex")).expect("parse dex");
+
+    let mut vm = Vm::new(VmOptions {
+        heap_max_bytes: 512 * 1024 * 1024,
+        gc_stress: std::env::var_os("ACOS_GC_STRESS").is_some(),
+        corelib: CoreLib::Real,
+        boot_dir: None,
+        trace_natives: false,
+    })
+    .expect("real-corelib VM");
+    vm.add_dex(dex);
+
+    let apk = repo_root().join("fixtures/build/apps/hello-jni.apk");
+    let jni = JniRuntime::new(JniConfig::default().with_apk(&apk));
+    jni.attach(&mut vm).expect("attach JNI");
+
+    let outcome = vm.run("dev/acos/fixtures/hellojni/MainActivity", &[]);
+    if let Some(acos_vm::VmError::JavaException(h)) = outcome.vm_error {
+        let class = vm
+            .class_of_object(h)
+            .map(|c| vm.class_desc(c).to_string())
+            .unwrap_or_else(|| "<dead>".into());
+        eprintln!(
+            "uncaught: {class}: {:?} (handle {h})",
+            vm.throwable_message(h)
+        );
+    }
+    assert!(
+        outcome.vm_error.is_none(),
+        "VM error: {:?} uncaught: {:?}\nstdout:\n{}\nstderr:\n{}",
+        outcome.vm_error,
+        outcome.uncaught,
+        outcome.stdout,
+        outcome.stderr
+    );
+    assert_eq!(outcome.exit_code, 0, "stdout:\n{}", outcome.stdout);
+
+    let expected = reference_lines();
+    assert!(!expected.is_empty(), "reference capture has JNI lines");
+    let got: Vec<String> = outcome.stdout.lines().map(str::to_string).collect();
+    assert_eq!(
+        got, expected,
+        "VM output must match the ART reference lines"
+    );
+
+    // The APK's own DEX declares the same natives the guest library exports.
+    // (The driver DEX is used to execute the JNI path without the framework UI.)
+    {
+        use std::io::Read;
+        let raw = std::fs::read(&apk).expect("apk bytes");
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(raw)).expect("zip");
+        let mut entry = archive.by_name("classes.dex").expect("classes.dex");
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes).expect("read dex");
+        let apk_dex = DexFile::parse(bytes).expect("parse apk dex");
+        let def = apk_dex
+            .find_class("Ldev/acos/fixtures/hellojni/MainActivity;")
+            .expect("MainActivity in APK");
+        let data = apk_dex
+            .class_data(def)
+            .expect("class data")
+            .expect("class data");
+        let mut apk_natives: Vec<String> = data
+            .direct_methods
+            .iter()
+            .chain(data.virtual_methods.iter())
+            .filter(|m| m.access_flags & acos_dex::access::NATIVE != 0)
+            .map(|m| apk_dex.method_ref(m.method_idx).unwrap().name.to_string())
+            .collect();
+        apk_natives.sort();
+        assert_eq!(
+            apk_natives,
+            vec![
+                "add",
+                "callBack",
+                "registeredEcho",
+                "stringFromJNI",
+                "sumArray",
+                "throwFromJNI"
+            ],
+            "APK native declarations"
+        );
+    }
+
+    // The library really came out of the APK.
+    let libs = jni.libraries();
+    assert_eq!(libs.len(), 1, "loaded libraries: {libs:?}");
+    assert_eq!(libs[0].0, "libhellojni.so");
+    assert!(
+        libs[0].1.as_deref().unwrap_or("").contains("hello-jni.apk"),
+        "library path: {:?}",
+        libs[0].1
+    );
+
+    // `RegisterNatives` installed the fourth native.
+    let registered = jni.registered_natives();
+    assert!(
+        registered.iter().any(|(c, n, s, p)| {
+            c == "Ldev/acos/fixtures/hellojni/MainActivity;"
+                && n == "registeredEcho"
+                && s == "(Ljava/lang/String;)Ljava/lang/String;"
+                && *p != 0
+        }),
+        "RegisterNatives entries: {registered:?}"
+    );
+
+    assert_eq!(jni.take_error(), None, "no structured JNI error");
+}

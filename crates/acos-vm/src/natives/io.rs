@@ -32,6 +32,29 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "sysconf", "(I)J", sysconf);
     vm.register_native(c, "android_fdsan_exchange_owner_tag", "(Ljava/io/FileDescriptor;JJ)V", noop_fd);
     vm.register_native("Landroid/system/OsConstants;", "initConstants", "()V", noop_fd);
+    // `java.io.UnixFileSystem.initIDs` only caches JNI field/method IDs; it has
+    // no observable effect (ART's own implementation is a no-op in the fast
+    // path). Called from the `<clinit>` that `LoadedApk`/`Context` trigger.
+    vm.register_native("Ljava/io/UnixFileSystem;", "initIDs", "()V", noop_fd);
+    // `File.getCanonicalPath` → `UnixFileSystem.canonicalize0`: the native
+    // `realpath(3)` wrapper. ACOS runs on a real host filesystem, so this is
+    // the real canonicalisation; a path that does not exist throws
+    // `IOException` exactly as ART's `canonicalize_md.c` does.
+    vm.register_native(
+        "Ljava/io/UnixFileSystem;",
+        "canonicalize0",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        canonicalize0,
+    );
+    // `File.list()` / `File.listFiles()` → `UnixFileSystem.list0`: readdir(3).
+    // Returns entry names (not paths); `null` on error, matching ART (the
+    // Java side turns that into an empty/null list).
+    vm.register_native(
+        "Ljava/io/UnixFileSystem;",
+        "list0",
+        "(Ljava/io/File;)[Ljava/lang/String;",
+        list0,
+    );
     icu_versions(vm);
     Ok(())
 }
@@ -42,6 +65,59 @@ fn icu_versions(vm: &mut Vm) {
     vm.register_native(c, "getIcuVersion", "()Ljava/lang/String;", icu_version);
     vm.register_native(c, "getUnicodeVersion", "()Ljava/lang/String;", icu_version);
     vm.register_native(c, "getCldrVersion", "()Ljava/lang/String;", icu_version);
+}
+
+fn canonicalize0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    match std::fs::canonicalize(&path) {
+        Ok(p) => {
+            let h = vm.new_string(&p.to_string_lossy())?;
+            vm.ret_ref(ctx, h);
+            Ok(())
+        }
+        Err(e) => Err(vm.throw_new(
+            "Ljava/io/IOException;",
+            Some(&format!("canonicalize0({path}): {e}")),
+        )),
+    }
+}
+
+fn list0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let path = match vm.get_field(file, "path") {
+        Ok(crate::javabridge::JavaValue::Object(s)) if s != NULL => {
+            vm.string_to_rust(s).unwrap_or_default()
+        }
+        _ => {
+            vm.ret_ref(ctx, NULL);
+            return Ok(());
+        }
+    };
+    let Ok(entries) = std::fs::read_dir(&path) else {
+        vm.ret_ref(ctx, NULL);
+        return Ok(());
+    };
+    let mut names: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort_unstable();
+    let mut refs = Vec::with_capacity(names.len());
+    // Root each name: the array allocation below may trigger a (stress) GC.
+    for n in &names {
+        let h = vm.new_string(n)?;
+        vm.native_roots.push(h);
+        refs.push(h);
+    }
+    let h = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "Ljava/lang/String;".to_string(),
+        data: ArrayData::Ref(refs),
+    }))?;
+    vm.ret_ref(ctx, h);
+    for _ in &names {
+        vm.native_roots.pop();
+    }
+    Ok(())
 }
 
 fn icu_version(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

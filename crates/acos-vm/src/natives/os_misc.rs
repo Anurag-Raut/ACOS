@@ -202,6 +202,28 @@ fn process(vm: &mut Vm) {
         process_get_thread_priority,
     );
     vm.register_native(c, "getUidForName", "(Ljava/lang/String;)I", process_uid_for_name);
+    vm.register_native(c, "setArgV0Native", "(Ljava/lang/String;)V", process_set_argv0);
+}
+
+/// The process name recorded by `Process.setArgV0` (`ActivityThread` sets it to
+/// the app package). ACOS has no separate process identity to rename, so the
+/// value is recorded and exposed for debugging instead of mutating the host
+/// process's `argv[0]`.
+fn process_name() -> &'static Mutex<String> {
+    static NAME: OnceLock<Mutex<String>> = OnceLock::new();
+    NAME.get_or_init(|| Mutex::new(String::new()))
+}
+
+fn process_set_argv0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    *process_name().lock().unwrap_or_else(|p| p.into_inner()) = name;
+    Ok(())
+}
+
+/// The process name last set by `Process.setArgV0` (empty until set).
+#[must_use]
+pub fn arg_v0() -> String {
+    process_name().lock().unwrap_or_else(|p| p.into_inner()).clone()
 }
 
 fn process_set_thread_priority(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

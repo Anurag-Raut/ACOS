@@ -554,15 +554,37 @@ impl Vm {
             })
     }
 
-    fn invoke(
+    /// Resolve a static method and push its frame **without running it**, after
+    /// running the class initializer. The caller drives execution (e.g. with
+    /// the interpreter scheduler) — used for `android.os.Looper.loop()`, which
+    /// blocks in `nativePollOnce` and therefore cannot go through the
+    /// synchronous [`Vm::call_static`] nested-call path.
+    pub fn push_static_call(
+        &mut self,
+        class: &str,
+        name: &str,
+        sig: &str,
+        args: &[JavaValue],
+    ) -> BridgeResult<()> {
+        let cid = self.load_class_named(class)?;
+        self.ensure_host_thread().map_err(BridgeError::from)?;
+        if let Err(e) = self.initialize_class(cid) {
+            let _ = self.ensure_host_thread();
+            return Err(self.map_vm_error(e));
+        }
+        let mid = self.resolve_method(cid, class, name, sig, InvokeKind::Static)?;
+        let words = self.encode_call_args(mid, args, class, name, sig)?;
+        crate::interp::push_frame_values(self, mid, NULL, &words).map_err(BridgeError::from)
+    }
+
+    fn encode_call_args(
         &mut self,
         mid: MethodId,
-        this: Handle,
         args: &[JavaValue],
         class: &str,
         name: &str,
         sig: &str,
-    ) -> BridgeResult<JavaValue> {
+    ) -> BridgeResult<Vec<u64>> {
         let params: Vec<TypeId> = self.methods[mid as usize].params.clone();
         if args.len() != params.len() {
             return Err(BridgeError::ArgCount {
@@ -594,6 +616,19 @@ impl Vm {
                 words.push(encoded[0] as u64);
             }
         }
+        Ok(words)
+    }
+
+    fn invoke(
+        &mut self,
+        mid: MethodId,
+        this: Handle,
+        args: &[JavaValue],
+        class: &str,
+        name: &str,
+        sig: &str,
+    ) -> BridgeResult<JavaValue> {
+        let words = self.encode_call_args(mid, args, class, name, sig)?;
         self.ensure_host_thread().map_err(BridgeError::from)?;
         let raw = match interp::call_method(self, mid, this, &words) {
             Ok(v) => v,

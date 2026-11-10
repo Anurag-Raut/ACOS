@@ -44,7 +44,8 @@ pub fn owns_method(method: &str) -> bool {
 
 type JResult<T> = Result<T, String>;
 
-fn err(e: impl std::fmt::Display) -> String {
+/// The `pms_java` error prefix.
+pub(crate) fn err(e: impl std::fmt::Display) -> String {
     format!("pms_java: {e}")
 }
 
@@ -74,7 +75,7 @@ fn set_int(vm: &mut Vm, obj: Handle, field: &str, value: i32) -> JResult<()> {
 }
 
 /// Materialise a real `android.content.pm.ApplicationInfo`.
-fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
+pub(crate) fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
     let h = vm
         .new_instance_ctor("android.content.pm.ApplicationInfo", "()V", &[])
         .map_err(err)?;

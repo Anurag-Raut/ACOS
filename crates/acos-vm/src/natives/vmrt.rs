@@ -51,7 +51,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "vmLibrary", "()Ljava/lang/String;", ret_null_str);
     vm.register_native(c, "bootClassPath", "()Ljava/lang/String;", ret_empty_str);
     vm.register_native(c, "classPath", "()Ljava/lang/String;", ret_empty_str);
-    vm.register_native(c, "properties", "()[Ljava/lang/String;", empty_string_array);
+    vm.register_native(c, "properties", "()[Ljava/lang/String;", runtime_properties);
     vm.register_native(c, "getBaseApkOptimizationInfo", "()Ldalvik/system/DexFile$OptimizationInfo;", ret_null);
     vm.register_native(c, "newUnpaddedArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", new_array_of);
     vm.register_native(c, "newNonMovableArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", new_array_of);
@@ -386,12 +386,34 @@ fn ret_null(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn empty_string_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+/// `VMRuntime.properties()` — the `-Dkey=value` assignments the embedded
+/// runtime hands to `java.lang.System.<clinit>`.
+///
+/// ART's `AndroidRuntime::start` sets `user.dir=/` (the zygote chdirs to `/`),
+/// which `jdk.internal.util.StaticProperty` and `java.io.UnixFileSystem`
+/// require to be present (they throw `InternalError` otherwise). The other
+/// Java properties (`java.home`, `user.home`, `user.name`, `java.io.tmpdir`,
+/// `os.*`, ICU versions) are derived by `System.initUnchangeableSystemProperties`
+/// from `Libcore.os`, `ICU` and the hardcoded table, so they are not repeated
+/// here.
+fn runtime_properties(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let entries = ["user.dir=/"];
+    let mut refs = Vec::with_capacity(entries.len());
+    // Root each string: `vm.alloc` below may trigger a (stress) GC and the
+    // handles in `refs` are not roots yet.
+    for e in entries {
+        let h = vm.new_string(e)?;
+        vm.native_roots.push(h);
+        refs.push(h);
+    }
     let h = vm.alloc(Object::Array(ArrayObj {
         elem_desc: "Ljava/lang/String;".to_string(),
-        data: ArrayData::Ref(Vec::new()),
+        data: ArrayData::Ref(refs),
     }))?;
     vm.ret_ref(ctx, h);
+    for _ in entries {
+        vm.native_roots.pop();
+    }
     Ok(())
 }
 

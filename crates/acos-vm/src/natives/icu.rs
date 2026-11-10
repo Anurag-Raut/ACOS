@@ -4,6 +4,8 @@
 //! Converters are implemented in Rust and keyed by an opaque `jlong` handle;
 //! ICU data files are never opened.
 
+use std::sync::{Mutex, OnceLock};
+
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
 use crate::heap::{ArrayData, ArrayObj, Object, NULL};
@@ -27,6 +29,38 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "contains", "(Ljava/lang/String;Ljava/lang/String;)Z", contains);
     vm.register_native(c, "getAvailableCharsetNames", "()[Ljava/lang/String;", available_names);
     vm.register_native(c, "getSubstitutionBytes", "(J)[B", substitution_bytes);
+    // ICU default-locale state. ACOS's ICU is a Rust shim with no ICU data, so
+    // the identity is recorded rather than handed to a native ICU library. The
+    // Java side still owns every observable decision (`Locale.getDefault`);
+    // this only mirrors it into the shim.
+    let l = "Lcom/android/icu/util/LocaleNative;";
+    vm.register_native(l, "setDefaultNative", "(Ljava/lang/String;)V", locale_set_default);
+    // `com.android.icu.util.regex.PatternNative` builds a `NativeAllocationRegistry`
+    // in `<clinit>`. ACOS has no native ICU regex objects, so there is no free
+    // function to return (`0` = no finalizer). Actual compilation/matching stays
+    // a structured `UNSUPPORTED_JAVA_API`.
+    vm.register_native(
+        "Lcom/android/icu/util/regex/PatternNative;",
+        "getNativeFinalizer",
+        "()J",
+        pattern_no_finalizer,
+    );
+    Ok(())
+}
+
+fn pattern_no_finalizer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i64(ctx, 0);
+    Ok(())
+}
+
+fn default_locale_slot() -> &'static Mutex<String> {
+    static LOCALE: OnceLock<Mutex<String>> = OnceLock::new();
+    LOCALE.get_or_init(|| Mutex::new(String::from("en-US")))
+}
+
+fn locale_set_default(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let tag = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    *default_locale_slot().lock().unwrap_or_else(|p| p.into_inner()) = tag;
     Ok(())
 }
 
