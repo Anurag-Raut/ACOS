@@ -80,6 +80,11 @@ pub const ENOSYS: i32 = 38;
 pub const ENOTEMPTY: i32 = 39;
 /// `ELOOP`: too many levels of symbolic links.
 pub const ELOOP: i32 = 40;
+/// `ENODATA`: no data available (a requested xattr is not set).
+pub const ENODATA: i32 = 61;
+/// `EOPNOTSUPP`: operation not supported (e.g. an xattr namespace the
+/// sandbox filesystem does not carry).
+pub const EOPNOTSUPP: i32 = 95;
 /// `EDQUOT`: disk quota exceeded.
 pub const EDQUOT: i32 = 122;
 
@@ -273,6 +278,15 @@ pub struct Vfs {
     broken: Option<i32>,
     /// Structured denial log: `guest_path\tERRNO_NAME` for unmapped paths.
     denials: Vec<String>,
+    /// Guest-set extended attributes, keyed by `(guest path, name)`.
+    ///
+    /// The sandbox models a filesystem that supports the `user.*` namespace,
+    /// exactly like the device data partition: `ContextImpl.getCacheDir` writes
+    /// `user.inode_cache` on the app data dir. Values are session-scoped and
+    /// dropped when the node is removed or renamed. ACOS has no
+    /// security/capability xattr layer, so other namespaces report
+    /// `EOPNOTSUPP` rather than inventing a label.
+    xattrs: BTreeMap<(String, String), Vec<u8>>,
 }
 
 impl Vfs {
@@ -281,6 +295,11 @@ impl Vfs {
         let mut broken = None;
         if let Err(e) = std::fs::create_dir_all(config.root.join("data/user/0")) {
             broken = Some(errno_of(e));
+        }
+        // The device-protected storage tree `/data/user_de/0` exists on every
+        // device; a device-protected `Context` resolves its data dir here.
+        if let Err(e) = std::fs::create_dir_all(config.root.join("data/user_de/0")) {
+            broken.get_or_insert(errno_of(e));
         }
         let root_canon =
             std::fs::canonicalize(&config.root).unwrap_or_else(|_| config.root.clone());
@@ -301,6 +320,7 @@ impl Vfs {
             cleanup: config.cleanup,
             broken,
             denials: Vec::new(),
+            xattrs: BTreeMap::new(),
         }
     }
 
@@ -312,7 +332,9 @@ impl Vfs {
 
     /// Override the writable scratch root. Existing open files are unaffected.
     pub fn set_root(&mut self, dir: &Path) {
-        if std::fs::create_dir_all(dir.join("data/user/0")).is_ok() {
+        if std::fs::create_dir_all(dir.join("data/user/0")).is_ok()
+            && std::fs::create_dir_all(dir.join("data/user_de/0")).is_ok()
+        {
             self.root = dir.to_path_buf();
             self.root_canon = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
             self.broken = None;
@@ -398,6 +420,9 @@ impl Vfs {
                     .join(rel),
             );
         }
+        if let Some(rest) = guest.strip_prefix("/data/user_de/") {
+            return Target::Writable(self.root.join("data").join("user_de").join(rest));
+        }
         if let Some(rest) = guest.strip_prefix("/data/user/") {
             return Target::Writable(self.root.join("data").join("user").join(rest));
         }
@@ -406,6 +431,7 @@ impl Vfs {
             // reaches `<pkg>/files`.
             "/data" => return Target::Writable(self.root.join("data")),
             "/data/user" => return Target::Writable(self.root.join("data").join("user")),
+            "/data/user_de" => return Target::Writable(self.root.join("data").join("user_de")),
             "/data/data" => return Target::Writable(self.root.join("data").join("user").join("0")),
             _ => {}
         }
@@ -948,7 +974,11 @@ impl Vfs {
             Target::Denied(e) => return Err(e),
             _ => return Err(EROFS),
         };
-        std::fs::rename(&from_host, &to_host).map_err(errno_of)
+        std::fs::rename(&from_host, &to_host).map_err(errno_of)?;
+        let from_key = Self::xattr_guest_key(&from_norm);
+        let to_key = Self::xattr_guest_key(&to_norm);
+        self.move_xattrs(&from_key, &to_key);
+        Ok(())
     }
 
     pub fn remove(&mut self, guest: &str) -> Result<(), i32> {
@@ -961,10 +991,13 @@ impl Vfs {
                 let h = self.safe_path(&h, &self.root_canon, false)?;
                 let md = std::fs::symlink_metadata(&h).map_err(errno_of)?;
                 if md.is_dir() {
-                    std::fs::remove_dir(&h).map_err(errno_of)
+                    std::fs::remove_dir(&h).map_err(errno_of)?;
                 } else {
-                    std::fs::remove_file(&h).map_err(errno_of)
+                    std::fs::remove_file(&h).map_err(errno_of)?;
                 }
+                let key = Self::xattr_guest_key(&norm);
+                self.drop_xattrs_under(&key);
+                Ok(())
             }
         }
     }
@@ -1010,6 +1043,152 @@ impl Vfs {
             _ => return Err(EROFS),
         };
         std::fs::hard_link(&old_host, &new_host).map_err(errno_of)
+    }
+
+    // -- extended attributes ----------------------------------------------
+
+    /// Map `/data/data/<pkg>` (the device symlink) onto `/data/user/0/<pkg>`
+    /// so both spellings address the same inode and share its xattrs.
+    fn xattr_guest_key(norm: &str) -> String {
+        if let Some(rest) = norm.strip_prefix("/data/data/") {
+            format!("/data/user/0/{rest}")
+        } else if norm == "/data/data" {
+            "/data/user/0".to_string()
+        } else {
+            norm.to_string()
+        }
+    }
+
+    /// Resolve `guest` to its xattr store key, requiring the node to exist.
+    /// `write` selects the error for a read-only node: `EROFS` when the caller
+    /// would mutate, while a read is allowed to look (and find nothing).
+    fn xattr_key(&self, guest: &str, write: bool) -> Result<String, i32> {
+        self.check_broken()?;
+        let norm = normalize_guest(guest).ok_or(EACCES)?;
+        let key = Self::xattr_guest_key(&norm);
+        match self.target(&norm) {
+            Target::Denied(e) => Err(e),
+            Target::ReadOnly(h) => {
+                let h = self.safe_path(&h, &self.boot_canon, true)?;
+                std::fs::metadata(&h).map_err(errno_of)?;
+                if write {
+                    Err(EROFS)
+                } else {
+                    Ok(key)
+                }
+            }
+            Target::Writable(h) => {
+                let h = self.safe_path(&h, &self.root_canon, true)?;
+                std::fs::metadata(&h).map_err(errno_of)?;
+                Ok(key)
+            }
+            Target::Synthetic(_) | Target::Host(_) => {
+                if write {
+                    Err(EROFS)
+                } else {
+                    Ok(key)
+                }
+            }
+        }
+    }
+
+    /// Whether `name` addresses the one xattr namespace the sandbox models.
+    /// A real Android data partition carries `user.*` attrs for an app; the
+    /// `trusted.`/`security.`/`system.` namespaces need a capability model
+    /// ACOS does not have, so they report `EOPNOTSUPP`.
+    fn xattr_namespace_ok(name: &str) -> bool {
+        name.len() > "user.".len() && name.starts_with("user.")
+    }
+
+    /// `setxattr(2)` for the modelled namespace.
+    pub fn setxattr(
+        &mut self,
+        guest: &str,
+        name: &str,
+        value: &[u8],
+        flags: i32,
+    ) -> Result<(), i32> {
+        const XATTR_CREATE: i32 = 1;
+        const XATTR_REPLACE: i32 = 2;
+        if !Self::xattr_namespace_ok(name) {
+            return Err(EOPNOTSUPP);
+        }
+        let key = self.xattr_key(guest, true)?;
+        let slot = (key, name.to_string());
+        let exists = self.xattrs.contains_key(&slot);
+        if flags & XATTR_CREATE != 0 && exists {
+            return Err(EEXIST);
+        }
+        if flags & XATTR_REPLACE != 0 && !exists {
+            return Err(ENODATA);
+        }
+        self.xattrs.insert(slot, value.to_vec());
+        Ok(())
+    }
+
+    /// `getxattr(2)`: the stored value or `ENODATA`.
+    pub fn getxattr(&self, guest: &str, name: &str) -> Result<Vec<u8>, i32> {
+        if !Self::xattr_namespace_ok(name) {
+            return Err(EOPNOTSUPP);
+        }
+        let key = self.xattr_key(guest, false)?;
+        self.xattrs
+            .get(&(key, name.to_string()))
+            .cloned()
+            .ok_or(ENODATA)
+    }
+
+    /// `listxattr(2)`: the `user.*` names set on the node. Sorted so the reply
+    /// is deterministic (the kernel order is unspecified).
+    pub fn listxattr(&self, guest: &str) -> Result<Vec<String>, i32> {
+        let key = self.xattr_key(guest, false)?;
+        let mut names: Vec<String> = self
+            .xattrs
+            .keys()
+            .filter(|(path, _)| *path == key)
+            .map(|(_, name)| name.clone())
+            .collect();
+        names.sort();
+        Ok(names)
+    }
+
+    /// `removexattr(2)`: drop the stored value or `ENODATA`.
+    pub fn removexattr(&mut self, guest: &str, name: &str) -> Result<(), i32> {
+        if !Self::xattr_namespace_ok(name) {
+            return Err(EOPNOTSUPP);
+        }
+        let key = self.xattr_key(guest, true)?;
+        self.xattrs
+            .remove(&(key, name.to_string()))
+            .map(|_| ())
+            .ok_or(ENODATA)
+    }
+
+    /// Drop every stored xattr on `guest` and, for a directory, its children.
+    fn drop_xattrs_under(&mut self, guest: &str) {
+        let prefix = format!("{guest}/");
+        self.xattrs
+            .retain(|(path, _), _| path != guest && !path.starts_with(&prefix));
+    }
+
+    /// Move the xattrs of a renamed node (and its subtree) to its new path.
+    fn move_xattrs(&mut self, from: &str, to: &str) {
+        let prefix = format!("{from}/");
+        let moved: Vec<((String, String), Vec<u8>)> = self
+            .xattrs
+            .iter()
+            .filter(|((path, _), _)| path == from || path.starts_with(&prefix))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for ((path, name), value) in moved {
+            self.xattrs.remove(&(path.clone(), name.clone()));
+            let new_path = if path == from {
+                to.to_string()
+            } else {
+                format!("{to}{}", &path[from.len()..])
+            };
+            self.xattrs.insert((new_path, name), value);
+        }
     }
 
     /// Tolerant canonicalisation for `java.io.UnixFileSystem.canonicalize0`.
@@ -1604,6 +1783,7 @@ pub fn errno_name(errno: i32) -> &'static str {
         38 => "ENOSYS",
         39 => "ENOTEMPTY",
         40 => "ELOOP",
+        61 => "ENODATA",
         95 => "EOPNOTSUPP",
         122 => "EDQUOT",
         125 => "ECANCELED",

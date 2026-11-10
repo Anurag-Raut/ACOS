@@ -69,6 +69,9 @@ pub enum Metric {
     Sessions,
     /// Per-session total + marginal memory with process-shared boot data, N=1..20.
     SessionsShared,
+    /// In-process session pool: create/reset throughput, CPU scaling and memory
+    /// from one shared template snapshot (T-44).
+    SessionsPool,
     /// Steady CPU of the parked/blocked runtime over a wall window.
     IdleCpu,
     /// Interpreter micro benchmarks (wall, instructions, instructions/second).
@@ -105,6 +108,7 @@ impl Metric {
             Metric::IdleRss => "idle-rss",
             Metric::Sessions => "sessions",
             Metric::SessionsShared => "sessions-shared",
+            Metric::SessionsPool => "sessions-pool",
             Metric::IdleCpu => "idle-cpu",
             Metric::Interpreter => "interpreter",
             Metric::All => "all",
@@ -396,6 +400,7 @@ fn measure_one(metric: Metric, args: &BenchArgs) -> Result<Value, BenchFailure> 
         Metric::IdleRss => bench_idle_rss(args),
         Metric::Sessions => bench_sessions(args),
         Metric::SessionsShared => super::bench_sessions::run(args),
+        Metric::SessionsPool => super::bench_pool::run(args),
         Metric::IdleCpu => bench_idle_cpu(args),
         Metric::Interpreter => bench_interpreter(args),
         _ => Err(BenchFailure::internal("unreachable metric dispatch")),
@@ -1318,6 +1323,7 @@ fn child_body(mode: &str, args: &BenchArgs) -> Result<Value, BenchFailure> {
             Ok(json!({"mode": "idle-rss", "variant": variant, "memory": memory}))
         }
         "sessions-shared" => super::bench_sessions::child_body(args),
+        "sessions-pool" => super::bench_pool::child_body(args),
         "sessions" => {
             let mut runtimes = Vec::new();
             for _ in 0..args.n {

@@ -4,6 +4,7 @@
 - host: 32 threads, 60 GiB RAM, loadavg1 2.93, kernel 7.2.11-arch1-1, `rustc 1.90.0 (1159e78c4 2025-09-14)`
 - method: BENCHMARKS.md §2: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric
 - interpreter rows: w25a hot-path rerun `run-2026-11-10-205045.json` (commit `40f075c`, `release`, 20 samples, loadavg1 4.80). That metric's wall time is dominated by `Vm::new` startup rather than by interpretation, so it is host-load-sensitive; the honest per-instruction evidence for this wave is the `vmbench` table in BENCHMARKS.md §8.6 (commit 40f075c, own target dir, 5 processes × best-of-2).
+- session pool rows: `run-2026-11-10-204202.json` (commit `40f075c`, `release`, 20 samples/metric; `sessions-pool` uses 5 fresh child processes per N). Full method/scope and isolation analysis: `results/bench/POOL_DESIGN.md`.
 - fidelity: `native-runtime` (ACOS executes the code itself). No row here is ART-verified, and no legacy value is an ACOS result.
 
 Metric types are never mixed: RSS, PSS, anon+shmem (`RssAnon+RssShmem`) and private/shared pages are reported in separate labelled columns.
@@ -57,6 +58,25 @@ Metric types are never mixed: RSS, PSS, anon+shmem (`RssAnon+RssShmem`) and priv
 | marginal N=2->N=5 (shared boot) | 14.313 MiB/session | anon+shmem | fresh process |
 | marginal N=5->N=10 (shared boot) | 14.323 MiB/session | anon+shmem | fresh process |
 | marginal N=10->N=20 (shared boot) | 14.33 MiB/session | anon+shmem | fresh process |
+| N=1 session pool: anon+shmem / PSS | 29496.0 / 29500.0 / 33134.0 / 33237.0 KiB (p50) | anon+shmem / PSS (separate) | warm restore |
+| N=1 session pool: jobs/s / reset ms / session create/s | 134.525 / 2.411 / 504.273 | wall | warm |
+| N=1 session pool: CPU cores used / efficiency | 1.173 / 1.173 cores/session | CPU | warm |
+| N=2 session pool: anon+shmem / PSS | 32120.0 / 32128.0 / 35822.0 / 35869.0 KiB (p50) | anon+shmem / PSS (separate) | warm restore |
+| N=2 session pool: jobs/s / reset ms / session create/s | 274.071 / 2.062 / 937.018 | wall | warm |
+| N=2 session pool: CPU cores used / efficiency | 1.46 / 0.73 cores/session | CPU | warm |
+| N=5 session pool: anon+shmem / PSS | 39992.0 / 40000.0 / 43749.0 / 43762.0 KiB (p50) | anon+shmem / PSS (separate) | warm restore |
+| N=5 session pool: jobs/s / reset ms / session create/s | 508.059 / 2.827 / 2037.245 | wall | warm |
+| N=5 session pool: CPU cores used / efficiency | 4.774 / 0.955 cores/session | CPU | warm |
+| N=10 session pool: anon+shmem / PSS | 53128.0 / 53144.0 / 56892.0 / 56907.0 KiB (p50) | anon+shmem / PSS (separate) | warm restore |
+| N=10 session pool: jobs/s / reset ms / session create/s | 733.341 / 3.656 / 3023.89 | wall | warm |
+| N=10 session pool: CPU cores used / efficiency | 8.765 / 0.877 cores/session | CPU | warm |
+| N=20 session pool: anon+shmem / PSS | 79404.0 / 79412.0 / 83117.0 / 83158.0 KiB (p50) | anon+shmem / PSS (separate) | warm restore |
+| N=20 session pool: jobs/s / reset ms / session create/s | 840.396 / 5.168 / 3198.729 | wall | warm |
+| N=20 session pool: CPU cores used / efficiency | 17.012 / 0.851 cores/session | CPU | warm |
+| session pool marginal N=1->N=2 | 2.563 MiB/session | anon+shmem | warm |
+| session pool marginal N=2->N=5 | 2.563 MiB/session | anon+shmem | warm |
+| session pool marginal N=5->N=10 | 2.566 MiB/session | anon+shmem | warm |
+| session pool marginal N=10->N=20 | 2.566 MiB/session | anon+shmem | warm |
 | idle CPU, parked/blocked | 0.0 / 0.0 ticks over 5 s (0.0 / 0.0 % of one core), zero_ticks=True | CPU window | parked |
 | interpreter `02_int_arith` | 16.048 / 18.218 ms, 62380 insns, 3860458.116 insn/s | wall + VM counters | cold |
 | interpreter `05_branches_loops` | 15.054 / 16.372 ms, 49732 insns, 3289003.346 insn/s | wall + VM counters | cold |
@@ -96,6 +116,9 @@ Verdicts: `better`/`worse` are computed only for the pairs whose metric type and
 | L-chrome | Chrome reference | core 340 MiB PSS; shot 61 ms; AX 18 ms | PSS, warm | **not measured** | `not-measurable` | reference only |
 | A-process-start | Process spawn -> Vm ready (ACOS-native) | no legacy metric | - | 16.929 ms p50 / 16.929 ms (p95 18.229) | `no-legacy-baseline` | legacy published only whole-job cold start |
 | A-attach-bind | attach -> bindApplication delivered (ACOS-native) | no legacy metric | - | 2.311 ms | `no-legacy-baseline` | the legacy engine never published this stage split |
+| A-pool-reset | SessionPool reset-to-clean (restore) vs legacy reset cmd | 110.3 ms cmd / 748.1 ms -> frame | wall, warm | 2.411 ms p50 at N=1; 2.827 ms at N=5 | `not-comparable` | ACOS restores a quiescent core VM (no app process/frame); legacy reset is app-scoped and frame-timed |
+| A-pool-throughput | SessionPool throughput (jobs/s, N=1..20) (ACOS-native) | no legacy metric | - | 134.525 jobs/s at N=1; 840.396 at N=20 | `no-legacy-baseline` | in-process run+reset loop of a small DEX program; legacy published no comparable throughput |
+| A-pool-memory | SessionPool marginal memory per session (N=10..20) | marginal N=5->10 ~99.3 MiB workset (v5) | workset, warm | 2.566 MiB/session (anon+shmem) | `measured` | template snapshot is a quiescent core VM (not a booted app process); anon+shmem vs legacy workset type differs |
 
 ## 3. Worse than legacy (explicit, with plan)
 

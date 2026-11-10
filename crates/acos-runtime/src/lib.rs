@@ -36,6 +36,7 @@ pub mod display_java;
 pub mod input_java;
 pub mod lifecycle;
 pub mod pms_java;
+pub mod session_pool;
 pub mod settings_java;
 pub mod transport;
 pub mod wms_java;

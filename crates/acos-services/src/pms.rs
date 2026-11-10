@@ -82,6 +82,10 @@ pub struct AppInfo {
     pub public_source_dir: String,
     /// `dataDir`.
     pub data_dir: String,
+    /// `deviceProtectedDataDir` (`/data/user_de/<user>/<pkg>`).
+    pub device_protected_data_dir: String,
+    /// `credentialProtectedDataDir` (`/data/user/<user>/<pkg>`).
+    pub credential_protected_data_dir: String,
     /// `nativeLibraryDir`.
     pub native_library_dir: String,
     /// uid.
@@ -137,6 +141,8 @@ impl AppInfo {
             public_source_dir: source_dir.clone(),
             source_dir,
             data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
+            device_protected_data_dir: format!("/data/user_de/{FIXTURE_USER}/{package}"),
+            credential_protected_data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
             native_library_dir,
             uid,
             flags: 0,
@@ -161,6 +167,8 @@ impl AppInfo {
             public_source_dir: source.clone(),
             source_dir: source,
             data_dir: "/data/user/0/dev.acos.fixtures.helloviews".into(),
+            device_protected_data_dir: "/data/user_de/0/dev.acos.fixtures.helloviews".into(),
+            credential_protected_data_dir: "/data/user/0/dev.acos.fixtures.helloviews".into(),
             native_library_dir: "/data/app/lib/x86_64".into(),
             uid: FIXTURE_UID,
             flags: 0,
@@ -193,6 +201,8 @@ impl AppInfo {
                 Value::Str8(Some(self.source_dir.clone())),
                 Value::Str8(Some(self.public_source_dir.clone())),
                 Value::Str8(Some(self.data_dir.clone())),
+                Value::Str8(Some(self.device_protected_data_dir.clone())),
+                Value::Str8(Some(self.credential_protected_data_dir.clone())),
                 Value::Str8(Some(self.native_library_dir.clone())),
                 Value::Int(self.uid),
                 Value::Int(self.flags),
@@ -226,16 +236,18 @@ impl AppInfo {
             source_dir: f.get(10)?.as_str()?.to_string(),
             public_source_dir: f.get(11)?.as_str()?.to_string(),
             data_dir: f.get(12)?.as_str()?.to_string(),
-            native_library_dir: f.get(13)?.as_str()?.to_string(),
-            uid: f.get(14)?.as_int()?,
-            flags: f.get(15)?.as_int()?,
-            private_flags: f.get(16)?.as_int()?,
-            target_sdk: f.get(17)?.as_int()?,
-            min_sdk: f.get(18)?.as_int()?,
-            theme: f.get(19)?.as_int()?,
-            process_name: f.get(21)?.as_str()?.to_string(),
-            class_name: f.get(22)?.as_str()?.to_string(),
-            target_sandbox_version: f.get(28)?.as_int()?,
+            device_protected_data_dir: f.get(13)?.as_str()?.to_string(),
+            credential_protected_data_dir: f.get(14)?.as_str()?.to_string(),
+            native_library_dir: f.get(15)?.as_str()?.to_string(),
+            uid: f.get(16)?.as_int()?,
+            flags: f.get(17)?.as_int()?,
+            private_flags: f.get(18)?.as_int()?,
+            target_sdk: f.get(19)?.as_int()?,
+            min_sdk: f.get(20)?.as_int()?,
+            theme: f.get(21)?.as_int()?,
+            process_name: f.get(23)?.as_str()?.to_string(),
+            class_name: f.get(24)?.as_str()?.to_string(),
+            target_sandbox_version: f.get(30)?.as_int()?,
         })
     }
 }

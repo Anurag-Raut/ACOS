@@ -436,3 +436,63 @@ interpretation, so it is a startup + host-load measurement, not a per-instructio
 one; it stays better than the committed `baseline.json` p50 (22.823 / 22.663 /
 24.559 ms) but worse than the low-load `ced0d70` run. The `vmbench` table above
 is the per-instruction evidence.
+
+### 8.7 SessionPool: fast session creation, reset and concurrent throughput (2026-11-10, W25-C / T-44)
+
+Run `results/bench/run-2026-11-10-204202.json`, commit `40f075c`, `release`,
+20 samples/metric, host 32 threads / 60 GiB. `sessions-pool`: `corelib real`,
+5 fresh child processes per `N`, 10 throughput rounds per child, workload
+`fixtures/build/dexprogs/02_int_arith` (`Main`). Fidelity `native-runtime` —
+**not** ART-verified. This is a metric-only row set; it does not change any
+row above.
+
+The pool boots **one** core `Vm` (`Vm::new` + `Vm::snapshot`, T-42/W19-E) and
+restores every session from those few-KiB bytes with the process-global
+`BootCache`/`codecache` (W21-B) warm. The template is a quiescent **core VM**,
+not a booted application process (the T-42 snapshot preconditions refuse
+application DEX), so its numbers are a different scope from `sessions-shared`
+(which runs `boot_app_process` per session) and the two are never mixed.
+
+| Metric | N=1 | N=2 | N=5 | N=10 | N=20 | Type | Cold/warm |
+|---|---:|---:|---:|---:|---:|---|---|
+| total `anon+shmem` p50 (MiB) | 28.80 | 31.37 | 39.06 | 51.88 | 77.54 | anon+shmem | warm restore |
+| total PSS p50 (MiB) | 32.36 | 34.98 | 42.72 | 55.56 | 81.17 | PSS | warm restore |
+| marginal per session (MiB) | — | 2.56 | 2.56 | 2.57 | 2.57 | anon+shmem | warm restore |
+| session create rate p50 (sessions/s) | 504.3 | 937.0 | 2037.2 | 3023.9 | 3198.7 | wall, concurrent restore | warm |
+| per-session restore p50 (ms) | 1.94 | 1.77 | 2.25 | 2.80 | 5.41 | wall | warm |
+| jobs/s p50 (run + reset loop) | 134.5 | 274.1 | 508.1 | 733.3 | 840.4 | wall | warm |
+| reset-to-clean p50 (ms) | 2.41 | 2.06 | 2.83 | 3.66 | 5.17 | wall | warm |
+| CPU cores used p50 | 1.17* | 1.46 | 4.77 | 8.77 | 17.01 | core-seconds/wall | warm |
+| CPU cores/session | 1.17* | 0.73 | 0.96 | 0.88 | 0.85 | ratio | warm |
+
+\* N=1 CPU is a tick-granularity artefact (a round is ~7 ms, one host tick is
+10 ms). The efficiency column is meaningful for N≥2 only.
+
+Determinism / isolation in this run: all five `N` produced exactly **one**
+distinct `(exit_code, stdout)` (`distinct_outputs_max = 1`), `failed = 0`,
+`panics = 0`, `timeouts = 0`, `restore_failures = 0`. The acceptance tests
+(`crates/acos-runtime/tests/session_pool.rs`) additionally prove determinism
+across `N`, `catch_unwind` panic isolation with lazy replacement, reset
+equivalence on a stateful program, and wall-watchdog killing of an infinite
+loop.
+
+Comparison (different scope — stated, never a like-for-like speed claim):
+
+| Row | Legacy | ACOS SessionPool | Verdict |
+|---|---|---|---|
+| `reset --app` cmd / → frame | 110.3 ms / 748.1 ms p50 | 2.41 ms p50 (N=1) restore-to-clean core | `not-comparable` (legacy is app-scoped and frame-timed) |
+| per-session memory | 78.7 MiB N=5 (v9) anon+shmem | 39.06 MiB total at N=5 (7.81 MiB/session) | `better`, different scope (core VM, not booted app) |
+| marginal N=10→20 | ~99.3 MiB workset (v5) | 2.57 MiB anon+shmem | `better`, different metric type/scope |
+| worker create → frame | 1.251–1.343 s p50 | 1.10 ms restore (no frame) | `not-comparable` (no renderer) |
+| concurrent N | N=5 scorecard, N=10 | N=1/2/5/10/20 executed concurrently, deterministic | **M9 correctness half now measured** (for the agent's trusted, in-process core-VM workload) |
+
+Worse-than-legacy rows: none in the measurable set. This is **not** a win claim:
+legacy's frame/reset-to-ready numbers still have no ACOS counterpart.
+
+Isolation (honest, full analysis in `results/bench/POOL_DESIGN.md`): the shared
+boot DEX and decoded code are immutable, but this pool is **in-process**. A
+memory-safety or native escape could reach another session's heap, the
+`HostGuard` RSS ceiling is process-wide, and `catch_unwind` cannot contain an
+abort. **Processes remain the isolation boundary for untrusted APKs**;
+in-process pooling is for the agent's own trusted workloads. Defaults chosen:
+60 s wall, template heap quota, RSS disabled.

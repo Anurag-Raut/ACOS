@@ -3,8 +3,8 @@
   "corelib": "real",
   "gc_stress": false,
   "total": 25,
-  "pass": 24,
-  "fail": 1,
+  "pass": 25,
+  "fail": 0,
   "unsupported": 0,
   "programs": [
     {
@@ -22,11 +22,11 @@
         "image_read_ms": 0,
         "instructions": 43407,
         "invokes": 8272,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40804,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40040,
         "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
         "wall_ms": 22
       }
     },
@@ -45,12 +45,12 @@
         "image_read_ms": 0,
         "instructions": 62380,
         "invokes": 11324,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40756,
+        "natives_registered": 1584,
+        "peak_rss_kb": 39960,
         "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 21
+        "wall_ms": 22
       }
     },
     {
@@ -68,8 +68,8 @@
         "image_read_ms": 0,
         "instructions": 67330,
         "invokes": 11524,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41620,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40772,
         "run_ms": 7,
         "startup_ms": 15,
         "vm_new_ms": 15,
@@ -91,9 +91,9 @@
         "image_read_ms": 0,
         "instructions": 146968,
         "invokes": 15142,
-        "natives_registered": 1583,
-        "peak_rss_kb": 42008,
-        "run_ms": 7,
+        "natives_registered": 1584,
+        "peak_rss_kb": 41020,
+        "run_ms": 8,
         "startup_ms": 16,
         "vm_new_ms": 16,
         "wall_ms": 24
@@ -114,12 +114,12 @@
         "image_read_ms": 0,
         "instructions": 49732,
         "invokes": 8943,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40888,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40140,
         "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 22
+        "wall_ms": 21
       }
     },
     {
@@ -137,12 +137,12 @@
         "image_read_ms": 0,
         "instructions": 55221,
         "invokes": 10229,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40216,
+        "natives_registered": 1584,
+        "peak_rss_kb": 39768,
         "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 21
+        "wall_ms": 22
       }
     },
     {
@@ -160,9 +160,9 @@
         "image_read_ms": 0,
         "instructions": 86746,
         "invokes": 14747,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41068,
-        "run_ms": 7,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40120,
+        "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
         "wall_ms": 22
@@ -176,18 +176,18 @@
         "allocations": 962,
         "classes_loaded": 213,
         "clinit_count": 52,
-        "dex_parse_ms": 0,
+        "dex_parse_ms": 1,
         "gc_count": 0,
         "gc_ms": 0,
         "heap_peak_bytes": 136058,
         "image_read_ms": 0,
         "instructions": 52091,
         "invokes": 9618,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41384,
-        "run_ms": 7,
-        "startup_ms": 14,
-        "vm_new_ms": 14,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40644,
+        "run_ms": 6,
+        "startup_ms": 16,
+        "vm_new_ms": 15,
         "wall_ms": 22
       }
     },
@@ -206,12 +206,12 @@
         "image_read_ms": 0,
         "instructions": 143608,
         "invokes": 15286,
-        "natives_registered": 1583,
-        "peak_rss_kb": 42072,
+        "natives_registered": 1584,
+        "peak_rss_kb": 41204,
         "run_ms": 8,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 24
+        "wall_ms": 23
       }
     },
     {
@@ -229,11 +229,11 @@
         "image_read_ms": 0,
         "instructions": 49806,
         "invokes": 9376,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40968,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40004,
         "run_ms": 6,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
         "wall_ms": 22
       }
     },
@@ -252,9 +252,9 @@
         "image_read_ms": 0,
         "instructions": 123772,
         "invokes": 11943,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41888,
-        "run_ms": 7,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40820,
+        "run_ms": 8,
         "startup_ms": 15,
         "vm_new_ms": 15,
         "wall_ms": 23
@@ -275,12 +275,12 @@
         "image_read_ms": 0,
         "instructions": 47584,
         "invokes": 9070,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40924,
+        "natives_registered": 1584,
+        "peak_rss_kb": 39936,
         "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 22
+        "wall_ms": 21
       }
     },
     {
@@ -298,8 +298,8 @@
         "image_read_ms": 0,
         "instructions": 54792,
         "invokes": 10402,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40552,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40212,
         "run_ms": 6,
         "startup_ms": 15,
         "vm_new_ms": 15,
@@ -321,12 +321,12 @@
         "image_read_ms": 0,
         "instructions": 63744,
         "invokes": 11905,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40988,
-        "run_ms": 6,
-        "startup_ms": 14,
-        "vm_new_ms": 14,
-        "wall_ms": 21
+        "natives_registered": 1584,
+        "peak_rss_kb": 40200,
+        "run_ms": 7,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 23
       }
     },
     {
@@ -344,12 +344,12 @@
         "image_read_ms": 0,
         "instructions": 50437,
         "invokes": 9603,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41040,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40564,
         "run_ms": 6,
-        "startup_ms": 14,
-        "vm_new_ms": 14,
-        "wall_ms": 21
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 23
       }
     },
     {
@@ -367,12 +367,12 @@
         "image_read_ms": 0,
         "instructions": 50047,
         "invokes": 9472,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41016,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40752,
         "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 23
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -390,8 +390,8 @@
         "image_read_ms": 0,
         "instructions": 67343,
         "invokes": 12390,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41808,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40848,
         "run_ms": 7,
         "startup_ms": 15,
         "vm_new_ms": 15,
@@ -413,12 +413,12 @@
         "image_read_ms": 0,
         "instructions": 147937,
         "invokes": 15658,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41904,
+        "natives_registered": 1584,
+        "peak_rss_kb": 41192,
         "run_ms": 8,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 23
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 24
       }
     },
     {
@@ -436,12 +436,12 @@
         "image_read_ms": 0,
         "instructions": 1342811,
         "invokes": 108204,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41732,
-        "run_ms": 38,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40536,
+        "run_ms": 39,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 54
+        "wall_ms": 55
       }
     },
     {
@@ -459,8 +459,8 @@
         "image_read_ms": 0,
         "instructions": 32447,
         "invokes": 6478,
-        "natives_registered": 1583,
-        "peak_rss_kb": 40172,
+        "natives_registered": 1584,
+        "peak_rss_kb": 39484,
         "run_ms": 5,
         "startup_ms": 15,
         "vm_new_ms": 15,
@@ -482,12 +482,12 @@
         "image_read_ms": 0,
         "instructions": 68999,
         "invokes": 13046,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41460,
-        "run_ms": 7,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 22
+        "natives_registered": 1584,
+        "peak_rss_kb": 40812,
+        "run_ms": 9,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 25
       }
     },
     {
@@ -505,12 +505,12 @@
         "image_read_ms": 0,
         "instructions": 87499,
         "invokes": 16121,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41356,
-        "run_ms": 8,
+        "natives_registered": 1584,
+        "peak_rss_kb": 40620,
+        "run_ms": 9,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 23
+        "wall_ms": 25
       }
     },
     {
@@ -528,12 +528,12 @@
         "image_read_ms": 0,
         "instructions": 87783,
         "invokes": 16209,
-        "natives_registered": 1583,
-        "peak_rss_kb": 41872,
+        "natives_registered": 1584,
+        "peak_rss_kb": 41016,
         "run_ms": 8,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 23
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 24
       }
     },
     {
@@ -551,36 +551,35 @@
         "image_read_ms": 0,
         "instructions": 134910,
         "invokes": 20131,
-        "natives_registered": 1583,
-        "peak_rss_kb": 46788,
-        "run_ms": 13,
+        "natives_registered": 1584,
+        "peak_rss_kb": 46036,
+        "run_ms": 16,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 28
+        "wall_ms": 31
       }
     },
     {
       "program": "25_security_digest",
-      "status": "fail",
-      "detail": "uncaught java.security.NoSuchAlgorithmException: Error constructing implementation (algorithm: MD5, provider: AndroidOpenSSL, class: com.android.org.conscrypt.OpenSSLMessageDigestJDK$MD5); exit 1 (want 0)",
-      "exit_code": 1,
+      "status": "pass",
+      "exit_code": 0,
       "metrics": {
-        "allocations": 22132,
-        "classes_loaded": 397,
-        "clinit_count": 111,
+        "allocations": 19946,
+        "classes_loaded": 486,
+        "clinit_count": 139,
         "dex_parse_ms": 0,
         "gc_count": 0,
         "gc_ms": 0,
-        "heap_peak_bytes": 2633076,
+        "heap_peak_bytes": 2356878,
         "image_read_ms": 0,
-        "instructions": 4379543,
-        "invokes": 806150,
-        "natives_registered": 1583,
-        "peak_rss_kb": 183568,
-        "run_ms": 155,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 171
+        "instructions": 2984810,
+        "invokes": 546825,
+        "natives_registered": 1584,
+        "peak_rss_kb": 206436,
+        "run_ms": 160,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 176
       }
     }
   ]

@@ -85,6 +85,18 @@ pub(crate) fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
     set_str(vm, h, "sourceDir", &app.source_dir)?;
     set_str(vm, h, "publicSourceDir", &app.public_source_dir)?;
     set_str(vm, h, "dataDir", &app.data_dir)?;
+    set_str(
+        vm,
+        h,
+        "deviceProtectedDataDir",
+        &app.device_protected_data_dir,
+    )?;
+    set_str(
+        vm,
+        h,
+        "credentialProtectedDataDir",
+        &app.credential_protected_data_dir,
+    )?;
     set_str(vm, h, "nativeLibraryDir", &app.native_library_dir)?;
     set_str(vm, h, "processName", &app.process_name)?;
     set_int(vm, h, "uid", app.uid)?;

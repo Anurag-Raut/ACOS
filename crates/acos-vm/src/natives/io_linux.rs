@@ -150,6 +150,35 @@ pub(crate) fn install(vm: &mut Vm) {
         "(Ljava/lang/String;Ljava/lang/String;)V",
         linux_symlink,
     );
+    // Extended attributes: `ContextImpl.getCacheDir`/`getCodeCacheDir` write
+    // `user.inode_cache`/`user.inode_code_cache` on the app data dir. The
+    // sandbox records the `user.*` namespace in the VFS (`vfs::Vfs::setxattr`);
+    // `getxattr`/`listxattr` return exactly what was set, and any other
+    // namespace raises `EOPNOTSUPP` because ACOS has no label/capability layer.
+    vm.register_native(
+        c,
+        "setxattr",
+        "(Ljava/lang/String;Ljava/lang/String;[BI)V",
+        linux_setxattr,
+    );
+    vm.register_native(
+        c,
+        "getxattr",
+        "(Ljava/lang/String;Ljava/lang/String;)[B",
+        linux_getxattr,
+    );
+    vm.register_native(
+        c,
+        "listxattr",
+        "(Ljava/lang/String;)[Ljava/lang/String;",
+        linux_listxattr,
+    );
+    vm.register_native(
+        c,
+        "removexattr",
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        linux_removexattr,
+    );
     vm.register_native(
         c,
         "statvfs",
@@ -762,6 +791,69 @@ fn linux_link(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     vm.vfs
         .link(&old, &new)
         .map_err(|e| errno_exception(vm, "link", e))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// extended attributes
+// ---------------------------------------------------------------------------
+
+fn linux_setxattr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = string_arg(vm, ctx, 0);
+    let name = string_arg(vm, ctx, 1);
+    let value = byte_array(vm, vm.arg_ref(ctx, 2)).unwrap_or_default();
+    let flags = vm.arg_i32(ctx, 3);
+    vm.vfs
+        .setxattr(&path, &name, &value, flags)
+        .map_err(|e| errno_exception(vm, "setxattr", e))?;
+    Ok(())
+}
+
+fn linux_getxattr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = string_arg(vm, ctx, 0);
+    let name = string_arg(vm, ctx, 1);
+    let value = vm
+        .vfs
+        .getxattr(&path, &name)
+        .map_err(|e| errno_exception(vm, "getxattr", e))?;
+    let array = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "B".to_string(),
+        data: ArrayData::Byte(value.into_iter().map(|b| b as i8).collect()),
+    }))?;
+    vm.ret_ref(ctx, array);
+    Ok(())
+}
+
+fn linux_listxattr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = string_arg(vm, ctx, 0);
+    let names = vm
+        .vfs
+        .listxattr(&path)
+        .map_err(|e| errno_exception(vm, "listxattr", e))?;
+    let mut refs = Vec::with_capacity(names.len());
+    for n in &names {
+        let h = vm.new_string(n)?;
+        vm.native_roots.push(h);
+        refs.push(h);
+    }
+    let array = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "Ljava/lang/String;".to_string(),
+        data: ArrayData::Ref(refs),
+    }));
+    for _ in &names {
+        vm.native_roots.pop();
+    }
+    let array = array?;
+    vm.ret_ref(ctx, array);
+    Ok(())
+}
+
+fn linux_removexattr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = string_arg(vm, ctx, 0);
+    let name = string_arg(vm, ctx, 1);
+    vm.vfs
+        .removexattr(&path, &name)
+        .map_err(|e| errno_exception(vm, "removexattr", e))?;
     Ok(())
 }
 

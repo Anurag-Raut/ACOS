@@ -65,7 +65,7 @@ done
 if [ ${#METRICS[@]} -eq 0 ]; then
     # Every metric whose inputs exist in today's engine. Order matters: cheap
     # ones first so a broken metric fails fast.
-    METRICS=(process-start boot-attach bind-app idle-rss sessions sessions-shared idle-cpu interpreter)
+    METRICS=(process-start boot-attach bind-app idle-rss sessions sessions-shared sessions-pool idle-cpu interpreter)
 fi
 
 mkdir -p "$RESULTS"
@@ -230,6 +230,7 @@ hmp() { awk -F': ' "/^$1:/{print \$2; exit}" /proc/meminfo | awk '{print $1}'; }
 
 mem_args() {
     case "$1" in
+        sessions-pool) echo "--mem 8G --time 900" ;;
         sessions|sessions-shared|idle-cpu) echo "--mem 6G --time 900" ;;
         *) echo "--mem 4G --time 300" ;;
     esac
@@ -370,6 +371,23 @@ if r:
             gates["sessions-shared.incremental_n5_mib.p50"] = {
                 "p50": row.get("incremental_miB_per_session")}
 
+r = result_of("sessions-pool")
+if r:
+    for row in r.get("sessions", []):
+        if row.get("n") == 5:
+            add_gate("sessions-pool.n5.anon_plus_shmem_kib.p50",
+                     row.get("memory", {}).get("anon_plus_shmem_kib"))
+            gates["sessions-pool.n5.reset_ms.p50"] = {"p50": row.get("reset_ms_p50")}
+        if row.get("n") == 20:
+            add_gate("sessions-pool.n20.anon_plus_shmem_kib.p50",
+                     row.get("memory", {}).get("anon_plus_shmem_kib"))
+            add_gate("sessions-pool.n20.jobs_per_sec.p50",
+                     row.get("throughput", {}).get("jobs_per_sec"))
+    for row in r.get("marginal", []):
+        if row.get("from_n") == 10:
+            gates["sessions-pool.marginal_n10_to_n20_mib.p50"] = {
+                "p50": row.get("marginal_miB_per_session")}
+
 r = result_of("idle-cpu")
 if r:
     add_gate("idle-cpu.cpu_ticks.p50", r.get("cpu_ticks"))
@@ -449,6 +467,9 @@ if r:
 r = res("sessions-shared")
 if r:
     acos["sessions-shared"] = r
+r = res("sessions-pool")
+if r:
+    acos["sessions-pool"] = r
 r = res("idle-cpu")
 if r:
     acos["idle-cpu"] = r
@@ -569,6 +590,23 @@ ROWS = [
      "no legacy metric", "-",
      (f"{p50_of(res('bind-app')['attach_to_bind_ms'])} ms") if res("bind-app") else None,
      "no-legacy-baseline", "the legacy engine never published this stage split"),
+    ("A-pool-reset", "SessionPool reset-to-clean (restore) vs legacy reset cmd",
+     "110.3 ms cmd / 748.1 ms -> frame", "wall, warm",
+     (lambda p: (f"{p.get('sessions', [{}])[0].get('reset_ms_p50')} ms p50 at N=1; "
+                 f"{next((r.get('reset_ms_p50') for r in p.get('sessions', []) if r.get('n') == 5), None)} ms at N=5")
+      )(res("sessions-pool") or {}) if res("sessions-pool") else None,
+     "not-comparable", "ACOS restores a quiescent core VM (no app process/frame); legacy reset is app-scoped and frame-timed"),
+    ("A-pool-throughput", "SessionPool throughput (jobs/s, N=1..20) (ACOS-native)",
+     "no legacy metric", "-",
+     (lambda p: (f"{p.get('sessions', [{}])[0].get('throughput', {}).get('jobs_per_sec', {}).get('p50')} jobs/s at N=1; "
+                 f"{next((r.get('throughput', {}).get('jobs_per_sec', {}).get('p50') for r in p.get('sessions', []) if r.get('n') == 20), None)} at N=20")
+      )(res("sessions-pool") or {}) if res("sessions-pool") else None,
+     "no-legacy-baseline", "in-process run+reset loop of a small DEX program; legacy published no comparable throughput"),
+    ("A-pool-memory", "SessionPool marginal memory per session (N=10..20)",
+     "marginal N=5->10 ~99.3 MiB workset (v5)", "workset, warm",
+     (lambda p: (f"{next((r.get('marginal_miB_per_session') for r in p.get('marginal', []) if r.get('from_n') == 10), None)} MiB/session (anon+shmem)")
+      )(res("sessions-pool") or {}) if res("sessions-pool") else None,
+     None, "template snapshot is a quiescent core VM (not a booted app process); anon+shmem vs legacy workset type differs"),
 ]
 
 # numeric verdicts for the paired rows (both sides in MiB or the same unit)
@@ -676,6 +714,21 @@ if sess_shared:
     for row in sess_shared.get("marginal", []):
         w(f"| marginal N={row['from_n']}->N={row['to_n']} (shared boot) | "
           f"{row['marginal_miB_per_session']} MiB/session | anon+shmem | fresh process |")
+pool = acos.get("sessions-pool") or {}
+if pool:
+    for row in pool.get("sessions", []):
+        w(f"| N={row['n']} session pool: anon+shmem / PSS | "
+          f"{fmt(row.get('memory', {}).get('anon_plus_shmem_kib'))} / "
+          f"{fmt(row.get('memory', {}).get('pss_kib'))} KiB (p50) | anon+shmem / PSS (separate) | warm restore |")
+        w(f"| N={row['n']} session pool: jobs/s / reset ms / session create/s | "
+          f"{p50_of(row.get('throughput', {}).get('jobs_per_sec'))} / {row.get('reset_ms_p50')} / "
+          f"{p50_of(row.get('session_create', {}).get('sessions_per_sec'))} | wall | warm |")
+        w(f"| N={row['n']} session pool: CPU cores used / efficiency | "
+          f"{p50_of(row.get('cpu', {}).get('cores_used'))} / "
+          f"{row.get('cpu', {}).get('efficiency_cores_per_session_p50')} cores/session | CPU | warm |")
+    for row in pool.get("marginal", []):
+        w(f"| session pool marginal N={row['from_n']}->N={row['to_n']} | "
+          f"{row['marginal_miB_per_session']} MiB/session | anon+shmem | warm |")
 r = res("idle-cpu")
 if r:
     w(f"| idle CPU, parked/blocked | {fmt(r['cpu_ticks'])} ticks over {r['window_secs']} s "
