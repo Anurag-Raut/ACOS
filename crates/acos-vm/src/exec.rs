@@ -8,14 +8,16 @@
 //!
 //! Scope and safety:
 //!
-//! * The tier only ever executes register/heap-local opcodes with the exact
-//!   semantics of the existing fast path. Anything else (invoke, return, field
-//!   resolution, allocation, monitors, strings, switches, ...) lowers to
-//!   [`Op::Fallback`], at which the loop stops *before* the instruction and
-//!   hands control back to the general interpreter. Catch-table semantics are
-//!   therefore unchanged: every instruction that can throw is executed by the
-//!   general path, which already routes exceptions through
-//!   `interp::handle_exception`.
+//! * The tier only ever executes register/heap-local opcodes and quickened
+//!   field accesses with the exact semantics of the existing fast path.
+//!   Anything else (invoke, return, allocation, monitors, strings, switches,
+//!   every opcode that can throw) lowers to [`Op::Fallback`], at which the loop
+//!   stops *before* the instruction and hands control back to the general
+//!   interpreter. Catch-table semantics are therefore unchanged: every
+//!   instruction that can throw is executed by the general path, which already
+//!   routes exceptions through `interp::handle_exception`. Field ops that can
+//!   throw (null receiver, uninitialised static owner, resolution failure) stay
+//!   `Fallback` for the same reason.
 //! * Frames keep the same `regs`/`refs` layout, so GC root semantics are
 //!   identical (the tier never introduces a value that the interpreter would
 //!   not also have in a register/ref slot).
@@ -24,17 +26,22 @@
 //!
 //! Lowered programs are immutable and cached process-wide, keyed by the shared
 //! `Arc<MethodCode>` pointer (the cache pins the `Arc`, so the address cannot be
-//! reused while the entry lives). Per-VM quickening is not needed yet because
-//! the tier deliberately does not resolve fields or methods itself.
+//! reused while the entry lives). Field resolution is **per-VM quickened**: the
+//! program stores only the DEX instruction and a process-unique quick slot, and
+//! each VM resolves that slot into its own side vector (`Vm::ir_fields`) the
+//! first time the body runs. Nothing resolved is shared across VMs, so a
+//! snapshot restore (a fresh `Vm`) re-resolves safely and
+//! `Vm::invalidate_ir_quickening` drops stale offsets on a class change.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI8, Ordering};
+use std::sync::atomic::{AtomicI8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::class::{Insn, MethodCode};
+use crate::class::{Class, ClassId, FieldSign, InitState, Insn, MethodCode};
 use crate::frame::Frame;
-use crate::heap::{ArrayData, Heap, Object};
-use crate::interp::{div_int, div_long, rem_int, rem_long};
+use crate::heap::{ArrayData, Heap, Object, NULL};
+use crate::interp::{apply_sign, div_int, div_long, rem_int, rem_long};
+use crate::vm::Vm;
 
 // ---------------------------------------------------------------------------
 // Switch
@@ -66,6 +73,59 @@ pub fn enabled() -> bool {
             on
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Per-VM field quickening
+// ---------------------------------------------------------------------------
+
+/// Resolved state of one typed-IR field instruction in one VM.
+///
+/// Lowering assigns every field instruction a process-unique *quick slot*; each
+/// VM keeps its own side vector (`Vm::ir_fields`) indexed by that slot. This is
+/// the typed-IR analogue of Dalvik/ART quickening: the descriptor lookup and
+/// class-resolution cost is paid once per VM, not once per execution, and the
+/// resolved offset is never shared across VMs (so a snapshot restore, which
+/// builds a fresh `Vm`, starts with an empty table and re-resolves safely).
+#[derive(Clone, Copy, Debug)]
+pub enum FieldQuick {
+    /// Not resolved yet (or quickening was invalidated). The tier must not
+    /// execute the op until the general path has run it once.
+    Unresolved,
+    /// Must stay on the general path: a VM-internal shadow field of
+    /// `Object`/`Class`/`String`, or a field whose resolution failed and whose
+    /// exact error the general path must report at the real instruction.
+    Fallback,
+    Ready(QuickField),
+}
+
+/// A resolved field access that the tier can execute directly.
+#[derive(Clone, Copy, Debug)]
+pub struct QuickField {
+    /// Declaring class: the static storage owner for `sget`/`sput`.
+    pub class: ClassId,
+    pub offset: u32,
+    pub width: u32,
+    pub is_ref: bool,
+    pub is_static: bool,
+    pub sign: FieldSign,
+}
+
+/// One field instruction of a lowered program, paired with its quick slot.
+/// `quicken` walks this to resolve the slots of a VM lazily.
+#[derive(Clone, Copy, Debug)]
+pub struct FieldRef {
+    pub slot: u32,
+    /// Index into `MethodCode::insns` of the field instruction.
+    pub insn_index: u32,
+    /// The instruction's DEX field reference index.
+    pub field_index: u32,
+}
+
+static NEXT_QSLOT: AtomicU32 = AtomicU32::new(0);
+
+fn next_qslot() -> u32 {
+    NEXT_QSLOT.fetch_add(1, Ordering::Relaxed)
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +170,14 @@ pub enum Op {
         b: u16,
         target: u32,
     },
+    /// `iget*`/`iget-object`; `slot` indexes the per-VM quickening table.
+    InstanceGet { op: u8, dst: u16, obj: u16, slot: u32 },
+    /// `iput*`/`iput-object`; `slot` indexes the per-VM quickening table.
+    InstancePut { op: u8, src: u16, obj: u16, slot: u32 },
+    /// `sget*`/`sget-object`; `slot` indexes the per-VM quickening table.
+    StaticGet { op: u8, dst: u16, slot: u32 },
+    /// `sput*`/`sput-object`; `slot` indexes the per-VM quickening table.
+    StaticPut { op: u8, src: u16, slot: u32 },
 }
 
 /// A lowered method body plus the reverse maps needed for re-entry.
@@ -134,6 +202,8 @@ pub struct Program {
     /// used for these: straight-line bodies get no benefit from the fused
     /// dispatch and would pay the per-segment entry cost on a call-heavy path.
     pub has_loop: bool,
+    /// Every field instruction in the body, with the quick slot it uses.
+    pub field_refs: Vec<FieldRef>,
 }
 
 /// Cache value: the lowered program *and* a strong reference to the body it was
@@ -257,11 +327,21 @@ fn mark_target(code: &MethodCode, insn: &Insn, pcs_at: u32, is_target: &mut [boo
     }
 }
 
-/// Lower one decoded instruction.
-fn lower_op(code: &MethodCode, pcs: &[u32], i: usize) -> Op {
+/// Lower one decoded instruction. Field instructions register a quick slot in
+/// `field_refs`; the slot is resolved per-VM at execution time.
+fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<FieldRef>) -> Op {
     let insn = &code.insns[i];
     let (r0, r1, r2) = (insn.regs[0], insn.regs[1], insn.regs[2]);
     let op = insn.op;
+    let mut field_slot = || {
+        let slot = next_qslot();
+        field_refs.push(FieldRef {
+            slot,
+            insn_index: i as u32,
+            field_index: insn.index,
+        });
+        slot
+    };
     match op {
         0x00 => Op::Nop,
         0x01 | 0x02 => Op::Move { kind: 0, dst: r0, src: r1 },
@@ -278,6 +358,30 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize) -> Op {
         0x44..=0x4a => Op::ArrayGet { op, dst: r0, arr: r1, idx: r2 },
         // `aput-object` needs the ArrayStoreException check: fall back.
         0x4b..=0x4c | 0x4e..=0x51 => Op::ArrayPut { op, src: r0, arr: r1, idx: r2 },
+        // Instance field get/put. Null checks, internal shadow fields, and
+        // resolution failures stay `Fallback` via the `FieldQuick` state.
+        0x52..=0x58 => Op::InstanceGet {
+            op,
+            dst: r0,
+            obj: r1,
+            slot: field_slot(),
+        },
+        0x59..=0x5f => Op::InstancePut {
+            op,
+            src: r0,
+            obj: r1,
+            slot: field_slot(),
+        },
+        0x60..=0x66 => Op::StaticGet {
+            op,
+            dst: r0,
+            slot: field_slot(),
+        },
+        0x67..=0x6d => Op::StaticPut {
+            op,
+            src: r0,
+            slot: field_slot(),
+        },
         0x28..=0x2a => Op::Goto { target: insn_target_insn(code, pcs, i) },
         0x32..=0x3d => Op::If {
             op,
@@ -339,6 +443,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
     let mut op_insn: Vec<u32> = Vec::with_capacity(n);
     let mut op_len: Vec<u8> = Vec::with_capacity(n);
     let mut insn_to_op = vec![u32::MAX; n + 1];
+    let mut field_refs: Vec<FieldRef> = Vec::new();
 
     let mut i = 0usize;
     while i < n {
@@ -363,7 +468,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
             };
             (fused, 2u8)
         } else {
-            (lower_op(code, &pcs, i), 1u8)
+            (lower_op(code, &pcs, i, &mut field_refs), 1u8)
         };
         let idx = ops.len() as u32;
         ops.push(op);
@@ -425,12 +530,63 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
         end_insn: n as u32,
         full,
         has_loop,
+        field_refs,
     }
 }
 
 // ---------------------------------------------------------------------------
 // Execution
 // ---------------------------------------------------------------------------
+
+/// Resolve, for this VM, the field instructions of `prog` that have not been
+/// quickened yet. Called once per IR segment, before [`run_ir`], so the
+/// descriptor lookup is off the per-instruction path.
+///
+/// Resolution failures and VM-internal shadow fields are recorded as
+/// [`FieldQuick::Fallback`]: the general interpreter then handles that
+/// instruction exactly as before (including the exact error and its pc).
+/// Because the table lives on the `Vm`, restore (which builds a fresh `Vm`)
+/// starts empty and [`Vm::invalidate_ir_quickening`] drops it on a class layout
+/// change, so a resolved offset is never used against a different layout.
+pub(crate) fn quicken(vm: &mut Vm, t: usize, fi: usize, prog: &Program) {
+    if prog.field_refs.is_empty() {
+        return;
+    }
+    // Every field op in a body shares the body's DEX image.
+    let dex = match &vm.methods[vm.threads[t].frames[fi].method as usize].imp {
+        crate::class::MethodImpl::Dex { dex, .. } => *dex,
+        _ => return,
+    };
+    for fr in &prog.field_refs {
+        let slot = fr.slot as usize;
+        if slot >= vm.ir_fields.len() {
+            vm.ir_fields.resize(slot + 1, FieldQuick::Unresolved);
+        }
+        if !matches!(vm.ir_fields[slot], FieldQuick::Unresolved) {
+            continue;
+        }
+        let quick = match vm.resolve_field(dex, fr.field_index) {
+            Ok(rf) => {
+                let internal =
+                    rf.class == vm.c_object || rf.class == vm.c_class || rf.class == vm.c_string;
+                if internal && !rf.is_static {
+                    FieldQuick::Fallback
+                } else {
+                    FieldQuick::Ready(QuickField {
+                        class: rf.class,
+                        offset: rf.offset,
+                        width: rf.width,
+                        is_ref: rf.is_ref,
+                        is_static: rf.is_static,
+                        sign: rf.sign,
+                    })
+                }
+            }
+            Err(_) => FieldQuick::Fallback,
+        };
+        vm.ir_fields[slot] = quick;
+    }
+}
 
 #[inline(always)]
 fn cond_take(op: u8, x: u32, y: u32) -> bool {
@@ -699,8 +855,21 @@ fn exec_arith_lit(f: &mut Frame, op: u8, r0: u16, r1: u16, lit: i32) -> bool {
 /// Execute the IR program on the current frame until the cap, the end of the
 /// ops, or the next [`Op::Fallback`]. Writes the current DEX pc/instruction
 /// index back onto the frame. Returns the number of DEX instructions executed.
+///
+/// `quick` is the VM's per-slot field quickening table and `classes` the VM's
+/// class table (read-only here, for the static-initialised check). A field op
+/// whose slot is not `Ready` stops the loop before the instruction, so the
+/// general path performs the null check, class initialisation, or resolution
+/// error with the original pc.
 #[inline]
-pub(crate) fn run_ir(f: &mut Frame, heap: &mut Heap, prog: &Program, cap: u64) -> u64 {
+pub(crate) fn run_ir(
+    f: &mut Frame,
+    heap: &mut Heap,
+    prog: &Program,
+    cap: u64,
+    quick: &[FieldQuick],
+    classes: &mut [Class],
+) -> u64 {
     let ops = prog.ops.as_slice();
     let op_pc = prog.op_pc.as_slice();
     let op_insn = prog.op_insn.as_slice();
@@ -814,6 +983,125 @@ pub(crate) fn run_ir(f: &mut Frame, heap: &mut Heap, prog: &Program, cap: u64) -
                         }
                     }
                     _ => break,
+                }
+            }
+            Op::InstanceGet { op, dst, obj, slot } => {
+                let qf = match quick.get(slot as usize) {
+                    Some(FieldQuick::Ready(qf)) => *qf,
+                    _ => break,
+                };
+                let h = f.reg(obj);
+                if h == NULL {
+                    break;
+                }
+                match heap.get(h) {
+                    Some(Object::Instance { fields, .. }) => {
+                        let off = qf.offset as usize;
+                        if qf.width == 2 {
+                            if off + 1 >= fields.len() {
+                                break;
+                            }
+                            let v = (fields[off] as u64) | ((fields[off + 1] as u64) << 32);
+                            f.set_reg_wide(dst, v);
+                        } else if off >= fields.len() {
+                            break;
+                        } else if op == 0x54 {
+                            f.set_reg_ref(dst, fields[off]);
+                        } else {
+                            f.set_reg(dst, apply_sign(fields[off], qf.sign));
+                        }
+                    }
+                    // The general path yields zero for a non-instance slot.
+                    _ => {
+                        if op == 0x54 {
+                            f.set_reg_ref(dst, 0);
+                        } else {
+                            f.set_reg(dst, 0);
+                        }
+                    }
+                }
+            }
+            Op::InstancePut { op, src, obj, slot } => {
+                let qf = match quick.get(slot as usize) {
+                    Some(FieldQuick::Ready(qf)) => *qf,
+                    _ => break,
+                };
+                let h = f.reg(obj);
+                if h == NULL {
+                    break;
+                }
+                let off = qf.offset as usize;
+                if qf.width == 2 {
+                    let v = f.reg_wide(src);
+                    match heap.get_mut(h) {
+                        Some(Object::Instance { fields, .. }) if off + 1 < fields.len() => {
+                            fields[off] = v as u32;
+                            fields[off + 1] = (v >> 32) as u32;
+                        }
+                        // Non-instance / short slot: the general path writes
+                        // nothing without throwing, so fall back for exactness.
+                        _ => break,
+                    }
+                } else {
+                    let v = if op == 0x5b {
+                        f.reg(src)
+                    } else {
+                        apply_sign(f.reg(src), qf.sign)
+                    };
+                    match heap.get_mut(h) {
+                        Some(Object::Instance { fields, .. }) if off < fields.len() => fields[off] = v,
+                        _ => break,
+                    }
+                }
+            }
+            Op::StaticGet { op, dst, slot } => {
+                let qf = match quick.get(slot as usize) {
+                    Some(FieldQuick::Ready(qf)) => *qf,
+                    _ => break,
+                };
+                let c = match classes.get(qf.class as usize) {
+                    Some(c) if matches!(c.init, InitState::Init) => c,
+                    // Not initialised (or bad id): the general path runs
+                    // `initialize_class` (which may run `<clinit>`) first.
+                    _ => break,
+                };
+                let off = qf.offset as usize;
+                if qf.width == 2 {
+                    if off + 1 >= c.statics.len() {
+                        break;
+                    }
+                    let v = (c.statics[off] as u64) | ((c.statics[off + 1] as u64) << 32);
+                    f.set_reg_wide(dst, v);
+                } else if off >= c.statics.len() {
+                    break;
+                } else if op == 0x62 {
+                    f.set_reg_ref(dst, c.statics[off]);
+                } else {
+                    f.set_reg(dst, apply_sign(c.statics[off], qf.sign));
+                }
+            }
+            Op::StaticPut { op, src, slot } => {
+                let qf = match quick.get(slot as usize) {
+                    Some(FieldQuick::Ready(qf)) => *qf,
+                    _ => break,
+                };
+                let c = match classes.get_mut(qf.class as usize) {
+                    Some(c) if matches!(c.init, InitState::Init) => c,
+                    _ => break,
+                };
+                let off = qf.offset as usize;
+                if qf.width == 2 {
+                    if off + 1 >= c.statics.len() {
+                        break;
+                    }
+                    let v = f.reg_wide(src);
+                    c.statics[off] = v as u32;
+                    c.statics[off + 1] = (v >> 32) as u32;
+                } else if off >= c.statics.len() {
+                    break;
+                } else {
+                    let v = f.reg(src);
+                    c.statics[off] = if op == 0x69 { v } else { apply_sign(v, qf.sign) };
                 }
             }
             Op::Goto { target } => {

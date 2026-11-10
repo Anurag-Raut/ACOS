@@ -611,3 +611,180 @@ one. These rows are much lower than the §8.6 run (16.048 / 15.054 / 19.730 ms p
 because that run was on a loadavg1 4.80 host and this one on 2.56, and because the
 main tree now carries later W33-A/W35-A work; they are **not** a like-for-like
 speed claim against §8.6. The `vmbench` table above is the per-instruction evidence.
+
+### 8.9 Typed-IR execution tier, w36a (2026-11-10, W36-A)
+
+Target: the §8.8 residuals on the pure-dispatch loops (`BenchLoop` 4.4x,
+`BenchArith` 3.9x, `BenchArray` 3.6x, `BenchFields` 5.6x behind `java -Xint`).
+This wave adds an **opt-in** typed-IR tier: each DEX method body is decoded once
+into a compact `&[Op]` program (operands pre-resolved, branch targets as IR
+indices, hot pairs fused into superinstructions) executed by a tight `match`
+loop over the same register file. It is enabled only by `ACOS_EXEC=ir`;
+**default behaviour is unchanged**.
+
+Design (all in new file `crates/acos-vm/src/exec.rs`; hooks are localized):
+
+* `Op` is a small enum. The fused op this wave adds is `ArithLitIf` — any
+  `<arith>/lit` (0xd0-0xe2) immediately followed by a conditional branch where
+  the branch is not a branch/handler re-entry point. That is the loop-increment
+  idiom (`add-int/lit8` + `if-*`) in every microbench.
+* Anything else (invoke, return, field access/resolution, allocation, monitors,
+  strings, switches, every opcode that can throw) lowers to `Op::Fallback`: the
+  loop stops *before* that instruction and `run_batch` runs it through the
+  existing general path. Catch-table/GC semantics are therefore untouched —
+  every throwing instruction is still executed by the general interpreter,
+  which unwinds with the original DEX pc.
+* Lowered programs are immutable and cached process-wide keyed by the shared
+  `Arc<MethodCode>` address (the cache holds the `Arc`, so the key cannot be
+  reused); per-frame caching is `Arc<MethodCode>`-pinned. No per-VM quickening is
+  needed because the tier does not resolve fields/methods itself.
+* Only bodies with a backward branch use the tier: a straight-line body gets no
+  fused-dispatch win and would pay the entry cost on a call-heavy path. This
+  gate moved `BenchFib`/`BenchVirtual`/`BenchVirtualCall` from a 1.2-1.4x
+  regression to par/slight wins.
+
+Method: **10 interleaved off/on rounds per program, `vmbench` best-of-1 per
+round, p50 over the 10 samples**; `java -Xint` p50 over 5 runs, same host/window.
+Base = current main tree with `ACOS_EXEC` unset; tier = the same binary with
+`ACOS_EXEC=ir`. Builds `release`, own `CARGO_TARGET_DIR=.cache/target-w36a`,
+every command under `tools/guarded.sh` (ADR-0018).
+
+| Program | off p50 (ms) | ir p50 (ms) | speedup | off spread | ir spread | `java -Xint` p50 (ms) | ir / `-Xint` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `BenchArith` | 2226.01 | 841.41 | **2.65x** | 2.9 % | 6.2 % | 516.27 | 1.63x |
+| `BenchLoop` | 1840.55 | 821.32 | **2.24x** | 1.0 % | 6.6 % | 395.92 | 2.07x |
+| `BenchArray` | 1359.35 | 697.04 | **1.95x** | 1.5 % | 9.9 % | 317.45 | 2.20x |
+| `BenchFields` | 456.27 | 405.38 | **1.13x** | 1.6 % | 6.0 % | 72.96 | 5.56x |
+| `BenchFib` | 517.10 | 526.79 | 0.98x | 1.6 % | 2.4 % | 321.50 | 1.64x |
+| `BenchStaticCall` | 3518.41 | 3310.96 | **1.06x** | 2.0 % | 12.8 % | 2807.74 | 1.18x |
+| `BenchVirtualCall` | 3631.37 | 3352.39 | **1.08x** | 7.4 % | 2.8 % | 2857.92 | 1.17x |
+| `BenchVirtual` | 2095.21 | 1851.29 | **1.13x** | 2.1 % | 2.4 % | 1111.48 | 1.67x |
+| `BenchAlloc` | 2723.61 | 2563.25 | **1.06x** | 3.8 % | 7.7 % | 1141.89 | 2.24x |
+| `BenchGc` | 643.88 | 574.18 | **1.12x** | 2.1 % | 3.3 % | 122.41 | 4.69x |
+| `BenchString` | 134.18 | 126.94 | **1.06x** | 7.8 % | 2.6 % | 593.04 | 0.21x |
+| `BenchCollections` | 132.46 | 132.05 | 1.00x | 2.6 % | 7.5 % | 77.61 | 1.70x |
+
+Verdict: the tier is a clear win on the dispatch-bound loops (2.0-2.7x, closing
+roughly half the gap to `java -Xint`: Loop 4.4x → 2.1x, Arith 3.9x → 1.6x,
+Array 3.6x → 2.2x) and a small win or wash elsewhere. It is **kept, but default
+off** (`ACOS_EXEC=ir`), because `BenchFields`/`BenchGc` are still 4.7-5.6x behind:
+the tier deliberately does not execute field ops, so the graph walk stays on the
+general path. Next step is per-VM quickening (resolved field offsets in a side
+vector indexed by IR instruction) so `iget`/`iput`/`sget`/`sput` become IR ops,
+then invoke inline-caching inside the tier; §8.8's register-window idea was not
+needed because the compact `Op` stream alone already won on dispatch.
+
+Rejected during the wave (measured, then reverted):
+
+* Using the tier for **all** methods: 1.2-1.4x regressions on call-heavy
+  programs (`BenchVirtual`, `BenchStaticCall`, `BenchVirtualCall`) because each
+  tiny callee paid the per-segment entry cost. Replaced by the backward-branch
+  gate.
+* Calling the global lowering cache from `run_batch` per segment: the `Mutex`
+  probe was paid per frame creation (frames are pooled, and a pooled frame's
+  body changes between A/B/C callees). Replaced by per-frame `Arc` caching plus
+  a cheap `is_loop_body` scan, and by not clearing the cached program when a
+  pooled frame is reused for the same body.
+
+Correctness for the wave (worktree = current main tree + `exec.rs`/frame/`interp`
+hooks):
+
+* `crates/acos-vm/tests/ir_equivalence.rs`: **2/2 pass** — every DEX corpus
+  program, byte-identical stdout/exit for IR vs the general interpreter, normal
+  and GC-stress.
+* `tools/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **26 pass / 0 fail
+  / 0 unsupported**; `--gc-stress`: **26 pass / 0 fail / 0 unsupported**.
+* `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
+* With `ACOS_EXEC` unset the only differences in the interpreter loop are a
+  `Frame` field and a hoisted `exec::enabled()` check, so the default path is
+  byte-for-byte the previous one (`ir_equivalence` also covers this via
+  `count_opcodes`).
+
+#### 8.9.1 Field quickening, w39a (2026-11-10, W39-A)
+
+W36-A left `iget`/`iput`/`sget`/`sput` on the general path, so the
+field-heavy graph walk never entered the tier. This wave lowers **all field
+widths** (`0x52`-`0x6d`) into the IR and gives the tier its own quickening:
+
+* Lowering assigns every field instruction a process-unique *quick slot*; each
+  `Vm` keeps `ir_fields`, a **side vector indexed by IR instruction**
+  (`FieldQuick::{Unresolved, Fallback, Ready(QuickField)}`). `exec::quicken`
+  runs once per IR segment (off the per-instruction path) and fills any
+  unresolved slot through the existing `Vm::resolve_field`.
+* A slot is `Fallback` when (a) resolution fails (the general path must report
+  the original error at the original pc), (b) the field is a VM-internal shadow
+  field of `Object`/`Class`/`String`, or (c) the field is static and its class
+  is not yet `InitState::Init` (so `<clinit>` still runs on the general path).
+  A null receiver also stops the loop before the instruction, so the NPE is
+  raised by the general path at the same pc. Every throwing path is therefore
+  still general-path, exactly as before.
+* The side vector is **per-VM**: a snapshot restore builds a fresh `Vm`, so it
+  starts empty and re-resolves against the restored layout;
+  `Vm::invalidate_ir_quickening` clears it for any class (re)definition. The
+  lowered program only stores the DEX instruction and its slot, never an
+  offset, so it survives both.
+
+Method: identical to §8.9 — **10 interleaved off/on rounds per program,
+`vmbench` best-of-1 per round, p50 over the 10 samples**; `java -Xint` p50 over
+5 runs, same host/window. Base = this wave's tree with `ACOS_EXEC` unset; tier
+= the same binary with `ACOS_EXEC=ir`. Builds `release`, own
+`CARGO_TARGET_DIR=.cache/target-w39a`, every command under `tools/guarded.sh`
+(ADR-0018). `ACOS_CORELIB=real`.
+
+| Program | off p50 (ms) | ir p50 (ms) | speedup | off spread | ir spread | `java -Xint` p50 (ms) | ir / `-Xint` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `BenchFields` | 450.06 | 120.23 | **3.74x** | 2.3 % | 3.3 % | 74.22 | **1.62x** |
+| `BenchGc` | 628.99 | 592.82 | **1.06x** | 5.9 % | 7.5 % | 135.76 | 4.37x |
+| `BenchVirtual` | 2036.80 | 1875.75 | **1.09x** | 2.4 % | 4.6 % | 1163.61 | **1.61x** |
+| `BenchAlloc` | 2801.84 | 2374.82 | **1.18x** | 7.8 % | 3.7 % | 1111.33 | **2.14x** |
+| `BenchFib` | 519.68 | 524.18 | 0.99x | 4.0 % | 6.4 % | 335.47 | **1.56x** |
+| `BenchStaticCall` | 3486.36 | 3382.25 | **1.03x** | 4.8 % | 5.3 % | 2930.08 | **1.15x** |
+
+Verdict: field quickening takes `BenchFields` from 405 ms (w36a) to **120 ms**,
+3.74x over off and **1.62x of `java -Xint`** — the original 5.6x gap is closed.
+The call-heavy programs stay level or slightly ahead (`BenchFib` 0.99x is inside
+the 4-6 % spread; `BenchStaticCall`/`BenchVirtual`/`BenchAlloc` improve), so
+there is no call regression.
+
+`BenchGc` is the one miss: 4.37x of `java -Xint`, not the 3x target. It is
+allocation/GC-bound, not dispatch-bound (9.0 % of its 44.6 M instructions are
+`new-array`, every one of which must run a GC-capable general allocation, and
+54 ms of the run is actual GC). Adding allocation to the tier would require a
+GC-capable path inside the frame-borrowed loop, so it is left for a separate
+wave; the tier’s contribution here is the surrounding fused arithmetic
+(1.06x).
+
+Decisions taken from measurement:
+
+* **Backward-branch gate kept.** Removing it (lower every body) was measured:
+  `BenchVirtual` regressed from 1856 ms to 2368 ms (+28 %) while other programs
+  barely moved, so straight-line bodies still use `fast_run`.
+* **Invokes remain the tier boundary.** Pushing a callee frame invalidates the
+  tier’s `&mut Frame` borrow, so an invoke cannot be executed inside the same
+  tight loop without re-indexing the frame through `&mut Vm` on every
+  instruction (which would regress the arithmetic loops). `run_batch` executes
+  the call immediately through the existing per-call inline caches
+  (`dexs[..].virtual_cache`, `dexs[..].method_cache`), which is the inline
+  caching for the boundary; measured call benches do not regress.
+
+Correctness for w39a (worktree = main tree + `exec.rs`/`interp.rs`/`vm.rs`):
+
+* `crates/acos-vm/tests/ir_equivalence.rs`: **2/2 pass** — every DEX corpus
+  program, byte-identical stdout/exit for IR vs the general interpreter, normal
+  and GC-stress.
+* `tools/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **27 pass / 0 fail
+  / 0 unsupported**; `--gc-stress`: **27 pass / 0 fail / 0 unsupported** (the
+  27th fixture, `27_annotations_reflection`, landed concurrently with W38-A).
+* `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
+* Full `cargo test -p acos-vm --tests`: green except the two pre-existing
+  `res_natives` `resolve=true` failures, reproduced with this wave’s three
+  source files stashed (i.e. present on the base tree, unrelated to the tier).
+
+Default-on recommendation: **keep default-off.** With `ACOS_EXEC=ir` the tier is
+now correct and a large win where it applies, but it is still a net wash on the
+allocation/GC-bound program and no faster than `fast_run` on some straight-line
+bodies (hence the loop gate). `ir_equivalence` plus the `--corelib real` 27/27
+run give the correctness evidence, but the remaining `BenchGc` 4.37x gap and the
+extra per-VM quickening state argue for an explicit opt-in until allocation is
+also tiered.
+

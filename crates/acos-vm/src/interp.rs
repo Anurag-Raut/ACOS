@@ -221,9 +221,19 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                 }
                 if vm.threads[t].frames[fi].ir.is_some() {
                     let prog = vm.threads[t].frames[fi].ir.take().expect("ir cached");
-                    let Vm { threads, heap, .. } = &mut *vm;
+                    // Resolve any field ops this VM has not quickened yet; this
+                    // is off the per-instruction path. Failures become
+                    // `Fallback` and are reported by the general path.
+                    crate::exec::quicken(vm, t, fi, &prog);
+                    let Vm {
+                        threads,
+                        heap,
+                        ir_fields,
+                        classes,
+                        ..
+                    } = &mut *vm;
                     let f = &mut threads[t].frames[fi];
-                    count += crate::exec::run_ir(f, heap, &prog, cap - count);
+                    count += crate::exec::run_ir(f, heap, &prog, cap - count, ir_fields, classes);
                     f.ir = Some(prog);
                 } else {
                     let Vm { threads, heap, .. } = &mut *vm;
@@ -1236,7 +1246,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
 /// Narrow/widen a stored field word to the register representation. `sign` is
 /// cached in the resolved-field entry, so no descriptor string is built.
 #[inline]
-fn apply_sign(v: u32, sign: FieldSign) -> u32 {
+pub(crate) fn apply_sign(v: u32, sign: FieldSign) -> u32 {
     match sign {
         FieldSign::Byte => (v as i8) as i32 as u32,
         FieldSign::Short => (v as i16) as i32 as u32,

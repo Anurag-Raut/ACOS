@@ -362,6 +362,13 @@ pub struct Vm {
     /// `HashMap<String,_>` probes from virtual/interface dispatch.
     pub(crate) dispatch_cache: HashMap<(u32, u32, ClassId), MethodId>,
 
+    /// Per-VM quickening for the typed-IR tier: resolved field accesses indexed
+    /// by the process-unique IR quick slot assigned at lowering. A side vector
+    /// indexed by IR instruction, so a snapshot restore (which builds a fresh
+    /// `Vm`) starts empty and never reuses a resolved offset from another
+    /// layout; [`Vm::invalidate_ir_quickening`] drops it on a class change.
+    pub(crate) ir_fields: Vec<crate::exec::FieldQuick>,
+
     pub metrics: Metrics,
     /// Execution histogram for the 256 opcode bytes (populated when
     /// `count_opcodes` is true).
@@ -438,6 +445,7 @@ impl Vm {
             string_hashes: HashMap::new(),
             main_thread_group: NULL,
             dispatch_cache: HashMap::new(),
+            ir_fields: Vec::new(),
             metrics: Metrics::default(),
             opcode_counts: [0; 256],
             count_opcodes: false,
@@ -1625,6 +1633,17 @@ impl Vm {
     }
 
     // ---- field resolution ------------------------------------------------
+
+    /// Drop the typed-IR field quickening side table. Called by any class
+    /// (re)definition that can change a field's resolved offset/width/sign, and
+    /// implicitly unnecessary after a snapshot restore because restore builds a
+    /// fresh `Vm` (empty table). The lowered programs themselves stay valid:
+    /// they only hold the DEX instruction and its quick slot, so the next
+    /// `exec::quicken` pass re-resolves each slot against the new layout before
+    /// the tier executes it.
+    pub fn invalidate_ir_quickening(&mut self) {
+        self.ir_fields.clear();
+    }
 
     pub fn resolve_field(&mut self, dex: u32, field_idx: u32) -> VmResult<ResolvedField> {
         if let Some(rf) = self.dexs[dex as usize].field_cache[field_idx as usize] {
