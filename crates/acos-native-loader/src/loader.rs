@@ -2,7 +2,7 @@
 //! and teardown.
 
 use std::collections::{HashMap, HashSet};
-use std::os::raw::{c_int, c_void};
+use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
@@ -93,12 +93,14 @@ pub struct NativeLibrary {
     pub(crate) relocs: Vec<Reloc>,
     pub(crate) imports: Mutex<Vec<ImportRecord>>,
     deps: Mutex<Vec<Arc<NativeLibrary>>>,
-    refs: AtomicUsize,
+    pub(crate) refs: AtomicUsize,
     initialized: AtomicBool,
     relocated: AtomicBool,
     protected: AtomicBool,
     loaded: AtomicBool,
     pub(crate) name_c: std::ffi::CString,
+    /// Lazily built (address, NUL-terminated name) table for `dladdr`.
+    dladdr_syms: Mutex<Option<Vec<(usize, std::ffi::CString)>>>,
 }
 
 // SAFETY: a `NativeLibrary` is immutable after load except for internal
@@ -136,6 +138,77 @@ impl NativeLibrary {
         }
     }
 
+    /// Version-aware definition lookup.
+    ///
+    /// ELF symbol versioning semantics implemented here:
+    ///
+    /// * a reference with a *required* version (`VERNEED`, e.g. `LIBC`) binds to
+    ///   a definition carrying that version, or to an unversioned definition
+    ///   (which is how the bionic shim table and sibling guest objects look);
+    /// * a definition of a *different* version never satisfies the reference;
+    /// * a hidden (`VERSYM_HIDDEN`) definition is only reachable through an
+    ///   explicit version, never by a plain name (`dlsym` skips it).
+    fn find_defined_versioned(&self, name: &str, wanted: Option<&str>) -> Option<Sym> {
+        let wanted = match wanted {
+            None => return self.find_defined(name),
+            Some(v) => v,
+        };
+        // A library can define several versions of one name, so scan the
+        // dynamic symbol table rather than taking the hash-table hit.
+        let mut unversioned: Option<Sym> = None;
+        for (i, sym) in self.dyninfo.symbols.iter().enumerate() {
+            if sym.is_undefined() || sym.shndx == SHN_UNDEF {
+                continue;
+            }
+            if self.dyninfo.symbol_name(i) != Some(name) {
+                continue;
+            }
+            if let Some((def, _default)) = self.dyninfo.defined_version(i) {
+                if def == wanted && !self.dyninfo.is_hidden_version(i) {
+                    return Some(*sym);
+                }
+                // Mismatched definition: keep looking.
+                continue;
+            }
+            unversioned.get_or_insert(*sym);
+        }
+        unversioned
+    }
+
+    /// Nearest exported function/object name at or below `addr`.
+    ///
+    /// Returns a pointer to a NUL-terminated name owned by this object (stable
+    /// for the object's lifetime) plus the symbol address.
+    pub(crate) fn nearest_symbol(&self, addr: usize) -> Option<(*const c_char, usize)> {
+        let mut guard = self.dladdr_syms.lock().ok()?;
+        let table = guard.get_or_insert_with(|| {
+            let mut v: Vec<(usize, std::ffi::CString)> = Vec::new();
+            for (i, sym) in self.dyninfo.symbols.iter().enumerate() {
+                if sym.is_undefined() || sym.value == 0 || sym.bind() == STB_LOCAL {
+                    continue;
+                }
+                let t = sym.sym_type();
+                if t != STT_FUNC && t != STT_OBJECT && t != STT_NOTYPE {
+                    continue;
+                }
+                let Some(n) = self.dyninfo.symbol_name(i) else {
+                    continue;
+                };
+                if let Ok(c) = std::ffi::CString::new(n) {
+                    v.push((self.runtime_addr(sym.value), c));
+                }
+            }
+            v.sort_by_key(|(a, _)| *a);
+            v
+        });
+        let idx = table.partition_point(|(a, _)| *a <= addr);
+        if idx == 0 {
+            return None;
+        }
+        let (sym_addr, name) = &table[idx - 1];
+        Some((name.as_ptr(), *sym_addr))
+    }
+
     /// Runtime end address (one past the highest mapped byte).
     pub(crate) fn runtime_end(&self) -> usize {
         let end = self
@@ -162,6 +235,14 @@ impl NativeLibrary {
     /// Whether the object is still mapped.
     pub fn is_loaded(&self) -> bool {
         self.loaded.load(Ordering::Acquire)
+    }
+
+    /// Whether this object answers to `name` (its file name or its SONAME).
+    /// SONAME de-duplication is what stops `libc++_shared.so` being mapped
+    /// twice when one dependency requests the file name and another the
+    /// `DT_SONAME`.
+    pub(crate) fn matches_name(&self, name: &str) -> bool {
+        self.name == name || self.dyninfo.soname.as_deref() == Some(name)
     }
 
     fn deps_snapshot(&self) -> Vec<Arc<NativeLibrary>> {
@@ -313,6 +394,7 @@ impl Loader {
             protected: AtomicBool::new(false),
             loaded: AtomicBool::new(true),
             name_c,
+            dladdr_syms: Mutex::new(None),
         });
 
         // Pre-order registration (root before deps) fixes the search order.
@@ -349,7 +431,7 @@ impl Loader {
             .lock()
             .unwrap()
             .iter()
-            .find(|l| l.name == need)
+            .find(|l| l.matches_name(need))
             .cloned()
         {
             return Ok(Some(existing));
@@ -527,36 +609,58 @@ impl Loader {
         }
         let reloc_count = read_leb128(data, &mut cur)?;
         let _reserved = read_leb128(data, &mut cur)?;
-        let group_size = read_leb128(data, &mut cur)?;
-        let _group_flags = read_leb128(data, &mut cur)?;
-        let info = read_leb128(data, &mut cur)?;
-        if group_size != reloc_count {
-            return Err(malformed(
-                "multi-group Android packed relocations are not supported",
-            ));
-        }
-        let r_type = (info & 0xffff_ffff) as u32;
-        let mut offset: i64 = 0;
-        let mut addend: i64 = 0;
-        for i in 0..group_size {
-            if i == 0 {
-                offset = read_sleb128(data, &mut cur)?;
-                if has_addend {
-                    addend = read_sleb128(data, &mut cur)?;
-                }
-            } else {
-                offset += read_leb128(data, &mut cur)? as i64;
-                if has_addend {
-                    addend += read_sleb128(data, &mut cur)?;
-                }
+        // One packed section may contain several groups (RELATIVE, SYMBOLIC,
+        // CUSTOM). The loop below walks them all; the previous implementation
+        // rejected anything with more than one group.
+        let mut remaining = reloc_count as usize;
+        let mut groups = 0usize;
+        while remaining > 0 {
+            let group_size = match read_leb128(data, &mut cur) {
+                Ok(v) => v as usize,
+                Err(_) => break,
+            };
+            let group_flags = read_leb128(data, &mut cur)?;
+            let info = read_leb128(data, &mut cur)?;
+            if group_size == 0 {
+                break;
             }
-            out.push(Reloc {
-                offset: offset as u64,
-                r_type,
-                sym: 0,
-                addend,
-                addend_in_place: !has_addend,
-            });
+            // Group flags: 1 = RELATIVE, 2 = SYMBOLIC, 4 = ANDROID custom.
+            let group_relative = group_flags & 1 != 0;
+            let group_symbolic = group_flags & 2 != 0;
+            let r_type = (info & 0xffff_ffff) as u32;
+            let group_sym_idx = (info >> 32) as u32;
+            if !group_relative && !group_symbolic {
+                return Err(malformed(
+                    "Android packed relocation group flags 0x0 are unsupported",
+                ));
+            }
+            let mut offset: i64 = 0;
+            let mut addend: i64 = 0;
+            for i in 0..group_size {
+                if i == 0 {
+                    offset = read_sleb128(data, &mut cur)?;
+                    if has_addend {
+                        addend = read_sleb128(data, &mut cur)?;
+                    }
+                } else {
+                    offset += read_leb128(data, &mut cur)? as i64;
+                    if has_addend {
+                        addend += read_sleb128(data, &mut cur)?;
+                    }
+                }
+                out.push(Reloc {
+                    offset: offset as u64,
+                    r_type,
+                    sym: if group_symbolic { group_sym_idx } else { 0 },
+                    addend,
+                    addend_in_place: !has_addend,
+                });
+            }
+            remaining = remaining.saturating_sub(group_size);
+            groups += 1;
+        }
+        if groups == 0 {
+            return Err(malformed("Android packed relocation section has no groups"));
         }
         Ok(())
     }
@@ -652,12 +756,15 @@ impl Loader {
 
     // --- symbol binding & relocation ---------------------------------------
 
-    fn resolve_global(&self, name: &str) -> Option<ResolveResult> {
+    fn resolve_global(&self, name: &str, version: Option<&str>) -> Option<ResolveResult> {
         for lib in self.inner.libs.lock().unwrap().iter() {
-            if let Some(s) = lib.find_defined(name) {
+            if let Some(s) = lib.find_defined_versioned(name, version) {
                 return Some(ResolveResult::Object(lib.clone(), s));
             }
         }
+        // The bionic table is unversioned; a versioned reference (`foo@LIBC`)
+        // is satisfied by it because bionic's own libc exports exactly those
+        // default versions.
         bionic::resolve(name).map(ResolveResult::Bionic)
     }
 
@@ -709,7 +816,10 @@ impl Loader {
             );
             if needs_symbol {
                 let display = name.clone().unwrap_or_else(|| "<null>".into());
-                let resolved = name.as_deref().and_then(|n| self.resolve_global(n));
+                let req_version = lib.dyninfo.symbol_version(r.sym as usize).map(str::to_string);
+                let resolved = name
+                    .as_deref()
+                    .and_then(|n| self.resolve_global(n, req_version.as_deref()));
                 match resolved {
                     Some(ResolveResult::Object(ref l, s)) => {
                         records.push(ImportRecord {
@@ -767,7 +877,11 @@ impl Loader {
             Some(n) => n.to_string(),
             None => return Ok(ResolvedValue::WeakNull),
         };
-        match self.resolve_global(&name) {
+        let version = lib
+            .dyninfo
+            .symbol_version(sym as usize)
+            .map(str::to_string);
+        match self.resolve_global(&name, version.as_deref()) {
             Some(ResolveResult::Object(l, s)) => {
                 if s.sym_type() == STT_TLS {
                     let modid = l
@@ -1007,6 +1121,16 @@ impl Loader {
             self.run_init(&dep);
         }
         let d = &lib.dyninfo;
+        if let Some((va, size)) = d.preinit_array {
+            for i in 0..(size / 8) {
+                let entry_addr = lib.runtime_addr(va + i * 8) as *const u64;
+                // SAFETY: preinit_array is inside a mapped segment.
+                let f = unsafe { *entry_addr };
+                if f != 0 {
+                    call_guest_addr(f as usize, &[]);
+                }
+            }
+        }
         if d.init != 0 {
             call_guest(lib, d.init, &[]);
         }

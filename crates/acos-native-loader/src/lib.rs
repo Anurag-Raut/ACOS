@@ -30,6 +30,7 @@ pub mod bionic;
 pub mod dyninfo;
 pub mod elf;
 pub mod error;
+pub mod inventory;
 pub mod loader;
 pub mod report;
 pub mod testjni;

@@ -252,6 +252,53 @@ fn build_table() -> HashMap<&'static str, Shim> {
 
     // Additional glibc libc/libm entries needed by real Android libraries.
     extern "C" {
+        // process / libc surface required by the RN/Hermes/ONNX corpus
+        fn exit();
+        fn _exit();
+        fn prctl();
+        fn uname();
+        fn pthread_sigmask();
+        fn pthread_kill();
+        fn pthread_getschedparam();
+        fn pthread_setschedparam();
+        fn pthread_attr_getstack();
+        fn pthread_attr_getschedparam();
+        fn pthread_attr_setschedparam();
+        fn pthread_attr_setschedpolicy();
+        fn pthread_attr_setscope();
+        fn sched_get_priority_max();
+        fn sigaltstack();
+        fn popen();
+        fn pclose();
+        fn fileno();
+        fn dirname();
+        fn asprintf();
+        fn mkstemp();
+        fn gethostname();
+        fn getrusage();
+        fn utimes();
+        fn nice();
+        fn select();
+        fn flock();
+        fn ferror();
+        fn ftell();
+        fn rewind();
+        fn tmpfile();
+        fn fscanf();
+        fn nftw();
+        fn lseek64();
+        fn __open_2();
+        fn __xpg_strerror_r();
+        // libm hyperbolics used by Hermes/ONNX
+        fn acosh();
+        fn asinh();
+        fn atanh();
+        fn cosh();
+        fn sinh();
+        fn tanh();
+        fn sincos();
+        fn lround();
+        fn llroundl();
         fn __ctype_get_mb_cur_max();
         fn __vsprintf_chk();
         fn acosf();
@@ -352,6 +399,14 @@ fn build_table() -> HashMap<&'static str, Shim> {
         fn wmemset();
     }
     fwd_extern!(
+        exit, _exit, prctl, uname, pthread_sigmask, pthread_kill, pthread_getschedparam,
+        pthread_setschedparam, pthread_attr_getstack, pthread_attr_getschedparam,
+        pthread_attr_setschedparam, pthread_attr_setschedpolicy, pthread_attr_setscope,
+        sched_get_priority_max, sigaltstack, popen, pclose, fileno, dirname, asprintf,
+        mkstemp, gethostname, getrusage, utimes, nice, select, flock, ferror, ftell,
+        rewind, tmpfile, fscanf, nftw, lseek64, __open_2,
+        __xpg_strerror_r,
+        acosh, asinh, atanh, cosh, sinh, tanh, sincos, lround, llroundl,
         __ctype_get_mb_cur_max, __vsprintf_chk, acosf, acoshf, arc4random, asinf, asinhf, atanf, atanhf, btowc, closedir, coshf, erfcf, erff, exp2f, expm1f, fchmodat, fdimf, fdopendir, fgets, fmaf, fputwc, freelocale, frexpf, fseek, fseeko, ftello, getc, getwc, ilogbf, islower, isnanf, isupper, iswalpha_l, iswblank_l, iswcntrl_l, iswdigit_l, iswlower, iswlower_l, iswprint_l, iswpunct_l, iswspace_l, iswupper_l, iswxdigit_l, isxdigit, ldexpf, lgammaf, lgammaf_r, localeconv, log1pf, logbf, mbrlen, mbrtowc, mbsnrtowcs, mbsrtowcs, mbtowc, memalign, modff, newlocale, opendir, pathconf, poll, readdir, realpath, remainderf, remove, remquof, sendfile, setlocale, setpriority, sincosf, sinhf, statvfs, strcoll_l, strftime_l, strlcpy, strtold_l, strtoll_l, strtoull_l, strxfrm_l, tanhf, tgamma, towlower_l, towupper_l, tzset, ungetc, ungetwc, unlinkat, uselocale, utimensat, wcrtomb, wcscoll_l, wcsnrtombs, wcsxfrm_l, wctob, wmemcpy, wmemmove, wmemset,
     );
 
@@ -381,7 +436,15 @@ fn build_table() -> HashMap<&'static str, Shim> {
     shim!("__tls_get_addr", crate::tls::__tls_get_addr as *const c_void);
     shim!("__tls_get_addr", crate::tls::__tls_get_addr as *const c_void);
 
+    // bionic spells the GNU strerror_r entry `__gnu_strerror_r`; glibc's
+    // exported `__xpg_strerror_r` has the same (int, char*, size_t) -> int ABI.
+    if let Some(xpg) = m.get("__xpg_strerror_r").copied() {
+        m.insert("__gnu_strerror_r", Shim::forwarded("__gnu_strerror_r", xpg.ptr));
+    }
+
     m.extend(shims::log_extra_table());
+    m.extend(shims::fortify_table());
+    m.extend(shims::android_extra_table());
     m.extend(shims::stat_table());
     m.extend(shims::signal_table());
     m.extend(shims::stdio_table());
@@ -394,7 +457,10 @@ fn build_table() -> HashMap<&'static str, Shim> {
 /// The process-wide bionic symbol table.
 pub fn table() -> &'static HashMap<&'static str, Shim> {
     static TABLE: OnceLock<HashMap<&'static str, Shim>> = OnceLock::new();
-    TABLE.get_or_init(build_table)
+    TABLE.get_or_init(|| {
+        shims::init_stream_cells();
+        build_table()
+    })
 }
 
 /// Look up a bionic-provided symbol.

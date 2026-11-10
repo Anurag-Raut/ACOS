@@ -8,6 +8,7 @@ mod bench_pool;
 mod bench_sessions;
 mod frame_diff;
 mod launch;
+mod native_inventory;
 mod observe_tree;
 mod parity;
 mod session;
@@ -58,6 +59,8 @@ enum Command {
     },
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
+    /// Static import inventory of guest `.so` files or an APK (no execution).
+    NativeInventory(native_inventory::NativeInventoryArgs),
     /// Numerically compare two frames (per-pixel + structural diff).
     FrameDiff(frame_diff::FrameDiffArgs),
     /// Compare a real device's UI capture (or a recorded capture) with ACOS.
@@ -154,6 +157,7 @@ fn main() -> ExitCode {
         Command::FrameDiff(args) => frame_diff::run(args),
         Command::Parity(args) => parity::run(args),
         Command::Bench(args) => bench::run(args),
+        Command::NativeInventory(args) => native_inventory::run(args),
     }
 }
 

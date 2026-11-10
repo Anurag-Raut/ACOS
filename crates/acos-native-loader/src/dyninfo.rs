@@ -147,8 +147,11 @@ pub struct DynInfo {
 
     /// Parsed `.gnu.version` entries (one per dynamic symbol).
     pub versym: Vec<u16>,
-    /// version index -> version string, from `.gnu.version_r`.
+    /// version index -> version string, from `.gnu.version_r` (requirements).
     pub version_names: Vec<(u16, String)>,
+    /// version index -> (version string, is_default), from `.gnu.version_d`
+    /// (definitions).
+    pub verdefs: Vec<(u16, String, bool)>,
 
     /// `(vaddr, byte_size)`.
     pub rela: Option<(u64, u64)>,
@@ -189,6 +192,8 @@ impl DynInfo {
         let mut versym_va = 0u64;
         let mut verneed_va = 0u64;
         let mut verneed_num = 0u64;
+        let mut verdef_va = 0u64;
+        let mut verdef_num = 0u64;
 
         let mut rela_va: Option<u64> = None;
         let mut rela_sz = 0u64;
@@ -216,6 +221,7 @@ impl DynInfo {
             sysv_hash: None,
             versym: Vec::new(),
             version_names: Vec::new(),
+            verdefs: Vec::new(),
             rela: None,
             rel: None,
             jmprel: None,
@@ -246,6 +252,8 @@ impl DynInfo {
                 DT_VERSYM => versym_va = d.val,
                 DT_VERNEED => verneed_va = d.val,
                 DT_VERNEEDNUM => verneed_num = d.val,
+                DT_VERDEF => verdef_va = d.val,
+                DT_VERDEFNUM => verdef_num = d.val,
                 DT_RELA => rela_va = Some(d.val),
                 DT_RELASZ => rela_sz = d.val,
                 DT_REL => rel_va = Some(d.val),
@@ -402,6 +410,11 @@ impl DynInfo {
                 }
             }
         }
+        if verdef_va != 0 && verdef_num > 0 {
+            if let Some(off) = elf.vaddr_to_offset(verdef_va) {
+                info.verdefs = parse_verdef(elf, off, verdef_num, strtab_va)?;
+            }
+        }
         if verneed_va != 0 && verneed_num > 0 {
             if let Some(off) = elf.vaddr_to_offset(verneed_va) {
                 info.version_names = parse_verneed(elf, off, verneed_num, strtab_va)?;
@@ -429,6 +442,28 @@ impl DynInfo {
         let rest = self.strtab.get(start..)?;
         let end = rest.iter().position(|&b| b == 0)?;
         std::str::from_utf8(&rest[..end]).ok()
+    }
+
+    /// Version *definition* (`.gnu.version_d`) for symbol `idx`: name and
+    /// whether it is the default version a plain (unversioned) reference binds
+    /// to.
+    pub fn defined_version(&self, idx: usize) -> Option<(&str, bool)> {
+        let vi = *self.versym.get(idx)?;
+        if vi <= 1 {
+            return None;
+        }
+        self.verdefs
+            .iter()
+            .find(|(i, _, _)| *i == vi)
+            .map(|(_, n, default)| (n.as_str(), *default))
+    }
+
+    /// Whether symbol `idx` is hidden (a non-default version definition).
+    ///
+    /// `VERSYM_HIDDEN` (bit 15) set means the definition is only reachable
+    /// through an explicitly versioned reference; `dlsym` must skip it.
+    pub fn is_hidden_version(&self, idx: usize) -> bool {
+        self.versym.get(idx).map(|v| v & 0x8000 != 0).unwrap_or(false)
     }
 
     /// Version string associated with symbol `idx`, if any.
@@ -627,6 +662,81 @@ fn parse_verneed(
             break;
         }
         cur += vn_next as usize;
+    }
+    Ok(out)
+}
+
+/// Parse `.gnu.version_d` into `(version index, name, is_default)`.
+///
+/// `vd_flags & VER_FLG_BASE` marks the base (file) version, which is not a
+/// default for symbol binding, and the first entry with `vd_ndx` equal to the
+/// symbol's version index is the definition. `VERSYM_HIDDEN` lives in
+/// `.gnu.version`, not here, so `is_default` reports `vd_ndx == 2`-style base
+/// semantics via the *first* definition for that index.
+fn parse_verdef(
+    elf: &Elf<'_>,
+    off: usize,
+    num: u64,
+    strtab_va: u64,
+) -> DynResult<Vec<(u16, String, bool)>> {
+    const VER_FLG_BASE: u16 = 0x1;
+    let mut out: Vec<(u16, String, bool)> = Vec::new();
+    let mut cur = off;
+    for _ in 0..num.min(4096) {
+        let vd_flags = u16::from_le_bytes(
+            elf.data
+                .get(cur + 2..cur + 4)
+                .ok_or_else(|| ElfError("verdef flags oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        let vd_ndx = u16::from_le_bytes(
+            elf.data
+                .get(cur + 4..cur + 6)
+                .ok_or_else(|| ElfError("verdef ndx oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        let vd_cnt = u16::from_le_bytes(
+            elf.data
+                .get(cur + 6..cur + 8)
+                .ok_or_else(|| ElfError("verdef cnt oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        let vd_aux = u32::from_le_bytes(
+            elf.data
+                .get(cur + 12..cur + 16)
+                .ok_or_else(|| ElfError("verdef aux oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        let vd_next = u32::from_le_bytes(
+            elf.data
+                .get(cur + 16..cur + 20)
+                .ok_or_else(|| ElfError("verdef next oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        let aux = cur + vd_aux as usize;
+        let vda_name = u32::from_le_bytes(
+            elf.data
+                .get(aux..aux + 4)
+                .ok_or_else(|| ElfError("verdaux oob".into()))?
+                .try_into()
+                .unwrap(),
+        );
+        if vd_cnt > 0 && (vd_flags & VER_FLG_BASE) == 0 {
+            if let Some(soff) = elf.vaddr_to_offset(strtab_va + vda_name as u64) {
+                if let Ok(name) = elf.read_cstr(soff) {
+                    out.push((vd_ndx, name, true));
+                }
+            }
+        }
+        if vd_next == 0 {
+            break;
+        }
+        cur += vd_next as usize;
     }
     Ok(out)
 }

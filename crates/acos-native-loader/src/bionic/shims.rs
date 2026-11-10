@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 // --- host libc symbols used by the shims -----------------------------------
@@ -493,5 +494,312 @@ pub fn signal_table() -> HashMap<&'static str, super::Shim> {
     add("sigaddset", addr!(sigaddset));
     add("sigdelset", addr!(sigdelset));
     add("sigismember", addr!(sigismember));
+    m
+}
+
+// --- stdio stream *data* symbols -------------------------------------------
+
+/// Bionic exposes `stdin`/`stdout`/`stderr` as `FILE*` *variables* inside the
+/// `__sF` array. Guest code that reads the variable must receive a pointer our
+/// stdio trampolines translate (`acos_map_stream`), so each name is bound to a
+/// cell holding the corresponding `__sF` slot address.
+static STDIN_CELL: AtomicUsize = AtomicUsize::new(0);
+static STDOUT_CELL: AtomicUsize = AtomicUsize::new(0);
+static STDERR_CELL: AtomicUsize = AtomicUsize::new(0);
+
+const SF_STRIDE: usize = SF_STREAM_BYTES;
+
+fn stream_addr(slot: usize) -> *const c_void {
+    let cell: &AtomicUsize = match slot {
+        0 => &STDIN_CELL,
+        1 => &STDOUT_CELL,
+        _ => &STDERR_CELL,
+    };
+    cell as *const AtomicUsize as *const c_void
+}
+
+/// `stdin`, `stdout`, `stderr` as bionic `FILE*` variables.
+pub fn stdio_stream_table() -> HashMap<&'static str, super::Shim> {
+    let mut m = HashMap::new();
+    m.insert("stdin", super::Shim::shimmed("stdin", stream_addr(0)));
+    m.insert("stdout", super::Shim::shimmed("stdout", stream_addr(1)));
+    m.insert("stderr", super::Shim::shimmed("stderr", stream_addr(2)));
+    m
+}
+
+/// Fill the stream cells (called before the table is published).
+pub fn init_stream_cells() {
+    let base = __sF_addr();
+    STDIN_CELL.store(base, Ordering::Relaxed);
+    STDOUT_CELL.store(base + SF_STRIDE, Ordering::Relaxed);
+    STDERR_CELL.store(base + SF_STRIDE * 2, Ordering::Relaxed);
+}
+
+// --- bionic sem_t ----------------------------------------------------------
+
+/// Bionic's `sem_t` is an opaque 32-byte object with a different layout from
+/// glibc's, so guest storage is treated as a handle onto a host `sem_t` (the
+/// same indirection used for mutexes and condition variables).
+struct HostSem(libc::sem_t);
+// SAFETY: a `sem_t` is designed for cross-thread use.
+unsafe impl Send for HostSem {}
+
+fn sems() -> &'static Mutex<HashMap<usize, u64>> {
+    static SEMS: OnceLock<Mutex<HashMap<usize, u64>>> = OnceLock::new();
+    SEMS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn sem_ref(key: usize) -> Option<u64> {
+    sems().lock().ok()?.get(&key).copied()
+}
+
+/// `sem_init(sem, pshared, value)`.
+///
+/// # Safety
+/// `sem` must point to at least 32 writable guest bytes.
+pub unsafe extern "C" fn sem_init(sem: *mut c_void, _pshared: c_int, value: u32) -> c_int {
+    if sem.is_null() {
+        return -1;
+    }
+    let key = sem as usize;
+    let boxed = Box::new(HostSem(std::mem::zeroed()));
+    let ptr = Box::into_raw(boxed);
+    if libc::sem_init(&mut (*ptr).0, 0, value) != 0 {
+        drop(Box::from_raw(ptr));
+        return -1;
+    }
+    sems().lock().unwrap().insert(key, ptr as u64);
+    // Guest object is a handle: zero it so a stale copy is detectable.
+    std::ptr::write_bytes(sem as *mut u8, 0, 32);
+    0
+}
+
+/// `sem_destroy`.
+///
+/// # Safety
+/// `sem` must have been passed to [`sem_init`].
+pub unsafe extern "C" fn sem_destroy(sem: *mut c_void) -> c_int {
+    let key = sem as usize;
+    match sems().lock().unwrap().remove(&key) {
+        Some(p) => {
+            let boxed = Box::from_raw(p as *mut HostSem);
+            libc::sem_destroy(&boxed.0 as *const libc::sem_t as *mut libc::sem_t);
+            0
+        }
+        None => -1,
+    }
+}
+
+/// `sem_post`.
+///
+/// # Safety
+/// `sem` must have been passed to [`sem_init`].
+pub unsafe extern "C" fn sem_post(sem: *mut c_void) -> c_int {
+    match sem_ref(sem as usize) {
+        Some(p) => libc::sem_post(&mut (*(p as *mut HostSem)).0),
+        None => -1,
+    }
+}
+
+/// `sem_wait`.
+///
+/// # Safety
+/// `sem` must have been passed to [`sem_init`].
+pub unsafe extern "C" fn sem_wait(sem: *mut c_void) -> c_int {
+    match sem_ref(sem as usize) {
+        Some(p) => libc::sem_wait(&mut (*(p as *mut HostSem)).0),
+        None => -1,
+    }
+}
+
+/// `sem_trywait`.
+///
+/// # Safety
+/// `sem` must have been passed to [`sem_init`].
+pub unsafe extern "C" fn sem_trywait(sem: *mut c_void) -> c_int {
+    match sem_ref(sem as usize) {
+        Some(p) => libc::sem_trywait(&mut (*(p as *mut HostSem)).0),
+        None => -1,
+    }
+}
+
+/// `sem_timedwait` with a bionic `timespec` (identical layout to glibc's).
+///
+/// # Safety
+/// `sem` must have been passed to [`sem_init`]; `abs_timeout` must point to a
+/// valid `timespec`.
+pub unsafe extern "C" fn sem_timedwait(
+    sem: *mut c_void,
+    abs_timeout: *const libc::timespec,
+) -> c_int {
+    match sem_ref(sem as usize) {
+        Some(p) => libc::sem_timedwait(&mut (*(p as *mut HostSem)).0, abs_timeout),
+        None => -1,
+    }
+}
+
+// --- libcutils tracing -----------------------------------------------------
+
+/// `ATrace_beginSection` / `ATrace_endSection` / `ATrace_isEnabled`.
+///
+/// The platform contract is: when system tracing is not enabled these are
+/// no-ops returning immediately (`ATrace_isEnabled` returns false). ACOS never
+/// enables platform tracing, so these are exact implementations of the
+/// documented disabled behaviour, not stubs.
+///
+/// # Safety
+/// `name` is ignored; any pointer value is accepted.
+pub unsafe extern "C" fn atrace_begin_section(_name: *const c_char) {}
+
+/// See [`atrace_begin_section`].
+///
+/// # Safety
+/// Always safe.
+pub unsafe extern "C" fn atrace_end_section() {}
+
+/// `ATrace_isEnabled` — tracing is never enabled.
+///
+/// # Safety
+/// Always safe.
+pub unsafe extern "C" fn atrace_is_enabled() -> bool {
+    false
+}
+
+/// `libandroid`/`libjnigraphics`/`libcutils` extras table.
+pub fn android_extra_table() -> HashMap<&'static str, super::Shim> {
+    let mut m = stdio_stream_table();
+    let mut add = |name: &'static str, ptr: *const c_void| {
+        m.insert(name, super::Shim::shimmed(name, ptr));
+    };
+    add("sem_init", sem_init as *const c_void);
+    add("sem_destroy", sem_destroy as *const c_void);
+    add("sem_post", sem_post as *const c_void);
+    add("sem_wait", sem_wait as *const c_void);
+    add("sem_trywait", sem_trywait as *const c_void);
+    add("sem_timedwait", sem_timedwait as *const c_void);
+    add("ATrace_beginSection", atrace_begin_section as *const c_void);
+    add("ATrace_endSection", atrace_end_section as *const c_void);
+    add("ATrace_isEnabled", atrace_is_enabled as *const c_void);
+    m
+}
+
+// --- bionic-only fortify wrappers ------------------------------------------
+//
+// glibc has no `__*_chk` counterparts for these (they are bionic `_FORTIFY_SOURCE`
+// entry points), so they are implemented here with exactly bionic's contract:
+// the object-size argument is validated and the plain operation is performed.
+
+/// `__memchr_chk(s, c, len, bos)`.
+///
+/// # Safety
+/// `s` must be readable for `len` bytes; `bos` is the compiler-provided buffer size.
+pub unsafe extern "C" fn __memchr_chk(
+    s: *const c_void,
+    c: c_int,
+    len: usize,
+    bos: usize,
+) -> *mut c_void {
+    if len > bos {
+        return std::ptr::null_mut();
+    }
+    libc::memchr(s, c, len) as *mut c_void
+}
+
+/// `__strchr_chk(s, c, bos)`.
+///
+/// # Safety
+/// `s` must be a NUL-terminated string of at most `bos` bytes.
+pub unsafe extern "C" fn __strchr_chk(s: *const c_char, c: c_int, bos: usize) -> *mut c_char {
+    // Bionic requires the terminator to be inside the object.
+    for i in 0..bos {
+        let b = *s.add(i);
+        if b == c as c_char {
+            return s.add(i) as *mut c_char;
+        }
+        if b == 0 {
+            return std::ptr::null_mut();
+        }
+    }
+    std::ptr::null_mut()
+}
+
+/// `__write_chk(fd, buf, count, buf_size)`.
+///
+/// # Safety
+/// `buf` must be readable for `count` bytes.
+pub unsafe extern "C" fn __write_chk(
+    fd: c_int,
+    buf: *const c_void,
+    count: usize,
+    buf_size: usize,
+) -> isize {
+    if count > buf_size {
+        *libc::__errno_location() = libc::EINVAL;
+        return -1;
+    }
+    libc::write(fd, buf, count)
+}
+
+/// `__fwrite_chk(ptr, size, nmemb, stream, bos)`.
+///
+/// The stream is a bionic `FILE*` (`__sF` slot) and is translated by the stdio
+/// trampoline; the size check matches bionic's.
+///
+/// # Safety
+/// `ptr` must be readable for `size * nmemb` bytes.
+pub unsafe extern "C" fn __fwrite_chk(
+    ptr: *const c_void,
+    size: usize,
+    nmemb: usize,
+    stream: *mut c_void,
+    bos: usize,
+) -> usize {
+    if size.saturating_mul(nmemb) > bos {
+        return 0;
+    }
+    let real = acos_map_stream(stream as usize) as *mut libc::FILE;
+    libc::fwrite(ptr, size, nmemb, real)
+}
+
+/// `__FD_SET_chk(fd, set, set_size)`.
+///
+/// # Safety
+/// `set` must be a writable `fd_set` of `set_size` bytes.
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn __FD_SET_chk(fd: c_int, set: *mut c_void, set_size: usize) -> c_int {
+    if fd < 0 || (fd as usize) >= set_size * 8 {
+        *libc::__errno_location() = libc::EINVAL;
+        return -1;
+    }
+    let set = set as *mut libc::fd_set;
+    libc::FD_SET(fd, set);
+    0
+}
+
+/// `__FD_ISSET_chk(fd, set, set_size)`.
+///
+/// # Safety
+/// `set` must be a readable `fd_set` of `set_size` bytes.
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn __FD_ISSET_chk(fd: c_int, set: *const c_void, set_size: usize) -> c_int {
+    if fd < 0 || (fd as usize) >= set_size * 8 {
+        return 0;
+    }
+    libc::FD_ISSET(fd, set as *const libc::fd_set) as c_int
+}
+
+/// bionic-only fortify entry points.
+pub fn fortify_table() -> HashMap<&'static str, super::Shim> {
+    let mut m = HashMap::new();
+    let mut add = |name: &'static str, ptr: *const c_void| {
+        m.insert(name, super::Shim::shimmed(name, ptr));
+    };
+    add("__memchr_chk", __memchr_chk as *const c_void);
+    add("__strchr_chk", __strchr_chk as *const c_void);
+    add("__write_chk", __write_chk as *const c_void);
+    add("__fwrite_chk", __fwrite_chk as *const c_void);
+    add("__FD_SET_chk", __FD_SET_chk as *const c_void);
+    add("__FD_ISSET_chk", __FD_ISSET_chk as *const c_void);
+    // bionic uses `stderr`-style `__sF` slots for `tmpfile`/`fscanf` streams too.
     m
 }

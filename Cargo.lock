@@ -28,6 +28,7 @@ version = "0.1.0"
 dependencies = [
  "acos-apk",
  "acos-dex",
+ "acos-native-loader",
  "acos-protocol",
  "acos-render",
  "acos-runtime",
@@ -39,6 +40,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "zip",
 ]
 
 [[package]]

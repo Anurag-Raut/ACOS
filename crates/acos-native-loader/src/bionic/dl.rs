@@ -99,6 +99,19 @@ pub unsafe extern "C" fn dlopen(filename: *const c_char, _flags: c_int) -> *mut 
     let Some(path) = resolve_library(&inner, &name) else {
         return std::ptr::null_mut();
     };
+    // Already mapped? Bump its reference count and reuse it (bionic returns a
+    // handle to the existing mapping, it does not map a second copy).
+    if let Some(existing) = OBJECTS
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|l| l.matches_name(&name) || l.matches_name(&path.to_string_lossy()))
+        .cloned()
+    {
+        existing.refs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = register_dl_handle(&inner, existing);
+        return id as *mut c_void;
+    }
     let handle = match loader.load(&path, &name) {
         Ok(h) => h,
         Err(_) => return std::ptr::null_mut(),
@@ -214,6 +227,11 @@ pub unsafe extern "C" fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int
         if a >= start && a < lib.runtime_end() {
             (*info).dli_fname = lib.name_c.as_ptr();
             (*info).dli_fbase = start as *mut c_void;
+            // Nearest exported symbol at or below `addr`.
+            if let Some((name, addr)) = lib.nearest_symbol(a) {
+                (*info).dli_sname = name;
+                (*info).dli_saddr = addr as *mut c_void;
+            }
             return 1;
         }
     }
