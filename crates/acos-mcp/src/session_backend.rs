@@ -485,6 +485,7 @@ impl SessionBackend {
             )),
             "acos_logs" => Some(self.call_logs(&request_id, args)),
             "acos_status" => Some(self.call_status(&request_id, args)),
+            "acos_doctor" => Some(self.cli.call_doctor(&request_id, args, ctx)),
             _ => None,
         }
     }

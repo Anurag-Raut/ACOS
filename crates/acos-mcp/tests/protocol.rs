@@ -414,6 +414,35 @@ fn help_tool_returns_the_agent_workflow() {
 }
 
 #[test]
+fn doctor_tool_returns_the_preflight_report() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-03-26");
+    let response = client.call_tool(
+        "acos_doctor",
+        json!({"base": {"request_id": "t_doctor"}}),
+    );
+    let envelope = envelope_of(&response);
+    let report = &envelope["result"];
+    assert!(
+        report["checks"].is_array(),
+        "doctor report missing checks: {envelope}"
+    );
+    assert!(
+        report["ok"].is_boolean(),
+        "doctor report missing ok: {envelope}"
+    );
+    // The verdict must be honest: healthy => pass; unhealthy => fail carrying
+    // the failing check names so an agent can act on the `fix` strings.
+    if report["ok"] == true {
+        assert_eq!(envelope["status"], "pass");
+    } else {
+        assert_eq!(envelope["status"], "fail");
+        assert_eq!(envelope["error"]["code"], "ASSERTION_FAILED");
+        assert!(envelope["error"]["details"]["failures"].is_array());
+    }
+}
+
+#[test]
 fn structured_content_is_only_sent_for_2025_06_18() {
     let mut modern = McpClient::with_real_acos();
     modern.initialize("2025-06-18");

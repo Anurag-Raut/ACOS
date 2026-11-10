@@ -90,29 +90,55 @@ Server limits (all optional):
 
 ## 2. Tools
 
-Tools are the descriptors from `acos_protocol::mcp_tools()` (`acos_<command>`),
-plus two server tools. Today the `acos` binary implements `inspect` and
-`run-dex`; everything else returns a structured `unsupported` envelope. That
-availability is derived at runtime by probing `acos --help`, not hard-coded, so
-new commands appear as available as soon as the CLI implements them.
+The server advertises 23 tools: the 13 protocol commands in
+`acos_protocol::mcp_tools()` (`acos_<command>`), two meta tools
+(`acos_capabilities`, `acos_help`), and eight server-local tools (the in-process
+session tools plus `acos_doctor`).
 
-| tool | command | available today | fidelity |
-|---|---|---|---|
-| `acos_inspect` | `inspect` | **yes** | `static-analysis` |
-| `acos_run_dex` | `run-dex` | **yes** | `native-runtime` |
-| `acos_run` | `run` | no | `native-runtime` |
-| `acos_observe` | `observe` | no | `native-runtime` |
-| `acos_capture` | `capture` | no | `native-runtime` |
-| `acos_action` | `action` | no | `native-runtime` |
-| `acos_assert` | `assert` | no | `native-runtime` |
-| `acos_events` | `events` | no | `native-runtime` |
-| `acos_reset` | `reset` | no | `native-runtime` |
-| `acos_profile` | `profile` | no | `native-runtime` |
-| `acos_destroy` | `destroy` | no | `native-runtime` |
-| `acos_verify` | `verify` | no | `native-runtime` |
-| `acos_capability_report` | `capability-report` | no | `static-analysis` |
-| `acos_capabilities` | server tool | **yes** | `static-analysis` |
-| `acos_help` | server tool | **yes** | `static-analysis` |
+Whether a protocol command can run **today** is derived at runtime by probing
+`acos --help`, never hard-coded, so new commands appear as available as soon as
+the CLI implements them. Each `tools/list` entry carries the live `available`
+and `fidelity` annotations: run `acos_capabilities` (or `tools/list`) for the
+current set. The structural list below is generated from the descriptors, and
+the `docs_tool_table_matches_descriptors` test fails if the docs drift from the
+server.
+
+<!-- ACOS_TOOLS_BEGIN -->
+| tool | kind | command | fidelity | required args |
+|---|---|---|---|---|
+| `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
+| `acos_run_dex` | protocol | `run-dex` | `native-runtime` | `base`, `path` |
+| `acos_run` | protocol | `run` | `native-runtime` | `apk`, `base` |
+| `acos_observe` | protocol | `observe` | `native-runtime` | `base` |
+| `acos_capture` | protocol | `capture` | `native-runtime` | `base` |
+| `acos_action` | protocol | `action` | `native-runtime` | `action`, `base` |
+| `acos_assert` | protocol | `assert` | `native-runtime` | `assertion`, `base` |
+| `acos_events` | protocol | `events` | `native-runtime` | `base` |
+| `acos_reset` | protocol | `reset` | `native-runtime` | `base`, `scope` |
+| `acos_profile` | protocol | `profile` | `native-runtime` | `base` |
+| `acos_destroy` | protocol | `destroy` | `native-runtime` | `base` |
+| `acos_verify` | protocol | `verify` | `native-runtime` | `artifacts`, `base`, `scenario` |
+| `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
+| `acos_capabilities` | server | - | `static-analysis` | - |
+| `acos_help` | server | - | `static-analysis` | - |
+| `acos_launch` | server | - | `native-runtime` | - |
+| `acos_observe_tree` | server | - | `native-runtime` | - |
+| `acos_tap` | server | - | `native-runtime` | - |
+| `acos_key` | server | - | `native-runtime` | - |
+| `acos_swipe` | server | - | `native-runtime` | - |
+| `acos_logs` | server | - | `native-runtime` | - |
+| `acos_status` | server | - | `native-runtime` | - |
+| `acos_doctor` | server | - | `static-analysis` | - |
+<!-- ACOS_TOOLS_END -->
+
+Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
+
+The server-local tools are served in-process (they never shell out):
+`acos_launch` boots an APK into a session that persists across calls and returns
+the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_swipe`/`acos_logs`/`acos_status`
+drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
+SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
+boot-classpath cache, host memory) and returns each failing check's `fix`.
 
 Every `tools/list` entry carries the protocol `description`, an `inputSchema`
 generated from the request type, and annotations:
@@ -197,7 +223,7 @@ inlined as MCP `image` content.
 --> {"jsonrpc":"2.0","method":"notifications/initialized"}
 
 --> {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
-<-- {"jsonrpc":"2.0","id":2,"result":{"tools":[ /* 15 tool descriptors */ ]}}
+<-- {"jsonrpc":"2.0","id":2,"result":{"tools":[ /* 23 tool descriptors */ ]}}
 
 --> {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
       "name":"acos_inspect",

@@ -214,9 +214,37 @@ pub fn fixture(path: &str) -> String {
         .unwrap_or_else(|e| panic!("read fixture {path}: {e}"))
 }
 
+/// The build command that produces a gitignored `fixtures/build/...` path.
+fn build_hint(path: &str) -> &'static str {
+    if path.starts_with("fixtures/build/apps/") {
+        "tools/build-apps.sh"
+    } else if path.starts_with("fixtures/build/dexprogs/") {
+        "tools/build-fixtures.sh"
+    } else {
+        "the fixture build scripts"
+    }
+}
+
+/// Absolute path for a repo-relative fixture.
+///
+/// Gitignored build prerequisites (`fixtures/build/...`) are checked here so a
+/// fresh worktree fails loudly with the exact build command instead of a
+/// confusing downstream error — the F-11 friction from W81-A.
+pub fn require_fixture(path: &str) -> std::path::PathBuf {
+    let full = repo_root().join(path);
+    if path.starts_with("fixtures/build/") && !full.exists() {
+        panic!(
+            "build fixtures first: `{}` (missing {})",
+            build_hint(path),
+            full.display()
+        );
+    }
+    full
+}
+
 /// Absolute path string for a repo-relative fixture.
 pub fn fixture_path(path: &str) -> String {
-    repo_root().join(path).display().to_string()
+    require_fixture(path).display().to_string()
 }
 
 /// Read the whole of a reader (used by the e2e helper).

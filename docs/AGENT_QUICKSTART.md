@@ -63,6 +63,7 @@ a false pass.
 | `acos_verify` | `acos verify` | yes | YAML scenario → evidence-backed verdict |
 | `acos_capabilities` | server tool | yes | Supported/unsupported set + backend version |
 | `acos_help` | server tool | yes | Self-description / playbook |
+| `acos_doctor` | server tool | yes | Host preflight JSON (SDK/JDK/keystore/memory) with `fix:` per failure |
 | `acos_capture` | `acos capture` | no | (not implemented) |
 | `acos_assert` | `acos assert` | no | (not implemented) |
 | `acos_events` | `acos events` | no | (not implemented) |
@@ -79,6 +80,17 @@ The result is the ACOS envelope as text (plus `structuredContent` on protocol
 > → `acos_tap` operate on the same live VM. The CLI has no daemon: every
 > `acos observe --apk ...` invocation seeds a **fresh** session (a fresh launch),
 > which is why multi-step driving belongs in MCP.
+>
+> **Why the CLI cannot share a session across processes (F-08).** A session is
+> a live `AgentSession` — an in-process VM, its class loader, its `View`
+> hierarchy and its frame store. None of that is serialisable, and the engine
+> has no host daemon to attach to, so two independent `acos` processes cannot
+> address the same session. Persisting only the *metadata* (id, apk, launch
+> ladder) would let `acos session status` report a session that no running VM
+> backs, which is worse than honesty. A future `acos serve` daemon (or the
+> existing MCP server's in-process registry, already keyed by `session_id`)
+> is the structural fix; until then the CLI relaunches per invocation and says
+> so. `docs/MCP.md` §4 documents the same boundary for MCP clients.
 
 ---
 

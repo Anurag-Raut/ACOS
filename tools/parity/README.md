@@ -9,7 +9,18 @@ Two modes, one comparator:
 
 Both emit one JSON object. `identical: true` / `ok: true` only when there is no
 normalized difference. A missing phone is `ok: false`, `code:
-NEEDS_REAL_DEVICE` and exit 1 — never an empty pass.
+NEEDS_REAL_DEVICE` and exit 1 — never an empty pass. A phone that is attached
+but cannot supply a capture (out of memory, `uiautomator` killed) is
+`ok: false`, `code: DEVICE_BUSY` with the screenshot still saved as a
+reference — also never an empty pass.
+
+When the phone capture succeeds but ACOS cannot yet produce its own tree (the
+current engine stops early in the launch ladder, e.g. at `VectorDrawable`), the
+report is `ok: false`, `code: ACOS_BLOCKED`, carries the full
+`acos_blocked_at` object (`reason`, `message`, `app_created`,
+`transaction_delivered`, `looper_quit`, `launch_error`), lists every device
+node as `missing_in_acos`, and saves the phone capture under
+`fixtures/reference-device/<app>/`. It is a blocker on the engine, not a pass.
 
 ## What is compared
 
@@ -66,6 +77,9 @@ Safety:
 * `--keep` leaves the fixture installed for manual inspection.
 
 If the ACOS side cannot reach a `ViewRootImpl` (the launch has not built a view
-hierarchy yet), the live report is `ok: false`, `code: NEEDS_REAL_DEVICE` with
-the launch booleans and reason `not_ready`. That is a blocker on the engine, not
-a pass.
+hierarchy yet), the live report is `ok: false`, `code: ACOS_BLOCKED` with
+`acos_blocked_at` (the launch booleans and the blocked stage) and the phone
+capture saved under `fixtures/reference-device/<app>/device-ui.xml` +
+`device-screenshot.png`. That is a blocker on the engine, not a pass. If
+`uiautomator` is killed before it writes a hierarchy (a memory-pressured
+device), the report is `code: DEVICE_BUSY` and only the screenshot is saved.

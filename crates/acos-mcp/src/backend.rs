@@ -404,6 +404,115 @@ impl CliBackend {
         };
         envelope_from_captured(&captured, request_id, CommandName::Verify, ctx)
     }
+
+    /// Run `acos doctor --json` for the `acos_doctor` server tool.
+    ///
+    /// The report is the raw `acos doctor --json` object, not an ACOS envelope.
+    /// A host that fails the preflight returns `fail` with `ASSERTION_FAILED`
+    /// (an `ASSERTION_FAILED` code) and the report under `result`, so an agent
+    /// can read each failing check and its `fix` string.
+    pub fn call_doctor(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
+        let Some(binary) = self.resolved_binary() else {
+            return Envelope::failure(
+                request_id,
+                command_backend(CommandName::Inspect),
+                Fidelity::StaticAnalysis,
+                ProtocolError::new(
+                    ErrorCode::UnsupportedBackend,
+                    "no `acos` binary found, so `acos doctor` cannot run",
+                )
+                .with_hint("Set ACOS_BIN to the built `acos` binary.")
+                .with_details(json!({})),
+                Metrics::wall_ms(0),
+            );
+        };
+        let mut argv = vec!["doctor".to_string(), "--json".to_string()];
+        if let Some(sdk) = args.get("sdk").and_then(Value::as_str) {
+            match safety::validate_path(sdk, &ctx.allowed_roots) {
+                Ok(path) => {
+                    argv.push("--sdk".to_string());
+                    argv.push(path.display().to_string());
+                }
+                Err(reason) => return unsafe_path(request_id, sdk, &reason),
+            }
+        }
+        if let Some(build_tools) = args.get("build_tools").and_then(Value::as_str) {
+            argv.push("--build-tools".to_string());
+            argv.push(build_tools.to_string());
+        }
+        let captured = match run_child(&binary, &argv, &self.config.extra_env, ctx) {
+            Ok(captured) => captured,
+            Err(err) => return run_error_envelope(request_id, CommandName::Inspect, err, ctx),
+        };
+        let stdout = String::from_utf8_lossy(&captured.stdout);
+        let parsed = serde_json::from_str::<Value>(stdout.trim());
+        match parsed {
+            Ok(value) if value.is_object() => {
+                let healthy = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
+                let metrics = Metrics::wall_ms(captured.wall_ms);
+                let failures: Vec<Value> = value
+                    .get("checks")
+                    .and_then(Value::as_array)
+                    .map(|checks| {
+                        checks
+                            .iter()
+                            .filter(|check| {
+                                check.get("status").and_then(Value::as_str) == Some("fail")
+                            })
+                            .filter_map(|check| check.get("name").cloned())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let envelope = if healthy {
+                    Envelope::pass(
+                        request_id,
+                        command_backend(CommandName::Inspect),
+                        Fidelity::StaticAnalysis,
+                        metrics,
+                    )
+                } else {
+                    Envelope::failure(
+                        request_id,
+                        command_backend(CommandName::Inspect),
+                        Fidelity::StaticAnalysis,
+                        ProtocolError::new(
+                            ErrorCode::AssertionFailed,
+                            "`acos doctor` found failing host preflight checks",
+                        )
+                        .with_hint(
+                            "Read `result.checks` for the failing `name`s and their `fix` strings.",
+                        )
+                        .with_details(json!({ "failures": failures })),
+                        metrics,
+                    )
+                };
+                envelope.with_value_result(value)
+            }
+            _ => {
+                let stderr = String::from_utf8_lossy(&captured.stderr);
+                let detail = stderr.trim();
+                let message = if detail.is_empty() {
+                    format!(
+                        "`acos doctor` produced no JSON report (exit {:?})",
+                        captured.status
+                    )
+                } else {
+                    format!(
+                        "`acos doctor` failed (exit {:?}): {}",
+                        captured.status,
+                        truncate(detail, 2000)
+                    )
+                };
+                Envelope::failure(
+                    request_id,
+                    command_backend(CommandName::Inspect),
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(ErrorCode::Internal, message),
+                    Metrics::wall_ms(captured.wall_ms),
+                )
+            }
+        }
+    }
 }
 
 impl Backend for CliBackend {
@@ -453,6 +562,20 @@ impl Backend for CliBackend {
             binary: caps.binary,
             version: caps.version,
         }
+    }
+
+    /// The bare CLI backend still serves `acos_doctor`: it delegates to
+    /// `acos doctor --json` and holds no session state.
+    fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
+        if name != "acos_doctor" {
+            return None;
+        }
+        let request_id = args
+            .pointer("/base/request_id")
+            .and_then(Value::as_str)
+            .unwrap_or("req_mcp")
+            .to_string();
+        Some(self.call_doctor(&request_id, args, ctx))
     }
 }
 

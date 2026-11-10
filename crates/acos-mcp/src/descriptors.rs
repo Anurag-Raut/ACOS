@@ -47,6 +47,10 @@ pub const HELP_TOOL: &str = "acos_help";
 
 /// Server-local in-process session tool names (served by
 /// [`crate::session_backend::SessionBackend`], not by the `acos` subprocess).
+///
+/// `acos_doctor` is also server-local: it delegates to `acos doctor --json`,
+/// but its report is a JSON object rather than an ACOS envelope, so it is
+/// handled in the same dispatch path.
 pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_launch",
     "acos_observe_tree",
@@ -55,6 +59,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_swipe",
     "acos_logs",
     "acos_status",
+    "acos_doctor",
 ];
 
 /// Identify a command from its wire name (`run-dex`).
@@ -242,13 +247,19 @@ pub fn session_tools() -> Vec<ToolInfo> {
     let mut out = Vec::with_capacity(SESSION_TOOL_NAMES.len());
     for name in SESSION_TOOL_NAMES {
         let (description, schema) = session_tool_spec(name);
+        // `acos_doctor` is a host preflight, not a runtime session op.
+        let fidelity = if *name == "acos_doctor" {
+            Fidelity::StaticAnalysis
+        } else {
+            Fidelity::NativeRuntime
+        };
         out.push(ToolInfo {
             tool_name: (*name).to_string(),
             command: None,
             description: description.to_string(),
             input_schema: schema,
             available: true,
-            fidelity: Fidelity::NativeRuntime,
+            fidelity,
             reason: None,
         });
     }
@@ -352,8 +363,65 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              window/frame yet' before reading logs or observing.",
             with_base(json!({})),
         ),
+        "acos_doctor" => (
+            "Run the host preflight (`acos doctor`) and return its JSON report. Call it FIRST when \
+             a build or launch fails before the app runs: it checks the Android SDK/build-tools, \
+             `android.jar`, the JDK (`java`/`javac`/`keytool`), the workspace helper and debug \
+             keystore, the boot-classpath cache, and host memory. Each failing check carries a \
+             concrete `fix` string. The tool returns `fail` with `ASSERTION_FAILED` when any \
+             required check fails, with the full report under `result.checks`.",
+            with_base(json!({})),
+        ),
         _ => ("In-process session tool.", with_base(json!({}))),
     }
+}
+
+/// Render the full tool list as a deterministic Markdown table.
+///
+/// This is the single source of the `docs/MCP.md` tool table: the
+/// `docs_tool_table_matches_descriptors` test compares the checked-in block
+/// against this output, so the docs cannot drift from the descriptor list.
+/// Availability and per-call schemas are still delivered live by `tools/list`;
+/// only the structural list is generated here.
+#[must_use]
+pub fn tools_markdown() -> String {
+    let caps = Capabilities::unprobed();
+    let mut out = String::from("| tool | kind | command | fidelity | required args |\n");
+    out.push_str("|---|---|---|---|---|\n");
+    for tool in tool_infos(&caps) {
+        let kind = if tool.command.is_some() {
+            "protocol"
+        } else {
+            "server"
+        };
+        let command = tool
+            .command
+            .map(|command| format!("`{}`", command.as_str()))
+            .unwrap_or_else(|| "-".to_string());
+        let required: Vec<String> = tool
+            .input_schema
+            .get("required")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|name| format!("`{name}`"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let required = if required.is_empty() {
+            "-".to_string()
+        } else {
+            required.join(", ")
+        };
+        out.push_str(&format!(
+            "| `{}` | {kind} | {command} | `{}` | {required} |\n",
+            tool.tool_name,
+            tool.fidelity.as_str()
+        ));
+    }
+    out
 }
 
 /// The `acos_capabilities` tool descriptor.
@@ -439,8 +507,8 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 7 session tools.
-        assert_eq!(infos.len(), 22);
+        // 13 protocol tools + acos_capabilities + acos_help + 8 session tools.
+        assert_eq!(infos.len(), 23);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(names.contains(descriptor.name.as_str()), "{}", descriptor.name);

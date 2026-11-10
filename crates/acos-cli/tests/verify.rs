@@ -23,6 +23,18 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+/// The gitignored fixture APK the verify tests need; fail loudly (F-11) with
+/// the exact build command rather than a confusing downstream error.
+fn require_hello_views_apk() -> PathBuf {
+    let apk = workspace().join("fixtures/build/apps/hello-views.apk");
+    assert!(
+        apk.exists(),
+        "build fixtures first: `tools/build-apps.sh` (missing {})",
+        apk.display()
+    );
+    apk
+}
+
 fn json_type(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
@@ -77,12 +89,13 @@ fn assert_matches_schema(schema: &Value, value: &Value, path: &str) {
 #[test]
 fn verify_json_matches_the_envelope_schema() {
     let artifacts = scratch("envelope");
+    let apk = require_hello_views_apk();
     let output = Command::cargo_bin("acos")
         .unwrap()
         .arg("verify")
         .arg(workspace().join("scenarios/negative/wrong-text.yaml"))
         .arg("--apk")
-        .arg(workspace().join("fixtures/build/apps/hello-views.apk"))
+        .arg(&apk)
         .arg("--reference")
         .arg(workspace().join("fixtures/reference/hello-views/art-api34-x86_64"))
         .arg("--artifacts")
@@ -123,6 +136,7 @@ fn verify_json_matches_the_envelope_schema() {
 #[test]
 fn verify_without_apk_uses_the_scenario_app() {
     let artifacts = scratch("no-apk");
+    let _ = require_hello_views_apk();
     let output = Command::cargo_bin("acos")
         .unwrap()
         .current_dir(workspace())

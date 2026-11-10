@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use acos_runtime::view_tree::ViewNode;
+use acos_vm::{CoreLib, VmOptions};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -533,6 +534,48 @@ fn adb(serial: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// A loud, structured skip when the phone cannot supply a UI capture (busy or
+/// out of memory). It still persists the screenshot as a reference so a later
+/// run has *some* evidence, but never claims a comparison.
+#[allow(clippy::too_many_arguments)]
+fn skip_report(
+    serial: &str,
+    package: &str,
+    app: &str,
+    output_dir: &Path,
+    reference_dir: &Path,
+    screenshot: &[u8],
+    message: &str,
+) -> Value {
+    let mut saved: Vec<String> = Vec::new();
+    if !screenshot.is_empty() {
+        let _ = std::fs::create_dir_all(reference_dir);
+        let path = reference_dir.join("device-screenshot.png");
+        if std::fs::write(&path, screenshot).is_ok() {
+            saved.push(path.display().to_string());
+        }
+        let _ = std::fs::write(output_dir.join("device-screenshot.png"), screenshot);
+    }
+    json!({
+        "ok": false,
+        "mode": "physical-device",
+        "fidelity": "physical-device",
+        "code": "DEVICE_BUSY",
+        "device": serial,
+        "package": package,
+        "app": app,
+        "message": message,
+        "output": output_dir.display().to_string(),
+        "reference_dir": reference_dir.display().to_string(),
+        "saved": saved,
+        "device_nodes": 0,
+        "acos_nodes": 0,
+        "matches": 0,
+        "identical": false,
+        "differences": [],
+    })
+}
+
 fn live_parity(
     serial: &str,
     apk: Option<&Path>,
@@ -582,6 +625,20 @@ fn live_parity(
     let _ = std::fs::create_dir_all(&output_dir);
 
     adb(serial, &["install", "-r", "-g", &apk.display().to_string()])
+        .or_else(|first| {
+            // A previous capture may have installed the same fixture package
+            // signed with an older throwaway debug keystore. Only our own
+            // `dev.acos.fixtures.*` package can reach here; uninstall it and
+            // retry rather than failing the whole run.
+            if first.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE")
+                || first.contains("signatures do not match")
+            {
+                let _ = adb(serial, &["uninstall", &package]);
+                adb(serial, &["install", "-r", "-g", &apk.display().to_string()])
+            } else {
+                Err(first)
+            }
+        })
         .map_err(|e| ParityFailure::no_device(format!("install failed: {e}"), json!({})))?;
     let _ = adb(serial, &["shell", "am", "force-stop", &package]);
     adb(
@@ -590,26 +647,87 @@ fn live_parity(
     )
     .map_err(|e| ParityFailure::no_device(format!("launch failed: {e}"), json!({})))?;
 
-    // uiautomator dump + screenshot.
-    let remote_xml = "/sdcard/acos_parity_window_dump.xml";
-    let _ = adb(serial, &["shell", "uiautomator", "dump", remote_xml]);
-    let xml = adb(serial, &["exec-out", "cat", remote_xml]).map_err(|e| {
-        ParityFailure::no_device(format!("uiautomator dump read failed: {e}"), json!({}))
-    })?;
-    std::fs::write(output_dir.join("device-ui.xml"), &xml).ok();
-    if let Ok(png) = Command::new("adb")
+    // Phone capture: screenshot first (screencap survives device memory
+    // pressure better than uiautomator), then the uiautomator XML.
+    let screenshot: Vec<u8> = Command::new("adb")
         .args(["-s", serial, "exec-out", "screencap", "-p"])
         .output()
-    {
-        if png.status.success() {
-            std::fs::write(output_dir.join("device-screenshot.png"), &png.stdout).ok();
-        }
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| output.stdout)
+        .unwrap_or_default();
+    if !screenshot.is_empty() {
+        std::fs::write(output_dir.join("device-screenshot.png"), &screenshot).ok();
     }
+
+    let app = apk
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| package.clone());
+    let reference_dir = repo_root().join("fixtures/reference-device").join(&app);
+
+    let remote_xml = "/sdcard/acos_parity_window_dump.xml";
+    let _ = adb(serial, &["shell", "rm", "-f", remote_xml]);
+    // `uiautomator dump` can be SIGKILLed by the device's low-memory killer
+    // *after* it has written the file, so the exit status is not trustworthy;
+    // read the file and require a real `<hierarchy>` before using it.
+    let _ = adb(serial, &["shell", "uiautomator", "dump", remote_xml]);
+    let xml = adb(serial, &["exec-out", "cat", remote_xml])
+        .ok()
+        .filter(|text| text.contains("<hierarchy"))
+        .unwrap_or_default();
+
+    if xml.is_empty() {
+        // uiautomator was killed (commonly OOM on a memory-pressured device)
+        // or produced no hierarchy. Do not fabricate a capture: uninstall, keep
+        // the screenshot, and report a loud structured skip.
+        if !args.keep {
+            let _ = adb(serial, &["uninstall", &package]);
+        }
+        return Ok(skip_report(
+            serial,
+            &package,
+            &app,
+            &output_dir,
+            &reference_dir,
+            &screenshot,
+            "uiautomator dump produced no <hierarchy>; the device may be out of memory \
+             (check `adb shell free -m`) or busy; parity skipped (no false pass)",
+        ));
+    }
+
+    std::fs::write(output_dir.join("device-ui.xml"), &xml).ok();
     let device_nodes = parse_uiautomator_xml(&xml).map_err(ParityFailure::usage)?;
 
-    // ACOS side: boot in-process and walk the live View hierarchy.
-    let mut runtime = acos_runtime::Runtime::standard()
-        .map_err(|e| ParityFailure::no_device(format!("cannot boot ACOS runtime: {e}"), json!({})))?;
+    // Persist the phone capture as a checked-in reference for this fixture app
+    // (`fixtures/reference-device/<app>/`). Only the small XML + PNG are kept.
+    let mut saved: Vec<String> = Vec::new();
+    let _ = std::fs::create_dir_all(&reference_dir);
+    for (name, bytes) in [
+        ("device-ui.xml", xml.as_bytes().to_vec()),
+        ("device-screenshot.png", screenshot.clone()),
+    ] {
+        if bytes.is_empty() {
+            continue;
+        }
+        let path = reference_dir.join(name);
+        if std::fs::write(&path, &bytes).is_ok() {
+            saved.push(path.display().to_string());
+        }
+    }
+
+    // ACOS side: boot with the **real** boot classpath (the same options the
+    // session launcher uses) and walk the live View hierarchy. The bootstrap
+    // corelib cannot even find `android.os.Looper`, so `Runtime::standard()`
+    // would fail before reaching the app.
+    let options = VmOptions {
+        corelib: CoreLib::Real,
+        ..VmOptions::default()
+    };
+    let mut runtime = acos_runtime::Runtime::standard_with(options).map_err(|e| {
+        ParityFailure::no_device(format!("cannot boot ACOS runtime: {e}"), json!({}))
+    })?;
+    let _ = runtime.register_app_natives(&apk);
     let launch = runtime.boot_and_run_lifecycle(&apk);
     let acos_nodes = match acos_runtime::view_tree::walk(runtime.vm_mut(), 2000) {
         Ok(tree) => {
@@ -624,24 +742,46 @@ fn live_parity(
             if !args.keep {
                 let _ = adb(serial, &["uninstall", &package]);
             }
-            return Err(ParityFailure::no_device(
-                format!(
-                    "ACOS could not walk its own View hierarchy ({}): {}; launch app_created={} \
-                     transaction_delivered={} looper_quit={}",
-                    e.reason(),
-                    e.message(),
-                    launch.app_created,
-                    launch.transaction_delivered,
-                    launch.looper_quit,
-                ),
-                json!({
-                    "app_created": launch.app_created,
-                    "transaction_delivered": launch.transaction_delivered,
-                    "looper_quit": launch.looper_quit,
-                    "launch_error": launch.error,
-                    "package": package,
-                }),
-            ));
+            // ACOS cannot produce its side yet (today it stops in the launch
+            // ladder, e.g. at `VectorDrawable`). Emit a structured
+            // `acos_blocked_at` report that keeps the phone capture and lists
+            // every device node as `missing_in_acos`; never an empty pass and
+            // never a bare `NEEDS_REAL_DEVICE` that discards the capture.
+            let partial = compare(&device_nodes, &[], opts);
+            let mut value = serde_json::to_value(&partial).unwrap_or(Value::Null);
+            if let Value::Object(ref mut map) = value {
+                map.insert("ok".to_string(), json!(false));
+                map.insert("mode".to_string(), json!("physical-device"));
+                map.insert("fidelity".to_string(), json!("physical-device"));
+                map.insert("code".to_string(), json!("ACOS_BLOCKED"));
+                map.insert("device".to_string(), json!(serial));
+                map.insert("package".to_string(), json!(package));
+                map.insert("app".to_string(), json!(app));
+                map.insert("output".to_string(), json!(output_dir.display().to_string()));
+                map.insert("reference_dir".to_string(), json!(reference_dir.display().to_string()));
+                map.insert("saved".to_string(), json!(saved));
+                map.insert(
+                    "message".to_string(),
+                    json!(format!(
+                        "ACOS could not walk its View hierarchy ({}): {}; the phone capture was \
+                         saved as a reference and no comparison is claimed",
+                        e.reason(),
+                        e.message(),
+                    )),
+                );
+                map.insert(
+                    "acos_blocked_at".to_string(),
+                    json!({
+                        "reason": e.reason(),
+                        "message": e.message(),
+                        "app_created": launch.app_created,
+                        "transaction_delivered": launch.transaction_delivered,
+                        "looper_quit": launch.looper_quit,
+                        "launch_error": launch.error,
+                    }),
+                );
+            }
+            return Ok(value);
         }
     };
 
@@ -658,7 +798,10 @@ fn live_parity(
         map.insert("fidelity".to_string(), json!("physical-device"));
         map.insert("device".to_string(), json!(serial));
         map.insert("package".to_string(), json!(package));
+        map.insert("app".to_string(), json!(app));
         map.insert("output".to_string(), json!(output_dir.display().to_string()));
+        map.insert("reference_dir".to_string(), json!(reference_dir.display().to_string()));
+        map.insert("saved".to_string(), json!(saved));
     }
     Ok(value)
 }
@@ -729,6 +872,25 @@ mod tests {
             "bounds differences must be labelled density"
         );
         assert!(report.matches > 0);
+    }
+
+    /// A busy phone skip is structured, not a pass.
+    #[test]
+    fn busy_skip_is_structured_not_a_pass() {
+        let dir = std::env::temp_dir().join("acos-parity-skip-test");
+        let report = skip_report(
+            "SERIAL",
+            "dev.acos.fixtures.counter",
+            "counter",
+            &dir,
+            &dir,
+            &[],
+            "the device is busy",
+        );
+        assert_eq!(report["ok"], false);
+        assert_eq!(report["code"], "DEVICE_BUSY");
+        assert_eq!(report["identical"], false);
+        assert!(report["message"].as_str().unwrap().contains("busy"));
     }
 
     /// A one-pixel change is caught; the same tree compares identical.
