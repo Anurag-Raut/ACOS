@@ -149,6 +149,11 @@ struct Proxy {
     frame_commit_callback: u32,
 }
 
+/// `nInitDisplayInfo` arguments: width, height, refresh Hz, color data space,
+/// app vsync offset ns, presentation deadline ns, fp16 HDR, mixed color
+/// spaces.
+type DisplayInfo = (i32, i32, f32, i32, i64, i64, bool, bool);
+
 struct HwuiState {
     proxies: HandleTable<Proxy>,
     next_window: u64,
@@ -163,6 +168,9 @@ struct HwuiState {
     /// `nSetDisplayDensityDpi`). Recorded, not silently dropped.
     high_contrast_text: bool,
     display_density_dpi: i32,
+    /// `nInitDisplayInfo` values, recorded because ACOS's software renderer
+    /// does not consume them.
+    display_info: Option<DisplayInfo>,
 }
 
 impl HwuiState {
@@ -175,6 +183,7 @@ impl HwuiState {
             skia_disk_cache: None,
             high_contrast_text: false,
             display_density_dpi: 0,
+            display_info: None,
         }
     }
 }
@@ -203,6 +212,12 @@ fn proxy(vm: &Vm, ctx: NativeCtx) -> VmResult<Handle> {
 /// Register the `HardwareRenderer` natives.
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     const H: &str = "Landroid/graphics/HardwareRenderer;";
+    // API-34 `ActivityThread.handleLaunchActivity` calls the static native
+    // `HardwareRenderer.preload()` before `performLaunchActivity`. On a device
+    // this warms the HWUI/Skia shader and resource caches; ACOS has no native
+    // shader compiler, so there is nothing to warm and the call is a declared
+    // no-op (the same status as `setupShadersDiskCache` below).
+    vm.register_native(H, "preload", "()V", h_noop);
     vm.register_native(H, "nCreateRootRenderNode", "()J", h_create_root);
     vm.register_native(H, "nCreateProxy", "(ZJ)J", h_create_proxy);
     vm.register_native(H, "nDeleteProxy", "(J)V", h_delete_proxy);
@@ -251,6 +266,35 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetFrameCommitCallback", "(JLandroid/graphics/HardwareRenderer$FrameCommitCallback;)V", h_set_frame_commit_callback);
     vm.register_native(H, "nAddObserver", "(JJ)V", h_noop);
     vm.register_native(H, "nRemoveObserver", "(JJ)V", h_noop);
+    // --- API-34 natives ACOS's software renderer does not consume ----------
+    // These are declared HWUI operations (hardware bitmap layers, texture
+    // layers, profile dumps, WebView surface callbacks, property overrides).
+    // ACOS rasterises a RenderNode display list in software and has no GPU
+    // layer/pipeline, so they are declared no-ops/defaults rather than silently
+    // pretending the hardware path ran. The display-info registration is
+    // recorded so the declared divergence is inspectable.
+    vm.register_native(H, "nInitDisplayInfo", "(IIFIJJZZ)V", h_init_display_info);
+    vm.register_native(H, "isWebViewOverlaysEnabled", "()Z", h_ret_false);
+    vm.register_native(H, "disableVsync", "()V", h_noop);
+    vm.register_native(H, "nAddRenderNode", "(JJZ)V", h_noop);
+    vm.register_native(H, "nRemoveRenderNode", "(JJ)V", h_noop);
+    vm.register_native(H, "nDrawRenderNode", "(JJ)V", h_noop);
+    vm.register_native(H, "nBuildLayer", "(JJ)V", h_noop);
+    vm.register_native(H, "nCancelLayerUpdate", "(JJ)V", h_noop);
+    vm.register_native(H, "nPushLayerUpdate", "(JJ)V", h_noop);
+    vm.register_native(H, "nCreateTextureLayer", "(J)J", h_ret_zero_long);
+    vm.register_native(H, "nDetachSurfaceTexture", "(JJ)V", h_noop);
+    vm.register_native(H, "nCreateHardwareBitmap", "(JII)Landroid/graphics/Bitmap;", h_ret_null);
+    vm.register_native(H, "nCopyLayerInto", "(JJJ)Z", h_ret_false);
+    vm.register_native(H, "nCopySurfaceInto", "(Landroid/view/Surface;IIIILandroid/graphics/HardwareRenderer$CopyRequest;)V", h_noop);
+    vm.register_native(H, "nDestroyHardwareResources", "(J)V", h_noop);
+    vm.register_native(H, "nDumpGlobalProfileInfo", "(Ljava/io/FileDescriptor;I)V", h_noop);
+    vm.register_native(H, "nDumpProfileInfo", "(JLjava/io/FileDescriptor;I)V", h_noop);
+    vm.register_native(H, "nOverrideProperty", "(Ljava/lang/String;Ljava/lang/String;)V", h_noop);
+    vm.register_native(H, "nRegisterVectorDrawableAnimator", "(JJ)V", h_noop);
+    vm.register_native(H, "nSetASurfaceTransactionCallback", "(JLandroid/graphics/HardwareRenderer$ASurfaceTransactionCallback;)V", h_noop);
+    vm.register_native(H, "nSetPictureCaptureCallback", "(JLandroid/graphics/HardwareRenderer$PictureCapturedCallback;)V", h_noop);
+    vm.register_native(H, "nSetPrepareSurfaceControlForWebviewCallback", "(JLandroid/graphics/HardwareRenderer$PrepareSurfaceControlForWebviewCallback;)V", h_noop);
     // `setupShadersDiskCache` is a static native (API 34). On a device it
     // points the HWUI/Skia shader caches at the two paths; ACOS has no native
     // shader compiler or cache, so the paths are recorded and the call is a
@@ -615,6 +659,31 @@ fn h_set_target_sdr_hdr_ratio(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+fn h_init_display_info(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let info = (
+        vm.arg_i32(ctx, 0),
+        vm.arg_i32(ctx, 1),
+        vm.arg_f32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i64(ctx, 4),
+        vm.arg_i64(ctx, 5),
+        vm.arg_bool(ctx, 6),
+        vm.arg_bool(ctx, 7),
+    );
+    HWUI.with(|s| s.borrow_mut().display_info = Some(info));
+    Ok(())
+}
+
+fn h_ret_zero_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i64(ctx, 0);
+    Ok(())
+}
+
+fn h_ret_null(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_ref(ctx, crate::heap::NULL);
+    Ok(())
+}
+
 fn h_set_high_contrast_text(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let v = vm.arg_bool(ctx, 0);
     HWUI.with(|s| s.borrow_mut().high_contrast_text = v);
@@ -636,6 +705,9 @@ pub fn recorded_renderer_config() -> Vec<(String, String)> {
             ("high_contrast_text".to_string(), s.high_contrast_text.to_string()),
             ("display_density_dpi".to_string(), s.display_density_dpi.to_string()),
         ];
+        if let Some(d) = s.display_info {
+            out.push(("display_info".to_string(), format!("{d:?}")));
+        }
         for (h, p) in s.proxies.iter() {
             let id = format!("{:#x}", h.to_jlong());
             if let Some(v) = p.opaque {

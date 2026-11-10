@@ -115,6 +115,10 @@ pub struct ThreadRT {
     pub wake_at: Option<Instant>,
     /// The object this thread is blocked in `Object.wait` on, if any.
     pub wait_monitor: Option<Handle>,
+    /// Re-entry count of the monitor this thread released when it entered
+    /// `Object.wait`; restored when it is notified and re-acquires the
+    /// monitor. `0` when the thread is not waiting on a monitor.
+    pub wait_saved_count: u32,
     /// Reusable register buffers for popped frames. Java calls happen in tight
     /// loops in real framework code; allocating a fresh `regs`/`refs` pair for
     /// every call dominated invoke cost. The pool is per-thread and capped.
@@ -135,6 +139,7 @@ impl ThreadRT {
             joiners: Vec::new(),
             wake_at: None,
             wait_monitor: None,
+            wait_saved_count: 0,
             frame_pool: Vec::new(),
             park_permit: false,
         }

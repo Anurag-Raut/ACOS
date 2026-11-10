@@ -364,11 +364,28 @@ fn pick_runnable(vm: &mut Vm) -> bool {
         match vm.threads[i].status {
             ThreadStatus::Sleeping => {
                 if vm.threads[i].wake_at.map(|w| w <= now).unwrap_or(true) {
-                    vm.threads[i].status = ThreadStatus::Runnable;
+                    // A timed `Object.wait` that timed out must also re-acquire
+                    // the monitor it released; park it monitor-blocked.
+                    match vm.threads[i].wait_monitor {
+                        Some(h) => {
+                            vm.threads[i].status = ThreadStatus::BlockedMonitor(h);
+                        }
+                        None => {
+                            vm.threads[i].status = ThreadStatus::Runnable;
+                        }
+                    }
                 }
             }
             ThreadStatus::BlockedMonitor(h) => {
                 if monitor_owner(vm, h).map(|o| o == i).unwrap_or(true) {
+                    // If this thread was woken from `Object.wait`, restore the
+                    // monitor ownership (and re-entry count) it gave up.
+                    if vm.threads[i].wait_monitor == Some(h) {
+                        let saved = vm.threads[i].wait_saved_count.max(1);
+                        vm.monitors.insert(h, (i, saved));
+                        vm.threads[i].wait_saved_count = 0;
+                        vm.threads[i].wait_monitor = None;
+                    }
                     vm.threads[i].status = ThreadStatus::Runnable;
                 }
             }

@@ -98,7 +98,9 @@ fn launcher_activity(apk_path: &Path) -> Result<PmsActivityInfo, ClientTransacti
         name: component.name.clone(),
         package_name: manifest.package.clone(),
         launch_mode,
-        flags: 0,
+        // ActivityInfo.FLAG_HARDWARE_ACCELERATED: the API default for an app
+        // with targetSdk >= 14 (the manifest carries no `android:hardwareAccelerated`).
+        flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED
         theme: manifest.application.theme.unwrap_or(0) as i32,
         exported: component.exported.unwrap_or(true),
         parent_activity_name: String::new(),

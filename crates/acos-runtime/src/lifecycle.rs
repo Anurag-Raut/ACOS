@@ -270,10 +270,36 @@ impl Runtime {
         let __t = std::time::Instant::now();
         let tx = deliver_launch_transaction(self.vm_mut(), app_thread, &app, thread, apk_path)?;
         report.transaction_scheduled = true;
-        run_phase(self.vm_mut())?;
+        // A framework exception here (for example the API-34 traversal's
+        // `KeyCharacterMap.load(-1)` on a device with no input service) must
+        // not prevent the explicit frame drive below, so keep the error and
+        // return it after the frame has been attempted.
+        let transaction_error = run_phase(self.vm_mut()).err();
         report.transaction_delivered = activity_created(self.vm_mut(), thread, tx.token);
         acos_vm::profile::add_stage(
             "client_transaction",
+            __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+        );
+
+        // --- first frame -----------------------------------------------------
+        // ACOS has no RenderThread and the framework's vsync-driven
+        // `performDraw` does not reach `ThreadedRenderer.draw` in this build
+        // (the traversal stops after `relayoutWindow`; see M2_LOG §W133-A).
+        // Drive the *real* `ThreadedRenderer.draw(view, attachInfo, vr)` once
+        // synchronously: it records the DecorView's display list through the
+        // `gfx_*` RenderNode natives and submits the rasterised frame through
+        // `nSyncAndDrawFrame` into the `FrameStore`. This is the same call the
+        // framework makes from `ViewRootImpl.draw`, only invoked by ACOS
+        // instead of the (absent) render thread.
+        let __t = std::time::Instant::now();
+        match self.render_frame_now() {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("render_frame_now: {e}");
+            }
+        }
+        acos_vm::profile::add_stage(
+            "first_frame",
             __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
         );
 
@@ -286,7 +312,117 @@ impl Runtime {
             "shutdown",
             __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
         );
+        if let Some(e) = transaction_error {
+            return Err(e);
+        }
         Ok(app_thread)
+    }
+
+    /// Re-open the main looper, let pending input/vsync work run, and publish a
+    /// fresh frame. This is the interaction pump: after `acos launch`, the
+    /// bounded run quits the looper; an injected `MotionEvent` sits in the
+    /// window `InputChannel` until a `nativePollOnce` on the main looper
+    /// dispatches it. `pump` clears the quit flag, re-enters `Looper.loop()`
+    /// when the main thread is not already looping, runs the scheduler, and
+    /// draws the resulting tree.
+    pub fn pump(&mut self) -> Result<(), LifecycleError> {
+        set_main_looper_quitting(self.vm_mut(), 0)?;
+        let in_loop = main_thread_in_looper(self.vm());
+        if !in_loop {
+            self.vm_mut()
+                .push_static_call("android.os.Looper", "loop", "()V", &[])?;
+            // The bounded launch run let `Looper.loop()` return, which leaves
+            // the main green thread finished; re-arm it so the scheduler runs
+            // the re-pushed loop (and its `nativePollOnce` input drain).
+            if let Some(t) = self.vm_mut().threads.first_mut() {
+                t.status = ThreadStatus::Runnable;
+            }
+        }
+        run_phase(self.vm_mut())?;
+        self.render_frame_now()?;
+        Ok(())
+    }
+
+    /// Drive the real `ThreadedRenderer.draw` for every live `ViewRootImpl`.
+    ///
+    /// This is the synchronous replacement for the framework's
+    /// RenderThread/vsync draw: it runs `View.updateDisplayListIfDirty` ->
+    /// `RenderNode.beginRecording`/`endRecording` -> `nSyncAndDrawFrame` through
+    /// the real framework bytecode, so a `FrameStore` frame is published from
+    /// the app's own `View.draw` and not from synthetic geometry.
+    ///
+    /// Returns `Ok(())` after attempting every root; a root without a live
+    /// hardware renderer is skipped.
+    pub fn render_frame_now(&mut self) -> Result<(), LifecycleError> {
+        let vm = self.vm_mut();
+        let global = match vm.call_static(
+            "android.view.WindowManagerGlobal",
+            "getInstance",
+            "()Landroid/view/WindowManagerGlobal;",
+            &[],
+        ) {
+            Ok(JavaValue::Object(h)) if h != NULL => h,
+            _ => return Ok(()),
+        };
+        vm.pending_exception = NULL;
+        let roots = match vm.call_method(global, "getRootViews", "()Ljava/util/ArrayList;", &[]) {
+            Ok(JavaValue::Object(h)) if h != NULL => h,
+            _ => {
+                vm.pending_exception = NULL;
+                match vm.get_field(global, "mRoots") {
+                    Ok(JavaValue::Object(h)) if h != NULL => h,
+                    _ => return Ok(()),
+                }
+            }
+        };
+        let count = match vm.call_method(roots, "size", "()I", &[]) {
+            Ok(JavaValue::Int(n)) if n > 0 => n as usize,
+            _ => {
+                vm.pending_exception = NULL;
+                return Ok(());
+            }
+        };
+        for i in 0..count {
+            let root = match vm.call_method(
+                roots,
+                "get",
+                "(I)Ljava/lang/Object;",
+                &[JavaValue::Int(i as i32)],
+            ) {
+                Ok(JavaValue::Object(h)) if h != NULL => h,
+                _ => continue,
+            };
+            let view = match vm.get_field(root, "mView") {
+                Ok(JavaValue::Object(h)) if h != NULL => h,
+                _ => continue,
+            };
+            let attach = match vm.get_field(root, "mAttachInfo") {
+                Ok(JavaValue::Object(h)) if h != NULL => h,
+                _ => continue,
+            };
+            let renderer = match vm.get_field(attach, "mThreadedRenderer") {
+                Ok(JavaValue::Object(h)) if h != NULL => h,
+                _ => continue,
+            };
+            // Same call `ViewRootImpl.draw` makes: record the DecorView display
+            // list and synchronously sync+draw it through the frame seam.
+            let r = vm.call_method(
+                renderer,
+                "draw",
+                "(Landroid/view/View;Landroid/view/View$AttachInfo;Landroid/view/ThreadedRenderer$DrawCallbacks;)V",
+                &[
+                    JavaValue::Object(view),
+                    JavaValue::Object(attach),
+                    JavaValue::Object(root),
+                ],
+            );
+            if let Err(e) = r {
+                vm.pending_exception = NULL;
+                eprintln!("render_frame_now: ThreadedRenderer.draw failed: {e}");
+            }
+        }
+        vm.pending_exception = NULL;
+        Ok(())
     }
 }
 
@@ -449,6 +585,41 @@ fn main_thread_parked(vm: &Vm) -> bool {
     vm.threads
         .first()
         .is_some_and(|t| t.status == ThreadStatus::Parked)
+}
+
+/// True when the main green thread currently has an `android.os.Looper.loop`
+/// frame on its stack (i.e. it is parked inside the loop rather than returned).
+fn main_thread_in_looper(vm: &Vm) -> bool {
+    vm.threads.first().is_some_and(|t| {
+        t.frames.iter().any(|f| {
+            let m = &vm.methods[f.method as usize];
+            vm.class_desc(m.class) == "Landroid/os/Looper;" && m.name == "loop"
+        })
+    })
+}
+
+/// Set or clear the main `MessageQueue.mQuitting` flag and wake the looper.
+fn set_main_looper_quitting(vm: &mut Vm, quitting: u32) -> Result<(), LifecycleError> {
+    let looper = match vm.call_static(
+        "android.os.Looper",
+        "myLooper",
+        "()Landroid/os/Looper;",
+        &[],
+    )? {
+        JavaValue::Object(h) if h != NULL => h,
+        _ => return Ok(()),
+    };
+    let queue = match vm.get_field(looper, "mQueue") {
+        Ok(JavaValue::Object(h)) if h != NULL => h,
+        _ => return Ok(()),
+    };
+    vm.set_instance_field_by_name(queue, "mQuitting", quitting);
+    let ptr = match vm.get_field(queue, "mPtr") {
+        Ok(JavaValue::Long(p)) => p,
+        _ => 0,
+    };
+    let _ = vm.call_method(queue, "nativeWake", "(J)V", &[JavaValue::Long(ptr)]);
+    Ok(())
 }
 
 /// Ask the current main looper to quit so the bounded run terminates.

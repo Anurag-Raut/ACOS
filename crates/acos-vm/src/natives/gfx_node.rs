@@ -44,6 +44,7 @@ struct NodeExtra {
     projection_receiver: bool,
     project_backwards: bool,
     animators: Vec<i64>,
+    stretch: Option<(f32, f32, f32, f32)>,
 }
 
 impl Default for NodeExtra {
@@ -62,6 +63,7 @@ impl Default for NodeExtra {
             projection_receiver: false,
             project_backwards: false,
             animators: Vec::new(),
+            stretch: None,
         }
     }
 }
@@ -173,6 +175,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(N, "nSetOutlineEmpty", "(J)Z", n_outline_none);
     vm.register_native(N, "nSetOutlineNone", "(J)Z", n_outline_none);
     vm.register_native(N, "nSetRevealClip", "(JZFFF)Z", n_set_reveal);
+    // Stretch effect (API 34). ACOS records the coefficients so the get/set
+    // round-trips exactly, but the software rasteriser does not apply the
+    // GPU stretch shader (same declared divergence as the other unmodelled
+    // RenderNode properties).
+    vm.register_native(N, "nStretch", "(JFFFF)Z", n_set_stretch);
+    vm.register_native(N, "nClearStretch", "(J)Z", n_clear_stretch);
 
     // Elevation / shadows.
     vm.register_native(N, "nSetElevation", "(JF)Z", n_set_elevation);
@@ -262,8 +270,21 @@ fn n_unique_id(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn n_is_valid(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    node(vm, ctx)?;
-    vm.ret_bool(ctx, true);
+    // API-34 `RenderNode.hasDisplayList()` and `RenderNode.isValid()` both
+    // bottom out in `nIsValid`. In HWUI it is true only once a display list
+    // has actually been recorded: `ThreadedRenderer.updateRootDisplayList`
+    // records the root only when `!mRootNode.hasDisplayList()`, and
+    // `View.updateDisplayListIfDirty` re-records when `!renderNode.isValid()`.
+    // Returning true for a fresh, never-recorded node silently made the root
+    // display list empty (every frame black). A stale handle is `false`, not an
+    // error, because callers use the boolean as a predicate.
+    let j = vm.arg_i64(ctx, 0);
+    let valid = with_ctx(|c| {
+        c.render_nodes
+            .get(rh(j))
+            .is_some_and(|n| !n.display_list.is_empty())
+    });
+    vm.ret_bool(ctx, valid);
     Ok(())
 }
 
@@ -550,6 +571,26 @@ fn n_outline_none(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     vm.ret_bool(ctx, true);
     Ok(())
 }
+fn n_set_stretch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = node(vm, ctx)?;
+    let s = (
+        vm.arg_f32(ctx, 1),
+        vm.arg_f32(ctx, 2),
+        vm.arg_f32(ctx, 3),
+        vm.arg_f32(ctx, 4),
+    );
+    extra(h, |e| e.stretch = Some(s));
+    vm.ret_bool(ctx, true);
+    Ok(())
+}
+
+fn n_clear_stretch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = node(vm, ctx)?;
+    extra(h, |e| e.stretch = None);
+    vm.ret_bool(ctx, true);
+    Ok(())
+}
+
 fn n_set_reveal(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let on = vm.arg_bool(ctx, 1);

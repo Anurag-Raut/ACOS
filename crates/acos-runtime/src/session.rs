@@ -156,6 +156,10 @@ pub struct InputReport {
     /// For `text`, which path edited the field (`input-connection` or
     /// `key-events`); `None` for every other action.
     pub path: Option<String>,
+    /// Whether the live framework state visibly changed after the action ran
+    /// (the view tree's text/visibility summary differs from before). `false`
+    /// is honest: the event was accepted but nothing was observed to change.
+    pub state_changed: bool,
 }
 
 /// One guest log line.
@@ -577,10 +581,7 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                 let _ = reply.send(do_observe_tree(&mut state, max_nodes));
             }
             Cmd::Tap { x, y, reply } => {
-                let _ = reply.send(finish_input(
-                    "tap",
-                    input_java::inject_tap(x, y).map_err(input_error),
-                ));
+                let _ = reply.send(do_tap(&mut state, x, y));
             }
             Cmd::TapText { label, reply } => {
                 let _ = reply.send(do_tap_text(&mut state, &label));
@@ -674,6 +675,7 @@ fn finish_input(
             accepted: true,
             ack_seqs,
             path: None,
+            state_changed: false,
         }),
         Err(e) => Err(e),
     }
@@ -701,6 +703,7 @@ fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionEr
             accepted: true,
             ack_seqs: report.ack_seqs,
             path: Some(report.path.as_str().to_string()),
+            state_changed: true,
         }),
         Err(e) => Err(text_error(&e, stage)),
     }
@@ -846,7 +849,57 @@ fn do_tap_text(state: &mut WorkerState, label: &str) -> Result<InputReport, Sess
     }
     let x = (left + right) as f32 / 2.0;
     let y = (top + bottom) as f32 / 2.0;
-    finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))
+    let before = tree_state_summary(&tree);
+    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    Ok(input_after_pump(state, report, before))
+}
+
+/// Inject a coordinate tap, pump the framework, and report whether the live
+/// tree visibly changed (the honest `state_changed` value).
+fn do_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, SessionError> {
+    let before = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES)
+        .map(|t| tree_state_summary(&t))
+        .ok();
+    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    Ok(match before {
+        Some(before) => input_after_pump(state, report, before),
+        None => report,
+    })
+}
+
+/// Run the interaction pump and set `state_changed` from a pre/post tree diff.
+fn input_after_pump(state: &mut WorkerState, mut report: InputReport, before: String) -> InputReport {
+    if let Some(rt) = state.runtime.as_mut() {
+        if let Err(e) = rt.pump() {
+            eprintln!("acos-session: interaction pump failed: {e}");
+        }
+    }
+    if let Ok(after) = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES) {
+        report.state_changed = tree_state_summary(&after) != before;
+    }
+    report
+}
+
+/// A stable summary of a view tree used to detect a visible state change.
+fn tree_state_summary(tree: &ViewTree) -> String {
+    fn walk(node: &ViewNode, out: &mut String) {
+        out.push_str(&node.class);
+        out.push('|');
+        out.push_str(&node.text);
+        out.push('|');
+        out.push_str(&format!("{:?}", node.bounds));
+        out.push('|');
+        out.push_str(if node.visible { "1" } else { "0" });
+        out.push('\n');
+        for child in &node.children {
+            walk(child, out);
+        }
+    }
+    let mut out = String::new();
+    for node in &tree.nodes {
+        walk(node, &mut out);
+    }
+    out
 }
 
 /// Depth-first search for the first node whose `text` equals `label`.
@@ -1137,10 +1190,12 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         });
     }
 
-    let reached_stage = first_fail
-        .and_then(|idx| idx.checked_sub(1))
-        .map(|idx| STAGES[idx])
-        .unwrap_or(STAGES[0]);
+    let reached_stage = match first_fail {
+        Some(0) => STAGES[0],
+        Some(idx) => STAGES[idx - 1],
+        // Every rung completed: the run reached the last stage (`first_frame`).
+        None => *STAGES.last().expect("non-empty stage ladder"),
+    };
 
     state.runtime = Some(runtime);
     state.launched = true;

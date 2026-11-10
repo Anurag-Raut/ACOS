@@ -397,6 +397,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         ("nativeSetDestinationFrame", "(JJIIII)V", native_record_destination_frame),
         ("nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V", native_record_geometry),
         ("nativeSetMetadata", "(JJILandroid/os/Parcel;)V", native_record_metadata),
+        // `SurfaceControl.nativeSanitize(long, int, int)` clamps a layer's
+        // buffer size to the display bounds for an ImageReader surface. ACOS's
+        // software compositor has no calibration/sanitisation pass, so the
+        // call is recorded (declared no-op) rather than silently ignored.
+        ("nativeSanitize", "(JII)V", native_record_sanitize),
     ] {
         vm.register_native(sc, name, sig, f);
     }
@@ -1452,6 +1457,13 @@ fn record(vm: &mut Vm, ctx: NativeCtx, tag: u16, args: [i64; 4]) -> VmResult<()>
 
 fn layer_arg(vm: &Vm, ctx: NativeCtx) -> i64 {
     vm.arg_i64(ctx, 1)
+}
+
+fn native_record_sanitize(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let l = layer_arg(vm, ctx);
+    let w = vm.arg_i32(ctx, 1) as i64;
+    let h = vm.arg_i32(ctx, 2) as i64;
+    record(vm, ctx, 101, [l, w, h, 0])
 }
 
 fn native_record_trusted_overlay(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

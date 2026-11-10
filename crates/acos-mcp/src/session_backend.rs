@@ -816,7 +816,7 @@ fn input_envelope(
             "session_id": session_id,
             "action": kind,
             "accepted": report.accepted,
-            "state_changed": report.path.is_some(),
+            "state_changed": report.state_changed,
             "input_ack_seq": report.ack_seqs.last().copied(),
             "text_path": report.path,
         }))

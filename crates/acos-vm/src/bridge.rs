@@ -140,7 +140,13 @@ pub fn finish_thread(vm: &mut Vm, t: usize) {
     let joiners = vm.threads[t].joiners.clone();
     for j in joiners {
         if vm.threads.get(j).is_some() && vm.threads[j].status == ThreadStatus::Waiting {
-            vm.threads[j].status = ThreadStatus::Runnable;
+            // A `Thread.join()` waiter released the thread monitor in `wait`;
+            // mark it monitor-blocked so the monitor is re-acquired before it
+            // resumes, then the scheduler runs it.
+            vm.threads[j].status = match vm.threads[j].wait_monitor {
+                Some(h) => ThreadStatus::BlockedMonitor(h),
+                None => ThreadStatus::Runnable,
+            };
             vm.threads[j].joiners.clear();
         }
     }
@@ -156,8 +162,10 @@ pub fn finish_thread(vm: &mut Vm, t: usize) {
             && vm.threads[j].status == ThreadStatus::Waiting
             && (wm == Some(object) || (lock != NULL && wm == Some(lock)))
         {
-            vm.threads[j].status = ThreadStatus::Runnable;
-            vm.threads[j].wait_monitor = None;
+            vm.threads[j].status = match wm {
+                Some(h) => ThreadStatus::BlockedMonitor(h),
+                None => ThreadStatus::Runnable,
+            };
         }
     }
 }

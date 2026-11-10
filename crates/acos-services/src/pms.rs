@@ -177,7 +177,7 @@ impl AppInfo {
             credential_protected_data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
             native_library_dir,
             uid,
-            flags: 0,
+            flags: 0x2000_0000, // ApplicationInfo.FLAG_HARDWARE_ACCELERATED (API default, targetSdk >= 14)
             private_flags: 0,
             target_sdk: manifest.target_sdk.unwrap_or(34) as i32,
             min_sdk: manifest.min_sdk.unwrap_or(26) as i32,
@@ -758,7 +758,7 @@ impl PmsState {
                 name: acos_apk::manifest::fq_name(&manifest.package, &c.name),
                 package_name: manifest.package.clone(),
                 launch_mode: launch_mode_code(c.launch_mode.as_deref()),
-                flags: 0,
+                flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED (API default, targetSdk >= 14)
                 theme: 0,
                 exported: c.exported.unwrap_or(false),
                 parent_activity_name: String::new(),

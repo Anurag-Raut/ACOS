@@ -62,13 +62,26 @@ fn obj_wait(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ms = vm.arg_i64(ctx, 0);
     let nanos = vm.arg_i32(ctx, 1);
     let t = vm.current_thread;
+    // Java requires the caller to own the monitor and `wait` must release it
+    // for the whole wait so another thread can enter the `synchronized` block
+    // and `notify`. Without the release `HandlerThread.getLooper()` holds its
+    // own monitor while waiting and `HandlerThread.run()` deadlocks on the
+    // `synchronized (this) { mLooper = ...; notifyAll(); }` block (W133-A).
+    let saved = vm
+        .monitors
+        .get(&this)
+        .filter(|(owner, _)| *owner == t)
+        .map(|(_, count)| *count)
+        .unwrap_or(1);
+    vm.monitors.remove(&this);
+    vm.threads[t].wait_saved_count = saved;
+    vm.threads[t].wait_monitor = Some(this);
     if ms > 0 || nanos > 0 {
         let total = ms.max(0) as u64 * 1_000_000 + nanos.max(0) as u64;
         vm.threads[t].status = ThreadStatus::Sleeping;
         vm.threads[t].wake_at = Some(Instant::now() + Duration::from_nanos(total));
     } else {
         vm.threads[t].status = ThreadStatus::Waiting;
-        vm.threads[t].wait_monitor = Some(this);
     }
     Ok(())
 }
@@ -92,8 +105,10 @@ fn wake_waiters(vm: &mut Vm, monitor: Handle, limit: usize) {
             break;
         }
         if t.status == ThreadStatus::Waiting && t.wait_monitor == Some(monitor) {
-            t.status = ThreadStatus::Runnable;
-            t.wait_monitor = None;
+            // The woken thread must re-acquire the monitor it released in
+            // `wait` before it resumes; park it as monitor-blocked and leave
+            // `wait_monitor` set so `pick_runnable` restores the ownership.
+            t.status = ThreadStatus::BlockedMonitor(monitor);
             n += 1;
         }
     }

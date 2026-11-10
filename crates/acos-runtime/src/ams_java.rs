@@ -1116,7 +1116,7 @@ pub fn schedule_launch(
         name: launch.class.clone(),
         package_name: launch.package.clone(),
         launch_mode: 0,
-        flags: 0,
+        flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED
         theme: 0,
         exported: true,
         parent_activity_name: String::new(),
