@@ -240,6 +240,31 @@ impl Default for ImeState {
     }
 }
 
+/// The process-wide IME manager state (one null in-process IME per ACOS user).
+///
+/// The state machines that serve `IInputMethodManager` (this crate) and the
+/// Java marshaller that materialises its replies (`acos-runtime::ime_java`)
+/// must observe the *same* state; a private `Arc` inside the host service would
+/// let `ime_java` answer a `startInput` the manager never recorded.
+static IME: Mutex<Option<Arc<Mutex<ImeState>>>> = Mutex::new(None);
+
+/// The shared IME state, installing a fresh one on first use.
+#[must_use]
+pub fn shared() -> Arc<Mutex<ImeState>> {
+    let mut slot = IME.lock().unwrap();
+    if let Some(state) = slot.as_ref() {
+        return Arc::clone(state);
+    }
+    let state = Arc::new(Mutex::new(ImeState::new()));
+    *slot = Some(Arc::clone(&state));
+    state
+}
+
+/// Replace the shared IME state (test isolation / session reset).
+pub fn install(state: Arc<Mutex<ImeState>>) {
+    *IME.lock().unwrap() = Some(state);
+}
+
 fn unsupported(interface: &str, method: &acos_aidl::MethodInfo) -> ServiceError {
     ServiceError::UnsupportedAndroidApi {
         interface: interface.to_string(),
@@ -318,6 +343,11 @@ impl ServiceObject for ImeService {
                 vec![Value::List(Some(Vec::new()))]
             }
             "getCurMethod" | "getLastInputMethod" => vec![Value::Str8(None)],
+            // The null IME has no subtype; `InputMethodSubtype` is a real
+            // framework parcelable the generic codec can express as `null`.
+            "getCurrentInputMethodSubtype" | "getLastInputMethodSubtype" => {
+                vec![Value::TypedObject(crate::value::Parcelable::Null)]
+            }
             "isInputMethodShown" => vec![Value::Bool(false)],
             _ => return Err(unsupported(interface, method)),
         };

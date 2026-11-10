@@ -48,7 +48,7 @@ registered**: nothing in the trace or the fixture apps call them, so
 | transaction | status | reply / evidence |
 |---|---|---|
 | `addClient(IInputMethodClient, IRemoteInputConnection, int)` | ok | recorded; idempotent per client binder |
-| `startInputOrWindowGainedFocus(...)` | state | `InputBindResult{result=NO_IME(1), method=null, session=null}`; recorded in `ImeState::start_inputs` |
+| `startInputOrWindowGainedFocus(...)` | ok | `InputBindResult` materialised by `acos-runtime::ime_java`: the framework's own `InputBindResult.NO_IME.result` (measured **6** in API 34; not `1`), no `IInputMethodSession`, no channel; recorded in `ImeState::start_inputs` |
 | `showSoftInput` | ok | `false` + `ResultReceiver` answered (no hang) |
 | `hideSoftInput` | ok | `false` |
 | `isImeTraceEnabled` | ok | `false` |
@@ -76,13 +76,13 @@ emits this as JSON for the session evidence.
 
 | transaction | status | reply / evidence |
 |---|---|---|
-| `setPrimaryClip(ClipData, ...)` / `setPrimaryClipAsPackage` | state | stores the **marshalled `ClipData` bytes** + facts read from the real object |
-| `getPrimaryClip` | state | the stored bytes verbatim → `ClipData.CREATOR` reads the same clip |
-| `getPrimaryClipDescription` | state | facts of the stored clip |
+| `setPrimaryClip(ClipData, ...)` / `setPrimaryClipAsPackage` | ok | `acos-runtime::clipboard_java` reads the real `ClipData` through its own `CREATOR`, stores the bytes its own `writeToParcel` emits + facts read from the real object, and delivers `onPrimaryClipChanged` oneway per registered listener |
+| `getPrimaryClip` | ok | the stored bytes verbatim → `ClipData.CREATOR` reads the same clip |
+| `getPrimaryClipDescription` | ok | a real `android.content.ClipDescription` materialised from the stored facts |
 | `hasPrimaryClip` | ok | `true` iff a clip is stored |
 | `hasClipboardText` | ok | facts: item 0 has text |
 | `getPrimaryClipSource` | ok | package that set it |
-| `clearPrimaryClip` | ok | clears |
+| `clearPrimaryClip` | ok | clears and notifies the listeners |
 | `add/removePrimaryClipChangedListener` | ok | listener set, idempotent |
 | `areClipboardAccessNotificationsEnabledForUser` | ok | `false` |
 | `setClipboardAccessNotificationsEnabledForUser` | ok | recorded |
@@ -105,7 +105,8 @@ VM-free path (structured error) because only `ClipData.CREATOR` may read them.
 | `IPermissionManager.shouldShowRequestPermissionRationale` / `isPermissionRevokedByPolicy` | ok | `false` |
 | `IPermissionManager.grantRuntimePermission` / `revokeRuntimePermission` / `updatePermissionFlags` | unsupported | recorded, structured error |
 | `IPermissionManager.getAllowlistedRestrictedPermissions` / auto-revoke lists | ok | empty list |
-| `IUserManager.getUserInfo/getUsers/getProfiles/getProfileIds/getPrimaryUser/getVisibleUsers` | ok (`UserInfo` payload = state) | single user `0`, name `ACOS` |
+| `IUserManager.getUserInfo/getUsers/getProfiles/getPrimaryUser` | ok | a real `android.content.pm.UserInfo` materialised by `acos-runtime::user_java`; single user `0`, name `ACOS`, unknown id → `null` |
+| `IUserManager.getProfileIds/getVisibleUsers` | ok | `int[]` of the single user `0` |
 | `IUserManager.getMainUserId/getBootUser/getUserName/isUserUnlocked/isUserRunning/...` | ok | user 0 / `ACOS` / `true` |
 | `IUserManager.createUserWithThrow/preCreateUserWithThrow/removeUser/setUserName/setUserIcon/setUserEnabled/setUserRestriction/markGuestForDeletion` | unsupported | recorded, structured error |
 | `INotificationManager.areNotificationsEnabled(ForPackage)` / `canShowBadge` / `hasSentValidMsg` | ok | `false` |
@@ -136,23 +137,45 @@ listener), `ITextServicesManager` (no spell checker), `IAutoFillManager`
 
 ```
 cargo test -p acos-runtime --test services_t38          # 13 passed
-cargo test -p acos-services --test host --test replay    # 9 + 3 passed
-cargo clippy -p acos-services -p acos-aidl --all-targets -- -D warnings   # clean
+cargo test -p acos-runtime --test services_t38_java     # 1 passed (real Stub$Proxy)
+cargo test -p acos-services                              # 25 lib + host/replay
+cargo clippy -p acos-services -p acos-runtime --all-targets -- -D warnings  # clean
 ```
+
+## Java marshallers (T-38 follow-up)
+
+The replies whose layout only the framework's own `writeToParcel` may define are
+now materialised through the Java bridge in `acos-runtime`:
+
+* `ime_java.rs` — `InputBindResult` (reads `NO_IME.result` off the real
+  constant, sets the fields, lets `writeToParcel` emit). The request's real
+  `EditorInfo`/`ImeOnBackInvokedDispatcher` are decoded with their own
+  `CREATOR`s (`parcel_java.rs`).
+* `clipboard_java.rs` — incoming `ClipData` decode + stored-byte re-emit,
+  `ClipDescription` materialisation, and the
+  `IOnPrimaryClipChangedListener.dispatchPrimaryClipChanged()` oneway delivery.
+* `user_java.rs` — `UserInfo` (single-object and `List<UserInfo>` replies).
+
+The VM-free path still refuses these replies with a structured error (the
+`services_t38.rs` assertions), because only the wire path has a VM to marshal
+with. The Java-level acceptance is `services_t38_java.rs` +
+`tests/java/ImeClipboardMain.java`: the real `IInputMethodManager$Stub$Proxy`
+reads `InputBindResult.NO_IME`, the real `IClipboard$Stub$Proxy` round-trips
+`ClipData.newPlainText("l", "hello")`, the listener fires once per change, and
+the real `IUserManager$Stub$Proxy` reads `UserInfo`.
 
 ## Open gaps (honest)
 
-1. **Java marshallers not written** for `InputBindResult`, `UserInfo`,
-   `ClipData`/`ClipDescription`: `acos-runtime/src/ime_java.rs` and
-   `clipboard_java.rs` are the next step. Until then the affected replies are
-   refused structurally (tests assert that refusal), so the framework never
-   reads bytes it would misparse. This is also why the Java-level
-   (`Stub$Proxy`) acceptance case for `startInput` / `setPrimaryClip` is not in
-   this wave.
-2. `IBatteryStats` (`com.android.internal.app.IBatteryStats`) and
+1. `IBatteryStats` (`com.android.internal.app.IBatteryStats`) and
    `ISensorPrivacyManager` (`android.hardware.ISensorPrivacyManager`) are decoded
    but not registered — no state machine yet.
-3. `crates/acos-services/src/exception.rs::every_framework_exception_code_round_trips`
-   fails on `5c5162d` too (untouched file, pre-existing); and
-   `acos-vm/src/natives/fwk_vsync.rs::on_looper_wake` is dead code under
-   `-D warnings` (W22-A's file).
+2. `IInputMethodManager.showSoftInput`/`hideSoftInput` still carry a real
+   `ResultReceiver` argument the generic codec has no spec for; the null-IME
+   reply is `false` but the *request* decode would need the same `CREATOR`
+   treatment. The measured launch/interaction path calls
+   `startInputOrWindowGainedFocus`, which is now Java-marshalled.
+3. The `every_framework_exception_code_round_trips` failure introduced by the
+   T-38 commit (`write_exception` now writes the full AOSP body for every
+   non-zero code, but the test still asserted a body for `NO_EXCEPTION`) is
+   fixed in `exception.rs`: the test now asserts `writeException(0)` writes no
+   body. The cause was the T-38 `exception.rs` change, **not** an AIDL table.

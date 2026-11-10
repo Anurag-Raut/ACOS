@@ -847,15 +847,38 @@ fn am_get_assigned_package_identifiers(vm: &mut Vm, ctx: NativeCtx) -> VmResult<
     let sa = vm
         .new_instance("android.util.SparseArray")
         .map_err(|e| internal(e.to_string()))?;
-    for (id, name) in items {
-        let nh = vm.new_string(&name)?;
-        let _ = vm.call_method(
-            sa,
-            "put",
-            "(ILjava/lang/Object;)V",
-            &[JavaValue::Int(id as i32), JavaValue::Object(nh)],
-        );
+    // Fill the SparseArray's backing store directly. Calling `put` would run
+    // `GrowingArrayUtils.insert` -> `Array.newInstance`/`System.arraycopy` as
+    // Java frames from inside this native; the interpreter has no handler in a
+    // native frame, so an exception there unwinds past this native's frame and
+    // invalidates `ctx`. Constructing the real `SparseArray` fields
+    // (`mKeys`/`mValues`/`mSize`) is exact and cannot unwind.
+    let n = items.len();
+    let keys = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "I".to_string(),
+        data: ArrayData::Int(items.iter().map(|(id, _)| *id as i32).collect()),
+    }))?;
+    vm.native_roots.push(keys);
+    let values = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "Ljava/lang/Object;".to_string(),
+        data: ArrayData::Ref(vec![NULL; n]),
+    }))?;
+    vm.native_roots.push(values);
+    for (i, (_, name)) in items.iter().enumerate() {
+        let nh = vm.new_string(name)?;
+        if let Some(Object::Array(ArrayObj {
+            data: ArrayData::Ref(v),
+            ..
+        })) = vm.heap.get_mut(values)
+        {
+            v[i] = nh;
+        }
     }
+    let _ = vm.set_field(sa, "mKeys", JavaValue::Object(keys));
+    let _ = vm.set_field(sa, "mValues", JavaValue::Object(values));
+    let _ = vm.set_field(sa, "mSize", JavaValue::Int(n as i32));
+    vm.native_roots.pop();
+    vm.native_roots.pop();
     detach(vm, sa);
     vm.ret_ref(ctx, sa);
     Ok(())

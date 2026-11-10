@@ -156,6 +156,33 @@ impl BinderTransport for ServiceTransport {
                     Vec::new()
                 };
                 (result, deliveries)
+            } else if crate::ime_java::owns(descriptor.as_deref())
+                && code_owns_method(descriptor.as_deref(), code, crate::ime_java::owns_method)
+            {
+                // `startInputOrWindowGainedFocus` returns a real
+                // `InputBindResult` (T-38 follow-up): the request carries a real
+                // `EditorInfo` and the reply is a framework parcelable the
+                // generic codec cannot express.
+                let result = crate::ime_java::transact(vm, binder, code, data, reply, flags)
+                    .map(|_| ());
+                (result, Vec::new())
+            } else if crate::clipboard_java::owns(descriptor.as_deref())
+                && code_owns_method(descriptor.as_deref(), code, crate::clipboard_java::owns_method)
+            {
+                // `setPrimaryClip`/`getPrimaryClip`/`getPrimaryClipDescription`
+                // carry/return a real `ClipData`; `setPrimaryClip` also emits
+                // the `IOnPrimaryClipChangedListener` oneway deliveries.
+                match crate::clipboard_java::transact(vm, binder, code, data, reply, flags) {
+                    Ok(d) => (Ok(()), d),
+                    Err(e) => (Err(e), Vec::new()),
+                }
+            } else if crate::user_java::owns(descriptor.as_deref())
+                && code_owns_method(descriptor.as_deref(), code, crate::user_java::owns_method)
+            {
+                // `getUserInfo`/`getUsers`/... return a real `UserInfo`.
+                let result = crate::user_java::transact(vm, binder, code, data, reply, flags)
+                    .map(|_| ());
+                (result, Vec::new())
             } else {
                 let mut host = self.host.borrow_mut();
                 let result = host
@@ -235,4 +262,16 @@ impl BinderTransport for ServiceTransport {
     fn unlink_to_death(&mut self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
+}
+
+/// True when the decoded method for `(descriptor, code)` is owned by the
+/// marshaller `owns_method` predicate.
+fn code_owns_method(
+    descriptor: Option<&str>,
+    code: u32,
+    owns_method: fn(&str) -> bool,
+) -> bool {
+    descriptor
+        .and_then(|d| acos_aidl::lookup(d, code))
+        .is_some_and(|m| owns_method(&m.name))
 }

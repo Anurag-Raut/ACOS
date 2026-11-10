@@ -164,10 +164,10 @@ pub fn deliver_launch(
             JavaValue::Object(info),             // ActivityInfo
             JavaValue::Object(config),           // curConfig
             JavaValue::Object(config),           // overrideConfig
-            JavaValue::Int(2),                   // procState (PROCESS_STATE_TOP)
+            JavaValue::Int(0),                   // deviceId (DEVICE_ID_DEFAULT)
             JavaValue::Null,                     // referrer
             JavaValue::Null,                     // voiceInteractor
-            JavaValue::Int(0),                   // deviceId
+            JavaValue::Int(2),                   // procState (PROCESS_STATE_TOP)
             JavaValue::Null,                     // state
             JavaValue::Null,                     // persistentState
             JavaValue::Null,                     // pendingResults

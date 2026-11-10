@@ -161,7 +161,7 @@ pub fn install(host: &mut ServiceHost) {
     let contentcapture = Arc::new(Mutex::new(crate::misc::ContentCaptureState::new()));
     let voice = Arc::new(Mutex::new(crate::misc::VoiceState::new()));
     let future = Arc::new(Mutex::new(crate::misc::FutureState::new()));
-    let ime = Arc::new(Mutex::new(crate::ime::ImeState::new()));
+    let ime = crate::ime::shared();
     let clipboard = crate::clipboard::shared();
     let appops = Arc::new(Mutex::new(crate::declared::AppOpsState::new()));
     let permission = Arc::new(Mutex::new(crate::declared::PermissionState::new()));

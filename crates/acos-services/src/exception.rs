@@ -127,9 +127,14 @@ mod tests {
             write_exception(&mut p, code, "msg").unwrap();
             p.set_data_position(0);
             assert_eq!(read_exception(&mut p).unwrap(), code);
-            // Every failure code carries the message and the (empty) remote
-            // stack-trace payload, exactly as `Parcel.writeException` writes
-            // and `Parcel.readException` reads.
+            // `Parcel.writeException(0)` is the success header: it writes the
+            // code only. Every *failure* code carries the message and the
+            // (empty) remote stack-trace payload, exactly as
+            // `Parcel.writeException` writes and `Parcel.readException` reads.
+            if code == NO_EXCEPTION {
+                assert_eq!(p.data_avail(), 0, "writeException(0) writes no body");
+                continue;
+            }
             assert_eq!(p.read_string16().unwrap().as_deref(), Some("msg"));
             assert_eq!(p.read_int32().unwrap(), 0);
             if code == EX_SERVICE_SPECIFIC {

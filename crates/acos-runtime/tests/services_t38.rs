@@ -24,7 +24,6 @@ use acos_services::{codes, ServiceError, ServiceHost, Value};
 
 const IMM: &str = "com.android.internal.view.IInputMethodManager";
 const IMS: &str = "com.android.internal.inputmethod.IInputMethodSession";
-const IIT: &str = "com.android.internal.inputmethod.IImeTracker";
 const ICLIP: &str = "android.content.IClipboard";
 const IAPP_OPS: &str = "com.android.internal.app.IAppOpsService";
 const IPERM: &str = "android.permission.IPermissionManager";
