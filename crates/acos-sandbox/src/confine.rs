@@ -15,8 +15,11 @@ static CONFINEMENT_ACTIVE: AtomicBool = AtomicBool::new(false);
 ///
 /// This is the process-reported bit the native loader consults before mapping
 /// an untrusted APK `.so`. It is set atomically at the very end of
-/// [`confine`], and only when no-new-privs, Landlock and seccomp are all
-/// active. A fork inherits it; a fresh `exec` (which seccomp forbids anyway)
+/// [`confine`], and only when every layer in [`Layer::TRUSTED`] is active
+/// (no-new-privs, fd hygiene, sanitised environment, resource limits, Landlock
+/// and seccomp) *and* every layer the profile marked `required` succeeded.
+/// A failed hygiene step or an under-specified probe profile leaves it false
+/// (W67A #9). A fork inherits it; a fresh `exec` (which seccomp forbids anyway)
 /// would not.
 pub fn confinement_active() -> bool {
     CONFINEMENT_ACTIVE.load(Ordering::SeqCst)
@@ -62,6 +65,12 @@ pub struct RlimitProfile {
     pub cpu_seconds: Option<u64>,
     /// `RLIMIT_CORE` (default `0`: never dump core).
     pub core: u64,
+    /// `RLIMIT_FSIZE` in bytes: bounds a guest writing the host disk full.
+    pub file_size_bytes: Option<u64>,
+    /// `RLIMIT_STACK` in bytes: bounds unbounded guest recursion.
+    pub stack_bytes: Option<u64>,
+    /// `RLIMIT_MEMLOCK` in bytes: bounds locked-memory exhaustion.
+    pub memlock_bytes: Option<u64>,
 }
 
 impl Default for RlimitProfile {
@@ -72,6 +81,12 @@ impl Default for RlimitProfile {
             nproc: Some(8192),
             cpu_seconds: Some(60),
             core: 0,
+            // 2 GiB of file growth, a generous 256 MiB stack, and 64 MiB of
+            // mlockable memory. Each bounds a distinct host-exhaustion vector
+            // (W67A #12) without constraining a real native engine.
+            file_size_bytes: Some(2 * 1024 * 1024 * 1024),
+            stack_bytes: Some(256 * 1024 * 1024),
+            memlock_bytes: Some(64 * 1024 * 1024),
         }
     }
 }
@@ -306,7 +321,11 @@ pub fn confine(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineErr
         return Err(ConfineError::Unavailable { missing, message });
     }
 
-    if Layer::BASE.iter().all(|l| report.is_active(*l)) {
+    // The global bit is only ever set when the full fail-closed hygiene set
+    // succeeded. `required` is already enforced above, so this additionally
+    // covers probe profiles (`required: []`) whose hygiene steps may have
+    // failed, and any profile that omitted a hygiene layer from `required`.
+    if Layer::TRUSTED.iter().all(|l| report.is_active(*l)) {
         CONFINEMENT_ACTIVE.store(true, Ordering::SeqCst);
         report.active = true;
     }

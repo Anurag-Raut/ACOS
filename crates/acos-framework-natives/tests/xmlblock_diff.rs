@@ -287,31 +287,31 @@ fn check_layout(apk_path: &PathBuf, entry: &str) {
 
 #[test]
 fn xmlblock_screen_simple() {
-    let apk = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         eprintln!("framework-res.apk missing; skipping");
         return;
     }
+    let apk = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     check_layout(&apk, "res/layout/screen_simple.xml");
 }
 
 #[test]
 fn xmlblock_hello_views_layout() {
-    let apk = workspace_root().join("fixtures/build/apps/hello-views.apk");
-    if !apk.exists() {
+    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
         eprintln!("hello-views.apk missing; skipping");
         return;
     }
+    let apk = workspace_root().join("fixtures/build/apps/hello-views.apk");
     check_layout(&apk, "res/layout/main.xml");
 }
 
 #[test]
 fn retrieve_attributes_through_manager() {
-    let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
         eprintln!("hello-views.apk missing; skipping");
         return;
     }
+    let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
     let mut mgr = acos_framework_natives::res::AssetManager::new();
     mgr.add_apk_assets(ApkAssets::open(&apk_path).unwrap());
     let bytes = mgr.sources()[0]
@@ -358,11 +358,11 @@ fn retrieve_attributes_through_manager() {
 /// `android:color="@0x01060035"` (`#ff161c20`).
 #[test]
 fn retrieve_attributes_resolves_framework_color_reference() {
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         eprintln!("framework-res.apk missing; skipping");
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let mut mgr = acos_framework_natives::res::AssetManager::new();
     mgr.add_apk_assets(ApkAssets::open(&apk_path).unwrap());
     let bytes = mgr.sources()[0]

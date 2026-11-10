@@ -16,6 +16,7 @@ dependencies = [
 name = "acos-apk"
 version = "0.1.0"
 dependencies = [
+ "acos-test-support",
  "serde",
  "serde_json",
  "thiserror",
@@ -58,6 +59,7 @@ name = "acos-framework-natives"
 version = "0.1.0"
 dependencies = [
  "acos-apk",
+ "acos-test-support",
  "memmap2",
  "serde_json",
  "thiserror",
@@ -70,6 +72,7 @@ version = "0.1.0"
 dependencies = [
  "acos-dex",
  "acos-native-loader",
+ "acos-test-support",
  "acos-vm",
  "cc",
  "libc",
@@ -129,6 +132,7 @@ dependencies = [
 name = "acos-render"
 version = "0.1.0"
 dependencies = [
+ "acos-test-support",
  "freetype-sys",
  "image-webp",
  "jpeg-decoder",
@@ -158,6 +162,7 @@ dependencies = [
  "acos-parcel",
  "acos-render",
  "acos-services",
+ "acos-test-support",
  "acos-vm",
  "acos-wm",
  "serde_json",
@@ -198,6 +203,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-test-support"
+version = "0.1.0"
+
+[[package]]
 name = "acos-verify"
 version = "0.1.0"
 dependencies = [
@@ -222,6 +231,7 @@ dependencies = [
  "acos-parcel",
  "acos-render",
  "acos-sqlite",
+ "acos-test-support",
  "aes",
  "aes-gcm",
  "cbc",

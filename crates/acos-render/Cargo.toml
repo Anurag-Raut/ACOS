@@ -47,6 +47,7 @@ freetype-sys = { version = "0.23", features = ["bundled"] }
 
 [dev-dependencies]
 proptest = "1"
+acos-test-support = { path = "../acos-test-support" }
 
 [[example]]
 name = "render_scene"

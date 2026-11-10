@@ -94,3 +94,38 @@ fn prepare_errors_carry_primary_code() {
     assert_eq!(e.extended, 1);
     assert_eq!(e.message, "no such table: nope");
 }
+
+/// Finding W67A-sqlite: the facade resolves the *initial* database path
+/// strictly under the VFS root, but SQL executed on the connection is not
+/// filtered, so `ATTACH DATABASE '/any/host/path'` and `VACUUM INTO` write
+/// arbitrary host files. Android's app sandbox cannot be escaped this way.
+#[test]
+fn attach_database_cannot_escape_the_vfs_root() {
+    let dir = std::env::temp_dir().join(format!(
+        "acos-sqlite-attach-escape-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    let app = dir.join("app.db");
+    let outside = dir.join("escaped.db");
+    let _ = std::fs::remove_file(&outside);
+    let db = Database::open(app.to_str().unwrap(), false, true).unwrap();
+    db.execute("CREATE TABLE t(x)", &[], false).unwrap();
+    let sql = format!("ATTACH DATABASE '{}' AS leak", outside.display());
+    let attached = db.execute(&sql, &[], false);
+    assert!(
+        attached.is_err(),
+        "ATTACH to a path outside the sandbox must be refused"
+    );
+    assert!(!outside.exists(), "ATTACH created a host file outside the sandbox");
+
+    let vacuum_out = dir.join("vacuum-escaped.db");
+    let _ = std::fs::remove_file(&vacuum_out);
+    let sql = format!("VACUUM INTO '{}'", vacuum_out.display());
+    assert!(
+        db.execute(&sql, &[], false).is_err(),
+        "VACUUM INTO a path outside the sandbox must be refused"
+    );
+    assert!(!vacuum_out.exists(), "VACUUM INTO created a host file outside the sandbox");
+}

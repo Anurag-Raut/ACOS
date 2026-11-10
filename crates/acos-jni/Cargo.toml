@@ -25,3 +25,4 @@ cc = "1"
 [dev-dependencies]
 acos-dex = { path = "../acos-dex" }
 serde_json = { workspace = true }
+acos-test-support = { path = "../acos-test-support" }

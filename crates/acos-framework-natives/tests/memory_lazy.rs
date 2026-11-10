@@ -47,11 +47,11 @@ fn read_mem() -> Mem {
 
 #[test]
 fn framework_res_lazy_memory() {
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         eprintln!("framework-res.apk missing; skipping memory test");
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let before = read_mem();
 
     let apk = ApkAssets::open(&apk_path).expect("open");

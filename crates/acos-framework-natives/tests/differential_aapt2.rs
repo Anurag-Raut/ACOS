@@ -165,11 +165,11 @@ fn differential_framework_res_values() {
         eprintln!("aapt not found; skipping differential test");
         return;
     };
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         eprintln!("framework-res.apk missing; skipping");
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let (checked, v, l, b) = differential_apk(&aapt, &apk_path, 120, 500);
     eprintln!(
         "DIFFERENTIAL framework-res: checked={} value_mismatches={} label_mismatches={} bag_mismatches={}",
@@ -187,11 +187,11 @@ fn differential_app_values() {
         eprintln!("aapt not found; skipping differential test");
         return;
     };
-    let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
         eprintln!("hello-views.apk missing; skipping");
         return;
     }
+    let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
     let (checked, v, l, b) = differential_apk(&aapt, &apk_path, usize::MAX, 1);
     eprintln!(
         "DIFFERENTIAL hello-views: checked={} value_mismatches={} label_mismatches={} bag_mismatches={}",

@@ -195,8 +195,7 @@ impl AssetManager {
         let mut count = 0i32;
         for i in 0..n {
             let attr = attrs[i] as u32;
-            match map.get(&attr) {
-                Some((value, _idx)) => {
+            if let Some((value, _idx)) = map.get(&attr) {
                     // `nativeRetrieveAttributes` must chase a raw `@resid`
                     // attribute value to its concrete resource, exactly like
                     // `applyStyle` does. `Resources.obtainAttributes` with a
@@ -225,8 +224,6 @@ impl AssetManager {
                         out_indices[slot] = i as i32;
                     }
                     count += 1;
-                }
-                None => {}
             }
         }
         if !out_indices.is_empty() {

@@ -45,7 +45,17 @@ fn run_one(name: &str, gc_stress: bool, count_opcodes: bool) -> (Vm, i32, String
 
 fn expected(name: &str, ext: &str) -> String {
     let p = repo_root().join(format!("fixtures/expected/dexprogs/{name}.{ext}"));
-    std::fs::read_to_string(p).unwrap_or_default()
+    // The fixture program exists (this test is only reached for it), so a
+    // missing reference file is a hard failure, never an empty stdout / zero
+    // exit that would make a silent non-run look like a pass
+    // (HONESTY_AUDIT #23).
+    std::fs::read_to_string(&p).unwrap_or_else(|e| {
+        panic!(
+            "missing checked-in reference {}: {e}; the fixture program exists, so a \
+             missing expectation must not silently become empty/zero",
+            p.display()
+        )
+    })
 }
 
 /// Programs that can only run against the real Android 14 boot classpath.
@@ -69,14 +79,14 @@ const REAL_CORELIB_ONLY: &[&str] = &[
 
 #[test]
 fn dexprogs_match_jvm_reference() {
-    let names = fixture_names();
-    if names.is_empty() {
+    if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
         eprintln!(
             "SKIP dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent \
              (run tools/build-fixtures.sh)"
         );
         return;
     }
+    let names = fixture_names();
     let mut executed = [0u64; 256];
     let mut failures = Vec::new();
     for name in &names {
@@ -116,11 +126,11 @@ fn dexprogs_match_jvm_reference() {
 /// still covered by the normal pass and by `tools/diff-dexprogs.sh --gc-stress`.)
 #[test]
 fn dexprogs_pass_gc_stress() {
-    let names = fixture_names();
-    if names.is_empty() {
+    if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
         eprintln!("SKIP dexprogs_pass_gc_stress: fixtures/build/dexprogs is absent");
         return;
     }
+    let names = fixture_names();
     let mut failures = Vec::new();
     for name in &names {
         if name == "19_threads_sync" || REAL_CORELIB_ONLY.contains(&name.as_str()) {

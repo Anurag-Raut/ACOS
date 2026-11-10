@@ -34,9 +34,28 @@ const FS_REFER: u64 = 1 << 13;
 const FS_TRUNCATE: u64 = 1 << 14;
 const FS_IOCTL_DEV: u64 = 1 << 15;
 
+// Landlock ABI 6 scopes: restrict IPCs (signals, abstract UNIX sockets) to the
+// sandbox domain. `landlock_ruleset_attr.scoped`.
+const LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET: u64 = 1 << 0;
+const LANDLOCK_SCOPE_SIGNAL: u64 = 1 << 1;
+
 #[repr(C)]
 struct RulesetAttr {
     handled_access_fs: u64,
+    handled_access_net: u64,
+    scoped: u64,
+}
+
+/// The `landlock_ruleset_attr` prefix length understood by `abi`. Passing a
+/// shorter prefix keeps the call valid on older kernels.
+fn ruleset_attr_size(abi: u32) -> usize {
+    if abi >= 6 {
+        std::mem::size_of::<RulesetAttr>()
+    } else if abi >= 4 {
+        std::mem::size_of::<RulesetAttr>() - 8
+    } else {
+        8
+    }
 }
 
 #[repr(C, packed)]
@@ -98,16 +117,29 @@ fn read_only_access() -> u64 {
 pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String, String> {
     let abi = abi().ok_or_else(|| "landlock_create_ruleset(VERSION) unsupported".to_string())?;
     let handled = handled_fs(abi);
+    // Landlock ABI 6 extends the ruleset with `scoped`, which confines signals
+    // and abstract UNIX sockets to the sandbox domain: a confined guest then
+    // cannot `kill` a host same-uid process or `connect` to a host abstract
+    // socket even if seccomp were bypassed (W67A #5). Older kernels ignore it.
+    let scope = if abi >= 6 {
+        LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | LANDLOCK_SCOPE_SIGNAL
+    } else {
+        0
+    };
     let attr = RulesetAttr {
         handled_access_fs: handled,
+        handled_access_net: 0,
+        scoped: scope,
     };
-    // SAFETY: `attr` is a valid, initialised ruleset attribute of the size we
-    // pass; the kernel copies it before returning.
+    let attr_size = ruleset_attr_size(abi);
+    // SAFETY: `attr` is a valid, initialised ruleset attribute; only the
+    // documented `attr_size` prefix is read by the kernel, which copies it
+    // before returning.
     let fd = unsafe {
         libc::syscall(
             libc::SYS_landlock_create_ruleset,
             &attr as *const RulesetAttr,
-            std::mem::size_of::<RulesetAttr>(),
+            attr_size,
             0u64,
         )
     };
@@ -164,6 +196,11 @@ pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String,
     }
 
     let mut detail = format!("abi {abi}, {rules} rules");
+    if scope != 0 {
+        detail.push_str(", scoped abstract_unix_socket+signal");
+    } else {
+        detail.push_str(", scopes unsupported (abi < 6)");
+    }
     if !skipped.is_empty() {
         detail.push_str(&format!(", skipped missing {skipped:?}"));
     }

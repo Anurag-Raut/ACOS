@@ -23,6 +23,8 @@
 
 #![forbid(unsafe_code)]
 
+use rusqlite::config::DbConfig;
+use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 use rusqlite::types::{Value, ValueRef};
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
@@ -99,6 +101,25 @@ fn engine_error(e: rusqlite::Error) -> EngineError {
     }
 }
 
+/// Authorizer callback: deny the SQL that could touch a host path or weaken
+/// the schema guarantees, allow everything else. See [`Database::open`].
+fn authorize_sql(ctx: AuthContext<'_>) -> Authorization {
+    match ctx.action {
+        AuthAction::Attach { .. } => Authorization::Deny,
+        AuthAction::Function { function_name }
+            if function_name.eq_ignore_ascii_case("load_extension") =>
+        {
+            Authorization::Deny
+        }
+        AuthAction::Pragma { pragma_name, .. }
+            if pragma_name.eq_ignore_ascii_case("writable_schema") =>
+        {
+            Authorization::Deny
+        }
+        _ => Authorization::Allow,
+    }
+}
+
 /// The result of a prepared statement's metadata query.
 #[derive(Clone, Debug)]
 pub struct StatementMeta {
@@ -140,6 +161,26 @@ impl Database {
         // Android always enables foreign keys for app databases.
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(engine_error)?;
+        // Host-safety hardening (W67A #3): the initial database path is
+        // already confined by `acos-vm::natives::fwk_sqlite::resolve_db_path`,
+        // but arbitrary SQL later reaches the engine. Android's app sandbox
+        // cannot be escaped via SQL either, so:
+        //
+        //  * "defensive" mode blocks `PRAGMA writable_schema=ON`,
+        //    `journal_mode=OFF`, `schema_version=N` and direct shadow-table
+        //    writes;
+        //  * `trusted_schema=OFF` stops untrusted schema objects (triggers,
+        //    views, CHECK/DEFAULT expressions) from invoking application
+        //    functions;
+        //  * an authorizer denies every `ATTACH DATABASE` (the engine has no
+        //    VFS root to resolve against, so a non-VFS path must never be
+        //    opened), the `load_extension()` SQL function, and any
+        //    `writable_schema` pragma.
+        conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
+            .map_err(engine_error)?;
+        conn.set_db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA, false)
+            .map_err(engine_error)?;
+        conn.authorizer(Some(authorize_sql));
         Ok(Database {
             conn,
             path: path.to_string(),

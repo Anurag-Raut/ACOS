@@ -15,8 +15,11 @@ fn repo_root() -> PathBuf {
 }
 
 fn hello_jni_apk() -> Option<PathBuf> {
-    let path = repo_root().join("fixtures/build/apps/hello-jni.apk");
-    path.is_file().then_some(path)
+    // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+    if !acos_test_support::have_fixture("fixtures/build/apps/hello-jni.apk") {
+        return None;
+    }
+    Some(repo_root().join("fixtures/build/apps/hello-jni.apk"))
 }
 
 /// Build a minimal in-memory APK containing exactly the given `lib/...` entries.

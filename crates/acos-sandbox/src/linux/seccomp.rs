@@ -1,14 +1,46 @@
 //! seccomp-bpf syscall confinement.
 //!
-//! The filter's default action is `SECCOMP_RET_ALLOW`; it denies a curated
-//! list of dangerous syscalls and, for `socket`/`socketpair`, allows only the
-//! `AF_UNIX` domain. Denials return `EACCES` so a confined process can handle
-//! them and an agent can observe a clean failure rather than a signal.
+//! The filter's default action is `SECCOMP_RET_ALLOW` with an *extended* deny
+//! list; it denies the syscalls a confined guest must never reach, and for
+//! `socket`/`socketpair` allows only the `AF_UNIX` domain. Denials return
+//! `EACCES` so a confined process can handle them and an agent can observe a
+//! clean failure rather than a signal.
 //!
-//! Everything not named in the deny list stays available on purpose:
-//! `futex`, `clone`/`clone3` (threads), `mmap`/`mprotect` (including
-//! `PROT_EXEC`), `rt_sigaction`, `clock_*`, `eventfd`, `epoll_*`, `poll`,
-//! `read`/`write`, `brk`, `getrandom`, ...
+//! The extended list covers every host-escape surface an APK `.so` could reach
+//! (W67A findings #1/#2): the io_uring `setup/enter/register` triplet,
+//! `userfaultfd`, `open_by_handle_at`/`name_to_handle_at` (both bypass the
+//! path-based Landlock ruleset), the new mount API
+//! (`fsopen`/`fsconfig`/`fsmount`/`fspick`/`move_mount`/`open_tree`/
+//! `mount_setattr`), the pidfd family, `kcmp`, `process_madvise`, `ptrace`,
+//! `perf_event_open`, `lookup_dcookie`, `quotactl`, `swapon`/`swapoff`,
+//! `syslog`, `acct`, `ioperm`/`iopl`, `modify_ldt`, the `setuid` family,
+//! `capset`, and the remaining process-control surfaces.
+//!
+//! Argument filtering (classic BPF cannot dereference pointers, so this is the
+//! strongest static posture available):
+//!
+//! * `clone` is denied only when `flags & CLONE_NEW*` is non-zero, so thread
+//!   creation (`CLONE_THREAD`) still works while a new user/mount/net/pid/ipc/
+//!   uts/cgroup namespace is refused (W67A #2);
+//! * `clone3` cannot be inspected (its flags live in a pointed-to
+//!   `struct clone_args`), so it is refused with `ENOSYS`; glibc and bionic
+//!   fall back to the (filtered) `clone`, which keeps threads working;
+//! * `kill`/`tkill` are always denied; `tgkill` is allowed only when its `tgid`
+//!   argument equals the pid captured at filter-build time, and
+//!   `rt_sigqueueinfo`/`rt_tgsigqueueinfo` only for the own pid (or pid 0), so a
+//!   guest cannot signal any process outside its own thread group;
+//! * `personality` is allowed only for `PER_LINUX` (`0`) and the read-only
+//!   query form (`0xffff_ffff`).
+//!
+//! Everything else (the native-engine set) stays available on purpose:
+//! `futex`, `mmap`/`mprotect` (including `PROT_EXEC`), `rt_sigaction`,
+//! `clock_*`, `eventfd`/`epoll_*`/`poll`/`pipe`/`socketpair`, `read`/`write`,
+//! `open*`/`stat*`/`getdents*` (Landlock-bounded), `madvise`, `prctl`, `rseq`,
+//! `sched_*`, `getrandom`, ...
+//!
+//! The residual risk (default-allow) is documented in `DECISIONS.md`
+//! ADR-0022: the allow-list is validated against the native-library inventory
+//! (`acos native-inventory`) but not yet the boot path.
 //!
 //! The classic-BPF program is assembled with a tiny forward-only label
 //! assembler so the control flow is auditable.
@@ -34,6 +66,23 @@ const LD_ABS_W: u16 = 0x20; // BPF_LD | BPF_W | BPF_ABS
 const JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
 const JA: u16 = 0x05; // BPF_JMP | BPF_JA
 const RET_K: u16 = 0x06; // BPF_RET | BPF_K
+const AND_K: u16 = 0x54; // BPF_ALU | BPF_AND | BPF_K
+
+/// `CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWUTS | CLONE_NEWIPC |
+/// CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET`: every namespace-creating
+/// `clone` flag (W67A #2).
+const CLONE_NEW_MASK: u32 = 0x0002_0000
+    | 0x0200_0000
+    | 0x0400_0000
+    | 0x0800_0000
+    | 0x1000_0000
+    | 0x2000_0000
+    | 0x4000_0000;
+
+/// `PER_LINUX`, the only personality a guest may install.
+const PER_LINUX: u32 = 0;
+/// `0xffff_ffff` is the documented read-only `personality` query argument.
+const PERSONALITY_QUERY: u32 = 0xffff_ffff;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -54,6 +103,7 @@ type Label = usize;
 
 enum Op {
     Ld(u32),
+    And(u32),
     Jeq {
         k: u32,
         t: Label,
@@ -90,6 +140,10 @@ impl Builder {
         self.ops.push(Op::Ld(offset));
     }
 
+    fn and(&mut self, k: u32) {
+        self.ops.push(Op::And(k));
+    }
+
     fn jeq(&mut self, k: u32, t: Label, f: Label) {
         self.ops.push(Op::Jeq { k, t, f });
     }
@@ -112,6 +166,12 @@ impl Builder {
                     jt: 0,
                     jf: 0,
                     k: offset,
+                },
+                Op::And(k) => SockFilter {
+                    code: AND_K,
+                    jt: 0,
+                    jf: 0,
+                    k,
                 },
                 Op::Jeq { k, t, f } => {
                     let jt = target(t) - pc - 1;
@@ -146,30 +206,83 @@ impl Builder {
     }
 }
 
+/// Every syscall that is denied unconditionally (no argument inspection
+/// needed). Kept sorted+unique so the assembled lookup is a deterministic
+/// binary-comparable program.
 fn deny_list() -> Vec<u32> {
     let mut list = vec![
+        // Execution / process replacement.
         libc::SYS_execve as u32,
         libc::SYS_execveat as u32,
+        // Process introspection.
         libc::SYS_ptrace as u32,
         libc::SYS_process_vm_readv as u32,
         libc::SYS_process_vm_writev as u32,
+        libc::SYS_process_madvise as u32,
+        libc::SYS_kcmp as u32,
+        // Namespaces and mounts: path-based Landlock cannot mediate these.
         libc::SYS_mount as u32,
         libc::SYS_umount2 as u32,
         libc::SYS_pivot_root as u32,
         libc::SYS_chroot as u32,
         libc::SYS_unshare as u32,
         libc::SYS_setns as u32,
-        libc::SYS_kexec_load as u32,
-        libc::SYS_kexec_file_load as u32,
+        libc::SYS_mount_setattr as u32,
+        libc::SYS_fsopen as u32,
+        libc::SYS_fsconfig as u32,
+        libc::SYS_fsmount as u32,
+        libc::SYS_fspick as u32,
+        libc::SYS_move_mount as u32,
+        libc::SYS_open_tree as u32,
+        // Handle-based lookups bypass the path ruleset.
+        libc::SYS_open_by_handle_at as u32,
+        libc::SYS_name_to_handle_at as u32,
+        // Kernel attack surface.
+        libc::SYS_io_uring_setup as u32,
+        libc::SYS_io_uring_enter as u32,
+        libc::SYS_io_uring_register as u32,
+        libc::SYS_userfaultfd as u32,
         libc::SYS_bpf as u32,
         libc::SYS_perf_event_open as u32,
-        libc::SYS_keyctl as u32,
-        libc::SYS_add_key as u32,
-        libc::SYS_request_key as u32,
+        // Modules / kexec / reboot.
+        libc::SYS_kexec_load as u32,
+        libc::SYS_kexec_file_load as u32,
         libc::SYS_init_module as u32,
         libc::SYS_finit_module as u32,
         libc::SYS_delete_module as u32,
         libc::SYS_reboot as u32,
+        // Kernel keyring.
+        libc::SYS_keyctl as u32,
+        libc::SYS_add_key as u32,
+        libc::SYS_request_key as u32,
+        // Credentials: a confined guest must never change them.
+        libc::SYS_setuid as u32,
+        libc::SYS_setgid as u32,
+        libc::SYS_setreuid as u32,
+        libc::SYS_setregid as u32,
+        libc::SYS_setresuid as u32,
+        libc::SYS_setresgid as u32,
+        libc::SYS_setfsuid as u32,
+        libc::SYS_setfsgid as u32,
+        libc::SYS_setgroups as u32,
+        libc::SYS_capset as u32,
+        // pidfd family and process signalling. `kill`/`tkill` are denied
+        // outright; `tgkill`/`rt_*sigqueueinfo` are argument-filtered below.
+        libc::SYS_pidfd_open as u32,
+        libc::SYS_pidfd_getfd as u32,
+        libc::SYS_pidfd_send_signal as u32,
+        libc::SYS_kill as u32,
+        libc::SYS_tkill as u32,
+        // Legacy / privileged surfaces.
+        libc::SYS_lookup_dcookie as u32,
+        libc::SYS_quotactl as u32,
+        libc::SYS_swapon as u32,
+        libc::SYS_swapoff as u32,
+        libc::SYS_syslog as u32,
+        libc::SYS_acct as u32,
+        libc::SYS_ioperm as u32,
+        libc::SYS_iopl as u32,
+        libc::SYS_modify_ldt as u32,
     ];
     list.sort_unstable();
     list.dedup();
@@ -178,18 +291,32 @@ fn deny_list() -> Vec<u32> {
 
 fn build() -> Vec<SockFilter> {
     let mut b = Builder::new();
+    // Labels: plain deny/allow terminals, then the per-syscall argument checks.
     let deny = b.label();
-    let kill = b.label();
+    let kill_arch = b.label();
     let x86_ok = b.label();
     let list = b.label();
     let socket_check = b.label();
     let not_socket1 = b.label();
     let not_socket2 = b.label();
+    let allow = b.label();
+    let clone_check = b.label();
+    let clone3_deny = b.label();
+    let tgkill_check = b.label();
+    let sigq_check = b.label();
+    let sigq_zero = b.label();
+    let personality_check = b.label();
+    let personality_query = b.label();
+
+    // The pid of this process, captured while the filter is built. `kill` to
+    // the own thread group and `tgkill` to the own tgid compare against it.
+    // SAFETY: `getpid` has no preconditions and cannot fail.
+    let own_pid = unsafe { libc::getpid() } as u32;
 
     // Reject a mismatched architecture outright: syscall numbers are per-arch.
     b.ld_abs(OFF_ARCH);
-    b.jeq(AUDIT_ARCH_X86_64, x86_ok, kill);
-    b.mark(kill);
+    b.jeq(AUDIT_ARCH_X86_64, x86_ok, kill_arch);
+    b.mark(kill_arch);
     b.ret(RET_KILL_PROCESS);
     b.mark(x86_ok);
 
@@ -214,9 +341,66 @@ fn build() -> Vec<SockFilter> {
         b.jeq(syscall, deny, next);
         b.mark(next);
     }
+    // Argument-filtered syscalls (`after_*` is marked after the test, so it is
+    // the next instruction; a "continue scanning" fall-through).
+    let after_clone = b.label();
+    b.jeq(libc::SYS_clone as u32, clone_check, after_clone);
+    b.mark(after_clone);
+    let after_clone3 = b.label();
+    b.jeq(libc::SYS_clone3 as u32, clone3_deny, after_clone3);
+    b.mark(after_clone3);
+    let after_tgkill = b.label();
+    b.jeq(libc::SYS_tgkill as u32, tgkill_check, after_tgkill);
+    b.mark(after_tgkill);
+    let after_sigq = b.label();
+    b.jeq(libc::SYS_rt_sigqueueinfo as u32, sigq_check, after_sigq);
+    b.mark(after_sigq);
+    let after_tgsigq = b.label();
+    b.jeq(libc::SYS_rt_tgsigqueueinfo as u32, sigq_check, after_tgsigq);
+    b.mark(after_tgsigq);
+    let after_personality = b.label();
+    b.jeq(libc::SYS_personality as u32, personality_check, after_personality);
+    b.mark(after_personality);
+    b.ja(allow);
+
+    // `clone3` cannot be inspected in classic BPF (flags live in a pointed-to
+    // struct). Refuse it with `ENOSYS` so glibc/bionic fall back to the
+    // filtered `clone` path and thread creation keeps working.
+    b.mark(clone3_deny);
+    b.ret(RET_ERRNO | (libc::ENOSYS as u32 & ERRNO_DATA_MASK));
+
+    // `tgkill(tgid, tid, sig)`: allow only the own thread group (arg0 == pid).
+    b.mark(tgkill_check);
+    b.ld_abs(OFF_ARG0);
+    b.jeq(own_pid, allow, deny);
+
+    // `rt_sigqueueinfo(pid, ...)` / `rt_tgsigqueueinfo(tgid, ...)`: own pid or 0.
+    b.mark(sigq_check);
+    b.ld_abs(OFF_ARG0);
+    b.jeq(own_pid, allow, sigq_zero);
+    b.mark(sigq_zero);
+    b.jeq(0, allow, deny);
+
+    // `clone(flags, ...)`: deny any namespace-bearing flag word.
+    b.mark(clone_check);
+    b.ld_abs(OFF_ARG0);
+    b.and(CLONE_NEW_MASK);
+    b.jeq(0, allow, deny);
+
+    // `personality(persona)`: only PER_LINUX, plus the read-only query form.
+    b.mark(personality_check);
+    b.ld_abs(OFF_ARG0);
+    b.jeq(PER_LINUX, allow, personality_query);
+    b.mark(personality_query);
+    b.jeq(PERSONALITY_QUERY, allow, deny);
+
+    // Terminals, marked last so every jump is forward. Default is allow.
+    b.mark(allow);
     b.ret(RET_ALLOW);
+    // Deny terminal: `EACCES`, so a confined process observes a clean failure.
     b.mark(deny);
     b.ret(RET_ERRNO | (libc::EACCES as u32 & ERRNO_DATA_MASK));
+
     b.finish()
 }
 
@@ -289,6 +473,36 @@ mod tests {
         assert_eq!(list, sorted);
         assert!(list.contains(&(libc::SYS_execve as u32)));
         assert!(list.contains(&(libc::SYS_bpf as u32)));
+    }
+
+    #[test]
+    fn deny_list_covers_sandbox_escape_syscalls() {
+        // Finding W67A-seccomp: these are guest-reachable via a loaded APK .so
+        // and each one either bypasses the path-based Landlock ruleset
+        // (open_by_handle_at, the mount API family), creates a namespace the
+        // `unshare` denial was meant to stop (clone CLONE_NEWUSER), or is a
+        // known kernel-attack surface (io_uring, userfaultfd, pidfd_getfd).
+        // They must be in the deny list; today they are not.
+        let list = deny_list();
+        for (name, nr) in [
+            ("io_uring_setup", libc::SYS_io_uring_setup),
+            ("io_uring_enter", libc::SYS_io_uring_enter),
+            ("io_uring_register", libc::SYS_io_uring_register),
+            ("userfaultfd", libc::SYS_userfaultfd),
+            ("open_by_handle_at", libc::SYS_open_by_handle_at),
+            ("name_to_handle_at", libc::SYS_name_to_handle_at),
+            ("pidfd_getfd", libc::SYS_pidfd_getfd),
+            ("kcmp", libc::SYS_kcmp),
+            ("fsopen", libc::SYS_fsopen),
+            ("fsmount", libc::SYS_fsmount),
+            ("move_mount", libc::SYS_move_mount),
+            ("open_tree", libc::SYS_open_tree),
+        ] {
+            assert!(
+                list.contains(&(nr as u32)),
+                "{name} ({nr}) is not denied by the seccomp filter"
+            );
+        }
     }
 
     #[test]

@@ -238,7 +238,7 @@ fn describe_throwable(vm: &Vm, h: Handle) -> String {
     let mut depth = 0;
     while let Some(cur) = current {
         if depth > 0 {
-            out.push_str(&format!("\n  caused by: "));
+            out.push_str("\n  caused by: ");
         }
         let class = vm
             .class_of_object(cur)

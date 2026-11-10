@@ -13,13 +13,14 @@ pub fn workspace_root() -> PathBuf {
 }
 
 pub fn framework_res() -> Option<PathBuf> {
-    let p = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    p.exists().then_some(p)
+    // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+    let rel = ".cache/boot/android-34/framework-res.apk";
+    acos_test_support::have_fixture(rel).then(|| workspace_root().join(rel))
 }
 
 pub fn hello_views() -> Option<PathBuf> {
-    let p = workspace_root().join("fixtures/build/apps/hello-views.apk");
-    p.exists().then_some(p)
+    let rel = "fixtures/build/apps/hello-views.apk";
+    acos_test_support::have_fixture(rel).then(|| workspace_root().join(rel))
 }
 
 #[test]

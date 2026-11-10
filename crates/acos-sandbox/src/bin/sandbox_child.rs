@@ -92,6 +92,22 @@ fn run() -> i32 {
         "ptrace" => do_ptrace(),
         "socket_inet" => do_socket_inet(),
         "process_vm" => do_process_vm(),
+        // W67A #1/#2 escape surface: every one must return `EACCES` from the
+        // seccomp filter (not a kernel `EPERM`), so `classify_seccomp` is used.
+        "io_uring_setup" => do_io_uring_setup(),
+        "userfaultfd" => do_userfaultfd(),
+        "open_by_handle_at" => do_open_by_handle_at(),
+        "name_to_handle_at" => do_name_to_handle_at(),
+        "fsopen" => do_fsopen(),
+        "move_mount" => do_move_mount(),
+        "pidfd_open" => do_pidfd_open(),
+        "kcmp" => do_kcmp(),
+        "kill_other" => do_kill_other(),
+        "setuid" => do_setuid(),
+        "clone_userns" => do_clone_userns(),
+        // Argument-filtered allow: signals to the own thread group still work.
+        "tgkill_self" => do_tgkill_self(),
+        "personality_ok" => do_personality_ok(),
         other => {
             eprintln!("unknown action {other:?}");
             2
@@ -103,6 +119,229 @@ fn classify(error: &std::io::Error) -> i32 {
     match error.raw_os_error() {
         Some(code) if code == libc::EACCES || code == libc::EPERM => EXIT_DENIED,
         _ => EXIT_UNEXPECTED,
+    }
+}
+
+/// Stricter classifier for the seccomp escape tests: only `EACCES` counts as a
+/// denial, so a kernel-side `EPERM` (the syscall *reached the kernel*) is
+/// reported as unexpected and fails the test.
+fn classify_seccomp(error: &std::io::Error) -> i32 {
+    match error.raw_os_error() {
+        Some(code) if code == libc::EACCES => EXIT_DENIED,
+        _ => EXIT_UNEXPECTED,
+    }
+}
+
+fn do_io_uring_setup() -> i32 {
+    let mut params = [0u8; 256];
+    // SAFETY: `params` is a valid writable buffer the kernel may fill.
+    let rc = unsafe { libc::syscall(libc::SYS_io_uring_setup, 8u32, params.as_mut_ptr()) };
+    if rc >= 0 {
+        // SAFETY: `rc` is a live ring fd.
+        unsafe {
+            libc::close(rc as i32);
+        }
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_userfaultfd() -> i32 {
+    // SAFETY: `userfaultfd` takes an int flag word.
+    let rc = unsafe { libc::syscall(libc::SYS_userfaultfd, 0u32) };
+    if rc >= 0 {
+        // SAFETY: `rc` is a live userfaultfd.
+        unsafe {
+            libc::close(rc as i32);
+        }
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_open_by_handle_at() -> i32 {
+    let handle = [0u8; 64];
+    // SAFETY: `handle` is a readable buffer; the kernel validates the fields.
+    let rc =
+        unsafe { libc::syscall(libc::SYS_open_by_handle_at, -1i32, handle.as_ptr(), 0i32) };
+    if rc >= 0 {
+        // SAFETY: `rc` is a live fd.
+        unsafe {
+            libc::close(rc as i32);
+        }
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_name_to_handle_at() -> i32 {
+    let path = CString::new("/").expect("no NUL");
+    let mut handle = [0u8; 64];
+    let mut mount_id: i32 = 0;
+    // SAFETY: all pointers are valid for the duration of the call.
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_name_to_handle_at,
+            libc::AT_FDCWD,
+            path.as_ptr(),
+            handle.as_mut_ptr(),
+            &mut mount_id as *mut i32,
+            0i32,
+        )
+    };
+    if rc >= 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_fsopen() -> i32 {
+    let fstype = CString::new("tmpfs").expect("no NUL");
+    // SAFETY: `fstype` is a valid C string.
+    let rc = unsafe { libc::syscall(libc::SYS_fsopen, fstype.as_ptr(), 0u32) };
+    if rc >= 0 {
+        // SAFETY: `rc` is a live fs_context fd.
+        unsafe {
+            libc::close(rc as i32);
+        }
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_move_mount() -> i32 {
+    let path = CString::new("/").expect("no NUL");
+    // SAFETY: both paths are valid C strings; the fds/dirs are invalid on
+    // purpose so a permitted call would fail harmlessly.
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_move_mount,
+            -1i32,
+            path.as_ptr(),
+            -1i32,
+            path.as_ptr(),
+            0u32,
+        )
+    };
+    if rc >= 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_pidfd_open() -> i32 {
+    // SAFETY: scalar arguments only.
+    let rc = unsafe { libc::syscall(libc::SYS_pidfd_open, 1u32, 0u32) };
+    if rc >= 0 {
+        // SAFETY: `rc` is a live pidfd.
+        unsafe {
+            libc::close(rc as i32);
+        }
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_kcmp() -> i32 {
+    const KCMP_FILE: u32 = 0;
+    // SAFETY: scalar arguments only; both pids are our own.
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_kcmp,
+            libc::getpid(),
+            libc::getpid(),
+            KCMP_FILE,
+            0usize,
+            0usize,
+        )
+    };
+    if rc >= 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_kill_other() -> i32 {
+    // SAFETY: signal 0 performs only a permission check on pid 1.
+    let rc = unsafe { libc::kill(1, 0) };
+    if rc == 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_setuid() -> i32 {
+    // SAFETY: `setuid` takes a scalar uid.
+    let rc = unsafe { libc::setuid(0) };
+    if rc == 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
+    }
+}
+
+fn do_clone_userns() -> i32 {
+    // Fork-like `clone(CLONE_NEWUSER|SIGCHLD)` with a dedicated stack. If the
+    // filter permits it, the child exits immediately; if it is correctly
+    // denied, the syscall returns `EACCES` and no child exists (W67A #2).
+    let mut stack = vec![0u8; 128 * 1024];
+    // SAFETY: `stack` outlives the call and the child only touches this stack.
+    let stack_top = unsafe { stack.as_mut_ptr().add(stack.len()) } as *mut libc::c_void;
+    // SAFETY: the pointer arguments are either NULL or the live `stack_top`.
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_clone,
+            (libc::CLONE_NEWUSER | libc::SIGCHLD) as libc::c_ulong,
+            stack_top,
+            std::ptr::null_mut::<libc::c_int>(),
+            std::ptr::null_mut::<libc::c_int>(),
+            0usize,
+        )
+    };
+    if rc < 0 {
+        return classify_seccomp(&std::io::Error::last_os_error());
+    }
+    if rc == 0 {
+        // Child: never continue into the parent's control flow.
+        // SAFETY: `_exit` terminates the freshly cloned child.
+        unsafe { libc::_exit(0) };
+    }
+    let mut status = 0;
+    // SAFETY: `rc` is the child pid returned by clone.
+    unsafe {
+        libc::waitpid(rc as libc::pid_t, &mut status, 0);
+    }
+    EXIT_OK
+}
+
+fn do_tgkill_self() -> i32 {
+    // SAFETY: `gettid` has no preconditions.
+    let tid = unsafe { libc::syscall(libc::SYS_gettid) };
+    // SAFETY: signal 0 to our own thread group is a permission check only.
+    let rc = unsafe { libc::syscall(libc::SYS_tgkill, libc::getpid(), tid, 0u32) };
+    if rc == 0 {
+        EXIT_OK
+    } else {
+        EXIT_UNEXPECTED
+    }
+}
+
+fn do_personality_ok() -> i32 {
+    // SAFETY: personality(0) sets PER_LINUX and returns the previous value.
+    let rc = unsafe { libc::syscall(libc::SYS_personality, 0u32) };
+    if rc >= 0 {
+        EXIT_OK
+    } else {
+        classify_seccomp(&std::io::Error::last_os_error())
     }
 }
 

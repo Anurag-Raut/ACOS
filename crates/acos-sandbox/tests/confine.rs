@@ -69,8 +69,19 @@ impl Drop for Sandbox {
 fn confined_process_denies_dangerous_actions_and_allows_normal_ones() {
     let sandbox = Sandbox::new();
 
-    // Permitted: normal runtime needs.
-    for action in ["open_ro", "write_data", "threads", "mmap_exec", "futex"] {
+    // Permitted: normal runtime needs. `tgkill_self` proves the signal
+    // argument filter still allows the own thread group, and `personality_ok`
+    // proves PER_LINUX is still installable, even though foreign signals and
+    // namespace-bearing clones are denied.
+    for action in [
+        "open_ro",
+        "write_data",
+        "threads",
+        "mmap_exec",
+        "futex",
+        "tgkill_self",
+        "personality_ok",
+    ] {
         assert_eq!(
             sandbox.run(action, true),
             OK,
@@ -87,8 +98,25 @@ fn confined_process_denies_dangerous_actions_and_allows_normal_ones() {
         );
     }
 
-    // Denied: syscall escape.
-    for action in ["exec", "ptrace", "socket_inet", "process_vm"] {
+    // Denied: syscall escape. The W67A hardened set must return `EACCES`
+    // (filtered), not `EPERM` (reached the kernel).
+    for action in [
+        "exec",
+        "ptrace",
+        "socket_inet",
+        "process_vm",
+        "io_uring_setup",
+        "userfaultfd",
+        "open_by_handle_at",
+        "name_to_handle_at",
+        "fsopen",
+        "move_mount",
+        "pidfd_open",
+        "kcmp",
+        "kill_other",
+        "setuid",
+        "clone_userns",
+    ] {
         assert_eq!(
             sandbox.run(action, true),
             DENIED,
@@ -140,8 +168,22 @@ fn probe_reports_which_layers_are_active() {
         assert_eq!(status, "active", "layer {layer} should be active: {report}");
     }
     assert_eq!(report["active"], serde_json::Value::Bool(true));
-    assert!(
-        report["landlock_abi"].as_u64().is_some(),
-        "landlock ABI should be reported: {report}"
-    );
+    let abi = report["landlock_abi"].as_u64().expect("landlock ABI reported");
+    assert!(abi >= 1, "landlock ABI should be present: {report}");
+
+    // On ABI >= 6 the landlock layer must also scope signals and abstract UNIX
+    // sockets to the sandbox domain (W67A #5); report it in the layer detail.
+    if abi >= 6 {
+        let detail = report["layers"]
+            .as_array()
+            .expect("layers array")
+            .iter()
+            .find(|entry| entry["layer"] == "landlock")
+            .and_then(|entry| entry["detail"].as_str())
+            .unwrap_or_default();
+        assert!(
+            detail.contains("scoped abstract_unix_socket+signal"),
+            "landlock ABI {abi} should report the signal/abstract-socket scope: {detail}"
+        );
+    }
 }

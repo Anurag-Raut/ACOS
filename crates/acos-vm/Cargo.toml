@@ -45,6 +45,7 @@ unicode-properties = "0.1"
 unicode-script = "0.5"
 
 [dev-dependencies]
+acos-test-support = { path = "../acos-test-support" }
 
 [lib]
 name = "acos_vm"

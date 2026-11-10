@@ -13,13 +13,12 @@ use std::path::PathBuf;
 use acos_render::RenderContext;
 
 fn reference_xml() -> Option<PathBuf> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/reference/hello-views/art-api34-x86_64/ui_initial.xml");
-    if p.exists() {
-        Some(p)
-    } else {
-        None
+    let rel = "fixtures/reference/hello-views/art-api34-x86_64/ui_initial.xml";
+    // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+    if !acos_test_support::have_fixture(rel) {
+        return None;
     }
+    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel))
 }
 
 /// Find bounds for a node with the given resource-id in the single-line UI dump.

@@ -29,19 +29,25 @@ fn repo_root() -> PathBuf {
 }
 
 fn hello_views_apk() -> Option<PathBuf> {
-    [
+    let candidates = [
         repo_root().join("fixtures/build/apps/hello-views.apk"),
         repo_root().join("fixtures/apps/hello-views/hello-views.apk"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
+    ];
+    if let Some(found) = candidates.iter().find(|p| p.is_file()) {
+        return Some(found.clone());
+    }
+    // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+    acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk");
+    None
 }
 
 /// The reference lifecycle, one event per line (`AcosFixture: <event>`).
 fn reference_lifecycle() -> Option<Vec<String>> {
-    let path = repo_root().join(
-        "fixtures/reference/hello-views/art-api34-x86_64/lifecycle-summary.txt",
-    );
+    let rel = "fixtures/reference/hello-views/art-api34-x86_64/lifecycle-summary.txt";
+    if !acos_test_support::have_fixture(rel) {
+        return None;
+    }
+    let path = repo_root().join(rel);
     let text = std::fs::read_to_string(path).ok()?;
     Some(
         text.lines()
@@ -58,6 +64,8 @@ fn new_runtime() -> Option<Runtime> {
     }) {
         Ok(rt) => Some(rt),
         Err(VmError::BootClasspathMissing(msg)) => {
+            // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+            acos_test_support::have_fixture(".cache/boot/android-34");
             eprintln!("SKIP m2 test: {msg}");
             None
         }

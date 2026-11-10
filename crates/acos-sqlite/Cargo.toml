@@ -10,7 +10,7 @@ description = "Safe Rust SQLite engine facade for the ACOS android.database.sqli
 # `bundled` vendors the SQLite C amalgamation and compiles it with `cc`.
 # The unsafe FFI lives entirely inside rusqlite/libsqlite3-sys; this crate's
 # own code stays `#![forbid(unsafe_code)]` (see ADR-0020 note in DECISIONS.md).
-rusqlite = { version = "0.37", features = ["bundled", "collation"] }
+rusqlite = { version = "0.37", features = ["bundled", "collation", "hooks"] }
 
 [lib]
 name = "acos_sqlite"

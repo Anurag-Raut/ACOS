@@ -283,10 +283,27 @@ impl Apk {
         let mut entry = archive
             .by_name(&entry_name)
             .map_err(|e| ApkError::new(NATIVE_LIB_NOT_FOUND, format!("{entry_name}: {e}")))?;
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
+        // The zip header is guest-controlled, so never size the allocation
+        // from it directly: cap by the real archive length and a fixed ceiling
+        // (W67A #14), then verify the read against the declared size.
+        const MAX_NATIVE_LIB_BYTES: u64 = 256 * 1024 * 1024;
+        let declared = entry.size();
+        let initial = declared
+            .min(self.raw.len() as u64)
+            .min(MAX_NATIVE_LIB_BYTES) as usize;
+        let mut bytes = Vec::with_capacity(initial);
         entry
             .read_to_end(&mut bytes)
             .map_err(|e| ApkError::new(APK_ENTRY, format!("{entry_name}: {e}")))?;
+        if bytes.len() as u64 != declared {
+            return Err(ApkError::new(
+                APK_ENTRY,
+                format!(
+                    "{entry_name}: declared {declared} bytes but read {}",
+                    bytes.len()
+                ),
+            ));
+        }
 
         let dest_dir = dest_dir.as_ref();
         std::fs::create_dir_all(dest_dir).map_err(|e| {

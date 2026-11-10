@@ -20,9 +20,8 @@ fn repo_root() -> PathBuf {
 }
 
 fn boot_available() -> bool {
-    repo_root()
-        .join(".cache/boot/android-34/BOOTCLASSPATH")
-        .is_file()
+    // Hard-fail under ACOS_REQUIRE_FIXTURES; otherwise a loud skip.
+    acos_test_support::have_fixture(".cache/boot/android-34/BOOTCLASSPATH")
 }
 
 fn reference_lines() -> Vec<String> {
@@ -74,6 +73,10 @@ fn hello_jni_runs_through_the_vm() {
     .expect("real-corelib VM");
     vm.add_dex(dex);
 
+    if !acos_test_support::have_fixture("fixtures/build/apps/hello-jni.apk") {
+        eprintln!("SKIP hello_jni_runs_through_the_vm: fixtures/build/apps/hello-jni.apk is absent");
+        return;
+    }
     let apk = repo_root().join("fixtures/build/apps/hello-jni.apk");
     // The APK's `lib/<abi>/libhellojni.so` is a trusted, checked-in fixture, and
     // this test process is not confined; opt out of the ADR-0022 confinement

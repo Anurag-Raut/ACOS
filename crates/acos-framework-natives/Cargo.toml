@@ -14,6 +14,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 acos-apk = { path = "../acos-apk" }
 serde_json = { workspace = true }
+acos-test-support = { path = "../acos-test-support" }
 
 [[bench]]
 name = "res_bench"

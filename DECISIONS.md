@@ -740,6 +740,27 @@ layer; product wiring is still pending).
   root and write to the data dir succeed; with confinement off the denied
   actions succeed, proving the sandbox is the cause. On the dev host (kernel
   `7.2.11-arch1-1`, Landlock ABI 10) all six mandatory layers are active.
+- **W67-A hardening (2026-11-11).** The seccomp posture stays default-`ALLOW`
+  (the allow-list was not validated against the full RN/Flutter native-lib
+  inventory), but the deny list is extended to the guest-reachable host-escape
+  set: io_uring `setup`/`enter`/`register`, `userfaultfd`,
+  `open_by_handle_at`/`name_to_handle_at`, the new mount API (`fsopen`,
+  `fsconfig`, `fsmount`, `fspick`, `move_mount`, `open_tree`, `mount_setattr`),
+  the pidfd family, `kcmp`, `process_madvise`, `lookup_dcookie`, `quotactl`,
+  `swapon`/`swapoff`, `syslog`, `acct`, `ioperm`/`iopl`, `modify_ldt`, the
+  `setuid` family and `capset`. Arguments are filtered where classic BPF can:
+  `clone` denies `CLONE_NEW*`, `clone3` returns `ENOSYS` (glibc/bionic fall
+  back to the filtered `clone`), `kill`/`tkill` are denied while
+  `tgkill`/`rt_*sigqueueinfo` allow only the own pid/tgid, and `personality`
+  allows only `PER_LINUX` and the read-only query form. **Residual risk:** a
+  future kernel attack surface reached by a syscall not on the list still
+  defaults to allow; the deny list is the mitigation and must be revisited per
+  kernel CVE. Landlock ABI >= 6 additionally sets `LANDLOCK_SCOPE_SIGNAL` and
+  `LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET`; `confinement_active()` now requires
+  the full `Layer::TRUSTED` hygiene set, so a failed hygiene step or an
+  under-specified probe profile can never make the loader trust a `.so`;
+  rlimits add `RLIMIT_FSIZE`, `RLIMIT_STACK` and `RLIMIT_MEMLOCK`; and the
+  native-launch read roots drop host `/usr`, `/lib` and `/etc`.
 - **Open question.** Running the confinement inside the already-multithreaded
   session process: seccomp is installed with `TSYNC`, so `confine` must be
   called before the runtime spawns coordinator threads, or the call fails

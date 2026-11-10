@@ -25,6 +25,12 @@ pub enum LoaderError {
         searched: Vec<PathBuf>,
     },
 
+    /// A `DT_NEEDED` entry named an absolute path or a path-bearing/`..` name,
+    /// or resolved outside every `search_paths` root. Guest-controlled ELF
+    /// content must not be able to name a host library (W67A #4).
+    #[error("unsafe native dependency {needed:?} required by {requester:?}: only SONAME-style names inside the search paths are allowed")]
+    UnsafeDependency { needed: String, requester: String },
+
     /// Relocation, init, or dependency initialization failed.
     #[error("library initialization failed: {0}")]
     InitFailed(String),
@@ -71,6 +77,7 @@ impl LoaderError {
             LoaderError::ElfMalformed(_) => "ELF_MALFORMED",
             LoaderError::WrongAbi { .. } => "WRONG_ABI",
             LoaderError::DepNotFound { .. } => "NATIVE_DEP_NOT_FOUND",
+            LoaderError::UnsafeDependency { .. } => "NATIVE_DEP_UNSAFE",
             LoaderError::InitFailed(_) => "NATIVE_INIT_FAILED",
             LoaderError::UnsupportedSymbols(_) => "UNSUPPORTED_NATIVE_SYMBOL",
             LoaderError::UnsupportedRelocation { .. } => "UNSUPPORTED_RELOCATION",

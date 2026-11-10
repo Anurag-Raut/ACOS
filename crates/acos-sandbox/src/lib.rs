@@ -11,15 +11,20 @@
 //! 1. `prctl(PR_SET_NO_NEW_PRIVS)` — makes the following layers un-removable;
 //! 2. close inherited file descriptors (except an explicit keep list);
 //! 3. a sanitised environment (`clearenv` + a minimal set);
-//! 4. resource limits (address space, `NOFILE`, `NPROC`, CPU, `CORE=0`);
+//! 4. resource limits (address space, `NOFILE`, `NPROC`, CPU, `CORE=0`,
+//!    `FSIZE`, `STACK`, `MEMLOCK`);
 //! 5. optional unprivileged user/network/mount namespaces;
 //! 6. a Landlock filesystem ruleset: read-only for system VFS roots and the
 //!    APK directory, read-write only for the app data directory, nothing else;
 //! 7. a seccomp-bpf filter that denies `exec*`, `ptrace`, `process_vm_*`,
-//!    `mount`/`unshare`/`setns`, `kexec`, `bpf`, `perf_event_open`, `keyctl`,
-//!    module ops, and every socket family except `AF_UNIX`, while leaving
-//!    futex, thread creation, `mmap`/`mprotect` (including `PROT_EXEC`),
-//!    signals, clocks, eventfd and epoll available.
+//!    `mount`/`unshare`/`setns`, the new mount API, `open_by_handle_at`,
+//!    `io_uring_*`, `userfaultfd`, the pidfd family, `kcmp`, `perf_event_open`,
+//!    `keyctl`, module ops, `setuid`/`capset`, and every socket family except
+//!    `AF_UNIX`; `clone` namespace flags, foreign-process signals and
+//!    `personality` are argument-filtered, while futex, thread creation,
+//!    `mmap`/`mprotect` (including `PROT_EXEC`), clocks, eventfd and epoll stay
+//!    available. Optional Landlock ABI>=6 scopes additionally confine signals
+//!    and abstract UNIX sockets to the sandbox domain.
 //!
 //! It **fails closed**: if any layer listed in [`ConfineProfile::required`]
 //! cannot be established, [`confine`] returns a structured
@@ -100,6 +105,20 @@ impl Layer {
 
     /// The layers that must all be active for a process to count as confined.
     pub const BASE: [Layer; 3] = [Layer::NoNewPrivs, Layer::Landlock, Layer::Seccomp];
+
+    /// The full fail-closed layer set: process hygiene plus the two kernel
+    /// enforcement layers. [`confinement_active`](crate::confinement_active)
+    /// stays false unless every one of these is active, so a profile whose
+    /// hygiene steps failed (or a probe with no `required` layers) can never
+    /// make the native loader trust an untrusted `.so` (W67A #9).
+    pub const TRUSTED: [Layer; 6] = [
+        Layer::NoNewPrivs,
+        Layer::CloseFds,
+        Layer::SanitizeEnv,
+        Layer::Rlimits,
+        Layer::Landlock,
+        Layer::Seccomp,
+    ];
 }
 
 impl std::fmt::Display for Layer {

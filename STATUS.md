@@ -1,7 +1,8 @@
 # ACOS — Status
 
-**As of 2026-11-10, HEAD `9426b5b` + working tree** (50 commits; checkpoint
-`ced0d70`/`40f075c`/`e64897f`). Honest, dated snapshot. `TASKS.md` is the plan;
+**As of 2026-11-11, HEAD `9ad95e7`** (87 commits; the W67-A audit baseline was
+`9426b5b`, and the W71-A security/test-honesty fixes land on top of `9ad95e7`).
+Honest, dated snapshot. `TASKS.md` is the plan;
 `docs/V1.md` is the V1 definition; `docs/FINDINGS.md` is the append-only
 findings log; `EXPERIMENTS.md` is the history; `BENCHMARKS.md` §8 and
 `results/bench/REPORT.md` are the measured benchmark record.
@@ -9,13 +10,16 @@ findings log; `EXPERIMENTS.md` is the history; `BENCHMARKS.md` §8 and
 ## One line
 
 **Console execution is real and verified against real ART; framework boot
-reaches `bindApplication` and a real `ClientTransaction`; the first
-Application/Activity callback, frame and input are not yet observed.** The
-Rust VM runs the real Android 14 core-library bytecode, the real boot-classpath
-DEX is extracted unprivileged, `acos inspect`/`run-dex`/`verify` exist, and the
-Rust service layer (`acos-services`, `acos-wm`) and renderer (`acos-render`)
-have their own acceptance tests. Everything downstream of Activity launch —
-lifecycle callbacks, frames, UI tree, input, reset, V1 verdict — is unverified.
+delivers `bindApplication`, `Application.onCreate` and the launch
+`ClientTransaction`, and reaches `MainActivity.onCreate` (blocked later in
+`VectorDrawable.nCreateGroup`); the full `onStart`/`onResume` order, the first
+frame and input are not yet observed.** The Rust VM runs the real Android 14
+core-library bytecode, the real boot-classpath DEX is extracted unprivileged,
+`acos inspect`/`run-dex`/`verify` exist, and the Rust service layer
+(`acos-services`, `acos-wm`), the SQLite engine (`acos-sqlite`), the
+confinement layer (`acos-sandbox`) and the renderer (`acos-render`) have their
+own acceptance tests. Everything downstream of `Activity.onCreate` — the rest
+of the lifecycle, frames, UI tree, input, reset, V1 verdict — is unverified.
 
 ## Milestone table (M0..M5 + V1 gate)
 
@@ -27,11 +31,23 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 |---|---|---|---|
 | **M0** static APK/DEX analysis | parse/verify/decode APK + DEX; differential vs `dexdump`/`aapt2` | **done** (static-analysis tier) | `crates/acos-dex/tests/diff_dexdump.sh` → 3 files / 380 methods / 4,253 insns / 0 mismatches (`docs/FINDINGS.md` F-0004); `crates/acos-apk/tests/differential_aapt2.rs`; `docs/FINDINGS.md` F-0002 |
 | **M1** println on the real core library | console programs execute on real `core-oj`/`core-libart`/`core-icu4j` DEX and match the ART oracle | **done** (art-reference) | `results/m1/README.md` (20/20 byte-identical, normal + GC-stress); `results/vm/OS_NATIVES_AUDIT.md` §3 (`--corelib real`: 25 pass / 0 fail / 0 unsupported of 25); `results/vm/dexprogs-real-normal.json` |
-| **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **partial** | `bindApplication` delivered + `ClientTransaction` scheduled (`results/m2/M2_LOG.md`; `results/m2/boot-release.json`); M2 acceptance test `#[ignore]`d/red (`app_created=false`, `tx_delivered=false`); `crates/acos-runtime/tests/m2.rs` |
+| **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **partial** | `bindApplication` delivered, `Application.onCreate` runs and the launch `ClientTransaction` reaches `MainActivity.onCreate` (`results/m2/M2_LOG.md`; `results/m2/boot-release.json`; commit `ad9c978`); the launch then blocks in `VectorDrawable.nCreateGroup` (`f84bd13`), so the full `onStart`/`onResume` order is still unverified and the M2 gate stays `#[ignore]`d/red; `crates/acos-runtime/tests/m2.rs` |
 | **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **partial** | renderer standalone verified: 88 tests, text advance within 0.3% of the ART UI dump (`results/render/README.md`); frame handoff `hardwareRenderer→compositor` added in the working tree (`crates/acos-runtime/src/frame_handoff.rs`); **no framework-bound frame yet** (M3 gate not met) |
 | **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **not started** (gate); pieces partial | input natives + WMS input dispatcher have unit coverage (`results/wm/README.md`); UI tree is protocol-only (`UiNode`/`UiTree`); no Activity runs, so no tap→state evidence |
 | **M5** interaction trace | `lifecycle-summary.txt` + `ui_after_*` + native-diff | **not started** | depends on M2–M4 |
 | **V1 gate** `acos verify` full verdict | `acos verify --apk … --scenario … --json --artifacts …` passes on the two fixtures with no Android boot | **not started** | runner exists (`crates/acos-verify`, `scenarios/`), but the native backend stops at the first UI step (`docs/DEV_WORKFLOW.md` §9; `scenarios/README.md`) |
+
+## Landed since the audit baseline (`9426b5b`, W67-A)
+
+| Area | What landed | Evidence |
+|---|---|---|
+| **M2 Activity.onCreate** | real provider binder, `Path.approximate` triples, conditional parcelable codec and `@null` theme refs; launch reaches `MainActivity.onCreate` (`ad9c978`, `f84bd13`) | `results/m2/M2_LOG.md`, `crates/acos-runtime/tests/m2.rs` |
+| **SQLite** | safe `acos-sqlite` engine (rusqlite + vendored C) behind the real `android.database.sqlite` natives; fixture 28 matches ART (`9114c58`) | `crates/acos-sqlite/tests/engine.rs`, `results/vm/W49A_SQLITE.md` |
+| **Sandbox** | seccomp/Landlock/rlimits/namespaces confinement, fail-closed, loader requires confinement; hostile-process harness (`83d814d`) + W67-A hardening (extended seccomp posture, ABI-6 signal/abstract-socket scopes, hygiene-gated `confinement_active`) | `crates/acos-sandbox/tests/confine.rs`, `crates/acos-sandbox/src/linux/*` |
+| **NDK** | `libandroid` surface: assets, bitmap, `ANativeWindow`, `ALooper`, `AChoreographer`, `AConfiguration`; GL traps (`a62c009`) | `crates/acos-jni/src/ndk_host.rs` (working tree), `fixtures/jni` |
+| **JNI broker** | 227/233 `JNINativeInterface` slots with documented reasons; `CallNonvirtual*`, native OS-thread attach/detach (`b4d8a7b`) | `results/jni/JNI_COVERAGE.md`, `crates/acos-jni/tests/` |
+| **Render corpus** | 5 fixture scenes vs ART API-34 (SSIM 0.989-0.995), per-scene thresholds; raster canvas/line breaking (`00a429b`, `f7f7d93`) | `results/render/W66A_CORPUS.md`, `results/render/corpus/` |
+| **dexprogs** | 27/27 vs real ART (`--corelib real`, normal) | `results/vm/dexprogs-w45a-real.json`, `results/vm/dexprogs-real-normal.json` |
 
 ## What is verified vs claimed (tier labels)
 
@@ -205,15 +221,14 @@ same-type/same-state pairs are called `better`/`worse`.
 
 ## Working tree / concurrency
 
-HEAD `9426b5b` (the honesty/host-safety audit) is the committed checkpoint. The
-working tree carries uncommitted wave work: W33-A (reflection fields, exception
-floor, lifecycle), W28-A (interpreter/dispatch/vm performance), W34-B
-(`acos-cli` session/launch, `acos-mcp`) and W35-A (the audit fixes: guest-sized
-allocation bounds, parcel counts, AppOps/UserManager grants, guest environment,
-surface decode errors, green-thread `park`/`unpark`, native-loader path
-confinement). Shared files (`heap.rs`, `reflect.rs`, `interp.rs`, `vm.rs`) were
-edited in place; concurrent agents re-read before editing. Validate on a scratch
-worktree if the shared tree does not build.
+HEAD `9ad95e7` is the committed checkpoint (the W67-A audit baseline was
+`9426b5b`). The working tree carries uncommitted wave work from concurrent
+agents (W57/W61/W64/W65/W66 native/JNI/render additions, W68-A `gfx_vector` and
+`acos-runtime`/`acos-services`, W69-A frame/interp/vm/jni bisecting, W70-A
+`acos-render`, and W71-A's W67-A security/test-honesty fixes). Shared files
+(`heap.rs`, `reflect.rs`, `interp.rs`, `vm.rs`, `snapshot.rs`) were edited in
+place; concurrent agents re-read before editing. Validate on a scratch worktree
+if the shared tree does not build.
 
 ## Decisions in force
 

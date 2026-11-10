@@ -120,8 +120,14 @@ fn boot_root() -> Option<PathBuf> {
 /// guest `.so`.
 pub fn confine_native_launch(apk: &Path) -> Result<ConfinementReport, SessionError> {
     let root = session_root()?;
+    // Read surface is exactly what native loading needs (W67A #13): the VFS
+    // session root (writable), the boot-cache `/system` mapping, and the APK's
+    // extracted-library directory. Host `/usr`, `/lib` and `/etc` are **not**
+    // granted: the custom ELF loader resolves `DT_NEEDED` from the VFS/APK
+    // search paths, and granting `/lib` was what made a traversing `DT_NEEDED`
+    // (finding #4) useful. Read-only roots are added only when they exist.
     let mut profile = ConfineProfile {
-        read_only_paths: vec![PathBuf::from("/usr"), PathBuf::from("/lib"), PathBuf::from("/etc")],
+        read_only_paths: Vec::new(),
         read_write_paths: vec![root.clone()],
         ..ConfineProfile::default()
     };

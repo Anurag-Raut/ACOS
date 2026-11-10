@@ -120,6 +120,18 @@ pub fn apply_rlimits(profile: &RlimitProfile) -> Result<String, String> {
         set_limit(libc::RLIMIT_CPU, value)?;
         applied.push(format!("CPU={value}"));
     }
+    if let Some(value) = profile.file_size_bytes {
+        set_limit(libc::RLIMIT_FSIZE, value)?;
+        applied.push(format!("FSIZE={value}"));
+    }
+    if let Some(value) = profile.stack_bytes {
+        set_limit(libc::RLIMIT_STACK, value)?;
+        applied.push(format!("STACK={value}"));
+    }
+    if let Some(value) = profile.memlock_bytes {
+        set_limit(libc::RLIMIT_MEMLOCK, value)?;
+        applied.push(format!("MEMLOCK={value}"));
+    }
     set_limit(libc::RLIMIT_CORE, profile.core)?;
     applied.push(format!("CORE={}", profile.core));
     Ok(applied.join(" "))

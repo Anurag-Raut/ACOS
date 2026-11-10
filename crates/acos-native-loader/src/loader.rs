@@ -23,6 +23,33 @@ pub(crate) static CURRENT_LOADER: Mutex<Option<Weak<LoaderInner>>> = Mutex::new(
 
 /// Name of a system library satisfied by the bionic shim table rather than a
 /// file on disk.
+/// Whether a `DT_NEEDED`/soname is a plain file-name component.
+///
+/// `search_paths` is the only resolution root, so absolute paths and any
+/// separator-bearing or `.`/`..` name are refused before a host path can be
+/// joined (W67A #4). This mirrors `bionic::dl::resolve_library` but applies to
+/// guest-controlled ELF content, not just an explicit `dlopen` argument.
+fn is_safe_dep_name(need: &str) -> bool {
+    !need.is_empty()
+        && !need.contains('/')
+        && !need.contains('\\')
+        && need != "."
+        && need != ".."
+        && !Path::new(need).is_absolute()
+}
+
+/// Whether `candidate` canonicalises to a path still under `dir`. A symlink
+/// placed in a search root cannot be used to escape it.
+fn contained_in(candidate: &Path, dir: &Path) -> bool {
+    let Ok(real) = std::fs::canonicalize(candidate) else {
+        return false;
+    };
+    match std::fs::canonicalize(dir) {
+        Ok(root) => real.starts_with(&root),
+        Err(_) => false,
+    }
+}
+
 fn is_shim_system_lib(name: &str) -> bool {
     matches!(
         name,
@@ -430,7 +457,15 @@ impl Loader {
         need: &str,
         requester: &str,
     ) -> Result<Option<Arc<NativeLibrary>>> {
-        // Already loaded?
+        // A guest library's `DT_NEEDED` is untrusted content: only a plain
+        // SONAME-style name may be resolved, and only inside `search_paths`.
+        if !is_safe_dep_name(need) {
+            return Err(LoaderError::UnsafeDependency {
+                needed: need.to_string(),
+                requester: requester.to_string(),
+            });
+        }
+        // Already loaded? De-duplicate by file name or `DT_SONAME`.
         if let Some(existing) = self
             .inner
             .libs
@@ -445,6 +480,12 @@ impl Loader {
         for dir in &self.inner.config.search_paths {
             let candidate = dir.join(need);
             if candidate.is_file() {
+                if !contained_in(&candidate, dir) {
+                    return Err(LoaderError::UnsafeDependency {
+                        needed: need.to_string(),
+                        requester: requester.to_string(),
+                    });
+                }
                 let bytes = std::fs::read(&candidate)?;
                 let lib = self.load_object(&bytes, Some(candidate), need)?;
                 self.load_deps(&lib)?;
@@ -1443,5 +1484,47 @@ pub(crate) fn dl_handle_remove(inner: &Arc<LoaderInner>, id: usize) -> Option<Ar
 impl LoaderInner {
     pub(crate) fn config(&self) -> &LoaderConfig {
         &self.config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{contained_in, is_safe_dep_name};
+
+    #[test]
+    fn rejects_unsafe_dt_needed_names() {
+        // W67A #4: guest ELF content must not be able to name a host path.
+        for bad in [
+            "/lib/x86_64-linux-gnu/libc.so.6",
+            "/etc/passwd",
+            "../libevil.so",
+            "sub/lib.so",
+            "..",
+            ".",
+            "",
+            "a\\b.so",
+        ] {
+            assert!(!is_safe_dep_name(bad), "{bad:?} must be rejected");
+        }
+        for ok in ["libtestdep.so", "libc++_shared.so", "libfoo.so.1"] {
+            assert!(is_safe_dep_name(ok), "{ok:?} must be accepted");
+        }
+    }
+
+    #[test]
+    fn containment_follows_symlinks_out_of_a_root() {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-native-loader-containment-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("root")).unwrap();
+        std::fs::write(dir.join("outside.so"), b"x").unwrap();
+        std::fs::write(dir.join("root/inside.so"), b"x").unwrap();
+        std::os::unix::fs::symlink(dir.join("outside.so"), dir.join("root/escape.so")).unwrap();
+
+        assert!(contained_in(&dir.join("root/inside.so"), &dir.join("root")));
+        assert!(!contained_in(&dir.join("root/escape.so"), &dir.join("root")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,0 +1,11 @@
+[package]
+name = "acos-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Shared test-only helpers for ACOS (workspace fixture gate)."
+
+[lib]
+name = "acos_test_support"
+path = "src/lib.rs"

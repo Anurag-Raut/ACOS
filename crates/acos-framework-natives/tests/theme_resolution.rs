@@ -213,11 +213,11 @@ fn theme_device_default_light_dark_action_bar() {
         eprintln!("aapt not found; skipping theme test");
         return;
     };
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         eprintln!("framework-res.apk missing; skipping");
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let output = Command::new(&aapt)
         .args(["dump", "--values", "resources"])
         .arg(&apk_path)
@@ -341,10 +341,10 @@ fn theme_device_default_light_dark_action_bar() {
 
 #[test]
 fn null_theme_reference_becomes_type_null() {
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let mut mgr = build_manager(&apk_path);
     let theme = mgr.theme_create();
     mgr.theme_apply_style(theme, 0x0103_013f, false);
@@ -364,10 +364,10 @@ fn null_theme_reference_becomes_type_null() {
 
 #[test]
 fn theme_copy_and_rebase() {
-    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         return;
     }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     let mut mgr = build_manager(&apk_path);
     let a = mgr.theme_create();
     mgr.theme_apply_style(a, 0x0103_013f, false);
