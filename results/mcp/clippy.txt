@@ -1,0 +1,2 @@
+    Checking acos-mcp v0.1.0 (/home/Qui/Projects/acos/crates/acos-mcp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s

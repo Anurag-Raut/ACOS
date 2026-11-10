@@ -57,6 +57,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-mcp"
+version = "0.1.0"
+dependencies = [
+ "acos-protocol",
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "acos-native-loader"
 version = "0.1.0"
 dependencies = [
@@ -110,12 +121,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-services"
+version = "0.1.0"
+dependencies = [
+ "acos-aidl",
+ "acos-apk",
+ "acos-dex",
+ "acos-parcel",
+ "acos-protocol",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "acos-vm"
 version = "0.1.0"
 dependencies = [
  "acos-dex",
+ "acos-parcel",
+ "rustix",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "acos-wm"
+version = "0.1.0"
+dependencies = [
+ "acos-aidl",
+ "acos-dex",
+ "acos-parcel",
+ "acos-protocol",
+ "acos-render",
+ "bytemuck",
+ "proptest",
+ "rustix",
  "thiserror",
 ]
 

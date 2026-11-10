@@ -1,0 +1,110 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "fidelity": "static-analysis",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_capabilities",
+  "result": {
+    "binary": "/home/Qui/Projects/acos/target/release/acos",
+    "commands": [
+      {
+        "available": true,
+        "command": "inspect",
+        "fidelity": "static-analysis",
+        "reason": null,
+        "tool": "acos_inspect"
+      },
+      {
+        "available": true,
+        "command": "run-dex",
+        "fidelity": "native-runtime",
+        "reason": null,
+        "tool": "acos_run_dex"
+      },
+      {
+        "available": false,
+        "command": "run",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_run"
+      },
+      {
+        "available": false,
+        "command": "observe",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_observe"
+      },
+      {
+        "available": false,
+        "command": "capture",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_capture"
+      },
+      {
+        "available": false,
+        "command": "action",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_action"
+      },
+      {
+        "available": false,
+        "command": "assert",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_assert"
+      },
+      {
+        "available": false,
+        "command": "events",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_events"
+      },
+      {
+        "available": false,
+        "command": "reset",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_reset"
+      },
+      {
+        "available": false,
+        "command": "profile",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_profile"
+      },
+      {
+        "available": false,
+        "command": "destroy",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_destroy"
+      },
+      {
+        "available": false,
+        "command": "verify",
+        "fidelity": "native-runtime",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_verify"
+      },
+      {
+        "available": false,
+        "command": "capability-report",
+        "fidelity": "static-analysis",
+        "reason": "not implemented by the acos backend yet",
+        "tool": "acos_capability_report"
+      }
+    ],
+    "probe_error": null,
+    "probed": true,
+    "version": "acos 0.1.0"
+  },
+  "status": "pass"
+}

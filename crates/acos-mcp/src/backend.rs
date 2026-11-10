@@ -1,0 +1,812 @@
+//! The backend abstraction and the CLI-backed implementation.
+//!
+//! [`Backend`] is the only thing the server knows about execution. The
+//! [`CliBackend`] runs the `acos` binary as a subprocess for commands the binary
+//! implements, and returns a structured `unsupported` envelope (status
+//! `unsupported`, `ok: false`, with a hint) for every command it does not.
+//! Runtime capability is discovered by probing `acos --help`; nothing is
+//! hard-coded beyond the fidelity each command is expected to produce.
+
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
+
+use acos_protocol::{
+    Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics,
+    ProtocolError, ResourceBudget,
+};
+use serde_json::{json, Value};
+
+use crate::descriptors::{command_backend, command_fidelity};
+use crate::process::{self, CancelToken, Captured, ChildSpec, RunError};
+use crate::safety;
+
+/// Default per-call wall-clock budget when the request declares none.
+pub const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(120);
+/// Default maximum captured bytes for stdout and stderr separately.
+pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+/// Default capability-probe timeout.
+pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Identity of the resolved backend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackendInfo {
+    /// Resolved `acos` binary, when one was found.
+    pub binary: Option<PathBuf>,
+    /// `acos --version` output, when available.
+    pub version: Option<String>,
+}
+
+/// A snapshot of what the backend can do.
+#[derive(Debug, Clone)]
+pub struct Capabilities {
+    /// Resolved binary, when found.
+    pub binary: Option<PathBuf>,
+    /// Version string, when probed.
+    pub version: Option<String>,
+    /// Whether a probe has run.
+    pub probed: bool,
+    /// Commands the backend reports it implements.
+    pub supported: HashSet<CommandName>,
+    /// Why probing failed, when it did.
+    pub probe_error: Option<String>,
+}
+
+impl Capabilities {
+    /// A snapshot before any probe: everything unavailable.
+    pub fn unprobed() -> Self {
+        Capabilities {
+            binary: None,
+            version: None,
+            probed: false,
+            supported: HashSet::new(),
+            probe_error: Some("the backend has not been probed yet".to_string()),
+        }
+    }
+
+    /// Whether a command is currently executable.
+    pub fn is_supported(&self, command: CommandName) -> bool {
+        self.supported.contains(&command)
+    }
+
+    /// JSON form for the `acos_capabilities` tool.
+    pub fn to_json(&self) -> Value {
+        let commands: Vec<Value> = crate::descriptors::all_commands()
+            .iter()
+            .map(|command| {
+                let available = self.is_supported(*command);
+                json!({
+                    "command": command.as_str(),
+                    "tool": command.tool_name(),
+                    "available": available,
+                    "fidelity": command_fidelity(*command).as_str(),
+                    "reason": if available { Value::Null } else {
+                        json!(self.probe_error.clone().unwrap_or_else(|| "not implemented by the acos backend yet".to_string()))
+                    },
+                })
+            })
+            .collect();
+        json!({
+            "binary": self.binary.as_ref().map(|p| p.display().to_string()),
+            "version": self.version,
+            "probed": self.probed,
+            "probe_error": self.probe_error,
+            "commands": commands,
+        })
+    }
+}
+
+/// Everything a backend needs for one call.
+#[derive(Debug, Clone)]
+pub struct CallContext {
+    /// Cancellation flag, set by `notifications/cancelled`.
+    pub cancel: CancelToken,
+    /// Hard wall-clock deadline for the call.
+    pub deadline: Instant,
+    /// Declared resource budget from `base.budget`.
+    pub budget: ResourceBudget,
+    /// Canonical allowed path roots.
+    pub allowed_roots: Vec<PathBuf>,
+    /// Artifacts directory (also an allowed root).
+    pub artifacts_dir: PathBuf,
+    /// Maximum characters per string argument.
+    pub max_arg_chars: usize,
+    /// Maximum captured bytes per stream.
+    pub max_output_bytes: usize,
+}
+
+/// The execution backend behind the MCP server.
+pub trait Backend: Send + Sync + 'static {
+    /// Execute one ACOS command and return its envelope.
+    fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope;
+    /// The cached capability snapshot.
+    fn capabilities(&self) -> Capabilities;
+    /// Re-probe the backend and update the cache.
+    fn refresh_capabilities(&self) -> Capabilities;
+    /// Backend identity.
+    fn info(&self) -> BackendInfo;
+}
+
+/// Configuration for [`CliBackend`].
+#[derive(Debug, Clone)]
+pub struct BackendConfig {
+    /// Explicit `acos` binary; `None` triggers discovery.
+    pub binary: Option<PathBuf>,
+    /// Extra environment for every child.
+    pub extra_env: Vec<(String, String)>,
+    /// Capability-probe timeout.
+    pub probe_timeout: Duration,
+    /// Maximum captured bytes per stream during probing.
+    pub max_output_bytes: usize,
+}
+
+impl Default for BackendConfig {
+    fn default() -> Self {
+        BackendConfig {
+            binary: None,
+            extra_env: Vec::new(),
+            probe_timeout: DEFAULT_PROBE_TIMEOUT,
+            max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
+        }
+    }
+}
+
+impl BackendConfig {
+    /// Configuration for an explicit binary (used by tests).
+    pub fn for_binary(binary: impl Into<PathBuf>) -> Self {
+        BackendConfig {
+            binary: Some(binary.into()),
+            ..BackendConfig::default()
+        }
+    }
+
+    /// Discover the binary from the environment: `ACOS_BIN`, then `acos` on
+    /// `PATH`, then `target/release/acos` walking up from the cwd/executable.
+    pub fn discover() -> Self {
+        BackendConfig {
+            binary: discover_binary(),
+            ..BackendConfig::default()
+        }
+    }
+}
+
+/// Find the `acos` binary.
+pub fn discover_binary() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("ACOS_BIN") {
+        if !value.trim().is_empty() {
+            return Some(PathBuf::from(value));
+        }
+    }
+    if let Some(path) = find_on_path("acos") {
+        return Some(path);
+    }
+    find_repo_binary()
+}
+
+fn find_on_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn find_repo_binary() -> Option<PathBuf> {
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        bases.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            bases.push(parent.to_path_buf());
+        }
+    }
+    for base in bases {
+        let mut dir: Option<&Path> = Some(base.as_path());
+        while let Some(current) = dir {
+            for profile in ["release", "debug"] {
+                let candidate = current.join("target").join(profile).join("acos");
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+            dir = current.parent();
+        }
+    }
+    None
+}
+
+/// The CLI-backed backend.
+pub struct CliBackend {
+    config: BackendConfig,
+    caps: RwLock<Capabilities>,
+}
+
+impl CliBackend {
+    /// Create a backend and run the initial capability probe.
+    pub fn new(config: BackendConfig) -> Self {
+        let caps = probe(&config);
+        CliBackend {
+            config,
+            caps: RwLock::new(caps),
+        }
+    }
+
+    /// The backend configuration.
+    pub fn config(&self) -> &BackendConfig {
+        &self.config
+    }
+
+    fn resolved_binary(&self) -> Option<PathBuf> {
+        self.config
+            .binary
+            .clone()
+            .or_else(discover_binary)
+    }
+
+    fn call_inspect(
+        &self,
+        binary: &Path,
+        request_id: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let Some(apk) = args.get("apk").and_then(Value::as_str) else {
+            return invalid_argument(request_id, "apk", "missing required string `apk`");
+        };
+        let apk_path = match safety::validate_path(apk, &ctx.allowed_roots) {
+            Ok(path) => path,
+            Err(reason) => return unsafe_path(request_id, apk, &reason),
+        };
+        let argv = vec![
+            "inspect".to_string(),
+            apk_path.display().to_string(),
+            "--json".to_string(),
+        ];
+        let captured = match run_child(binary, &argv, &self.config.extra_env, ctx) {
+            Ok(captured) => captured,
+            Err(err) => return run_error_envelope(request_id, CommandName::Inspect, err, ctx),
+        };
+        envelope_from_captured(&captured, request_id, CommandName::Inspect, ctx)
+    }
+
+    fn call_run_dex(
+        &self,
+        binary: &Path,
+        request_id: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let Some(path) = args.get("path").and_then(Value::as_str) else {
+            return invalid_argument(request_id, "path", "missing required string `path`");
+        };
+        let dex_path = match safety::validate_path(path, &ctx.allowed_roots) {
+            Ok(path) => path,
+            Err(reason) => return unsafe_path(request_id, path, &reason),
+        };
+        let main = args
+            .get("main")
+            .and_then(Value::as_str)
+            .unwrap_or("Main")
+            .to_string();
+        let mut argv = vec![
+            "run-dex".to_string(),
+            dex_path.display().to_string(),
+            "--main".to_string(),
+            main,
+            "--json".to_string(),
+        ];
+        if let Some(program_args) = args.get("args").and_then(Value::as_array) {
+            for arg in program_args {
+                if let Some(value) = arg.as_str() {
+                    argv.push("--arg".to_string());
+                    argv.push(value.to_string());
+                }
+            }
+        }
+
+        let mut env = self.config.extra_env.clone();
+        let heap = args
+            .get("heap_max_bytes")
+            .and_then(Value::as_u64)
+            .or_else(|| ctx.budget.memory_mib.map(|mib| mib.saturating_mul(1024 * 1024)));
+        if let Some(heap) = heap {
+            env.push(("ACOS_HEAP_MAX".to_string(), heap.to_string()));
+        }
+        if args
+            .get("gc_stress")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            env.push(("ACOS_GC_STRESS".to_string(), "1".to_string()));
+        }
+
+        let captured = match run_child(binary, &argv, &env, ctx) {
+            Ok(captured) => captured,
+            Err(err) => return run_error_envelope(request_id, CommandName::RunDex, err, ctx),
+        };
+        envelope_from_captured(&captured, request_id, CommandName::RunDex, ctx)
+    }
+}
+
+impl Backend for CliBackend {
+    fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope {
+        let request_id = args
+            .pointer("/base/request_id")
+            .and_then(Value::as_str)
+            .unwrap_or("req_mcp")
+            .to_string();
+
+        if let Err(reason) = safety::check_arg_limits(args, ctx.max_arg_chars) {
+            return invalid_argument(&request_id, "$", &reason);
+        }
+
+        let caps = self.capabilities();
+        if !caps.is_supported(command) {
+            return unsupported_envelope(&request_id, command, &caps);
+        }
+        let Some(binary) = self.resolved_binary() else {
+            return unsupported_envelope(&request_id, command, &caps);
+        };
+
+        match command {
+            CommandName::Inspect => self.call_inspect(&binary, &request_id, args, ctx),
+            CommandName::RunDex => self.call_run_dex(&binary, &request_id, args, ctx),
+            _ => unsupported_envelope(&request_id, command, &caps),
+        }
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        self.caps
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn refresh_capabilities(&self) -> Capabilities {
+        let caps = probe(&self.config);
+        *self.caps.write().unwrap_or_else(|e| e.into_inner()) = caps.clone();
+        caps
+    }
+
+    fn info(&self) -> BackendInfo {
+        let caps = self.capabilities();
+        BackendInfo {
+            binary: caps.binary,
+            version: caps.version,
+        }
+    }
+}
+
+fn run_child(
+    binary: &Path,
+    argv: &[String],
+    extra_env: &[(String, String)],
+    ctx: &CallContext,
+) -> Result<Captured, RunError> {
+    let spec = ChildSpec {
+        program: binary,
+        args: argv,
+        env: extra_env,
+        deadline: ctx.deadline,
+        cancel: &ctx.cancel,
+        max_output_bytes: ctx.max_output_bytes,
+    };
+    process::run(&spec)
+}
+
+fn probe(config: &BackendConfig) -> Capabilities {
+    let Some(binary) = config.binary.clone().or_else(discover_binary) else {
+        return Capabilities {
+            binary: None,
+            version: None,
+            probed: true,
+            supported: HashSet::new(),
+            probe_error: Some(
+                "no `acos` binary found; set ACOS_BIN or build acos-cli".to_string(),
+            ),
+        };
+    };
+
+    let cancel = CancelToken::new();
+    let help_args = vec!["--help".to_string()];
+    let help_spec = ChildSpec {
+        program: &binary,
+        args: &help_args,
+        env: &config.extra_env,
+        deadline: Instant::now() + config.probe_timeout,
+        cancel: &cancel,
+        max_output_bytes: config.max_output_bytes,
+    };
+    let help = process::run(&help_spec);
+
+    let version = {
+        let version_args = vec!["--version".to_string()];
+        let version_spec = ChildSpec {
+            program: &binary,
+            args: &version_args,
+            env: &config.extra_env,
+            deadline: Instant::now() + config.probe_timeout,
+            cancel: &cancel,
+            max_output_bytes: config.max_output_bytes,
+        };
+        process::run(&version_spec)
+            .ok()
+            .map(|captured| String::from_utf8_lossy(&captured.stdout).trim().to_string())
+            .filter(|v| !v.is_empty())
+    };
+
+    match help {
+        Ok(captured) => {
+            let text = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&captured.stdout),
+                String::from_utf8_lossy(&captured.stderr)
+            );
+            let supported = parse_help_commands(&text);
+            Capabilities {
+                binary: Some(binary),
+                version,
+                probed: true,
+                supported,
+                probe_error: None,
+            }
+        }
+        Err(err) => Capabilities {
+            binary: Some(binary),
+            version,
+            probed: true,
+            supported: HashSet::new(),
+            probe_error: Some(format!("capability probe failed: {err}")),
+        },
+    }
+}
+
+/// Parse command names out of a clap `--help` listing.
+pub fn parse_help_commands(text: &str) -> HashSet<CommandName> {
+    let mut supported = HashSet::new();
+    let mut in_commands = false;
+    for line in text.lines() {
+        let trimmed = line.trim_end();
+        if trimmed.eq_ignore_ascii_case("commands:") {
+            in_commands = true;
+            continue;
+        }
+        if in_commands {
+            if trimmed.trim().is_empty() {
+                in_commands = false;
+                continue;
+            }
+            // clap prints `  <name>  <about>` (two-space indent). Stop at the
+            // next section header (e.g. `Options:`).
+            if !line.starts_with(' ') && !line.starts_with('\t') {
+                in_commands = false;
+                continue;
+            }
+            if let Some(name) = line.split_whitespace().next() {
+                if name == "help" {
+                    continue;
+                }
+                if let Some(command) = crate::descriptors::command_from_wire(name) {
+                    supported.insert(command);
+                }
+            }
+        }
+    }
+    supported
+}
+
+fn envelope_from_captured(
+    captured: &Captured,
+    fallback_id: &str,
+    command: CommandName,
+    ctx: &CallContext,
+) -> Envelope {
+    let stdout = String::from_utf8_lossy(&captured.stdout);
+    let parsed = serde_json::from_str::<Value>(stdout.trim());
+    let mut envelope = match parsed {
+        Ok(value) if value.is_object() => envelope_from_cli_value(&value, fallback_id, command),
+        _ => {
+            let stderr = String::from_utf8_lossy(&captured.stderr);
+            let detail = stderr.trim();
+            let message = if detail.is_empty() {
+                format!(
+                    "`acos {}` produced no JSON envelope (exit {:?})",
+                    command.as_str(),
+                    captured.status
+                )
+            } else {
+                format!(
+                    "`acos {}` failed (exit {:?}): {}",
+                    command.as_str(),
+                    captured.status,
+                    truncate(detail, 2000)
+                )
+            };
+            Envelope::failure(
+                fallback_id,
+                command_backend(command),
+                command_fidelity(command),
+                ProtocolError::new(ErrorCode::Internal, message),
+                Metrics::wall_ms(captured.wall_ms),
+            )
+        }
+    };
+
+    // Enforce the declared memory budget when the backend reports peak RSS.
+    if let (Some(mib), Some(peak)) = (ctx.budget.memory_mib, envelope.metrics().peak_rss_bytes) {
+        let limit = mib.saturating_mul(1024 * 1024);
+        if peak > limit {
+            let request_id = envelope.request_id().to_string();
+            envelope = Envelope::failure(
+                request_id,
+                command_backend(command),
+                command_fidelity(command),
+                ProtocolError::new(
+                    ErrorCode::ResourceLimit,
+                    format!("peak RSS {peak} bytes exceeded the declared budget of {limit} bytes"),
+                )
+                .with_details(json!({"peak_rss_bytes": peak, "budget_bytes": limit})),
+                envelope.metrics(),
+            );
+        }
+    }
+
+    envelope
+}
+
+/// Convert a raw `acos --json` object into a validated protocol envelope.
+///
+/// The CLI's error objects do not carry `hint`/`retryable`, so the envelope is
+/// rebuilt through the protocol constructors rather than deserialized.
+pub fn envelope_from_cli_value(value: &Value, fallback_id: &str, command: CommandName) -> Envelope {
+    let request_id = value
+        .get("request_id")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback_id);
+    let backend = value
+        .get("backend")
+        .and_then(Value::as_str)
+        .and_then(parse_backend)
+        .unwrap_or_else(|| command_backend(command));
+    let fidelity = value
+        .get("fidelity")
+        .and_then(Value::as_str)
+        .and_then(parse_fidelity)
+        .unwrap_or_else(|| command_fidelity(command));
+    let metrics = serde_json::from_value::<Metrics>(
+        value.get("metrics").cloned().unwrap_or_else(|| json!({})),
+    )
+    .unwrap_or_else(|_| Metrics::wall_ms(0));
+
+    let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    if ok {
+        let mut envelope = Envelope::pass(request_id, backend, fidelity, metrics);
+        if let Some(result) = value.get("result") {
+            if !result.is_null() {
+                envelope = envelope.with_value_result(result.clone());
+            }
+        }
+        if let Some(caps) = value.get("capabilities_used").and_then(Value::as_array) {
+            envelope = envelope.with_capabilities(
+                caps.iter().filter_map(Value::as_str).map(str::to_string),
+            );
+        }
+        if let Some(session) = value.get("session_id").and_then(Value::as_str) {
+            envelope = envelope.with_session_id(session);
+        }
+        envelope
+    } else {
+        let code = value
+            .pointer("/error/code")
+            .and_then(Value::as_str)
+            .and_then(ErrorCode::from_str_opt)
+            .unwrap_or(ErrorCode::Internal);
+        let message = value
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("the acos backend reported an error");
+        let mut error = ProtocolError::new(code, message);
+        if let Some(details) = value.pointer("/error/details") {
+            if !details.is_null() {
+                error = error.with_details(details.clone());
+            }
+        }
+        Envelope::failure(request_id, backend, fidelity, error, metrics)
+    }
+}
+
+fn parse_backend(value: &str) -> Option<ProtocolBackend> {
+    serde_json::from_value(Value::String(value.to_string())).ok()
+}
+
+fn parse_fidelity(value: &str) -> Option<Fidelity> {
+    serde_json::from_value(Value::String(value.to_string())).ok()
+}
+
+fn unsupported_envelope(request_id: &str, command: CommandName, caps: &Capabilities) -> Envelope {
+    let reason = caps
+        .probe_error
+        .clone()
+        .unwrap_or_else(|| "the acos backend does not implement this command yet".to_string());
+    let error = ProtocolError::new(
+        ErrorCode::UnsupportedBackend,
+        format!(
+            "command `{}` is not implemented by the acos backend: {reason}",
+            command.as_str()
+        ),
+    )
+    .with_hint(format!(
+        "This ACOS build does not implement `{}`. Call `acos_capabilities` for the current supported set. \
+         This is `unsupported`, never a pass; do not rewrite the app to hide the gap.",
+        command.as_str()
+    ))
+    .with_details(json!({
+        "command": command.as_str(),
+        "tool": command.tool_name(),
+        "available": false,
+        "binary": caps.binary.as_ref().map(|p| p.display().to_string()),
+        "probe_error": caps.probe_error,
+    }));
+    Envelope::failure(
+        request_id,
+        command_backend(command),
+        command_fidelity(command),
+        error,
+        Metrics::wall_ms(0),
+    )
+}
+
+fn invalid_argument(request_id: &str, field: &str, reason: &str) -> Envelope {
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::StaticAnalysis,
+        ProtocolError::new(
+            ErrorCode::InvalidArgument,
+            format!("invalid argument `{field}`: {reason}"),
+        )
+        .with_details(json!({"field": field, "reason": reason})),
+        Metrics::wall_ms(0),
+    )
+}
+
+fn unsafe_path(request_id: &str, path: &str, reason: &str) -> Envelope {
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::StaticAnalysis,
+        ProtocolError::new(ErrorCode::UnsafePath, reason.to_string())
+            .with_details(json!({"path": path})),
+        Metrics::wall_ms(0),
+    )
+}
+
+fn run_error_envelope(
+    request_id: &str,
+    command: CommandName,
+    err: RunError,
+    ctx: &CallContext,
+) -> Envelope {
+    let (code, message) = match &err {
+        RunError::Timeout => (
+            ErrorCode::Timeout,
+            format!(
+                "`acos {}` exceeded its wall-clock budget of {} ms",
+                command.as_str(),
+                ctx.deadline
+                    .saturating_duration_since(Instant::now())
+                    .as_millis()
+            ),
+        ),
+        RunError::Cancelled => (
+            ErrorCode::Internal,
+            format!("`acos {}` was cancelled by the client", command.as_str()),
+        ),
+        RunError::OutputLimit => (
+            ErrorCode::ResourceLimit,
+            format!(
+                "`acos {}` produced more than {} bytes on one stream",
+                command.as_str(),
+                ctx.max_output_bytes
+            ),
+        ),
+        RunError::Spawn(detail) => (
+            ErrorCode::Internal,
+            format!("could not start `acos {}`: {detail}", command.as_str()),
+        ),
+        RunError::Io(detail) => (
+            ErrorCode::Internal,
+            format!("`acos {}` I/O failure: {detail}", command.as_str()),
+        ),
+    };
+    let mut error = ProtocolError::new(code, message);
+    if matches!(err, RunError::Cancelled) {
+        error = error.with_details(json!({"cancelled": true}));
+    }
+    Envelope::failure(
+        request_id,
+        command_backend(command),
+        command_fidelity(command),
+        error,
+        Metrics::wall_ms(0),
+    )
+}
+
+fn truncate(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max).collect();
+    out.push('…');
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_parsing_finds_clap_commands() {
+        let text = "The `acos` command-line interface.\n\nUsage: acos <COMMAND>\n\nCommands:\n  inspect  Inspect an APK\n  run-dex  Execute a DEX main\n  help     Print help\n\nOptions:\n  -h, --help  Print help\n";
+        let supported = parse_help_commands(text);
+        assert!(supported.contains(&CommandName::Inspect));
+        assert!(supported.contains(&CommandName::RunDex));
+        assert!(!supported.contains(&CommandName::Run));
+        assert_eq!(supported.len(), 2);
+    }
+
+    #[test]
+    fn cli_pass_envelope_is_rebuilt() {
+        let value = json!({
+            "request_id": "req_1",
+            "ok": true,
+            "status": "pass",
+            "backend": "acos-native",
+            "fidelity": "static-analysis",
+            "capabilities_used": ["apk.inspect"],
+            "error": null,
+            "result": {"package": "x"},
+            "metrics": {"wall_ms": 3}
+        });
+        let env = envelope_from_cli_value(&value, "fallback", CommandName::Inspect);
+        assert!(env.ok());
+        assert_eq!(env.status(), acos_protocol::Status::Pass);
+        assert_eq!(env.fidelity(), Fidelity::StaticAnalysis);
+        assert_eq!(env.result().unwrap()["package"], "x");
+    }
+
+    #[test]
+    fn cli_error_envelope_gets_hint_and_status() {
+        let value = json!({
+            "request_id": "req_2",
+            "ok": false,
+            "status": "unsupported",
+            "backend": "acos-native",
+            "fidelity": "native-runtime",
+            "capabilities_used": ["dex.run"],
+            "error": {"code": "UNSUPPORTED_JAVA_API", "message": "java.lang.reflect.Proxy"},
+            "metrics": {"wall_ms": 1}
+        });
+        let env = envelope_from_cli_value(&value, "fallback", CommandName::RunDex);
+        assert!(!env.ok());
+        assert_eq!(env.status(), acos_protocol::Status::Unsupported);
+        let error = env.error().unwrap();
+        assert_eq!(error.code, ErrorCode::UnsupportedJavaApi);
+        assert!(!error.hint.is_empty());
+    }
+
+    #[test]
+    fn unsupported_backend_envelope_is_never_a_pass() {
+        let caps = Capabilities::unprobed();
+        let env = unsupported_envelope("req_3", CommandName::Verify, &caps);
+        assert!(!env.ok());
+        assert_eq!(env.status(), acos_protocol::Status::Unsupported);
+        assert_eq!(env.error().unwrap().code, ErrorCode::UnsupportedBackend);
+        assert_eq!(env.error().unwrap().details.as_ref().unwrap()["available"], false);
+    }
+}

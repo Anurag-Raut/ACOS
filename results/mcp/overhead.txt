@@ -1,0 +1,14 @@
+bare_n=50
+bare_p50_ms=1
+bare_p95_ms=2
+bare_mean_ms=1.1
+mcp_n=50
+mcp_p50_ms=3
+mcp_p95_ms=4
+mcp_mean_ms=3.2
+overhead_p50_ms=2
+overhead_p95_ms=2
+fixture=/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk
+iterations=50
+mcp_bin=/home/Qui/Projects/acos/target/debug/acos-mcp
+acos_bin=/home/Qui/Projects/acos/target/release/acos
