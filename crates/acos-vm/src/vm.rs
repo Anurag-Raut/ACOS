@@ -1826,6 +1826,12 @@ impl Vm {
     /// the tier executes it.
     pub fn invalidate_ir_quickening(&mut self) {
         self.ir_fields.clear();
+        // Frames with a cached IR program must re-resolve their field slots.
+        for t in &mut self.threads {
+            for f in &mut t.frames {
+                f.ir_quickened = false;
+            }
+        }
     }
 
     pub fn resolve_field(&mut self, dex: u32, field_idx: u32) -> VmResult<ResolvedField> {

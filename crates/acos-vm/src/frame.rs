@@ -45,6 +45,11 @@ pub struct Frame {
     pub ir: Option<Arc<crate::exec::Program>>,
     /// Whether the IR decision above has been made for this frame's body.
     pub ir_checked: bool,
+    /// Whether this frame's IR field quickening slots have already been
+    /// resolved in this VM. Re-entering the IR after an `invoke` returns then
+    /// skips the (per-slot) quickening scan; cleared on frame reuse and by
+    /// [`crate::vm::Vm::invalidate_ir_quickening`].
+    pub ir_quickened: bool,
 }
 
 impl Frame {
@@ -65,6 +70,7 @@ impl Frame {
             advance_size: 0,
             ir: None,
             ir_checked: false,
+            ir_quickened: false,
         }
     }
 

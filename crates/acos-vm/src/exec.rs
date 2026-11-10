@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use crate::class::{Class, ClassId, FieldSign, InitState, Insn, MethodCode};
 use crate::error::VmResult;
 use crate::frame::Frame;
-use crate::heap::{ArrayData, Heap, Object, NULL};
+use crate::heap::{ArrayData, ArrayObj, Heap, Object, NULL};
 use crate::interp::{apply_sign, div_int, div_long, rem_int, rem_long};
 use crate::vm::Vm;
 
@@ -169,6 +169,12 @@ pub enum Op {
     NewArray { dst: u16, type_index: u32, len: u16 },
     ArrayLen { dst: u16, arr: u16 },
     ArrayGet { op: u8, dst: u16, arr: u16, idx: u16 },
+    /// Fused `aget` (int) + `int-to-long` (the `long x = arr[i]` idiom).
+    ArrayGetI2L { dst: u16, arr: u16, idx: u16 },
+    /// Fused `aget` (int) + `int-to-long` + `add/sub/mul-long/2addr` (the
+    /// `longAcc += arr[i]` idiom). `op` is the `Arith2` long opcode; `tmp` is
+    /// the widened element register (written for exactness if read later).
+    ArrayGetI2LAdd2 { op: u8, acc: u16, tmp: u16, arr: u16, idx: u16 },
     ArrayPut { op: u8, src: u16, arr: u16, idx: u16 },
     Goto { target: u32 },
     /// `op` is the original `if-*` opcode; `IfZ` ignores `b`.
@@ -188,6 +194,17 @@ pub enum Op {
         lit: i32,
         a: u16,
         b: u16,
+        target: u32,
+    },
+    /// Fused `<arith>/lit` + unconditional `goto` (the loop-increment back
+    /// edge when the loop test sits at the head of the body). Only fused when
+    /// the `goto` is not a re-entry point and has a valid target, because the
+    /// arith write is not idempotent.
+    ArithLitGoto {
+        aop: u8,
+        dst: u16,
+        src: u16,
+        lit: i32,
         target: u32,
     },
     /// `invoke-*`: the trampoline pushes the callee frame; the loop then
@@ -499,23 +516,55 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
     let mut i = 0usize;
     while i < n {
         let insn = &code.insns[i];
-        // Fuse a pure producer + conditional branch when the branch is not a
-        // re-entry point (so it can never be entered on its own). Two idioms
-        // cover the loop-increment/test shapes: `<arith>/lit` + `if-*` (the
-        // counter idiom) and `const*` + `if-*` (the loop-bound constant javac
-        // leaves inside the loop).
-        let fuse_with = if i + 1 < n && !is_target[i + 1] && cond_branch(code.insns[i + 1].op) {
-            if arith_lit(insn.op) {
-                Some(1u8)
-            } else if (0x12..=0x15).contains(&insn.op) {
-                Some(2u8)
-            } else {
-                None
+        // Fuse a producer + branch/arith when the second instruction is not a
+        // re-entry point (so it can never be entered on its own). The fused
+        // idioms cover the loop shapes javac/d8 emits: `<arith>/lit` + `if-*`
+        // (counter test), `const*` + `if-*` (loop-bound constant),
+        // `<arith>/lit` + `goto` (back edge with the test at the head), and
+        // `aget` + `int-to-long` [+ `add/sub/mul-long/2addr`] (`longAcc += arr[i]`).
+        let mut fuse_with: u8 = 0;
+        if i + 1 < n && !is_target[i + 1] {
+            let b = &code.insns[i + 1];
+            if arith_lit(insn.op) && cond_branch(b.op) {
+                fuse_with = 1;
+            } else if (0x12..=0x15).contains(&insn.op) && cond_branch(b.op) {
+                fuse_with = 2;
+            } else if arith_lit(insn.op) && (0x28..=0x2a).contains(&b.op) {
+                // Only fuse when the back edge resolves; otherwise the
+                // non-idempotent arith write would be re-run on the fallback.
+                if insn_target_insn(code, &pcs, i + 1) != u32::MAX {
+                    fuse_with = 3;
+                }
+            } else if insn.op == 0x44
+                && b.op == 0x81
+                && b.regs[0] == b.regs[1]
+                && b.regs[1] == insn.regs[0]
+            {
+                // `aget` (int) + `int-to-long` (same register). A following
+                // long accumulation may extend this to a three-instruction
+                // superinstruction.
+                if i + 2 < n
+                    && !is_target[i + 2]
+                    && (0xbb..=0xbd).contains(&code.insns[i + 2].op)
+                    && code.insns[i + 2].regs[1] == b.regs[0]
+                {
+                    fuse_with = 4;
+                } else {
+                    fuse_with = 5;
+                }
             }
-        } else {
-            None
-        };
-        let (op, len) = if fuse_with == Some(2) {
+        }
+        let (op, len) = if fuse_with == 4 {
+            let d = &code.insns[i + 2];
+            let fused = Op::ArrayGetI2LAdd2 {
+                op: d.op,
+                acc: d.regs[0],
+                tmp: insn.regs[0],
+                arr: insn.regs[1],
+                idx: insn.regs[2],
+            };
+            (fused, 3u8)
+        } else if fuse_with == 2 {
             let b = &code.insns[i + 1];
             let fused = Op::ConstIf {
                 dst: insn.regs[0],
@@ -526,7 +575,24 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
                 target: insn_target_insn(code, &pcs, i + 1),
             };
             (fused, 2u8)
-        } else if fuse_with == Some(1) {
+        } else if fuse_with == 3 {
+            let fused = Op::ArithLitGoto {
+                aop: insn.op,
+                dst: insn.regs[0],
+                src: insn.regs[1],
+                lit: insn.literal as i32,
+                target: insn_target_insn(code, &pcs, i + 1),
+            };
+            (fused, 2u8)
+        } else if fuse_with == 5 {
+            let b = &code.insns[i + 1];
+            let fused = Op::ArrayGetI2L {
+                dst: b.regs[0],
+                arr: insn.regs[1],
+                idx: insn.regs[2],
+            };
+            (fused, 2u8)
+        } else if fuse_with == 1 {
             let b = &code.insns[i + 1];
             let fused = Op::ArithLitIf {
                 aop: insn.op,
@@ -548,8 +614,11 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
         op_insn.push(i as u32);
         op_len.push(len);
         insn_to_op[i] = idx;
-        if len == 2 {
+        if len >= 2 {
             insn_to_op[i + 1] = idx;
+        }
+        if len == 3 {
+            insn_to_op[i + 2] = idx;
         }
         i += len as usize;
     }
@@ -563,6 +632,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
             Op::Goto { target } => Some(target),
             Op::If { target, .. } => Some(target),
             Op::ArithLitIf { target, .. } => Some(target),
+            Op::ArithLitGoto { target, .. } => Some(target),
             Op::ConstIf { target, .. } => Some(target),
             _ => None,
         };
@@ -576,6 +646,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
                 Op::Goto { target }
                 | Op::If { target, .. }
                 | Op::ArithLitIf { target, .. }
+                | Op::ArithLitGoto { target, .. }
                 | Op::ConstIf { target, .. } => {
                     *target = resolved;
                 }
@@ -592,6 +663,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
             Op::Goto { target } => *target,
             Op::If { target, .. } => *target,
             Op::ArithLitIf { target, .. } => *target,
+            Op::ArithLitGoto { target, .. } => *target,
             Op::ConstIf { target, .. } => *target,
             _ => return false,
         };
@@ -929,6 +1001,24 @@ fn exec_arith_lit(f: &mut Frame, op: u8, r0: u16, r1: u16, lit: i32) -> bool {
     true
 }
 
+/// The low 32-bit word the general `aget` would store for element `k` of
+/// `a`. Used by the fused `aget`+`int-to-long` ops so they reproduce the
+/// general path for every element kind instead of falling back.
+#[inline(always)]
+fn array_elem_word(a: &ArrayObj, k: usize) -> u32 {
+    match &a.data {
+        ArrayData::Bool(v) => v[k] as u32,
+        ArrayData::Byte(v) => v[k] as i32 as u32,
+        ArrayData::Char(v) => v[k] as u32,
+        ArrayData::Short(v) => v[k] as i32 as u32,
+        ArrayData::Int(v) => v[k] as u32,
+        ArrayData::Long(v) => v[k] as u32,
+        ArrayData::Float(v) => v[k].to_bits(),
+        ArrayData::Double(v) => v[k].to_bits() as u32,
+        ArrayData::Ref(v) => v[k],
+    }
+}
+
 /// A slow (VM-touching) op reached by the tight IR loop. The loop stops with
 /// the frame positioned at the op and hands it to [`run_ir`], which runs it with
 /// `&mut Vm` (allocation can run GC and `<clinit>`, so the frame borrow must be
@@ -1079,6 +1169,47 @@ fn run_ir_loop(
                                 }
                             }
                         }
+                    }
+                    _ => break,
+                }
+            }
+            Op::ArrayGetI2L { dst, arr, idx } => {
+                let h = f.reg(arr);
+                let i = f.reg(idx) as i32;
+                match heap.get(h) {
+                    Some(Object::Array(a)) if i >= 0 && (i as usize) < a.len() => {
+                        // The `int-to-long` reads the low word the general
+                        // `aget` would have stored; reproducing it for every
+                        // element kind keeps the fused op total (no fallback).
+                        let w = array_elem_word(a, i as usize);
+                        f.set_reg_wide(dst, (w as i32) as i64 as u64);
+                    }
+                    _ => break,
+                }
+            }
+            Op::ArrayGetI2LAdd2 {
+                op,
+                acc,
+                tmp,
+                arr,
+                idx,
+            } => {
+                let h = f.reg(arr);
+                let i = f.reg(idx) as i32;
+                match heap.get(h) {
+                    Some(Object::Array(a)) if i >= 0 && (i as usize) < a.len() => {
+                        let w = array_elem_word(a, i as usize);
+                        let x = (w as i32) as i64;
+                        // Preserve the intermediate `int-to-long` write into
+                        // the element register in case it is read later.
+                        f.set_reg_wide(tmp, x as u64);
+                        let base = f.reg_wide(acc) as i64;
+                        let r = match op {
+                            0xbb => base.wrapping_add(x),
+                            0xbc => base.wrapping_sub(x),
+                            _ => base.wrapping_mul(x),
+                        };
+                        f.set_reg_wide(acc, r as u64);
                     }
                     _ => break,
                 }
@@ -1410,6 +1541,20 @@ fn run_ir_loop(
                 } else {
                     pc += 1;
                 }
+                count += len;
+                continue;
+            }
+            Op::ArithLitGoto {
+                aop,
+                dst,
+                src,
+                lit,
+                target,
+            } => {
+                if target == u32::MAX || !exec_arith_lit(f, aop, dst, src, lit) {
+                    break;
+                }
+                pc = target as usize;
                 count += len;
                 continue;
             }

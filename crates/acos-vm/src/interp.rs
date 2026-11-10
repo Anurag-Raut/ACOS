@@ -81,6 +81,7 @@ fn acquire_frame(
     frame.monitor = None;
     frame.advance_on_return = false;
     frame.advance_size = 0;
+    frame.ir_quickened = false;
     frame
 }
 
@@ -221,8 +222,13 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                     let prog = vm.threads[t].frames[fi].ir.take().expect("ir cached");
                     // Resolve any field ops this VM has not quickened yet; this
                     // is off the per-instruction path. Failures become
-                    // `Fallback` and are reported by the general path.
-                    crate::exec::quicken(vm, t, fi, &prog);
+                    // `Fallback` and are reported by the general path. A frame
+                    // that already quickened its slots (e.g. re-entering the IR
+                    // after an `invoke` returned) skips the scan.
+                    if !vm.threads[t].frames[fi].ir_quickened {
+                        crate::exec::quicken(vm, t, fi, &prog);
+                        vm.threads[t].frames[fi].ir_quickened = true;
+                    }
                     let depth = vm.threads[t].frames.len();
                     let handled = match crate::exec::run_ir(vm, t, fi, &prog, cap - count) {
                         Ok((n, handled)) => {
