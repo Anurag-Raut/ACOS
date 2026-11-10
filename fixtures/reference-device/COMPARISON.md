@@ -10,6 +10,7 @@ A `physical-device` pass never satisfies an `art-reference` requirement (ADR-000
 * **API 35 vs API 34** — edge-to-edge enforcement and status-bar inset changes shift the content origin; text and resource ids are stable.
 * The scenario's expected bounds are calibrated to the API-34 420 dpi oracle, so a device bounds mismatch is expected and is reported as `bounds_differ_density`, never as a text failure.
 
+* **agent-device vs uiautomator snapshot scope** — `element_absent_on_device` rows are android framework chrome ids (action bar, status-bar background, navigation-bar background, dialog title divider) that uiautomator dumps in the ART reference but the agent-device accessibility snapshot does not expose. The app's own ids and the dialog ids are present; this is a tool scope difference, not a missing UI element.
 
 ## Table
 

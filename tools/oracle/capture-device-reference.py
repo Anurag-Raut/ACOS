@@ -596,6 +596,14 @@ def write_comparison(out_root, apps, manifests, emu_ref_root):
         "oracle, so a device bounds mismatch is expected and is reported as "
         "`bounds_differ_density`, never as a text failure.\n"
     )
+    lines.append(
+        "* **agent-device vs uiautomator snapshot scope** — `element_absent_on_device` "
+        "rows are android framework chrome ids (action bar, status-bar background, "
+        "navigation-bar background, dialog title divider) that uiautomator dumps in "
+        "the ART reference but the agent-device accessibility snapshot does not "
+        "expose. The app's own ids and the dialog ids are present; this is a tool "
+        "scope difference, not a missing UI element."
+    )
     lines.append("\n## Table\n")
     lines.append("| app | element (resource id) | scenario expected text | device final text | emulator final text | device bounds | emulator bounds | text verdict | bounds verdict | note |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
