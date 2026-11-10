@@ -209,6 +209,16 @@ fn binder_id_of(vm: &mut Vm, obj: Handle) -> Option<BinderId> {
     if obj == NULL {
         return None;
     }
+    // A `BinderProxy` carries its handle in `mNativeData`. Read it directly
+    // instead of asking the transport: materialising a reply that contains a
+    // binder (e.g. `ContentProviderHolder`) runs *inside* the transport's
+    // `transact`, and re-borrowing the transport RefCell for the same lookup
+    // would panic.
+    if let Ok(JavaValue::Long(v)) = vm.get_field(obj, "mNativeData") {
+        if v != 0 {
+            return Some(BinderId(v as u64));
+        }
+    }
     let mapped = with_transport(|t| t.binder_id_of(vm, obj)).flatten();
     if mapped.is_some() {
         return mapped;

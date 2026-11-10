@@ -400,9 +400,10 @@ pub fn install(host: &mut ServiceHost) {
         },
     );
     // Register the content-provider binder so `getContentProvider` can return a
-    // handle the dispatcher routes.
+    // handle the dispatcher routes. Record the binder for the runtime AMS
+    // bridge, which materialises the `ContentProviderHolder` reply.
     let settings_provider = Arc::clone(&settings);
-    host.register(
+    let settings_binder = host.register(
         "settings",
         "android.content.IContentProvider",
         move |_w| {
@@ -411,6 +412,7 @@ pub fn install(host: &mut ServiceHost) {
             ))) as Box<dyn ServiceObject>
         },
     );
+    crate::provider::set_settings_provider_binder(settings_binder.0);
     // Point the aux binder at the registered controller entry.
     let _ = (controller, provider);
 }

@@ -449,7 +449,45 @@ pub fn component_name(vm: &mut Vm, package: &str, class: &str) -> JResult<Handle
     .map_err(err)
 }
 
+/// A minimal real `android.content.pm.ApplicationInfo` for the provider's
+/// owning package.
+///
+/// `ComponentInfo.writeToParcel` dereferences `applicationInfo`
+/// unconditionally, so the `ProviderInfo` must carry a non-null one even when
+/// the app never reads it.
+fn provider_application_info(
+    vm: &mut Vm,
+    package: &str,
+    process_name: &str,
+) -> JResult<Handle> {
+    let app = AppInfo {
+        package_name: package.to_string(),
+        name: String::new(),
+        class_name: String::new(),
+        source_dir: String::new(),
+        public_source_dir: String::new(),
+        data_dir: format!("/data/user/0/{package}"),
+        device_protected_data_dir: format!("/data/user_de/0/{package}"),
+        credential_protected_data_dir: format!("/data/user/0/{package}"),
+        native_library_dir: String::new(),
+        uid: 1000,
+        flags: 0,
+        private_flags: 0,
+        target_sdk: 34,
+        min_sdk: 26,
+        process_name: process_name.to_string(),
+        theme: 0,
+        label_res: 0,
+        target_sandbox_version: 2,
+    };
+    crate::pms_java::application_info(vm, &app)
+}
+
 /// Materialise a real `ProviderInfo` (`getContentProvider`).
+///
+/// The field set is the API-34 `PackageItemInfo` -> `ComponentInfo` ->
+/// `ProviderInfo` chain; the framework's own `writeToParcel` writes them in
+/// order once they are set.
 fn provider_info(
     vm: &mut Vm,
     package: &str,
@@ -459,16 +497,54 @@ fn provider_info(
     let h = vm
         .new_instance_ctor("android.content.pm.ProviderInfo", "()V", &[])
         .map_err(err)?;
+    // PackageItemInfo
     set_str(vm, h, "name", class)?;
     set_str(vm, h, "packageName", package)?;
-    set_str(vm, h, "authority", authority)?;
+    set_int(vm, h, "labelRes", 0)?;
+    vm.set_field(h, "nonLocalizedLabel", JavaValue::Null)
+        .map_err(err)?;
+    set_int(vm, h, "icon", 0)?;
+    set_int(vm, h, "logo", 0)?;
+    vm.set_field(h, "metaData", JavaValue::Null).map_err(err)?;
+    set_int(vm, h, "banner", 0)?;
+    set_int(vm, h, "showUserIcon", 0)?;
+    // ComponentInfo
+    let app = provider_application_info(vm, package, package)?;
+    vm.set_field(h, "applicationInfo", JavaValue::Object(app))
+        .map_err(err)?;
+    set_str(vm, h, "processName", package)?;
+    vm.set_field(h, "splitName", JavaValue::Null).map_err(err)?;
+    vm.set_field(h, "attributionTags", JavaValue::Null)
+        .map_err(err)?;
+    set_int(vm, h, "descriptionRes", 0)?;
+    set_bool(vm, h, "enabled", true)?;
     vm.set_field(h, "exported", JavaValue::Boolean(false))
         .map_err(err)?;
+    set_bool(vm, h, "directBootAware", false)?;
+    // ProviderInfo
+    set_str(vm, h, "authority", authority)?;
+    set_str(vm, h, "readPermission", "android.permission.READ_SETTINGS")?;
+    set_str(vm, h, "writePermission", "android.permission.WRITE_SETTINGS")?;
+    set_bool(vm, h, "grantUriPermissions", false)?;
+    set_bool(vm, h, "forceUriPermissions", false)?;
+    vm.set_field(h, "uriPermissionPatterns", JavaValue::Null)
+        .map_err(err)?;
+    vm.set_field(h, "pathPermissions", JavaValue::Null)
+        .map_err(err)?;
+    set_bool(vm, h, "multiprocess", false)?;
+    set_int(vm, h, "initOrder", 0)?;
+    set_int(vm, h, "flags", 0)?;
+    set_bool(vm, h, "isSyncable", true)?;
     Ok(h)
 }
 
 /// Materialise a real `ContentProviderHolder` carrying a real `ProviderInfo`
-/// and (when known) a `BinderProxy` for the provider.
+/// and (when known) a real `android.content.ContentProviderProxy` for the
+/// provider.
+///
+/// The proxy wraps a `BinderProxy` whose `mNativeData` is the binder id, so
+/// `IContentProvider.asBinder()` (called by `writeToParcel`) returns a binder
+/// the ACOS transport routes to the `settings` handler.
 fn content_provider_holder(
     vm: &mut Vm,
     package: &str,
@@ -483,13 +559,27 @@ fn content_provider_holder(
     vm.set_field(holder, "info", JavaValue::Object(info))
         .map_err(err)?;
     if binder != 0 {
-        let proxy = vm
+        let remote = vm
             .new_instance_ctor("android.os.BinderProxy", "(J)V", &[JavaValue::Long(binder as i64)])
             .map_err(err)?;
-        vm.set_field(holder, "provider", JavaValue::Object(proxy))
+        let provider = vm
+            .new_instance_ctor(
+                "android.content.ContentProviderProxy",
+                "(Landroid/os/IBinder;)V",
+                &[JavaValue::Object(remote)],
+            )
+            .map_err(err)?;
+        vm.set_field(holder, "provider", JavaValue::Object(provider))
+            .map_err(err)?;
+    } else {
+        vm.set_field(holder, "provider", JavaValue::Null)
             .map_err(err)?;
     }
+    vm.set_field(holder, "connection", JavaValue::Null)
+        .map_err(err)?;
     vm.set_field(holder, "noReleaseNeeded", JavaValue::Boolean(true))
+        .map_err(err)?;
+    vm.set_field(holder, "mLocal", JavaValue::Boolean(false))
         .map_err(err)?;
     Ok(holder)
 }
@@ -497,6 +587,14 @@ fn content_provider_holder(
 fn set_str(vm: &mut Vm, obj: Handle, field: &str, value: &str) -> JResult<()> {
     let h = vm.new_string_rooted(value).map_err(err)?;
     vm.set_field(obj, field, JavaValue::Object(h)).map_err(err)
+}
+
+fn set_int(vm: &mut Vm, obj: Handle, field: &str, value: i32) -> JResult<()> {
+    vm.set_field(obj, field, JavaValue::Int(value)).map_err(err)
+}
+
+fn set_bool(vm: &mut Vm, obj: Handle, field: &str, value: bool) -> JResult<()> {
+    vm.set_field(obj, field, JavaValue::Boolean(value)).map_err(err)
 }
 
 /// Re-build a real `android.content.Intent` from typed facts.
@@ -724,11 +822,23 @@ pub fn transact(
             Ok(Vec::new())
         }
         "getContentProvider" => {
-            let authority = args.get(1).and_then(Arg::string).unwrap_or_default();
+            // `getContentProvider(IApplicationThread caller, String callingPackage,
+            // String name, int userId, boolean stable)`: the requested authority
+            // is the *second* string (arg 2), not the calling package.
+            let authority = args.get(2).and_then(Arg::string).unwrap_or_default();
             match state.get_content_provider(authority) {
                 Some(p) => {
+                    // The hardcoded `settings` record carries no binder id (it
+                    // is not published by an app); use the binder the host
+                    // registered for the `IContentProvider` service so the
+                    // holder's `provider` is real and `Settings` can call it.
+                    let binder = if p.binder != 0 {
+                        p.binder
+                    } else {
+                        acos_services::provider::settings_provider_binder()
+                    };
                     let holder =
-                        content_provider_holder(vm, &p.package, &p.class, authority, p.binder)?;
+                        content_provider_holder(vm, &p.package, &p.class, authority, binder)?;
                     crate::pms_java::typed_object(vm, Some(holder), reply)?;
                 }
                 None => crate::pms_java::typed_object(vm, None, reply)?,

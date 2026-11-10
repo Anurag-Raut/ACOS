@@ -479,16 +479,47 @@ fn path_op(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     ))
 }
 
-fn path_approximate(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let acceptable = vm.arg_f32(ctx, 1).max(0.0);
-    let pts = read_path(vm.arg_i64(ctx, 0), |p| p.flatten(acceptable))?;
+/// Flattened contours -> the interleaved `(fraction, x, y)` triples Android's
+/// `Path.approximate` returns, where `fraction` is the cumulative distance
+/// fraction along the whole path (0 at the first point, 1 at the last).
+///
+/// `PathInterpolator.initPath` reads this shape and rejects a path whose first
+/// point is not `(0, 0)` or whose last point is not `(1, 1)`.
+fn approximate_triples(contours: &[Vec<acos_render::geom::PointF>]) -> Vec<f32> {
+    let mut total = 0.0f32;
+    let mut distances: Vec<Vec<f32>> = Vec::with_capacity(contours.len());
+    for contour in contours {
+        let mut acc = 0.0f32;
+        let mut seg = Vec::with_capacity(contour.len());
+        for (i, p) in contour.iter().enumerate() {
+            if i > 0 {
+                let q = &contour[i - 1];
+                acc += ((p.x - q.x).powi(2) + (p.y - q.y).powi(2)).sqrt();
+            }
+            seg.push(acc);
+        }
+        total += acc;
+        distances.push(seg);
+    }
+    if total <= 0.0 {
+        total = 1.0;
+    }
+
     let mut flat: Vec<f32> = Vec::new();
-    for contour in &pts {
-        for p in contour {
+    for (contour, seg) in contours.iter().zip(&distances) {
+        for (p, distance) in contour.iter().zip(seg) {
+            flat.push(distance / total);
             flat.push(p.x);
             flat.push(p.y);
         }
     }
+    flat
+}
+
+fn path_approximate(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let acceptable = vm.arg_f32(ctx, 1).max(0.0);
+    let contours = read_path(vm.arg_i64(ctx, 0), |p| p.flatten(acceptable))?;
+    let flat = approximate_triples(&contours);
     let arr = vm.alloc(crate::heap::Object::Array(crate::heap::ArrayObj {
         elem_desc: "F".to_string(),
         data: crate::heap::ArrayData::Float(flat),
@@ -725,4 +756,34 @@ fn region_op(o: i32) -> VmResult<RegionOp> {
     RegionOp::from_ordinal(o).ok_or_else(|| {
         VmError::unsupported_api(format!("Region.Op ordinal {o}"), "android.graphics.Region")
     })
+}
+
+#[cfg(test)]
+mod approximate_tests {
+    use super::approximate_triples;
+    use acos_render::geom::PointF;
+
+    /// Regression (W51-A): `Path.approximate` must return `(fraction, x, y)`
+    /// triples from `(0, 0)` to `(1, 1)`. The path-interpolator loader
+    /// (`PathInterpolator.initPath`) rejects anything else, which broke
+    /// `PhoneWindow.installDecor`.
+    #[test]
+    fn approximation_is_fraction_x_y_triples_from_origin_to_unit() {
+        let contours = vec![vec![
+            PointF::new(0.0, 0.0),
+            PointF::new(0.5, 0.25),
+            PointF::new(1.0, 1.0),
+        ]];
+        let flat = approximate_triples(&contours);
+        assert_eq!(flat.len(), 9);
+        assert_eq!((flat[0], flat[1], flat[2]), (0.0, 0.0, 0.0));
+        let last = flat.len() - 3;
+        assert_eq!(
+            (flat[last], flat[last + 1], flat[last + 2]),
+            (1.0, 1.0, 1.0)
+        );
+        // Fractions are strictly increasing for a non-degenerate path.
+        assert!(flat[3] > 0.0 && flat[3] < 1.0, "mid fraction: {}", flat[3]);
+        assert!(flat[6] > flat[3]);
+    }
 }

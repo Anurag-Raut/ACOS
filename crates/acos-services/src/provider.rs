@@ -12,6 +12,7 @@
 //!
 //! Seeded from `research/ambient-state/settings_keys.tsv`.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -21,6 +22,26 @@ use acos_parcel::ParcelFd;
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::{Bundle, Parcelable, RawFdValue, Value};
+
+thread_local! {
+    /// The binder the `settings` `IContentProvider` was registered under.
+    ///
+    /// `acos-services` cannot see the VM, and `acos-runtime::ams_java` cannot
+    /// see `ServiceHost`; recording the binder here lets the `getContentProvider`
+    /// reply carry the real `IContentProvider` instead of `null`.
+    static SETTINGS_PROVIDER_BINDER: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Record the `settings` provider binder at host install time.
+pub fn set_settings_provider_binder(binder: u64) {
+    SETTINGS_PROVIDER_BINDER.with(|slot| slot.set(binder));
+}
+
+/// The `settings` provider binder recorded by [`set_settings_provider_binder`].
+#[must_use]
+pub fn settings_provider_binder() -> u64 {
+    SETTINGS_PROVIDER_BINDER.with(Cell::get)
+}
 
 /// A settings namespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

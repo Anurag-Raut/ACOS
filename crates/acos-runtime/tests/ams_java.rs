@@ -210,3 +210,85 @@ fn unsupported_extra_type_is_a_structured_error() {
     let err = ams_java::read_intent_facts(vm, &mut data).expect_err("long extra must be refused");
     assert!(err.contains("unsupported type"), "{err}");
 }
+
+/// Build the AIDL request for `getContentProvider(IApplicationThread,
+/// String callingPackage, String name, int userId, boolean stable)`.
+fn content_provider_request(calling_package: &str, authority: &str) -> Parcel {
+    let mut data = Parcel::new();
+    data.write_interface_token("android.app.IActivityManager")
+        .expect("token");
+    data.write_strong_binder_opt(None);
+    data.write_string16(calling_package).expect("callingPackage");
+    data.write_string16(authority).expect("authority");
+    data.write_int32(0);
+    data.write_int32(0);
+    data.set_data_position(0);
+    data
+}
+
+/// Regression (W51-A): `getContentProvider` must read the authority from the
+/// *second* string argument (the first is `callingPackage`), and the reply
+/// holder must carry a real `IContentProvider` so `Settings` can call it.
+#[test]
+fn get_content_provider_reads_the_authority_and_carries_the_provider() {
+    let Some(mut rt) = common::new_runtime() else {
+        return;
+    };
+    let vm = rt.vm_mut();
+    let mut data = content_provider_request("dev.acos.fixtures.counter", "settings");
+    let mut reply = Parcel::new();
+    ams_java::transact(
+        vm,
+        acos_parcel::binder::BinderId(0),
+        30,
+        &mut data,
+        &mut reply,
+        0,
+    )
+    .expect("getContentProvider transact");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("read status"), 0, "reply must not carry an exception");
+    let holder = acos_runtime::parcel_java::read_typed_object(
+        vm,
+        &mut reply,
+        "android.app.ContentProviderHolder",
+    )
+    .expect("read ContentProviderHolder")
+    .expect("holder must be present for `settings`");
+    let provider = vm.get_field(holder, "provider").expect("provider field");
+    assert!(
+        matches!(provider, JavaValue::Object(h) if h != acos_vm::heap::NULL),
+        "holder.provider must be a real IContentProvider, got {}",
+        provider.kind()
+    );
+}
+
+/// Regression (W51-A): the authority is arg 2, so a calling package of
+/// `settings` with a different authority is a genuine miss (null holder).
+#[test]
+fn get_content_provider_does_not_treat_the_calling_package_as_the_authority() {
+    let Some(mut rt) = common::new_runtime() else {
+        return;
+    };
+    let vm = rt.vm_mut();
+    let mut data = content_provider_request("settings", "not.settings");
+    let mut reply = Parcel::new();
+    ams_java::transact(
+        vm,
+        acos_parcel::binder::BinderId(0),
+        30,
+        &mut data,
+        &mut reply,
+        0,
+    )
+    .expect("getContentProvider transact");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("read status"), 0, "reply must not carry an exception");
+    let holder = acos_runtime::parcel_java::read_typed_object(
+        vm,
+        &mut reply,
+        "android.app.ContentProviderHolder",
+    )
+    .expect("read ContentProviderHolder");
+    assert!(holder.is_none(), "unknown authority must yield a null holder");
+}

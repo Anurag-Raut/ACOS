@@ -104,7 +104,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// The M2 gate. Ignored while the framework blocks before `Activity.onCreate`;
 /// run with `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
 #[test]
-#[ignore = "M2 not reached: bindApplication + Application.onCreate + the launch ClientTransaction all run (app_created=true, transaction_scheduled=true) and performLaunchActivity reaches Activity.attach -> PhoneWindow.<init>; the framework then reads Settings.Global over the content-provider path and ACOS's `android.app.ContentProviderHolder` parcel is missing its trailing fields (connection/noReleaseNeeded/mLocal), so ContentResolver.acquireProvider throws IllegalStateException 'Bundle length is not aligned by 4'; results/m2/M2_LOG.md §W40-A"]
+#[ignore = "M2 not reached: bindApplication + Application.onCreate + the launch ClientTransaction all run (app_created=true, transaction_scheduled=true) and performLaunchActivity reaches MainActivity.onCreate -> setContentView -> PhoneWindow.installDecor. The Settings.Global reads now succeed over the real ContentProviderHolder/IContentProvider path (W51-A); the current blocker is DecorView reading `@android:color/system_bar_background_semi_transparent` (ComplexColor XML), where Resources.getColor raises Resources$NotFoundException / UnsupportedOperationException 'Can't convert value at index 0 to color: type=0x1'; results/m2/M2_LOG.md §W51-A"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");
