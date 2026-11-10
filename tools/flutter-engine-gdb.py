@@ -34,6 +34,7 @@ of silently reporting "breakpoint never hit".
 """
 
 import os
+import struct
 import sys
 
 import gdb
@@ -59,6 +60,35 @@ SITES = [
     (0x9acdaa, "REQFRAME", 20),      # Animator::RequestFrame
     (0x9ad1c6, "AWCB", 20),          # Animator::AwaitVSync::$_0
     (0x9c3522, "ONANIMBEGIN", 20),   # Shell::OnAnimatorBeginFrame
+    # W128-A: platform-view -> surface -> raster -> present, and the pointer
+    # path.  These are the sites that decide whether a frame can be rasterised.
+    (0x52fabf, "SURFJNI", 8),        # flutter::SurfaceCreated(JNIEnv*,..)
+    (0x52fe6b, "SURFWIN", 8),        # flutter::SurfaceWindowChanged(JNIEnv*,..)
+    (0x52b2d2, "NOTIFYCR", 8),       # PlatformViewAndroid::NotifyCreated::$_0()
+    (0x52b5e0, "NSWC", 8),           # PlatformViewAndroid::NotifySurfaceWindowChanged::$_0()
+    (0x52aee4, "CREATEREND", 8),     # PlatformViewAndroid::CreateRenderingSurface
+    (0x529936, "SURFFACT", 8),       # AndroidSurfaceFactoryImpl::CreateSurface
+    (0x5299b1, "RAPI", 8),           # after AndroidContext::RenderingApi() -> eax
+    (0x539a10, "SW_SETWIN", 8),      # AndroidSurfaceSoftware::SetNativeWindow
+    (0x5397c0, "GL_SETWIN", 8),      # AndroidSurfaceGLSkia::SetNativeWindow
+    (0x539a60, "SW_ACQ", 8),         # AndroidSurfaceSoftware::AcquireBackingStore
+    (0x539b36, "SW_PRES", 8),        # AndroidSurfaceSoftware::PresentBackingStore
+    (0x9b6426, "RDRAW", 8),          # Rasterizer::Draw
+    (0x9c384a, "ONADRAW", 8),        # Shell::OnAnimatorDraw
+    (0x9db026, "RENDER", 40),        # FfiDispatcher<PlatformConfigurationNativeApi::Render>::Call
+    (0x9fae5c, "ADDVIEW", 8),        # PlatformConfiguration::AddView
+    (0x530571, "PTRJNI", 8),         # flutter::DispatchPointerDataPacket(JNIEnv*,..)
+    (0x9c1f98, "PTRSHELL", 8),       # Shell::OnPlatformViewDispatchPointerDataPacket
+    (0x5301b2, "SVJNI", 8),          # flutter::SetViewportMetrics(JNIEnv*,..)
+    (0x9c1764, "SVSHELL", 8),        # Shell::OnPlatformViewSetViewportMetrics
+    (0x9b64d2, "RDTRYWAIT", 12),     # Rasterizer::Draw: Semaphore::TryWait result
+    (0x9b686f, "RDDROP", 12),        # Rasterizer::Draw: drop-frame path
+    (0x9b556e, "DTS_UNSAFE", 12),    # Rasterizer::DrawToSurfacesUnsafe
+    (0x9b5326, "DTS", 12),           # Rasterizer::DrawToSurfaces
+    (0x5399ae, "SW_GPUSURF", 8),     # AndroidSurfaceSoftware::CreateGPUSurface
+    (0x5515fc, "SW_ACQFRAME", 12),   # GPUSurfaceSoftware::AcquireFrame
+    (0x872e74, "SF_SUBMIT", 12),     # SurfaceFrame::Submit
+    (0x9b5609, "SURFV", 12),         # virtual call on the rasterizer surface
 ]
 
 _S = {"base": None, "log": None, "installed": False, "sites": []}
@@ -141,6 +171,65 @@ class Site(gdb.Breakpoint):
                 "%s %d tid=%d obj=0x%x vt=+0x%x"
                 % (self.tag, self.n, tid, obj, (v - base) if v else 0)
             )
+        elif self.tag == "SURFV":
+            rdi = reg("rdi")
+            vt = u64(rdi) if rdi > 0x1000 else 0
+            tgt = u64(vt + 0x38) if vt else 0
+            log("SURFV %d tid=%d this=0x%x vt=+0x%x slot38=+0x%x" % (
+                self.n, tid, rdi, (vt - base) if vt else 0,
+                (tgt - base) if tgt else 0))
+        elif self.tag == "RDTRYWAIT":
+            log("RDTRYWAIT %d tid=%d ok=%d" % (self.n, tid, reg("al") & 0xFF))
+        elif self.tag == "SVJNI":
+            log("SVJNI %d tid=%d view_or_shell=0x%x dpr=%d" % (
+                self.n, tid, reg("rdx"), reg("xmm0") if False else 0))
+        elif self.tag == "SVSHELL":
+            m = reg("rdx")
+            try:
+                raw = bytes(gdb.selected_inferior().read_memory(m, 0x40))
+                doubles = [
+                    struct.unpack_from("<d", raw, i * 8)[0] for i in range(8)
+                ]
+            except gdb.error:
+                doubles = [float("nan")] * 8
+            log("SVSHELL %d tid=%d view_id=%d metrics=0x%x d=%r" % (
+                self.n, tid, reg("rsi"), m, doubles))
+        elif self.tag == "RAPI":
+            log("RAPI %d tid=%d rendering_api=%d" % (self.n, tid, reg("eax")))
+        elif self.tag in ("RDTRYWAIT",):
+            log("%s %d tid=%d ok=%d" % (self.tag, self.n, tid, reg("al") & 0xFF))
+        elif self.tag in ("SURFJNI", "SURFWIN", "NOTIFYCR", "NSWC",
+                          "CREATEREND", "SURFFACT", "SW_SETWIN", "GL_SETWIN",
+                          "SW_ACQ", "SW_PRES", "RDRAW", "ONADRAW",
+                          "ADDVIEW", "PTRJNI", "PTRSHELL", "RDDROP",
+                          "DTS_UNSAFE", "DTS", "SW_GPUSURF", "SW_ACQFRAME",
+                          "SF_SUBMIT"):
+            extra = ""
+            if self.tag == "SURFJNI":
+                extra = " jni_env=0x%x shell=0x%x surface=0x%x" % (
+                    reg("rdi"), reg("rdx"), reg("rcx"))
+            elif self.tag in ("SURFWIN", "NOTIFYCR", "NSWC", "CREATEREND"):
+                extra = " self=0x%x arg=0x%x" % (reg("rdi"), reg("rsi"))
+            elif self.tag == "SW_SETWIN":
+                extra = " self=0x%x window=0x%x" % (reg("rdi"), reg("rsi"))
+            elif self.tag == "GL_SETWIN":
+                extra = " self=0x%x window=0x%x" % (reg("rdi"), reg("rsi"))
+            elif self.tag == "SW_ACQ":
+                size = 0
+                try:
+                    size = int.from_bytes(
+                        bytes(gdb.selected_inferior().read_memory(reg("rsi"), 8)),
+                        "little")
+                except gdb.error:
+                    pass
+                extra = " self=0x%x size=%dx%d" % (
+                    reg("rdi"), size & 0xFFFFFFFF, (size >> 32) & 0xFFFFFFFF)
+            elif self.tag == "ADDVIEW":
+                extra = " view_id=%d metrics=0x%x" % (reg("rsi"), reg("rdx"))
+            elif self.tag == "PTRJNI":
+                extra = " shell=0x%x packet=0x%x count=%d" % (
+                    reg("rdx"), reg("rcx"), reg("r8"))
+            log("%s %d tid=%d%s" % (self.tag, self.n, tid, extra))
         else:
             log("%s %d tid=%d" % (self.tag, self.n, tid))
         return False
