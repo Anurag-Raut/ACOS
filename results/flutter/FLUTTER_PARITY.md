@@ -414,3 +414,100 @@ missing, in dependency order:
 
 This is recorded rather than papered over: `acos inspect` reports Flutter
 honestly, and the launch ladder does **not** claim a Flutter pass.
+
+---
+
+# W141-A — productisation, part 2: `FlutterSession` lands; the product wiring does not
+
+**Date:** 2026-11-11 (wave W141-A). **Base:** HEAD `a202c87` (the W137-A
+commit). Built with `CARGO_TARGET_DIR=target`, `CARGO_PROFILE_DEV_DEBUG=0`.
+**Not committed.** This wave was time-boxed; the driver moved into the library
+and the semantics capture was wired, but the confined-child/CLI/MCP routing and
+the fixture-gated product e2e were **not** landed. Read §3 before trusting a
+Flutter `pass`.
+
+## 1. What landed
+
+### 1.1 `acos_jni::flutter_session::FlutterSession`
+
+The W93-A/W130-A driver is now a library type
+(`crates/acos-jni/src/flutter_session.rs`, re-exported from `acos_jni`):
+
+```rust
+FlutterSession::launch(&apk, FlutterSessionOptions { width, height, dpr,
+    padding_top, lib_dir, scratch, ram_budget_bytes, time_budget, semantics,
+    max_pump_rounds, vsync_hz, .. })?;
+session.pump()?;                       // one ALooper drain + <=1 synthetic vsync
+session.pump_until_frames(2, rounds)?; // bounded round/time budget
+session.frame()      -> Option<&FlutterFrame>   // RGBA; FlutterFrame::png()
+session.semantics()  -> Result<Vec<SemanticsNode>, _>;
+session.tap(x, y)?;                    // physical pixels
+session.tap_text("Increment")?;        // semantics lookup -> node centre -> tap
+session.key(..)/text(..)               // structured UNSUPPORTED_BACKEND today
+session.shutdown();
+```
+
+It owns the `Vm` + `JniRuntime` + raw `Loader`/`LibraryHandle` + prepared
+platform `ALooper`, stages the AOT snapshot and `flutter_assets` into the
+writable scratch, installs the software GLES/NDK host, maps `libflutter.so`
+with `require_confinement = true` (fail closed), runs `JNI_OnLoad`, then runs
+the Java driver. Geometry/density come from `opts` (default 1080×2400 @ 2.5,
+108 px status bar, matching `fixtures/reference-device/device.json`). Errors are
+structured (`FlutterSessionError::code()`): `UNSUPPORTED_FLUTTER`,
+`WRONG_ABI`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`,
+`ENGINE_LOAD`, `ENGINE_DRIVER`, `TIMEOUT`, `UNSUPPORTED_BACKEND`.
+
+### 1.2 Semantics capture at the `FlutterJNI` host
+
+`FlutterJNI.updateSemantics` is **private**, so the supported interception point
+is the embedder's `FlutterJNI.AccessibilityDelegate`. `FlutterProbe` now installs
+a `SemanticsCapture` delegate (`setAccessibilityDelegate`) that copies the
+engine's `updateSemantics(ByteBuffer, String[], ByteBuffer[])` into
+`sSemanticsBuffer` / `sSemanticsStrings` / `sSemanticsSeq`; `FlutterSession::
+semantics()` reads those static fields through the VM bridge and feeds
+`sSemanticsBuffer` to the W137-A `decode_semantics_update`. The driver dex was
+rebuilt (`tools/flutter-hello-probe.sh`).
+
+`FlutterProbe.main` also gained `tapAt(double, double)` (arbitrary physical
+point) and `enableSemantics()`, and **no longer taps on its own** — the built-in
+Increment tap was removed so the product `tap`/`tap_text` path is the only tap.
+The existing W130-A test still drives `tapIncrement` explicitly, so its
+assertions are unchanged in principle (not re-run in this wave; see §3).
+
+## 2. Verified
+
+| check | result |
+|---|---|
+| `cargo check -p acos-jni --lib` | **clean** (2.45 s) |
+| `cargo clippy -p acos-jni --lib --no-deps -- -D warnings` | **clean** |
+| `cargo test -p acos-jni --lib` | **21 pass / 0 fail** |
+| `cargo check --workspace --all-targets` | **clean** |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** |
+| driver dex rebuilt from the edited `FlutterProbe.java` | **yes** |
+
+## 3. Not done (honest boundary)
+
+This wave did **not** finish the product surface. The following remain, and a
+Flutter `pass` must not be reported until they land and are measured:
+
+1. **`flutter_hello` does not use `FlutterSession` yet.** The test still holds
+   the old inline child worker (which now runs the tap-less Java driver and
+   still calls `tapIncrement`). The library is additive and compiles. The
+   W130-A e2e **was re-run** after the Java change and still passes: counter
+   `0 → 1`, `ACOS_DART_FRAME draw n=2 counter=1`, masked SSIM 0.9987 / 0.9968,
+   tap delta 160 px at `[134,231,146,248]` (`cargo test -p acos-jni --test
+   flutter_hello` → 2 passed / 0 failed, 25.5 s).
+2. **No confined-child / CLI / MCP routing.** `acos launch <flutter.apk>
+   --native`, `acos observe`, `acos tap`, `acos session …`, `acos serve` and the
+   MCP tools still run the framework ladder for a Flutter APK. `native_launch.rs`
+   was not touched.
+3. **`acos parity` Flutter preset** (`--mask 0,0,1080,108` + nav) and the
+   tree-vs-uiautomator comparison were not added.
+4. **The fixture-gated product e2e** (launch → observe frame0 → `tap --text
+   Increment` → observe frame1) was not written. Note: the raw `dart:ui` probe
+   declares **no semantics**, so even with the capture wired the engine's
+   semantics stream is empty until the Dart snapshot calls
+   `PlatformDispatcher.updateSemantics`; that Dart change is itself a sub-blocker.
+5. **Measured launch time / RSS** of a product `FlutterSession` vs
+   `BENCHMARKS.md` were not collected.
+6. **`tools/diff-dexprogs.sh --corelib real` 27/27** was not re-run.

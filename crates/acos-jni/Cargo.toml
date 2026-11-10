@@ -17,6 +17,7 @@ acos-gles = { path = "../acos-gles" }
 acos-native-loader = { path = "../acos-native-loader" }
 acos-vm = { path = "../acos-vm" }
 libc = "0.2"
+png = "0.17"
 thiserror = { workspace = true }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
@@ -29,4 +30,3 @@ acos-render = { path = "../acos-render" }
 serde_json = { workspace = true }
 acos-test-support = { path = "../acos-test-support" }
 acos-sandbox = { path = "../acos-sandbox" }
-png = "0.17"

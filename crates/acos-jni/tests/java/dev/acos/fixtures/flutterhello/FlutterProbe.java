@@ -102,6 +102,23 @@ public final class FlutterProbe {
   /** Number of {@code asyncWaitForVsync} requests seen (diagnostic). */
   private static volatile long sRequestCount = 0L;
 
+  /**
+   * W141-A semantics capture. The engine delivers the accessibility tree to
+   * the embedder through {@code FlutterJNI.updateSemantics(buffer, strings,
+   * attrs)}. {@code updateSemantics} is private in {@code FlutterJNI}, so the
+   * delegate installed below is the supported interception point; the Rust
+   * {@code FlutterSession} reads these fields and decodes the buffer with the
+   * W137-A {@code decode_semantics_update} port.
+   */
+  static volatile byte[] sSemanticsBuffer;
+
+  static volatile String[] sSemanticsStrings;
+
+  static volatile int sSemanticsSeq;
+
+  /** Whether semantics were requested (diagnostic). */
+  private static volatile boolean sSemanticsEnabled;
+
   public static void main(String[] args) {
     String bundlePath = args.length > 0 ? args[0] : null;
     String entrypoint = args.length > 1 ? args[1] : "main";
@@ -121,6 +138,7 @@ public final class FlutterProbe {
       FlutterJNI jni = new FlutterJNI();
       sJni = jni;
       installVsyncBridge(jni);
+      jni.setAccessibilityDelegate(new SemanticsCapture());
       System.out.println("ACOS_FLUTTER_PROBE phase=constructed jni=" + jni);
 
 
@@ -215,19 +233,10 @@ public final class FlutterProbe {
       jni.scheduleFrame();
       System.out.println("ACOS_FLUTTER_PROBE phase=scheduleFrame ok");
 
-      // The task runner is the caller's ALooper (pumped by the Rust harness),
-      // so everything above is queued in order; the tap below follows the
-      // surface/viewport tasks.
-      ByteBuffer packet = buildTap(BUTTON_CENTER_X * DPR, BUTTON_CENTER_Y * DPR);
-      // `position` is the number of valid bytes, not an offset: the engine's
-      // `flutter::DispatchPointerDataPacket` copies `[address, address +
-      // position)` out of the direct buffer (`AndroidTouchProcessor` passes
-      // `packet.position()`). W128-A passed 0, so every packet arrived empty
-      // and `Engine::DoDispatchPacket` skipped the Dart invoke.
-      jni.dispatchPointerDataPacket(packet, packet.position());
-      System.out.println("ACOS_FLUTTER_PROBE phase=pointerDispatched bytes=" + packet.position());
-      jni.scheduleFrame();
-      System.out.println("ACOS_FLUTTER_PROBE phase=tapScheduled");
+      // W141-A: the harness no longer taps on its own. The product
+      // `FlutterSession` drives `tapAt` after the first frame has settled, so
+      // the driver behaves like `acos tap` instead of hard-coding the
+      // Increment button. `main` only schedules the first frame.
     } catch (Throwable t) {
       System.out.println("ACOS_FLUTTER_PROBE phase=error " + t);
       t.printStackTrace(System.out);
@@ -281,11 +290,68 @@ public final class FlutterProbe {
 
   /** Harness driver: re-dispatch the counter tap (down+up) and schedule. */
   public static void tapIncrement() {
+    tapAt(BUTTON_CENTER_X * DPR, BUTTON_CENTER_Y * DPR);
+  }
+
+  /**
+   * W141-A harness driver: dispatch a tap at physical {@code (x, y)} and
+   * schedule a frame. The product `FlutterSession.tap` calls this.
+   */
+  public static void tapAt(double x, double y) {
     FlutterJNI jni = sJni;
-    if (jni != null) {
-      ByteBuffer packet = buildTap(BUTTON_CENTER_X * DPR, BUTTON_CENTER_Y * DPR);
-      jni.dispatchPointerDataPacket(packet, packet.position());
-      jni.scheduleFrame();
+    if (jni == null) {
+      return;
+    }
+    ByteBuffer packet = buildTap(x, y);
+    jni.dispatchPointerDataPacket(packet, packet.position());
+    jni.scheduleFrame();
+  }
+
+  /** W141-A: enable the engine's accessibility (semantics) stream. */
+  public static void enableSemantics() {
+    FlutterJNI jni = sJni;
+    if (jni == null) {
+      return;
+    }
+    jni.setSemanticsEnabled(true);
+    sSemanticsEnabled = true;
+    System.out.println("ACOS_FLUTTER_PROBE phase=semanticsEnabled");
+  }
+
+  /**
+   * W141-A: the embedder-side accessibility delegate. It copies the engine's
+   * semantics update into static fields the Rust driver reads; the buffer is
+   * decoded by the W137-A port, not here.
+   */
+  private static final class SemanticsCapture
+      implements FlutterJNI.AccessibilityDelegate {
+    @Override
+    public void updateSemantics(
+        ByteBuffer buffer, String[] strings, ByteBuffer[] attributeBuffers) {
+      try {
+        ByteBuffer dup = buffer.duplicate();
+        dup.order(ByteOrder.LITTLE_ENDIAN);
+        dup.rewind();
+        byte[] data = new byte[dup.remaining()];
+        dup.get(data);
+        sSemanticsBuffer = data;
+        sSemanticsStrings = strings == null ? new String[0] : strings.clone();
+        sSemanticsSeq++;
+      } catch (Throwable t) {
+        System.out.println("ACOS_FLUTTER_PROBE phase=semanticsError " + t);
+      }
+    }
+
+    @Override
+    public void updateCustomAccessibilityActions(ByteBuffer buffer, String[] strings) {}
+
+    @Override
+    public void setLocale(String locale) {}
+
+    @Override
+    public void resetSemantics() {
+      sSemanticsBuffer = null;
+      sSemanticsStrings = null;
     }
   }
 

@@ -336,14 +336,23 @@ full wire format):
   `PointerData` packet; the caller scales by `devicePixelRatio` and passes
   `packet.len()` as `position`.
 
-### 7.3 Current boundary (2026-11-11, HEAD `db844bd`)
+### 7.3 Current boundary (2026-11-11, HEAD `a202c87`, W141-A)
 
 `acos launch <flutter.apk> --native`, `acos observe`, `acos tap --text` and the
-MCP session tools do **not** drive the Flutter engine yet: the driver (`Vm` +
-raw loader + software GLES + the engine's `ALooper` pump) still lives in the
-`crates/acos-jni/tests/flutter_hello.rs` test harness. That harness is the
-working evidence — it presents two 1080×2400 frames and the Increment tap takes
-the counter `0 → 1` (masked SSIM 0.9987 / 0.9968). Productising it means moving
-that driver into a `FlutterSession` held by the confined child (see
-FLUTTER_PARITY.md §W137-A "Not done"). Do not report a Flutter `pass` until that
-wiring lands.
+MCP session tools do **not** drive the Flutter engine yet: the product wiring is
+still missing. W141-A moved the W130-A driver into a library type,
+`acos_jni::FlutterSession` (`crates/acos-jni/src/flutter_session.rs`):
+`launch(apk, opts)` → `pump()` / `pump_until_frames(n)` → `frame()` (RGBA/PNG) →
+`semantics()` → `tap(x,y)` / `tap_text(label)` → `shutdown()`, with bounded
+pumping, geometry/density from `opts` (default 1080×2400 @ 2.5) and structured
+`UNSUPPORTED_*`/`ENGINE_*` errors. Semantics capture is wired through the
+`FlutterJNI.AccessibilityDelegate` (`updateSemantics` is private, so the
+delegate is the supported hook) into the W137-A decoder. It is **not** yet held
+by the confined child, so `acos launch --native` on a Flutter APK still runs the
+framework ladder. The `tests/flutter_hello.rs` harness (Vm + raw loader +
+software GLES + `ALooper` pump + `FlutterJNI` host) remains the working evidence
+for the engine path (counter `0 → 1`, masked SSIM 0.9987 / 0.9968). Also note the
+raw `dart:ui` probe declares no semantics, so the engine's semantics stream is
+empty until the snapshot calls `PlatformDispatcher.updateSemantics`. Do not
+report a Flutter `pass` until the confined-child wiring and the fixture-gated
+product e2e land (see FLUTTER_PARITY.md §W141-A).

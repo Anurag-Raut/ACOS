@@ -31,5 +31,5 @@
       2400
     ]
   ],
-  "reference": "/home/Qui/Projects/acos/fixtures/reference-device/flutter-hello/screenshot_initial.png"
+  "reference": "/home/Qui/Projects/acos/crates/acos-jni/../../fixtures/reference-device/flutter-hello/screenshot_initial.png"
 }
