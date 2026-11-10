@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.canvasshapes/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.canvasshapes/.MainActivity
+TotalTime: 685
+WaitTime: 689
+Complete

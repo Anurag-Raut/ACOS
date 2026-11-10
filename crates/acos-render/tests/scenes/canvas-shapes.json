@@ -1,0 +1,551 @@
+{
+  "width": 1080,
+  "height": 2400,
+  "density": 2.625,
+  "background": "#FFF0F0F3",
+  "root": {
+    "name": "root",
+    "bounds": [
+      0,
+      0,
+      1080,
+      2400
+    ],
+    "children": [
+      {
+        "name": "status-bar",
+        "bounds": [
+          0,
+          0,
+          1080,
+          128
+        ],
+        "ops": [
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              0,
+              1080,
+              128
+            ],
+            "paint": {
+              "color": "#FF191C1E"
+            }
+          }
+        ]
+      },
+      {
+        "name": "action-bar",
+        "bounds": [
+          0,
+          128,
+          1080,
+          275
+        ],
+        "ops": [
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              0,
+              1080,
+              147
+            ],
+            "paint": {
+              "color": "#FF191C1E"
+            }
+          },
+          {
+            "op": "text",
+            "text": "Canvas Shapes",
+            "x": 42,
+            "y": 94,
+            "paint": {
+              "color": "#FFE1E2E2",
+              "textSize": 53.2,
+              "typeface": {
+                "family": "sans-serif",
+                "weight": 500,
+                "italic": false
+              }
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              147,
+              1080,
+              148
+            ],
+            "paint": {
+              "color": "#FFD6D6D8"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              148,
+              1080,
+              149
+            ],
+            "paint": {
+              "color": "#FFDADADD"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              149,
+              1080,
+              150
+            ],
+            "paint": {
+              "color": "#FFDEDEE0"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              150,
+              1080,
+              151
+            ],
+            "paint": {
+              "color": "#FFE1E1E4"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              151,
+              1080,
+              152
+            ],
+            "paint": {
+              "color": "#FFE4E4E7"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              152,
+              1080,
+              153
+            ],
+            "paint": {
+              "color": "#FFE5E5E8"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              153,
+              1080,
+              154
+            ],
+            "paint": {
+              "color": "#FFE7E7EA"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              154,
+              1080,
+              155
+            ],
+            "paint": {
+              "color": "#FFE8E8EB"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              155,
+              1080,
+              156
+            ],
+            "paint": {
+              "color": "#FFE9E9EC"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              156,
+              1080,
+              157
+            ],
+            "paint": {
+              "color": "#FFEAEAED"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              157,
+              1080,
+              158
+            ],
+            "paint": {
+              "color": "#FFEBEBEE"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              158,
+              1080,
+              159
+            ],
+            "paint": {
+              "color": "#FFECECEF"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              159,
+              1080,
+              160
+            ],
+            "paint": {
+              "color": "#FFEDEDF0"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              160,
+              1080,
+              161
+            ],
+            "paint": {
+              "color": "#FFEDEDF0"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              161,
+              1080,
+              162
+            ],
+            "paint": {
+              "color": "#FFEEEEF1"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              162,
+              1080,
+              163
+            ],
+            "paint": {
+              "color": "#FFEEEEF1"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              163,
+              1080,
+              164
+            ],
+            "paint": {
+              "color": "#FFEFEFF2"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              164,
+              1080,
+              165
+            ],
+            "paint": {
+              "color": "#FFEFEFF2"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              165,
+              1080,
+              166
+            ],
+            "paint": {
+              "color": "#FFEFEFF2"
+            }
+          }
+        ]
+      },
+      {
+        "name": "canvas_status",
+        "bounds": [
+          0,
+          275,
+          1080,
+          368
+        ],
+        "ops": [
+          {
+            "op": "text",
+            "text": "canvas ready",
+            "x": 21,
+            "y": 61,
+            "paint": {
+              "color": "#FF191C1E",
+              "textSize": 36.75,
+              "typeface": {
+                "family": "sans-serif",
+                "weight": 400,
+                "italic": false
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "shape",
+        "bounds": [
+          0,
+          368,
+          1080,
+          2337
+        ],
+        "ops": [
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              0,
+              1080,
+              1969
+            ],
+            "paint": {
+              "color": "#FFF5F5EA"
+            }
+          },
+          {
+            "op": "rect",
+            "rect": [
+              40,
+              40,
+              1040,
+              180
+            ],
+            "paint": {
+              "color": "#FFE06040"
+            }
+          },
+          {
+            "op": "circle",
+            "cx": 540.0,
+            "cy": 984.5,
+            "r": 216.0,
+            "paint": {
+              "color": "#FF308040",
+              "antiAlias": true
+            }
+          },
+          {
+            "op": "line",
+            "x0": 40,
+            "y0": 1929,
+            "x1": 1040,
+            "y1": 1929,
+            "paint": {
+              "color": "#FF2266CC",
+              "style": "stroke",
+              "strokeWidth": 6
+            }
+          },
+          {
+            "op": "path",
+            "commands": [
+              [
+                "M",
+                40,
+                1476.75
+              ],
+              [
+                "Q",
+                540.0,
+                1082.95,
+                1040,
+                1476.75
+              ]
+            ],
+            "paint": {
+              "color": "#FF2266CC",
+              "style": "stroke",
+              "strokeWidth": 6
+            }
+          },
+          {
+            "op": "text",
+            "text": "shapes drawn=1",
+            "x": 40,
+            "y": 1772.1,
+            "paint": {
+              "color": "#FF111111",
+              "textSize": 48,
+              "typeface": {
+                "family": "sans-serif",
+                "weight": 400,
+                "italic": false
+              }
+            }
+          },
+          {
+            "op": "path",
+            "commands": [
+              [
+                "M",
+                337.026,
+                910.624
+              ],
+              [
+                "C",
+                344.562,
+                889.918,
+                355.222,
+                870.488,
+                368.636,
+                853.008
+              ],
+              [
+                "C",
+                382.049,
+                835.527,
+                398.058,
+                820.201,
+                416.107,
+                807.563
+              ],
+              [
+                "C",
+                434.157,
+                794.925,
+                454.033,
+                785.123,
+                475.048,
+                778.497
+              ],
+              [
+                "C",
+                496.062,
+                771.871,
+                517.966,
+                768.5,
+                540.0,
+                768.5
+              ],
+              [
+                "C",
+                562.034,
+                768.5,
+                583.938,
+                771.871,
+                604.952,
+                778.497
+              ],
+              [
+                "C",
+                625.967,
+                785.123,
+                645.843,
+                794.925,
+                663.893,
+                807.563
+              ],
+              [
+                "C",
+                681.942,
+                820.201,
+                697.951,
+                835.527,
+                711.364,
+                853.008
+              ],
+              [
+                "C",
+                724.778,
+                870.488,
+                735.438,
+                889.918,
+                742.974,
+                910.624
+              ]
+            ],
+            "paint": {
+              "color": "#FF2266CC",
+              "style": "stroke",
+              "strokeWidth": 6
+            }
+          }
+        ]
+      },
+      {
+        "name": "navigation-bar",
+        "bounds": [
+          0,
+          2337,
+          1080,
+          2400
+        ],
+        "ops": [
+          {
+            "op": "rect",
+            "rect": [
+              0,
+              0,
+              1080,
+              63
+            ],
+            "paint": {
+              "color": "#FF000000"
+            }
+          },
+          {
+            "op": "roundRect",
+            "rect": [
+              398,
+              26,
+              681,
+              37
+            ],
+            "rx": 5.5,
+            "ry": 5.5,
+            "paint": {
+              "color": "#FFD0D0D0",
+              "antiAlias": true
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
