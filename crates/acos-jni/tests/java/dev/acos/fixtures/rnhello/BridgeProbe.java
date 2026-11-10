@@ -26,9 +26,12 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.os.Bundle;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 
 import com.facebook.hermes.reactexecutor.HermesExecutorFactory;
+import com.facebook.react.internal.AndroidChoreographerProvider;
+import com.facebook.react.modules.core.ReactChoreographer;
 import com.facebook.react.NativeModuleRegistryBuilder;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.Arguments;
@@ -43,6 +46,7 @@ import com.facebook.react.bridge.NativeModuleRegistry;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.queue.MessageQueueThreadSpec;
 import com.facebook.react.bridge.queue.ReactQueueConfigurationSpec;
 import com.facebook.react.modules.appstate.AppStateModule;
 import com.facebook.react.modules.core.ExceptionsManagerModule;
@@ -78,6 +82,10 @@ public final class BridgeProbe {
   static void emit(String json) {
     System.out.println(TAG + json);
     System.out.flush();
+    try {
+      android.util.Log.i("ACOS_RN_BRIDGE", json);
+    } catch (Throwable ignored) {
+    }
   }
 
   static void emitOp(String json) {
@@ -424,8 +432,39 @@ public final class BridgeProbe {
     }
   }
 
+  /**
+   * Prepare the process main looper and the `ReactChoreographer` singleton.
+   *
+   * Real Android does this in `ActivityThread.main` (`Looper.prepareMainLooper`)
+   * and in `ReactInstanceManager` (`ReactChoreographer.initialize`); the probe
+   * runs `main` on the VM's thread 0, so it must do both itself. Without a main
+   * `Looper`, `MessageQueueThreadImpl.createForMainThread` fails with
+   * `getMainLooper(...) must not be null` (W123-A). The main looper is a real
+   * `MessageQueue` (native `nativeInit`), so the VM's looper pump can drive it
+   * with virtual time, exactly like the framework lifecycle driver (W118-A).
+   */
+  private static void prepareMainThread() {
+    try {
+      if (Looper.myLooper() == null) {
+        Looper.prepareMainLooper();
+      }
+      stage("main-looper", String.valueOf(Looper.getMainLooper()));
+    } catch (Throwable t) {
+      emit("{\"phase\":\"main-looper-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+    try {
+      ReactChoreographer.initialize(AndroidChoreographerProvider.INSTANCE);
+      stage("choreographer", "ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"choreographer-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+  }
+
   public static void main(String[] args) {
     emit("{\"phase\":\"begin\"}");
+    prepareMainThread();
     String bundlePath = args.length > 0 ? args[0] : "";
     String libDir = args.length > 1 ? args[1] : "";
     String sourceDir = args.length > 2 ? args[2] : bundlePath;
@@ -508,16 +547,34 @@ public final class BridgeProbe {
       JavaScriptExecutor jsExecutor = new HermesExecutorFactory().create();
       stage("executor", "ok");
 
+      // The host `bundlePath` is the extracted `assets/index.android.bundle`.
+      // The file loader's native `JSBigFileString::fromPath` runs in the host
+      // process and opens that host path directly, whereas the asset loader
+      // needs the VM's NDK `AAssetManager_open`, which cannot stream the bundle
+      // out of this APK (W127-A). Both load the same Hermes bytecode.
       JSBundleLoader loader;
-      if (appContext.assets() != null) {
-        loader = JSBundleLoader.createAssetLoader(appContext, "index.android.bundle", true);
-        stage("loader", "asset:index.android.bundle");
-      } else {
+      if (!bundlePath.isEmpty()) {
         loader = JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ true);
         stage("loader", "file:" + bundlePath);
+      } else {
+        loader = JSBundleLoader.createAssetLoader(appContext, "index.android.bundle", true);
+        stage("loader", "asset:index.android.bundle");
       }
 
-      ReactQueueConfigurationSpec spec = ReactQueueConfigurationSpec.createDefault();
+      // Single-threaded bridge: run the UI, JS and native-modules roles all on
+      // the main looper. Real Android gives JS/native modules their own OS
+      // threads; ACOS's queues are green threads, and the native
+      // `JMessageQueueThread::runOnQueueSync` (called by
+      // `Instance::initializeBridge`) blocks the host in a libc++
+      // `condition_variable` waiting for the JS green thread, which cannot run
+      // because the host is blocked. Putting all three roles on the main looper
+      // makes `isOnThread()` true so the setup runs inline; `Looper.loop()`
+      // below then drains the asynchronous work.
+      ReactQueueConfigurationSpec spec =
+          new ReactQueueConfigurationSpec(
+              MessageQueueThreadSpec.mainThreadSpec(),
+              MessageQueueThreadSpec.mainThreadSpec());
+      stage("spec", "single-threaded-main");
       catalyst =
           new CatalystInstanceImpl.Builder()
               .setReactQueueConfigurationSpec(spec)
@@ -561,18 +618,27 @@ public final class BridgeProbe {
       dump(t);
     }
 
-    // Run the native-modules/JS queues for a bounded number of turns so the
-    // bridge can flush its first batch. The VM's scheduler runs the green
-    // threads; each `callFunction` above is asynchronous, so we give the queues
-    // a chance by invoking a no-op JS flush on the JS queue through another
-    // call. A plain Thread.sleep parks the host thread and lets the VM pump.
+    // All three RN queues share the main looper (see the spec above). The
+    // bridge's asynchronous work is posted to that looper's Handler, so drain
+    // it by running `Looper.loop()` and quitting after a bounded delay. The
+    // VM's virtual-time scheduler advances the guest clock to the quit message
+    // so the drain is deterministic and does not wait in real time.
     try {
-      for (int i = 0; i < 20; i++) {
-        Thread.sleep(10);
-      }
-      stage("drain", "ok");
+      android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
+      handler.postDelayed(
+          new Runnable() {
+            @Override
+            public void run() {
+              stage("drain", "quit");
+              Looper.myLooper().quit();
+            }
+          },
+          1000);
+      Looper.loop();
+      stage("looper-done", "ok");
     } catch (Throwable t) {
       stage("drain-error", esc(t.toString()));
+      dump(t);
     }
 
     if (uiManager != null) {

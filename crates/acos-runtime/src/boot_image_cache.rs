@@ -218,7 +218,12 @@ impl BootImageCache {
         if let Err(e) = limited.read_to_end(&mut buf) {
             return LoadResult::Invalid(format!("read {}: {e}", path.display()));
         }
-        decode(key, &buf)
+        acos_vm::profile::note_alloc("boot_cache_file_read", buf.len() as u64);
+        // `decode` consumes the read buffer and returns it with the header
+        // drained, so a cache hit holds exactly one copy of the payload. The
+        // old code copied the payload out (`payload.to_vec()`) while `buf` was
+        // still live, doubling the largest transient allocation of a launch.
+        decode(key, buf)
     }
 
     /// Publish `payload` under `key` atomically, then evict to budget.
@@ -429,7 +434,7 @@ pub fn image_key(boot_dir: Option<&Path>, corelib: CoreLib) -> u64 {
     h
 }
 
-fn decode(expected_key: u64, buf: &[u8]) -> LoadResult {
+fn decode(expected_key: u64, mut buf: Vec<u8>) -> LoadResult {
     if buf.len() < HEADER_LEN {
         return LoadResult::Invalid("truncated header".to_string());
     }
@@ -476,11 +481,18 @@ fn decode(expected_key: u64, buf: &[u8]) -> LoadResult {
             env!("CARGO_PKG_VERSION")
         ));
     }
-    let payload = &buf[HEADER_LEN + version_len..];
-    if checksum(payload) != payload_checksum {
+    let prefix = HEADER_LEN + version_len;
+    if checksum(&buf[prefix..]) != payload_checksum {
         return LoadResult::Invalid("payload checksum mismatch".to_string());
     }
-    LoadResult::Hit(payload.to_vec())
+    // Move the payload to the front in place instead of allocating a second
+    // full-size buffer. The reader still owns `buf`'s capacity (the file
+    // size), which is the payload plus a few dozen header bytes.
+    if prefix > 0 {
+        buf.drain(..prefix);
+    }
+    acos_vm::profile::note_alloc("boot_cache_payload", buf.len() as u64);
+    LoadResult::Hit(buf)
 }
 
 /// FNV-1a 64-bit. Corruption/truncation detection, not a security hash; the

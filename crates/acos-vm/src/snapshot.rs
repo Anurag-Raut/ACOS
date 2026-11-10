@@ -246,6 +246,7 @@ impl BootImage {
     /// cache (one parse per process); any failure is a structured error so the
     /// caller can fall back to a real boot.
     pub(crate) fn from_bytes(bytes: &[u8]) -> VmResult<BootImage> {
+        crate::profile::note_alloc("boot_image_serialized", bytes.len() as u64);
         let data: SerializedBootImage = borsh::from_slice(bytes)
             .map_err(|e| VmError::SnapshotFormat(format!("linked boot image: {e}")))?;
         // The cache payload is untrusted input. Every provider path must

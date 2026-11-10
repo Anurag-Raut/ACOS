@@ -169,12 +169,13 @@ const BOOT_PAYLOAD_MAGIC: u32 = 0x314C_4241;
 const MAX_BOOT_PAYLOAD_ENTRIES: usize = 1 << 20;
 
 /// A decoded boot-cache payload: `(vm snapshot, binder layout, attach record,
-/// linked boot image)`.
-type BootPayload = (
+/// linked boot image)`. The image borrows the payload buffer (zero-copy);
+/// `None`/empty means a legacy entry with no linked image.
+type BootPayload<'a> = (
     Vec<u8>,
     Vec<(u64, String, BinderKind)>,
     Option<(u64, i64, String)>,
-    Vec<u8>,
+    &'a [u8],
 );
 
 fn kind_code(kind: BinderKind) -> u8 {
@@ -236,7 +237,13 @@ fn encode_boot_payload(
 
 /// Decode a [`encode_boot_payload`] frame. Every field is length-checked, so a
 /// corrupt cache file is a clean `Err` and the caller falls back to a boot.
-fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload, String> {
+///
+/// The linked-image segment is returned as a **borrow of `bytes`** rather than
+/// a copy: it is only needed for the duration of the `Vm::restore` that follows
+/// in [`RuntimeTemplate::from_cached`], so the old `image.to_vec()` was a pure
+/// transient duplicate of up to ~25 MiB. The snapshot is copied out because the
+/// template retains it after the payload buffer is dropped.
+fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload<'_>, String> {
     if bytes.len() < 8 {
         return Err("truncated payload header".to_string());
     }
@@ -296,7 +303,9 @@ fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload, String> {
         .checked_add(img_len)
         .filter(|&end| end == bytes.len())
         .ok_or_else(|| "linked-image length mismatch".to_string())?;
-    Ok((snapshot, layout, attach, bytes[pos..end].to_vec()))
+    acos_vm::profile::note_alloc("boot_payload_snapshot", snapshot.len() as u64);
+    acos_vm::profile::note_alloc("boot_payload_image", img_len as u64);
+    Ok((snapshot, layout, attach, &bytes[pos..end]))
 }
 
 /// Structured pool failure.
@@ -1312,7 +1321,8 @@ impl RuntimeTemplate {
         let vm = if image.is_empty() {
             Vm::restore(&snapshot).map_err(PoolError::Restore)?
         } else {
-            Vm::restore_with_boot_image(&snapshot, &image).map_err(PoolError::Restore)?
+            // `image` borrows `bytes`; both stay live only through this restore.
+            Vm::restore_with_boot_image(&snapshot, image).map_err(PoolError::Restore)?
         };
         let activity_thread = vm
             .find_instance_of_class("Landroid/app/ActivityThread;")
@@ -1689,12 +1699,13 @@ mod payload_tests {
 
     #[test]
     fn valid_frame_round_trips() {
+        let frame = valid_frame();
         let (snapshot, layout, attach, image) =
-            decode_boot_payload(&valid_frame()).expect("valid frame");
+            decode_boot_payload(&frame).expect("valid frame");
         assert_eq!(snapshot, b"S");
         assert!(layout.is_empty());
         assert!(attach.is_none());
-        assert_eq!(image, b"I");
+        assert_eq!(image, &b"I"[..]);
     }
 
     #[test]

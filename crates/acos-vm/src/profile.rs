@@ -256,6 +256,42 @@ pub fn set_note(key: &str, value: u64) {
         }
 }
 
+/// Charge a byte count to a named allocation call-site category.
+///
+/// `acos-vm`/`acos-runtime` cannot install a process-wide counting allocator
+/// (`#![forbid(unsafe_code)]`), so the big, named buffers instrument their own
+/// construction. Counts accumulate; the report's `allocations[]` list is sorted
+/// by bytes so the dominant call-site is obvious. Purely diagnostic — never
+/// changes behaviour.
+pub fn note_alloc(category: &str, bytes: u64) {
+    if !enabled() || bytes == 0 {
+        return;
+    }
+    let map = alloc_notes();
+    if let Ok(mut m) = map.lock() {
+        let e = m.entry(category.to_string()).or_insert((0, 0));
+        e.0 += bytes;
+        e.1 += 1;
+    }
+}
+
+/// Reset the accumulated call-site allocation counters.
+pub fn reset_allocs() {
+    if let Ok(mut m) = alloc_notes().lock() {
+        m.clear();
+    }
+}
+
+/// Snapshot of `(category -> (bytes, allocations))` sorted by bytes desc.
+pub fn alloc_notes_snapshot() -> Vec<(String, u64, u64)> {
+    let mut v: Vec<(String, u64, u64)> = match alloc_notes().lock() {
+        Ok(g) => g.iter().map(|(k, (b, n))| (k.clone(), *b, *n)).collect(),
+        Err(_) => Vec::new(),
+    };
+    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v
+}
+
 fn stages() -> &'static Mutex<HashMap<String, (u64, u64)>> {
     static M: OnceLock<Mutex<HashMap<String, (u64, u64)>>> = OnceLock::new();
     M.get_or_init(|| Mutex::new(HashMap::new()))
@@ -282,6 +318,10 @@ fn clinits() -> &'static Mutex<HashMap<String, (u64, u64)>> {
 }
 fn notes() -> &'static Mutex<HashMap<String, u64>> {
     static M: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+fn alloc_notes() -> &'static Mutex<HashMap<String, (u64, u64)>> {
+    static M: OnceLock<Mutex<HashMap<String, (u64, u64)>>> = OnceLock::new();
     M.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -351,6 +391,10 @@ pub fn report() -> serde_json::Value {
         "class_parses_by_class": sorted(class_parses()),
         "class_links_by_class": sorted(class_links()),
         "clinit_by_class": sorted(clinits()),
+        "allocations": alloc_notes_snapshot()
+            .into_iter()
+            .map(|(name, bytes, count)| json!({"name": name, "bytes": bytes, "count": count}))
+            .collect::<Vec<_>>(),
         "notes": notes_v,
     })
 }

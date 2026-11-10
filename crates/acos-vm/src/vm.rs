@@ -589,6 +589,15 @@ impl Vm {
         self.c_thread = image.c_thread;
         self.c_print_stream = image.c_print_stream;
         self.c_system = image.c_system;
+        // Approximate the per-restore clone cost of the linked image (the
+        // `Arc<MethodCode>` bodies are shared by pointer, but the `Vec`s and
+        // their inline `String`s are deep-cloned on every install). Diagnostic
+        // only: a large number here is the multi-restore launch copying the
+        // class/method tables once per `Vm::restore`.
+        let clone_bytes = image.classes.len() * std::mem::size_of::<crate::class::Class>()
+            + image.methods.len() * std::mem::size_of::<crate::class::Method>()
+            + image.types.len() * std::mem::size_of::<crate::class::TypeInfo>();
+        crate::profile::note_alloc("vm_install_boot_image", clone_bytes as u64);
         // A serialized image carries `NativeFn` placeholders; re-bind every one
         // from the registry `natives::install` just populated above. For an
         // in-process image this is a no-op (same function pointers). This runs
