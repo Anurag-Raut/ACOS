@@ -1,7 +1,7 @@
 //! The ACOS virtual machine: heap ownership, class loading, resolution, GC and
 //! the public `run` entry point.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
@@ -260,6 +260,13 @@ pub struct Vm {
     pub dexs: Vec<DexCtx>,
     pub classes: Vec<Class>,
     pub class_by_desc: HashMap<String, ClassId>,
+    /// Descriptors of DEX classes whose `load_dex_class` is on the stack.
+    ///
+    /// A class is only inserted into `class_by_desc` once its fields, methods
+    /// and vtable are complete, so this set detects a re-entrant load of a
+    /// class that is still being built (a cycle, or a bug) instead of handing
+    /// back a partially linked class.
+    loading_classes: HashSet<String>,
     pub types: Vec<TypeInfo>,
     pub type_by_desc: HashMap<String, TypeId>,
     pub methods: Vec<Method>,
@@ -335,6 +342,7 @@ impl Vm {
             dexs: Vec::new(),
             classes: Vec::new(),
             class_by_desc: HashMap::new(),
+            loading_classes: HashSet::new(),
             types: Vec::new(),
             type_by_desc: HashMap::new(),
             methods: Vec::new(),
@@ -590,10 +598,12 @@ impl Vm {
 
     // ---- class construction ---------------------------------------------
 
-    pub fn add_class(&mut self, spec: ClassSpec) -> ClassId {
-        if let Some(&id) = self.class_by_desc.get(&spec.descriptor) {
-            return id;
-        }
+    /// Create a class record without publishing it in `class_by_desc`.
+    ///
+    /// `load_dex_class` builds a class through this path so a partially loaded
+    /// class is never visible to `load_class`; the descriptor is inserted only
+    /// once its fields, methods and vtable are complete.
+    fn create_class(&mut self, spec: ClassSpec) -> ClassId {
         let id = self.classes.len() as ClassId;
         let mut class = Class::new(spec.descriptor.clone());
         class.access = spec.access;
@@ -606,7 +616,16 @@ impl Vm {
             class.instance_refs = self.classes[sup as usize].instance_refs.clone();
         }
         self.classes.push(class);
-        self.class_by_desc.insert(spec.descriptor, id);
+        id
+    }
+
+    pub fn add_class(&mut self, spec: ClassSpec) -> ClassId {
+        if let Some(&id) = self.class_by_desc.get(&spec.descriptor) {
+            return id;
+        }
+        let id = self.create_class(spec);
+        let desc = self.class_desc(id).to_string();
+        self.class_by_desc.insert(desc, id);
         id
     }
 
@@ -953,9 +972,30 @@ impl Vm {
         if let Some(&id) = self.class_by_desc.get(&desc) {
             return Ok(id);
         }
+        // A class currently being loaded must not be re-entered: the caller
+        // would observe a class whose methods/vtable are still incomplete
+        // (e.g. resolving `Landroid/os/Build;->-$$Nest$...` while the host class
+        // is mid-load). Class hierarchies are acyclic, so a re-entry here is a
+        // cycle/bug and is reported rather than yielding a partial class.
+        if !self.loading_classes.insert(desc.clone()) {
+            return Err(VmError::Load(format!("cyclic class load: {desc}")));
+        }
+        let result = self.load_dex_class_body(&file, dex_idx, def_idx, &desc);
+        self.loading_classes.remove(&desc);
+        result
+    }
+
+    fn load_dex_class_body(
+        &mut self,
+        file: &Rc<DexFile>,
+        dex_idx: u32,
+        def_idx: usize,
+        desc: &str,
+    ) -> VmResult<ClassId> {
+        let def = &file.class_defs()[def_idx];
         let is_interface = def.access_flags & acos_dex::access::INTERFACE != 0;
-        let id = self.add_class(ClassSpec {
-            descriptor: desc.clone(),
+        let id = self.create_class(ClassSpec {
+            descriptor: desc.to_string(),
             access: def.access_flags,
             super_class: None,
             interfaces: Vec::new(),
@@ -1023,6 +1063,9 @@ impl Vm {
         }
 
         self.link_class(id)?;
+        // Publish only after fields, methods and vtable are complete so that no
+        // caller can observe a partially linked class.
+        self.class_by_desc.insert(desc.to_string(), id);
         self.metrics.classes_loaded = self.classes.len();
         Ok(id)
     }

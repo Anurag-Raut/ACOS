@@ -185,6 +185,42 @@ derivation rules are part of the compatibility surface for `Build.*` and
 (`MODEL = mainline`, `DEVICE = generic`); a full image would take it from
 `vendor`/`odm`, which the boot cache does not extract.
 
+### F-0009 — The DEX class loader must publish a class only after it is complete — 2026-11-10
+
+**Finding.** `load_dex_class` inserted the class descriptor into
+`class_by_desc` at the very start of loading, before the superclass/interfaces,
+fields, methods and vtable existed. The W8-A note recorded one non-recurring
+`UNSUPPORTED_JAVA_API: Landroid/os/Build;->-$$Nest$smgetString` at
+`Build$VERSION.<clinit> pc=3`: the nest-bridge is a d8 synthetic in
+`android.os.Build`, so an `invoke-static` during `Build$VERSION.<clinit>`
+resolves the host class on demand. If that load had failed part-way (or been
+re-entered), the partial `Build` stayed visible and `find_method` failed,
+because `invoke` maps any `load_class`/`find_method` error to
+`UNSUPPORTED_JAVA_API` naming the call site. The loader is now atomic:
+`load_dex_class` builds through `create_class` (no publication), guards
+re-entry with a `loading_classes` descriptor set, and inserts into
+`class_by_desc` only after `link_class` succeeds. A re-entrant load of a class
+that is still being built is reported as `cyclic class load: <desc>` instead
+of returning a half-linked class; DEX class hierarchies are acyclic, so this
+is always a bug.
+
+**Evidence.** `crates/acos-vm/src/vm.rs` `create_class` / `load_dex_class` /
+`load_dex_class_body` (publication moved past `link_class`);
+`crates/acos-vm/tests/loader_stress.rs` loads and initialises `Build`,
+`Build$VERSION`, `Build$VERSION_CODES`, `Build$Partition` and cross-jar
+framework classes in every rotation, asserting the nest bridge and the direct
+method map after each step, and repeats the nested initialisation 32x under
+`ACOS_GC_STRESS`; `cargo test -p acos-vm` (all suites pass);
+`tools/diff-dexprogs.sh --corelib real` 20/20 normal and 20/20 `--gc-stress`.
+The original transient was not reproduced in the stress runs (it needed
+fresh-VM, varied-order, GC-stress conditions), so the fix is a code invariant,
+not a captured interleaving.
+
+**Design impact.** Lazy class loading is transactional with the descriptor
+map as the single publication barrier: nothing may observe a class whose
+members are still being added. Future lazy providers (snapshot restore,
+additional jars) must preserve this — build first, publish last.
+
 ## 2026-11-10 — Owner directive D5: V1 is not the end; dogfood with real agents
 
 The owner requires that ACOS keep being refined after version 1 as a real product. After V1, "dogfood" waves are mandatory: subagents act as Android-developing agents (write app code, build the APK, run `acos verify`, read evidence, fix, repeat) using every ACOS feature, and the friction they hit becomes first-class backlog. Source: owner message, 2026-11-10. Recorded by the lead.
