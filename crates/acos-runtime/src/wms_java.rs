@@ -338,6 +338,9 @@ pub fn transact(
     let method = acos_aidl::lookup(&descriptor, code)
         .ok_or_else(|| err(format!("unknown method code {code} for {descriptor}")))?;
     data.enforce_interface(&descriptor).map_err(perr)?;
+    if std::env::var_os("ACOS_WMS_TRACE").is_some() {
+        eprintln!("WMS-TRACE {descriptor} code={code} {}", method.name);
+    }
     let args = decode_args(method, data)?;
 
     reply.reset();

@@ -2078,3 +2078,116 @@ main with `git apply` (clean), and re-confirmed there:
 * `lifecycle_probe counter.apk` -> same `ImageDecoder.nCreate` blocker.
 
 The worktree and its `target-w110a` scratch were deleted after the copy-back.
+
+# W116-A session — services replies decode in real Java; main-looper quit; first-traversal gap
+
+Worktree: clean HEAD `b9a778a`, `CARGO_TARGET_DIR=.cache/target-w116a`,
+`CARGO_PROFILE_DEV_DEBUG=0`. No commits. Owned files only
+(`acos-runtime::{lifecycle,wms_java}`, `acos-services`); W104-A's in-progress
+`ImageDecoder` natives were applied **temporarily** to the worktree to reach
+`setView` and were reverted before any gate ran (they are not part of this
+session's diff).
+
+## Bottom line
+
+With W104-A's real `ImageDecoder` wired in, `counter.apk` passes
+`activity_on_create` (`MainActivity.onCreate` -> `setContentView` ->
+`installDecor` -> launcher-icon decode all complete) and reaches
+`ViewRootImpl.setView` -> `IWindowSession.addToDisplayAsUser`, whose reply is
+read by the *real* framework `Stub$Proxy` with no parcel desync and no Java
+exception. The bounded run then hit a harness bug (the main looper was asked to
+`quitSafely()`, which the real framework forbids); fixed here. The next real
+blocker is that the first `performTraversals` never reaches `relayout`: the
+`ViewRootImpl.scheduleTraversals()` vsync is scheduled and dispatched, but the
+lifecycle driver's `run_phase` does not pump the looper, so the future-dated
+`doFrame` message never runs.
+
+## Ladder (counter.apk, `ACOS_BOOT_DIR=.cache/boot/android-34`)
+
+| Rung | State before | State after W116-A | Evidence |
+|---|---|---|---|
+| `apk_parsed` .. `application_on_create` | ok | ok | JSON stages |
+| `client_transaction` | ok | ok | `transaction_delivered=true` (`mActivities` has the record's `activity`) |
+| launch `onCreate` | ok | ok | `activity_on_create` stage `ok` |
+| `ImageDecoder.nCreate` | `UNSUPPORTED_JAVA_API` | reproduced with W104-A's real native (`activity_on_create` ok) | not edited here; W104-A owns it |
+| `ViewRootImpl.setView` -> `addToDisplayAsUser` | not reached | **reached, reply decoded** | `ACOS_WMS_TRACE`: `IWindowSession code=2 addToDisplayAsUser` once |
+| `IWindowSession.relayout` (first `performTraversals`) | not reached | not reached | no `relayout` transaction; see root cause below |
+| `onResume` stage | not reached | run completes with `report.error=None`; counter has no `AcosFixture` log so the stage probe (which greps for `onResume`) still reports not-reached | JSON `on_resume` blocker message is "did not complete and the runtime reported no error" |
+| bounded shutdown | `IllegalStateException: Main thread not allowed to quit.` | clean return (`looper_quit` path) | fixed below |
+
+## Fix — the main looper cannot be `quitSafely()`d
+
+`lifecycle::quit_main_looper` called `Looper.myLooper().quitSafely()`. The real
+process main `MessageQueue` is built with `quitAllowed=false`, so the
+framework's `MessageQueue.quit(true)` correctly throws
+`IllegalStateException("Main thread not allowed to quit.")` — real
+`ActivityThread.main` never quits its looper; the OS kills the process. The
+bounded ACOS run must terminate some other way, so `quit_main_looper` now
+performs exactly what `MessageQueue.quit()` does **after** its guard: set the
+real `MessageQueue.mQuitting` field and call `nativeWake(mPtr)`. `next()` then
+observes the flag and returns null, so `Looper.loop()` returns normally instead
+of throwing. No behaviour is faked: `ViewRootImpl`/`ActivityThread` are
+untouched, and the framework's own `quit()` remains correct for user code.
+
+Regression path: `counter.apk` before the fix -> `on_resume` blocker
+`JAVA_EXCEPTION: Main thread not allowed to quit`; after -> no runtime error.
+(The parallel copy in `session_pool.rs` still has the old `quitSafely()` call;
+it is W114-A/W115-A's file and was not touched.)
+
+## Root cause of the missing first traversal (next blocker)
+
+`lifecycle::run_phase` calls `acos_vm::interp::run` once. The interpreter
+returns as soon as the only green thread parks in `MessageQueue.next()`. The
+looper-pump (`natives::looper::pump`, which blocks the host on the process
+epoll and resumes parked loopers) is only called from `Vm::run_inner`, not from
+`run_phase`. `ViewRootImpl.scheduleTraversals()` posts an asynchronous
+`doFrame` message dated at the vsync timestamp (`base + 16.6 ms`, in the
+future) and `nativeScheduleVsync` writes its eventfd; `on_looper_wake` does
+reach `FrameDisplayEventReceiver.onVsync`, but the message's `when` is in the
+future, so `next()` parks and `run_phase` returns before it fires. Hence
+`relayout`/`measure`/`layout`/`draw` never run.
+
+Traced (`ACOS_VSYNC_TRACE`, temporary): exactly one
+`nativeScheduleVsync` call, from
+`ViewRootImpl.scheduleTraversals -> Choreographer.postCallback -> ... -> DisplayEventReceiver.scheduleVsync`,
+and exactly one dispatch. Fixing this needs a public looper-pump on `Vm`
+(called in a `run_phase` loop) or an immediate first-tick timestamp; both live
+in `acos-vm`, outside this session's file set.
+
+## Services replies — what was validated
+
+`addToDisplayAsUser`'s reply body is `int result, InputChannel,
+InsetsState, InsetsSourceControl[], Rect, float[]`. The real
+`IWindowSession.Stub$Proxy` read it end-to-end (the transaction returned; no
+`BadParcelableException`/`Parcel` desync was raised). This exercises the
+`acos-wm::codec` `InsetsState`/`InsetsSourceControl` encoders against the
+framework's real readers on the launch path for the first time. `relayout`
+(`ClientWindowFrames`, `MergedConfiguration`, `SurfaceControl`, `InsetsState`,
+`InsetsSourceControl[]`, `Bundle`) is not yet exercised because the traversal
+does not fire; see the blocker above.
+
+`ACOS_WMS_TRACE=1` (new, env-gated) prints each `IWindowManager`/
+`IWindowSession` transaction; it is what produced the ladder evidence.
+
+## Gates (this worktree)
+
+| Item | Result |
+|---|---|
+| `cargo check --workspace --all-targets` | clean |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo test -p acos-runtime --test m2` | 2 passed / 1 ignored (gate unchanged) |
+| `cargo test -p acos-runtime --test wms` | 8 passed |
+| `cargo test -p acos-services` | all pass (incl. `parcelable` 4/4, 27 Full specs vs the API-34 DEX) |
+| `tools/diff-dexprogs.sh --corelib real` | 27 pass / 0 fail / 0 unsupported |
+
+## Honesty / handoff
+
+* No services/parcelable code was faked or stubbed; the only code that made
+  `onCreate` complete was W104-A's real `ImageDecoder`, which was reverted.
+* The M2 gate stays `#[ignore]`d: `hello-views` (its fixture) is blocked
+  earlier, at `android.widget.EditText` inflate, so `onResume` is not reached
+  there. `counter.apk` does reach `addToDisplayAsUser`, but the stage probe
+  keys off the fixture `AcosFixture` log.
+* Next: (1) W104-A lands `ImageDecoder`; (2) pump loopers in `run_phase` so the
+  first traversal runs and `relayout` is exercised; (3) then
+  `measure`/`layout`/`draw`.

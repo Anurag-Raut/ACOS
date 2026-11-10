@@ -108,16 +108,56 @@ fn rn_bridge_child_worker() {
     let scratch = PathBuf::from(std::env::var(OUT_ENV).expect("scratch"));
     let apk = PathBuf::from(std::env::var(APK_ENV).expect("apk"));
     std::fs::create_dir_all(&scratch).expect("scratch dir");
+    // Copy the fixture libs and APK into the writable scratch dir. The real
+    // paths live behind symlinks in a git worktree, and SoLoader's
+    // `File.canonicalize0` cannot walk a symlinked ancestor that Landlock has
+    // not granted; the scratch dir is already read-write and confined.
+    let libdir = {
+        let dst = scratch.join("lib");
+        std::fs::create_dir_all(&dst).expect("scratch lib dir");
+        for entry in std::fs::read_dir(&libdir).expect("read fixture lib dir") {
+            let entry = entry.expect("lib entry");
+            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                std::fs::copy(entry.path(), dst.join(entry.file_name())).expect("copy lib");
+            }
+        }
+        dst
+    };
+    let apk = {
+        let dst = scratch.join("rn-hello.apk");
+        std::fs::copy(&apk, &dst).expect("copy apk");
+        dst
+    };
 
     let apk_dir = apk.parent().unwrap_or_else(|| Path::new("."));
     let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
     let probe_lib_dir = repo_root().join("fixtures/build/rn-bridge/x86_64");
     let hermes_lib_dir = repo_root().join("fixtures/build/rn-hermes/x86_64");
     let boot_dir = repo_root().join(".cache/boot/android-34");
+    // Resolve symlinks first: a git worktree points `.cache/` and
+    // `fixtures/build/` at the main tree, and SoLoader's `File.canonicalize0`
+    // walks the *real* ancestor chain. Granting the symlink's own path is not
+    // enough for `realpath`.
+    let libdir_real = std::fs::canonicalize(&libdir).unwrap_or_else(|_| libdir.clone());
+    let apk_dir_real = std::fs::canonicalize(apk_dir).unwrap_or_else(|_| apk_dir.to_path_buf());
     let mut profile = acos_sandbox::ConfineProfile::default()
         .with_read_only(&libdir)
+        .with_read_only(&libdir_real)
         .with_read_only(apk_dir)
+        .with_read_only(&apk_dir_real)
         .with_read_only(&data_dir);
+    // SoLoader's `File.canonicalize0` walks the parent chain of the APK and the
+    // native lib dir; those ancestors are symlinked in a git worktree, so grant
+    // them read-only too (never the whole repo, only the ancestors).
+    for base in [&libdir, apk_dir, &libdir_real, &apk_dir_real] {
+        let mut cur = base.parent();
+        while let Some(p) = cur {
+            if p.exists() {
+                profile = profile.with_read_only(p);
+            }
+            cur = p.parent();
+        }
+    }
     for d in [&probe_lib_dir, &hermes_lib_dir] {
         if d.is_dir() {
             profile = profile.with_read_only(d);
@@ -125,10 +165,18 @@ fn rn_bridge_child_worker() {
     }
     // Hermes' `std::random_device` opens `/dev/urandom`. Grant only the device
     // nodes that are needed (W94-A #8) instead of all of `/dev`; this harness is
-    // test-only and the production profile grants no `/dev` path.
+    // test-only and the production profile grants no `/dev` path. Landlock
+    // masks directory-only rights for these non-directory paths (W106-A).
     for dev in ["/dev/urandom", "/dev/null"] {
         if Path::new(dev).exists() {
             profile = profile.with_read_only(dev);
+        }
+    }
+    // SoLoader canonicalizes the scratch lib dir; its parent temp dir must be
+    // readable but stays read-only (the scratch subtree itself is read-write).
+    if let Some(parent) = scratch.parent() {
+        if parent.exists() {
+            profile = profile.with_read_only(parent);
         }
     }
     profile = profile.with_read_write(&scratch);
@@ -166,6 +214,23 @@ fn rn_bridge_child_worker() {
             return;
         }
     };
+    // The probe DEX carries a compile-time `AssetManager` stub (it only needs
+    // the hidden ctor/addAssetPath for javac). Loading the real framework jar
+    // eagerly makes the lazy boot provider win before the probe DEX is added,
+    // so `ResourcesImpl.<clinit>` resolves the real `getThemeFreeFunction`.
+    if boot_ok {
+        // The probe DEX carries a compile-time `AssetManager` stub (it only
+        // needs the hidden ctor/addAssetPath for javac). Force the real
+        // framework class in first so the lazy boot provider wins over that
+        // stub; `ResourcesImpl.<clinit>` then resolves the real Java
+        // `AssetManager.getThemeFreeFunction()`.
+        if let Err(e) = vm.load_class("Landroid/content/res/AssetManager;") {
+            println!(
+                "W88A_STAGE {}",
+                serde_json::json!({"phase": "assetmanager-preload-error", "detail": format!("{e:?}")})
+            );
+        }
+    }
     match load_apk_dex(&apk, &mut vm) {
         Ok(n) => println!(
             "W88A_STAGE {}",

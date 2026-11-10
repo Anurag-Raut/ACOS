@@ -452,7 +452,25 @@ fn quit_main_looper(vm: &mut Vm) -> Result<(), LifecycleError> {
         JavaValue::Object(h) if h != NULL => h,
         _ => return Ok(()),
     };
-    vm.call_method(looper, "quitSafely", "()V", &[])?;
+    // The process main looper's `MessageQueue` is constructed with
+    // `quitAllowed=false`, so the framework's own `Looper.quitSafely()` ->
+    // `MessageQueue.quit(true)` correctly throws
+    // `IllegalStateException: Main thread not allowed to quit.` (the real
+    // `ActivityThread.main` never quits its looper; the OS kills the process).
+    // ACOS must terminate its bounded run, so it performs exactly what
+    // `MessageQueue.quit()` does *after* its guard: set `mQuitting`, then wake
+    // the parked `nativePollOnce`. `MessageQueue.next()` observes the flag and
+    // returns null, so `Looper.loop()` returns normally instead of throwing.
+    let queue = match vm.get_field(looper, "mQueue") {
+        Ok(JavaValue::Object(h)) if h != NULL => h,
+        _ => return Ok(()),
+    };
+    vm.set_instance_field_by_name(queue, "mQuitting", 1);
+    let ptr = match vm.get_field(queue, "mPtr") {
+        Ok(JavaValue::Long(p)) => p,
+        _ => 0,
+    };
+    let _ = vm.call_method(queue, "nativeWake", "(J)V", &[JavaValue::Long(ptr)]);
     Ok(())
 }
 

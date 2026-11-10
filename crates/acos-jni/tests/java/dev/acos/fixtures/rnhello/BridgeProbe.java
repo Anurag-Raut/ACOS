@@ -23,6 +23,7 @@ package dev.acos.fixtures.rnhello;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.pm.ApplicationInfo;
+import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -50,6 +51,7 @@ import com.facebook.react.modules.deviceinfo.DeviceInfoModule;
 import com.facebook.react.modules.systeminfo.AndroidInfoModule;
 import com.facebook.react.soloader.OpenSourceMergedSoMapping;
 import com.facebook.soloader.SoLoader;
+import com.facebook.soloader.SoSource;
 import com.facebook.react.views.text.ReactRawTextManager;
 import com.facebook.react.views.text.ReactTextViewManager;
 import com.facebook.react.views.text.ReactVirtualTextViewManager;
@@ -146,11 +148,31 @@ public final class BridgeProbe {
   public static final class ProbeContext extends ContextWrapper {
     private final String libDir;
     private final String apkPath;
+    private final AssetManager assets;
 
     public ProbeContext(String libDir, String apkPath) {
       super(null);
       this.libDir = libDir;
       this.apkPath = apkPath;
+      AssetManager am = new AssetManager();
+      boolean ok = false;
+      try {
+        ok = am.addAssetPath(apkPath) != 0;
+        stage("assets", "addAssetPath=" + ok + " apk=" + apkPath);
+      } catch (Throwable t) {
+        emit("{\"phase\":\"assets-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      }
+      this.assets = ok ? am : null;
+    }
+
+    /** The APK's AssetManager, or null when {@code addAssetPath} failed. */
+    public AssetManager assets() {
+      return assets;
+    }
+
+    @Override
+    public AssetManager getAssets() {
+      return assets;
     }
 
     @Override
@@ -181,7 +203,11 @@ public final class BridgeProbe {
       ai.publicSourceDir = apkPath;
       ai.nativeLibraryDir = libDir;
       ai.metaData = new Bundle();
-      ai.flags = 0;
+      // `FLAG_EXTRACT_NATIVE_LIBS` (0x10000000): the fixture libs are already
+      // extracted into `nativeLibraryDir`, so SoLoader must use the
+      // ApplicationSoSource (DirectorySoSource) instead of DirectApkSoSource,
+      // which would re-open the APK.
+      ai.flags = 0x10000000;
       return ai;
     }
   }
@@ -354,75 +380,38 @@ public final class BridgeProbe {
     }
   }
 
-  private static void loadNativeStack() throws Throwable {
-    for (String n :
-        new String[] {"c++_shared", "jsi", "fbjni", "hermes", "reactnative", "hermestooling"}) {
-      load(n);
-    }
-    OpenSourceMergedSoMapping m = OpenSourceMergedSoMapping.INSTANCE;
-    // Sub-libraries whose folded JNI_OnLoad the SoLoader invokes. Names that
-    // are not built into the OSS merged libs (jsinspector/mapbufferjni) are
-    // skipped by catching UnsatisfiedLinkError, exactly like SoLoader.
-    String[] merged = {
-      "fabricjni", "react_devsupportjni", "react_featureflagsjni", "react_newarchdefaults",
-      "reactnativeblob", "reactnativejni", "reactnativejni_common", "rninstance",
-      "turbomodulejsijni", "uimanagerjni", "yoga", "hermes_executor", "hermesinstancejni",
-      "jsijniprofiler",
-    };
-    for (String lib : merged) {
-      try {
-        m.invokeJniOnload(lib);
-        stage("merged", lib + " ok");
-      } catch (Throwable t) {
-        stage("merged-skip", lib + ": " + esc(t.toString()));
-      }
-    }
-  }
-
   /**
-   * The RN classes loaded below (`ReactNativeFeatureFlags`, view managers)
-   * call `SoLoader.loadLibrary`, which asserts `SoLoader.init()` ran. We loaded
-   * every `.so` ourselves through `System.loadLibrary`, so prime SoLoader's
-   * static state directly instead of running its `Context`-based SoSource
-   * discovery (which would re-map the libraries and needs a real app context).
+   * Initialise the real `SoLoader` against the APK's extracted native library
+   * directory. `ApplicationSoSource` wraps a `DirectorySoSource` over
+   * `ApplicationInfo.nativeLibraryDir`, so `libhermes_executor.so` (merged into
+   * `libhermestooling.so`) and its dependencies resolve without opening the
+   * APK. Every load goes through the VM's `Runtime.nativeLoad` seam
+   * (`ProbeSoFileLoader` -> `System.loadLibrary` -> `acos-jni`).
+   *
+   * The external mapping (`OpenSourceMergedSoMapping`) is installed first:
+   * `SoLoader.initEnableConfig` returns early when it is non-null, and the
+   * mapping translates merged names (`hermes_executor` -> `hermestooling`) and
+   * drives the merged `JNI_OnLoad` calls. That also avoids `PackageManager`
+   * discovery, which the probe context does not provide.
    */
-  @SuppressWarnings("unchecked")
-  private static void primeSoLoader(Context context) throws Throwable {
-    // `SoLoader.init` discovers SoSources by opening the APK with
-    // `java.util.zip.ZipFile`, whose native `open` the VM does not implement
-    // (W88-A blocker). Every `.so` is already mapped through the confined
-    // `System.loadLibrary` path, so satisfy SoLoader's static state directly.
-    java.lang.reflect.Field soSources = SoLoader.class.getDeclaredField("sSoSources");
-    soSources.setAccessible(true);
-    if (soSources.get(null) == null) {
-      // Empty but non-null: `assertInitialized()` / `isInitialized()` only test
-      // for null. All real libraries are already mapped.
-      Object empty =
-          java.lang.reflect.Array.newInstance(soSources.getType().getComponentType(), 0);
-      soSources.set(null, empty);
-      stage("soloader-set", empty == null ? "null" : "wrote");
+  private static void initSoLoader(ProbeContext context) throws Throwable {
+    java.lang.reflect.Field ext = SoLoader.class.getDeclaredField("externalSoMapping");
+    ext.setAccessible(true);
+    ext.set(null, OpenSourceMergedSoMapping.INSTANCE);
+    stage("soloader-ext", String.valueOf(ext.get(null)));
+    stage("soloader", "before-init");
+    try {
+      SoLoader.init(context, 0, new ProbeSoFileLoader());
+    } catch (Throwable t) {
+      stage("soloader-init-error", t.toString());
+      dump(t);
+      throw t;
     }
-    stage("soloader-readback", String.valueOf(soSources.get(null) != null));
-    java.lang.reflect.Field loaded = SoLoader.class.getDeclaredField("sLoadedLibraries");
-    loaded.setAccessible(true);
-    Object set = loaded.get(null);
-    if (set instanceof java.util.Set) {
-      java.util.Set<Object> s = (java.util.Set<Object>) set;
-      for (String n :
-          new String[] {
-            "libc++_shared.so",
-            "libjsi.so",
-            "libfbjni.so",
-            "libhermes.so",
-            "libreactnative.so",
-            "libhermestooling.so",
-          }) {
-        s.add(n);
-      }
-    }
-    stage("soloader", "primed");
+    stage("soloader", "init ok");
     stage("soloader-isinit", String.valueOf(SoLoader.isInitialized()));
-    stage("soloader-class-isinit", String.valueOf(com.facebook.soloader.SoLoader.isInitialized()));
+    for (SoSource source : SoLoader.cloneSoSources()) {
+      stage("soloader-source", source.getName());
+    }
   }
 
   public static void main(String[] args) {
@@ -430,10 +419,12 @@ public final class BridgeProbe {
     String bundlePath = args.length > 0 ? args[0] : "";
     String libDir = args.length > 1 ? args[1] : "";
     String apkPath = args.length > 2 ? args[2] : bundlePath;
+    ProbeContext appContext = new ProbeContext(libDir, apkPath);
     try {
-      loadNativeStack();
+      initSoLoader(appContext);
     } catch (Throwable t) {
       emit("{\"phase\":\"load-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
       return;
     }
 
@@ -456,7 +447,6 @@ public final class BridgeProbe {
       java.lang.reflect.Field tagf = SoLoader.class.getDeclaredField("TAG");
       tagf.setAccessible(true);
       stage("reflect-tag", String.valueOf(tagf.get(null)) + "/" + SoLoader.TAG);
-      primeSoLoader(new ProbeContext(libDir, apkPath));
       // Deterministic display metrics: avoids a full Resources/AssetManager
       // dependency for the UIManagerModule constructor while still giving it
       // real, non-zero metrics.
@@ -472,7 +462,7 @@ public final class BridgeProbe {
       DisplayMetricsHolder.setScreenDisplayMetrics(dm);
       stage("metrics", "ok");
 
-      reactContext = new BridgeReactContext(new ProbeContext(libDir, apkPath));
+      reactContext = new BridgeReactContext(appContext);
       stage("context", "ok");
 
       // Only the view managers the hello tree needs. Calling
@@ -505,9 +495,14 @@ public final class BridgeProbe {
       JavaScriptExecutor jsExecutor = new HermesExecutorFactory().create();
       stage("executor", "ok");
 
-      JSBundleLoader loader =
-          JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ true);
-      stage("loader", "ok");
+      JSBundleLoader loader;
+      if (appContext.assets() != null) {
+        loader = JSBundleLoader.createAssetLoader(appContext, "index.android.bundle", true);
+        stage("loader", "asset:index.android.bundle");
+      } else {
+        loader = JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ true);
+        stage("loader", "file:" + bundlePath);
+      }
 
       ReactQueueConfigurationSpec spec = ReactQueueConfigurationSpec.createDefault();
       catalyst =

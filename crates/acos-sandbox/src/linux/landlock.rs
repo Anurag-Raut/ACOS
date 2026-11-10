@@ -34,6 +34,23 @@ const FS_REFER: u64 = 1 << 13;
 const FS_TRUNCATE: u64 = 1 << 14;
 const FS_IOCTL_DEV: u64 = 1 << 15;
 
+/// Rights that only apply to a directory. The kernel's `landlock_add_rule`
+/// rejects a path-beneath rule for a non-directory path when the mask carries
+/// any of these (`EINVAL`), so they must be masked out per path type. A
+/// non-directory path may only be granted `EXECUTE|WRITE_FILE|READ_FILE|
+/// TRUNCATE|IOCTL_DEV`.
+const DIRECTORY_ONLY_RIGHTS: u64 = FS_READ_DIR
+    | FS_REMOVE_DIR
+    | FS_REMOVE_FILE
+    | FS_MAKE_CHAR
+    | FS_MAKE_DIR
+    | FS_MAKE_REG
+    | FS_MAKE_SOCK
+    | FS_MAKE_FIFO
+    | FS_MAKE_BLOCK
+    | FS_MAKE_SYM
+    | FS_REFER;
+
 // Landlock ABI 6 scopes: restrict IPCs (signals, abstract UNIX sockets) to the
 // sandbox domain. `landlock_ruleset_attr.scoped`.
 const LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET: u64 = 1 << 0;
@@ -113,9 +130,8 @@ fn read_only_access() -> u64 {
     FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 }
 
-/// Create and enforce a ruleset. Missing roots are skipped (never widened).
-pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String, String> {
-    let abi = abi().ok_or_else(|| "landlock_create_ruleset(VERSION) unsupported".to_string())?;
+/// Create a ruleset for `abi`, returning its fd and the IPC scope mask.
+fn create_ruleset(abi: u32) -> Result<(c_int, u64), String> {
     let handled = handled_fs(abi);
     // Landlock ABI 6 extends the ruleset with `scoped`, which confines signals
     // and abstract UNIX sockets to the sandbox domain: a confined guest then
@@ -149,7 +165,13 @@ pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String,
             std::io::Error::last_os_error()
         ));
     }
-    let ruleset_fd = fd as c_int;
+    Ok((fd as c_int, scope))
+}
+
+/// Create and enforce a ruleset. Missing roots are skipped (never widened).
+pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String, String> {
+    let abi = abi().ok_or_else(|| "landlock_create_ruleset(VERSION) unsupported".to_string())?;
+    let (ruleset_fd, scope) = create_ruleset(abi)?;
 
     let mut rules = 0usize;
     let mut skipped = Vec::new();
@@ -167,7 +189,7 @@ pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String,
         }
     }
     for path in read_write {
-        match add_path_rule(ruleset_fd, path, handled) {
+        match add_path_rule(ruleset_fd, path, handled_fs(abi)) {
             Ok(true) => rules += 1,
             Ok(false) => skipped.push(path.display().to_string()),
             Err(e) => {
@@ -221,8 +243,20 @@ fn add_path_rule(ruleset_fd: c_int, path: &Path, access: u64) -> Result<bool, St
         }
         return Err(format!("open({}) O_PATH: {err}", path.display()));
     }
+    // `landlock_add_rule` rejects directory-only rights on a non-directory
+    // path (`EINVAL`). Classify the opened object rather than the spelling so
+    // symlinks are classified by their target.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: `path_fd` is a live O_PATH descriptor; `fstat` only fills `st`.
+    let is_dir = unsafe { libc::fstat(path_fd, &mut st) } == 0
+        && (st.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+    let allowed_access = if is_dir {
+        access
+    } else {
+        access & !DIRECTORY_ONLY_RIGHTS
+    };
     let attr = PathBeneathAttr {
-        allowed_access: access,
+        allowed_access,
         parent_fd: path_fd,
     };
     // SAFETY: `attr` is a valid packed path-beneath attribute; the path_fd
@@ -249,4 +283,48 @@ fn add_path_rule(ruleset_fd: c_int, path: &Path, access: u64) -> Result<bool, St
         return Err(format!("landlock_add_rule({}): {err}", path.display()));
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// W106-A: a read-only grant for the device nodes Hermes opens
+    /// (`/dev/urandom`, `/dev/null`) must not carry directory-only rights.
+    /// The kernel rejects those on non-directories with `EINVAL`; this test
+    /// builds a ruleset and adds the rules without applying it to the test
+    /// process, so it exercises the real `landlock_add_rule` call.
+    #[test]
+    fn device_nodes_accept_read_only_path_rules() {
+        let Some(abi) = abi() else {
+            eprintln!("SKIP landlock device-node rule test: Landlock unavailable");
+            return;
+        };
+        let (ruleset_fd, _scope) = create_ruleset(abi).expect("create landlock ruleset");
+        for raw in ["/dev/urandom", "/dev/null"] {
+            let path = Path::new(raw);
+            if !path.exists() {
+                eprintln!("SKIP {raw}: missing on this host");
+                continue;
+            }
+            match add_path_rule(ruleset_fd, path, read_only_access()) {
+                Ok(true) => {}
+                Ok(false) => panic!("{raw} disappeared between exists() and add_path_rule"),
+                Err(e) => panic!("landlock_add_rule({raw}): {e}"),
+            }
+        }
+        // SAFETY: the ruleset fd was returned by create_ruleset and is no
+        // longer needed. The ruleset is never installed via
+        // `landlock_restrict_self`, so this test does not confine the runner.
+        unsafe {
+            libc::close(ruleset_fd);
+        }
+    }
+
+    #[test]
+    fn directory_only_rights_are_masked_for_files() {
+        assert_eq!(read_only_access() & DIRECTORY_ONLY_RIGHTS, FS_READ_DIR);
+        // A directory keeps the directory-only rights; a file loses them.
+        assert_eq!(read_only_access() & !DIRECTORY_ONLY_RIGHTS, FS_EXECUTE | FS_READ_FILE);
+    }
 }
