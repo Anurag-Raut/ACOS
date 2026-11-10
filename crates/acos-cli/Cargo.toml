@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
+acos-mcp = { path = "../acos-mcp" }
 acos-native-loader = { path = "../acos-native-loader" }
 acos-protocol = { path = "../acos-protocol" }
 acos-render = { path = "../acos-render" }
@@ -22,6 +23,7 @@ acos-services = { path = "../acos-services" }
 acos-verify = { path = "../acos-verify" }
 acos-vm = { path = "../acos-vm" }
 clap = { version = "4", features = ["derive"] }
+libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

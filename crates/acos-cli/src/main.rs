@@ -14,6 +14,7 @@ mod native_launch;
 mod observe_tree;
 mod parity;
 mod sandbox_probe;
+mod serve;
 mod session;
 mod verify;
 
@@ -55,7 +56,10 @@ enum Command {
     Swipe(session::SwipeArgs),
     /// Read the guest log buffer.
     Logs(session::LogsArgs),
-    /// Session lifecycle: status, reset, close.
+    /// Run the local session daemon (unix socket) so the CLI is not stateless.
+    Serve(serve::ServeArgs),
+    /// Session daemon lifecycle: list, status, observe, tap, key, text, logs,
+    /// reset, destroy.
     Session {
         #[command(subcommand)]
         command: session::SessionCommand,
@@ -149,6 +153,11 @@ const FIDELITY: &str = "static-analysis";
 const BACKEND: &str = "acos-native";
 
 fn main() -> ExitCode {
+    // Confined native session child: parse and confine before any thread (the
+    // daemon re-execs `acos --confined-child --rw … --ro …`).
+    if let Some(profile) = serve::confined_child_profile() {
+        return serve::run_confined_child(profile);
+    }
     let cli = Cli::parse();
     match cli.command {
         Command::Inspect(args) => inspect(args),
@@ -159,6 +168,7 @@ fn main() -> ExitCode {
         Command::Key(args) => session::key(args),
         Command::Swipe(args) => session::swipe(args),
         Command::Logs(args) => session::logs(args),
+        Command::Serve(args) => serve::run(args),
         Command::Session { command } => session::session(command),
         Command::Verify(args) => verify::run(args),
         Command::FrameDiff(args) => frame_diff::run(args),

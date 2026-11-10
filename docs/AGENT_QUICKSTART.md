@@ -75,22 +75,37 @@ Every tool's `arguments` are the ACOS request object; only
 The result is the ACOS envelope as text (plus `structuredContent` on protocol
 `2025-06-18`). `isError` is `true` for every non-`pass` status.
 
-> **Sessions persist in MCP, not in the CLI.** The MCP server holds
-> `AgentSession`s keyed by `session_id`, so `acos_launch` → `acos_observe_tree`
-> → `acos_tap` operate on the same live VM. The CLI has no daemon: every
-> `acos observe --apk ...` invocation seeds a **fresh** session (a fresh launch),
-> which is why multi-step driving belongs in MCP.
+> **Sessions persist in a local daemon.** `acos serve` holds live
+> `AgentSession`s (one worker thread or confined native child each) behind a
+> private Unix socket: runtime dir `0700`, `SO_PEERCRED` checked, idle timeout,
+> and session / RAM caps. It serves the same session-tool protocol and ACOS
+> envelopes as the MCP `SessionBackend`, so the CLI and the MCP server are two
+> front-ends over one session registry (`ACOS_SESSION_DAEMON=1` points the MCP
+> server at a running daemon).
 >
-> **Why the CLI cannot share a session across processes (F-08).** A session is
-> a live `AgentSession` — an in-process VM, its class loader, its `View`
-> hierarchy and its frame store. None of that is serialisable, and the engine
-> has no host daemon to attach to, so two independent `acos` processes cannot
-> address the same session. Persisting only the *metadata* (id, apk, launch
-> ladder) would let `acos session status` report a session that no running VM
-> backs, which is worse than honesty. A future `acos serve` daemon (or the
-> existing MCP server's in-process registry, already keyed by `session_id`)
-> is the structural fix; until then the CLI relaunches per invocation and says
-> so. `docs/MCP.md` §4 documents the same boundary for MCP clients.
+> **F-08 is fixed structurally.** `acos launch <apk> --keep` starts the daemon
+> if it is not already running and leaves the session live. Separate processes
+> then address that *same* session:
+>
+> ```bash
+> acos launch fixtures/build/apps/native-hello.apk --native --keep --json
+> acos observe --json            # the daemon's session, not a fresh one
+> acos tap --text "+1" --json
+> acos logs --json
+> acos session list --json       # every session the daemon holds
+> acos session status --json
+> acos session reset --json
+> acos session destroy --json    # daemon idles out afterwards
+> ```
+>
+> `acos session {list,status,observe,tap,key,text,logs,reset,destroy}` always
+> talks to the daemon (auto-starting it on demand). The top-level
+> `observe/tap/key/swipe/logs` use a *running* daemon when one exists and fall
+> back to the old one-shot in-process session otherwise; `--apk` keeps the
+> one-shot path. Set `ACOS_NO_DAEMON=1` to disable the daemon entirely, and
+> `ACOS_SESSION_IDLE_SECS` / `ACOS_RUNTIME_DIR` / `ACOS_SESSION_SOCKET` to
+> tune it. Native sessions run in the same confined child the MCP server uses
+> (`acos --confined-child`).
 
 ---
 
@@ -130,16 +145,19 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
 
 ```bash
 acos inspect fixtures/build/apps/todo-dogfood.apk --json
-acos launch  fixtures/build/apps/todo-dogfood.apk --json
-# each of the following relaunches (the CLI is stateless):
-acos observe --apk fixtures/build/apps/todo-dogfood.apk --tree --json
-acos tap     --apk fixtures/build/apps/todo-dogfood.apk --text "+1" --json
-acos logs    --apk fixtures/build/apps/todo-dogfood.apk --json
-acos session status --apk fixtures/build/apps/todo-dogfood.apk --json
+# --keep starts `acos serve` and leaves the session live:
+acos launch  fixtures/build/apps/todo-dogfood.apk --keep --json
+# each of the following talks to that same daemon session:
+acos observe --json
+acos tap     --text "+1" --json
+acos logs    --json
+acos session status --json
 ```
 
-For anything with more than one interaction, drive it over MCP so the session
-survives between calls.
+Without a running daemon the CLI still supports the one-shot path
+(`acos observe --apk <apk>` / `acos launch <apk>` without `--keep`), which
+relaunches; with `--keep` the session survives between calls. MCP clients use
+the in-process session registry exactly as before.
 
 ---
 

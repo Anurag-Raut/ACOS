@@ -58,7 +58,22 @@ fn main() {
             .unwrap_or_else(|| "<not found>".to_string())
     ));
 
-    let backend = SessionBackend::new(backend_config, SessionOptions::default());
+    let mut backend = SessionBackend::new(backend_config, SessionOptions::default());
+    if acos_mcp::daemon::mcp_daemon_requested() {
+        let socket = acos_mcp::daemon::socket_path();
+        if socket.exists() {
+            backend = backend.with_daemon();
+            log(&format!(
+                "session daemon: forwarding session tools to {}",
+                socket.display()
+            ));
+        } else {
+            log(&format!(
+                "session daemon: {} not found; holding sessions in-process",
+                socket.display()
+            ));
+        }
+    }
     let caps = backend.capabilities();
     let available: Vec<&str> = acos_mcp::descriptors::all_commands()
         .iter()

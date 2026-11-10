@@ -34,6 +34,7 @@ use acos_runtime::view_tree::{ViewNode, ViewTree};
 use serde_json::{json, Value};
 
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
+use crate::daemon::{self, DaemonClient};
 
 /// Commands the session backend serves itself (bypassing the CLI capability
 /// probe, which cannot see them).
@@ -60,6 +61,8 @@ pub struct SessionBackend {
     child_binary: PathBuf,
     /// Monotonic counter for per-child VFS roots.
     next_child: AtomicU64,
+    /// Optional running session daemon to forward session tools to (F-08).
+    daemon: Option<Mutex<DaemonClient>>,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -83,6 +86,7 @@ impl SessionBackend {
             native_children: Mutex::new(HashMap::new()),
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
+            daemon: None,
         }
     }
 
@@ -95,6 +99,7 @@ impl SessionBackend {
             native_children: Mutex::new(HashMap::new()),
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
+            daemon: None,
         }
     }
 
@@ -103,6 +108,84 @@ impl SessionBackend {
     pub fn with_native_child_binary(mut self, path: PathBuf) -> Self {
         self.child_binary = path;
         self
+    }
+
+    /// Forward session tools to a running daemon at `path` (F-08).
+    ///
+    /// Used by the MCP server when `ACOS_SESSION_DAEMON` is set, so a CLI-driven
+    /// daemon can own the session while MCP tools operate on it.
+    #[must_use]
+    pub fn with_daemon_socket(mut self, path: PathBuf) -> Self {
+        match DaemonClient::connect(&path) {
+            Ok(client) => self.daemon = Some(Mutex::new(client)),
+            Err(e) => eprintln!(
+                "acos-mcp: session daemon at {} unavailable: {e}",
+                path.display()
+            ),
+        }
+        self
+    }
+
+    /// Forward session tools to the default daemon socket when it is running.
+    #[must_use]
+    pub fn with_daemon(self) -> Self {
+        self.with_daemon_socket(daemon::socket_path())
+    }
+
+    /// Number of live sessions (in-process tasks plus confined native children).
+    #[must_use]
+    pub fn session_count(&self) -> usize {
+        let local = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len();
+        let native = self
+            .native_children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len();
+        local + native
+    }
+
+    /// A `session_list` result: every held session's status (native included).
+    #[must_use]
+    pub fn list_sessions(&self) -> Value {
+        let mut out: Vec<Value> = Vec::new();
+        {
+            let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            for (id, session) in sessions.iter() {
+                let state = session.status().ok();
+                out.push(json!({
+                    "session_id": id,
+                    "launched": state.as_ref().map(|s| s.launched).unwrap_or(false),
+                    "package": state.as_ref().and_then(|s| s.package.clone()),
+                    "stage_reached": state.as_ref().map(|s| s.stage_reached).unwrap_or("none"),
+                    "published_frames": state.as_ref().map(|s| s.published_frames).unwrap_or(0),
+                    "native": false,
+                }));
+            }
+        }
+        {
+            let mut children = self
+                .native_children
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            for (id, child) in children.iter_mut() {
+                let probe = json!({"base": {"request_id": "req_list", "session_id": id}});
+                let env = child.call_tool("acos_status", &probe);
+                let result = env.result().cloned().unwrap_or(Value::Null);
+                out.push(json!({
+                    "session_id": id,
+                    "launched": result["launched"],
+                    "package": result["package"],
+                    "stage_reached": result["stage_reached"],
+                    "published_frames": result["published_frames"],
+                    "native": true,
+                }));
+            }
+        }
+        json!({"sessions": out, "count": out.len()})
     }
 
     /// The CLI backend used for non-session commands.
@@ -463,6 +546,15 @@ impl SessionBackend {
 
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
+        if name != "acos_doctor" && !name.is_empty() {
+            if let Some(daemon) = &self.daemon {
+                let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
+                return Some(match client.call(name, args) {
+                    Ok(envelope) => envelope,
+                    Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
+                });
+            }
+        }
         let request_id = request_id(args);
         match name {
             "acos_launch" => Some(self.call_run(&request_id, args, ctx)),
@@ -470,21 +562,28 @@ impl SessionBackend {
             "acos_observe" => Some(self.call_observe(&request_id, args, ctx)),
             "acos_tap" => Some(self.call_action(
                 &request_id,
-                &json!({"session_id": session_id(args), "action": {"kind": "tap", "x": args.get("x"), "y": args.get("y"), "text": args.get("text")}}),
+                &json!({"base": session_base(args), "action": {"kind": "tap", "x": args.get("x"), "y": args.get("y"), "text": args.get("text")}}),
                 ctx,
             )),
             "acos_key" => Some(self.call_action(
                 &request_id,
-                &json!({"session_id": session_id(args), "action": {"kind": "key", "code": args.get("code")}}),
+                &json!({"base": session_base(args), "action": {"kind": "key", "code": args.get("code")}}),
                 ctx,
             )),
             "acos_swipe" => Some(self.call_action(
                 &request_id,
-                &json!({"session_id": session_id(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "duration_ms": args.get("duration_ms")}}),
+                &json!({"base": session_base(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "duration_ms": args.get("duration_ms")}}),
                 ctx,
             )),
             "acos_logs" => Some(self.call_logs(&request_id, args)),
             "acos_status" => Some(self.call_status(&request_id, args)),
+            "acos_reset" => Some(self.call_reset(&request_id, args, ctx)),
+            "acos_destroy" => Some(self.call_destroy(&request_id, args, ctx)),
+            "acos_text" => Some(unsupported(
+                &request_id,
+                "input.text",
+                "typed-text input is not implemented in this build",
+            )),
             "acos_doctor" => Some(self.cli.call_doctor(&request_id, args, ctx)),
             _ => None,
         }
@@ -571,6 +670,23 @@ impl SessionBackend {
 
 impl Backend for SessionBackend {
     fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope {
+        if let Some(daemon) = &self.daemon {
+            let tool = match command {
+                CommandName::Run => Some("acos_launch"),
+                CommandName::Observe => Some("acos_observe"),
+                CommandName::Action => Some("acos_action"),
+                CommandName::Reset => Some("acos_reset"),
+                CommandName::Destroy => Some("acos_destroy"),
+                _ => None,
+            };
+            if let Some(tool) = tool {
+                let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
+                return match client.call(tool, args) {
+                    Ok(envelope) => envelope,
+                    Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
+                };
+            }
+        }
         let request_id = request_id(args);
         match command {
             CommandName::Run => self.call_run(&request_id, args, ctx),
@@ -609,6 +725,24 @@ fn session_id(args: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or(DEFAULT_SESSION)
         .to_string()
+}
+
+/// The original `base` object, so a synthesized action request keeps the
+/// caller's session id instead of falling back to `DEFAULT_SESSION`.
+fn session_base(args: &Value) -> Value {
+    let mut base = args
+        .get("base")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if let Some(object) = base.as_object_mut() {
+        object
+            .entry("session_id".to_string())
+            .or_insert_with(|| json!(session_id(args)));
+        object
+            .entry("request_id".to_string())
+            .or_insert_with(|| json!(request_id(args)));
+    }
+    base
 }
 
 fn request_id(args: &Value) -> String {
@@ -959,6 +1093,11 @@ impl ConfinedChild {
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// A transport failure while forwarding to the session daemon.
+fn daemon_error(request_id: &str, args: &Value, message: &str) -> Envelope {
+    native_child_error(request_id, &session_id(args), "SESSION_NOT_FOUND", message)
 }
 
 fn native_child_error(

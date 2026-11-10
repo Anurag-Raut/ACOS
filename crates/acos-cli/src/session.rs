@@ -24,6 +24,9 @@ use serde_json::{json, Value};
 
 use crate::launch::session_error_envelope;
 use crate::new_request_id;
+use crate::serve;
+
+use acos_mcp::daemon::{self, DaemonClient};
 
 fn start_session(timeout: u64) -> AgentSession {
     AgentSession::start(SessionOptions {
@@ -65,6 +68,45 @@ fn status_line(envelope: &Envelope) -> String {
         envelope.ok(),
         envelope.status()
     )
+}
+
+fn daemon_base(session: &str) -> Value {
+    json!({"request_id": new_request_id(), "session_id": session})
+}
+
+fn emit_daemon_call(mut client: DaemonClient, tool: &str, args: &Value, json: bool) -> ExitCode {
+    match client.call(tool, args) {
+        Ok(envelope) => emit(&envelope, json),
+        Err(e) => {
+            let envelope = fail(
+                &new_request_id(),
+                ErrorCode::Internal,
+                format!("session daemon: {e}"),
+                json!({"tool": tool}),
+            );
+            emit(&envelope, json)
+        }
+    }
+}
+
+/// Use a daemon that is already running. Top-level commands never auto-start.
+fn call_running_daemon(tool: &str, args: &Value, json: bool) -> Option<ExitCode> {
+    let client = serve::try_daemon()?;
+    Some(emit_daemon_call(client, tool, args, json))
+}
+
+/// Use the daemon, starting one detached if needed (`acos session …`).
+fn call_ensure_daemon(tool: &str, args: &Value, json: bool) -> Option<ExitCode> {
+    if !serve::daemon_enabled() {
+        return None;
+    }
+    match serve::ensure_daemon() {
+        Ok(client) => Some(emit_daemon_call(client, tool, args, json)),
+        Err(e) => {
+            let envelope = fail(&new_request_id(), ErrorCode::Internal, e, json!({}));
+            Some(emit(&envelope, json))
+        }
+    }
 }
 
 /// Seed the session with a real launch when `--apk` was given.
@@ -118,6 +160,21 @@ pub struct ObserveArgs {
 
 /// Run `acos observe`.
 pub fn observe(args: ObserveArgs) -> ExitCode {
+    if args.apk.is_none() && args.screenshot.is_none() {
+        let tool = if args.tree || args.text {
+            "acos_observe_tree"
+        } else {
+            "acos_observe"
+        };
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "tree": args.tree,
+            "text": args.text,
+        });
+        if let Some(code) = call_running_daemon(tool, &daemon_args, args.json) {
+            return code;
+        }
+    }
     let request_id = new_request_id();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
@@ -249,6 +306,17 @@ pub struct TapArgs {
 
 /// Run `acos tap`.
 pub fn tap(args: TapArgs) -> ExitCode {
+    if args.apk.is_none() {
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "x": args.x,
+            "y": args.y,
+            "text": args.label,
+        });
+        if let Some(code) = call_running_daemon("acos_tap", &daemon_args, args.json) {
+            return code;
+        }
+    }
     let request_id = new_request_id();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
@@ -299,6 +367,15 @@ pub struct KeyArgs {
 
 /// Run `acos key`.
 pub fn key(args: KeyArgs) -> ExitCode {
+    if args.apk.is_none() {
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "code": args.code,
+        });
+        if let Some(code) = call_running_daemon("acos_key", &daemon_args, args.json) {
+            return code;
+        }
+    }
     let request_id = new_request_id();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
@@ -378,6 +455,17 @@ pub struct SwipeArgs {
 
 /// Run `acos swipe`.
 pub fn swipe(args: SwipeArgs) -> ExitCode {
+    if args.apk.is_none() {
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "from": {"x": args.x1, "y": args.y1},
+            "to": {"x": args.x2, "y": args.y2},
+            "duration_ms": args.duration_ms,
+        });
+        if let Some(code) = call_running_daemon("acos_swipe", &daemon_args, args.json) {
+            return code;
+        }
+    }
     let request_id = new_request_id();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
@@ -446,6 +534,12 @@ pub struct LogsArgs {
 
 /// Run `acos logs`.
 pub fn logs(args: LogsArgs) -> ExitCode {
+    if args.apk.is_none() {
+        let daemon_args = json!({"base": daemon_base(&args.session)});
+        if let Some(code) = call_running_daemon("acos_logs", &daemon_args, args.json) {
+            return code;
+        }
+    }
     let request_id = new_request_id();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
@@ -519,24 +613,247 @@ pub struct SessionCmdArgs {
     pub json: bool,
 }
 
-/// `acos session` subcommands.
+/// Arguments for `acos session list`.
+#[derive(Debug, clap::Args)]
+pub struct SessionListArgs {
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `acos session observe`.
+#[derive(Debug, clap::Args)]
+pub struct SessionObserveArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+    /// Request the structured UI tree.
+    #[arg(long)]
+    pub tree: bool,
+    /// Request the flat text rendering.
+    #[arg(long)]
+    pub text: bool,
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `acos session tap`.
+#[derive(Debug, clap::Args)]
+pub struct SessionTapArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+    /// X coordinate.
+    pub x: Option<i32>,
+    /// Y coordinate.
+    pub y: Option<i32>,
+    /// Tap the node whose text equals this label.
+    #[arg(long = "text")]
+    pub label: Option<String>,
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `acos session key`.
+#[derive(Debug, clap::Args)]
+pub struct SessionKeyArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+    /// Key code (`4` = BACK, `66` = ENTER) or a name (`back`, `home`, `enter`).
+    pub code: String,
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `acos session text`.
+#[derive(Debug, clap::Args)]
+pub struct SessionTextArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+    /// Text to type into the focused field.
+    pub text: String,
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// `acos session` subcommands. Every one talks to the `acos serve` daemon and
+/// auto-starts it when it is not running (unless `ACOS_NO_DAEMON=1`).
 #[derive(Debug, clap::Subcommand)]
 pub enum SessionCommand {
+    /// List the sessions the daemon is holding.
+    List(SessionListArgs),
     /// Report the session's launched state and last reached stage.
     Status(SessionCmdArgs),
+    /// Observe the session's latest frame or UI tree.
+    Observe(SessionObserveArgs),
+    /// Tap a point or a text label.
+    Tap(SessionTapArgs),
+    /// Press a key code.
+    Key(SessionKeyArgs),
+    /// Type text into the focused field (reported unsupported until input lands).
+    Text(SessionTextArgs),
+    /// Read the guest log buffer.
+    Logs(SessionCmdArgs),
     /// Recreate the session's task state (drop the VM).
     Reset(SessionCmdArgs),
-    /// Close the session (idempotent).
+    /// Destroy the session (idempotent).
+    Destroy(SessionCmdArgs),
+    /// Alias of `destroy`.
     Close(SessionCmdArgs),
 }
 
 /// Run `acos session <subcommand>`.
 pub fn session(command: SessionCommand) -> ExitCode {
     match command {
-        SessionCommand::Status(args) => run_status(args),
-        SessionCommand::Reset(args) => run_reset(args),
-        SessionCommand::Close(args) => run_close(args),
+        SessionCommand::List(args) => session_list(args),
+        SessionCommand::Status(args) => session_status(args),
+        SessionCommand::Observe(args) => session_observe(args),
+        SessionCommand::Tap(args) => session_tap(args),
+        SessionCommand::Key(args) => session_key(args),
+        SessionCommand::Text(args) => session_text(args),
+        SessionCommand::Logs(args) => session_logs(args),
+        SessionCommand::Reset(args) => session_reset(args),
+        SessionCommand::Destroy(args) => session_destroy(args),
+        SessionCommand::Close(args) => session_destroy(args),
     }
+}
+
+fn session_list(args: SessionListArgs) -> ExitCode {
+    let daemon_args = json!({"base": daemon_base("s_cli")});
+    if let Some(code) = call_ensure_daemon(daemon::TOOL_LIST, &daemon_args, args.json) {
+        return code;
+    }
+    let envelope = fail(
+        &new_request_id(),
+        ErrorCode::UnsupportedBackend,
+        "`acos session list` requires the session daemon; unset ACOS_NO_DAEMON to enable it",
+        json!({"tool": daemon::TOOL_LIST}),
+    );
+    emit(&envelope, args.json)
+}
+
+fn session_status(args: SessionCmdArgs) -> ExitCode {
+    let daemon_args = json!({"base": daemon_base(&args.session)});
+    if let Some(code) = call_ensure_daemon("acos_status", &daemon_args, args.json) {
+        return code;
+    }
+    run_status(args)
+}
+
+fn session_observe(args: SessionObserveArgs) -> ExitCode {
+    let tool = if args.tree || args.text {
+        "acos_observe_tree"
+    } else {
+        "acos_observe"
+    };
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "tree": args.tree,
+        "text": args.text,
+    });
+    if let Some(code) = call_ensure_daemon(tool, &daemon_args, args.json) {
+        return code;
+    }
+    observe(ObserveArgs {
+        session: args.session,
+        apk: None,
+        screenshot: None,
+        tree: args.tree,
+        text: args.text,
+        timeout: 120,
+        json: args.json,
+    })
+}
+
+fn session_tap(args: SessionTapArgs) -> ExitCode {
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "x": args.x,
+        "y": args.y,
+        "text": args.label,
+    });
+    if let Some(code) = call_ensure_daemon("acos_tap", &daemon_args, args.json) {
+        return code;
+    }
+    tap(TapArgs {
+        session: args.session,
+        x: args.x,
+        y: args.y,
+        label: args.label,
+        apk: None,
+        timeout: 120,
+        json: args.json,
+    })
+}
+
+fn session_key(args: SessionKeyArgs) -> ExitCode {
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "code": args.code,
+    });
+    if let Some(code) = call_ensure_daemon("acos_key", &daemon_args, args.json) {
+        return code;
+    }
+    key(KeyArgs {
+        session: args.session,
+        code: args.code,
+        apk: None,
+        timeout: 120,
+        json: args.json,
+    })
+}
+
+fn session_text(args: SessionTextArgs) -> ExitCode {
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "text": args.text,
+    });
+    if let Some(code) = call_ensure_daemon("acos_text", &daemon_args, args.json) {
+        return code;
+    }
+    // No in-process typed-text path exists either; fail honestly.
+    let envelope = fail(
+        &new_request_id(),
+        ErrorCode::UnsupportedBackend,
+        "typed-text input is not implemented in this build; use `acos session key`",
+        json!({"capability": "input.text"}),
+    );
+    emit(&envelope, args.json)
+}
+
+fn session_logs(args: SessionCmdArgs) -> ExitCode {
+    let daemon_args = json!({"base": daemon_base(&args.session)});
+    if let Some(code) = call_ensure_daemon("acos_logs", &daemon_args, args.json) {
+        return code;
+    }
+    logs(LogsArgs {
+        session: args.session,
+        apk: None,
+        timeout: args.timeout,
+        json: args.json,
+    })
+}
+
+fn session_reset(args: SessionCmdArgs) -> ExitCode {
+    let daemon_args = json!({"base": daemon_base(&args.session)});
+    if let Some(code) = call_ensure_daemon("acos_reset", &daemon_args, args.json) {
+        return code;
+    }
+    run_reset(args)
+}
+
+fn session_destroy(args: SessionCmdArgs) -> ExitCode {
+    let daemon_args = json!({"base": daemon_base(&args.session)});
+    if let Some(code) = call_ensure_daemon("acos_destroy", &daemon_args, args.json) {
+        return code;
+    }
+    run_close(args)
 }
 
 fn run_status(args: SessionCmdArgs) -> ExitCode {

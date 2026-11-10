@@ -23,6 +23,7 @@
 
 pub mod backend;
 pub mod base64;
+pub mod daemon;
 pub mod descriptors;
 pub mod gate;
 pub mod help;

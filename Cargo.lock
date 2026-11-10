@@ -29,6 +29,7 @@ version = "0.1.0"
 dependencies = [
  "acos-apk",
  "acos-dex",
+ "acos-mcp",
  "acos-native-loader",
  "acos-protocol",
  "acos-render",
@@ -39,6 +40,7 @@ dependencies = [
  "acos-vm",
  "assert_cmd",
  "clap",
+ "libc",
  "serde",
  "serde_json",
  "thiserror",

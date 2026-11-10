@@ -22,6 +22,9 @@ fn workspace_path(rel: &str) -> PathBuf {
 fn run(args: &[&str]) -> Output {
     Command::cargo_bin("acos")
         .expect("acos binary")
+        // These tests assert the in-process fallback (no daemon running); keep
+        // them hermetic so an ambient `acos serve` cannot change their result.
+        .env("ACOS_NO_DAEMON", "1")
         .args(args)
         .output()
         .expect("run acos")

@@ -45,11 +45,19 @@ pub struct LaunchArgs {
     /// native code only for a non-host ABI.
     #[arg(long)]
     pub native: bool,
+
+    /// Keep the session alive in the `acos serve` daemon after launching, so
+    /// separate `acos observe/tap/logs` invocations see the same live session.
+    #[arg(long)]
+    pub keep: bool,
 }
 
 /// Run `acos launch`.
 pub fn run(args: LaunchArgs) -> ExitCode {
     let request_id = new_request_id();
+    if args.keep {
+        return run_keep(&args, &request_id);
+    }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
             let envelope = session_error_envelope(&request_id, &err);
@@ -89,6 +97,87 @@ pub fn run(args: LaunchArgs) -> ExitCode {
                 eprintln!("launch: {}: {}", err.code, err.message);
             }
             ExitCode::FAILURE
+        }
+    }
+}
+
+/// Launch through the `acos serve` daemon and leave the session running.
+fn run_keep(args: &LaunchArgs, request_id: &str) -> ExitCode {
+    let native = crate::native_launch::native_requested(args.native);
+    let mut client = match crate::serve::ensure_daemon() {
+        Ok(client) => client,
+        Err(e) => {
+            let envelope = daemon_failure(request_id, e);
+            return finish_daemon(&envelope, args.json);
+        }
+    };
+    // The daemon's path check rejects `..`, so send a canonical absolute path.
+    let apk = std::fs::canonicalize(&args.apk).unwrap_or_else(|_| args.apk.clone());
+    let daemon_args = json!({
+        "base": {"request_id": request_id, "session_id": "s_cli"},
+        "apk": apk.display().to_string(),
+        "native": native,
+        "timeout_ms": args.timeout.saturating_mul(1000),
+    });
+    let envelope = match client.call("acos_launch", &daemon_args) {
+        Ok(envelope) => envelope,
+        Err(e) => daemon_failure(request_id, format!("session daemon: {e}")),
+    };
+    finish_daemon(&envelope, args.json)
+}
+
+fn daemon_failure(request_id: &str, message: String) -> Envelope {
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(ErrorCode::Internal, message),
+        Metrics::wall_ms(0),
+    )
+}
+
+fn finish_daemon(envelope: &Envelope, json: bool) -> ExitCode {
+    if json {
+        crate::print_json(envelope);
+    } else if let Some(result) = envelope.result() {
+        print_daemon_launch(result);
+    } else if let Some(error) = envelope.error() {
+        eprintln!("launch: {}: {}", error.code, error.message);
+    }
+    if envelope.status().is_pass() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn print_daemon_launch(result: &Value) {
+    let reached = result
+        .get("reached_stage")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let classes = result
+        .get("classes_loaded")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let wall = result.get("wall_ms").and_then(Value::as_u64).unwrap_or(0);
+    println!("launch: reached {reached} (classes={classes}, wall={wall}ms)");
+    if let Some(package) = result.get("package").and_then(Value::as_str) {
+        println!("  package: {package}");
+    }
+    if let Some(stages) = result.get("stages").and_then(Value::as_array) {
+        for stage in stages {
+            let name = stage.get("stage").and_then(Value::as_str).unwrap_or("");
+            let status = stage.get("status").and_then(Value::as_str).unwrap_or("");
+            println!("  [{status:>11}] {name}");
+            if let Some(blocker) = stage.get("blocker") {
+                let code = blocker.get("code").and_then(Value::as_str).unwrap_or("");
+                let message = blocker
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                println!("      {code}: {}", first_line(message));
+            }
         }
     }
 }
