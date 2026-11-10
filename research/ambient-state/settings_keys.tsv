@@ -1,0 +1,8 @@
+namespace	key	accessor	default	calling_method	executed_in	origin	note
+Global	force_resizable_activities	getInt		com.android.internal.policy.PhoneWindow-><init>(Landroid/content/Context;Landroid/view/Window;Landroid/view/ViewRootImpl$ActivityConfigCallback;)V	launch	executed	provenance=literal
+Global	render_shadows_in_compositor	getInt		com.android.internal.policy.PhoneWindow-><init>(Landroid/content/Context;)V	launch	executed	provenance=literal
+Global	show_angle_in_use_dialog_box	getInt		android.os.GraphicsEnvironment->shouldShowAngleInUseDialogBox(Landroid/content/Context;)Z	launch	executed	provenance=literal
+System	auto_caps	getInt	1	android.text.method.TextKeyListener->updatePrefs(Landroid/content/ContentResolver;)V	interaction	executed	provenance=literal
+System	auto_punctuate	getInt	1	android.text.method.TextKeyListener->updatePrefs(Landroid/content/ContentResolver;)V	interaction	executed	provenance=literal
+System	auto_replace	getInt	1	android.text.method.TextKeyListener->updatePrefs(Landroid/content/ContentResolver;)V	interaction	executed	provenance=literal
+System	show_password	getInt	1	android.text.method.TextKeyListener->updatePrefs(Landroid/content/ContentResolver;)V	interaction	executed	provenance=literal

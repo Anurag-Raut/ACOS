@@ -1,0 +1,7 @@
+thread_name	kind	calling_method	executed_in	origin	note
+AsyncTask #	Thread	android.os.AsyncTask$1->newThread(Ljava/lang/Runnable;)Ljava/lang/Thread;	launch	executed	provenance=dynamic
+IMM.binder-emu	HandlerThread	android.view.inputmethod.IInputMethodSessionInvoker->createOrNull(Lcom/android/internal/inputmethod/IInputMethodSession;)Landroid/view/inputmethod/IInputMethodSessionInvoker;	launch,interaction	executed	provenance=literal
+InsetsAnimations	HandlerThread	android.view.InsetsAnimationThread-><init>()V	interaction	executed	provenance=literal
+SpellCheckerSession	HandlerThread	android.view.textservice.SpellCheckerSession$SpellCheckerSessionListenerImpl->onServiceConnected(Lcom/android/internal/textservice/ISpellCheckerSession;)V	interaction	executed	provenance=literal
+SurfaceSyncGroupTimer	HandlerThread	android.window.SurfaceSyncGroup->addTimeout()V	launch	executed	provenance=literal
+process reaper	Thread	java.lang.UNIXProcess$ProcessReaperThreadFactory->newThread(Ljava/lang/Runnable;)Ljava/lang/Thread;	interaction	executed	provenance=literal

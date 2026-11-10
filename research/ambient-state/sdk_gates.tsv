@@ -1,0 +1,18 @@
+field	site	compared_value	field_value	calling_method	executed_in	origin	note
+android.os.Build$VERSION.RESOURCES_SDK_INT	read		34	android.content.res.ResourcesImpl->updateConfiguration(Landroid/content/res/Configuration;Landroid/util/DisplayMetrics;Landroid/content/res/CompatibilityInfo;)V	launch	executed	value read by the path
+android.os.Build.HW_TIMEOUT_MULTIPLIER	read		1	android.view.ViewRootImpl->getOrCreateSurfaceSyncGroup()Landroid/window/SurfaceSyncGroup;	launch	executed	value read by the path
+android.os.Build.IS_DEBUGGABLE	read		1	android.app.ActivityManager->isLowRamDeviceStatic()Z	launch	executed	value read by the path
+android.os.Build.IS_DEBUGGABLE	read		1	android.app.ActivityThread->handleBindApplication(Landroid/app/ActivityThread$AppBindData;)V	launch	executed	value read by the path
+android.os.Build.IS_DEBUGGABLE	read		1	android.app.ActivityThread->handleTopResumedActivityChanged(Landroid/app/ActivityThread$ActivityClientRecord;ZLjava/lang/String;)V	launch	executed	value read by the path
+android.os.Build.IS_DEBUGGABLE	read		1	android.os.BinderProxy$ProxyMap->set(JLandroid/os/BinderProxy;)V	launch,interaction	executed	value read by the path
+android.os.Build.IS_DEBUGGABLE	read		1	com.android.internal.jank.InteractionJankMonitor-><clinit>()V	interaction	executed	value read by the path
+android.os.Build.IS_ENG	read		0	android.os.BinderProxy->transact(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z	launch,interaction	executed	value read by the path
+android.os.Build.IS_ENG	read		0	android.os.StrictMode->initThreadDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.IS_ENG	read		0	android.os.StrictMode->initVmDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.IS_USER	read		0	android.os.StrictMode->initThreadDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.IS_USER	read		0	android.os.StrictMode->initVmDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.IS_USERDEBUG	read		1	android.os.BinderProxy->transact(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z	launch,interaction	executed	value read by the path
+android.os.Build.IS_USERDEBUG	read		1	android.os.StrictMode->initThreadDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.IS_USERDEBUG	read		1	android.os.StrictMode->initVmDefaults(Landroid/content/pm/ApplicationInfo;)V	launch	executed	value read by the path
+android.os.Build.SUPPORTED_32_BIT_ABIS	read		[]	android.os.Build-><clinit>()V	-	supplementary	value read by the path
+android.os.Build.SUPPORTED_64_BIT_ABIS	read		[x86_64]	android.os.Build-><clinit>()V	-	supplementary	value read by the path
