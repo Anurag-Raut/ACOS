@@ -290,6 +290,7 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
         // unbound platform API, not an abstract method.
         if vm.methods[method as usize].is_native() {
             let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+            eprintln!("DBG unbound native {}->{}{} at {}", vm.class_desc_of_id(vm.methods[method as usize].class), vm.methods[method as usize].name, vm.methods[method as usize].sig, at);
             return Err(crate::bridge::unbound_native_error(vm, method, at));
         }
         let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
@@ -1156,6 +1157,10 @@ fn array_get(vm: &mut Vm, t: usize, fi: usize, dst: u16, arr: Handle, idx: i32, 
     };
     if idx < 0 || idx as usize >= len {
         let msg = format!("Index {idx} out of bounds for length {len}");
+        {
+            let f = &vm.threads[t].frames[fi];
+            eprintln!("DBG array_get {}->{} pc={:#x} idx={idx} len={len}", vm.class_desc_of_id(f.class), vm.methods[f.method as usize].name, f.pc);
+        }
         return Err(vm.throw_new("Ljava/lang/ArrayIndexOutOfBoundsException;", Some(&msg)));
     }
     match vm.heap.get(arr) {
@@ -1189,6 +1194,13 @@ fn array_put(vm: &mut Vm, t: usize, fi: usize, src: u16, arr: Handle, idx: i32, 
     };
     if idx < 0 || idx as usize >= len {
         let msg = format!("Index {idx} out of bounds for length {len}");
+        {
+            let mut chain = String::new();
+            for fr in vm.threads[t].frames.iter().rev().take(12) {
+                chain.push_str(&format!(" | {}:{}@{:#x}", vm.class_desc_of_id(fr.class), vm.methods[fr.method as usize].name, fr.pc));
+            }
+            eprintln!("DBG array_put{} idx={idx} len={len} op={op:#x}", chain);
+        }
         return Err(vm.throw_new("Ljava/lang/ArrayIndexOutOfBoundsException;", Some(&msg)));
     }
     let rv = reg(vm, t, fi, src);

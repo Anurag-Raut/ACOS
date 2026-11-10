@@ -2,9 +2,9 @@
   "mode": "normal",
   "corelib": "real",
   "gc_stress": false,
-  "total": 23,
+  "total": 25,
   "pass": 23,
-  "fail": 0,
+  "fail": 2,
   "unsupported": 0,
   "programs": [
     {
@@ -22,8 +22,8 @@
         "image_read_ms": 0,
         "instructions": 43407,
         "invokes": 8272,
-        "natives_registered": 699,
-        "peak_rss_kb": 37844,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39620,
         "run_ms": 6,
         "startup_ms": 14,
         "vm_new_ms": 14,
@@ -45,12 +45,12 @@
         "image_read_ms": 0,
         "instructions": 62380,
         "invokes": 11324,
-        "natives_registered": 699,
-        "peak_rss_kb": 37608,
-        "run_ms": 6,
-        "startup_ms": 14,
-        "vm_new_ms": 14,
-        "wall_ms": 21
+        "natives_registered": 1421,
+        "peak_rss_kb": 39568,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -68,12 +68,12 @@
         "image_read_ms": 0,
         "instructions": 67330,
         "invokes": 11524,
-        "natives_registered": 699,
-        "peak_rss_kb": 38396,
-        "run_ms": 8,
-        "startup_ms": 18,
-        "vm_new_ms": 18,
-        "wall_ms": 26
+        "natives_registered": 1421,
+        "peak_rss_kb": 40468,
+        "run_ms": 7,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 23
       }
     },
     {
@@ -91,12 +91,12 @@
         "image_read_ms": 0,
         "instructions": 146968,
         "invokes": 15142,
-        "natives_registered": 699,
-        "peak_rss_kb": 38820,
-        "run_ms": 10,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 28
+        "natives_registered": 1421,
+        "peak_rss_kb": 40668,
+        "run_ms": 7,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 24
       }
     },
     {
@@ -114,12 +114,12 @@
         "image_read_ms": 0,
         "instructions": 49732,
         "invokes": 8943,
-        "natives_registered": 699,
-        "peak_rss_kb": 37648,
-        "run_ms": 7,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 25
+        "natives_registered": 1421,
+        "peak_rss_kb": 39732,
+        "run_ms": 8,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
+        "wall_ms": 26
       }
     },
     {
@@ -137,11 +137,11 @@
         "image_read_ms": 0,
         "instructions": 55221,
         "invokes": 10229,
-        "natives_registered": 699,
-        "peak_rss_kb": 37792,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39724,
         "run_ms": 8,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
         "wall_ms": 26
       }
     },
@@ -160,12 +160,12 @@
         "image_read_ms": 0,
         "instructions": 86746,
         "invokes": 14747,
-        "natives_registered": 699,
-        "peak_rss_kb": 37884,
-        "run_ms": 8,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 26
+        "natives_registered": 1421,
+        "peak_rss_kb": 39936,
+        "run_ms": 9,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
+        "wall_ms": 27
       }
     },
     {
@@ -183,8 +183,8 @@
         "image_read_ms": 0,
         "instructions": 52091,
         "invokes": 9618,
-        "natives_registered": 699,
-        "peak_rss_kb": 38212,
+        "natives_registered": 1421,
+        "peak_rss_kb": 40324,
         "run_ms": 8,
         "startup_ms": 18,
         "vm_new_ms": 18,
@@ -206,11 +206,11 @@
         "image_read_ms": 0,
         "instructions": 143608,
         "invokes": 15286,
-        "natives_registered": 699,
-        "peak_rss_kb": 38800,
+        "natives_registered": 1421,
+        "peak_rss_kb": 40756,
         "run_ms": 10,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
         "wall_ms": 28
       }
     },
@@ -229,12 +229,12 @@
         "image_read_ms": 0,
         "instructions": 49806,
         "invokes": 9376,
-        "natives_registered": 699,
-        "peak_rss_kb": 37760,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39588,
         "run_ms": 8,
         "startup_ms": 18,
         "vm_new_ms": 18,
-        "wall_ms": 27
+        "wall_ms": 26
       }
     },
     {
@@ -252,11 +252,11 @@
         "image_read_ms": 0,
         "instructions": 123772,
         "invokes": 11943,
-        "natives_registered": 699,
-        "peak_rss_kb": 38696,
-        "run_ms": 10,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
+        "natives_registered": 1421,
+        "peak_rss_kb": 40492,
+        "run_ms": 9,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
         "wall_ms": 27
       }
     },
@@ -275,11 +275,11 @@
         "image_read_ms": 0,
         "instructions": 47584,
         "invokes": 9070,
-        "natives_registered": 699,
-        "peak_rss_kb": 37728,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39764,
         "run_ms": 8,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
         "wall_ms": 26
       }
     },
@@ -298,9 +298,9 @@
         "image_read_ms": 0,
         "instructions": 54792,
         "invokes": 10402,
-        "natives_registered": 699,
-        "peak_rss_kb": 37832,
-        "run_ms": 9,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39824,
+        "run_ms": 8,
         "startup_ms": 17,
         "vm_new_ms": 17,
         "wall_ms": 26
@@ -321,12 +321,12 @@
         "image_read_ms": 0,
         "instructions": 63744,
         "invokes": 11905,
-        "natives_registered": 699,
-        "peak_rss_kb": 38028,
-        "run_ms": 9,
-        "startup_ms": 18,
-        "vm_new_ms": 18,
-        "wall_ms": 27
+        "natives_registered": 1421,
+        "peak_rss_kb": 39884,
+        "run_ms": 8,
+        "startup_ms": 17,
+        "vm_new_ms": 17,
+        "wall_ms": 26
       }
     },
     {
@@ -344,12 +344,12 @@
         "image_read_ms": 0,
         "instructions": 50437,
         "invokes": 9603,
-        "natives_registered": 699,
-        "peak_rss_kb": 38672,
-        "run_ms": 9,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 27
+        "natives_registered": 1421,
+        "peak_rss_kb": 40500,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -367,12 +367,12 @@
         "image_read_ms": 0,
         "instructions": 50047,
         "invokes": 9472,
-        "natives_registered": 699,
-        "peak_rss_kb": 38604,
-        "run_ms": 9,
-        "startup_ms": 18,
-        "vm_new_ms": 18,
-        "wall_ms": 27
+        "natives_registered": 1421,
+        "peak_rss_kb": 40276,
+        "run_ms": 6,
+        "startup_ms": 14,
+        "vm_new_ms": 14,
+        "wall_ms": 21
       }
     },
     {
@@ -390,12 +390,12 @@
         "image_read_ms": 0,
         "instructions": 67343,
         "invokes": 12390,
-        "natives_registered": 699,
-        "peak_rss_kb": 38548,
-        "run_ms": 9,
-        "startup_ms": 18,
-        "vm_new_ms": 18,
-        "wall_ms": 28
+        "natives_registered": 1421,
+        "peak_rss_kb": 40416,
+        "run_ms": 7,
+        "startup_ms": 14,
+        "vm_new_ms": 14,
+        "wall_ms": 22
       }
     },
     {
@@ -413,12 +413,12 @@
         "image_read_ms": 0,
         "instructions": 147937,
         "invokes": 15658,
-        "natives_registered": 699,
-        "peak_rss_kb": 38956,
-        "run_ms": 10,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 28
+        "natives_registered": 1421,
+        "peak_rss_kb": 40764,
+        "run_ms": 8,
+        "startup_ms": 14,
+        "vm_new_ms": 14,
+        "wall_ms": 22
       }
     },
     {
@@ -436,12 +436,12 @@
         "image_read_ms": 0,
         "instructions": 1342811,
         "invokes": 108204,
-        "natives_registered": 699,
-        "peak_rss_kb": 38340,
-        "run_ms": 48,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 66
+        "natives_registered": 1421,
+        "peak_rss_kb": 40320,
+        "run_ms": 40,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
+        "wall_ms": 59
       }
     },
     {
@@ -459,11 +459,11 @@
         "image_read_ms": 0,
         "instructions": 32447,
         "invokes": 6478,
-        "natives_registered": 699,
-        "peak_rss_kb": 37640,
+        "natives_registered": 1421,
+        "peak_rss_kb": 39656,
         "run_ms": 7,
-        "startup_ms": 18,
-        "vm_new_ms": 18,
+        "startup_ms": 17,
+        "vm_new_ms": 17,
         "wall_ms": 25
       }
     },
@@ -482,12 +482,12 @@
         "image_read_ms": 0,
         "instructions": 68999,
         "invokes": 13046,
-        "natives_registered": 699,
-        "peak_rss_kb": 38332,
-        "run_ms": 9,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 27
+        "natives_registered": 1421,
+        "peak_rss_kb": 40436,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 23
       }
     },
     {
@@ -505,8 +505,8 @@
         "image_read_ms": 0,
         "instructions": 87499,
         "invokes": 16121,
-        "natives_registered": 699,
-        "peak_rss_kb": 38396,
+        "natives_registered": 1421,
+        "peak_rss_kb": 40268,
         "run_ms": 10,
         "startup_ms": 18,
         "vm_new_ms": 18,
@@ -528,12 +528,60 @@
         "image_read_ms": 0,
         "instructions": 87783,
         "invokes": 16209,
-        "natives_registered": 699,
-        "peak_rss_kb": 38732,
+        "natives_registered": 1421,
+        "peak_rss_kb": 40524,
         "run_ms": 10,
+        "startup_ms": 17,
+        "vm_new_ms": 17,
+        "wall_ms": 28
+      }
+    },
+    {
+      "program": "24_zip_roundtrip",
+      "status": "fail",
+      "detail": "line 22: got 'zip_entry=first.txt\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00 len=300 crc=460098515 ascii=ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACO' want 'zip_entry=first.txt len=300 crc=460098515 ascii=ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACO'",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 2808,
+        "classes_loaded": 315,
+        "clinit_count": 80,
+        "dex_parse_ms": 0,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 362744,
+        "image_read_ms": 0,
+        "instructions": 134946,
+        "invokes": 20136,
+        "natives_registered": 1421,
+        "peak_rss_kb": 45756,
+        "run_ms": 17,
         "startup_ms": 18,
         "vm_new_ms": 18,
-        "wall_ms": 28
+        "wall_ms": 36
+      }
+    },
+    {
+      "program": "25_security_digest",
+      "status": "fail",
+      "detail": "uncaught java.lang.AssertionError: Unable to configure default providers; exit 1 (want 0)",
+      "exit_code": 1,
+      "metrics": {
+        "allocations": 9669,
+        "classes_loaded": 386,
+        "clinit_count": 108,
+        "dex_parse_ms": 0,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 1149007,
+        "image_read_ms": 0,
+        "instructions": 1023468,
+        "invokes": 190138,
+        "natives_registered": 1421,
+        "peak_rss_kb": 176052,
+        "run_ms": 110,
+        "startup_ms": 18,
+        "vm_new_ms": 18,
+        "wall_ms": 128
       }
     }
   ]

@@ -113,6 +113,7 @@ impl Runtime {
         &mut self,
         apk_path: impl AsRef<Path>,
     ) -> Result<BootReport, BootError> {
+        seed_device_environment();
         let started = Instant::now();
         let mut stages: Vec<&'static str> = Vec::new();
         let boot_classpath_classes = self.vm().classes.len();
@@ -216,4 +217,26 @@ static NEXT_START_SEQ: AtomicU64 = AtomicU64::new(1);
 #[must_use]
 pub fn describe_vm_error(e: &VmError) -> String {
     format!("{}: {e}", e.code())
+}
+
+/// Seed the device environment the framework reads through
+/// `android.system.Os.getenv` / `java.lang.System.getenv`.
+///
+/// `android.icu.platform.AndroidDataFiles.generateIcuDataPath()` builds the ICU
+/// data search path from `ANDROID_I18N_ROOT` and `ANDROID_TZDATA_ROOT`; the
+/// real device sets them to the i18n/tzdata apex mounts. ACOS extracts the ICU
+/// `.dat` into the boot cache (`<boot>/apex/com.android.i18n/etc/icu/`) and
+/// exposes it read-only through the already-mapped `/system/**` VFS subtree, so
+/// the guest root is `/system/apex/com.android.i18n`. The tzdata path keeps the
+/// real `/apex/com.android.tzdata` spelling because the VFS maps that prefix
+/// directly. Existing host values are preserved (a real shell override wins).
+fn seed_device_environment() {
+    // `std::env::set_var` is process-global; only set the device default when
+    // the host has not provided one.
+    if std::env::var_os("ANDROID_I18N_ROOT").is_none() {
+        std::env::set_var("ANDROID_I18N_ROOT", "/system/apex/com.android.i18n");
+    }
+    if std::env::var_os("ANDROID_TZDATA_ROOT").is_none() {
+        std::env::set_var("ANDROID_TZDATA_ROOT", "/apex/com.android.tzdata");
+    }
 }

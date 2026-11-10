@@ -16,7 +16,20 @@ pub mod binder;
 mod character;
 mod fwk_debug;
 pub mod fwk_graphics;
+pub mod fwk_input;
+pub mod gfx_bitmap;
+pub mod gfx_canvas;
+pub mod gfx_handles;
+pub mod gfx_hwui;
+pub mod gfx_matrix;
+pub mod gfx_node;
+pub mod gfx_paint;
+pub mod gfx_path;
+mod gfx_state;
+pub mod gfx_text;
 pub mod fwk_jni;
+mod fwk_m2_filechannel;
+pub mod fwk_surface;
 mod fwk_reflect;
 mod fwk_res;
 mod icu;
@@ -37,6 +50,7 @@ mod reflect;
 #[path = "unsafe.rs"]
 mod unsafe_natives;
 mod vmrt;
+mod zip;
 
 use crate::error::VmResult;
 use crate::vm::Vm;
@@ -51,6 +65,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // Registered after `io`: the file-I/O natives replace the std-stream stubs
     // and own every path/descriptor operation.
     io_linux::install(vm);
+    zip::install(vm)?;
     vmrt::install(vm)?;
     math::install(vm)?;
     reflect::install(vm)?;
@@ -58,7 +73,18 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     fwk_res::install(vm)?;
     fwk_debug::install(vm)?;
     fwk_graphics::install(vm)?;
+    fwk_input::install(vm)?;
+    gfx_paint::install(vm)?;
+    gfx_path::install(vm)?;
+    gfx_matrix::install(vm)?;
+    gfx_text::install(vm)?;
+    gfx_node::install(vm)?;
+    gfx_canvas::install(vm)?;
+    gfx_bitmap::install(vm)?;
+    gfx_hwui::install(vm)?;
     fwk_jni::install(vm)?;
+    fwk_m2_filechannel::install(vm)?;
+    fwk_surface::install(vm)?;
     parcel::install(vm)?;
     unsafe_natives::install(vm)?;
     looper::install(vm)?;

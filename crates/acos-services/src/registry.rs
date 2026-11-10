@@ -50,6 +50,9 @@ pub fn owner_of(descriptor: &str) -> Option<&'static str> {
 /// `ServiceManager` name -> AIDL descriptor for the ACOS-owned set.
 pub const NAMES: &[(&str, &str)] = &[
     ("activity", "android.app.IActivityManager"),
+    // `window` is answered by `crates/acos-services/src/wms.rs` + the
+    // `acos-runtime` wire codecs (T-29).
+    ("window", "android.view.IWindowManager"),
     ("activity_task", "android.app.IActivityTaskManager"),
     ("package", "android.content.pm.IPackageManager"),
     ("display", "android.hardware.display.IDisplayManager"),
@@ -119,6 +122,9 @@ pub fn install(host: &mut ServiceHost) {
     // Auxiliary binders returned by other services.
     let controller = host.register_aux("android.app.IActivityClientController");
     let provider = host.register_aux("android.content.IContentProvider");
+
+    // WMS state machine (T-29); the runtime transport owns the wire codecs.
+    let _wms_state = crate::wms::install(host);
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.

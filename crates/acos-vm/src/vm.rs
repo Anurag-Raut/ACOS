@@ -56,7 +56,9 @@ pub struct ThreadRT {
 }
 
 impl ThreadRT {
-    pub(crate) fn new(object: Handle) -> ThreadRT {
+    /// Create an empty (frame-less) thread record. Public so snapshot tests can
+    /// build a quiescent/live thread to exercise the preconditions.
+    pub fn new(object: Handle) -> ThreadRT {
         ThreadRT {
             object,
             frames: Vec::new(),
@@ -296,7 +298,14 @@ pub struct Vm {
     pub pending_exception: Handle,
 
     pub gc_stress: bool,
-    gc_threshold: usize,
+    pub(crate) gc_threshold: usize,
+
+    /// Wall-clock anchor (unix milliseconds) recorded in snapshot metadata.
+    /// Deterministic (0 unless explicitly seeded) so two snapshots of the same
+    /// state are byte-equal; the T-43 re-seed hook sets it after restore.
+    pub clock_anchor_millis: u64,
+    /// Locale recorded in snapshot metadata (defaults to `$LANG` or `en-US`).
+    pub snapshot_locale: String,
 
     // Pre-created fatal exceptions (cannot allocate when thrown).
     pub oom_object: Handle,
@@ -385,6 +394,8 @@ impl Vm {
             pending_exception: NULL,
             gc_stress: options.gc_stress,
             gc_threshold: (options.heap_max_bytes / 16).max(1 << 20),
+            clock_anchor_millis: 0,
+            snapshot_locale: std::env::var("LANG").unwrap_or_else(|_| "en-US".to_string()),
             oom_object: NULL,
             stack_overflow_object: NULL,
             c_object: 0,

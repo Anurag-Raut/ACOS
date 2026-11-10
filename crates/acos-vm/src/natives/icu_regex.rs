@@ -556,7 +556,9 @@ impl Parser {
         if self.eat('?') {
             if self.eat(':') {
                 let mut inner = *flags;
-                return self.parse_alt(&mut inner);
+                let body = self.parse_alt(&mut inner)?;
+                self.expect(')')?;
+                return Ok(body);
             }
             if self.eat('=') {
                 let mut inner = *flags;

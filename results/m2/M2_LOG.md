@@ -156,3 +156,140 @@ ACOS_GC_STRESS=1 tools/guarded.sh --mem 6G --time 400 -- \
 tools/guarded.sh --mem 6G --time 400 -- \
   cargo test -p acos-runtime --test m2 -- --ignored --nocapture # the red M2 gate
 ```
+
+---
+
+# W19h session — ICU data substrate (critical path)
+
+**Status: `bindApplication` delivered, still no `Application.onCreate`.** This
+session cleared the `MissingResourceException` blocker named below, and left the
+next blocker precisely characterised. The full M2 gate test is still `#[ignore]`d
+(`app_created=false`, `tx_delivered=false`).
+
+## What changed
+
+| file | change |
+|---|---|
+| `crates/acos-runtime/src/lifecycle.rs` | `run_phase` no longer collapses an uncaught framework exception to `VmError::JavaException(handle)`. New `LifecycleError::JavaException(String)` renders `Class: message` + recorded frames + the last 15 first-invoked natives (`native_tail`). This is diagnostic only; it does not fake a callback. |
+| `crates/acos-runtime/src/boot.rs` | new `seed_device_environment()` (called at the top of `boot_app_process`) sets `ANDROID_I18N_ROOT=/system/apex/com.android.i18n` and `ANDROID_TZDATA_ROOT=/apex/com.android.tzdata` when the host has not set them. `android.icu.platform.AndroidDataFiles.generateIcuDataPath()` joins `$ANDROID_TZDATA_ROOT/etc/icu/:$ANDROID_I18N_ROOT/etc/icu/`; the VFS already maps `/system/**` and `/apex/com.android.tzdata/**`. |
+| `crates/acos-vm/src/natives/fwk_m2_filechannel.rs` (**new**) | `sun.nio.ch.FileChannelImpl.initIDs()J` → `4096` (ART returns the page size, stored in `allocationGranularity`). Honest: `map0`/`unmap0` are deliberately left unimplemented. |
+| `crates/acos-vm/src/natives/mod.rs` | two one-line registrations: `mod fwk_m2_filechannel;` and `fwk_m2_filechannel::install(vm)?;` (the only edit outside my files, listed here). |
+
+## Root cause of the first blocker (verified by disassembly)
+
+The M2 block was:
+
+```text
+java.util.MissingResourceException: Could not find the bundle
+  android/icu/impl/data/icudt72b/likelySubtags
+```
+
+`android.graphics.Typeface.<clinit>` (framework `classes.dex`, lines 1475–1478)
+runs **unconditionally**:
+
+```java
+locale = SystemProperties.get("persist.sys.locale", "en-US");
+ULocale ul = ULocale.forLanguageTag(locale);
+ul = ULocale.addLikelySubtags(ul);      // <-- loads the likelySubtags bundle
+String script = ul.getScript();
+FontConfig config = SystemFonts.getSystemPreinstalledFontConfig();
+```
+
+Real ART's app trace does **not** show `addLikelySubtags`: `Typeface` is in
+`preloaded-classes`, so its `<clinit>` runs in zygote before the app forks. ACOS
+has no zygote, so it runs in-process and needs the ICU data.
+
+The data lookup (core-icu4j `classes.dex`) is:
+
+```text
+ICUResourceBundleReader$ReaderCache.createInstance
+  (baseName starts "android/icu/impl/data/icudt72b")
+    -> ICUBinary.getData(loader, fullName, itemPath)
+         -> ICUBinary.getDataFromFile(itemPath)   // memory-mapped .dat files
+              (built by AndroidDataFiles.generateIcuDataPath())
+         -> ICUData.getStream(loader, resourceName) // classpath fallback
+```
+
+Both the mapped-`.dat` path and the classpath fallback require data ACOS did not
+have.
+
+## Data extraction (not committed; gitignored `.cache`)
+
+`.cache/boot/extract-icu-w19h.sh` (reuses the super → `lpunpack` → APEX
+`original_apex` → `debugfs` method of `tools/extract-bootclasspath.sh`) produced:
+
+```
+.cache/boot/android-34/apex/com.android.i18n/etc/icu/icudt72l.dat
+  size   28431696
+  sha256 451bf49791196d9d9cf56c9f5526062b0a57207cb347f585f0e3c619d7e0bd53
+```
+
+**Durability:** `tools/extract-bootclasspath.sh` does **not** yet extract this
+file, so a `--force` re-extraction (`rm -rf $OUT`) would drop it. The extraction
+to extend is the i18n APEX block (§3): `debugfs dump /etc/icu/icudt72l.dat` from
+`com.android.i18n`'s `apex_payload.img` into `$OUT/apex/com.android.i18n/etc/icu/`,
+and the same for tzdata `.dat` files. Until then the file is a gitignored `.cache`
+artifact produced by `.cache/boot/extract-icu-w19h.sh` (w19h scratch).
+
+## Non-ignored M2 suite after this session
+
+```
+cargo test -p acos-runtime --test m2 -- --test-threads=1 --nocapture
+test result: ok. 2 passed; 0 failed; 1 ignored
+```
+
+`peak_rss ~188 MiB`, `classes=606`, `bind=true app=false tx=false` for both.
+
+## Evidence (each step is a real framework run)
+
+```text
+# before: no ICU path -> MissingResourceException
+bind_delivered=true app_created=false tx_delivered=false classes=589
+ERROR: java exception: java.util.MissingResourceException: Could not find the
+  bundle android/icu/impl/data/icudt72b/likelySubtags
+
+# with ANDROID_I18N_ROOT/ANDROID_TZDATA_ROOT set (shell): blocker moves
+bind_delivered=true app_created=false tx_delivered=false classes=591
+ERROR: vm: Lsun/nio/ch/FileChannelImpl;->initIDs()J is not implemented
+
+# with seed_device_environment() + initIDs implemented (no shell env):
+bind_delivered=true app_created=false tx_delivered=false classes=606
+ERROR: java exception: java.lang.ArrayIndexOutOfBoundsException:
+  Index -1 out of bounds for length 2
+native-tail (last new natives):
+  ... FileChannelImpl.initIDs / Linux.open / fstat / FileDescriptor.isSocket /
+  Linux.close / AsynchronousCloseMonitor.signalBlockedThreads
+```
+
+The AIOOBE is reached while `ICUBinary.mapFile` opens/closes the `.dat`
+(`FileInputStream.getChannel().map(...)`); it is the current M2 blocker.
+Provenance note: other agents were editing the tree concurrently
+(`wms_java.rs`, `transport.rs`), so the run that first showed the AIOOBE also
+included their uncommitted changes; it is reproducible from a clean
+`boot.rs`/`lifecycle.rs`/`natives/mod.rs` at the time of writing.
+
+## Remaining ICU path (next owner)
+
+`ICUBinary.mapFile` needs `FileChannelImpl.map0(IJJ)J` / `unmap0(JJ)I`, and the
+Java `map` builds a `java.nio.DirectByteBuffer` over the returned address whose
+gets go through `jdk.internal.misc.Unsafe.getByte/getChar/getInt(J)`. ACOS's VM
+is `#![forbid(unsafe_code)]` and `natives/unsafe.rs` implements only
+`addressSize`, so a Rust-owned read-only direct-buffer substrate is required
+(synthetic address → Rust-side byte table + the `Unsafe.get*(J)` family).
+
+A smaller, alternative route that avoids the whole direct-buffer track: parse
+the ICU `.dat` TOC in a `java.lang.BootClassLoader.findResource` /
+`ICUData.getStream` shim and serve `android/icu/impl/data/icudt72b/<bundle>` as
+an `InputStream` over the bundle bytes (the fallback `ICUData.getStream` path
+`ICUBinary.getData` already tries).
+
+## Honesty
+
+* No `Ok(())` was used for undelivered work; the unimplemented `map0` remains a
+  structured `UNSUPPORTED_JAVA_API`.
+* The M2 gate test is still red/ignored; no Application/Activity callback is
+  claimed.
+* `seed_device_environment` changes the guest-visible `ANDROID_I18N_ROOT` to
+  `/system/apex/com.android.i18n` (real devices use `/apex/com.android.i18n`)
+  because the VFS currently maps `/apex` only for tzdata; this is a declared
+  divergence, not a hidden one.

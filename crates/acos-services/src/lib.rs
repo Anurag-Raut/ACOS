@@ -52,6 +52,7 @@ pub mod provider;
 pub mod registry;
 pub mod trace;
 pub mod value;
+pub mod wms;
 
 pub use error::{codes, Result, ServiceError};
 pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};

@@ -33,6 +33,7 @@ pub mod lifecycle;
 pub mod pms_java;
 pub mod settings_java;
 pub mod transport;
+pub mod wms_java;
 
 use std::cell::RefCell;
 use std::rc::Rc;

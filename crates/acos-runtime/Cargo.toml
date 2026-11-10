@@ -13,6 +13,7 @@ acos-dex = { path = "../acos-dex" }
 acos-parcel = { path = "../acos-parcel" }
 acos-services = { path = "../acos-services" }
 acos-vm = { path = "../acos-vm" }
+acos-wm = { path = "../acos-wm" }
 thiserror = { workspace = true }
 
 [dev-dependencies]

@@ -34,6 +34,19 @@ pub enum VmError {
     },
     /// The run crossed `ACOS_WALL_MAX_SECS`.
     Timeout { elapsed_secs: u64, limit_secs: u64 },
+    /// A snapshot could not be produced because a precondition is not met
+    /// (live green thread, open fd, native handle, pending exception, ...).
+    SnapshotPrecondition(String),
+    /// A snapshot byte stream is malformed or of an unsupported format
+    /// version. Restore is refused rather than guessed at.
+    SnapshotFormat(String),
+    /// A snapshot was produced for a different boot DEX set / property table /
+    /// locale; restoring it would silently mix two build fingerprints.
+    SnapshotMismatch(String),
+    /// A `jlong` graphics/handle-table reference was null, stale or forged.
+    /// Structured (never a panic/abort) so callers can distinguish a
+    /// use-after-free from an unimplemented API.
+    StaleHandle { what: String },
 }
 
 impl VmError {
@@ -48,6 +61,10 @@ impl VmError {
             VmError::BootClasspathMissing(_) => "BOOT_CLASSPATH_MISSING",
             VmError::HostMemoryLimit { .. } => "HOST_MEMORY_LIMIT",
             VmError::Timeout { .. } => "TIMEOUT",
+            VmError::SnapshotPrecondition(_) => "SNAPSHOT_PRECONDITION",
+            VmError::SnapshotFormat(_) => "SNAPSHOT_FORMAT",
+            VmError::SnapshotMismatch(_) => "SNAPSHOT_MISMATCH",
+            VmError::StaleHandle { .. } => "STALE_HANDLE",
         }
     }
 
@@ -96,6 +113,12 @@ impl fmt::Display for VmError {
                 "wall-clock limit exceeded: {}s > {}s (ACOS_WALL_MAX_SECS)",
                 elapsed_secs, limit_secs
             ),
+            VmError::SnapshotPrecondition(m) => {
+                write!(f, "SNAPSHOT_PRECONDITION: {m}")
+            }
+            VmError::SnapshotFormat(m) => write!(f, "SNAPSHOT_FORMAT: {m}"),
+            VmError::SnapshotMismatch(m) => write!(f, "SNAPSHOT_MISMATCH: {m}"),
+            VmError::StaleHandle { what } => write!(f, "STALE_HANDLE: {what}"),
         }
     }
 }

@@ -21,5 +21,7 @@
   "20_uncaught": {"exit": 1, "nondeterministic": false, "runs": 3},
   "21_regex_basic": {"exit": 0, "nondeterministic": false, "runs": 3},
   "22_regex_advanced": {"exit": 0, "nondeterministic": false, "runs": 3},
-  "23_regex_split_replace": {"exit": 0, "nondeterministic": false, "runs": 3}
+  "23_regex_split_replace": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "24_zip_roundtrip": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "25_security_digest": {"exit": 0, "nondeterministic": false, "runs": 3}
 }

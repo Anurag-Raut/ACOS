@@ -58,6 +58,8 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     "21_regex_basic",
     "22_regex_advanced",
     "23_regex_split_replace",
+    "24_zip_roundtrip",
+    "25_security_digest",
 ];
 
 #[test]

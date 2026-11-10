@@ -117,12 +117,12 @@ impl ArrayData {
 pub struct Heap {
     /// Slot 0 is permanently `None` (the `null` handle).
     pub(crate) objects: Vec<Option<Object>>,
-    free: Vec<u32>,
+    pub(crate) free: Vec<u32>,
     /// Recycled small instance field arrays. Frameworks (and allocation
     /// benchmarks) create many tiny instances in a loop; reusing their field
     /// storage removes a `Vec` allocation per object. Untraced: contents are
     /// zeroed on reuse.
-    field_pool: Vec<Vec<u32>>,
+    pub(crate) field_pool: Vec<Vec<u32>>,
     /// Approximate live bytes reported as `heap_peak_bytes`.
     pub live_bytes: usize,
     pub peak_bytes: usize,

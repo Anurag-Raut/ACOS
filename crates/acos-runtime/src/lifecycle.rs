@@ -89,6 +89,11 @@ pub enum LifecycleError {
     /// done; the message names the exact missing piece.
     #[error("unsupported: {0}")]
     Unsupported(String),
+    /// The real framework threw an uncaught Java exception. Carries the fully
+    /// rendered `Class: message` plus the recorded stack frames, not just a
+    /// handle, so the blocker is diagnosable from the report alone.
+    #[error("java exception: {0}")]
+    JavaException(String),
 }
 
 impl Runtime {
@@ -185,9 +190,46 @@ fn run_phase(vm: &mut Vm) -> Result<(), LifecycleError> {
     if vm.pending_exception != NULL {
         let h = vm.pending_exception;
         vm.pending_exception = NULL;
-        return Err(LifecycleError::Vm(VmError::JavaException(h)));
+        return Err(LifecycleError::JavaException(describe_throwable(vm, h)));
     }
     Ok(())
+}
+
+/// Render an uncaught `Throwable` as `Class: message` plus its recorded
+/// frames. Mirrors [`Vm::describe_uncaught`] without needing the private
+/// helper: `class_of_object` / `class_desc_of_id` / `throwable_message` and
+/// `throwable_stacks` are all public.
+fn describe_throwable(vm: &Vm, h: Handle) -> String {
+    let class = vm
+        .class_of_object(h)
+        .map(|c| vm.class_desc_of_id(c))
+        .unwrap_or_else(|| "java.lang.Throwable".to_string());
+    let mut out = match vm.throwable_message(h) {
+        Some(m) => format!("{class}: {m}"),
+        None => class,
+    };
+    if let Some(entries) = vm.throwable_stacks.get(&h) {
+        for e in entries {
+            out.push_str(&format!("\n    at {}.{}({})", e.class, e.method, e.line));
+        }
+    }
+    out.push_str(&format!("\n  native-tail: {}", native_tail(vm)));
+    out
+}
+
+/// The last 15 natives invoked for the first time, in invocation order. The
+/// tail localises the framework call that precedes an otherwise shallow
+/// exception stack.
+fn native_tail(vm: &Vm) -> String {
+    let Some(tr) = vm.native_trace.as_ref() else {
+        return "(trace disabled)".to_string();
+    };
+    let start = tr.hits.len().saturating_sub(15);
+    let lines: Vec<String> = tr.hits[start..]
+        .iter()
+        .map(|hit| format!("{}->{}{}", hit.class, hit.method, hit.signature))
+        .collect();
+    format!("\n    {}", lines.join("\n    "))
 }
 
 fn initial_application_non_null(vm: &mut Vm, thread: Handle) -> bool {

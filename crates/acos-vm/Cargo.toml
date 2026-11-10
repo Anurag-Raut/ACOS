@@ -9,8 +9,10 @@ description = "ACOS Rust DEX interpreter: managed heap, class model, interpreter
 [dependencies]
 acos-dex = { path = "../acos-dex" }
 acos-framework-natives = { path = "../acos-framework-natives" }
+acos-render = { path = "../acos-render" }
 acos-parcel = { path = "../acos-parcel" }
-rustix = { version = "1.1", features = ["event", "time", "pipe"] }
+rustix = { version = "1.1", features = ["event", "time", "pipe", "net", "fs"] }
+flate2 = "1"
 libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

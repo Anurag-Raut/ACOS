@@ -141,12 +141,23 @@ impl BinderTransport for ServiceTransport {
         // The interface token is needed after the handler runs, to choose the
         // reply encoder; grab it before the dispatcher consumes it.
         let descriptor = data.peek_interface_token().ok().flatten();
-        let mut host = self.host.borrow_mut();
-        let result = host
-            .transact(binder, code, data, reply, flags)
-            .map_err(|e| e.to_string());
-        let pending = host.take_deliveries();
-        drop(host);
+
+        // WMS (T-29) is routed here: it owns the `acos-wm` policy state and the
+        // DEX-derived parcelable codecs, which the generic `Value` codec cannot
+        // express (`MergedConfiguration` has three inline `Configuration`s).
+        let (result, pending) = if crate::wms_java::owns(descriptor.as_deref()) {
+            (
+                crate::wms_java::transact(binder, code, data, reply, flags),
+                Vec::new(),
+            )
+        } else {
+            let mut host = self.host.borrow_mut();
+            let result = host
+                .transact(binder, code, data, reply, flags)
+                .map_err(|e| e.to_string());
+            let pending = host.take_deliveries();
+            (result, pending)
+        };
         pop_calling_identity();
 
         // PMS replies are real framework Java objects: the framework marshals

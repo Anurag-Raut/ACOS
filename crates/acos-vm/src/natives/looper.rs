@@ -388,6 +388,9 @@ fn native_poll_once(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // A wake that arrived before we parked must not be lost: a non-blocking
     // poll observes it and returns immediately.
     if handle.wait(Some(Duration::ZERO)) {
+        // An input fd registered through `LooperHandle::add_fd` is readable on
+        // the same looper id; dispatch it on this (the looper) green thread.
+        let _ = crate::natives::fwk_input::on_looper_wake(vm, ptr);
         return Ok(());
     }
     if timeout_ms == 0 {
