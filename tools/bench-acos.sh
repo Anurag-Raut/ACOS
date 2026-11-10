@@ -69,7 +69,7 @@ done
 if [ ${#METRICS[@]} -eq 0 ]; then
     # Every metric whose inputs exist in today's engine. Order matters: cheap
     # ones first so a broken metric fails fast.
-    METRICS=(process-start boot-attach bind-app idle-rss sessions sessions-shared sessions-pool idle-cpu interpreter)
+    METRICS=(process-start boot-attach bind-app launch idle-rss sessions sessions-shared sessions-pool idle-cpu interpreter)
 fi
 
 mkdir -p "$RESULTS"

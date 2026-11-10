@@ -39,7 +39,9 @@
 //! workloads; untrusted tenants need one process (or a zygote-forked child) per
 //! session with its own capability/transport namespace.
 
+use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -47,9 +49,17 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use acos_dex::DexFile;
+use acos_parcel::{set_process_identity, BinderId};
+use acos_services::ServiceHost;
+use acos_vm::javabridge::JavaValue;
 use acos_vm::limits::HostGuard;
+use acos_vm::natives::binder::install_transport;
 use acos_vm::vm::{CoreLib, RunOutcome, Vm, VmOptions};
 use acos_vm::VmError;
+
+use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
+use crate::transport::ServiceTransport;
+use crate::{Runtime, FIXTURE_PID, FIXTURE_UID};
 
 /// Structured pool failure.
 #[derive(Debug, thiserror::Error)]
@@ -57,6 +67,9 @@ pub enum PoolError {
     /// The one-time template boot + snapshot failed.
     #[error("session template boot failed: {0}")]
     Boot(#[source] VmError),
+    /// A framework-boot bridge call (Looper/ActivityThread/attach) failed.
+    #[error("framework boot bridge failed: {0}")]
+    Bridge(#[from] acos_vm::javabridge::BridgeError),
     /// A session could not be restored from the template snapshot.
     #[error("session restore failed: {0}")]
     Restore(#[source] VmError),
@@ -792,4 +805,368 @@ impl Drop for SessionPool {
             }
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Framework-init runtime template (W45-A)
+// ---------------------------------------------------------------------------
+
+/// A framework-init snapshot: one `Runtime` is booted to the
+/// `ActivityThread`-attached state, the `Vm` is snapshotted (`ACOSSNAP`), and
+/// every launch restores that `Vm` instead of re-running
+/// `Looper.prepareMainLooper` + `new ActivityThread` + `attach`.
+///
+/// The app DEX is **not** part of the template (the T-42 preconditions refuse
+/// application DEX); it is loaded per launch after the `Vm` restore. The
+/// `activity_thread` handle is preserved by the slot-preserving snapshot.
+#[derive(Debug, Clone)]
+pub struct RuntimeTemplate {
+    snapshot: Arc<[u8]>,
+    activity_thread: u32,
+    boot_ms: f64,
+    snapshot_ms: f64,
+    classes: usize,
+}
+
+impl RuntimeTemplate {
+    /// Boot the framework once and capture the snapshot.
+    ///
+    /// This is the only step that pays the framework boot cost; it must run on
+    /// the thread that will own the `Runtime` (the `Runtime` is not `Send`).
+    pub fn boot() -> Result<RuntimeTemplate, PoolError> {
+        let started = Instant::now();
+        let mut rt = Runtime::standard_with(VmOptions {
+            corelib: CoreLib::Real,
+            ..VmOptions::default()
+        })
+        .map_err(PoolError::Boot)?;
+
+        seed_device_environment();
+        let log = {
+            let host = rt.host();
+            let mut host = host.borrow_mut();
+            install_recording_atms(&mut host)
+        };
+
+        rt.vm_mut()
+            .call_static("android.os.Looper", "prepareMainLooper", "()V", &[])?;
+        let thread = rt
+            .vm_mut()
+            .new_instance_ctor("android.app.ActivityThread", "()V", &[])?;
+        rt.vm_mut().call_method_direct(
+            thread,
+            "attach",
+            "(ZJ)V",
+            &[JavaValue::Boolean(false), JavaValue::Long(1)],
+        )?;
+        let attach = first_attach(&log).ok_or_else(|| {
+            PoolError::Boot(VmError::SnapshotPrecondition(
+                "attach returned but no attachApplication was recorded".into(),
+            ))
+        })?;
+        if !is_valid_app_thread(&attach) {
+            return Err(PoolError::Boot(VmError::SnapshotPrecondition(
+                "attachApplication arrived without a valid IApplicationThread binder".into(),
+            )));
+        }
+
+        let boot_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now();
+        let snapshot = rt.vm().snapshot().map_err(PoolError::Boot)?;
+        let snapshot_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let classes = rt.vm().classes.len();
+        let activity_thread = rt
+            .vm()
+            .find_instance_of_class("Landroid/app/ActivityThread;")
+            .ok_or_else(|| {
+                PoolError::Boot(VmError::SnapshotPrecondition(
+                    "ActivityThread instance missing from the snapshot".into(),
+                ))
+            })?;
+        Ok(RuntimeTemplate {
+            snapshot: Arc::from(snapshot),
+            activity_thread,
+            boot_ms,
+            snapshot_ms,
+            classes,
+        })
+    }
+
+    /// The template boot wall time (paid once).
+    #[must_use]
+    pub fn boot_ms(&self) -> f64 {
+        self.boot_ms
+    }
+
+    /// The snapshot capture wall time (paid once).
+    #[must_use]
+    pub fn snapshot_ms(&self) -> f64 {
+        self.snapshot_ms
+    }
+
+    /// Snapshot size in bytes.
+    #[must_use]
+    pub fn snapshot_bytes(&self) -> usize {
+        self.snapshot.len()
+    }
+
+    /// Classes loaded in the framework snapshot.
+    #[must_use]
+    pub fn classes(&self) -> usize {
+        self.classes
+    }
+
+    /// Restore the framework `Vm` and wrap it in a fresh `Runtime`.
+    ///
+    /// The `Runtime` owns a fresh `ServiceHost`; the `Vm` state (including the
+    /// `ActivityThread` and its `Looper`) comes from the snapshot. The app DEX
+    /// is added by the caller before [`RuntimeLaunch::run`].
+    pub fn restore_runtime(&self) -> Result<Runtime, PoolError> {
+        let vm = Vm::restore(&self.snapshot).map_err(PoolError::Restore)?;
+        Ok(Runtime::with_vm(vm, ServiceHost::standard()))
+    }
+
+    /// The preserved `android.app.ActivityThread` handle in the restored `Vm`.
+    #[must_use]
+    pub fn activity_thread(&self) -> u32 {
+        self.activity_thread
+    }
+}
+
+/// Timings and outcome of one launch from a [`RuntimeTemplate`].
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeLaunchReport {
+    /// `Vm::restore` wall time.
+    pub restore_ms: f64,
+    /// `Runtime::with_vm` + fresh `ServiceHost` wall time.
+    pub runtime_ms: f64,
+    /// APK open + app DEX parse + `add_dex` wall time.
+    pub app_load_ms: f64,
+    /// `bindApplication` delivery wall time.
+    pub bind_ms: f64,
+    /// The `Application.onCreate` interpreter phase wall time.
+    pub app_phase_ms: f64,
+    /// The `ClientTransaction` delivery wall time.
+    pub transaction_ms: f64,
+    /// The `Activity.onCreate` interpreter phase wall time.
+    pub transaction_phase_ms: f64,
+    /// `quitSafely` + final interpreter phase wall time.
+    pub quit_phase_ms: f64,
+    /// Total launch wall time from restore to the last interpreter phase.
+    pub total_ms: f64,
+    /// `Application.attach`/`onCreate` ran (`mInitialApplication != null`).
+    pub app_created: bool,
+    /// `Activity.onCreate` completed (`ActivityClientRecord.activity != null`).
+    pub transaction_delivered: bool,
+    /// The looper was asked to quit and returned.
+    pub looper_quit: bool,
+    /// The first structured failure, if any.
+    pub error: Option<String>,
+}
+
+impl Runtime {
+    /// Build a `Runtime` around an already-restored `Vm` and a fresh service host.
+    ///
+    /// This is the restore half of [`RuntimeTemplate`]; it mirrors
+    /// `Runtime::with_host` but takes the `Vm` instead of constructing a new one.
+    pub fn with_vm(vm: Vm, host: ServiceHost) -> Runtime {
+        let host = Rc::new(RefCell::new(host));
+        let context = host
+            .borrow()
+            .binder_for_descriptor("android.os.IServiceManager")
+            .unwrap_or(BinderId(0));
+        set_process_identity(FIXTURE_UID, FIXTURE_PID);
+        install_transport(Box::new(ServiceTransport::new(
+            Rc::clone(&host),
+            context,
+            FIXTURE_UID,
+            FIXTURE_PID,
+        )));
+        crate::input_java::install();
+        Runtime { vm, host }
+    }
+}
+
+/// Run the app launch on an already-framework-booted `Runtime`.
+///
+/// The caller has restored the framework `Vm` (or booted it); this loads the
+/// app DEX, stages the `LoadedApk`, and drives the same real framework bytecode
+/// as `Runtime::boot_and_run_lifecycle`, minus the framework boot/attach that
+/// the template already did: `bindApplication`, `Application.onCreate`, the
+/// launch `ClientTransaction`, `Activity.onCreate`/`onResume`, then
+/// `quitSafely`.
+pub fn launch_from_template(
+    rt: &mut Runtime,
+    apk: &std::path::Path,
+    activity_thread: u32,
+) -> RuntimeLaunchReport {
+    let started = Instant::now();
+    let mut report = RuntimeLaunchReport::default();
+    match launch_inner(rt, apk, activity_thread, &mut report) {
+        Ok(()) => {}
+        Err(e) => report.error = Some(e),
+    }
+    report.total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    report
+}
+
+/// Run the launch on a `Runtime` that already has the app DEX loaded.
+///
+/// This is the half used by the `before` profile: the boot probe has already
+/// loaded the app DEX as part of the measured boot path. It skips the app DEX
+/// load and drives the real `bindApplication` + `ClientTransaction` + looper.
+pub fn launch_from_template_loaded(
+    rt: &mut Runtime,
+    apk: &std::path::Path,
+    activity_thread: u32,
+    app: &acos_services::pms::AppInfo,
+) -> RuntimeLaunchReport {
+    let started = Instant::now();
+    let mut report = RuntimeLaunchReport::default();
+    match launch_loaded_inner(rt, apk, activity_thread, app, &mut report) {
+        Ok(()) => {}
+        Err(e) => report.error = Some(e),
+    }
+    report.total_ms = started.elapsed().as_secs_f64() * 1000.0;
+    report
+}
+
+fn launch_inner(
+    rt: &mut Runtime,
+    apk: &std::path::Path,
+    activity_thread: u32,
+    report: &mut RuntimeLaunchReport,
+) -> Result<(), String> {
+    let opened = acos_apk::Apk::open(apk).map_err(|e| format!("open apk: {e}"))?;
+    let raw = opened
+        .dex_files
+        .first()
+        .ok_or_else(|| "apk contains no classes.dex".to_string())?;
+    let dex = DexFile::parse(raw.bytes.clone()).map_err(|e| format!("dex: {e}"))?;
+    let t = Instant::now();
+    rt.vm_mut().add_dex(dex);
+    report.app_load_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let manifest = opened.manifest().map_err(|e| format!("manifest: {e}"))?;
+    let mut app = acos_services::pms::AppInfo::from_manifest(
+        &manifest,
+        apk,
+        acos_services::pms::FIXTURE_UID,
+    );
+    crate::apk_loader::stage(rt.vm(), apk, &mut app)
+        .map_err(|e| format!("stage apk: {e}"))?;
+    launch_loaded_inner(rt, apk, activity_thread, &app, report)
+}
+
+fn launch_loaded_inner(
+    rt: &mut Runtime,
+    apk: &std::path::Path,
+    activity_thread: u32,
+    app: &acos_services::pms::AppInfo,
+    report: &mut RuntimeLaunchReport,
+) -> Result<(), String> {
+    rt.vm_mut()
+        .push_static_call("android.os.Looper", "loop", "()V", &[])
+        .map_err(|e| format!("Looper.loop: {e}"))?;
+
+    let t = Instant::now();
+    let app_thread =
+        crate::bind_app::deliver_bind_application(rt.vm_mut(), activity_thread, app)
+            .map_err(|e| format!("bindApplication: {e}"))?;
+    report.bind_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = Instant::now();
+    run_phase(rt.vm_mut())?;
+    report.app_phase_ms = t.elapsed().as_secs_f64() * 1000.0;
+    report.app_created = initial_application_non_null(rt.vm_mut(), activity_thread);
+
+    let t = Instant::now();
+    let tx = crate::client_transaction::deliver_launch(rt.vm_mut(), app_thread, app, apk)
+        .map_err(|e| format!("client transaction: {e}"))?;
+    report.transaction_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = Instant::now();
+    run_phase(rt.vm_mut())?;
+    report.transaction_phase_ms = t.elapsed().as_secs_f64() * 1000.0;
+    report.transaction_delivered = activity_created(rt.vm_mut(), activity_thread, tx.token);
+
+    let t = Instant::now();
+    quit_main_looper(rt.vm_mut())?;
+    run_phase(rt.vm_mut())?;
+    report.quit_phase_ms = t.elapsed().as_secs_f64() * 1000.0;
+    report.looper_quit = true;
+    Ok(())
+}
+
+fn seed_device_environment() {
+    if std::env::var_os("ANDROID_I18N_ROOT").is_none() {
+        std::env::set_var("ANDROID_I18N_ROOT", "/system/apex/com.android.i18n");
+    }
+    if std::env::var_os("ANDROID_TZDATA_ROOT").is_none() {
+        std::env::set_var("ANDROID_TZDATA_ROOT", "/apex/com.android.tzdata");
+    }
+}
+
+fn run_phase(vm: &mut Vm) -> Result<(), String> {
+    acos_vm::interp::run(vm).map_err(|e| format!("interp: {e}"))?;
+    if vm.pending_exception != acos_vm::heap::NULL {
+        let h = vm.pending_exception;
+        vm.pending_exception = acos_vm::heap::NULL;
+        let class = vm
+            .class_of_object(h)
+            .map(|c| vm.class_desc_of_id(c))
+            .unwrap_or_else(|| "java.lang.Throwable".to_string());
+        let message = vm.throwable_message(h);
+        return Err(match message {
+            Some(m) => format!("uncaught {class}: {m}"),
+            None => format!("uncaught {class}"),
+        });
+    }
+    Ok(())
+}
+
+fn initial_application_non_null(vm: &mut Vm, thread: u32) -> bool {
+    matches!(
+        vm.get_field(thread, "mInitialApplication"),
+        Ok(JavaValue::Object(h)) if h != acos_vm::heap::NULL
+    )
+}
+
+fn activity_created(vm: &mut Vm, thread: u32, token: u32) -> bool {
+    let record = match vm.call_method(
+        thread,
+        "getActivityClient",
+        "(Landroid/os/IBinder;)Landroid/app/ActivityThread$ActivityClientRecord;",
+        &[JavaValue::Object(token)],
+    ) {
+        Ok(JavaValue::Object(h)) if h != acos_vm::heap::NULL => h,
+        _ => return false,
+    };
+    matches!(
+        vm.get_field(record, "activity"),
+        Ok(JavaValue::Object(h)) if h != acos_vm::heap::NULL
+    )
+}
+
+fn quit_main_looper(vm: &mut Vm) -> Result<(), String> {
+    let parked = vm
+        .threads
+        .first()
+        .is_some_and(|t| t.status == acos_vm::vm::ThreadStatus::Parked);
+    if !parked {
+        return Ok(());
+    }
+    let looper = match vm.call_static(
+        "android.os.Looper",
+        "myLooper",
+        "()Landroid/os/Looper;",
+        &[],
+    ) {
+        Ok(JavaValue::Object(h)) if h != acos_vm::heap::NULL => h,
+        _ => return Ok(()),
+    };
+    vm.call_method(looper, "quitSafely", "()V", &[])
+        .map_err(|e| format!("quitSafely: {e}"))?;
+    Ok(())
 }

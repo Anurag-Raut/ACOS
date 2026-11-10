@@ -213,17 +213,42 @@ fn boot_fingerprint(vm: &Vm) -> u64 {
         h ^= b as u64;
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
     };
-    for dex in &vm.dexs {
-        let bytes = dex.file.bytes();
-        let header = dex.file.header();
-        for b in header.checksum.to_le_bytes() {
-            mix(b);
+    // Hash the boot classpath *definition* (the `BOOTCLASSPATH` jar list and
+    // each jar's size), not the dynamically loaded `vm.dexs`: lazy providers are
+    // pulled in on demand by the framework boot, so hashing `vm.dexs` would make
+    // a framework snapshot invalid against a fresh `Vm::new`. The list is the
+    // stable identity of the boot image; content changes still surface through
+    // the class-layout checks in `restore`.
+    if let Some(dir) = &vm.boot_dir {
+        if let Ok(text) = std::fs::read_to_string(dir.join("BOOTCLASSPATH")) {
+            for line in text.lines() {
+                let jar = line.trim();
+                for b in jar.as_bytes() {
+                    mix(*b);
+                }
+                mix(b'\n');
+                if let Ok(meta) = std::fs::metadata(dir.join("dex").join(jar.trim_end_matches(".jar"))) {
+                    for b in (meta.len() as u64).to_le_bytes() {
+                        mix(b);
+                    }
+                }
+            }
         }
-        for b in header.signature {
-            mix(b);
-        }
-        for b in (bytes.len() as u64).to_le_bytes() {
-            mix(b);
+    }
+    // Bootstrap has no on-disk boot classpath: fall back to the loaded providers.
+    if vm.boot_dir.is_none() {
+        for dex in &vm.dexs {
+            let bytes = dex.file.bytes();
+            let header = dex.file.header();
+            for b in header.checksum.to_le_bytes() {
+                mix(b);
+            }
+            for b in header.signature {
+                mix(b);
+            }
+            for b in (bytes.len() as u64).to_le_bytes() {
+                mix(b);
+            }
         }
     }
     h
@@ -269,6 +294,15 @@ fn property_hash(vm: &Vm) -> u64 {
 // ---------------------------------------------------------------------------
 
 impl Vm {
+    /// True when `frame` is the host-bridge sentinel base frame (the only frame
+    /// a quiescent host thread should carry at snapshot time).
+    fn is_sentinel_frame(&self, frame: &crate::frame::Frame) -> bool {
+        let Some(m) = self.methods.get(frame.method as usize) else {
+            return false;
+        };
+        m.class == self.c_object && m.name == "<init>" && m.sig == "()V"
+    }
+
     /// Enforce the T-42 snapshot preconditions and return a structured error
     /// naming the first violation.
     pub fn snapshot_preconditions(&self) -> VmResult<()> {
@@ -285,10 +319,17 @@ impl Vm {
         }
         for (i, t) in self.threads.iter().enumerate() {
             if !t.frames.is_empty() {
-                return Err(VmError::SnapshotPrecondition(format!(
-                    "thread {i} has {} live Java frames (running); snapshot requires a quiescent VM",
-                    t.frames.len()
-                )));
+                // The host thread always carries one sentinel base frame
+                // (`javabridge::ensure_host_thread`); it is a host bridge
+                // artifact, not Java execution state, and the snapshot stores no
+                // frames. Allow it when it is the only frame.
+                let sentinel_only = t.frames.len() == 1 && self.is_sentinel_frame(&t.frames[0]);
+                if !sentinel_only {
+                    return Err(VmError::SnapshotPrecondition(format!(
+                        "thread {i} has {} live Java frames (running); snapshot requires a quiescent VM",
+                        t.frames.len()
+                    )));
+                }
             }
             match t.status {
                 ThreadStatus::Runnable | ThreadStatus::Finished => {}
@@ -497,6 +538,23 @@ impl Vm {
         }
 
         Ok(w.buf)
+    }
+
+    /// Find the first heap instance whose class descriptor is `desc`.
+    ///
+    /// Used by the framework-init snapshot to recover the preserved
+    /// `android.app.ActivityThread` handle without adding a VM field: handles
+    /// are slot-preserving, so the handle found here is valid after restore.
+    pub fn find_instance_of_class(&self, desc: &str) -> Option<Handle> {
+        let class_id = *self.class_by_desc.get(desc)?;
+        for (idx, slot) in self.heap.objects.iter().enumerate() {
+            if let Some(Object::Instance { class, .. }) = slot {
+                if *class == class_id {
+                    return Some(idx as Handle);
+                }
+            }
+        }
+        None
     }
 
     /// Parse only the header of a snapshot (used for refusal tests and

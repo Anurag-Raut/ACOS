@@ -63,6 +63,9 @@ pub enum Metric {
     /// attach → `IApplicationThread.bindApplication` delivered, plus the phase
     /// that follows it on the main looper.
     BindApp,
+    /// Full launch: boot classpath → framework attach → bindApplication →
+    /// Application.onCreate → ClientTransaction → Activity.onCreate/onResume.
+    Launch,
     /// Settled fixed idle memory (PSS / RSS / anon+shmem / private vs shared).
     IdleRss,
     /// Per-session incremental and marginal memory at the requested N values.
@@ -105,6 +108,7 @@ impl Metric {
             Metric::ProcessStart => "process-start",
             Metric::BootAttach => "boot-attach",
             Metric::BindApp => "bind-app",
+            Metric::Launch => "launch",
             Metric::IdleRss => "idle-rss",
             Metric::Sessions => "sessions",
             Metric::SessionsShared => "sessions-shared",
@@ -397,6 +401,7 @@ fn measure_one(metric: Metric, args: &BenchArgs) -> Result<Value, BenchFailure> 
         Metric::ProcessStart => bench_process_start(args),
         Metric::BootAttach => bench_boot_attach(args),
         Metric::BindApp => bench_bind_app(args),
+        Metric::Launch => bench_launch(args),
         Metric::IdleRss => bench_idle_rss(args),
         Metric::Sessions => bench_sessions(args),
         Metric::SessionsShared => super::bench_sessions::run(args),
@@ -561,7 +566,7 @@ fn bench_boot_attach(args: &BenchArgs) -> Result<Value, BenchFailure> {
     // every later sample. Recorded explicitly so the cold cost is never hidden.
     let mut first_cold: Option<(f64, f64)> = None;
     for i in 0..(args.runs + args.warmup) {
-        let probe = boot_probe(&apk, args, false, false)?;
+        let probe = boot_probe(&apk, args, false, false, false)?;
         if i == 0 {
             first_cold = Some((probe.vm_ready_ms, probe.boot_ms));
         }
@@ -580,7 +585,7 @@ fn bench_boot_attach(args: &BenchArgs) -> Result<Value, BenchFailure> {
     }
     // Counters come from one extra *traced* probe: tracing adds overhead, so it
     // is deliberately kept out of the timed samples.
-    let traced = boot_probe(&apk, args, false, true)?;
+    let traced = boot_probe(&apk, args, false, true, false)?;
     let last_counters = traced.counters();
     let raw_stages = traced.stages;
     // Each stage reports its own cost and the VM counters it moved (deltas from
@@ -661,7 +666,7 @@ fn bench_bind_app(args: &BenchArgs) -> Result<Value, BenchFailure> {
     let mut delivered = 0usize;
     let mut blocker: Option<String> = None;
     for i in 0..(args.runs + args.warmup) {
-        let probe = boot_probe(&apk, args, true, false)?;
+        let probe = boot_probe(&apk, args, true, false, false)?;
         if probe.bind_delivered {
             delivered += 1;
         }
@@ -676,7 +681,7 @@ fn bench_bind_app(args: &BenchArgs) -> Result<Value, BenchFailure> {
         phase.push(probe.phase_ms);
     }
     // Counters from a traced probe (tracing is not in the timed samples).
-    let traced = boot_probe(&apk, args, true, true)?;
+    let traced = boot_probe(&apk, args, true, true, false)?;
     let counters = traced.counters();
     if blocker.is_none() {
         blocker = traced.blocker.clone();
@@ -704,6 +709,190 @@ fn bench_bind_app(args: &BenchArgs) -> Result<Value, BenchFailure> {
         "counters": counters,
         "note": "the phase after bindApplication is expected to stop at the first unwired native \
                  (ICU regex / font config); the structured blocker is reported, never a stub",
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// metric: launch (before/after the framework-init snapshot)
+// ---------------------------------------------------------------------------
+
+fn bench_launch(args: &BenchArgs) -> Result<Value, BenchFailure> {
+    let apk = resolve_apk(args)?;
+    if parse_corelib(&args.corelib)? != acos_vm::CoreLib::Real {
+        return Err(BenchFailure::unsupported(
+            "launch requires --corelib real: the framework-init snapshot is a real \
+             Android-14 boot-classpath snapshot",
+        ));
+    }
+
+    // ---- before: the current acos launch path (Vm::new + boot_app_process) ----
+    let mut before_launch = Vec::new();
+    let mut before_boot = Vec::new();
+    let mut before_bind = Vec::new();
+    let mut before_app = Vec::new();
+    let mut before_tx = Vec::new();
+    let mut before_tx_phase = Vec::new();
+    let mut before_quit = Vec::new();
+    let mut before_app_created = 0usize;
+    let mut before_tx_delivered = 0usize;
+    let mut before_blocker: Option<String> = None;
+    let mut before_classes = 0usize;
+    let mut before_vm_ready = Vec::new();
+    for i in 0..(args.runs + args.warmup) {
+        let probe = boot_probe(&apk, args, true, false, true)?;
+        if probe.app_created {
+            before_app_created += 1;
+        }
+        if probe.transaction_delivered {
+            before_tx_delivered += 1;
+        }
+        if before_blocker.is_none() {
+            before_blocker = probe.blocker.clone();
+        }
+        if i < args.warmup {
+            continue;
+        }
+        before_launch.push(probe.launch_ms);
+        before_boot.push(probe.boot_ms);
+        before_bind.push(probe.bind_ms);
+        before_app.push(probe.phase_ms);
+        before_tx.push(probe.transaction_ms);
+        before_tx_phase.push(probe.transaction_phase_ms);
+        before_quit.push(probe.quit_phase_ms);
+        before_vm_ready.push(probe.vm_ready_ms);
+        before_classes = probe.classes_loaded;
+    }
+
+    // ---- template: one framework boot + ACOSSNAP capture --------------------
+    let template_started = Instant::now();
+    let template = acos_runtime::session_pool::RuntimeTemplate::boot()
+        .map_err(|e| BenchFailure::internal(format!("RuntimeTemplate::boot: {e}")))?;
+    let template_boot_ms = template_started.elapsed().as_secs_f64() * 1000.0;
+    let template_boot_internal_ms = template.boot_ms();
+    let template_snapshot_ms = template.snapshot_ms();
+    let template_snapshot_bytes = template.snapshot_bytes();
+    let template_classes = template.classes();
+
+    // ---- after: Vm::restore + app load + bindApplication + ClientTransaction -
+    let mut after_launch = Vec::new();
+    let mut after_restore = Vec::new();
+    let mut after_app_load = Vec::new();
+    let mut after_bind = Vec::new();
+    let mut after_app = Vec::new();
+    let mut after_tx = Vec::new();
+    let mut after_tx_phase = Vec::new();
+    let mut after_quit = Vec::new();
+    let mut after_app_created = 0usize;
+    let mut after_tx_delivered = 0usize;
+    let mut after_looper_quit = 0usize;
+    let mut after_blocker: Option<String> = None;
+    for i in 0..(args.runs + args.warmup) {
+        let t = Instant::now();
+        let mut rt = template
+            .restore_runtime()
+            .map_err(|e| BenchFailure::internal(format!("RuntimeTemplate::restore: {e}")))?;
+        let restore_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let report = acos_runtime::session_pool::launch_from_template(
+            &mut rt,
+            &apk,
+            template.activity_thread(),
+        );
+        if report.app_created {
+            after_app_created += 1;
+        }
+        if report.transaction_delivered {
+            after_tx_delivered += 1;
+        }
+        if report.looper_quit {
+            after_looper_quit += 1;
+        }
+        if after_blocker.is_none() {
+            after_blocker = report.error.clone();
+        }
+        if i < args.warmup {
+            continue;
+        }
+        after_launch.push(report.total_ms);
+        after_restore.push(restore_ms);
+        after_app_load.push(report.app_load_ms);
+        after_bind.push(report.bind_ms);
+        after_app.push(report.app_phase_ms);
+        after_tx.push(report.transaction_ms);
+        after_tx_phase.push(report.transaction_phase_ms);
+        after_quit.push(report.quit_phase_ms);
+    }
+
+    // The "after" total is restore + launch; report both the sum and its parts.
+    let after_total: Vec<f64> = after_launch
+        .iter()
+        .zip(after_restore.iter())
+        .map(|(l, r)| l + r)
+        .collect();
+    let before_total = before_launch.clone();
+
+    Ok(json!({
+        "metric": "launch",
+        "definition": "Runtime::standard_with -> boot classpath load -> framework attach -> \
+                       bindApplication -> Application.onCreate -> launch ClientTransaction -> \
+                       Activity.onCreate/onResume, wall time",
+        "unit": "ms",
+        "type": "wall",
+        "cold_or_warm": "before: fresh Vm + fresh framework boot per sample (process-global boot \
+                         cache warm after the first); after: one framework boot + ACOSSNAP, then \
+                         Vm::restore per sample",
+        "corelib": args.corelib,
+        "fixture": apk.display().to_string(),
+        "apk_sha256": file_sha256(&apk),
+        "samples": before_launch.len(),
+        "before": {
+            "path": "acos launch today: Vm::new + boot_app_process + bindApplication + ClientTransaction",
+            "vm_ready_ms": stats(&before_vm_ready),
+            "boot_ms": stats(&before_boot),
+            "bind_ms": stats(&before_bind),
+            "app_on_create_ms": stats(&before_app),
+            "client_transaction_ms": stats(&before_tx),
+            "activity_on_create_ms": stats(&before_tx_phase),
+            "quit_ms": stats(&before_quit),
+            "launch_ms": stats(&before_launch),
+            "app_created": before_app_created,
+            "transaction_delivered": before_tx_delivered,
+            "classes_loaded": before_classes,
+            "first_blocker": before_blocker,
+        },
+        "template": {
+            "path": "one framework boot + ACOSSNAP capture",
+            "boot_ms": round3(template_boot_ms),
+            "internal_boot_ms": round3(template_boot_internal_ms),
+            "snapshot_ms": round3(template_snapshot_ms),
+            "snapshot_bytes": template_snapshot_bytes,
+            "classes": template_classes,
+        },
+        "after": {
+            "path": "Vm::restore from ACOSSNAP + Runtime::with_vm + app DEX load + bindApplication + ClientTransaction",
+            "restore_ms": stats(&after_restore),
+            "app_load_ms": stats(&after_app_load),
+            "bind_ms": stats(&after_bind),
+            "app_on_create_ms": stats(&after_app),
+            "client_transaction_ms": stats(&after_tx),
+            "activity_on_create_ms": stats(&after_tx_phase),
+            "quit_ms": stats(&after_quit),
+            "launch_ms": stats(&after_launch),
+            "total_ms": stats(&after_total),
+            "app_created": after_app_created,
+            "transaction_delivered": after_tx_delivered,
+            "looper_quit": after_looper_quit,
+            "first_blocker": after_blocker,
+        },
+        "speedup_p50": if median(&before_total) > 0.0 {
+            round3(median(&before_total) / median(&after_total).max(f64::MIN_POSITIVE))
+        } else {
+            0.0
+        },
+        "note": "the before path is the same sequence as acos launch (AgentSession::launch -> \
+                 Runtime::standard_with -> boot_and_run_lifecycle); the after path restores the \
+                 framework Vm from ACOSSNAP and skips prepareMainLooper/ActivityThread/attach. \
+                 Both are measured in the same process so the process-global boot DEX/code caches \
+                 are equally warm. A blocker is reported verbatim, never stubbed.",
     }))
 }
 
@@ -1034,6 +1223,13 @@ struct Probe {
     clinits: u64,
     instructions: u64,
     natives: usize,
+    launch_ms: f64,
+    transaction_ms: f64,
+    transaction_phase_ms: f64,
+    quit_phase_ms: f64,
+    app_created: bool,
+    transaction_delivered: bool,
+    looper_quit: bool,
 }
 
 impl Probe {
@@ -1056,6 +1252,7 @@ fn boot_probe(
     args: &BenchArgs,
     bind: bool,
     trace: bool,
+    launch: bool,
 ) -> Result<Probe, BenchFailure> {
     use acos_runtime::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
     use acos_runtime::Runtime;
@@ -1179,9 +1376,46 @@ fn boot_probe(
             .native_trace
             .as_ref()
             .map_or(0, |t| t.hits.len()),
+        launch_ms: f64::NAN,
+        transaction_ms: f64::NAN,
+        transaction_phase_ms: f64::NAN,
+        quit_phase_ms: f64::NAN,
+        app_created: false,
+        transaction_delivered: false,
+        looper_quit: false,
     };
 
     if !bind {
+        return Ok(probe);
+    }
+
+    if launch {
+        // Full launch from an already-framework-booted Runtime. The app DEX was
+        // loaded in the `load-app-dex` stage above, so this uses the "loaded"
+        // half and measures bindApplication + Application.onCreate + the launch
+        // ClientTransaction + Activity.onCreate/onResume + quitSafely.
+        let app = app_info(apk)?;
+        let report = acos_runtime::session_pool::launch_from_template_loaded(
+            &mut rt,
+            apk,
+            thread,
+            &app,
+        );
+        probe.bind_ms = report.bind_ms;
+        probe.phase_ms = report.app_phase_ms;
+        probe.transaction_ms = report.transaction_ms;
+        probe.transaction_phase_ms = report.transaction_phase_ms;
+        probe.quit_phase_ms = report.quit_phase_ms;
+        probe.app_created = report.app_created;
+        probe.transaction_delivered = report.transaction_delivered;
+        probe.looper_quit = report.looper_quit;
+        probe.bind_delivered = report.error.is_none();
+        probe.blocker = report.error;
+        probe.launch_ms = boot_started.elapsed().as_secs_f64() * 1000.0;
+        probe.classes_loaded = rt.vm().classes.len();
+        probe.clinits = rt.vm().metrics.clinit_count;
+        probe.instructions = rt.vm().metrics.instructions;
+        probe.natives = rt.vm().native_trace.as_ref().map_or(0, |t| t.hits.len());
         return Ok(probe);
     }
 

@@ -788,3 +788,158 @@ run give the correctness evidence, but the remaining `BenchGc` 4.37x gap and the
 extra per-VM quickening state argue for an explicit opt-in until allocation is
 also tiered.
 
+
+### 8.10 Framework-init snapshot (ACOSSNAP): launch latency, W45-A (2026-11-11)
+
+Target: cut app-launch latency (time from `acos launch` to `app_created` /
+first resume) by booting the framework once, snapshotting the quiescent
+`ActivityThread`-attached `Vm` (ACOSSNAP), and restoring per launch instead of
+re-running the framework boot. Ownership: `crates/acos-vm/src/snapshot.rs`,
+`crates/acos-runtime/src/session_pool.rs`, `crates/acos-cli/src/bench.rs`,
+`tools/bench-acos.sh`.
+
+Run `results/bench/run-2026-11-11-001239.json` (commit `66e4232`, `dev`
+profile, 20 samples/metric, host 32 threads / 60 GiB, `corelib real`,
+fixture `fixtures/build/apps/hello-views.apk`). New reproducible row:
+`tools/bench-acos.sh --profile dev launch` (the `launch` metric is in the
+default `METRICS` list; `acos bench launch --runs 20 --warmup 2`). Fidelity
+`native-runtime` — **not** ART-verified.
+
+`bench launch` measures two paths in one process (so the process-global boot
+DEX/decoded-code caches are equally warm):
+
+* **before** — the `acos launch` path today: `Runtime::standard_with`
+  (`Vm::new`) + `boot_app_process` (`open-apk`, `load-app-dex`,
+  `prepare-main-looper`, `instantiate-activity-thread`, `attach-application`) +
+  `bindApplication` + `Application.onCreate` + the launch `ClientTransaction` +
+  `Activity.onCreate`/`onResume` + `quitSafely`;
+* **after** — one `RuntimeTemplate::boot` (`Vm::new` + framework stages +
+  `Vm::snapshot`, paid once) and then per launch: `Vm::restore` +
+  `Runtime::with_vm` + APK/DEX load + `bindApplication` + `ClientTransaction`
+  + `quitSafely`.
+
+| phase | before p50 / p95 (ms) | after p50 / p95 (ms) | note |
+|---|---:|---:|---|
+| `Vm` ready (`Vm::new`) | 5.396 / 11.522 | — | part of `restore_ms` after |
+| framework boot (`boot_app_process` stages) | 66.545 / 126.268 | — | replaced by `restore_ms` |
+| `Vm::restore` from ACOSSNAP | — | 55.282 / 62.592 | re-links 332 classes from the boot DEX |
+| app DEX load/short stage | — | 0.048 / 0.055 | |
+| `attachApplication` → `bindApplication` | 9.445 / 17.847 | 11.134 / 12.389 | |
+| `Application.onCreate` phase | 0.0 / 0.0 | 0.0 / 0.0 | blocked in both (see below) |
+| `ClientTransaction` delivery + `Activity.onCreate` | 0.0 / 0.0 | 0.0 / 0.0 | blocked in both |
+| **launch total** | **144.407 / 230.761** | **141.714 / 157.110** | after = `restore_ms` + `launch_ms`; p50 **1.019x** |
+| launch phases only (excl. boot/restore) | 77.862 / 104.493 | 84.494 / 90.512 | p50 0.92x, p95 1.15x (flat within host-load noise) |
+
+Template (paid once, amortized over launches): boot `92.413 ms`, snapshot
+`0.956 ms`, snapshot size **221 324 B**, 332 classes.
+
+ACOS-vs-legacy (BENCHMARKS.md §3 / `results/bench/baseline.json`):
+
+| row | legacy ACVM | ACOS before | ACOS after | verdict |
+|---|---|---|---|---|
+| `M3` cold start → first correct frame | 3.620 s | 144.407 ms (`launch` before, no frame) | 141.714 ms (no frame) | `not-comparable` (no renderer; different metric) |
+| `M4` worker create → correct frame | 1.251–1.343 s | — | 84.494 ms launch phases | `not-comparable` (no frame) |
+| `boot-attach.boot_ms.p50` (`baseline.json`) | 95.115 ms (ACOS baseline) | 66.545 ms | — | framework boot only; the `launch` row is larger |
+| `bind-app.attach_to_bind_ms.p50` (`baseline.json`) | 3.760 ms (ACOS baseline) | 9.445 ms | 11.134 ms | same order; host load differs |
+
+**Correctness.** `tools/diff-dexprogs.sh --corelib real` on the same worktree:
+**27 pass / 0 fail / 0 unsupported** (`results/vm/dexprogs-w45a-real.json`).
+The snapshot change only relaxes the precondition for the host sentinel base
+frame and makes the boot fingerprint the stable `BOOTCLASSPATH` definition
+instead of the dynamically loaded lazy providers; neither touches the default
+`Vm::run` path. The `launch` metric itself is `status: pass`.
+
+**Verdict / what remains.**
+
+* The snapshot is **post-framework-boot**, not post-app-load: the app launch
+  chain is not yet stable. In both the before and after paths
+  `bindApplication` throws `uncaught java.lang.ExceptionInInitializerError`, so
+  `app_created = 0` and `transaction_delivered = 0`; the measured `launch` is
+  the real framework work up to that blocker, not a fake pass.
+* The framework bring-up (`Vm::new` + `boot_app_process` stages, 71.9 ms =
+  5.396 + 66.545) is replaced by the `Vm::restore` (55.3 ms), a **16.7 ms
+  phase saving**; the end-to-end p50 saving is 2.7 ms because the app-bound
+  `bind` phase is slower in this run and the errored `Application.onCreate`
+  run dominates both paths. The launch phases alone are flat
+  (77.9 ms before vs 84.5 ms after, 0.92x p50), so the framework bring-up
+  saving is not yet reflected end-to-end; the p95 improves **1.47x**
+  (the before tail has a 324 ms outlier).
+* The dominant remaining restore cost is the per-`Vm` **class re-link**
+  (field layouts, vtables, lazy boot-jar pulls) for the 332 snapshot classes;
+  sharing parsed class metadata / a lazy-jar provider across restored VMs (T-43)
+  is what would turn the 1.02x total into a large win.
+* Amortization: the template boot is paid once per process; at N=1 the
+  template path is slower than the boot path, and it only pays off for many
+  sequential launches until the restore cost is reduced.
+
+Method notes: no `/usr/bin/time`, `/proc` based, one `tools/guarded.sh` scope
+per metric, `CARGO_TARGET_DIR` respected, no fixed sleeps in the timed path.
+
+### 8.11 Allocation/GC gap vs `java -Xint` (w48a, 2026-11-11)
+
+Target: the `BenchGc` 4.4x / `BenchAlloc` 2.1x residual left by §8.9.1.
+A clean worktree of HEAD `515eeff` (`.cache/wt-w48a`, `CARGO_TARGET_DIR`
+`.cache/target-w48a`, every command under `tools/guarded.sh`) was profiled
+**first**. No `perf`/`samply` on the host, so the profile is a gperftools
+sampling profile (`LD_PRELOAD=/usr/lib/libprofiler.so`, 500 Hz,
+`setarch -R` for stable symbols), symbolized with `addr2line` against the
+release binary's debug info.
+
+**Profile (BenchGc, 1546 samples).** Time is dominated by dispatch, not the
+allocator: `acos_vm::dispatch::fast_op` + `advance`, `acos_vm::interp::execute`,
+and `Arc<MethodCode>` clone/drop in the frame push/pop path. `Vm::alloc`
+(`interp.rs:860` in the base binary) is ~1.4 % of samples, the mark/sweep ~9 %
+(53 ms of a 0.6 s run is `gc_ms`), and the libc allocator frames are low single
+digits once the profiler's own signal-handler sample (16 %) is excluded. The
+same holds for `BenchAlloc` (`gc_ms` 101 ms of 2.7 s; 10 M `new-instance` are
+outweighed by 20 M `return-void`/`invoke-direct`).
+
+**Kept change (1).** `new-array` in `interp.rs`: the component descriptor was
+unconditionally copied with `type_descriptor(..).to_string()` — a throwaway
+`String` heap allocation per array — although `ArrayObj` already owns a copy.
+The descriptor is now borrowed from the DEX type table and only rebuilt on the
+cold bounds/`OOM` error path. This is a strict allocation removal (4.0 M fewer
+`String`s on `BenchGc`).
+
+**Measured, then rejected.** (2) Scaling the `Object::Instance` field-vector
+recycle pool from 4096 to `max(4096, heap_max/4096)` and replacing
+`resize(slots,0); fill(0)` with `clear(); resize(slots,0)` in `heap.rs`:
+neutral on `BenchAlloc` and a consistent-but-noisy 0.3–1.5 % *slower* on
+`BenchGc`, at the cost of caching more dead `Vec`s for the whole heap cap;
+reverted. (3) A `new-instance`/`new-array` IR op was **not** attempted: it
+would need a GC-capable allocation inside `run_ir`'s frame-borrowed loop, and
+the tier deliberately never holds `&mut Vm` (see §8.9.1).
+
+Method: **5 interleaved before/after rounds per program, `vmbench` best-of-3
+per round, min reported**; `java -Xint` is OpenJDK 17, the same wall method.
+`ACOS_CORELIB=real` except `BenchString`, which hangs under `real` at HEAD for
+both binaries and is measured with the default bootstrap corelib (as in §8.8).
+Host 32 threads, loadavg1 3–5 (other agents building concurrently).
+
+| Program | before (ms) | after (ms) | after + IR (ms) | `java -Xint` (ms) | after / `-Xint` | IR / `-Xint` |
+|---|---:|---:|---:|---:|---:|---:|
+| `BenchGc` | 601.75 | 610.90 | 557.83 | 442.57 | 1.38x | 1.26x |
+| `BenchAlloc` | 2738.15 | 2783.99 | 2317.26 | 1437.48 | 1.94x | 1.61x |
+| `BenchCollections` | 140.28 | 141.29 | 149.75 | 398.24 | 0.35x | 0.38x |
+| `BenchString` | 131.30 | 129.88 | 129.52 | 918.20 | 0.14x | 0.14x |
+
+The before/after deltas are **within the run-to-run spread** (a second
+8-round interleaved run of the same binaries put `BenchGc` after at 592.10 ms
+vs before 598.17 ms — the sign flips). The change is therefore shipped as a
+strict work reduction, **not** as a measured win: the allocation/GC gap is
+dispatch-bound, and the only large lever left is running `new-array`/
+`new-instance` inside the IR tier (rejected above) or a bump/size-class object
+arena, both outside a semantics-preserving patch of this size.
+
+Correctness for the wave (worktree = HEAD `515eeff` + the kept change):
+
+* `tools/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**;
+  `--gc-stress`: **27 / 0 / 0**; `ACOS_EXEC=ir`: **27 / 0 / 0**; `ACOS_EXEC=ir`
+  `--gc-stress`: **27 / 0 / 0**.
+* `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
+* `#![forbid(unsafe_code)]` untouched; the change only moves the existing
+  `array_len_fits` check onto the hot path and copies no `String` on success.
+
+Verdict: no measurable closure of the `BenchGc`/`BenchAlloc` gap from an
+allocation micro-optimisation. `bench-vm`/`vmbench` should next be run with an
+allocation-tier design, not more heap bookkeeping.
