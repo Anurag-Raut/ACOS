@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Text Input</string>
+    <string name="hint">Type something</string>
+    <string name="save">Save</string>
+    <string name="empty">Nothing saved yet</string>
+</resources>

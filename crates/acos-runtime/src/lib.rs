@@ -115,12 +115,17 @@ impl Runtime {
             .borrow()
             .binder_for_descriptor("android.os.IServiceManager")
             .unwrap_or(BinderId(0));
-        set_process_identity(FIXTURE_UID, FIXTURE_PID);
+        // The reported caller/process pid is the host pid, so the framework's
+        // same-process short-circuits (`Binder.getCallingPid() == Process.myPid()`)
+        // behave exactly as they do on device. `Process.myPid()` reads the
+        // kernel pid through `Os.getpid`, so the two must agree.
+        let pid = std::process::id() as i32;
+        set_process_identity(FIXTURE_UID, pid);
         install_transport(Box::new(ServiceTransport::new(
             Rc::clone(&host),
             context,
             FIXTURE_UID,
-            FIXTURE_PID,
+            pid,
         )));
         // The real `InputEventReceiver` ack path (`nativeFinishInputEvent`)
         // forwards to the service input dispatcher.

@@ -19,7 +19,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/results/dogfood/launch"
 TIMEOUT="${ACOS_LAUNCH_TIMEOUT:-300}"
-ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity)
+ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu)
 
 die() { echo "e2e-dogfood: error: $*" >&2; exit 1; }
 

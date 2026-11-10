@@ -39,7 +39,7 @@ KEYSTORE="$BUILD_DIR/debug.keystore"
 KEY_ALIAS="androiddebugkey"
 KEY_PASS="android"
 
-ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity)
+ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu)
 
 die() { echo "build-dogfood-apps: error: $*" >&2; exit 1; }
 
@@ -129,4 +129,4 @@ else
     for app in "${ALL_APPS[@]}"; do build_apk "$app"; done
 fi
 
-echo "build-dogfood-apps: done -> $BUILD_DIR/{sqlite-crud,canvas-shapes,service-provider,two-activity}.apk"
+echo "build-dogfood-apps: done -> $BUILD_DIR/{sqlite-crud,canvas-shapes,service-provider,two-activity,list-scroll,text-input,dialog-menu}.apk"

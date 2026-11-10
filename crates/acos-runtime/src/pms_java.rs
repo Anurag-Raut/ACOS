@@ -23,7 +23,8 @@
 
 use acos_parcel::Parcel;
 use acos_services::pms::{
-    cached_description, ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo,
+    cached_description, cached_provider_info, cached_provider_list, ActivityInfo as PmsActivityInfo,
+    AppInfo, PackageInfo, ProviderInfo as PmsProviderInfo,
 };
 use acos_vm::heap::{ArrayData, Handle, Object};
 use acos_vm::javabridge::JavaValue;
@@ -37,6 +38,8 @@ pub fn owns_method(method: &str) -> bool {
         "getApplicationInfo"
             | "getPackageInfo"
             | "getActivityInfo"
+            | "resolveContentProvider"
+            | "queryContentProviders"
             | "resolveIntent"
             | "queryIntentActivities"
     )
@@ -72,6 +75,11 @@ fn set_opt_str(vm: &mut Vm, obj: Handle, field: &str, value: &str) -> JResult<()
 
 fn set_int(vm: &mut Vm, obj: Handle, field: &str, value: i32) -> JResult<()> {
     vm.set_field(obj, field, JavaValue::Int(value)).map_err(err)
+}
+
+fn set_bool(vm: &mut Vm, obj: Handle, field: &str, value: bool) -> JResult<()> {
+    vm.set_field(obj, field, JavaValue::Boolean(value))
+        .map_err(err)
 }
 
 /// Materialise a real `android.content.pm.ApplicationInfo`.
@@ -153,6 +161,81 @@ fn string_array(vm: &mut Vm, values: &[String]) -> JResult<Handle> {
             .map_err(err)?;
     }
     Ok(arr)
+}
+
+/// Materialise a real `android.content.pm.ProviderInfo`.
+///
+/// The field set is the API-34 `PackageItemInfo` -> `ComponentInfo` ->
+/// `ProviderInfo` chain; the framework's own `writeToParcel` writes it in order.
+pub(crate) fn provider_info(
+    vm: &mut Vm,
+    app: &AppInfo,
+    provider: &PmsProviderInfo,
+) -> JResult<Handle> {
+    let h = vm
+        .new_instance_ctor("android.content.pm.ProviderInfo", "()V", &[])
+        .map_err(err)?;
+    // PackageItemInfo
+    set_str(vm, h, "name", &provider.name)?;
+    set_str(vm, h, "packageName", &provider.package_name)?;
+    set_int(vm, h, "labelRes", 0)?;
+    vm.set_field(h, "nonLocalizedLabel", JavaValue::Null)
+        .map_err(err)?;
+    set_int(vm, h, "icon", 0)?;
+    set_int(vm, h, "logo", 0)?;
+    set_int(vm, h, "banner", 0)?;
+    vm.set_field(h, "metaData", JavaValue::Null).map_err(err)?;
+    // ComponentInfo
+    let app_h = application_info(vm, app)?;
+    vm.set_field(h, "applicationInfo", JavaValue::Object(app_h))
+        .map_err(err)?;
+    set_str(vm, h, "processName", &provider.process_name)?;
+    vm.set_field(h, "splitName", JavaValue::Null).map_err(err)?;
+    set_bool(vm, h, "enabled", true)?;
+    set_bool(vm, h, "exported", provider.exported)?;
+    set_bool(vm, h, "directBootAware", false)?;
+    // ProviderInfo
+    set_str(vm, h, "authority", &provider.authority)?;
+    set_opt_str(vm, h, "readPermission", &provider.read_permission)?;
+    set_opt_str(vm, h, "writePermission", &provider.write_permission)?;
+    set_bool(vm, h, "grantUriPermissions", provider.grant_uri_permissions)?;
+    set_bool(vm, h, "forceUriPermissions", false)?;
+    vm.set_field(h, "uriPermissionPatterns", JavaValue::Null)
+        .map_err(err)?;
+    vm.set_field(h, "pathPermissions", JavaValue::Null)
+        .map_err(err)?;
+    set_bool(vm, h, "multiprocess", false)?;
+    set_int(vm, h, "initOrder", provider.init_order)?;
+    set_int(vm, h, "flags", 0)?;
+    set_bool(vm, h, "isSyncable", true)?;
+    Ok(h)
+}
+
+/// Materialise a `ParceledListSlice<ProviderInfo>` with the given providers.
+fn provider_list_slice(
+    vm: &mut Vm,
+    app: &AppInfo,
+    providers: &[PmsProviderInfo],
+) -> JResult<Option<Handle>> {
+    if providers.is_empty() {
+        return Ok(None);
+    }
+    let list = vm
+        .new_instance_ctor("java.util.ArrayList", "()V", &[])
+        .map_err(err)?;
+    for provider in providers {
+        let h = provider_info(vm, app, provider)?;
+        vm.call_method(list, "add", "(Ljava/lang/Object;)Z", &[JavaValue::Object(h)])
+            .map_err(err)?;
+    }
+    let slice = vm
+        .new_instance_ctor(
+            "android.content.pm.ParceledListSlice",
+            "(Ljava/util/List;)V",
+            &[JavaValue::Object(list)],
+        )
+        .map_err(err)?;
+    Ok(Some(slice))
 }
 
 /// Materialise a real `android.content.pm.PackageInfo`.
@@ -272,6 +355,21 @@ pub fn rewrite_reply(vm: &mut Vm, method: &str, reply: &mut Parcel) -> JResult<b
                 }
                 None => typed_object(vm, None, reply)?,
             }
+        }
+        "resolveContentProvider" => {
+            // The handler resolved the authority and cached the matching
+            // provider (or `None`).
+            match cached_provider_info() {
+                Some(p) => {
+                    let h = provider_info(vm, &desc.app, &p)?;
+                    typed_object(vm, Some(h), reply)?;
+                }
+                None => typed_object(vm, None, reply)?,
+            }
+        }
+        "queryContentProviders" => {
+            let list = provider_list_slice(vm, &desc.app, &cached_provider_list())?;
+            typed_object(vm, list, reply)?;
         }
         "resolveIntent" => {
             // Only the launcher intent is installed; anything else is a

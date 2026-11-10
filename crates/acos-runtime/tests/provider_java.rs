@@ -203,6 +203,23 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         "content://dev.acos.fixtures.svcprovider/echo/0"
     );
 
+    // getType: `ContentProvider.Transport.getType` is reached through the
+    // framework's own `ContentProviderProxy` / `ContentProviderNative` pair, and
+    // the reply is the string the app's provider declares.
+    let type_h = obj(
+        vm.call_method(
+            proxy,
+            "getType",
+            "(Landroid/content/AttributionSource;Landroid/net/Uri;)Ljava/lang/String;",
+            &[JavaValue::Object(attribution), JavaValue::Object(uri)],
+        )
+        .expect("ContentProviderProxy.getType"),
+    );
+    assert_eq!(
+        vm.java_string_to_rust(type_h).expect("getType string"),
+        "vnd.android.cursor.dir/vnd.acos.echo"
+    );
+
     // query: the cursor is a real Java object materialised by the framework's
     // own `ContentProviderNative`/`BulkCursorDescriptor` reply.
     let id_column = string(vm, "_id");

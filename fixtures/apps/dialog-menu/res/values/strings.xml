@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dialog Menu</string>
+    <string name="show_dialog">Show dialog</string>
+    <string name="show_toast">Show toast</string>
+    <string name="idle">Idle</string>
+    <string name="menu_reset">Reset</string>
+    <string name="menu_about">About</string>
+</resources>

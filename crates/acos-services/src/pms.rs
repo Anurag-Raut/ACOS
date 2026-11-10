@@ -38,6 +38,30 @@ pub struct PmsDescription {
 thread_local! {
     static LAST_DESCRIPTION: RefCell<Option<PmsDescription>> = const { RefCell::new(None) };
     static LAST_ACTIVITY: RefCell<Option<ActivityInfo>> = const { RefCell::new(None) };
+    static LAST_PROVIDER: RefCell<Option<ProviderInfo>> = const { RefCell::new(None) };
+    static LAST_PROVIDER_LIST: RefCell<Vec<ProviderInfo>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Record the provider a `resolveContentProvider` call resolved (or `None`).
+pub fn cache_provider_info(provider: Option<ProviderInfo>) {
+    LAST_PROVIDER.with(|slot| *slot.borrow_mut() = provider);
+}
+
+/// The provider recorded by the last `resolveContentProvider` call.
+#[must_use]
+pub fn cached_provider_info() -> Option<ProviderInfo> {
+    LAST_PROVIDER.with(|slot| slot.borrow().clone())
+}
+
+/// Record the providers a `queryContentProviders` call returned.
+pub fn cache_provider_list(providers: Vec<ProviderInfo>) {
+    LAST_PROVIDER_LIST.with(|slot| *slot.borrow_mut() = providers);
+}
+
+/// The providers recorded by the last `queryContentProviders` call.
+#[must_use]
+pub fn cached_provider_list() -> Vec<ProviderInfo> {
+    LAST_PROVIDER_LIST.with(|slot| slot.borrow().clone())
 }
 
 /// Record the description a handler just served.
@@ -306,6 +330,80 @@ impl ActivityInfo {
     }
 }
 
+/// Typed `ProviderInfo` values (the subset the framework and the fixtures read).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProviderInfo {
+    /// Fully-qualified provider class name.
+    pub name: String,
+    /// Owning package.
+    pub package_name: String,
+    /// `android:authorities` entry.
+    pub authority: String,
+    /// `processName`.
+    pub process_name: String,
+    /// `readPermission` (empty when the manifest declares none).
+    pub read_permission: String,
+    /// `writePermission`.
+    pub write_permission: String,
+    /// `exported`.
+    pub exported: bool,
+    /// `grantUriPermissions`.
+    pub grant_uri_permissions: bool,
+    /// `initOrder`.
+    pub init_order: i32,
+}
+
+impl ProviderInfo {
+    /// Encode in the curated `ProviderInfo` prefix order (`parcelable.rs`).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Parcelable {
+        Parcelable::ordered(
+            "android.content.pm.ProviderInfo",
+            vec![
+                Value::Str8(Some(self.name.clone())),
+                Value::Str8(Some(self.package_name.clone())),
+                Value::Int(0),  // banner
+                Value::Str(None), // label
+                Value::Int(0),  // icon
+                Value::Int(0),  // labelRes
+                Value::Bundle(None),
+                Value::Str8(Some(self.authority.clone())),
+                Value::Str8(opt(self.read_permission.is_empty(), self.read_permission.clone())),
+                Value::Str8(opt(self.write_permission.is_empty(), self.write_permission.clone())),
+                Value::Bool(self.exported),
+                Value::Bool(self.grant_uri_permissions),
+                Value::Int(self.init_order),
+                Value::Str8(Some(self.process_name.clone())),
+            ],
+        )
+    }
+
+    /// Decode a typed parcelable produced by [`ProviderInfo::to_parcelable`].
+    #[must_use]
+    pub fn from_parcelable(p: &Parcelable) -> Option<Self> {
+        let f = p.fields()?;
+        Some(Self {
+            name: f.first()?.as_str()?.to_string(),
+            package_name: f.get(1)?.as_str()?.to_string(),
+            authority: f.get(7)?.as_str()?.to_string(),
+            read_permission: f.get(8)?.as_str().unwrap_or_default().to_string(),
+            write_permission: f.get(9)?.as_str().unwrap_or_default().to_string(),
+            exported: f.get(10)?.as_bool()?,
+            grant_uri_permissions: f.get(11)?.as_bool()?,
+            init_order: f.get(12)?.as_int()?,
+            process_name: f.get(13)?.as_str()?.to_string(),
+        })
+    }
+}
+
+fn opt(empty: bool, value: String) -> Option<String> {
+    if empty {
+        None
+    } else {
+        Some(value)
+    }
+}
+
 /// Typed `PackageInfo` values.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageInfo {
@@ -439,6 +537,8 @@ pub struct PmsState {
     pub features: FeatureTable,
     /// Granted permissions (manifest + install `-g`).
     pub granted_permissions: Vec<String>,
+    /// Declared content providers (`<provider>` + `android:authorities`).
+    pub providers: Vec<ProviderInfo>,
     /// uid -> package.
     pub uid_packages: Vec<(i32, String)>,
     /// dex-load notifications (oneway, recorded).
@@ -480,6 +580,7 @@ impl PmsState {
             package,
             features: FeatureTable::default(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
+            providers: Vec::new(),
             dex_loads: Vec::new(),
             installer_package: None,
             apk_path: apk,
@@ -514,6 +615,30 @@ impl PmsState {
             .iter()
             .map(|p| p.name.clone())
             .collect();
+        let provider_package = manifest.package.clone();
+        let mut providers: Vec<ProviderInfo> = Vec::new();
+        for c in &manifest.providers {
+            let name = acos_apk::manifest::fq_name(&provider_package, &c.name);
+            let process = c
+                .process
+                .clone()
+                .unwrap_or_else(|| provider_package.clone());
+            let permission = c.permission.clone().unwrap_or_default();
+            let exported = c.exported.unwrap_or(false);
+            for authority in &c.authorities {
+                providers.push(ProviderInfo {
+                    name: name.clone(),
+                    package_name: provider_package.clone(),
+                    authority: authority.clone(),
+                    process_name: process.clone(),
+                    read_permission: permission.clone(),
+                    write_permission: permission.clone(),
+                    exported,
+                    grant_uri_permissions: false,
+                    init_order: 0,
+                });
+            }
+        }
         let version_code = manifest.version_code.unwrap_or(1) as i32;
         let version_name = manifest.version_name.clone().unwrap_or_else(|| "1.0".into());
         let package = PackageInfo {
@@ -532,6 +657,7 @@ impl PmsState {
             package,
             features: FeatureTable::default(),
             granted_permissions: requested_permissions,
+            providers,
             dex_loads: Vec::new(),
             installer_package: None,
             apk_path: path.to_path_buf(),
@@ -556,6 +682,15 @@ impl PmsState {
         } else {
             DENIED
         }
+    }
+
+    /// The declared provider matching `authority`, if any.
+    #[must_use]
+    pub fn provider_for_authority(&self, authority: &str) -> Option<ProviderInfo> {
+        self.providers
+            .iter()
+            .find(|p| p.authority == authority)
+            .cloned()
     }
 
     /// Package name for a uid.
@@ -716,6 +851,23 @@ impl ServiceObject for PmsService {
                     _ => vec![Value::Str(None)],
                 }
             }
+            "resolveContentProvider" => {
+                // `resolveContentProvider(String authority, long flags, int userId)`.
+                let authority = args.first().and_then(Value::as_str).unwrap_or_default();
+                let provider = state.provider_for_authority(authority);
+                cache_provider_info(provider.clone());
+                vec![match provider {
+                    Some(p) => Value::TypedObject(p.to_parcelable()),
+                    None => Value::TypedObject(Parcelable::Null),
+                }]
+            }
+            "queryContentProviders" => {
+                // `queryContentProviders(String processName, int uid, long flags,
+                // String metadataKey)`. The reply is a `ParceledListSlice`; the
+                // real list is materialised by `pms_java` from the cache.
+                cache_provider_list(state.providers.clone());
+                vec![Value::TypedObject(Parcelable::Null)]
+            }
             "resolveIntent" | "queryIntentActivities" | "queryIntentServices" => {
                 // No intent resolution is on the hello-views launch path.
                 vec![Value::TypedObject(Parcelable::Null)]
@@ -735,5 +887,59 @@ impl ServiceObject for PmsService {
             reply,
             deliveries: Vec::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_provider() -> ProviderInfo {
+        ProviderInfo {
+            name: "dev.acos.fixtures.svcprovider.EchoProvider".into(),
+            package_name: "dev.acos.fixtures.svcprovider".into(),
+            authority: "dev.acos.fixtures.svcprovider".into(),
+            process_name: "dev.acos.fixtures.svcprovider".into(),
+            read_permission: String::new(),
+            write_permission: String::new(),
+            exported: true,
+            grant_uri_permissions: false,
+            init_order: 0,
+        }
+    }
+
+    #[test]
+    fn provider_round_trips_through_the_prefix_codec() {
+        let provider = sample_provider();
+        let decoded = ProviderInfo::from_parcelable(&provider.to_parcelable()).expect("decoded");
+        assert_eq!(decoded, provider);
+    }
+
+    #[test]
+    fn resolve_content_provider_answers_the_declared_authority() {
+        let mut state = PmsState::new();
+        assert!(state.provider_for_authority("dev.acos.fixtures.svcprovider").is_none());
+        state.providers.push(sample_provider());
+        let found = state
+            .provider_for_authority("dev.acos.fixtures.svcprovider")
+            .expect("declared authority resolves");
+        assert_eq!(found.name, sample_provider().name);
+        assert!(state.provider_for_authority("dev.acos.fixtures.absent").is_none());
+    }
+
+    #[test]
+    fn from_apk_reads_provider_authorities() {
+        let path = crate::workspace_path("fixtures/build/apps/service-provider.apk")
+            .unwrap_or_else(|| PathBuf::from("fixtures/build/apps/service-provider.apk"));
+        if !path.is_file() {
+            eprintln!("SKIP from_apk_reads_provider_authorities: fixture APK not built");
+            return;
+        }
+        let state = PmsState::from_apk(&path).expect("from_apk");
+        let provider = state
+            .provider_for_authority("dev.acos.fixtures.svcprovider")
+            .expect("fixture authority declared in the manifest");
+        assert_eq!(provider.name, "dev.acos.fixtures.svcprovider.EchoProvider");
+        assert!(!provider.exported, "the fixture provider is not exported");
     }
 }

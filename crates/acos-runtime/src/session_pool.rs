@@ -59,7 +59,7 @@ use acos_vm::VmError;
 
 use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
 use crate::transport::ServiceTransport;
-use crate::{Runtime, FIXTURE_PID, FIXTURE_UID};
+use crate::{Runtime, FIXTURE_UID};
 
 /// Structured pool failure.
 #[derive(Debug, thiserror::Error)]
@@ -976,12 +976,16 @@ impl Runtime {
             .borrow()
             .binder_for_descriptor("android.os.IServiceManager")
             .unwrap_or(BinderId(0));
-        set_process_identity(FIXTURE_UID, FIXTURE_PID);
+        // Match the kernel pid so `Binder.getCallingPid()` and
+        // `Process.myPid()` agree (the same-process short-circuits in the
+        // framework's permission checks rely on it).
+        let pid = std::process::id() as i32;
+        set_process_identity(FIXTURE_UID, pid);
         install_transport(Box::new(ServiceTransport::new(
             Rc::clone(&host),
             context,
             FIXTURE_UID,
-            FIXTURE_PID,
+            pid,
         )));
         crate::input_java::install();
         Runtime {
