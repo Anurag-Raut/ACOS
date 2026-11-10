@@ -13,6 +13,8 @@ path = "src/main.rs"
 [dependencies]
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
+acos-protocol = { path = "../acos-protocol" }
+acos-verify = { path = "../acos-verify" }
 acos-vm = { path = "../acos-vm" }
 clap = { version = "4", features = ["derive"] }
 serde = { workspace = true }

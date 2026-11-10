@@ -3,6 +3,8 @@
 //! Implements exactly one command so far: `acos inspect <apk> [--json]`.
 //! Unimplemented subcommands deliberately do not exist yet.
 
+mod verify;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -29,6 +31,8 @@ enum Command {
     Inspect(InspectArgs),
     /// Execute a DEX/APK's `main` on the ACOS Rust interpreter.
     RunDex(RunDexArgs),
+    /// Run a YAML scenario and write an evidence-backed verdict.
+    Verify(verify::VerifyArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -108,6 +112,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Inspect(args) => inspect(args),
         Command::RunDex(args) => run_dex(args),
+        Command::Verify(args) => verify::run(args),
     }
 }
 

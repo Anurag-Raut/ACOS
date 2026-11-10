@@ -331,6 +331,71 @@ impl CliBackend {
         };
         envelope_from_captured(&captured, request_id, CommandName::RunDex, ctx)
     }
+
+    fn call_verify(
+        &self,
+        binary: &Path,
+        request_id: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let Some(scenario) = args.get("scenario").and_then(Value::as_str) else {
+            return invalid_argument(request_id, "scenario", "missing required string `scenario`");
+        };
+        let scenario_path = match safety::validate_path(scenario, &ctx.allowed_roots) {
+            Ok(path) => path,
+            Err(reason) => return unsafe_path(request_id, scenario, &reason),
+        };
+
+        let mut argv = vec![
+            "verify".to_string(),
+            scenario_path.display().to_string(),
+            "--json".to_string(),
+        ];
+        if let Some(apk) = args.get("apk").and_then(Value::as_str) {
+            match safety::validate_path(apk, &ctx.allowed_roots) {
+                Ok(path) => {
+                    argv.push("--apk".to_string());
+                    argv.push(path.display().to_string());
+                }
+                Err(reason) => return unsafe_path(request_id, apk, &reason),
+            }
+        }
+        if let Some(artifacts) = args.get("artifacts").and_then(Value::as_str) {
+            match safety::validate_path(artifacts, &ctx.allowed_roots) {
+                Ok(path) => {
+                    argv.push("--artifacts".to_string());
+                    argv.push(path.display().to_string());
+                }
+                Err(reason) => return unsafe_path(request_id, artifacts, &reason),
+            }
+        }
+        if let Some(reference) = args.get("reference").and_then(Value::as_str) {
+            match safety::validate_path(reference, &ctx.allowed_roots) {
+                Ok(path) => {
+                    argv.push("--reference".to_string());
+                    argv.push(path.display().to_string());
+                }
+                Err(reason) => return unsafe_path(request_id, reference, &reason),
+            }
+        }
+        if let Some(fidelity) = args.get("required_fidelity").and_then(Value::as_str) {
+            argv.push("--required-fidelity".to_string());
+            argv.push(fidelity.to_string());
+        }
+        if let Some(flags) = args.get("flags").and_then(Value::as_array) {
+            for flag in flags.iter().filter_map(Value::as_str) {
+                argv.push("--flag".to_string());
+                argv.push(flag.to_string());
+            }
+        }
+
+        let captured = match run_child(binary, &argv, &self.config.extra_env, ctx) {
+            Ok(captured) => captured,
+            Err(err) => return run_error_envelope(request_id, CommandName::Verify, err, ctx),
+        };
+        envelope_from_captured(&captured, request_id, CommandName::Verify, ctx)
+    }
 }
 
 impl Backend for CliBackend {
@@ -356,6 +421,7 @@ impl Backend for CliBackend {
         match command {
             CommandName::Inspect => self.call_inspect(&binary, &request_id, args, ctx),
             CommandName::RunDex => self.call_run_dex(&binary, &request_id, args, ctx),
+            CommandName::Verify => self.call_verify(&binary, &request_id, args, ctx),
             _ => unsupported_envelope(&request_id, command, &caps),
         }
     }
@@ -584,22 +650,8 @@ pub fn envelope_from_cli_value(value: &Value, fallback_id: &str, command: Comman
     .unwrap_or_else(|_| Metrics::wall_ms(0));
 
     let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
-    if ok {
-        let mut envelope = Envelope::pass(request_id, backend, fidelity, metrics);
-        if let Some(result) = value.get("result") {
-            if !result.is_null() {
-                envelope = envelope.with_value_result(result.clone());
-            }
-        }
-        if let Some(caps) = value.get("capabilities_used").and_then(Value::as_array) {
-            envelope = envelope.with_capabilities(
-                caps.iter().filter_map(Value::as_str).map(str::to_string),
-            );
-        }
-        if let Some(session) = value.get("session_id").and_then(Value::as_str) {
-            envelope = envelope.with_session_id(session);
-        }
-        envelope
+    let mut envelope = if ok {
+        Envelope::pass(request_id, backend, fidelity, metrics)
     } else {
         let code = value
             .pointer("/error/code")
@@ -617,7 +669,36 @@ pub fn envelope_from_cli_value(value: &Value, fallback_id: &str, command: Comman
             }
         }
         Envelope::failure(request_id, backend, fidelity, error, metrics)
+    };
+
+    // Attach the optional parts the same way for pass and failure so the MCP
+    // envelope is the CLI envelope (for example a `verify` fail still carries its
+    // verdict result).
+    if let Some(result) = value.get("result") {
+        if !result.is_null() {
+            envelope = envelope.with_value_result(result.clone());
+        }
     }
+    if let Some(caps) = value.get("capabilities_used").and_then(Value::as_array) {
+        envelope =
+            envelope.with_capabilities(caps.iter().filter_map(Value::as_str).map(str::to_string));
+    }
+    if let Some(session) = value.get("session_id").and_then(Value::as_str) {
+        envelope = envelope.with_session_id(session);
+    }
+    if let Some(isolation) = value
+        .get("isolation")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+    {
+        envelope = envelope.with_isolation(isolation);
+    }
+    if let Some(evidence) = value.get("evidence") {
+        if let Ok(evidence) = serde_json::from_value(evidence.clone()) {
+            envelope = envelope.with_evidence(evidence);
+        }
+    }
+    envelope
 }
 
 fn parse_backend(value: &str) -> Option<ProtocolBackend> {

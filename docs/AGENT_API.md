@@ -1101,3 +1101,138 @@ can otherwise drive the host to tens of gigabytes (host-safety incident
   bound and the VM's bound agree. `tools/ramguard.sh` is the out-of-process
   backstop: it kills `target/*/acos*` processes when `MemAvailable < 9 GiB`
   (≈85% used on the 62 GiB host) or a single process exceeds 8 GiB RSS.
+
+---
+
+## 17. The `verify` runner and the `Backend` seam
+
+The scenario runner lives in `crates/acos-verify` and is exposed as
+`acos verify`. It is the entry point an agent calls in the verification loop:
+
+```bash
+acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] \
+  [--reference <art-ref-dir>] [--required-fidelity <f>] [--flag <f>] [--json]
+```
+
+* `--apk` overrides the scenario's `app`; otherwise the scenario path is used.
+* `--artifacts` defaults to `out/<scenario stem>` and receives the full evidence
+  directory (§10).
+* `--reference` selects the **reference-replay** backend (below). Without it the
+  *native* backend runs.
+* `--required-fidelity` makes a pass that does not reach that fidelity an
+  `unsupported` (`UNSUPPORTED_BACKEND` with
+  `required_fidelity`/`achieved_fidelity` in `details`), never an optimistic
+  pass.
+* Exactly one JSON envelope is written to stdout and the same object is returned
+  by MCP `acos_verify`. A non-pass verdict exits non-zero.
+
+### 17.1 The `Backend` trait
+
+The runner never talks to the VM, loader, renderer or input path directly. It
+asks a `Backend` (`crates/acos-verify/src/backend.rs`) for one operation at a
+time and checks that the matching **capability** is switched on first:
+
+| capability | step(s) it enables | backend method |
+|---|---|---|
+| `static-manifest` | static `launch` target resolution | `manifest` |
+| `lifecycle` | `launch` | `launch` |
+| `ui.tree` | `wait_for`, `assert_text`, `assert_visible`, `assert_not_visible`, `assert_state` | `observe` |
+| `logs` | `assert_log` | `logs_since` |
+| `crash-reports` | `assert_no_crash` | crash state in `observe`/`launch` |
+| `screenshot` | `capture`, `assert_screenshot` | `capture` |
+| `input` | `tap`, `type`, `key`, `back`, `rotate` | `input` |
+| `reset` | `reset` | `reset` |
+| `environment` | `set_network`, `set_permission`, `set_locale`, `set_density`, `set_theme`, `set_time` | `configure` |
+
+A method that is not implemented returns `BackendError::Unsupported`; the
+executor turns that into `status: unsupported`, code `UNSUPPORTED_BACKEND`, with
+the exact capability in `error.details.capability` and the backend/step in
+`details.backend`/`details.context`. `call_activity_method` is always
+unsupported until an injected debug hook exists.
+
+Every backend returns a `fidelity()` and a `protocol_backend()` label recorded
+in the verdict. The executor only claims `pass` when **every** step was
+executed and passed at that fidelity.
+
+### 17.2 Backends today
+
+| backend | fidelity | supports now | how selected |
+|---|---|---|---|
+| `NativeBackend` (`acos-native`) | `native-runtime` | static manifest (`acos-apk`) and `launch` to the M2 `attachApplication` point (`acos-runtime`) | default |
+| `ReferenceBackend` (`acvm-reference`) | `art-reference` | static manifest, UI tree and log stream replayed from the checked-in `fixtures/reference/<app>/art-api34-x86_64/` capture | `--reference` |
+
+The native backend deliberately does **not** fake a UI tree, screenshot, log
+stream or input: those are M2/M3 capabilities. It reports them as `unsupported`,
+so a positive scenario stops at the first such step and yields a truthful
+**partial** verdict. For example, `hello-views.yaml` passes `launch` and then
+reports `wait_for` as `unsupported` (`ui.tree`).
+
+The reference replay backend exists so the assertion logic and false-pass
+prevention can be exercised before M2/M3 land. It replays real ART evidence and
+labels the result `art-reference`; it cannot react to input, so both positive
+scenarios remain partial. It is **not** an app execution backend.
+
+### 17.3 Honesty rules enforced by the executor
+
+1. A step whose capability is missing is `unsupported`; it is never skipped and
+   never counted as a pass.
+2. Execution stops at the first non-pass step; later assertions are not
+   evaluated against stale state (`verdict.notes` records the stop).
+3. A scenario that declares `expectation: fail`/`non_pass` can never produce
+   `status: pass`. If it would, the runner emits `status: error`,
+   code `INTERNAL`, and a note — a harness failure, never a successful test.
+4. A `required_fidelity` stronger than the achieved fidelity turns a would-be
+   pass into `unsupported`.
+5. Artifacts are validated against the verdict (`validate_artifacts_dir`); a
+   claimed pass without its frame/tree/step evidence is invalid.
+6. **Frame binding (the advisor rule).** A screenshot and the UI tree it is
+   compared against are one `SessionObservation`, so they always share a
+   `frame_seq`; a backend whose `tree.frame` does not match the observation
+   frame is a defect (`INTERNAL`), never a pass. A non-meaningful
+   (blank/placeholder) frame never satisfies a UI or screenshot assertion. A
+   `capture` with `fresh: true` must advance the frame, and a tap is only
+   accepted when the same completed frame shows the change in **both** the UI
+   tree and the screenshot. §17.5 has the detail.
+
+### 17.4 Plugging in M2/M3 without a schema change
+
+To add a capability later (for example a real UI tree in M3):
+
+1. Implement the backend method (for example `observe`) against the runtime.
+2. Switch the corresponding field in `Capabilities` to `true`.
+3. Return the protocol types already used by the scenario format (`UiTree`,
+   `FrameMeta`, `LogRecord`, `CrashRecord`).
+
+No scenario key changes and no executor rewrite is needed. The reference replay
+backend is the worked example of a second implementation.
+
+### 17.5 The frame-binding rule (screenshot + UI tree + tap)
+
+The one vertical slice that proves input works is
+`launch -> screenshot + UI tree -> tap -> changed screenshot/tree`. The runner
+enforces it so a backend cannot pass by showing the change in only one channel:
+
+* **One observation, one frame.** `observe`, `capture` and `input` return a
+  `SessionObservation` carrying the frame metadata, the UI tree and (when
+  available) the encoded screenshot. `SessionObservation::binding_violation`
+  rejects a tree whose `frame_seq`/`content_hash` differs from the observation
+  frame (`INTERNAL`). There is no way to pair a screenshot with a tree from a
+  different traversal.
+* **Completed frame.** A `launch`, `wait_for`, `tap`, `capture` or
+  `assert_screenshot` establishes the frame that later assertions must describe.
+  A pure `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state` that
+  observes a *different* frame without one of those steps is reported as a
+  binding failure (`ASSERTION_FAILED`), not silently accepted.
+* **Fresh capture.** `capture: {fresh: true}` (the default) must return
+  `frame_seq` greater than the previous completed frame, else `NO_FRESH_FRAME`.
+  An action (`tap`/`type`/`key`/`back`/`rotate`) must also complete a new frame;
+  a stale frame would let an assertion bind to the pre-action traversal.
+* **Tap changes both.** A `tap` is accepted only when `changed_from` reports the
+  UI-tree content hash *and* the screenshot bytes changed relative to the
+  previous observation (each only when the backend advertises that capability).
+  The step records a `state_change` assertion result; when a channel is missing
+  the result says which one, and never claims the other.
+* **Screenshot comparison.** `assert_screenshot` compares the captured frame to
+  the baseline with `crates/acos-verify/src/screenshot.rs`, honouring
+  `tolerance` and `region_masks`. A frame whose size differs from the baseline
+  is an error, never an optimistic pass.

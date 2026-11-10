@@ -1,0 +1,552 @@
+//! Assertion evaluation against one observation or log slice.
+//!
+//! Each evaluator returns an [`AssertionResult`] (for the verdict) plus an
+//! optional [`BackendError`] when the assertion did not hold. The executor turns
+//! the error into the step's status and the failure classification.
+
+use acos_protocol::assertion::{
+    AssertionDiff, AssertionResult, LogAssertion, StateAssertion, TextAssertion,
+    VisibilityAssertion,
+};
+use acos_protocol::ui::UiNode;
+use acos_protocol::ErrorCode;
+use regex::Regex;
+use serde_json::{json, Value};
+
+use crate::backend::{BackendError, CrashRecord, LogRecord, SessionObservation};
+
+/// The outcome of one assertion.
+#[derive(Debug, Clone)]
+pub struct Evaluated {
+    /// The assertion result recorded in the verdict.
+    pub result: AssertionResult,
+    /// The failure, when the assertion did not hold.
+    pub error: Option<BackendError>,
+}
+
+impl Evaluated {
+    pub(crate) fn pass(kind: &str, matched: Vec<String>, message: Option<String>) -> Self {
+        Evaluated {
+            result: AssertionResult {
+                kind: kind.to_string(),
+                passed: true,
+                diff: None,
+                matched_node_ids: matched,
+                message,
+            },
+            error: None,
+        }
+    }
+
+    pub(crate) fn fail(
+        kind: &str,
+        matched: Vec<String>,
+        diff: AssertionDiff,
+        error: BackendError,
+    ) -> Self {
+        Evaluated {
+            result: AssertionResult {
+                kind: kind.to_string(),
+                passed: false,
+                diff: Some(diff),
+                matched_node_ids: matched,
+                message: None,
+            },
+            error: Some(error),
+        }
+    }
+}
+
+/// Find the matching node and its document index.
+fn locate<'a>(observation: &'a SessionObservation, selector: &acos_protocol::Selector) -> Option<(usize, &'a UiNode)> {
+    let index = observation
+        .tree
+        .all_nodes()
+        .into_iter()
+        .position(|node| {
+            let mut probe = selector.clone();
+            probe.index = None;
+            probe.matches_node(node)
+        })?;
+    observation.tree.all_nodes().get(index).map(|node| (index, *node))
+}
+
+fn node_path(index: usize, field: &str) -> String {
+    format!("nodes[{index}].{field}")
+}
+
+/// Build an `ELEMENT_NOT_FOUND` result for a selector that matched nothing.
+pub fn element_missing(kind: &str, selector: &acos_protocol::Selector) -> Evaluated {
+    Evaluated::fail(
+        kind,
+        Vec::new(),
+        AssertionDiff {
+            expected: json!(selector),
+            actual: Value::Null,
+            path: None,
+            detail: Some("selector matched no node".to_string()),
+        },
+        BackendError::Failed {
+            code: ErrorCode::ElementNotFound,
+            detail: format!("selector {selector:?} matched no node"),
+        },
+    )
+}
+
+/// Evaluate a `text` assertion (optional exact bounds).
+pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) -> Evaluated {
+    let Some((index, node)) = locate(observation, &assertion.selector) else {
+        return Evaluated::fail(
+            "text",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({"selector": assertion.selector, "text": assertion.text}),
+                actual: Value::Null,
+                path: None,
+                detail: Some("selector matched no node".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::ElementNotFound,
+                detail: format!("selector {:?} matched no node", assertion.selector),
+            },
+        );
+    };
+    let matched = vec![node.id.clone()];
+    if !assertion.text.matches(&node.text) {
+        return Evaluated::fail(
+            "text",
+            matched,
+            AssertionDiff {
+                expected: json!(assertion.text),
+                actual: json!(node.text),
+                path: Some(node_path(index, "text")),
+                detail: Some(format!(
+                    "text did not match ({})",
+                    assertion.text.describe()
+                )),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: format!(
+                    "expected text {}, got {:?}",
+                    assertion.text.describe(),
+                    node.text
+                ),
+            },
+        );
+    }
+    if let Some(expected_bounds) = assertion.bounds {
+        if node.bounds != expected_bounds {
+            return Evaluated::fail(
+                "text",
+                matched,
+                AssertionDiff {
+                    expected: json!(expected_bounds),
+                    actual: json!(node.bounds),
+                    path: Some(node_path(index, "bounds")),
+                    detail: Some("bounds did not match".to_string()),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::AssertionFailed,
+                    detail: format!(
+                        "expected bounds {expected_bounds}, got {}",
+                        node.bounds
+                    ),
+                },
+            );
+        }
+    }
+    Evaluated::pass("text", matched, None)
+}
+
+/// Evaluate a `visible` assertion (optional exact bounds).
+pub fn eval_visible(assertion: &VisibilityAssertion, observation: &SessionObservation) -> Evaluated {
+    let Some((index, node)) = locate(observation, &assertion.selector) else {
+        return Evaluated::fail(
+            "visible",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({"selector": assertion.selector, "visible": true}),
+                actual: Value::Null,
+                path: None,
+                detail: Some("selector matched no node".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::ElementNotFound,
+                detail: format!("selector {:?} matched no node", assertion.selector),
+            },
+        );
+    };
+    let matched = vec![node.id.clone()];
+    if !node.visible {
+        return Evaluated::fail(
+            "visible",
+            matched,
+            AssertionDiff {
+                expected: json!(true),
+                actual: json!(false),
+                path: Some(node_path(index, "visible")),
+                detail: Some("node is not visible".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "node is present but not visible".to_string(),
+            },
+        );
+    }
+    if let Some(expected_bounds) = assertion.bounds {
+        if node.bounds != expected_bounds {
+            return Evaluated::fail(
+                "visible",
+                matched,
+                AssertionDiff {
+                    expected: json!(expected_bounds),
+                    actual: json!(node.bounds),
+                    path: Some(node_path(index, "bounds")),
+                    detail: Some("bounds did not match".to_string()),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::AssertionFailed,
+                    detail: format!("expected bounds {expected_bounds}, got {}", node.bounds),
+                },
+            );
+        }
+    }
+    Evaluated::pass("visible", matched, None)
+}
+
+/// Evaluate a `not_visible` assertion.
+pub fn eval_not_visible(
+    assertion: &VisibilityAssertion,
+    observation: &SessionObservation,
+) -> Evaluated {
+    let Some((index, node)) = locate(observation, &assertion.selector) else {
+        // Absent is the expected state.
+        return Evaluated::pass("not_visible", Vec::new(), Some("node absent".to_string()));
+    };
+    let matched = vec![node.id.clone()];
+    if node.visible {
+        return Evaluated::fail(
+            "not_visible",
+            matched,
+            AssertionDiff {
+                expected: json!(false),
+                actual: json!(true),
+                path: Some(node_path(index, "visible")),
+                detail: Some("node is visible".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "node is visible but was expected not to be".to_string(),
+            },
+        );
+    }
+    Evaluated::pass("not_visible", matched, None)
+}
+
+/// Evaluate a `state` assertion (all specified flags must match).
+pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) -> Evaluated {
+    let Some((index, node)) = locate(observation, &assertion.selector) else {
+        return Evaluated::fail(
+            "state",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({"selector": assertion.selector}),
+                actual: Value::Null,
+                path: None,
+                detail: Some("selector matched no node".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::ElementNotFound,
+                detail: format!("selector {:?} matched no node", assertion.selector),
+            },
+        );
+    };
+    let matched = vec![node.id.clone()];
+    let checks: [(&str, Option<bool>, bool); 6] = [
+        ("visible", assertion.visible, node.visible),
+        ("enabled", assertion.enabled, node.enabled),
+        ("focused", assertion.focused, node.focused),
+        ("clickable", assertion.clickable, node.clickable),
+        ("scrollable", assertion.scrollable, node.scrollable),
+        ("checked", assertion.checked, node.checked),
+    ];
+    for (field, expected, actual) in checks {
+        if let Some(expected) = expected {
+            if expected != actual {
+                return Evaluated::fail(
+                    "state",
+                    matched,
+                    AssertionDiff {
+                        expected: json!({field: expected}),
+                        actual: json!({field: actual}),
+                        path: Some(node_path(index, field)),
+                        detail: Some(format!("{field} mismatch")),
+                    },
+                    BackendError::Failed {
+                        code: ErrorCode::AssertionFailed,
+                        detail: format!("expected {field}={expected}, got {actual}"),
+                    },
+                );
+            }
+        }
+    }
+    Evaluated::pass("state", matched, None)
+}
+
+/// Evaluate a `log` assertion against a log slice.
+pub fn eval_log(assertion: &LogAssertion, logs: &[LogRecord]) -> Evaluated {
+    let filtered: Vec<&LogRecord> = logs
+        .iter()
+        .filter(|record| {
+            assertion
+                .tag
+                .as_deref()
+                .map(|tag| record.tag == tag)
+                .unwrap_or(true)
+        })
+        .collect();
+    let regexes: Result<Vec<Regex>, _> = assertion
+        .patterns
+        .iter()
+        .map(|pattern| Regex::new(pattern))
+        .collect();
+    let Ok(regexes) = regexes else {
+        return Evaluated::fail(
+            "log",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!(assertion.patterns),
+                actual: json!(filtered
+                    .iter()
+                    .map(|record| format!("{}: {}", record.tag, record.message))
+                    .collect::<Vec<String>>()),
+                path: None,
+                detail: Some("invalid log pattern".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "invalid log pattern".to_string(),
+            },
+        );
+    };
+    let min_matches = assertion.min_matches.max(1);
+
+    let passed = if assertion.ordered {
+        ordered_log_match(&regexes, &filtered, min_matches)
+    } else {
+        regexes.iter().all(|regex| {
+            filtered
+                .iter()
+                .filter(|record| regex.is_match(&record.message))
+                .count()
+                >= min_matches
+        })
+    };
+
+    if passed {
+        return Evaluated::pass("log", Vec::new(), None);
+    }
+    Evaluated::fail(
+        "log",
+        Vec::new(),
+        AssertionDiff {
+            expected: json!({"patterns": assertion.patterns, "ordered": assertion.ordered, "min_matches": min_matches}),
+            actual: json!(filtered
+                .iter()
+                .map(|record| format!("{}: {}", record.tag, record.message))
+                .collect::<Vec<String>>()),
+            path: None,
+            detail: Some(if assertion.ordered {
+                "log patterns did not appear in the required order".to_string()
+            } else {
+                "one or more log patterns did not match".to_string()
+            }),
+        },
+        BackendError::Failed {
+            code: ErrorCode::AssertionFailed,
+            detail: "log assertion did not hold".to_string(),
+        },
+    )
+}
+
+/// Sequential ordered match: each pattern must match `min_matches` times before
+/// the next pattern may match. Extra lines are allowed.
+fn ordered_log_match(regexes: &[Regex], logs: &[&LogRecord], min_matches: usize) -> bool {
+    let mut pattern = 0usize;
+    let mut matched_for_pattern = 0usize;
+    for record in logs {
+        if pattern >= regexes.len() {
+            break;
+        }
+        if regexes[pattern].is_match(&record.message) {
+            matched_for_pattern += 1;
+            if matched_for_pattern >= min_matches {
+                pattern += 1;
+                matched_for_pattern = 0;
+            }
+        }
+    }
+    pattern >= regexes.len()
+}
+
+/// Evaluate an `assert_no_crash` step.
+pub fn eval_no_crash(crashed: Option<&CrashRecord>) -> Evaluated {
+    match crashed {
+        None => Evaluated::pass("no_crash", Vec::new(), Some("no crash recorded".to_string())),
+        Some(record) => Evaluated::fail(
+            "no_crash",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!("no crash"),
+                actual: json!({"exception": record.exception, "message": record.message}),
+                path: None,
+                detail: Some("a crash was recorded".to_string()),
+            },
+            BackendError::Crash {
+                exception: record.exception.clone(),
+                message: record.message.clone(),
+                stack: record.stack.clone(),
+                fatal: record.fatal,
+            },
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acos_protocol::assertion::TextAssertion;
+    use acos_protocol::events::LogLevel;
+    use acos_protocol::ui::{Bounds, Selector, TextMatch, UiNode, UiTree};
+    use acos_protocol::FrameMeta;
+
+    fn observation() -> SessionObservation {
+        let result = UiNode::new("n1", "android.widget.TextView", Bounds::new(42, 612, 175, 663))
+            .with_resource_id("dev.acos.fixtures.helloviews:id/result")
+            .with_text("clicks: 0");
+        let frame = FrameMeta::new(1, "2026-11-10T13:51:14.000Z", "req:launch:0", 1080, 2400, 420, "abc", true);
+        let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![result]);
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "dev.acos.fixtures.helloviews".to_string(),
+            frame,
+            tree,
+            screenshot_png: None,
+            crashed: None,
+        }
+    }
+
+    #[test]
+    fn text_assertion_passes_on_match() {
+        let evaluated = eval_text(
+            &TextAssertion {
+                selector: Selector::by_id("result"),
+                text: TextMatch::exact("clicks: 0"),
+                bounds: Some(Bounds::new(42, 612, 175, 663)),
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(evaluated.result.passed);
+        assert!(evaluated.error.is_none());
+    }
+
+    #[test]
+    fn text_assertion_fails_on_wrong_text() {
+        let evaluated = eval_text(
+            &TextAssertion {
+                selector: Selector::by_id("result"),
+                text: TextMatch::exact("clicks: 9"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.error.as_ref().unwrap().code(),
+            ErrorCode::AssertionFailed
+        );
+    }
+
+    #[test]
+    fn text_assertion_fails_on_wrong_bounds() {
+        let evaluated = eval_text(
+            &TextAssertion {
+                selector: Selector::by_id("result"),
+                text: TextMatch::exact("clicks: 0"),
+                bounds: Some(Bounds::new(0, 0, 1, 1)),
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.result.diff.as_ref().unwrap().path.as_deref(),
+            Some("nodes[0].bounds")
+        );
+    }
+
+    #[test]
+    fn missing_node_is_element_not_found() {
+        let evaluated = eval_visible(
+            &VisibilityAssertion {
+                selector: Selector::by_id("does_not_exist"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.error.as_ref().unwrap().code(),
+            ErrorCode::ElementNotFound
+        );
+    }
+
+    #[test]
+    fn ordered_logs_require_order() {
+        let logs = vec![
+            LogRecord {
+                seq: 1,
+                timestamp_ms: 1,
+                level: LogLevel::Info,
+                tag: "AcosFixture".to_string(),
+                message: "onCreate".to_string(),
+            },
+            LogRecord {
+                seq: 2,
+                timestamp_ms: 2,
+                level: LogLevel::Info,
+                tag: "AcosFixture".to_string(),
+                message: "onStart".to_string(),
+            },
+            LogRecord {
+                seq: 3,
+                timestamp_ms: 3,
+                level: LogLevel::Info,
+                tag: "AcosFixture".to_string(),
+                message: "onResume".to_string(),
+            },
+        ];
+        let good = assert_log(&logs, &["^onCreate$", "^onStart$", "^onResume$"]);
+        assert!(good.result.passed);
+        let bad = assert_log(&logs, &["^onResume$", "^onStart$", "^onCreate$"]);
+        assert!(!bad.result.passed);
+    }
+
+    fn assert_log(logs: &[LogRecord], patterns: &[&str]) -> Evaluated {
+        eval_log(
+            &LogAssertion {
+                tag: Some("AcosFixture".to_string()),
+                patterns: patterns.iter().map(|p| p.to_string()).collect(),
+                ordered: true,
+                since_previous_step: false,
+                timeout_ms: None,
+                min_matches: 1,
+            },
+            logs,
+        )
+    }
+}

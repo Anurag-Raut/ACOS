@@ -69,12 +69,14 @@ fn tools_list_contains_every_protocol_command_plus_meta_tools() {
     assert_eq!(inspect["annotations"]["available"], true);
     assert_eq!(inspect["annotations"]["fidelity"], "static-analysis");
     assert_eq!(inspect["_meta"]["acos"]["command"], "inspect");
+    // `verify` is implemented by the current `acos` binary, so it is available.
     let verify = tool(&list, "acos_verify").unwrap();
-    assert_eq!(verify["annotations"]["available"], false);
+    assert_eq!(verify["annotations"]["available"], true);
+    assert_eq!(verify["annotations"]["fidelity"], "native-runtime");
     assert!(verify["description"]
         .as_str()
         .unwrap()
-        .contains("available=false"));
+        .contains("available=true"));
 }
 
 #[test]
@@ -126,11 +128,10 @@ fn unimplemented_command_returns_unsupported_never_a_pass() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
     let response = client.call_tool(
-        "acos_verify",
+        "acos_run",
         json!({
-            "base": {"request_id": "t_verify"},
-            "scenario": "scenarios/does-not-exist.yaml",
-            "artifacts": "out/does-not-exist",
+            "base": {"request_id": "t_run"},
+            "apk": fixture_path("fixtures/build/apps/hello-views.apk"),
         }),
     );
     assert!(is_error(&response));
@@ -140,6 +141,30 @@ fn unimplemented_command_returns_unsupported_never_a_pass() {
     assert_eq!(envelope["error"]["code"], "UNSUPPORTED_BACKEND");
     assert!(envelope["error"]["hint"].as_str().unwrap().contains("unsupported"));
     assert_eq!(envelope["error"]["details"]["available"], false);
+}
+
+#[test]
+fn verify_returns_the_same_truthful_envelope_as_the_cli() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-03-26");
+    let artifacts = repo_root().join("target/acos-mcp-artifacts/verify-wrong-text");
+    let _ = std::fs::remove_dir_all(&artifacts);
+    let response = client.call_tool(
+        "acos_verify",
+        json!({
+            "base": {"request_id": "t_verify"},
+            "scenario": fixture_path("scenarios/negative/wrong-text.yaml"),
+            "apk": fixture_path("fixtures/build/apps/hello-views.apk"),
+            "reference": fixture_path("fixtures/reference/hello-views/art-api34-x86_64"),
+            "artifacts": artifacts.display().to_string(),
+        }),
+    );
+    assert!(is_error(&response), "unexpected: {response}");
+    let envelope = envelope_of(&response);
+    assert_eq!(envelope["status"], "fail");
+    assert_eq!(envelope["error"]["code"], "ASSERTION_FAILED");
+    assert_eq!(envelope["result"]["verdict"]["verdict"], "fail");
+    let _ = std::fs::remove_dir_all(&artifacts);
 }
 
 #[test]

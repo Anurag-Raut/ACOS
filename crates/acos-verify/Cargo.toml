@@ -1,0 +1,19 @@
+[package]
+name = "acos-verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The ACOS scenario runner: parse a scenario, execute it against a Backend, and write an evidence-backed verdict."
+
+[dependencies]
+acos-apk = { path = "../acos-apk" }
+acos-protocol = { path = "../acos-protocol" }
+acos-runtime = { path = "../acos-runtime" }
+acos-vm = { path = "../acos-vm" }
+png = "0.17"
+regex = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+thiserror = { workspace = true }
