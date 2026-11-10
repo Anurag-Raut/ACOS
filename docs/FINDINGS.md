@@ -147,3 +147,7 @@ for tiny dex only.
 ## 2026-11-10 — Owner directive D5: V1 is not the end; dogfood with real agents
 
 The owner requires that ACOS keep being refined after version 1 as a real product. After V1, "dogfood" waves are mandatory: subagents act as Android-developing agents (write app code, build the APK, run `acos verify`, read evidence, fix, repeat) using every ACOS feature, and the friction they hit becomes first-class backlog. Source: owner message, 2026-11-10. Recorded by the lead.
+
+## 2026-11-10 — Measured dynamic work-lists (research/dynamic-trace/REPORT.md)
+
+Real ART method tracing replaced the static estimates: println needs 21 natives (30 across three console programs), not 152-663. Activity launch of hello-views: 7,018 methods, 379 natives (92 core, 287 android.*), 51 outgoing binder transactions over 19 interfaces, 1,128 classes executed of which 95.4% come from zygote's preloaded-classes (ACOS has no zygote: snapshotting must reproduce that preloaded state). Real ART cold launch p50 466 ms / p95 536 ms, warm 17 ms; idle PSS ~29.7 MiB; first draw ~179 ms into the trace. Consequence: the native and service work for the first Activity is hundreds of functions, not thousands; snapshot/restore (ADR-0010) is confirmed as the main lever because most launch work is class init that zygote does ahead of time on Android.
