@@ -1,0 +1,113 @@
+# ACOS V1 benchmark report
+
+- run: `run-2026-11-10-191849.json` (2026-11-10T19:22:17, commit `fad5534`, 20 samples/metric, `release` profile)
+- host: 32 threads, 60 GiB RAM, loadavg1 3.01, kernel 7.2.11-arch1-1, `rustc 1.90.0 (1159e78c4 2025-09-14)`
+- method: BENCHMARKS.md §2: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric
+- fidelity: `native-runtime` (ACOS executes the code itself). No row here is ART-verified, and no legacy value is an ACOS result.
+
+Metric types are never mixed: RSS, PSS, anon+shmem (`RssAnon+RssShmem`) and private/shared pages are reported in separate labelled columns.
+
+## 1. Measured ACOS metrics
+
+| Metric | Value (p50, p95) | Type | Cold/warm |
+|---|---|---|---|
+| process spawn -> Vm ready | 20.841 / 21.873 ms | wall (parent-measured) | cold |
+| Vm::new (boot classpath loaded) | 16.415 / 17.125 ms | wall | cold |
+| boot -> attachApplication | 95.115 / 97.656 ms | wall | cold |
+| boot counters | classes=332, boot-classpath-classes=40, clinits=82, instructions=149338, natives=76 | counts | cold |
+| - stage `open-apk` | 0.061 / 0.066 ms | wall | cold |
+| - stage `load-app-dex` | 0.015 / 0.017 ms | wall | cold |
+| - stage `prepare-main-looper` | 73.495 / 76.127 ms | wall | cold |
+| - stage `instantiate-activity-thread` | 11.303 / 11.683 ms | wall | cold |
+| - stage `attach-application` | 10.213 / 10.986 ms | wall | cold |
+| attach -> bindApplication delivered | 3.76 / 3.9 ms | wall | cold |
+| bindApplication -> parked/blocked | 27.703 / 28.642 ms | wall | cold |
+| first blocker after bind | `uncaught Ljava/util/MissingResourceException;: Could not find the bundle android/icu/impl/data/icudt72b/likelySubtags` | structured | - |
+| fixed idle core (Vm only, zero tasks): PSS | 30637.0 / 30730.0 KiB | PSS | settled |
+| fixed idle core (Vm only, zero tasks): RSS | 34472.0 / 34620.0 KiB | RSS | settled |
+| fixed idle core (Vm only, zero tasks): anon+shmem | 26780.0 / 26780.0 KiB | anon+shmem | settled |
+| fixed idle core (Vm only, zero tasks): private / shared | 29420.0 / 5056.0 KiB | private/shared pages | settled |
+| fixed idle core (framework booted): PSS | 163983.0 / 164140.0 KiB | PSS | settled |
+| fixed idle core (framework booted): RSS | 167864.0 / 168052.0 KiB | RSS | settled |
+| fixed idle core (framework booted): anon+shmem | 158744.0 / 158756.0 KiB | anon+shmem | settled |
+| fixed idle core (framework booted): private / shared | 162720.0 / 5144.0 KiB | private/shared pages | settled |
+| N=1 sessions: PSS / anon+shmem / private / shared | 164098.0 / 158744.0 / 162872.0 / 5084.0 KiB (p50) | mixed, labelled | fresh process per N |
+| N=2 sessions: PSS / anon+shmem / private / shared | 321216.0 / 315936.0 / 319972.0 / 5144.0 KiB (p50) | mixed, labelled | fresh process per N |
+| N=5 sessions: PSS / anon+shmem / private / shared | 792803.0 / 787564.0 / 791556.0 / 5076.0 KiB (p50) | mixed, labelled | fresh process per N |
+| N=10 sessions: PSS / anon+shmem / private / shared | 1578868.0 / 1573576.0 / 1577640.0 / 5124.0 KiB (p50) | mixed, labelled | fresh process per N |
+| incremental N=1 | 155.023 MiB/session | anon+shmem | fresh process |
+| incremental N=2 | 154.266 MiB/session | anon+shmem | fresh process |
+| incremental N=5 | 153.821 MiB/session | anon+shmem | fresh process |
+| incremental N=10 | 153.67 MiB/session | anon+shmem | fresh process |
+| marginal N=1->N=2 | 153.508 MiB/session | anon+shmem | fresh process |
+| marginal N=2->N=5 | 153.525 MiB/session | anon+shmem | fresh process |
+| marginal N=5->N=10 | 153.518 MiB/session | anon+shmem | fresh process |
+| idle CPU, parked/blocked | 0.0 / 0.0 ticks over 5 s (0.0 / 0.0 % of one core), zero_ticks=True | CPU window | parked |
+| interpreter `02_int_arith` | 22.823 / 22.988 ms, 62380 insns, 2733215.513 insn/s | wall + VM counters | cold |
+| interpreter `05_branches_loops` | 22.663 / 22.905 ms, 49732 insns, 2194433.943 insn/s | wall + VM counters | cold |
+| interpreter `09_strings` | 24.559 / 25.26 ms, 143608 insns, 5847468.169 insn/s | wall + VM counters | cold |
+
+## 2. ACOS vs legacy, every row of BENCHMARKS.md
+
+Verdicts: `better`/`worse` are computed only for the pairs whose metric type and state match (anon+shmem vs anon+shmem, MiB vs MiB). Everything else is `not-measurable` (no engine capability yet) or `no-legacy-baseline` (legacy never published it). Nothing is estimated.
+
+| Row | Metric | Legacy (ACVM, reference only) | Legacy type/state | ACOS | Verdict | Note |
+|---|---|---|---|---|---|---|
+| M1 | Fixed idle core memory | 206.0 MiB (W1) / 303.9 MiB (v9); reads span 259-322 MiB | anon+shmem, settled 60 s | 155.0 MiB (booted app process), 26.2 MiB (Vm only); PSS 160.1 MiB | `better (-24.8%)` | ACOS's settled state is a booted framework app process (attach handshake done); the Vm-only column is an even leaner state (boot-classpath DEX is parsed lazily, 40 classes at Vm-ready) |
+| M2 | Incremental memory per session at N=5 | 78.7 MiB (v9) / 33.2 MiB (W2 opt-in) | anon+shmem, warm | 153.821 MiB/session at N=5 | `worse (+95.5%)` | in-process sequential sessions; private pages only (no DEX mmap, nothing shareable) |
+| M3 | Cold start -> first correct frame | 3.620 s (v12) | wall, cold | **not measured** | `not-measurable` | needs acos-render bound to the graphics natives |
+| M4 | Worker create -> correct frame | 1.251-1.343 s p50 | wall, warm | **not measured** | `not-measurable` | needs a worker-create path + renderer |
+| M5 | Fresh screenshot | 0.066-0.067 s p50 | wall, warm | **not measured** | `not-measurable` | needs acos-render capture + frame sequencing |
+| M6 | Reset-to-ready | 110.3 ms cmd / 748.1 ms -> frame | wall, warm | **not measured** | `not-measurable` | no reset path (ResetRequest is protocol-only) |
+| M7 | UI tree with text | 538-768 ms one-shot / 4.1 ms persistent / 14-87 ms structure | wall, warm | **not measured** | `not-measurable` | UI-tree bridge not wired |
+| M8 | Action-to-state latency | not cleanly published (U1 step-5 747 ms incl. tree) | wall, warm | **not measured** | `not-measurable` | needs input injection + UI tree |
+| M9 | Concurrent workloads (N) | N=5 scorecard, N=10 measured; 10 extra displays | count + memory | N=10 measured for memory: 1536.7 MiB anon+shmem at N=10, marginal 153.518 MiB/session (N=5->10) | `measured` | memory is measured; independent state/input at N is NOT (process-global Binder transport) |
+| M10 | End-to-end verify wall time | install-bound dev loop ~19 s, 74-81 % adb install (no direct equivalent) | wall | **not measured** | `not-measurable` | needs launch/assert/evidence/reset/cleanup |
+| M11 | Verified tasks / GiB-minute | not published as such | ratio | **not measured** | `not-measurable` | needs the T01-T12 suite + job-cgroup accounting |
+| L-idle-core | Legacy bare core (P2c, stripped) | 278 MiB | anon, settled | 26.2 MiB (Vm only, anon+shmem) | `better (-90.6%)` | closest state = Vm ready with zero tasks; ACOS also holds the boot classpath in the heap |
+| L-session-n1 | Per-session N=1 (v9) | 130.3 MiB | anon+shmem, warm | 155.023 MiB/session at N=1 | `worse (+19.0%)` | in-process session |
+| L-marginal | Marginal N=5->10 (v5) | ~99.3 MiB workset | workset, warm | 153.518 MiB/session (N=5->10) | `worse (+54.6%)` | anon+shmem, not cgroup workset |
+| L-cold-first-shot | Cold core->first shot (v12) | 3.620 s | wall, cold | **not measured** | `not-measurable` | no renderer |
+| L-guest-boot | Guest boot `boot_completed` (v10) | 1.517 s | wall, cold | 0.095 s attach handshake incl. Vm init (no guest kernel/zygote to boot) | `measured` | not the same thing: ACOS has no guest boot; the attach handshake is the analogous gate |
+| L-worker-frame | Worker create -> frame | 1.251-1.343 s p50 | wall, warm | **not measured** | `not-measurable` | no worker path |
+| L-screenshot | Fresh screenshot | 0.066-0.067 s p50 | wall, warm | **not measured** | `not-measurable` | no renderer |
+| L-resume-shot | Resume->shot | 0.207-0.215 s | wall, warm | **not measured** | `not-measurable` | no renderer |
+| L-reset | `reset --app` cmd / -> frame | 110.3 ms / 748.1 ms p50 | wall, warm | **not measured** | `not-measurable` | no reset path |
+| L-user-reset | Whole-user reset + observe | 48-50 s | wall, warm | **not measured** | `not-measurable` | no reset path |
+| L-ui-tree | UI tree structure/text | 14-87 ms / 538-768 ms / 4.1 ms | wall, warm | **not measured** | `not-measurable` | UI-tree bridge not wired |
+| L-idle-cpu | Parked idle CPU | 3.86-5.94 % (legacy called it unreliable) | CPU window | 0.0 % of one core, 0.0 ticks over 5 s | `measured` | ACOS: the interpreter thread is parked/stopped, so the process sleeps |
+| L-emulator-boot | Stock emulator cold boot | 25.2 s / ~3300 MiB | PSS, cold | **not measured** | `not-measurable` | no emulator/guest in the ACOS path (out of scope) |
+| L-renderer | Host renderer R1 | 6.27 s p50, 1.26 GiB RSS | wall/RSS, host-only | **not measured** | `not-measurable` | no renderer |
+| L-chrome | Chrome reference | core 340 MiB PSS; shot 61 ms; AX 18 ms | PSS, warm | **not measured** | `not-measurable` | reference only |
+| A-process-start | Process spawn -> Vm ready (ACOS-native) | no legacy metric | - | 20.841 ms p50 / 20.841 ms (p95 21.873) | `no-legacy-baseline` | legacy published only whole-job cold start |
+| A-attach-bind | attach -> bindApplication delivered (ACOS-native) | no legacy metric | - | 3.76 ms | `no-legacy-baseline` | the legacy engine never published this stage split |
+
+## 3. Worse than legacy (explicit, with plan)
+
+| Row | Metric | Legacy | ACOS | Delta | Plan |
+|---|---|---|---|---|---|
+| M2 | Incremental memory per session at N=5 | 78.7 MiB (v9) / 33.2 MiB (W2 opt-in) | 153.821 MiB/session at N=5 | worse (+95.5%) | in-process sequential sessions; private pages only (no DEX mmap, nothing shareable) |
+| L-session-n1 | Per-session N=1 (v9) | 130.3 MiB | 155.023 MiB/session at N=1 | worse (+19.0%) | in-process session |
+| L-marginal | Marginal N=5->10 (v5) | ~99.3 MiB workset | 153.518 MiB/session (N=5->10) | worse (+54.6%) | anon+shmem, not cgroup workset |
+
+## 4. not_yet_measurable (dependency named, never guessed)
+
+| Metric | BENCHMARKS.md row | Blocking dependency |
+|---|---|---|
+| cold start -> first correct frame | M3 | acos-render is not bound to the graphics natives; no frame exists to be correct |
+| worker create -> correct frame | M4 | no worker-create path + renderer |
+| fresh screenshot | M5 | acos-render capture + request/cause frame sequencing |
+| reset -> ready | M6 | no reset implementation (ResetRequest is protocol-only) |
+| UI tree with text | M7 | UI-tree bridge not wired (UiNode/UiTree are protocol-only) |
+| action -> state latency | M8 | input injection + UI tree |
+| end-to-end verify | M10 | launch (ClientTransaction, T-23) + assert + evidence + reset |
+| verified tasks / GiB-minute | M11 | T01-T12 suite + job-cgroup accounting |
+| N=20 concurrent workers | V1 §5.1 | process-global Binder transport: sessions are not independently usable |
+| per-session correctness / isolation at N | M9 (correctness half) | same as above; only memory at N is measurable today |
+
+## 5. Raw artifacts
+
+- run document (envelopes + host/method record): `run-2026-11-10-191849.json`
+- per-metric envelopes are embedded in `envelopes`; every one is a validated `acos-protocol` envelope (`ok: true` only with `status: pass`).
+- regression gate: `tools/bench-acos.sh --check` (baseline `results/bench/baseline.json`).
+

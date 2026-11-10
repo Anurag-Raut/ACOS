@@ -1,0 +1,107 @@
+{
+  "schema": "acos-bench-baseline/v1",
+  "created": "2026-11-10T19:22:17",
+  "commit": "fad5534",
+  "source_run": "run-2026-11-10-191849.json",
+  "note": "Committed regression baseline: p50 of every gated row from the source run. The gate fails when a fresh p50 exceeds value*(1+max(tolerance, measured spread)). Update only with a recorded run and an explicit note in BENCHMARKS.md.",
+  "rows": [
+    {
+      "id": "bind-app.attach_to_bind_ms.p50",
+      "path": "",
+      "value": 3.76,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "boot-attach.boot_ms.p50",
+      "path": "",
+      "value": 95.115,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "boot-attach.vm_ready_ms.p50",
+      "path": "",
+      "value": 16.415,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "idle-cpu.cpu_ticks.p50",
+      "path": "",
+      "value": 0.0,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "idle-rss.booted.anon_plus_shmem_kib.p50",
+      "path": "",
+      "value": 158744.0,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "idle-rss.booted.pss_kib.p50",
+      "path": "",
+      "value": 163983.0,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "idle-rss.vm.anon_plus_shmem_kib.p50",
+      "path": "",
+      "value": 26780.0,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "interpreter.02_int_arith.wall_ms.p50",
+      "path": "",
+      "value": 22.823,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "interpreter.05_branches_loops.wall_ms.p50",
+      "path": "",
+      "value": 22.663,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "interpreter.09_strings.wall_ms.p50",
+      "path": "",
+      "value": 24.559,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "process-start.wall_ms.p50",
+      "path": "",
+      "value": 20.841,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "sessions.incremental_n5_mib.p50",
+      "path": "",
+      "value": 153.821,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "sessions.marginal_n5_to_n10_mib.p50",
+      "path": "",
+      "value": 153.518,
+      "direction": "lower",
+      "tolerance": 0.25
+    },
+    {
+      "id": "sessions.n10.anon_plus_shmem_kib.p50",
+      "path": "",
+      "value": 1573576.0,
+      "direction": "lower",
+      "tolerance": 0.25
+    }
+  ]
+}

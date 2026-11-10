@@ -3,6 +3,7 @@
 //! Implements exactly one command so far: `acos inspect <apk> [--json]`.
 //! Unimplemented subcommands deliberately do not exist yet.
 
+mod bench;
 mod verify;
 
 use std::path::PathBuf;
@@ -33,6 +34,8 @@ enum Command {
     RunDex(RunDexArgs),
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
+    /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
+    Bench(bench::BenchArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -113,6 +116,7 @@ fn main() -> ExitCode {
         Command::Inspect(args) => inspect(args),
         Command::RunDex(args) => run_dex(args),
         Command::Verify(args) => verify::run(args),
+        Command::Bench(args) => bench::run(args),
     }
 }
 

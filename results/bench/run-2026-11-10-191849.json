@@ -1,0 +1,1767 @@
+{
+  "schema": "acos-bench-run/v1",
+  "timestamp": "2026-11-10T19:22:17",
+  "commit": "fad5534",
+  "samples_per_metric": 20,
+  "profile": "release",
+  "methodology": "BENCHMARKS.md \u00a72: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric",
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "threads": 32,
+    "kernel": "7.2.11-arch1-1",
+    "ram_total_kib": 63394528,
+    "ram_available_at_start_kib": 45546168,
+    "zram_swap_total_kib": 20971516,
+    "loadavg1": "3.01",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "fixture": {
+    "path": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+    "sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+    "package": "com.example.helloviews",
+    "api_level": 34,
+    "abi": "x86_64"
+  },
+  "metric_status": {
+    "process-start": "pass",
+    "boot-attach": "pass",
+    "bind-app": "pass",
+    "idle-rss": "pass",
+    "sessions": "pass",
+    "idle-cpu": "pass",
+    "interpreter": "pass"
+  },
+  "gates": {
+    "process-start.wall_ms.p50": {
+      "p50": 20.841,
+      "p95": 21.873
+    },
+    "boot-attach.boot_ms.p50": {
+      "p50": 95.115,
+      "p95": 97.656
+    },
+    "boot-attach.vm_ready_ms.p50": {
+      "p50": 16.415,
+      "p95": 17.125
+    },
+    "bind-app.attach_to_bind_ms.p50": {
+      "p50": 3.76,
+      "p95": 3.9
+    },
+    "idle-rss.vm.anon_plus_shmem_kib.p50": {
+      "p50": 26780.0,
+      "p95": 26780.0
+    },
+    "idle-rss.booted.anon_plus_shmem_kib.p50": {
+      "p50": 158744.0,
+      "p95": 158756.0
+    },
+    "idle-rss.booted.pss_kib.p50": {
+      "p50": 163983.0,
+      "p95": 164140.0
+    },
+    "sessions.n10.anon_plus_shmem_kib.p50": {
+      "p50": 1573576.0,
+      "p95": 1573628.0
+    },
+    "sessions.marginal_n5_to_n10_mib.p50": {
+      "p50": 153.518
+    },
+    "sessions.incremental_n5_mib.p50": {
+      "p50": 153.821
+    },
+    "idle-cpu.cpu_ticks.p50": {
+      "p50": 0.0,
+      "p95": 0.0
+    },
+    "interpreter.02_int_arith.wall_ms.p50": {
+      "p50": 22.823,
+      "p95": 22.988
+    },
+    "interpreter.05_branches_loops.wall_ms.p50": {
+      "p50": 22.663,
+      "p95": 22.905
+    },
+    "interpreter.09_strings.wall_ms.p50": {
+      "p50": 24.559,
+      "p95": 25.26
+    }
+  },
+  "envelopes": {
+    "process-start": {
+      "request_id": "bench_46d84_18e6b3324bf38036",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "classes_loaded": 40,
+        "cold_or_warm": "cold (fresh process per sample, boot classpath on page cache)",
+        "corelib": "real",
+        "definition": "process spawn -> Vm ready (boot classpath loaded), wall clock",
+        "in_process_ms": {
+          "max": 18.608,
+          "mean": 17.426,
+          "min": 16.4,
+          "p50": 17.398,
+          "p95": 18.521,
+          "raw": [
+            16.4,
+            16.6,
+            16.708,
+            16.767,
+            17.135,
+            17.153,
+            17.175,
+            17.323,
+            17.352,
+            17.398,
+            17.446,
+            17.464,
+            17.512,
+            17.551,
+            17.636,
+            17.65,
+            17.983,
+            18.141,
+            18.521,
+            18.608
+          ],
+          "samples": 20
+        },
+        "metric": "process-start",
+        "note": "wall is parent-measured spawn->first stdout line (includes exec, dynamic linking, rust init); in_process_ms excludes exec",
+        "samples": 20,
+        "type": "wall",
+        "unit": "ms",
+        "wall_ms": {
+          "max": 21.923,
+          "mean": 20.847,
+          "min": 19.714,
+          "p50": 20.841,
+          "p95": 21.873,
+          "raw": [
+            19.714,
+            19.97,
+            20.048,
+            20.28,
+            20.491,
+            20.519,
+            20.608,
+            20.672,
+            20.711,
+            20.841,
+            20.956,
+            20.968,
+            21.018,
+            21.032,
+            21.067,
+            21.127,
+            21.359,
+            21.756,
+            21.873,
+            21.923
+          ],
+          "samples": 20
+        }
+      },
+      "metrics": {
+        "wall_ms": 477
+      }
+    },
+    "boot-attach": {
+      "request_id": "bench_46e8e_18e6b3330cf80389",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "apk_sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+        "boot_ms": {
+          "max": 100.652,
+          "mean": 95.063,
+          "min": 91.753,
+          "p50": 95.115,
+          "p95": 97.656,
+          "raw": [
+            91.753,
+            92.355,
+            92.425,
+            92.627,
+            93.719,
+            93.83,
+            94.697,
+            94.792,
+            95.033,
+            95.115,
+            95.12,
+            95.178,
+            95.609,
+            95.631,
+            95.901,
+            96.088,
+            96.247,
+            96.827,
+            97.656,
+            100.652
+          ],
+          "samples": 20
+        },
+        "cold_or_warm": "cold per sample (fresh Vm, fresh boot classpath parse)",
+        "corelib": "real",
+        "counters": {
+          "boot_classpath_classes": 40,
+          "classes_loaded": 332,
+          "clinits": 82,
+          "instructions": 149338,
+          "natives_invoked": 76
+        },
+        "definition": "Vm::new + boot_app_process stages through IActivityManager.attachApplication",
+        "fixture": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+        "metric": "boot-attach",
+        "note": "stages mirror acos_runtime::boot::boot_app_process exactly (same public calls, same order); the probe fails loudly if the attach handshake is not recorded",
+        "samples": 20,
+        "stages": [
+          {
+            "counters_delta": {
+              "classes": 40,
+              "clinits": 0,
+              "instructions": 0,
+              "natives": 0
+            },
+            "counters_total": {
+              "classes": 40,
+              "clinits": 0,
+              "instructions": 0,
+              "natives": 0
+            },
+            "ms": {
+              "max": 0.071,
+              "mean": 0.061,
+              "min": 0.058,
+              "p50": 0.061,
+              "p95": 0.066,
+              "raw": [
+                0.058,
+                0.058,
+                0.059,
+                0.059,
+                0.059,
+                0.06,
+                0.06,
+                0.06,
+                0.06,
+                0.061,
+                0.061,
+                0.061,
+                0.062,
+                0.062,
+                0.062,
+                0.062,
+                0.063,
+                0.065,
+                0.066,
+                0.071
+              ],
+              "samples": 20
+            },
+            "stage": "open-apk"
+          },
+          {
+            "counters_delta": {
+              "classes": 0,
+              "clinits": 0,
+              "instructions": 0,
+              "natives": 0
+            },
+            "counters_total": {
+              "classes": 40,
+              "clinits": 0,
+              "instructions": 0,
+              "natives": 0
+            },
+            "ms": {
+              "max": 0.022,
+              "mean": 0.016,
+              "min": 0.014,
+              "p50": 0.015,
+              "p95": 0.017,
+              "raw": [
+                0.014,
+                0.014,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.015,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.017,
+                0.022
+              ],
+              "samples": 20
+            },
+            "stage": "load-app-dex"
+          },
+          {
+            "counters_delta": {
+              "classes": 25,
+              "clinits": 6,
+              "instructions": 243,
+              "natives": 5
+            },
+            "counters_total": {
+              "classes": 65,
+              "clinits": 6,
+              "instructions": 243,
+              "natives": 5
+            },
+            "ms": {
+              "max": 77.665,
+              "mean": 73.324,
+              "min": 70.13,
+              "p50": 73.495,
+              "p95": 76.127,
+              "raw": [
+                70.13,
+                70.727,
+                70.942,
+                71.006,
+                71.199,
+                72.064,
+                72.464,
+                73.24,
+                73.417,
+                73.495,
+                73.609,
+                73.81,
+                73.823,
+                74.225,
+                74.442,
+                74.675,
+                74.713,
+                74.714,
+                76.127,
+                77.665
+              ],
+              "samples": 20
+            },
+            "stage": "prepare-main-looper"
+          },
+          {
+            "counters_delta": {
+              "classes": 184,
+              "clinits": 50,
+              "instructions": 56553,
+              "natives": 54
+            },
+            "counters_total": {
+              "classes": 249,
+              "clinits": 56,
+              "instructions": 56796,
+              "natives": 59
+            },
+            "ms": {
+              "max": 11.851,
+              "mean": 11.324,
+              "min": 11.005,
+              "p50": 11.303,
+              "p95": 11.683,
+              "raw": [
+                11.005,
+                11.033,
+                11.059,
+                11.062,
+                11.072,
+                11.095,
+                11.143,
+                11.225,
+                11.28,
+                11.303,
+                11.304,
+                11.319,
+                11.393,
+                11.45,
+                11.463,
+                11.508,
+                11.585,
+                11.65,
+                11.683,
+                11.851
+              ],
+              "samples": 20
+            },
+            "stage": "instantiate-activity-thread"
+          },
+          {
+            "counters_delta": {
+              "classes": 83,
+              "clinits": 26,
+              "instructions": 92542,
+              "natives": 17
+            },
+            "counters_total": {
+              "classes": 332,
+              "clinits": 82,
+              "instructions": 149338,
+              "natives": 76
+            },
+            "ms": {
+              "max": 11.05,
+              "mean": 10.334,
+              "min": 10.072,
+              "p50": 10.213,
+              "p95": 10.986,
+              "raw": [
+                10.072,
+                10.077,
+                10.087,
+                10.107,
+                10.124,
+                10.154,
+                10.158,
+                10.169,
+                10.202,
+                10.213,
+                10.227,
+                10.247,
+                10.3,
+                10.343,
+                10.469,
+                10.489,
+                10.525,
+                10.672,
+                10.986,
+                11.05
+              ],
+              "samples": 20
+            },
+            "stage": "attach-application"
+          }
+        ],
+        "type": "wall",
+        "unit": "ms",
+        "vm_ready_ms": {
+          "max": 17.188,
+          "mean": 16.434,
+          "min": 15.849,
+          "p50": 16.415,
+          "p95": 17.125,
+          "raw": [
+            15.849,
+            15.883,
+            15.955,
+            15.995,
+            16.13,
+            16.247,
+            16.283,
+            16.32,
+            16.334,
+            16.415,
+            16.419,
+            16.462,
+            16.503,
+            16.548,
+            16.663,
+            16.678,
+            16.764,
+            16.923,
+            17.125,
+            17.188
+          ],
+          "samples": 20
+        }
+      },
+      "metrics": {
+        "wall_ms": 2913
+      }
+    },
+    "bind-app": {
+      "request_id": "bench_4702a_18e6b3340003eea8",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "apk_sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+        "attach_to_bind_ms": {
+          "max": 4.255,
+          "mean": 3.801,
+          "min": 3.72,
+          "p50": 3.76,
+          "p95": 3.9,
+          "raw": [
+            3.72,
+            3.726,
+            3.731,
+            3.736,
+            3.744,
+            3.745,
+            3.747,
+            3.751,
+            3.759,
+            3.76,
+            3.764,
+            3.778,
+            3.79,
+            3.798,
+            3.802,
+            3.804,
+            3.815,
+            3.897,
+            3.9,
+            4.255
+          ],
+          "samples": 20
+        },
+        "bind_delivered": true,
+        "bind_phase_ms": {
+          "max": 32.327,
+          "mean": 28.004,
+          "min": 27.481,
+          "p50": 27.703,
+          "p95": 28.642,
+          "raw": [
+            27.481,
+            27.524,
+            27.546,
+            27.551,
+            27.597,
+            27.675,
+            27.692,
+            27.702,
+            27.703,
+            27.703,
+            27.707,
+            27.729,
+            27.804,
+            27.829,
+            27.928,
+            27.937,
+            27.988,
+            28.013,
+            28.642,
+            32.327
+          ],
+          "samples": 20
+        },
+        "boot_ms": {
+          "max": 105.019,
+          "mean": 95.792,
+          "min": 91.668,
+          "p50": 95.711,
+          "p95": 98.719,
+          "raw": [
+            91.668,
+            92.83,
+            93.39,
+            93.704,
+            93.882,
+            94.128,
+            94.263,
+            94.698,
+            94.832,
+            95.711,
+            95.864,
+            96.066,
+            96.293,
+            96.355,
+            96.586,
+            96.804,
+            97.067,
+            97.967,
+            98.719,
+            105.019
+          ],
+          "samples": 20
+        },
+        "cold_or_warm": "cold per sample (fresh Vm + fresh boot)",
+        "counters": {
+          "boot_classpath_classes": 40,
+          "classes_loaded": 589,
+          "clinits": 166,
+          "instructions": 497328,
+          "natives_invoked": 119
+        },
+        "definition": "attachApplication received -> IApplicationThread.bindApplication delivered, and the main-looper phase that follows it",
+        "first_blocker": "uncaught Ljava/util/MissingResourceException;: Could not find the bundle android/icu/impl/data/icudt72b/likelySubtags",
+        "fixture": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+        "metric": "bind-app",
+        "note": "the phase after bindApplication is expected to stop at the first unwired native (ICU regex / font config); the structured blocker is reported, never a stub",
+        "samples": 20,
+        "type": "wall",
+        "unit": "ms"
+      },
+      "metrics": {
+        "wall_ms": 3740
+      }
+    },
+    "idle-rss": {
+      "request_id": "bench_470ec_18e6b33e12b1b6c0",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "cold_or_warm": "cold per sample (fresh process), settled 1000 ms",
+        "corelib": "real",
+        "definition": "settled memory of the runtime core with zero tasks",
+        "fixture": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+        "metric": "idle-rss",
+        "never": "PSS and cgroup memory are never summed (BENCHMARKS.md \u00a71)",
+        "type": "RSS + PSS + anon+shmem (RssAnon+RssShmem) + private/shared, each labelled",
+        "unit": "KiB (smaps_rollup / status), MiB convenience columns",
+        "variants": {
+          "booted": {
+            "anon_plus_shmem_kib": {
+              "max": 158760.0,
+              "mean": 158746.4,
+              "min": 158732.0,
+              "p50": 158744.0,
+              "p95": 158756.0,
+              "raw": [
+                158732.0,
+                158736.0,
+                158740.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158744.0,
+                158748.0,
+                158752.0,
+                158752.0,
+                158752.0,
+                158752.0,
+                158752.0,
+                158756.0,
+                158760.0
+              ],
+              "samples": 20
+            },
+            "miB_anon_plus_shmem_p50": 155.023,
+            "miB_pss_p50": 160.14,
+            "private_kib": {
+              "max": 162860.0,
+              "mean": 162730.4,
+              "min": 162556.0,
+              "p50": 162720.0,
+              "p95": 162852.0,
+              "raw": [
+                162556.0,
+                162652.0,
+                162668.0,
+                162676.0,
+                162676.0,
+                162680.0,
+                162696.0,
+                162700.0,
+                162704.0,
+                162720.0,
+                162724.0,
+                162740.0,
+                162744.0,
+                162748.0,
+                162756.0,
+                162808.0,
+                162820.0,
+                162828.0,
+                162852.0,
+                162860.0
+              ],
+              "samples": 20
+            },
+            "pss_kib": {
+              "max": 164149.0,
+              "mean": 163997.65,
+              "min": 163809.0,
+              "p50": 163983.0,
+              "p95": 164140.0,
+              "raw": [
+                163809.0,
+                163909.0,
+                163932.0,
+                163941.0,
+                163955.0,
+                163971.0,
+                163975.0,
+                163979.0,
+                163982.0,
+                163983.0,
+                163984.0,
+                163998.0,
+                164006.0,
+                164009.0,
+                164015.0,
+                164018.0,
+                164093.0,
+                164105.0,
+                164140.0,
+                164149.0
+              ],
+              "samples": 20
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 158744.0,
+              "anonymous_kib": 158744.0,
+              "private_clean_kib": 3960.0,
+              "private_dirty_kib": 158744.0,
+              "private_kib": 162704.0,
+              "pss_anon_kib": 158744.0,
+              "pss_file_kib": 5254.0,
+              "pss_kib": 163998.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 158744.0,
+              "rss_file_kib": 9180.0,
+              "rss_kib": 167924.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 5220.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 5220.0,
+              "swap_kib": 0.0
+            },
+            "rss_kib": {
+              "max": 168096.0,
+              "mean": 167876.8,
+              "min": 167616.0,
+              "p50": 167864.0,
+              "p95": 168052.0,
+              "raw": [
+                167616.0,
+                167772.0,
+                167780.0,
+                167824.0,
+                167824.0,
+                167828.0,
+                167848.0,
+                167848.0,
+                167852.0,
+                167864.0,
+                167876.0,
+                167888.0,
+                167908.0,
+                167924.0,
+                167932.0,
+                167932.0,
+                167932.0,
+                167940.0,
+                168052.0,
+                168096.0
+              ],
+              "samples": 20
+            },
+            "samples": 20,
+            "shared_kib": {
+              "max": 5280.0,
+              "mean": 5146.4,
+              "min": 4964.0,
+              "p50": 5144.0,
+              "p95": 5256.0,
+              "raw": [
+                4964.0,
+                5060.0,
+                5076.0,
+                5080.0,
+                5100.0,
+                5108.0,
+                5120.0,
+                5128.0,
+                5128.0,
+                5144.0,
+                5144.0,
+                5152.0,
+                5172.0,
+                5176.0,
+                5184.0,
+                5200.0,
+                5220.0,
+                5236.0,
+                5256.0,
+                5280.0
+              ],
+              "samples": 20
+            },
+            "state": "runtime core + booted framework app process (attach handshake done)"
+          },
+          "vm": {
+            "anon_plus_shmem_kib": {
+              "max": 26784.0,
+              "mean": 26779.4,
+              "min": 26776.0,
+              "p50": 26780.0,
+              "p95": 26780.0,
+              "raw": [
+                26776.0,
+                26776.0,
+                26776.0,
+                26776.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26780.0,
+                26784.0
+              ],
+              "samples": 20
+            },
+            "miB_anon_plus_shmem_p50": 26.152,
+            "miB_pss_p50": 29.919,
+            "private_kib": {
+              "max": 29516.0,
+              "mean": 29414.6,
+              "min": 29304.0,
+              "p50": 29420.0,
+              "p95": 29516.0,
+              "raw": [
+                29304.0,
+                29308.0,
+                29308.0,
+                29308.0,
+                29368.0,
+                29404.0,
+                29408.0,
+                29412.0,
+                29420.0,
+                29420.0,
+                29420.0,
+                29424.0,
+                29428.0,
+                29428.0,
+                29452.0,
+                29468.0,
+                29488.0,
+                29492.0,
+                29516.0,
+                29516.0
+              ],
+              "samples": 20
+            },
+            "pss_kib": {
+              "max": 30772.0,
+              "mean": 30639.0,
+              "min": 30555.0,
+              "p50": 30637.0,
+              "p95": 30730.0,
+              "raw": [
+                30555.0,
+                30556.0,
+                30559.0,
+                30560.0,
+                30560.0,
+                30605.0,
+                30619.0,
+                30620.0,
+                30635.0,
+                30637.0,
+                30640.0,
+                30650.0,
+                30654.0,
+                30663.0,
+                30680.0,
+                30681.0,
+                30698.0,
+                30706.0,
+                30730.0,
+                30772.0
+              ],
+              "samples": 20
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 26780.0,
+              "anonymous_kib": 26780.0,
+              "private_clean_kib": 2640.0,
+              "private_dirty_kib": 26780.0,
+              "private_kib": 29420.0,
+              "pss_anon_kib": 26780.0,
+              "pss_file_kib": 3926.0,
+              "pss_kib": 30706.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 26780.0,
+              "rss_file_kib": 7840.0,
+              "rss_kib": 34620.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 5200.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 5200.0,
+              "swap_kib": 0.0
+            },
+            "rss_kib": {
+              "max": 34660.0,
+              "mean": 34483.2,
+              "min": 34292.0,
+              "p50": 34472.0,
+              "p95": 34620.0,
+              "raw": [
+                34292.0,
+                34356.0,
+                34364.0,
+                34388.0,
+                34444.0,
+                34448.0,
+                34452.0,
+                34460.0,
+                34468.0,
+                34472.0,
+                34476.0,
+                34476.0,
+                34476.0,
+                34516.0,
+                34548.0,
+                34560.0,
+                34592.0,
+                34596.0,
+                34620.0,
+                34660.0
+              ],
+              "samples": 20
+            },
+            "samples": 20,
+            "shared_kib": {
+              "max": 5200.0,
+              "mean": 5068.6,
+              "min": 4904.0,
+              "p50": 5056.0,
+              "p95": 5164.0,
+              "raw": [
+                4904.0,
+                4924.0,
+                4976.0,
+                4976.0,
+                5032.0,
+                5040.0,
+                5048.0,
+                5052.0,
+                5056.0,
+                5056.0,
+                5072.0,
+                5080.0,
+                5080.0,
+                5112.0,
+                5136.0,
+                5144.0,
+                5156.0,
+                5164.0,
+                5164.0,
+                5200.0
+              ],
+              "samples": 20
+            },
+            "state": "runtime core only, zero tasks (Vm ready, framework not booted)"
+          }
+        }
+      },
+      "metrics": {
+        "wall_ms": 42932
+      }
+    },
+    "sessions": {
+      "request_id": "bench_47ea4_18e6b345634e913c",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "apk_sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+        "cold_or_warm": "fresh process per N; sessions are in-process and sequential",
+        "corelib": "real",
+        "definition": "per-session incremental (loaded-bare)/N and marginal (total(high)-total(low))/(high-low) memory of the current boot path",
+        "fixture": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+        "incremental": [
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 158744.0,
+            "incremental_miB_per_session": 155.023,
+            "n": 1
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157968.0,
+            "incremental_miB_per_session": 154.266,
+            "n": 2
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157512.8,
+            "incremental_miB_per_session": 153.821,
+            "n": 5
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157357.6,
+            "incremental_miB_per_session": 153.67,
+            "n": 10
+          }
+        ],
+        "limit": "Runtime::with_host installs the process-global Binder transport, so N live runtimes are a memory experiment, not a working multi-session configuration",
+        "marginal": [
+          {
+            "from_n": 1,
+            "marginal_anon_plus_shmem_kib_per_session": 157192.0,
+            "marginal_miB_per_session": 153.508,
+            "to_n": 2
+          },
+          {
+            "from_n": 2,
+            "marginal_anon_plus_shmem_kib_per_session": 157209.333,
+            "marginal_miB_per_session": 153.525,
+            "to_n": 5
+          },
+          {
+            "from_n": 5,
+            "marginal_anon_plus_shmem_kib_per_session": 157202.4,
+            "marginal_miB_per_session": 153.518,
+            "to_n": 10
+          }
+        ],
+        "metric": "sessions",
+        "sessions": [
+          {
+            "anon_plus_shmem_kib": {
+              "max": 158748.0,
+              "mean": 158740.8,
+              "min": 158732.0,
+              "p50": 158744.0,
+              "p95": 158748.0,
+              "raw": [
+                158732.0,
+                158736.0,
+                158744.0,
+                158744.0,
+                158748.0
+              ],
+              "samples": 5
+            },
+            "miB_anon_plus_shmem_p50": 155.023,
+            "n": 1,
+            "private_kib": {
+              "max": 162916.0,
+              "mean": 162812.8,
+              "min": 162608.0,
+              "p50": 162872.0,
+              "p95": 162916.0,
+              "raw": [
+                162608.0,
+                162780.0,
+                162872.0,
+                162888.0,
+                162916.0
+              ],
+              "samples": 5
+            },
+            "pss_kib": {
+              "max": 164135.0,
+              "mean": 164050.2,
+              "min": 163875.0,
+              "p50": 164098.0,
+              "p95": 164135.0,
+              "raw": [
+                163875.0,
+                164025.0,
+                164098.0,
+                164118.0,
+                164135.0
+              ],
+              "samples": 5
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 158744.0,
+              "anonymous_kib": 158744.0,
+              "private_clean_kib": 3864.0,
+              "private_dirty_kib": 158744.0,
+              "private_kib": 162608.0,
+              "pss_anon_kib": 158744.0,
+              "pss_file_kib": 5131.0,
+              "pss_kib": 163875.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 158744.0,
+              "rss_file_kib": 8948.0,
+              "rss_kib": 167692.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 5084.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 5084.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9260.0,
+              "mean": 9140.8,
+              "min": 8948.0,
+              "p50": 9176.0,
+              "p95": 9260.0,
+              "raw": [
+                8948.0,
+                9072.0,
+                9176.0,
+                9248.0,
+                9260.0
+              ],
+              "samples": 5
+            },
+            "samples": 5,
+            "shared_kib": {
+              "max": 5112.0,
+              "mean": 5068.8,
+              "min": 5024.0,
+              "p50": 5084.0,
+              "p95": 5112.0,
+              "raw": [
+                5024.0,
+                5036.0,
+                5084.0,
+                5088.0,
+                5112.0
+              ],
+              "samples": 5
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 315948.0,
+              "mean": 315937.6,
+              "min": 315928.0,
+              "p50": 315936.0,
+              "p95": 315948.0,
+              "raw": [
+                315928.0,
+                315932.0,
+                315936.0,
+                315944.0,
+                315948.0
+              ],
+              "samples": 5
+            },
+            "miB_anon_plus_shmem_p50": 308.531,
+            "n": 2,
+            "private_kib": {
+              "max": 320088.0,
+              "mean": 319924.8,
+              "min": 319700.0,
+              "p50": 319972.0,
+              "p95": 320088.0,
+              "raw": [
+                319700.0,
+                319876.0,
+                319972.0,
+                319988.0,
+                320088.0
+              ],
+              "samples": 5
+            },
+            "pss_kib": {
+              "max": 321331.0,
+              "mean": 321167.4,
+              "min": 320963.0,
+              "p50": 321216.0,
+              "p95": 321331.0,
+              "raw": [
+                320963.0,
+                321075.0,
+                321216.0,
+                321252.0,
+                321331.0
+              ],
+              "samples": 5
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 315948.0,
+              "anonymous_kib": 315948.0,
+              "private_clean_kib": 4140.0,
+              "private_dirty_kib": 315948.0,
+              "private_kib": 320088.0,
+              "pss_anon_kib": 315948.0,
+              "pss_file_kib": 5383.0,
+              "pss_kib": 321331.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 315948.0,
+              "rss_file_kib": 9172.0,
+              "rss_kib": 325120.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 5032.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 5032.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9204.0,
+              "mean": 9072.0,
+              "min": 8884.0,
+              "p50": 9172.0,
+              "p95": 9204.0,
+              "raw": [
+                8884.0,
+                8928.0,
+                9172.0,
+                9172.0,
+                9204.0
+              ],
+              "samples": 5
+            },
+            "samples": 5,
+            "shared_kib": {
+              "max": 5156.0,
+              "mean": 5084.8,
+              "min": 4944.0,
+              "p50": 5144.0,
+              "p95": 5156.0,
+              "raw": [
+                4944.0,
+                5032.0,
+                5144.0,
+                5148.0,
+                5156.0
+              ],
+              "samples": 5
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 787584.0,
+              "mean": 787565.6,
+              "min": 787552.0,
+              "p50": 787564.0,
+              "p95": 787584.0,
+              "raw": [
+                787552.0,
+                787560.0,
+                787564.0,
+                787568.0,
+                787584.0
+              ],
+              "samples": 5
+            },
+            "miB_anon_plus_shmem_p50": 769.105,
+            "n": 5,
+            "private_kib": {
+              "max": 791576.0,
+              "mean": 791548.0,
+              "min": 791508.0,
+              "p50": 791556.0,
+              "p95": 791576.0,
+              "raw": [
+                791508.0,
+                791540.0,
+                791556.0,
+                791560.0,
+                791576.0
+              ],
+              "samples": 5
+            },
+            "pss_kib": {
+              "max": 792837.0,
+              "mean": 792804.0,
+              "min": 792770.0,
+              "p50": 792803.0,
+              "p95": 792837.0,
+              "raw": [
+                792770.0,
+                792787.0,
+                792803.0,
+                792823.0,
+                792837.0
+              ],
+              "samples": 5
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 787584.0,
+              "anonymous_kib": 787584.0,
+              "private_clean_kib": 3972.0,
+              "private_dirty_kib": 787584.0,
+              "private_kib": 791556.0,
+              "pss_anon_kib": 787584.0,
+              "pss_file_kib": 5219.0,
+              "pss_kib": 792803.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 787584.0,
+              "rss_file_kib": 9044.0,
+              "rss_kib": 796628.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 5072.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 5072.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9112.0,
+              "mean": 9083.2,
+              "min": 9044.0,
+              "p50": 9088.0,
+              "p95": 9112.0,
+              "raw": [
+                9044.0,
+                9072.0,
+                9088.0,
+                9100.0,
+                9112.0
+              ],
+              "samples": 5
+            },
+            "samples": 5,
+            "shared_kib": {
+              "max": 5144.0,
+              "mean": 5100.8,
+              "min": 5072.0,
+              "p50": 5076.0,
+              "p95": 5144.0,
+              "raw": [
+                5072.0,
+                5072.0,
+                5076.0,
+                5140.0,
+                5144.0
+              ],
+              "samples": 5
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 1573628.0,
+              "mean": 1573587.2,
+              "min": 1573556.0,
+              "p50": 1573576.0,
+              "p95": 1573628.0,
+              "raw": [
+                1573556.0,
+                1573568.0,
+                1573576.0,
+                1573608.0,
+                1573628.0
+              ],
+              "samples": 5
+            },
+            "miB_anon_plus_shmem_p50": 1536.695,
+            "n": 10,
+            "private_kib": {
+              "max": 1577772.0,
+              "mean": 1577625.6,
+              "min": 1577512.0,
+              "p50": 1577640.0,
+              "p95": 1577772.0,
+              "raw": [
+                1577512.0,
+                1577560.0,
+                1577640.0,
+                1577644.0,
+                1577772.0
+              ],
+              "samples": 5
+            },
+            "pss_kib": {
+              "max": 1579016.0,
+              "mean": 1578875.8,
+              "min": 1578776.0,
+              "p50": 1578868.0,
+              "p95": 1579016.0,
+              "raw": [
+                1578776.0,
+                1578822.0,
+                1578868.0,
+                1578897.0,
+                1579016.0
+              ],
+              "samples": 5
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 1573608.0,
+              "anonymous_kib": 1573608.0,
+              "private_clean_kib": 4036.0,
+              "private_dirty_kib": 1573608.0,
+              "private_kib": 1577644.0,
+              "pss_anon_kib": 1573608.0,
+              "pss_file_kib": 5260.0,
+              "pss_kib": 1578868.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 1573608.0,
+              "rss_file_kib": 9004.0,
+              "rss_kib": 1582612.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 4968.0,
+              "shared_dirty_kib": 0.0,
+              "shared_kib": 4968.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9320.0,
+              "mean": 9132.0,
+              "min": 9004.0,
+              "p50": 9128.0,
+              "p95": 9320.0,
+              "raw": [
+                9004.0,
+                9072.0,
+                9128.0,
+                9136.0,
+                9320.0
+              ],
+              "samples": 5
+            },
+            "samples": 5,
+            "shared_kib": {
+              "max": 5172.0,
+              "mean": 5093.6,
+              "min": 4968.0,
+              "p50": 5124.0,
+              "p95": 5172.0,
+              "raw": [
+                4968.0,
+                5060.0,
+                5124.0,
+                5144.0,
+                5172.0
+              ],
+              "samples": 5
+            }
+          }
+        ],
+        "sharing": {
+          "consequence": "nothing is shareable between sessions today: private pages grow with N and shared pages are flat (see private_kib/rss_file_kib per N)",
+          "dex_mmap": false,
+          "evidence": "the boot classpath and app DEX are read with std::fs::read and parsed into the VM heap; no mmap is used, so their pages are private anonymous pages"
+        },
+        "type": "anon+shmem (RssAnon+RssShmem) with PSS and private/shared reported separately",
+        "unit": "KiB (MiB convenience columns)"
+      },
+      "metrics": {
+        "wall_ms": 31081
+      }
+    },
+    "idle-cpu": {
+      "request_id": "bench_4894e_18e6b361fa3ca8a1",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "cold_or_warm": "warm (after boot + bind phase, main looper parked or run stopped)",
+        "cpu_pct_one_core": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "raw": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "samples": 20
+        },
+        "cpu_ticks": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "raw": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "samples": 20
+        },
+        "definition": "process CPU ticks consumed while the runtime is parked/blocked, over a wall window",
+        "metric": "idle-cpu",
+        "note": "a parked looper must burn zero ticks; a non-zero tick count is reported as-is",
+        "samples": 20,
+        "state": {
+          "parked_looper": true,
+          "status": [
+            "Runnable"
+          ],
+          "threads": 1
+        },
+        "type": "CPU",
+        "unit": "ticks (CLK_TCK=100 assumed on x86_64) and % of one core",
+        "window_secs": 5,
+        "zero_ticks_over_window": true
+      },
+      "metrics": {
+        "wall_ms": 122456
+      }
+    },
+    "interpreter": {
+      "request_id": "bench_49a87_18e6b3626a4d3010",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "cold_or_warm": "cold per sample (fresh Vm per sample, bootstrap core library)",
+        "corelib": "real",
+        "definition": "interpreted DEX program wall time and interpreted instructions",
+        "metric": "interpreter",
+        "note": "ACOS-only: legacy ACVM published no interpreter micro benchmarks, so these rows have no legacy counterpart (host-JVM numbers live in results/vm, a different engine and fidelity)",
+        "programs": [
+          {
+            "allocations": 927,
+            "instructions": 62380,
+            "instructions_per_second": {
+              "max": 2772377.168,
+              "mean": 2734988.337,
+              "min": 2711697.951,
+              "p50": 2732582.143,
+              "p95": 2767561.236,
+              "raw": [
+                2711697.951,
+                2713553.342,
+                2713558.182,
+                2717199.551,
+                2720761.702,
+                2720852.13,
+                2721654.976,
+                2722342.81,
+                2728125.619,
+                2732582.143,
+                2733215.513,
+                2737251.781,
+                2737975.162,
+                2742009.841,
+                2744626.617,
+                2749489.264,
+                2752018.353,
+                2760913.398,
+                2767561.236,
+                2772377.168
+              ],
+              "samples": 20
+            },
+            "instructions_per_second_p50": 2733215.513,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/02_int_arith/classes.dex",
+            "program": "02_int_arith",
+            "samples": 20,
+            "wall_ms": {
+              "max": 23.004,
+              "mean": 22.809,
+              "min": 22.501,
+              "p50": 22.823,
+              "p95": 22.988,
+              "raw": [
+                22.501,
+                22.54,
+                22.594,
+                22.667,
+                22.688,
+                22.728,
+                22.75,
+                22.783,
+                22.789,
+                22.823,
+                22.828,
+                22.866,
+                22.914,
+                22.92,
+                22.927,
+                22.927,
+                22.957,
+                22.988,
+                22.988,
+                23.004
+              ],
+              "samples": 20
+            }
+          },
+          {
+            "allocations": 856,
+            "instructions": 49732,
+            "instructions_per_second": {
+              "max": 2218840.135,
+              "mean": 2193957.552,
+              "min": 2169743.75,
+              "p50": 2193032.936,
+              "p95": 2211520.961,
+              "raw": [
+                2169743.75,
+                2171230.885,
+                2173496.429,
+                2182082.241,
+                2184411.85,
+                2186236.95,
+                2189481.937,
+                2192037.314,
+                2192937.104,
+                2193032.936,
+                2194433.943,
+                2194518.285,
+                2196853.091,
+                2197837.553,
+                2204694.236,
+                2206925.197,
+                2208096.341,
+                2210739.896,
+                2211520.961,
+                2218840.135
+              ],
+              "samples": 20
+            },
+            "instructions_per_second_p50": 2194433.943,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/05_branches_loops/classes.dex",
+            "program": "05_branches_loops",
+            "samples": 20,
+            "wall_ms": {
+              "max": 22.921,
+              "mean": 22.669,
+              "min": 22.414,
+              "p50": 22.663,
+              "p95": 22.905,
+              "raw": [
+                22.414,
+                22.488,
+                22.496,
+                22.523,
+                22.535,
+                22.557,
+                22.628,
+                22.638,
+                22.662,
+                22.663,
+                22.677,
+                22.678,
+                22.688,
+                22.714,
+                22.748,
+                22.767,
+                22.791,
+                22.881,
+                22.905,
+                22.921
+              ],
+              "samples": 20
+            }
+          },
+          {
+            "allocations": 1801,
+            "instructions": 143608,
+            "instructions_per_second": {
+              "max": 5952627.435,
+              "mean": 5829320.947,
+              "min": 5677452.105,
+              "p50": 5837456.62,
+              "p95": 5923919.984,
+              "raw": [
+                5677452.105,
+                5685178.228,
+                5697813.534,
+                5764480.926,
+                5776984.921,
+                5782839.727,
+                5791948.35,
+                5811121.162,
+                5835217.992,
+                5837456.62,
+                5847468.169,
+                5862703.46,
+                5866144.092,
+                5874300.891,
+                5890787.6,
+                5892308.147,
+                5894503.702,
+                5921161.895,
+                5923919.984,
+                5952627.435
+              ],
+              "samples": 20
+            },
+            "instructions_per_second_p50": 5847468.169,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/09_strings/classes.dex",
+            "program": "09_strings",
+            "samples": 20,
+            "wall_ms": {
+              "max": 25.294,
+              "mean": 24.64,
+              "min": 24.125,
+              "p50": 24.559,
+              "p95": 25.26,
+              "raw": [
+                24.125,
+                24.242,
+                24.253,
+                24.363,
+                24.372,
+                24.378,
+                24.447,
+                24.481,
+                24.495,
+                24.559,
+                24.601,
+                24.611,
+                24.713,
+                24.794,
+                24.833,
+                24.859,
+                24.913,
+                25.204,
+                25.26,
+                25.294
+              ],
+              "samples": 20
+            }
+          }
+        ],
+        "type": "wall + VM counters",
+        "unit": "ms, instructions, instructions/second"
+      },
+      "metrics": {
+        "wall_ms": 1548
+      }
+    }
+  }
+}

@@ -14,6 +14,8 @@ path = "src/main.rs"
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
 acos-protocol = { path = "../acos-protocol" }
+acos-runtime = { path = "../acos-runtime" }
+acos-services = { path = "../acos-services" }
 acos-verify = { path = "../acos-verify" }
 acos-vm = { path = "../acos-vm" }
 clap = { version = "4", features = ["derive"] }
