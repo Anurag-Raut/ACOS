@@ -24,6 +24,10 @@ extern const char *acos_jni_method_codes(uint64_t mid);
 extern JniCallResult acos_jni_va_invoke(uint64_t env, uint64_t target,
                                         uint64_t mid, int mode,
                                         uint64_t *words, int n);
+extern JniCallResult acos_jni_va_invoke_nonvirtual(uint64_t env, uint64_t obj,
+                                                   uint64_t cls, uint64_t mid,
+                                                   int mode, uint64_t *words,
+                                                   int n);
 
 #define MAX_WORDS 32
 
@@ -156,7 +160,79 @@ DEFINE_BOTH(float, Float, as_float)
 DEFINE_BOTH(double, Double, as_double)
 DEFINE_BOTH(void, Void, AS_VOID)
 
+/*
+ * `CallNonvirtual<Type>Method(env, obj, clazz, mid, ...)`: four fixed
+ * arguments instead of the virtual call's three, so they get their own shims
+ * that forward both the receiver and the `jclass` to Rust.
+ */
+#define DEFINE_NONVIRTUAL_VARIADIC(name, TYPE, cast)                            \
+    TYPE name(uint64_t env, uint64_t obj, uint64_t cls, uint64_t mid, ...) {    \
+        va_list ap;                                                            \
+        uint64_t words[MAX_WORDS];                                             \
+        int n = 0;                                                             \
+        const char *codes = acos_jni_method_codes(mid);                        \
+        va_start(ap, mid);                                                     \
+        if (codes != 0) {                                                      \
+            for (const char *p = codes; *p != 0 && n < MAX_WORDS; ++p)          \
+                words[n++] = read_one(ap, *p);                                \
+        }                                                                      \
+        va_end(ap);                                                            \
+        JniCallResult r =                                                      \
+            acos_jni_va_invoke_nonvirtual(env, obj, cls, mid, 0, words, n);    \
+        return cast(r);                                                        \
+    }
+
+#define DEFINE_NONVIRTUAL_VALIST(name, TYPE, cast)                              \
+    TYPE name(uint64_t env, uint64_t obj, uint64_t cls, uint64_t mid,           \
+              va_list ap) {                                                    \
+        uint64_t words[MAX_WORDS];                                             \
+        int n = 0;                                                             \
+        const char *codes = acos_jni_method_codes(mid);                        \
+        if (codes != 0) {                                                      \
+            for (const char *p = codes; *p != 0 && n < MAX_WORDS; ++p)          \
+                words[n++] = read_one(ap, *p);                                \
+        }                                                                      \
+        JniCallResult r =                                                      \
+            acos_jni_va_invoke_nonvirtual(env, obj, cls, mid, 0, words, n);    \
+        return cast(r);                                                        \
+    }
+
+#define DEFINE_NONVIRTUAL_ARRAY(name, TYPE, cast)                               \
+    TYPE name(uint64_t env, uint64_t obj, uint64_t cls, uint64_t mid,           \
+              const uint64_t *a) {                                             \
+        uint64_t words[MAX_WORDS];                                             \
+        int n = 0;                                                             \
+        const char *codes = acos_jni_method_codes(mid);                        \
+        if (codes != 0) {                                                      \
+            for (const char *p = codes; *p != 0 && n < MAX_WORDS; ++p) {        \
+                words[n] = a ? a[n] : 0;                                      \
+                ++n;                                                          \
+            }                                                                  \
+        }                                                                      \
+        JniCallResult r =                                                      \
+            acos_jni_va_invoke_nonvirtual(env, obj, cls, mid, 0, words, n);    \
+        return cast(r);                                                        \
+    }
+
+#define DEFINE_NONVIRTUAL(RET, NAME, cast)                                      \
+    DEFINE_NONVIRTUAL_VARIADIC(acosrjni_CallNonvirtual##NAME##Method, RET, cast) \
+    DEFINE_NONVIRTUAL_VALIST(acosrjni_CallNonvirtual##NAME##MethodV, RET, cast)  \
+    DEFINE_NONVIRTUAL_ARRAY(acosrjni_CallNonvirtual##NAME##MethodA, RET, cast)
+
+DEFINE_NONVIRTUAL(void *, Object, AS_OBJECT)
+DEFINE_NONVIRTUAL(uint8_t, Boolean, AS_BOOLEAN)
+DEFINE_NONVIRTUAL(int8_t, Byte, AS_BYTE)
+DEFINE_NONVIRTUAL(uint16_t, Char, AS_CHAR)
+DEFINE_NONVIRTUAL(int16_t, Short, AS_SHORT)
+DEFINE_NONVIRTUAL(int32_t, Int, AS_INT)
+DEFINE_NONVIRTUAL(int64_t, Long, AS_LONG)
+DEFINE_NONVIRTUAL(float, Float, as_float)
+DEFINE_NONVIRTUAL(double, Double, as_double)
+DEFINE_NONVIRTUAL(void, Void, AS_VOID)
+
 /* Constructors. */
 DEFINE_VARIADIC(acosrjni_NewObject, void *, 2, AS_OBJECT)
 DEFINE_VALIST(acosrjni_NewObjectV, void *, 2, AS_OBJECT)
 DEFINE_ARRAY(acosrjni_NewObjectA, void *, 2, AS_OBJECT)
+
+

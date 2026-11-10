@@ -59,6 +59,9 @@ RUST_IMPL = {
     "GetPrimitiveArrayCritical", "ReleasePrimitiveArrayCritical",
     "RegisterNatives", "UnregisterNatives", "GetJavaVM",
     "MonitorEnter", "MonitorExit", "GetObjectRefType",
+    "GetStringCritical", "ReleaseStringCritical",
+    "NewWeakGlobalRef", "DeleteWeakGlobalRef",
+    "NewDirectByteBuffer", "GetDirectBufferAddress", "GetDirectBufferCapacity",
 }
 
 # Slots implemented in the C varargs trampoline (csrc/jni_varargs.c).
@@ -71,6 +74,7 @@ for t in CALL_TYPES:
     for form in ("", "V", "A"):
         C_IMPL.add(f"Call{t}Method{form}")
         C_IMPL.add(f"CallStatic{t}Method{form}")
+        C_IMPL.add(f"CallNonvirtual{t}Method{form}")
 for form in ("", "V", "A"):
     C_IMPL.add(f"NewObject{form}")
 

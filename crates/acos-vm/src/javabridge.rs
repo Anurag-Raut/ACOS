@@ -376,6 +376,34 @@ impl Vm {
         self.invoke(mid, obj, args, &class, name, sig)
     }
 
+    /// Call an instance method with **non-virtual** dispatch resolved on
+    /// `class` (the `jclass` argument of `CallNonvirtual*Method`).
+    ///
+    /// Unlike [`Vm::call_method`], the method is looked up on the supplied
+    /// class (and its superclasses), not on `obj`'s runtime class; this is the
+    /// JNI contract for the `CallNonvirtual*` family.
+    pub fn call_nonvirtual(
+        &mut self,
+        obj: Handle,
+        class: &str,
+        name: &str,
+        sig: &str,
+        args: &[JavaValue],
+    ) -> BridgeResult<JavaValue> {
+        if obj == NULL {
+            return Err(BridgeError::DeadHandle(NULL));
+        }
+        if self.heap.get(obj).is_none() {
+            return Err(BridgeError::DeadHandle(obj));
+        }
+        let cid = self.load_class_named(class)?;
+        // `Super` resolution searches the class's declared/virtual maps and
+        // then walks the superclass chain, which is exactly the non-virtual
+        // lookup the JNI spec requires.
+        let mid = self.resolve_method(cid, class, name, sig, InvokeKind::Super)?;
+        self.invoke(mid, obj, args, class, name, sig)
+    }
+
     /// Call a static method on `class`.
     pub fn call_static(
         &mut self,

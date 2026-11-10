@@ -63,8 +63,8 @@ fn native_fixture_exercises_slots_through_jni_table() {
     // SAFETY: the runtime is attached and bound to `vm` for this thread.
     let pass = unsafe { f(env, std::ptr::null_mut()) };
     assert_eq!(
-        pass, 0xFF,
-        "fixture slot checks bitmask (0b{:08b}); no structured error: {:?}",
+        pass, 0x7FF,
+        "fixture slot checks bitmask (0b{:011b}); no structured error: {:?}",
         pass,
         rt.take_error()
     );

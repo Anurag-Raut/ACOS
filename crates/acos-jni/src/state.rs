@@ -12,6 +12,9 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::thread::ThreadId;
 
 use acos_native_loader::{LibraryHandle, Loader, LoaderConfig, MissingPolicy};
 use acos_vm::{RunOutcome, Vm};
@@ -271,6 +274,70 @@ impl State {
 thread_local! {
     static RUNTIME: RefCell<Option<Rc<RefCell<State>>>> = const { RefCell::new(None) };
     static VM_PTR: Cell<*mut Vm> = const { Cell::new(std::ptr::null_mut()) };
+    /// Set when this OS thread attached through the process-global slots
+    /// rather than owning a thread-local [`RUNTIME`].
+    static ATTACHED_BY_GLOBAL: Cell<bool> = const { Cell::new(false) };
+}
+
+// --- process-global attach slots -------------------------------------------
+//
+// ACOS owns one VM on one host thread, but native engines (`pthread_create`
+// threads in Hermes / the Flutter engine / fbjni) call `AttachCurrentThread`
+// from OS threads that have no thread-local runtime. JNI is a process-global
+// interface, so the environment and JavaVM slot addresses are published here
+// once at runtime construction. A thread that attaches this way gets the
+// shared `JNIEnv` (the function table is stateless) and its own attachment
+// record; it may use the exception/local-frame bookkeeping slots, but any slot
+// that needs the single-threaded VM is reported as `JNI_NO_VM` rather than
+// racing the owner. See ADR-0021.
+
+static GLOBAL_ENV_SLOT: AtomicUsize = AtomicUsize::new(0);
+static GLOBAL_ATTACHED: OnceLock<Mutex<HashSet<ThreadId>>> = OnceLock::new();
+
+fn global_attached() -> &'static Mutex<HashSet<ThreadId>> {
+    GLOBAL_ATTACHED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Publish the environment slot address for OS-thread attach.
+pub(crate) fn install_global_slots(env_slot: usize) {
+    GLOBAL_ENV_SLOT.store(env_slot, Ordering::Release);
+}
+
+/// Attach the calling OS thread through the global slots. Returns the
+/// `JNIEnv` address, or `None` when no runtime has been published.
+pub(crate) fn attach_current_os_thread() -> Option<usize> {
+    let env = GLOBAL_ENV_SLOT.load(Ordering::Acquire);
+    if env == 0 {
+        return None;
+    }
+    let id = std::thread::current().id();
+    global_attached().lock().unwrap().insert(id);
+    ATTACHED_BY_GLOBAL.with(|c| c.set(true));
+    Some(env)
+}
+
+/// Detach the calling OS thread if it attached through the global slots.
+/// Returns whether it was attached.
+pub(crate) fn detach_current_os_thread() -> bool {
+    let removed = global_attached()
+        .lock()
+        .unwrap()
+        .remove(&std::thread::current().id());
+    ATTACHED_BY_GLOBAL.with(|c| c.set(false));
+    removed
+}
+
+/// Whether the calling OS thread is attached (owner thread or global).
+pub(crate) fn current_thread_attached() -> bool {
+    if runtime_state().is_some() {
+        return true;
+    }
+    ATTACHED_BY_GLOBAL.with(|c| c.get())
+}
+
+/// The published `JNIEnv` slot address (0 when none).
+pub(crate) fn global_env_slot() -> usize {
+    GLOBAL_ENV_SLOT.load(Ordering::Acquire)
 }
 
 pub(crate) fn runtime_state() -> Option<Rc<RefCell<State>>> {
@@ -383,11 +450,14 @@ impl JniRuntime {
             resolved: HashMap::new(),
             last_thread: 0,
         };
-        JniRuntime {
+        let env_slot = state.env_slot;
+        let runtime = JniRuntime {
             inner: Rc::new(RefCell::new(state)),
             env,
             vm,
-        }
+        };
+        install_global_slots(env_slot);
+        runtime
     }
 
     /// `JNIEnv*` handed to guest native code.

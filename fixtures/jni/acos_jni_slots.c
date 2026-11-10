@@ -18,9 +18,50 @@
  *   bit 5  Set/GetIntArrayRegion round trip
  *   bit 6  PushLocalFrame / PopLocalFrame
  *   bit 7  MonitorEnter / MonitorExit
+ *   bit 8  CallNonvirtualIntMethod (varargs C shim)
+ *   bit 9  CallNonvirtualIntMethodA (jvalue[] C shim)
+ *   bit 10 native pthread attach / GetEnv / detach
  */
 #include <jni.h>
+#include <pthread.h>
 #include <stddef.h>
+#include <stdint.h>
+
+/*
+ * A native worker thread with no thread-local runtime: it must observe
+ * JNI_EDETACHED from `GetEnv`, attach, observe a valid environment, and detach.
+ */
+typedef struct {
+    JavaVM *vm;
+    int bits;
+} worker_arg;
+
+static void *worker_main(void *raw) {
+    worker_arg *w = (worker_arg *) raw;
+    JNIEnv *env = NULL;
+    int bits = 0;
+    if ((*w->vm)->GetEnv(w->vm, (void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        bits |= 1;
+    }
+    env = NULL;
+    if ((*w->vm)->AttachCurrentThread(w->vm, &env, NULL) == JNI_OK && env != NULL) {
+        bits |= 2;
+    }
+    JNIEnv *again = NULL;
+    if ((*w->vm)->GetEnv(w->vm, (void **) &again, JNI_VERSION_1_6) == JNI_OK
+        && again == env) {
+        bits |= 4;
+    }
+    if ((*w->vm)->DetachCurrentThread(w->vm) == JNI_OK) {
+        bits |= 8;
+    }
+    /* After detach GetEnv must report the thread is no longer attached. */
+    if ((*w->vm)->GetEnv(w->vm, (void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        bits |= 16;
+    }
+    w->bits = bits;
+    return NULL;
+}
 
 #ifndef JNIWeakGlobalRefType
 #define JNIWeakGlobalRefType 3
@@ -97,6 +138,49 @@ acos_jni_test_slots(JNIEnv *env, jclass cls) {
             pass |= 64;
         }
         (*env)->PopLocalFrame(env, NULL);
+    }
+
+    /* Non-virtual call: the same String.length method through both the
+     * varargs and the jvalue[] C shims. */
+    {
+        jclass strClass = (*env)->FindClass(env, "java/lang/String");
+        jstring str = (*env)->NewStringUTF(env, "nonvirtual");
+        if (strClass != NULL && str != NULL) {
+            jmethodID lenMid = (*env)->GetMethodID(env, strClass, "length", "()I");
+            if (lenMid != NULL) {
+                jint v = (*env)->CallNonvirtualIntMethod(env, str, strClass, lenMid);
+                if (v == 10) {
+                    pass |= 256;
+                }
+                jint va = (*env)->CallNonvirtualIntMethodA(env, str, strClass, lenMid, NULL);
+                if (va == 10) {
+                    pass |= 512;
+                }
+            }
+        }
+        if (str != NULL) {
+            (*env)->DeleteLocalRef(env, str);
+        }
+        if (strClass != NULL) {
+            (*env)->DeleteLocalRef(env, strClass);
+        }
+    }
+
+    /* Native OS-thread attach / GetEnv / detach. */
+    {
+        JavaVM *javaVm = NULL;
+        if ((*env)->GetJavaVM(env, &javaVm) == JNI_OK && javaVm != NULL) {
+            worker_arg w;
+            w.vm = javaVm;
+            w.bits = 0;
+            pthread_t tid;
+            if (pthread_create(&tid, NULL, worker_main, &w) == 0) {
+                pthread_join(tid, NULL);
+                if (w.bits == 0x1F) {
+                    pass |= 1024;
+                }
+            }
+        }
     }
 
     if (buf != NULL) {

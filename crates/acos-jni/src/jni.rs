@@ -2247,19 +2247,34 @@ pub unsafe extern "C" fn vm_AttachCurrentThreadAsDaemon(
 }
 
 fn attach_env(out: *mut usize) -> i32 {
-    let Some(rt) = runtime_state() else {
-        return crate::state::JNI_EDETACHED;
-    };
     if out.is_null() {
         return JNI_ERR;
     }
-    let slot = rt.borrow().env_slot;
-    // SAFETY: JNI requires a writable `JNIEnv*`.
-    unsafe { *out = slot };
-    JNI_OK
+    // The owning host thread already has a thread-local runtime.
+    if let Some(rt) = runtime_state() {
+        let slot = rt.borrow().env_slot;
+        // SAFETY: JNI requires a writable `JNIEnv*`.
+        unsafe { *out = slot };
+        return JNI_OK;
+    }
+    // A native OS thread (`pthread_create`) attaches through the
+    // process-global slots published by `JniRuntime::new`.
+    match crate::state::attach_current_os_thread() {
+        Some(slot) => {
+            // SAFETY: JNI requires a writable `JNIEnv*`.
+            unsafe { *out = slot };
+            JNI_OK
+        }
+        None => crate::state::JNI_EDETACHED,
+    }
 }
 
 pub unsafe extern "C" fn vm_DetachCurrentThread(_vm: usize) -> i32 {
+    // The owner thread's attachment is owned by `JniRuntime`; a native thread
+    // that attached through the global slots is recorded per OS thread.
+    if runtime_state().is_none() {
+        crate::state::detach_current_os_thread();
+    }
     JNI_OK
 }
 
@@ -2267,7 +2282,23 @@ pub unsafe extern "C" fn vm_GetEnv(_vm: usize, out: *mut usize, version: i32) ->
     if version != JNI_VERSION_1_6 && version != 0x0001_0004 {
         return crate::state::JNI_EVERSION;
     }
-    attach_env(out)
+    if out.is_null() {
+        return JNI_ERR;
+    }
+    // `GetEnv` never attaches: it reports the current attachment.
+    if let Some(rt) = runtime_state() {
+        let slot = rt.borrow().env_slot;
+        // SAFETY: JNI requires a writable `JNIEnv*`.
+        unsafe { *out = slot };
+        return JNI_OK;
+    }
+    if crate::state::current_thread_attached() {
+        // SAFETY: JNI requires a writable `JNIEnv*`.
+        unsafe { *out = crate::state::global_env_slot() };
+        JNI_OK
+    } else {
+        crate::state::JNI_EDETACHED
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2455,6 +2486,111 @@ pub unsafe extern "C" fn acos_jni_va_invoke(
         }
         Err(e) => {
             record(&ctx, bridge_error("Call<Type>Method", e));
+            zero_result()
+        }
+    }
+}
+
+/// C varargs shim target for `CallNonvirtual<Type>Method{,V,A}`.
+///
+/// `obj` is the receiver, `cls` is the `jclass` the method ID was derived
+/// from and `mid` identifies the method. The method is resolved on the class
+/// it was declared in (`info.class`) and invoked without virtual dispatch.
+#[no_mangle]
+pub unsafe extern "C" fn acos_jni_va_invoke_nonvirtual(
+    _env: usize,
+    obj: usize,
+    cls: usize,
+    mid: usize,
+    _mode: i32,
+    words: *const u64,
+    n: i32,
+) -> JniCallResult {
+    const FN: &str = "CallNonvirtual<Type>Method";
+    let Some(mut ctx) = enter(FN, false) else {
+        return zero_result();
+    };
+    let Some(info) = method_info(&mut ctx, mid) else {
+        record(
+            &ctx,
+            JniError::BadReference {
+                function: FN.into(),
+                what: "jmethodID".into(),
+                handle: mid as u32,
+            },
+        );
+        return zero_result();
+    };
+    if n < 0 || n as usize != info.param_descs.len() {
+        record(
+            &ctx,
+            JniError::BadArgument {
+                function: FN.into(),
+                message: format!(
+                    "{} arguments supplied for {} params of {}{}",
+                    n,
+                    info.param_descs.len(),
+                    info.name,
+                    info.sig
+                ),
+            },
+        );
+        return zero_result();
+    }
+    // The `jclass` must be a live class; the method ID carries the declaring
+    // class descriptor used for non-virtual resolution.
+    if let Err(e) = class_id(&mut ctx, cls as Handle, FN) {
+        record(&ctx, e);
+        return zero_result();
+    }
+    let raw: Vec<u64> = if n == 0 || words.is_null() {
+        Vec::new()
+    } else {
+        // SAFETY: the C shim passes exactly `n` words.
+        unsafe { std::slice::from_raw_parts(words, n as usize) }.to_vec()
+    };
+    let mut args = Vec::with_capacity(raw.len());
+    for (desc, w) in info.param_descs.iter().zip(raw.iter()) {
+        match bits_value(&mut ctx, desc, *w, FN) {
+            Ok(v) => args.push(v),
+            Err(e) => {
+                record(&ctx, e);
+                return zero_result();
+            }
+        }
+    }
+
+    let vm = ctx.vm();
+    let h = obj as Handle;
+    if h == NULL || !vm.heap.is_live(h) {
+        record(
+            &ctx,
+            JniError::BadReference {
+                function: FN.into(),
+                what: "jobject".into(),
+                handle: h,
+            },
+        );
+        return zero_result();
+    }
+    let result = vm.call_nonvirtual(h, &info.class, &info.name, &info.sig, &args);
+    match result {
+        Ok(v) => value_result(v),
+        Err(BridgeError::JavaException { class, message }) => {
+            let vm = ctx.vm();
+            match vm.new_throwable(&class, Some(&message)) {
+                Ok(h) => refs::set_pending(vm, &ctx.rt, ctx.t, h),
+                Err(e) => record(
+                    &ctx,
+                    JniError::NativeFault {
+                        message: format!("cannot materialise pending exception {class}: {e}"),
+                    },
+                ),
+            }
+            zero_result()
+        }
+        Err(e) => {
+            record(&ctx, bridge_error(FN, e));
             zero_result()
         }
     }

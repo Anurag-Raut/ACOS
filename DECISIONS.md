@@ -574,3 +574,37 @@ Status: accepted (W49-A, 2026-11-10), supersedes no previous decision.
   `fixtures/expected-art/dexprogs/28_sqlite_basic.stdout` is byte-identical to
   the ACOS run, over three deterministic ART runs.
   `tools/diff-dexprogs.sh --corelib real` = 28 pass / 0 fail / 0 unsupported.
+
+## ADR-0021 — JNI native OS-thread attach: process-global slots + owner-bound VM (W54-A)
+
+Status: accepted (2026-11-11), workstream 3 of cross-platform apps.
+
+- **Context.** Complex native engines (Hermes, the Flutter engine, fbjni) call
+  `AttachCurrentThread` from OS threads created with `pthread_create`, then make
+  JNI calls with a per-thread `JNIEnv`. ACOS runs one VM on one host thread;
+  `acos-vm` is `#![forbid(unsafe_code)]` and `Rc`/`RefCell`-based, so its state
+  is neither `Send` nor `Sync`. The previous `AttachCurrentThread` returned the
+  owner's environment unconditionally and `GetEnv` always succeeded, which is
+  wrong on a native thread.
+- **Decision.** Publish the immutable `JNIEnv` slot address in a process-global
+  atomic at `JniRuntime::new`. `AttachCurrentThread` on a thread with no
+  thread-local runtime attaches it through a global `HashSet<ThreadId>` and
+  returns the shared environment (the function table is stateless, so one
+  `JNIEnv` address is valid for every attached thread). `GetEnv` never attaches
+  and returns `JNI_EDETACHED` for an unattached thread; `DetachCurrentThread`
+  clears the record. The owning thread keeps its thread-local attachment.
+- **Boundary.** The VM stays single-threaded and owner-bound. An attached native
+  thread can call the bookkeeping slots that need no VM, but a VM-touching slot
+  reports `JNI_NO_VM` (structured) rather than racing the owner. Java callbacks
+  from a native OS thread are **not** supported yet.
+- **Why not a brokered re-entrant mutex now.** A sound broker needs the owner to
+  release the `&mut Vm` borrow across the guest call and to pump queued requests
+  at a safe point. That is a VM-wide refactor (safe points, a request channel,
+  and a suspend protocol) that cannot be landed safely inside the W54-A window.
+  The API surface and per-thread attach shipped now are the safe subset; the
+  broker is the follow-up.
+- **Evidence.** `fixtures/jni/acos_jni_slots.c` spawns a real `pthread` and
+  asserts `GetEnv == JNI_EDETACHED` → `AttachCurrentThread == JNI_OK` → same-env
+  `GetEnv == JNI_OK` → `DetachCurrentThread == JNI_OK` → `JNI_EDETACHED`
+  (`jni_native_fixture`, bit 10). `jni_slots::javavm_attach_getenv_and_versions`
+  keeps the owner-thread contract.

@@ -26,6 +26,36 @@ extern "C" {
     pub fn acosrjni_CallLongMethod();
     pub fn acosrjni_CallLongMethodA();
     pub fn acosrjni_CallLongMethodV();
+    pub fn acosrjni_CallNonvirtualBooleanMethod();
+    pub fn acosrjni_CallNonvirtualBooleanMethodA();
+    pub fn acosrjni_CallNonvirtualBooleanMethodV();
+    pub fn acosrjni_CallNonvirtualByteMethod();
+    pub fn acosrjni_CallNonvirtualByteMethodA();
+    pub fn acosrjni_CallNonvirtualByteMethodV();
+    pub fn acosrjni_CallNonvirtualCharMethod();
+    pub fn acosrjni_CallNonvirtualCharMethodA();
+    pub fn acosrjni_CallNonvirtualCharMethodV();
+    pub fn acosrjni_CallNonvirtualDoubleMethod();
+    pub fn acosrjni_CallNonvirtualDoubleMethodA();
+    pub fn acosrjni_CallNonvirtualDoubleMethodV();
+    pub fn acosrjni_CallNonvirtualFloatMethod();
+    pub fn acosrjni_CallNonvirtualFloatMethodA();
+    pub fn acosrjni_CallNonvirtualFloatMethodV();
+    pub fn acosrjni_CallNonvirtualIntMethod();
+    pub fn acosrjni_CallNonvirtualIntMethodA();
+    pub fn acosrjni_CallNonvirtualIntMethodV();
+    pub fn acosrjni_CallNonvirtualLongMethod();
+    pub fn acosrjni_CallNonvirtualLongMethodA();
+    pub fn acosrjni_CallNonvirtualLongMethodV();
+    pub fn acosrjni_CallNonvirtualObjectMethod();
+    pub fn acosrjni_CallNonvirtualObjectMethodA();
+    pub fn acosrjni_CallNonvirtualObjectMethodV();
+    pub fn acosrjni_CallNonvirtualShortMethod();
+    pub fn acosrjni_CallNonvirtualShortMethodA();
+    pub fn acosrjni_CallNonvirtualShortMethodV();
+    pub fn acosrjni_CallNonvirtualVoidMethod();
+    pub fn acosrjni_CallNonvirtualVoidMethodA();
+    pub fn acosrjni_CallNonvirtualVoidMethodV();
     pub fn acosrjni_CallObjectMethod();
     pub fn acosrjni_CallObjectMethodA();
     pub fn acosrjni_CallObjectMethodV();
@@ -391,36 +421,36 @@ fn build_native_table() -> [usize; JNI_SLOT_COUNT] {
         acosrjni_CallVoidMethod as *const () as usize,
         acosrjni_CallVoidMethodV as *const () as usize,
         acosrjni_CallVoidMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualObjectMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualObjectMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualObjectMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualBooleanMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualBooleanMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualBooleanMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualByteMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualByteMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualByteMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualCharMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualCharMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualCharMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualShortMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualShortMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualShortMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualIntMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualIntMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualIntMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualLongMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualLongMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualLongMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualFloatMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualFloatMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualFloatMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualDoubleMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualDoubleMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualDoubleMethodA as *const () as usize,
-        crate::traps::trap_CallNonvirtualVoidMethod as *const () as usize,
-        crate::traps::trap_CallNonvirtualVoidMethodV as *const () as usize,
-        crate::traps::trap_CallNonvirtualVoidMethodA as *const () as usize,
+        acosrjni_CallNonvirtualObjectMethod as *const () as usize,
+        acosrjni_CallNonvirtualObjectMethodV as *const () as usize,
+        acosrjni_CallNonvirtualObjectMethodA as *const () as usize,
+        acosrjni_CallNonvirtualBooleanMethod as *const () as usize,
+        acosrjni_CallNonvirtualBooleanMethodV as *const () as usize,
+        acosrjni_CallNonvirtualBooleanMethodA as *const () as usize,
+        acosrjni_CallNonvirtualByteMethod as *const () as usize,
+        acosrjni_CallNonvirtualByteMethodV as *const () as usize,
+        acosrjni_CallNonvirtualByteMethodA as *const () as usize,
+        acosrjni_CallNonvirtualCharMethod as *const () as usize,
+        acosrjni_CallNonvirtualCharMethodV as *const () as usize,
+        acosrjni_CallNonvirtualCharMethodA as *const () as usize,
+        acosrjni_CallNonvirtualShortMethod as *const () as usize,
+        acosrjni_CallNonvirtualShortMethodV as *const () as usize,
+        acosrjni_CallNonvirtualShortMethodA as *const () as usize,
+        acosrjni_CallNonvirtualIntMethod as *const () as usize,
+        acosrjni_CallNonvirtualIntMethodV as *const () as usize,
+        acosrjni_CallNonvirtualIntMethodA as *const () as usize,
+        acosrjni_CallNonvirtualLongMethod as *const () as usize,
+        acosrjni_CallNonvirtualLongMethodV as *const () as usize,
+        acosrjni_CallNonvirtualLongMethodA as *const () as usize,
+        acosrjni_CallNonvirtualFloatMethod as *const () as usize,
+        acosrjni_CallNonvirtualFloatMethodV as *const () as usize,
+        acosrjni_CallNonvirtualFloatMethodA as *const () as usize,
+        acosrjni_CallNonvirtualDoubleMethod as *const () as usize,
+        acosrjni_CallNonvirtualDoubleMethodV as *const () as usize,
+        acosrjni_CallNonvirtualDoubleMethodA as *const () as usize,
+        acosrjni_CallNonvirtualVoidMethod as *const () as usize,
+        acosrjni_CallNonvirtualVoidMethodV as *const () as usize,
+        acosrjni_CallNonvirtualVoidMethodA as *const () as usize,
         crate::jni::jni_GetFieldID as *const () as usize,
         crate::jni::jni_GetObjectField as *const () as usize,
         crate::jni::jni_GetBooleanField as *const () as usize,
@@ -565,9 +595,7 @@ fn build_native_table() -> [usize; JNI_SLOT_COUNT] {
 
 fn build_invoke_table() -> [usize; 8] {
     [
-        0,
-        0,
-        0,
+        0, 0, 0,
         crate::jni::vm_DestroyJavaVM as *const () as usize,
         crate::jni::vm_AttachCurrentThread as *const () as usize,
         crate::jni::vm_DetachCurrentThread as *const () as usize,
