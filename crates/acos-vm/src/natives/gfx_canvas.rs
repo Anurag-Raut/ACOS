@@ -112,6 +112,18 @@ fn push(canvas: i64, op: DisplayOp) -> VmResult<()> {
     Ok(())
 }
 
+/// Push a display op onto a canvas from another gfx native module (the
+/// `VectorDrawable` tree emits Save/Concat/ClipPath/DrawPath at `nDraw` time).
+pub(crate) fn push_op(canvas: i64, op: DisplayOp) -> VmResult<()> {
+    push(canvas, op)
+}
+
+/// Whether a canvas handle resolves. Used by `gfx_vector::nDraw` so an invalid
+/// canvas is a zero-pixel no-op instead of a panic.
+pub(crate) fn canvas_exists(canvas: i64) -> bool {
+    rec(canvas, |_| ()).is_some()
+}
+
 /// Replay a raster canvas's full display list over its bitmap.
 fn flush_raster(canvas: i64) -> VmResult<()> {
     let Some((bitmap, node, ops, base)) = rec(canvas, |c| {
