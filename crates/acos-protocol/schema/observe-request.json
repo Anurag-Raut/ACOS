@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DisplaySpec": {
+      "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
+      "oneOf": [
+        {
+          "description": "No display at all (headless logic/storage tests).",
+          "properties": {
+            "mode": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Offscreen software surface with an explicit size and density.",
+          "properties": {
+            "density_dpi": {
+              "description": "Density in dots per inch (for example 420).",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "height": {
+              "description": "Height in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "mode": {
+              "enum": [
+                "offscreen"
+              ],
+              "type": "string"
+            },
+            "width": {
+              "description": "Width in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "density_dpi",
+            "height",
+            "mode",
+            "width"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "IsolationLevel": {
+      "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
+      "oneOf": [
+        {
+          "description": "Another activity/task in a shared process and shared app data. No isolation.",
+          "enum": [
+            "shared-task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process, potentially the same package/storage identity.",
+          "enum": [
+            "process"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process/UID/credentials/mount namespace and app data.",
+          "enum": [
+            "sandbox"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fully separate engine instance (strongest short of a VM).",
+          "enum": [
+            "core"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Sandboxed full Android/backend for untrusted or device-level fidelity.",
+          "enum": [
+            "vm"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "RequestBase": {
+      "description": "Identity fields present on every request.",
+      "properties": {
+        "budget": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResourceBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hard resource budget."
+        },
+        "capabilities": {
+          "description": "Capabilities the request needs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cause_id": {
+          "description": "The cause of the last known frame, when relevant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested display (for `run`; reported everywhere)."
+        },
+        "frame_seq": {
+          "description": "The last frame sequence the client has seen, when relevant.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IsolationLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested isolation level (for `run`/`verify`; reported everywhere)."
+        },
+        "request_id": {
+          "description": "Client-chosen request id, echoed in the envelope and used as the frame `cause_id` for actions that produce a frame.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Session the request targets (absent for session-creating commands).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "ResourceBudget": {
+      "description": "Hard resource budgets for one request or one scenario.\n\nEvery field is opt-in; `None` means \"use the engine default\". The engine must return `RESOURCE_LIMIT`/`TIMEOUT` when a budget is exhausted instead of silently exceeding it.",
+      "properties": {
+        "cpu_ms": {
+          "description": "Maximum CPU time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_mib": {
+          "description": "Maximum resident memory attributable to this request/session, in MiB.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_ms": {
+          "description": "Maximum wall-clock time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "description": "`observe`: UI tree, text and frame metadata.",
+  "properties": {
+    "base": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/RequestBase"
+        }
+      ],
+      "description": "Identity fields."
+    },
+    "include_frame": {
+      "default": true,
+      "description": "Include frame metadata.",
+      "type": "boolean"
+    },
+    "max_nodes": {
+      "description": "Maximum nodes to return (truncation is reported).",
+      "format": "uint",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "text": {
+      "default": false,
+      "description": "Include the newline-joined text rendering.",
+      "type": "boolean"
+    },
+    "tree": {
+      "default": true,
+      "description": "Include the structured UI tree.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "base"
+  ],
+  "title": "ObserveRequest",
+  "type": "object"
+}

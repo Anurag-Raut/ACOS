@@ -1,0 +1,195 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Bounds": {
+      "description": "Integer screen bounds `[left, top, right, bottom]` in pixels.\n\nSerialized as a four-element array. `right`/`bottom` are exclusive at the Android/UI-automator pixel-grid level.",
+      "items": {
+        "format": "int32",
+        "type": "integer"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "FrameMeta": {
+      "description": "Metadata for one produced frame.\n\nA frame answers a *cause* (the request/action id that produced it) and has a monotonically increasing per-session `frame_seq`. `content_hash` is the SHA-256 of the encoded pixels. `meaningful` is false for blank/placeholder frames; a placeholder must never satisfy a UI assertion.",
+      "properties": {
+        "cause_id": {
+          "description": "The request id that caused this frame (for example `req_19`).",
+          "type": "string"
+        },
+        "content_hash": {
+          "description": "SHA-256 of the encoded frame pixels (lowercase hex).",
+          "type": "string"
+        },
+        "density": {
+          "description": "Display density in dots per inch.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "frame_seq": {
+          "description": "Monotonic per-session frame sequence number.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "height": {
+          "description": "Frame height in pixels.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "meaningful": {
+          "description": "True only when the frame reflects real rendered UI content.",
+          "type": "boolean"
+        },
+        "produced_at": {
+          "description": "RFC 3339 UTC timestamp when the frame was produced by ACOS.",
+          "type": "string"
+        },
+        "width": {
+          "description": "Frame width in pixels.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cause_id",
+        "content_hash",
+        "density",
+        "frame_seq",
+        "height",
+        "meaningful",
+        "produced_at",
+        "width"
+      ],
+      "type": "object"
+    },
+    "UiNode": {
+      "description": "One UI node.\n\n`id` is a tree-local stable node identity (for example `n7`), not the Android resource id; `resource_id` is the Android id.",
+      "properties": {
+        "bounds": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            }
+          ],
+          "description": "Screen bounds in pixels."
+        },
+        "checked": {
+          "description": "Whether the node is checked (checkboxes/switches).",
+          "type": "boolean"
+        },
+        "children": {
+          "default": [],
+          "description": "Child nodes, in layout order.",
+          "items": {
+            "$ref": "#/definitions/UiNode"
+          },
+          "type": "array"
+        },
+        "class": {
+          "description": "Fully qualified view class.",
+          "type": "string"
+        },
+        "clickable": {
+          "description": "Whether the node accepts clicks.",
+          "type": "boolean"
+        },
+        "content_desc": {
+          "default": "",
+          "description": "Accessibility content description (empty when absent).",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Whether the node is enabled.",
+          "type": "boolean"
+        },
+        "focused": {
+          "description": "Whether the node has input focus.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Tree-local node id, stable for one tree snapshot.",
+          "type": "string"
+        },
+        "package": {
+          "default": "",
+          "description": "Owning package (empty when unknown).",
+          "type": "string"
+        },
+        "resource_id": {
+          "default": "",
+          "description": "Android resource id (empty when absent).",
+          "type": "string"
+        },
+        "scrollable": {
+          "description": "Whether the node can scroll.",
+          "type": "boolean"
+        },
+        "text": {
+          "default": "",
+          "description": "Visible text (empty when absent).",
+          "type": "string"
+        },
+        "visible": {
+          "description": "Whether the node is visible.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bounds",
+        "checked",
+        "class",
+        "clickable",
+        "enabled",
+        "focused",
+        "id",
+        "scrollable",
+        "visible"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "A snapshot of the UI tree for one frame.",
+  "properties": {
+    "frame": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/FrameMeta"
+        }
+      ],
+      "description": "The frame this tree describes."
+    },
+    "nodes": {
+      "description": "Root nodes in document/window order.",
+      "items": {
+        "$ref": "#/definitions/UiNode"
+      },
+      "type": "array"
+    },
+    "package": {
+      "description": "Package owning the root window.",
+      "type": "string"
+    },
+    "text_available": {
+      "default": true,
+      "description": "False when the text/semantics route was unavailable.",
+      "type": "boolean"
+    },
+    "truncated": {
+      "default": false,
+      "description": "True when the tree was truncated by a node limit.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "frame",
+    "nodes",
+    "package"
+  ],
+  "title": "UiTree",
+  "type": "object"
+}

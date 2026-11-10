@@ -1,0 +1,2039 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Action": {
+      "description": "One input action.",
+      "oneOf": [
+        {
+          "description": "Tap a selector or a point.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "tap"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target selector (mutually exclusive with x/y)."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "x": {
+              "description": "Explicit x (mutually exclusive with selector).",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "y": {
+              "description": "Explicit y (mutually exclusive with selector).",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Long-press a selector or point.",
+          "properties": {
+            "duration_ms": {
+              "default": 600,
+              "description": "Hold duration.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "long_press"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target selector."
+            },
+            "x": {
+              "description": "Explicit x.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "y": {
+              "description": "Explicit y.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Swipe/drag between two points.",
+          "properties": {
+            "duration_ms": {
+              "default": 300,
+              "description": "Gesture duration.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Point"
+                }
+              ],
+              "description": "Start point."
+            },
+            "kind": {
+              "enum": [
+                "swipe"
+              ],
+              "type": "string"
+            },
+            "to": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Point"
+                }
+              ],
+              "description": "End point."
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Type text, optionally into a selected node first.",
+          "properties": {
+            "clear": {
+              "default": false,
+              "description": "Clear the field first.",
+              "type": "boolean"
+            },
+            "kind": {
+              "enum": [
+                "type"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target node (absent = current focus)."
+            },
+            "text": {
+              "description": "Text to enter.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Press a symbolic key.",
+          "properties": {
+            "key": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/KeyName"
+                }
+              ],
+              "description": "Key name."
+            },
+            "kind": {
+              "enum": [
+                "key"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Press Back.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "back"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rotate the display.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "rotate"
+              ],
+              "type": "string"
+            },
+            "orientation": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Orientation"
+                }
+              ],
+              "description": "Requested orientation."
+            }
+          },
+          "required": [
+            "kind",
+            "orientation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wait for a selector (event-driven, not a polling sleep).",
+          "properties": {
+            "kind": {
+              "enum": [
+                "wait"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Selector to wait for."
+            },
+            "timeout_ms": {
+              "default": 5000,
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ActionRequest": {
+      "description": "`action`: deliver one input action.",
+      "properties": {
+        "action": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Action"
+            }
+          ],
+          "description": "The action."
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        }
+      },
+      "required": [
+        "action",
+        "base"
+      ],
+      "type": "object"
+    },
+    "AssertRequest": {
+      "description": "`assert`: evaluate an assertion.",
+      "properties": {
+        "assertion": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Assertion"
+            }
+          ],
+          "description": "The assertion."
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "fresh_frame": {
+          "default": false,
+          "description": "Produce a fresh frame as part of the assertion evidence.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "assertion",
+        "base"
+      ],
+      "type": "object"
+    },
+    "Assertion": {
+      "description": "Any assertion the `assert` command can evaluate.",
+      "oneOf": [
+        {
+          "description": "Node text (and optional bounds).",
+          "properties": {
+            "bounds": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Bounds"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional exact expected screen bounds."
+            },
+            "kind": {
+              "enum": [
+                "text"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Which node to inspect."
+            },
+            "text": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TextMatch"
+                }
+              ],
+              "description": "Expected text matcher."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "selector",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Node visibility.",
+          "properties": {
+            "bounds": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Bounds"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional exact expected bounds."
+            },
+            "kind": {
+              "enum": [
+                "visible"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Which node to inspect."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Node invisibility.",
+          "properties": {
+            "bounds": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Bounds"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional exact expected bounds."
+            },
+            "kind": {
+              "enum": [
+                "not_visible"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Which node to inspect."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Node state flags.",
+          "properties": {
+            "checked": {
+              "description": "Expected checked flag.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "clickable": {
+              "description": "Expected clickable flag.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "enabled": {
+              "description": "Expected enabled flag.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "focused": {
+              "description": "Expected focus flag.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "kind": {
+              "enum": [
+                "state"
+              ],
+              "type": "string"
+            },
+            "scrollable": {
+              "description": "Expected scrollable flag.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Which node to inspect."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "visible": {
+              "description": "Expected visibility.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Log line sequence.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "log"
+              ],
+              "type": "string"
+            },
+            "min_matches": {
+              "default": 1,
+              "description": "Minimum number of matched lines required per pattern.",
+              "format": "uint",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "ordered": {
+              "default": true,
+              "description": "Require the patterns in order.",
+              "type": "boolean"
+            },
+            "patterns": {
+              "description": "Regex patterns to match against log messages.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "since_previous_step": {
+              "default": false,
+              "description": "Only consider log events produced since the previous scenario step. This is what makes lifecycle assertions step-scoped instead of matching an earlier cycle.",
+              "type": "boolean"
+            },
+            "tag": {
+              "description": "Log tag to filter on (for example `AcosFixture`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "patterns"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "No crash/ANR.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "no_crash"
+              ],
+              "type": "string"
+            },
+            "since_seq": {
+              "description": "Only consider events with `seq > since_seq`.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Screenshot regression.",
+          "properties": {
+            "baseline": {
+              "description": "Baseline PNG path, relative to the scenario file or workspace root.",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "screenshot"
+              ],
+              "type": "string"
+            },
+            "region_masks": {
+              "default": [],
+              "description": "Regions excluded from the comparison.",
+              "items": {
+                "$ref": "#/definitions/RegionMask"
+              },
+              "type": "array"
+            },
+            "tolerance": {
+              "description": "Maximum allowed fraction of changed pixels in `0.0..=1.0`.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "baseline",
+            "kind",
+            "tolerance"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Bounds": {
+      "description": "Integer screen bounds `[left, top, right, bottom]` in pixels.\n\nSerialized as a four-element array. `right`/`bottom` are exclusive at the Android/UI-automator pixel-grid level.",
+      "items": {
+        "format": "int32",
+        "type": "integer"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "CapabilityReportRequest": {
+      "description": "`capability-report`: what this engine can do for an APK/scenario.",
+      "properties": {
+        "apk": {
+          "description": "APK path.",
+          "type": "string"
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "native_libs": {
+          "default": false,
+          "description": "Include native-library/symbol coverage.",
+          "type": "boolean"
+        },
+        "scenario": {
+          "description": "Optional scenario to check against.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "apk",
+        "base"
+      ],
+      "type": "object"
+    },
+    "CaptureFormat": {
+      "description": "Capture encoding.",
+      "oneOf": [
+        {
+          "description": "PNG.",
+          "enum": [
+            "png"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Raw RGBA pixels.",
+          "enum": [
+            "raw"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "CaptureRequest": {
+      "description": "`capture`: obtain a fresh frame.",
+      "properties": {
+        "after_cause": {
+          "description": "Only accept a frame caused by this request/action id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after_seq": {
+          "description": "Only accept a frame with `frame_seq > after_seq`.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "format": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CaptureFormat"
+            }
+          ],
+          "default": "png",
+          "description": "Encoding."
+        },
+        "fresh": {
+          "default": true,
+          "description": "Require a frame produced after the request (default true).",
+          "type": "boolean"
+        },
+        "output": {
+          "description": "Output path, relative to the artifacts directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "type": "object"
+    },
+    "DataPolicy": {
+      "description": "Data lifetime policy for a new session.",
+      "oneOf": [
+        {
+          "description": "Fresh app data, discarded on destroy.",
+          "enum": [
+            "ephemeral"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Persist app data across sessions.",
+          "enum": [
+            "persistent"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fresh app data, kept until reset.",
+          "enum": [
+            "fresh"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "DestroyRequest": {
+      "description": "`destroy`: tear down a session.",
+      "properties": {
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "type": "object"
+    },
+    "DisplaySpec": {
+      "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
+      "oneOf": [
+        {
+          "description": "No display at all (headless logic/storage tests).",
+          "properties": {
+            "mode": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Offscreen software surface with an explicit size and density.",
+          "properties": {
+            "density_dpi": {
+              "description": "Density in dots per inch (for example 420).",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "height": {
+              "description": "Height in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "mode": {
+              "enum": [
+                "offscreen"
+              ],
+              "type": "string"
+            },
+            "width": {
+              "description": "Width in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "density_dpi",
+            "height",
+            "mode",
+            "width"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EventKind": {
+      "description": "The event kinds an agent can filter on.",
+      "oneOf": [
+        {
+          "description": "Activity/application lifecycle transition.",
+          "enum": [
+            "lifecycle"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A logcat-style log line.",
+          "enum": [
+            "log"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An app crash.",
+          "enum": [
+            "crash"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An app-not-responding event.",
+          "enum": [
+            "anr"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A produced frame.",
+          "enum": [
+            "frame"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Acknowledgement that an input action was delivered.",
+          "enum": [
+            "input-ack"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "EventsRequest": {
+      "description": "`events`: read the session event stream.",
+      "properties": {
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "kinds": {
+          "default": [],
+          "description": "Only return these kinds (empty = all).",
+          "items": {
+            "$ref": "#/definitions/EventKind"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "description": "Maximum number of events.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "since_seq": {
+          "description": "Return events with `seq > since_seq` (cursor from the previous call).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Event-driven wait for at least one matching event.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "type": "object"
+    },
+    "Fidelity": {
+      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success.",
+      "oneOf": [
+        {
+          "description": "Static host analysis only.",
+          "enum": [
+            "static-analysis"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Host JVM (weak oracle; never Android-verified).",
+          "enum": [
+            "jvm-reference"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "ACOS native execution; not ART-validated by itself.",
+          "enum": [
+            "native-runtime"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Real ART reference capture/execution.",
+          "enum": [
+            "art-reference"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Physical device/OEM target.",
+          "enum": [
+            "physical-device"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Mocked/simulated behaviour.",
+          "enum": [
+            "simulated"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "InspectRequest": {
+      "description": "`inspect`: static APK analysis.",
+      "properties": {
+        "abi_map": {
+          "default": false,
+          "description": "Include the ABI map.",
+          "type": "boolean"
+        },
+        "apk": {
+          "description": "APK path (workspace-relative or absolute).",
+          "type": "string"
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "native_libs": {
+          "default": false,
+          "description": "Include native library details.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "apk",
+        "base"
+      ],
+      "type": "object"
+    },
+    "IsolationLevel": {
+      "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
+      "oneOf": [
+        {
+          "description": "Another activity/task in a shared process and shared app data. No isolation.",
+          "enum": [
+            "shared-task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process, potentially the same package/storage identity.",
+          "enum": [
+            "process"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process/UID/credentials/mount namespace and app data.",
+          "enum": [
+            "sandbox"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fully separate engine instance (strongest short of a VM).",
+          "enum": [
+            "core"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Sandboxed full Android/backend for untrusted or device-level fidelity.",
+          "enum": [
+            "vm"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "KeyName": {
+      "description": "A symbolic key.",
+      "oneOf": [
+        {
+          "description": "Back.",
+          "enum": [
+            "back"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Home.",
+          "enum": [
+            "home"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Enter.",
+          "enum": [
+            "enter"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Tab.",
+          "enum": [
+            "tab"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Delete/backspace.",
+          "enum": [
+            "delete"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Escape.",
+          "enum": [
+            "escape"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume up.",
+          "enum": [
+            "volume_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume down.",
+          "enum": [
+            "volume_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Power.",
+          "enum": [
+            "power"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Menu.",
+          "enum": [
+            "menu"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad up.",
+          "enum": [
+            "dpad_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad down.",
+          "enum": [
+            "dpad_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad left.",
+          "enum": [
+            "dpad_left"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad right.",
+          "enum": [
+            "dpad_right"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ObserveRequest": {
+      "description": "`observe`: UI tree, text and frame metadata.",
+      "properties": {
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "include_frame": {
+          "default": true,
+          "description": "Include frame metadata.",
+          "type": "boolean"
+        },
+        "max_nodes": {
+          "description": "Maximum nodes to return (truncation is reported).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "text": {
+          "default": false,
+          "description": "Include the newline-joined text rendering.",
+          "type": "boolean"
+        },
+        "tree": {
+          "default": true,
+          "description": "Include the structured UI tree.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "type": "object"
+    },
+    "Orientation": {
+      "description": "Screen orientation.",
+      "oneOf": [
+        {
+          "description": "Portrait.",
+          "enum": [
+            "portrait"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Landscape.",
+          "enum": [
+            "landscape"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Point": {
+      "description": "A point in screen pixels.",
+      "properties": {
+        "x": {
+          "description": "X coordinate.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Y coordinate.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "ProfileRequest": {
+      "description": "`profile`: collect metrics.",
+      "properties": {
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "cpu": {
+          "default": true,
+          "description": "Include CPU metrics.",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "description": "Sampling window.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "frames": {
+          "default": true,
+          "description": "Include frame metrics.",
+          "type": "boolean"
+        },
+        "memory": {
+          "default": true,
+          "description": "Include memory metrics.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "type": "object"
+    },
+    "RegionMask": {
+      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).",
+      "properties": {
+        "bounds": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            }
+          ],
+          "description": "Screen region to mask out."
+        },
+        "reason": {
+          "description": "Why this region is nondeterministic (documented, not decorative).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bounds"
+      ],
+      "type": "object"
+    },
+    "RequestBase": {
+      "description": "Identity fields present on every request.",
+      "properties": {
+        "budget": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResourceBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hard resource budget."
+        },
+        "capabilities": {
+          "description": "Capabilities the request needs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cause_id": {
+          "description": "The cause of the last known frame, when relevant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested display (for `run`; reported everywhere)."
+        },
+        "frame_seq": {
+          "description": "The last frame sequence the client has seen, when relevant.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IsolationLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested isolation level (for `run`/`verify`; reported everywhere)."
+        },
+        "request_id": {
+          "description": "Client-chosen request id, echoed in the envelope and used as the frame `cause_id` for actions that produce a frame.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Session the request targets (absent for session-creating commands).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "ResetRequest": {
+      "description": "`reset`: reset session/app/data state.",
+      "properties": {
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "scope": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResetScope"
+            }
+          ],
+          "description": "What to reset."
+        }
+      },
+      "required": [
+        "base",
+        "scope"
+      ],
+      "type": "object"
+    },
+    "ResetScope": {
+      "description": "What a reset clears.",
+      "oneOf": [
+        {
+          "description": "Recreate the task only; app data is shared.",
+          "enum": [
+            "task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Clear app data and relaunch.",
+          "enum": [
+            "app"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Clear app data and caches.",
+          "enum": [
+            "data"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Reset everything the session owns.",
+          "enum": [
+            "all"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ResourceBudget": {
+      "description": "Hard resource budgets for one request or one scenario.\n\nEvery field is opt-in; `None` means \"use the engine default\". The engine must return `RESOURCE_LIMIT`/`TIMEOUT` when a budget is exhausted instead of silently exceeding it.",
+      "properties": {
+        "cpu_ms": {
+          "description": "Maximum CPU time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_mib": {
+          "description": "Maximum resident memory attributable to this request/session, in MiB.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_ms": {
+          "description": "Maximum wall-clock time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RunDexRequest": {
+      "description": "`run-dex`: execute a DEX `main`.",
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Program arguments for `main(String[])`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "gc_stress": {
+          "default": false,
+          "description": "Run the GC-stress profile.",
+          "type": "boolean"
+        },
+        "heap_max_bytes": {
+          "description": "Heap limit in bytes.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "main": {
+          "default": "Main",
+          "description": "Fully qualified main class.",
+          "type": "string"
+        },
+        "path": {
+          "description": "`.dex`, `.apk`, or directory of `.dex` files.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base",
+        "path"
+      ],
+      "type": "object"
+    },
+    "RunRequest": {
+      "description": "`run`: launch an app and create a session.",
+      "properties": {
+        "activity": {
+          "description": "Activity component (`pkg/.Activity` or `.Activity`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "apk": {
+          "description": "APK path.",
+          "type": "string"
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields; `isolation` and `display` are honoured here."
+        },
+        "data": {
+          "description": "Intent data URI.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DataPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Data lifetime policy."
+        },
+        "extras": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "String extras.",
+          "type": "object"
+        },
+        "intent_action": {
+          "description": "Intent action instead of an explicit activity.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Human label for the session (also used in artifacts).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "apk",
+        "base"
+      ],
+      "type": "object"
+    },
+    "Selector": {
+      "description": "A node selector. See the module docs for the stable matching rules.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exact screen bounds."
+        },
+        "class": {
+          "description": "Exact view class.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_desc": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Content-description matcher."
+        },
+        "id": {
+          "description": "Android resource id (`pkg:id/name`), or a bare local id (`name`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Zero-based occurrence among otherwise matching nodes.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Text matcher."
+        }
+      },
+      "type": "object"
+    },
+    "TextMatch": {
+      "description": "A text matching rule: exactly one of `exact`, `contains`, `regex`.\n\nA struct rather than an enum so the agent-facing YAML/JSON form is a plain map (`text: {exact: \"Greet\"}`) and not a YAML `!tag`.",
+      "properties": {
+        "contains": {
+          "description": "Substring containment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact": {
+          "description": "Full string equality (no trimming or normalisation).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regex": {
+          "description": "Unanchored Rust regex (`is_match`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "VerifyRequest": {
+      "description": "`verify`: run an APK + scenario and produce artifacts.",
+      "properties": {
+        "apk": {
+          "description": "APK path (overrides the scenario `app` when set).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifacts": {
+          "description": "Artifacts output directory.",
+          "type": "string"
+        },
+        "base": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RequestBase"
+            }
+          ],
+          "description": "Identity fields."
+        },
+        "flags": {
+          "default": [],
+          "description": "Deterministic flags recorded in the reproducer.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reference": {
+          "description": "Optional art-reference directory to compare against.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "required_fidelity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Fidelity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Minimum fidelity the verdict must achieve."
+        },
+        "scenario": {
+          "description": "Scenario path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifacts",
+        "base",
+        "scenario"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "A request for any command.",
+  "oneOf": [
+    {
+      "description": "`inspect`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "inspect"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/InspectRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`run-dex`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "run-dex"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/RunDexRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`run`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "run"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/RunRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`observe`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "observe"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/ObserveRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`capture`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "capture"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/CaptureRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`action`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "action"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/ActionRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`assert`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "assert"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/AssertRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`events`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "events"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/EventsRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`reset`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "reset"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/ResetRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`profile`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "profile"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/ProfileRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`destroy`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "destroy"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/DestroyRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`verify`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "verify"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/VerifyRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "`capability-report`.",
+      "properties": {
+        "command": {
+          "enum": [
+            "capability-report"
+          ],
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/definitions/CapabilityReportRequest"
+        }
+      },
+      "required": [
+        "command",
+        "request"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "CommandRequest"
+}

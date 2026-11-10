@@ -1,0 +1,362 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "LifecycleState": {
+      "description": "Activity/application lifecycle state.",
+      "oneOf": [
+        {
+          "description": "`Application.onCreate`.",
+          "enum": [
+            "app_created"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onCreate`.",
+          "enum": [
+            "created"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onStart`.",
+          "enum": [
+            "started"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onResume`.",
+          "enum": [
+            "resumed"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onPause`.",
+          "enum": [
+            "paused"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onStop`.",
+          "enum": [
+            "stopped"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onSaveInstanceState`.",
+          "enum": [
+            "save_instance_state"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "`Activity.onDestroy`.",
+          "enum": [
+            "destroyed"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The activity/process was recreated.",
+          "enum": [
+            "recreated"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app process was killed by the engine/test.",
+          "enum": [
+            "process_killed"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app process started.",
+          "enum": [
+            "process_started"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "LogLevel": {
+      "description": "Logcat-style severity.",
+      "oneOf": [
+        {
+          "description": "Verbose.",
+          "enum": [
+            "verbose"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Debug.",
+          "enum": [
+            "debug"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Info.",
+          "enum": [
+            "info"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Warning.",
+          "enum": [
+            "warn"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Error.",
+          "enum": [
+            "error"
+          ],
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "description": "One event on a session stream.",
+  "oneOf": [
+    {
+      "description": "Lifecycle transition.",
+      "properties": {
+        "activity": {
+          "description": "Component name, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "lifecycle"
+          ],
+          "type": "string"
+        },
+        "state": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/LifecycleState"
+            }
+          ],
+          "description": "The new state."
+        }
+      },
+      "required": [
+        "kind",
+        "state"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "Log line.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "log"
+          ],
+          "type": "string"
+        },
+        "level": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/LogLevel"
+            }
+          ],
+          "description": "Severity."
+        },
+        "message": {
+          "description": "Message body (no trailing newline).",
+          "type": "string"
+        },
+        "tag": {
+          "description": "Log tag.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "level",
+        "message",
+        "tag"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "App crash.",
+      "properties": {
+        "exception": {
+          "description": "Exception class or signal.",
+          "type": "string"
+        },
+        "fatal": {
+          "description": "True when the crash killed the process.",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "crash"
+          ],
+          "type": "string"
+        },
+        "message": {
+          "description": "Exception message.",
+          "type": "string"
+        },
+        "stack": {
+          "default": [],
+          "description": "Stack frames.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "exception",
+        "fatal",
+        "kind",
+        "message"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "App-not-responding.",
+      "properties": {
+        "activity": {
+          "description": "Activity being processed, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "anr"
+          ],
+          "type": "string"
+        },
+        "reason": {
+          "description": "Human reason (`main thread blocked`, ...).",
+          "type": "string"
+        },
+        "stack": {
+          "default": [],
+          "description": "Main-thread stack.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "A frame was produced.",
+      "properties": {
+        "cause_id": {
+          "description": "The request that caused the frame.",
+          "type": "string"
+        },
+        "content_hash": {
+          "description": "SHA-256 of the encoded pixels.",
+          "type": "string"
+        },
+        "frame_seq": {
+          "description": "Frame sequence number.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "frame"
+          ],
+          "type": "string"
+        },
+        "meaningful": {
+          "description": "True when the frame reflects real UI content.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cause_id",
+        "content_hash",
+        "frame_seq",
+        "kind",
+        "meaningful"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "Input was delivered.",
+      "properties": {
+        "accepted": {
+          "description": "Whether the platform acknowledged delivery.",
+          "type": "boolean"
+        },
+        "action": {
+          "description": "The action (`tap`, `type`, `back`, ...).",
+          "type": "string"
+        },
+        "cause_id": {
+          "description": "The request that requested the input.",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "input-ack"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "accepted",
+        "action",
+        "cause_id",
+        "kind"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "seq": {
+      "description": "Monotonic per-session sequence number.",
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "session_id": {
+      "description": "Session this event belongs to, when known.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timestamp_ms": {
+      "description": "Milliseconds since the Unix epoch, as reported by the runtime clock.",
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "seq",
+    "timestamp_ms"
+  ],
+  "title": "Event",
+  "type": "object"
+}

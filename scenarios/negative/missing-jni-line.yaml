@@ -1,0 +1,26 @@
+# NEGATIVE: one JNI result line is mis-stated.
+# Must produce status=fail even though six of the seven lines are correct.
+version: 1
+name: negative-missing-jni-line
+description: Require a registeredEcho line with the wrong value.
+app: fixtures/build/apps/hello-jni.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: sandbox
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hellojni/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      timeout_ms: 5000
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "registeredEcho=echo?"}

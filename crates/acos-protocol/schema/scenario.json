@@ -1,0 +1,1641 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Bounds": {
+      "description": "Integer screen bounds `[left, top, right, bottom]` in pixels.\n\nSerialized as a four-element array. `right`/`bottom` are exclusive at the Android/UI-automator pixel-grid level.",
+      "items": {
+        "format": "int32",
+        "type": "integer"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "CallActivityMethodStep": {
+      "description": "`call_activity_method` (optional; debug/source-owned builds only).",
+      "properties": {
+        "activity": {
+          "description": "Activity component (defaults to the launched activity).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "args": {
+          "default": [],
+          "description": "JSON arguments.",
+          "items": true,
+          "type": "array"
+        },
+        "method": {
+          "description": "Method name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "type": "object"
+    },
+    "CaptureFormat": {
+      "description": "Capture encoding.",
+      "oneOf": [
+        {
+          "description": "PNG.",
+          "enum": [
+            "png"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Raw RGBA pixels.",
+          "enum": [
+            "raw"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "CaptureStep": {
+      "description": "`capture`.",
+      "properties": {
+        "format": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CaptureFormat"
+            }
+          ],
+          "default": "png",
+          "description": "Encoding."
+        },
+        "fresh": {
+          "default": true,
+          "description": "Require a fresh frame.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Artifact name (`frames/<seq>.png` is always written; this names the step).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "DensitySetup": {
+      "description": "`set_density`.",
+      "properties": {
+        "density_dpi": {
+          "description": "Density in dpi.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "density_dpi"
+      ],
+      "type": "object"
+    },
+    "DisplaySpec": {
+      "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
+      "oneOf": [
+        {
+          "description": "No display at all (headless logic/storage tests).",
+          "properties": {
+            "mode": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Offscreen software surface with an explicit size and density.",
+          "properties": {
+            "density_dpi": {
+              "description": "Density in dots per inch (for example 420).",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "height": {
+              "description": "Height in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "mode": {
+              "enum": [
+                "offscreen"
+              ],
+              "type": "string"
+            },
+            "width": {
+              "description": "Width in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "density_dpi",
+            "height",
+            "mode",
+            "width"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EmptyStep": {
+      "description": "An empty step payload (`- back: {}`).",
+      "type": "object"
+    },
+    "Engine": {
+      "description": "Which engine should run the scenario.",
+      "oneOf": [
+        {
+          "description": "Use the native runtime when it can, otherwise fall back per policy.",
+          "enum": [
+            "native-preferred"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Only the native runtime; never fall back.",
+          "enum": [
+            "native-only"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Only the reference backend.",
+          "enum": [
+            "reference-only"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Expectation": {
+      "description": "What the scenario expects. Used to make negative tests explicit.",
+      "oneOf": [
+        {
+          "description": "The scenario must produce `status: pass`.",
+          "enum": [
+            "pass"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The scenario must produce `status: fail` (the app ran; a check did not hold).",
+          "enum": [
+            "fail"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The scenario must produce any non-pass status (crash/unsupported/... count).",
+          "enum": [
+            "non_pass"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "FallbackPolicy": {
+      "description": "What to do when the preferred engine cannot run a step.",
+      "oneOf": [
+        {
+          "description": "Report the native result and escalate to the reference backend when allowed.",
+          "enum": [
+            "report-and-escalate"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Report the native result only; never silently switch engines.",
+          "enum": [
+            "report-only"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Forbid fallback; an unsupported capability stays unsupported.",
+          "enum": [
+            "forbid"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "IsolationLevel": {
+      "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
+      "oneOf": [
+        {
+          "description": "Another activity/task in a shared process and shared app data. No isolation.",
+          "enum": [
+            "shared-task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process, potentially the same package/storage identity.",
+          "enum": [
+            "process"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process/UID/credentials/mount namespace and app data.",
+          "enum": [
+            "sandbox"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fully separate engine instance (strongest short of a VM).",
+          "enum": [
+            "core"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Sandboxed full Android/backend for untrusted or device-level fidelity.",
+          "enum": [
+            "vm"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "KeyName": {
+      "description": "A symbolic key.",
+      "oneOf": [
+        {
+          "description": "Back.",
+          "enum": [
+            "back"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Home.",
+          "enum": [
+            "home"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Enter.",
+          "enum": [
+            "enter"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Tab.",
+          "enum": [
+            "tab"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Delete/backspace.",
+          "enum": [
+            "delete"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Escape.",
+          "enum": [
+            "escape"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume up.",
+          "enum": [
+            "volume_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume down.",
+          "enum": [
+            "volume_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Power.",
+          "enum": [
+            "power"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Menu.",
+          "enum": [
+            "menu"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad up.",
+          "enum": [
+            "dpad_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad down.",
+          "enum": [
+            "dpad_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad left.",
+          "enum": [
+            "dpad_left"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad right.",
+          "enum": [
+            "dpad_right"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "KeyStep": {
+      "description": "`key`.",
+      "properties": {
+        "key": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeyName"
+            }
+          ],
+          "description": "Symbolic key."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "LaunchStep": {
+      "description": "`launch`.",
+      "properties": {
+        "activity": {
+          "description": "Explicit component (`pkg/.Activity` or `.Activity`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clear_state": {
+          "default": false,
+          "description": "Clear app data before launching.",
+          "type": "boolean"
+        },
+        "data": {
+          "description": "Intent data URI.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extras": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "String extras.",
+          "type": "object"
+        },
+        "intent_action": {
+          "description": "Intent action.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LocaleSetup": {
+      "description": "`set_locale`.",
+      "properties": {
+        "locale": {
+          "description": "BCP-47-ish locale (`en-US`, `pt_BR`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "locale"
+      ],
+      "type": "object"
+    },
+    "LogAssertion": {
+      "description": "Assert a logcat-style line sequence.\n\nEach pattern is a Rust regex. With `ordered: true` the patterns must match in order (extra lines are allowed); with `ordered: false` each pattern must match at least once.",
+      "properties": {
+        "min_matches": {
+          "default": 1,
+          "description": "Minimum number of matched lines required per pattern.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "ordered": {
+          "default": true,
+          "description": "Require the patterns in order.",
+          "type": "boolean"
+        },
+        "patterns": {
+          "description": "Regex patterns to match against log messages.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "since_previous_step": {
+          "default": false,
+          "description": "Only consider log events produced since the previous scenario step. This is what makes lifecycle assertions step-scoped instead of matching an earlier cycle.",
+          "type": "boolean"
+        },
+        "tag": {
+          "description": "Log tag to filter on (for example `AcosFixture`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Event-driven timeout.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "patterns"
+      ],
+      "type": "object"
+    },
+    "NetworkRule": {
+      "description": "One mocked HTTP response.",
+      "properties": {
+        "body": {
+          "description": "Response body.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delay_ms": {
+          "description": "Artificial delay before responding.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Response headers.",
+          "type": "object"
+        },
+        "method": {
+          "description": "HTTP method (defaults to any).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "Response status.",
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "times": {
+          "description": "Match at most this many times (absent = unlimited).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "URL or URL pattern.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "url"
+      ],
+      "type": "object"
+    },
+    "NetworkSetup": {
+      "description": "`set_network`.",
+      "properties": {
+        "offline": {
+          "description": "Force offline/online state.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rules": {
+          "default": [],
+          "description": "Mocked responses.",
+          "items": {
+            "$ref": "#/definitions/NetworkRule"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "NoCrashAssertion": {
+      "description": "Assert that no crash/ANR event occurred.",
+      "properties": {
+        "since_seq": {
+          "description": "Only consider events with `seq > since_seq`.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Orientation": {
+      "description": "Screen orientation.",
+      "oneOf": [
+        {
+          "description": "Portrait.",
+          "enum": [
+            "portrait"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Landscape.",
+          "enum": [
+            "landscape"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "OutputOptions": {
+      "description": "Artifact options.",
+      "properties": {
+        "logs": {
+          "default": true,
+          "description": "Write logs (`logs/`).",
+          "type": "boolean"
+        },
+        "resource_metrics": {
+          "default": true,
+          "description": "Write `resources.json`.",
+          "type": "boolean"
+        },
+        "screenshots": {
+          "default": true,
+          "description": "Write screenshots (`frames/<seq>.png`).",
+          "type": "boolean"
+        },
+        "traces": {
+          "default": true,
+          "description": "Write the event trace (`events.jsonl`).",
+          "type": "boolean"
+        },
+        "ui_tree": {
+          "default": true,
+          "description": "Write UI trees (`tree/<seq>.json`).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "PermissionSetup": {
+      "description": "`set_permission`.",
+      "properties": {
+        "permission": {
+          "description": "Fully qualified permission name.",
+          "type": "string"
+        },
+        "state": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PermissionState"
+            }
+          ],
+          "description": "State to apply."
+        }
+      },
+      "required": [
+        "permission",
+        "state"
+      ],
+      "type": "object"
+    },
+    "PermissionState": {
+      "description": "Permission state.",
+      "oneOf": [
+        {
+          "description": "Granted.",
+          "enum": [
+            "grant"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Denied.",
+          "enum": [
+            "deny"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Revoked.",
+          "enum": [
+            "revoke"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Reset to the manifest/default state.",
+          "enum": [
+            "reset"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "RegionMask": {
+      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).",
+      "properties": {
+        "bounds": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            }
+          ],
+          "description": "Screen region to mask out."
+        },
+        "reason": {
+          "description": "Why this region is nondeterministic (documented, not decorative).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bounds"
+      ],
+      "type": "object"
+    },
+    "ResetScope": {
+      "description": "What a reset clears.",
+      "oneOf": [
+        {
+          "description": "Recreate the task only; app data is shared.",
+          "enum": [
+            "task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Clear app data and relaunch.",
+          "enum": [
+            "app"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Clear app data and caches.",
+          "enum": [
+            "data"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Reset everything the session owns.",
+          "enum": [
+            "all"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ResetStep": {
+      "description": "`reset`.",
+      "properties": {
+        "scope": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResetScope"
+            }
+          ],
+          "description": "Reset scope."
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "type": "object"
+    },
+    "ResourceBudget": {
+      "description": "Hard resource budgets for one request or one scenario.\n\nEvery field is opt-in; `None` means \"use the engine default\". The engine must return `RESOURCE_LIMIT`/`TIMEOUT` when a budget is exhausted instead of silently exceeding it.",
+      "properties": {
+        "cpu_ms": {
+          "description": "Maximum CPU time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_mib": {
+          "description": "Maximum resident memory attributable to this request/session, in MiB.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_ms": {
+          "description": "Maximum wall-clock time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RotateStep": {
+      "description": "`rotate`.",
+      "properties": {
+        "orientation": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Orientation"
+            }
+          ],
+          "description": "Requested orientation."
+        }
+      },
+      "required": [
+        "orientation"
+      ],
+      "type": "object"
+    },
+    "ScreenshotAssertion": {
+      "description": "Screenshot regression assertion.",
+      "properties": {
+        "baseline": {
+          "description": "Baseline PNG path, relative to the scenario file or workspace root.",
+          "type": "string"
+        },
+        "region_masks": {
+          "default": [],
+          "description": "Regions excluded from the comparison.",
+          "items": {
+            "$ref": "#/definitions/RegionMask"
+          },
+          "type": "array"
+        },
+        "tolerance": {
+          "description": "Maximum allowed fraction of changed pixels in `0.0..=1.0`.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "baseline",
+        "tolerance"
+      ],
+      "type": "object"
+    },
+    "Selector": {
+      "description": "A node selector. See the module docs for the stable matching rules.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exact screen bounds."
+        },
+        "class": {
+          "description": "Exact view class.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_desc": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Content-description matcher."
+        },
+        "id": {
+          "description": "Android resource id (`pkg:id/name`), or a bare local id (`name`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Zero-based occurrence among otherwise matching nodes.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Text matcher."
+        }
+      },
+      "type": "object"
+    },
+    "StateAssertion": {
+      "description": "Assert node state flags.",
+      "properties": {
+        "checked": {
+          "description": "Expected checked flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "clickable": {
+          "description": "Expected clickable flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "enabled": {
+          "description": "Expected enabled flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "focused": {
+          "description": "Expected focus flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "scrollable": {
+          "description": "Expected scrollable flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            }
+          ],
+          "description": "Which node to inspect."
+        },
+        "timeout_ms": {
+          "description": "Event-driven timeout.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "visible": {
+          "description": "Expected visibility.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "Step": {
+      "description": "A scenario step.\n\nOn the wire a step is a one-key map: `- launch: {activity: .MainActivity}`. The struct has one optional field per step kind; validation enforces that **exactly one** is present. (A Rust enum would map to YAML `!tag` syntax with `serde_yaml_ng`, which is not the agent-facing format.)",
+      "properties": {
+        "assert_log": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LogAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert a log sequence."
+        },
+        "assert_no_crash": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NoCrashAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert no crash/ANR."
+        },
+        "assert_not_visible": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/VisibilityAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert node invisibility."
+        },
+        "assert_screenshot": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ScreenshotAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert a screenshot against a baseline."
+        },
+        "assert_state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StateAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert node state flags."
+        },
+        "assert_text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert node text/bounds."
+        },
+        "assert_visible": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/VisibilityAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert node visibility."
+        },
+        "back": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EmptyStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Press Back."
+        },
+        "call_activity_method": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CallActivityMethodStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Invoke an explicitly injected test hook. Optional and only safe for debuggable/source-owned builds; never for arbitrary third-party APKs."
+        },
+        "capture": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CaptureStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Capture a frame into the artifacts directory."
+        },
+        "key": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/KeyStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Press a key."
+        },
+        "launch": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LaunchStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Launch the app."
+        },
+        "reset": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResetStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reset session/app/data state."
+        },
+        "rotate": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RotateStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Rotate the display."
+        },
+        "set_density": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DensitySetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set display density."
+        },
+        "set_locale": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LocaleSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set the locale."
+        },
+        "set_network": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NetworkSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Install deterministic network responses."
+        },
+        "set_permission": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PermissionSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set a runtime permission."
+        },
+        "set_theme": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThemeSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set light/dark theme."
+        },
+        "set_time": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimeSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set the runtime clock."
+        },
+        "tap": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TapStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tap a selector or point."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypeStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Type text."
+        },
+        "wait_for": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitForStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wait for a selector (event-driven)."
+        }
+      },
+      "type": "object"
+    },
+    "TapStep": {
+      "description": "`tap`.",
+      "properties": {
+        "selector": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Target selector."
+        },
+        "timeout_ms": {
+          "description": "Event-driven timeout.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "x": {
+          "description": "Explicit x.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "y": {
+          "description": "Explicit y.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TextAssertion": {
+      "description": "Assert a node's text (and optionally its exact bounds).",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional exact expected screen bounds."
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            }
+          ],
+          "description": "Which node to inspect."
+        },
+        "text": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            }
+          ],
+          "description": "Expected text matcher."
+        },
+        "timeout_ms": {
+          "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "selector",
+        "text"
+      ],
+      "type": "object"
+    },
+    "TextMatch": {
+      "description": "A text matching rule: exactly one of `exact`, `contains`, `regex`.\n\nA struct rather than an enum so the agent-facing YAML/JSON form is a plain map (`text: {exact: \"Greet\"}`) and not a YAML `!tag`.",
+      "properties": {
+        "contains": {
+          "description": "Substring containment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact": {
+          "description": "Full string equality (no trimming or normalisation).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regex": {
+          "description": "Unanchored Rust regex (`is_match`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Theme": {
+      "description": "Theme.",
+      "oneOf": [
+        {
+          "description": "Light.",
+          "enum": [
+            "light"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Dark.",
+          "enum": [
+            "dark"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Follow the system.",
+          "enum": [
+            "system"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ThemeSetup": {
+      "description": "`set_theme`.",
+      "properties": {
+        "theme": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Theme"
+            }
+          ],
+          "description": "Theme to apply."
+        }
+      },
+      "required": [
+        "theme"
+      ],
+      "type": "object"
+    },
+    "TimeSetup": {
+      "description": "`set_time`.",
+      "properties": {
+        "timestamp": {
+          "description": "RFC 3339 UTC timestamp.",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "Optional IANA timezone.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "TypeStep": {
+      "description": "`type`.",
+      "properties": {
+        "clear": {
+          "default": false,
+          "description": "Clear the field first.",
+          "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Target selector (absent = current focus)."
+        },
+        "text": {
+          "description": "Text to enter.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "VisibilityAssertion": {
+      "description": "Assert a node is visible.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional exact expected bounds."
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            }
+          ],
+          "description": "Which node to inspect."
+        },
+        "timeout_ms": {
+          "description": "Event-driven timeout.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "WaitForStep": {
+      "description": "`wait_for`.",
+      "properties": {
+        "require_visible": {
+          "default": true,
+          "description": "Require the matched node to be visible.",
+          "type": "boolean"
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            }
+          ],
+          "description": "Selector to wait for."
+        },
+        "timeout_ms": {
+          "default": 5000,
+          "description": "Event-driven timeout.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "A complete scenario.",
+  "properties": {
+    "api_level": {
+      "description": "Android API level required, when the scenario pins one.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "app": {
+      "description": "APK path (workspace-relative or absolute).",
+      "type": "string"
+    },
+    "budgets": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ResourceBudget"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Resource budget."
+    },
+    "capabilities": {
+      "default": [],
+      "description": "Capabilities the scenario needs.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "description": {
+      "description": "Optional description.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "display": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/DisplaySpec"
+        }
+      ],
+      "description": "Display spec."
+    },
+    "engine": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Engine"
+        }
+      ],
+      "default": "native-preferred",
+      "description": "Engine preference."
+    },
+    "expectation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Expectation"
+        }
+      ],
+      "default": "pass",
+      "description": "Expected outcome."
+    },
+    "fallback": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/FallbackPolicy"
+        }
+      ],
+      "default": "report-and-escalate",
+      "description": "Fallback policy."
+    },
+    "isolation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/IsolationLevel"
+        }
+      ],
+      "description": "Isolation level."
+    },
+    "name": {
+      "description": "Human/agent-readable name (also used in the verdict).",
+      "type": "string"
+    },
+    "output": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/OutputOptions"
+        }
+      ],
+      "default": {
+        "logs": true,
+        "resource_metrics": true,
+        "screenshots": true,
+        "traces": true,
+        "ui_tree": true
+      },
+      "description": "Artifact options."
+    },
+    "steps": {
+      "description": "Ordered steps.",
+      "items": {
+        "$ref": "#/definitions/Step"
+      },
+      "type": "array"
+    },
+    "version": {
+      "description": "Format version; must be [`SCENARIO_VERSION`].",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "app",
+    "display",
+    "isolation",
+    "name",
+    "steps",
+    "version"
+  ],
+  "title": "Scenario",
+  "type": "object"
+}

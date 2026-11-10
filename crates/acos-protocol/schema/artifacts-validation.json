@@ -1,0 +1,582 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ArtifactIssue": {
+      "description": "One artifact-validation problem.",
+      "properties": {
+        "code": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ErrorCode"
+            }
+          ],
+          "description": "Stable code (`ARTIFACTS_INVALID` today)."
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path of the offending artifact.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "path"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "A stable, machine-readable ACOS error code.\n\nThe serde representation is the exact `SCREAMING_SNAKE_CASE` string that agents branch on. Codes are additive: a code is never renamed or re-used for a different meaning.",
+      "oneOf": [
+        {
+          "description": "The native engine lacks a required `android.*` API or behaviour.",
+          "enum": [
+            "UNSUPPORTED_ANDROID_API"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The native engine lacks a required Java/library API.",
+          "enum": [
+            "UNSUPPORTED_JAVA_API"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A Dalvik opcode or bytecode feature is not implemented.",
+          "enum": [
+            "UNSUPPORTED_BYTECODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required native (ELF/Bionic/JNI) symbol is not implemented.",
+          "enum": [
+            "UNSUPPORTED_NATIVE_SYMBOL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The behaviour needs a real device, OEM service or hardware target.",
+          "enum": [
+            "NEEDS_REAL_DEVICE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app requires licensed Google Mobile Services.",
+          "enum": [
+            "REQUIRES_GMS"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The APK/native library ABI is not supported by this engine.",
+          "enum": [
+            "WRONG_ABI"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Capture/observe was requested on a headless session.",
+          "enum": [
+            "NO_DISPLAY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Text/semantics were requested but the chosen route cannot provide them.",
+          "enum": [
+            "NO_TEXT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native relocation kind is not implemented by the loader.",
+          "enum": [
+            "UNSUPPORTED_RELOCATION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The renderer hit an operation it cannot draw faithfully.",
+          "enum": [
+            "RENDER_UNSUPPORTED_OP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested backend does not exist in this build.",
+          "enum": [
+            "UNSUPPORTED_BACKEND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "No frame satisfying the request (freshness / sequencing) exists.",
+          "enum": [
+            "NO_FRESH_FRAME"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Evidence cannot be tied to the required fidelity level.",
+          "enum": [
+            "UNVERIFIED_FIDELITY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The input is not a readable zip/APK container.",
+          "enum": [
+            "APK_NOT_ZIP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The container is a zip but has no `AndroidManifest.xml`.",
+          "enum": [
+            "APK_NO_MANIFEST"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "I/O failure while reading the APK from disk.",
+          "enum": [
+            "APK_IO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A zip entry could not be read or decompressed.",
+          "enum": [
+            "APK_ENTRY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The APK Signing Block is present but malformed.",
+          "enum": [
+            "APK_SIGNING_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The binary `AndroidManifest.xml` (AXML) is malformed.",
+          "enum": [
+            "AXML_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The `resources.arsc` resource table is malformed.",
+          "enum": [
+            "ARSC_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX magic is not `dex\\n`.",
+          "enum": [
+            "DEX_BAD_MAGIC"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX version is not supported.",
+          "enum": [
+            "DEX_UNSUPPORTED_VERSION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX Adler-32 checksum does not match.",
+          "enum": [
+            "DEX_BAD_CHECKSUM"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX SHA-1 signature does not match.",
+          "enum": [
+            "DEX_BAD_SIGNATURE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX is truncated relative to its header/map.",
+          "enum": [
+            "DEX_TRUNCATED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX endian tag is invalid.",
+          "enum": [
+            "DEX_BAD_ENDIAN"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX index is out of range.",
+          "enum": [
+            "DEX_INDEX_OUT_OF_RANGE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX instruction is malformed.",
+          "enum": [
+            "DEX_BAD_INSTRUCTION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX opcode is defined as unused.",
+          "enum": [
+            "DEX_UNUSED_OPCODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX LEB128 value is malformed.",
+          "enum": [
+            "DEX_BAD_LEB128"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX MUTF-8 string is malformed.",
+          "enum": [
+            "DEX_BAD_MUTF8"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX encoded value is malformed.",
+          "enum": [
+            "DEX_BAD_ENCODED_VALUE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX class data item is malformed.",
+          "enum": [
+            "DEX_BAD_CLASS_DATA"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX code item is malformed.",
+          "enum": [
+            "DEX_BAD_CODE_ITEM"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX debug info is malformed.",
+          "enum": [
+            "DEX_BAD_DEBUG_INFO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX annotation is malformed.",
+          "enum": [
+            "DEX_BAD_ANNOTATION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The DEX map is malformed.",
+          "enum": [
+            "DEX_BAD_MAP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The DEX header is malformed.",
+          "enum": [
+            "DEX_BAD_HEADER"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX structural or bytecode verification failed.",
+          "enum": [
+            "DEX_VERIFY_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Integer overflow while parsing a DEX structure.",
+          "enum": [
+            "DEX_OVERFLOW"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX file could not be loaded into the VM.",
+          "enum": [
+            "DEX_LOAD_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An ELF native library is malformed.",
+          "enum": [
+            "ELF_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native dependency is missing.",
+          "enum": [
+            "NATIVE_DEP_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native library initializer failed.",
+          "enum": [
+            "NATIVE_INIT_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Native I/O failed.",
+          "enum": [
+            "NATIVE_IO_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required native symbol was not found.",
+          "enum": [
+            "NATIVE_SYMBOL_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native-loader argument is invalid.",
+          "enum": [
+            "NATIVE_INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A VM invariant or implementation bug (never user input).",
+          "enum": [
+            "VM_INTERNAL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A live Java exception escaped the entry point.",
+          "enum": [
+            "JAVA_EXCEPTION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app process crashed (uncaught exception / signal / abort).",
+          "enum": [
+            "APP_CRASHED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app is not responding (ANR / main-thread stall).",
+          "enum": [
+            "APP_NOT_RESPONDING"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An assertion ran and did not hold.",
+          "enum": [
+            "ASSERTION_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A selector matched no node.",
+          "enum": [
+            "ELEMENT_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A UI node reference is no longer valid.",
+          "enum": [
+            "STALE_REF"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested session does not exist (or was already destroyed).",
+          "enum": [
+            "SESSION_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The session is busy with another request.",
+          "enum": [
+            "SESSION_BUSY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested isolation level is not implemented for this app.",
+          "enum": [
+            "ISOLATION_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested isolation level is advertised but its guarantees are unmet.",
+          "enum": [
+            "ISOLATION_UNSATISFIED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A memory admission/guard rule was triggered.",
+          "enum": [
+            "RAM_GUARD"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Execution was aborted by the RAM guard.",
+          "enum": [
+            "RAM_ABORT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The operation exceeded its wall/CPU budget.",
+          "enum": [
+            "TIMEOUT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A declared resource budget was exhausted.",
+          "enum": [
+            "RESOURCE_LIMIT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The scenario is structurally or semantically invalid.",
+          "enum": [
+            "INVALID_SCENARIO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A request argument is invalid.",
+          "enum": [
+            "INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An artifact path was rejected (escape, absolute path, symlink, ...).",
+          "enum": [
+            "UNSAFE_PATH"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The artifacts directory is incomplete or contradicts its verdict.",
+          "enum": [
+            "ARTIFACTS_INVALID"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A render handle is invalid or already released.",
+          "enum": [
+            "RENDER_BAD_HANDLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required font could not be found.",
+          "enum": [
+            "RENDER_FONT_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A renderer argument is invalid.",
+          "enum": [
+            "RENDER_INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A render surface has invalid dimensions.",
+          "enum": [
+            "RENDER_SIZE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An image could not be decoded.",
+          "enum": [
+            "RENDER_DECODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Renderer I/O failed.",
+          "enum": [
+            "RENDER_IO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Strict rendering mode escalated an otherwise-recordable fidelity loss.",
+          "enum": [
+            "RENDER_STRICT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "ACOS itself failed (distinct from an app crash).",
+          "enum": [
+            "INTERNAL"
+          ],
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "description": "Result of validating an artifacts directory.",
+  "properties": {
+    "issues": {
+      "description": "Every problem found.",
+      "items": {
+        "$ref": "#/definitions/ArtifactIssue"
+      },
+      "type": "array"
+    },
+    "ok": {
+      "description": "True when the directory is internally consistent and complete.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "issues",
+    "ok"
+  ],
+  "title": "ArtifactValidation",
+  "type": "object"
+}

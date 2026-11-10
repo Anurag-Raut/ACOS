@@ -1,0 +1,23 @@
+{
+  "request_id": "req_2",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "capabilities_used": [
+    "dex.run"
+  ],
+  "error": {
+    "code": "UNSUPPORTED_JAVA_API",
+    "message": "java.lang.reflect.Proxy is not implemented (at Lx;->y)",
+    "hint": "Read details.api/details.at; replace it with an implemented API, or declare the task unsupported and (if allowed) escalate to the reference backend.",
+    "retryable": false,
+    "details": {
+      "api": "java.lang.reflect.Proxy",
+      "at": "Lx;->y"
+    }
+  },
+  "metrics": {
+    "wall_ms": 4
+  }
+}

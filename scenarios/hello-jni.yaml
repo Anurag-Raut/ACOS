@@ -1,0 +1,106 @@
+# hello-jni: JNI in both directions through the Rust loader/JNIEnv.
+#
+# Expected report text and bounds come from
+# fixtures/reference/hello-jni/art-api34-x86_64/ (1080x2400 @ 420 dpi).
+# The report TextView has no resource id, so it is selected by class + bounds.
+version: 1
+name: hello-jni
+description: >-
+  Launch hello-jni, verify every JNI result line (NewStringUTF, primitive args,
+  int array, native-to-Java callbacks, RegisterNatives, ThrowNew caught in Java)
+  and the AcosJniFixture log order.
+app: fixtures/build/apps/hello-jni.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: sandbox
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - jni
+  - native-loader
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hellojni/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {text: {exact: Hello JNI}}
+      text: {exact: Hello JNI}
+      bounds: [42, 166, 261, 237]
+
+  # ---- the full native report, line by line ------------------------------
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "stringFromJNI=Hello from native C"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "add(20,22)=42"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "sumArray([1,2,3,4,5])=15"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "javaCallbackResult=42"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "voidCallback=from-native"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "registeredEcho=echo!"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        bounds: [0, 275, 1080, 2337]
+      text: {contains: "throwFromJNI caught=thrown from native"}
+
+  # The JNI callbacks log during launch; scan the whole session log.
+  - assert_log:
+      tag: AcosJniFixture
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^javaCallback x=21$'
+        - '^voidCallback s=from-native$'
+
+  - capture:
+      name: initial-report
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

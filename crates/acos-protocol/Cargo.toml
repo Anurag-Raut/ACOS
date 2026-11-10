@@ -1,0 +1,19 @@
+[package]
+name = "acos-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The agent-facing ACOS protocol: typed commands, error taxonomy, scenarios, artifacts and MCP descriptors."
+
+[dependencies]
+regex = "1"
+schemars = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+# YAML crate choice: serde_yaml is archived/unmaintained and serde_yml is
+# deprecated by its own release notes. serde_yaml_ng is the maintained fork of
+# serde_yaml with the same API, used only to parse the agent-facing scenario
+# format. JSON remains the wire format for every response.
+serde_yaml_ng = "0.10"
+thiserror = { workspace = true }

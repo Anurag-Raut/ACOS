@@ -1,0 +1,17 @@
+{
+  "request_id": "req_1",
+  "ok": true,
+  "status": "pass",
+  "backend": "host-tooling",
+  "fidelity": "static-analysis",
+  "capabilities_used": [
+    "apk.inspect"
+  ],
+  "result": {
+    "package": "dev.acos.fixtures.helloviews",
+    "launcher_activity": "dev.acos.fixtures.helloviews.MainActivity"
+  },
+  "metrics": {
+    "wall_ms": 3
+  }
+}

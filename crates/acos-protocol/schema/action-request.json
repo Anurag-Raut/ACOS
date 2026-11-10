@@ -1,0 +1,751 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Action": {
+      "description": "One input action.",
+      "oneOf": [
+        {
+          "description": "Tap a selector or a point.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "tap"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target selector (mutually exclusive with x/y)."
+            },
+            "timeout_ms": {
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "x": {
+              "description": "Explicit x (mutually exclusive with selector).",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "y": {
+              "description": "Explicit y (mutually exclusive with selector).",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Long-press a selector or point.",
+          "properties": {
+            "duration_ms": {
+              "default": 600,
+              "description": "Hold duration.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "long_press"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target selector."
+            },
+            "x": {
+              "description": "Explicit x.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "y": {
+              "description": "Explicit y.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Swipe/drag between two points.",
+          "properties": {
+            "duration_ms": {
+              "default": 300,
+              "description": "Gesture duration.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Point"
+                }
+              ],
+              "description": "Start point."
+            },
+            "kind": {
+              "enum": [
+                "swipe"
+              ],
+              "type": "string"
+            },
+            "to": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Point"
+                }
+              ],
+              "description": "End point."
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Type text, optionally into a selected node first.",
+          "properties": {
+            "clear": {
+              "default": false,
+              "description": "Clear the field first.",
+              "type": "boolean"
+            },
+            "kind": {
+              "enum": [
+                "type"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target node (absent = current focus)."
+            },
+            "text": {
+              "description": "Text to enter.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Press a symbolic key.",
+          "properties": {
+            "key": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/KeyName"
+                }
+              ],
+              "description": "Key name."
+            },
+            "kind": {
+              "enum": [
+                "key"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Press Back.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "back"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rotate the display.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "rotate"
+              ],
+              "type": "string"
+            },
+            "orientation": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Orientation"
+                }
+              ],
+              "description": "Requested orientation."
+            }
+          },
+          "required": [
+            "kind",
+            "orientation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wait for a selector (event-driven, not a polling sleep).",
+          "properties": {
+            "kind": {
+              "enum": [
+                "wait"
+              ],
+              "type": "string"
+            },
+            "selector": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Selector"
+                }
+              ],
+              "description": "Selector to wait for."
+            },
+            "timeout_ms": {
+              "default": 5000,
+              "description": "Event-driven timeout.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Bounds": {
+      "description": "Integer screen bounds `[left, top, right, bottom]` in pixels.\n\nSerialized as a four-element array. `right`/`bottom` are exclusive at the Android/UI-automator pixel-grid level.",
+      "items": {
+        "format": "int32",
+        "type": "integer"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "DisplaySpec": {
+      "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
+      "oneOf": [
+        {
+          "description": "No display at all (headless logic/storage tests).",
+          "properties": {
+            "mode": {
+              "enum": [
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Offscreen software surface with an explicit size and density.",
+          "properties": {
+            "density_dpi": {
+              "description": "Density in dots per inch (for example 420).",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "height": {
+              "description": "Height in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "mode": {
+              "enum": [
+                "offscreen"
+              ],
+              "type": "string"
+            },
+            "width": {
+              "description": "Width in pixels.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "density_dpi",
+            "height",
+            "mode",
+            "width"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "IsolationLevel": {
+      "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
+      "oneOf": [
+        {
+          "description": "Another activity/task in a shared process and shared app data. No isolation.",
+          "enum": [
+            "shared-task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process, potentially the same package/storage identity.",
+          "enum": [
+            "process"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process/UID/credentials/mount namespace and app data.",
+          "enum": [
+            "sandbox"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fully separate engine instance (strongest short of a VM).",
+          "enum": [
+            "core"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Sandboxed full Android/backend for untrusted or device-level fidelity.",
+          "enum": [
+            "vm"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "KeyName": {
+      "description": "A symbolic key.",
+      "oneOf": [
+        {
+          "description": "Back.",
+          "enum": [
+            "back"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Home.",
+          "enum": [
+            "home"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Enter.",
+          "enum": [
+            "enter"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Tab.",
+          "enum": [
+            "tab"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Delete/backspace.",
+          "enum": [
+            "delete"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Escape.",
+          "enum": [
+            "escape"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume up.",
+          "enum": [
+            "volume_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Volume down.",
+          "enum": [
+            "volume_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Power.",
+          "enum": [
+            "power"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Menu.",
+          "enum": [
+            "menu"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad up.",
+          "enum": [
+            "dpad_up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad down.",
+          "enum": [
+            "dpad_down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad left.",
+          "enum": [
+            "dpad_left"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "D-pad right.",
+          "enum": [
+            "dpad_right"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Orientation": {
+      "description": "Screen orientation.",
+      "oneOf": [
+        {
+          "description": "Portrait.",
+          "enum": [
+            "portrait"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Landscape.",
+          "enum": [
+            "landscape"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Point": {
+      "description": "A point in screen pixels.",
+      "properties": {
+        "x": {
+          "description": "X coordinate.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Y coordinate.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "RequestBase": {
+      "description": "Identity fields present on every request.",
+      "properties": {
+        "budget": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResourceBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hard resource budget."
+        },
+        "capabilities": {
+          "description": "Capabilities the request needs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cause_id": {
+          "description": "The cause of the last known frame, when relevant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested display (for `run`; reported everywhere)."
+        },
+        "frame_seq": {
+          "description": "The last frame sequence the client has seen, when relevant.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IsolationLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requested isolation level (for `run`/`verify`; reported everywhere)."
+        },
+        "request_id": {
+          "description": "Client-chosen request id, echoed in the envelope and used as the frame `cause_id` for actions that produce a frame.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Session the request targets (absent for session-creating commands).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "ResourceBudget": {
+      "description": "Hard resource budgets for one request or one scenario.\n\nEvery field is opt-in; `None` means \"use the engine default\". The engine must return `RESOURCE_LIMIT`/`TIMEOUT` when a budget is exhausted instead of silently exceeding it.",
+      "properties": {
+        "cpu_ms": {
+          "description": "Maximum CPU time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_mib": {
+          "description": "Maximum resident memory attributable to this request/session, in MiB.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_ms": {
+          "description": "Maximum wall-clock time, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Selector": {
+      "description": "A node selector. See the module docs for the stable matching rules.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exact screen bounds."
+        },
+        "class": {
+          "description": "Exact view class.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_desc": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Content-description matcher."
+        },
+        "id": {
+          "description": "Android resource id (`pkg:id/name`), or a bare local id (`name`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Zero-based occurrence among otherwise matching nodes.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Text matcher."
+        }
+      },
+      "type": "object"
+    },
+    "TextMatch": {
+      "description": "A text matching rule: exactly one of `exact`, `contains`, `regex`.\n\nA struct rather than an enum so the agent-facing YAML/JSON form is a plain map (`text: {exact: \"Greet\"}`) and not a YAML `!tag`.",
+      "properties": {
+        "contains": {
+          "description": "Substring containment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact": {
+          "description": "Full string equality (no trimming or normalisation).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regex": {
+          "description": "Unanchored Rust regex (`is_match`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "description": "`action`: deliver one input action.",
+  "properties": {
+    "action": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Action"
+        }
+      ],
+      "description": "The action."
+    },
+    "base": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/RequestBase"
+        }
+      ],
+      "description": "Identity fields."
+    }
+  },
+  "required": [
+    "action",
+    "base"
+  ],
+  "title": "ActionRequest",
+  "type": "object"
+}

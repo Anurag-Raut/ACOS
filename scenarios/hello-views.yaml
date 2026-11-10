@@ -1,0 +1,178 @@
+# hello-views: real Activity, real framework views, real input.
+#
+# Expected values come from the ART reference captures in
+# fixtures/reference/hello-views/art-api34-x86_64/:
+#   display 1080x2400 @ 420 dpi, locale en-US, light theme, font scale 1.0.
+# The bounds below are the ART uiautomator bounds at that configuration.
+version: 1
+name: hello-views
+description: >-
+  Launch hello-views, verify initial texts and bounds, type World, tap Greet
+  twice, rotate to landscape and back (state save/restore), press Back, and
+  verify the AcosFixture lifecycle order with logcat regex assertions.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+
+  # ---- ART reference: initial state -------------------------------------
+  - assert_text:
+      selector: {id: title}
+      text: {exact: Hello ACOS}
+      bounds: [42, 317, 231, 368]
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: Enter your name}
+      bounds: [42, 368, 1038, 486]
+
+  - assert_text:
+      selector: {id: btn}
+      text: {exact: Greet}
+      bounds: [42, 486, 273, 612]
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}
+      bounds: [42, 612, 175, 663]
+
+  # Cold-start logs happened during launch, before these assert steps;
+  # scan the whole session log for this first lifecycle check.
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  # ---- first click -------------------------------------------------------
+  - tap:
+      selector: {id: input}
+  - type:
+      selector: {id: input}
+      text: World
+  - tap:
+      selector: {id: btn}
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^greet name=World clicks=1$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, World! clicks: 1"}
+      bounds: [42, 612, 392, 663]
+
+  - capture:
+      name: after-click-1
+      format: png
+      fresh: true
+
+  # ---- second click ------------------------------------------------------
+  - tap:
+      selector: {id: btn}
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^greet name=World clicks=2$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, World! clicks: 2"}
+      bounds: [42, 612, 392, 663]
+
+  # ---- rotate to landscape: activity recreated, counter restored --------
+  - rotate:
+      orientation: landscape
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: World}
+      bounds: [170, 282, 2358, 400]
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 2"}
+      bounds: [170, 526, 303, 577]
+
+  # ---- rotate back to portrait ------------------------------------------
+  - rotate:
+      orientation: portrait
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 2"}
+      bounds: [42, 612, 175, 663]
+
+  # ---- back destroys the activity ---------------------------------------
+  - back: {}
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+
+  - assert_no_crash: {}

@@ -1,0 +1,27 @@
+# NEGATIVE: the requested log order never occurs.
+# Must produce status=fail; ordered log assertions are not set membership.
+version: 1
+name: negative-wrong-lifecycle-order
+description: Require onResume before onStart before onCreate, which never happens.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onResume$'
+        - '^onStart$'
+        - '^onCreate$'

@@ -1,0 +1,661 @@
+//! The UI tree and selector model.
+//!
+//! Selector semantics are deliberately small and stable:
+//!
+//! * `id` matches the full Android resource id exactly. A bare local id without
+//!   `/` also matches the suffix after the last `/` (`btn` matches
+//!   `dev.acos.fixtures.helloviews:id/btn`).
+//! * `text` / `content_desc` are exact, substring (`contains`) or Rust-regex
+//!   (`regex`, unanchored `is_match`) matches. Matching is case-sensitive.
+//! * `class` is an exact match.
+//! * `bounds` is exact equality of integer screen bounds.
+//! * All specified fields are ANDed.
+//! * `index` selects the 0-based occurrence among the nodes matching the other
+//!   fields, in stable document order (pre-order depth-first).
+//! * A selector with no fields is invalid (`INVALID_ARGUMENT` / `INVALID_SCENARIO`).
+//! * Document order is pre-order depth-first with children in stored order.
+
+use regex::Regex;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::frame::FrameMeta;
+
+/// Integer screen bounds `[left, top, right, bottom]` in pixels.
+///
+/// Serialized as a four-element array. `right`/`bottom` are exclusive at the
+/// Android/UI-automator pixel-grid level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct Bounds(pub [i32; 4]);
+
+impl Bounds {
+    /// Build from edges.
+    pub const fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
+        Bounds([left, top, right, bottom])
+    }
+
+    /// Left edge.
+    pub const fn left(self) -> i32 {
+        self.0[0]
+    }
+
+    /// Top edge.
+    pub const fn top(self) -> i32 {
+        self.0[1]
+    }
+
+    /// Right edge.
+    pub const fn right(self) -> i32 {
+        self.0[2]
+    }
+
+    /// Bottom edge.
+    pub const fn bottom(self) -> i32 {
+        self.0[3]
+    }
+
+    /// Width in pixels (may be negative for invalid bounds).
+    pub const fn width(self) -> i32 {
+        self.0[2] - self.0[0]
+    }
+
+    /// Height in pixels (may be negative for invalid bounds).
+    pub const fn height(self) -> i32 {
+        self.0[3] - self.0[1]
+    }
+
+    /// True when the rectangle has non-negative width/height.
+    pub const fn is_valid(self) -> bool {
+        self.0[0] <= self.0[2] && self.0[1] <= self.0[3]
+    }
+
+    /// Center point.
+    pub const fn center(self) -> (i32, i32) {
+        (self.0[0] + self.width() / 2, self.0[1] + self.height() / 2)
+    }
+}
+
+impl std::fmt::Display for Bounds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{},{}][{},{}]",
+            self.0[0], self.0[1], self.0[2], self.0[3]
+        )
+    }
+}
+
+impl From<[i32; 4]> for Bounds {
+    fn from(value: [i32; 4]) -> Self {
+        Bounds(value)
+    }
+}
+
+impl std::str::FromStr for Bounds {
+    type Err = BoundsParseError;
+
+    /// Parse the uiautomator form `[42,317][231,368]`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let inner = s
+            .strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .ok_or_else(|| BoundsParseError(s.to_string()))?;
+        let (first, second) = inner
+            .split_once("][")
+            .ok_or_else(|| BoundsParseError(s.to_string()))?;
+        let mut nums = Vec::with_capacity(4);
+        for part in [first, second] {
+            for n in part.split(',') {
+                nums.push(
+                    n.trim()
+                        .parse::<i32>()
+                        .map_err(|_| BoundsParseError(s.to_string()))?,
+                );
+            }
+        }
+        if nums.len() != 4 {
+            return Err(BoundsParseError(s.to_string()));
+        }
+        Ok(Bounds([nums[0], nums[1], nums[2], nums[3]]))
+    }
+}
+
+/// Bounds string parse failure.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid bounds (expected `[left,top][right,bottom]`): {0}")]
+pub struct BoundsParseError(pub String);
+
+/// A text matching rule: exactly one of `exact`, `contains`, `regex`.
+///
+/// A struct rather than an enum so the agent-facing YAML/JSON form is a plain
+/// map (`text: {exact: "Greet"}`) and not a YAML `!tag`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TextMatch {
+    /// Full string equality (no trimming or normalisation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact: Option<String>,
+    /// Substring containment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contains: Option<String>,
+    /// Unanchored Rust regex (`is_match`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regex: Option<String>,
+}
+
+impl TextMatch {
+    /// Exact matcher.
+    pub fn exact(s: impl Into<String>) -> Self {
+        TextMatch {
+            exact: Some(s.into()),
+            ..TextMatch::default()
+        }
+    }
+
+    /// Contains matcher.
+    pub fn contains(s: impl Into<String>) -> Self {
+        TextMatch {
+            contains: Some(s.into()),
+            ..TextMatch::default()
+        }
+    }
+
+    /// Regex matcher.
+    pub fn regex(s: impl Into<String>) -> Self {
+        TextMatch {
+            regex: Some(s.into()),
+            ..TextMatch::default()
+        }
+    }
+
+    /// The populated matcher kind, when exactly one is set.
+    pub fn kind(&self) -> Option<&'static str> {
+        match (&self.exact, &self.contains, &self.regex) {
+            (Some(_), None, None) => Some("exact"),
+            (None, Some(_), None) => Some("contains"),
+            (None, None, Some(_)) => Some("regex"),
+            _ => None,
+        }
+    }
+
+    /// Evaluate against a node string. An invalid matcher matches nothing.
+    pub fn matches(&self, haystack: &str) -> bool {
+        match (&self.exact, &self.contains, &self.regex) {
+            (Some(needle), None, None) => haystack == needle,
+            (None, Some(needle), None) => haystack.contains(needle),
+            (None, None, Some(pattern)) => Regex::new(pattern)
+                .map(|re| re.is_match(haystack))
+                .unwrap_or(false),
+            _ => false,
+        }
+    }
+
+    /// Validate the matcher, returning a human-readable problem if any.
+    pub fn validate(&self) -> Option<String> {
+        match (&self.exact, &self.contains, &self.regex) {
+            (Some(s), None, None) | (None, Some(s), None) => {
+                if s.is_empty() {
+                    Some("text matcher must not be empty".to_string())
+                } else {
+                    None
+                }
+            }
+            (None, None, Some(pattern)) => {
+                if pattern.is_empty() {
+                    return Some("regex must not be empty".to_string());
+                }
+                Regex::new(pattern)
+                    .err()
+                    .map(|e| format!("invalid regex: {e}"))
+            }
+            _ => Some("text matcher must set exactly one of exact/contains/regex".to_string()),
+        }
+    }
+
+    /// Human-readable description for logs and diffs.
+    pub fn describe(&self) -> String {
+        match (&self.exact, &self.contains, &self.regex) {
+            (Some(s), None, None) => format!("exactly {s:?}"),
+            (None, Some(s), None) => format!("containing {s:?}"),
+            (None, None, Some(s)) => format!("matching /{s}/"),
+            _ => "invalid text matcher".to_string(),
+        }
+    }
+}
+
+/// A node selector. See the module docs for the stable matching rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Selector {
+    /// Android resource id (`pkg:id/name`), or a bare local id (`name`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Text matcher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextMatch>,
+    /// Content-description matcher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_desc: Option<TextMatch>,
+    /// Exact view class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class: Option<String>,
+    /// Exact screen bounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<Bounds>,
+    /// Zero-based occurrence among otherwise matching nodes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+}
+
+impl Selector {
+    /// A selector by resource id.
+    pub fn by_id(id: impl Into<String>) -> Self {
+        Selector {
+            id: Some(id.into()),
+            ..Selector::default()
+        }
+    }
+
+    /// A selector by exact text.
+    pub fn by_text(text: impl Into<String>) -> Self {
+        Selector {
+            text: Some(TextMatch::exact(text)),
+            ..Selector::default()
+        }
+    }
+
+    /// A selector by exact class.
+    pub fn by_class(class: impl Into<String>) -> Self {
+        Selector {
+            class: Some(class.into()),
+            ..Selector::default()
+        }
+    }
+
+    /// True when no matching field is present.
+    pub fn is_empty(&self) -> bool {
+        self.id.is_none()
+            && self.text.is_none()
+            && self.content_desc.is_none()
+            && self.class.is_none()
+            && self.bounds.is_none()
+            && self.index.is_none()
+    }
+
+    /// All semantic problems with this selector (empty for a valid selector).
+    pub fn validation_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.is_empty() {
+            errors.push(
+                "selector is empty; set at least one of id/text/content_desc/class/bounds"
+                    .to_string(),
+            );
+            return errors;
+        }
+        if let Some(id) = &self.id {
+            if id.is_empty() {
+                errors.push("selector.id must not be empty".to_string());
+            }
+        }
+        if let Some(class) = &self.class {
+            if class.is_empty() {
+                errors.push("selector.class must not be empty".to_string());
+            }
+        }
+        if let Some(text) = &self.text {
+            if let Some(err) = text.validate() {
+                errors.push(format!("selector.text: {err}"));
+            }
+        }
+        if let Some(desc) = &self.content_desc {
+            if let Some(err) = desc.validate() {
+                errors.push(format!("selector.content_desc: {err}"));
+            }
+        }
+        if let Some(bounds) = self.bounds {
+            if !bounds.is_valid() {
+                errors.push(format!(
+                    "selector.bounds must satisfy left<=right and top<=bottom: {bounds}"
+                ));
+            }
+        }
+        errors
+    }
+
+    /// True when a single node matches all specified fields (index excluded).
+    pub fn matches_node(&self, node: &UiNode) -> bool {
+        if let Some(id) = &self.id {
+            let matches = node.resource_id == *id
+                || node
+                    .resource_id
+                    .rsplit_once('/')
+                    .map(|(_, local)| local == id)
+                    .unwrap_or(false);
+            if !matches {
+                return false;
+            }
+        }
+        if let Some(text) = &self.text {
+            if !text.matches(&node.text) {
+                return false;
+            }
+        }
+        if let Some(desc) = &self.content_desc {
+            if !desc.matches(&node.content_desc) {
+                return false;
+            }
+        }
+        if let Some(class) = &self.class {
+            if node.class != *class {
+                return false;
+            }
+        }
+        if let Some(bounds) = self.bounds {
+            if node.bounds != bounds {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// One UI node.
+///
+/// `id` is a tree-local stable node identity (for example `n7`), not the Android
+/// resource id; `resource_id` is the Android id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct UiNode {
+    /// Tree-local node id, stable for one tree snapshot.
+    pub id: String,
+    /// Fully qualified view class.
+    pub class: String,
+    /// Android resource id (empty when absent).
+    #[serde(default)]
+    pub resource_id: String,
+    /// Visible text (empty when absent).
+    #[serde(default)]
+    pub text: String,
+    /// Accessibility content description (empty when absent).
+    #[serde(default)]
+    pub content_desc: String,
+    /// Screen bounds in pixels.
+    pub bounds: Bounds,
+    /// Whether the node is visible.
+    pub visible: bool,
+    /// Whether the node is enabled.
+    pub enabled: bool,
+    /// Whether the node has input focus.
+    pub focused: bool,
+    /// Whether the node accepts clicks.
+    pub clickable: bool,
+    /// Whether the node can scroll.
+    pub scrollable: bool,
+    /// Whether the node is checked (checkboxes/switches).
+    pub checked: bool,
+    /// Child nodes, in layout order.
+    #[serde(default)]
+    pub children: Vec<UiNode>,
+    /// Owning package (empty when unknown).
+    #[serde(default)]
+    pub package: String,
+}
+
+impl UiNode {
+    /// Construct a minimal visible/enabled node.
+    pub fn new(id: impl Into<String>, class: impl Into<String>, bounds: Bounds) -> Self {
+        UiNode {
+            id: id.into(),
+            class: class.into(),
+            resource_id: String::new(),
+            text: String::new(),
+            content_desc: String::new(),
+            bounds,
+            visible: true,
+            enabled: true,
+            focused: false,
+            clickable: false,
+            scrollable: false,
+            checked: false,
+            children: Vec::new(),
+            package: String::new(),
+        }
+    }
+
+    /// Builder: set Android id.
+    pub fn with_resource_id(mut self, resource_id: impl Into<String>) -> Self {
+        self.resource_id = resource_id.into();
+        self
+    }
+
+    /// Builder: set text.
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.text = text.into();
+        self
+    }
+
+    /// Builder: set clickable.
+    pub fn clickable(mut self, clickable: bool) -> Self {
+        self.clickable = clickable;
+        self
+    }
+
+    /// Builder: set children.
+    pub fn with_children(mut self, children: Vec<UiNode>) -> Self {
+        self.children = children;
+        self
+    }
+
+    /// Depth-first walk including `self`.
+    pub fn walk<'a>(&'a self, out: &mut Vec<&'a UiNode>) {
+        out.push(self);
+        for child in &self.children {
+            child.walk(out);
+        }
+    }
+
+    /// Display label used by `observe --text`.
+    pub fn text_line(&self) -> String {
+        format!(
+            "{} | {} | {} | {}",
+            self.class, self.resource_id, self.text, self.bounds
+        )
+    }
+}
+
+/// A snapshot of the UI tree for one frame.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct UiTree {
+    /// The frame this tree describes.
+    pub frame: FrameMeta,
+    /// Package owning the root window.
+    pub package: String,
+    /// Root nodes in document/window order.
+    pub nodes: Vec<UiNode>,
+    /// True when the tree was truncated by a node limit.
+    #[serde(default)]
+    pub truncated: bool,
+    /// False when the text/semantics route was unavailable.
+    #[serde(default = "default_true")]
+    pub text_available: bool,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+impl UiTree {
+    /// Build a tree.
+    pub fn new(frame: FrameMeta, package: impl Into<String>, nodes: Vec<UiNode>) -> Self {
+        UiTree {
+            frame,
+            package: package.into(),
+            nodes,
+            truncated: false,
+            text_available: true,
+        }
+    }
+
+    /// All nodes in stable document order.
+    pub fn all_nodes(&self) -> Vec<&UiNode> {
+        let mut out = Vec::new();
+        for node in &self.nodes {
+            node.walk(&mut out);
+        }
+        out
+    }
+
+    /// Find all nodes matching a selector, applying `selector.index` last.
+    ///
+    /// An empty selector is invalid and matches nothing.
+    pub fn find_all(&self, selector: &Selector) -> Vec<&UiNode> {
+        if selector.is_empty() {
+            return Vec::new();
+        }
+        let mut matched: Vec<&UiNode> = self
+            .all_nodes()
+            .into_iter()
+            .filter(|node| selector.matches_node(node))
+            .collect();
+        if let Some(index) = selector.index {
+            matched = matched.into_iter().nth(index).into_iter().collect();
+        }
+        matched
+    }
+
+    /// Find the first matching node. An empty selector matches nothing.
+    pub fn find_one(&self, selector: &Selector) -> Option<&UiNode> {
+        if selector.is_empty() {
+            return None;
+        }
+        let mut no_index = selector.clone();
+        no_index.index = None;
+        self.all_nodes()
+            .into_iter()
+            .find(|node| no_index.matches_node(node))
+    }
+
+    /// The canonical `observe --text` rendering, one line per node with text or
+    /// a content description, in document order.
+    pub fn text_lines(&self) -> Vec<String> {
+        self.all_nodes()
+            .into_iter()
+            .filter(|node| !node.text.is_empty() || !node.content_desc.is_empty())
+            .map(UiNode::text_line)
+            .collect()
+    }
+
+    /// The text rendering as a single newline-joined string.
+    pub fn text(&self) -> String {
+        self.text_lines().join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame() -> FrameMeta {
+        FrameMeta::new(
+            1,
+            "2026-11-10T13:51:14Z",
+            "req_1",
+            1080,
+            2400,
+            420,
+            "abc",
+            true,
+        )
+    }
+
+    fn sample_tree() -> UiTree {
+        let title = UiNode::new(
+            "n1",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 231, 368),
+        )
+        .with_resource_id("dev.acos.fixtures.helloviews:id/title")
+        .with_text("Hello ACOS");
+        let input = UiNode::new(
+            "n2",
+            "android.widget.EditText",
+            Bounds::new(42, 368, 1038, 486),
+        )
+        .with_resource_id("dev.acos.fixtures.helloviews:id/input")
+        .with_text("World");
+        let btn = UiNode::new(
+            "n3",
+            "android.widget.Button",
+            Bounds::new(42, 486, 273, 612),
+        )
+        .with_resource_id("dev.acos.fixtures.helloviews:id/btn")
+        .with_text("Greet")
+        .clickable(true);
+        let result = UiNode::new(
+            "n4",
+            "android.widget.TextView",
+            Bounds::new(42, 612, 392, 663),
+        )
+        .with_resource_id("dev.acos.fixtures.helloviews:id/result")
+        .with_text("Hello, World! clicks: 1");
+        UiTree::new(
+            frame(),
+            "dev.acos.fixtures.helloviews",
+            vec![UiNode::new(
+                "root",
+                "android.widget.LinearLayout",
+                Bounds::new(0, 275, 1080, 2337),
+            )
+            .with_children(vec![title, input, btn, result])],
+        )
+    }
+
+    #[test]
+    fn bounds_round_trip_and_parse() {
+        let b = Bounds::new(42, 317, 231, 368);
+        assert_eq!(b.to_string(), "[42,317][231,368]");
+        assert_eq!("[42,317][231,368]".parse::<Bounds>().unwrap(), b);
+        assert_eq!(b.width(), 189);
+        assert_eq!(b.height(), 51);
+        assert_eq!(b.center(), (136, 342));
+        assert!(b.is_valid());
+        assert!(!Bounds::new(10, 0, 5, 1).is_valid());
+        assert!("nope".parse::<Bounds>().is_err());
+    }
+
+    #[test]
+    fn selectors_are_stable() {
+        let tree = sample_tree();
+        assert_eq!(tree.find_all(&Selector::by_id("btn")).len(), 1);
+        assert_eq!(
+            tree.find_all(&Selector::by_id("dev.acos.fixtures.helloviews:id/btn"))
+                .len(),
+            1
+        );
+        assert_eq!(
+            tree.find_all(&Selector {
+                text: Some(TextMatch::contains("clicks: 1")),
+                ..Selector::default()
+            })
+            .len(),
+            1
+        );
+        assert_eq!(
+            tree.find_all(&Selector {
+                class: Some("android.widget.TextView".into()),
+                index: Some(1),
+                ..Selector::default()
+            })
+            .len(),
+            1
+        );
+        assert_eq!(tree.find_one(&Selector::by_text("Greet")).unwrap().id, "n3");
+        assert!(tree.find_all(&Selector::default()).is_empty());
+        assert!(!Selector::default().validation_errors().is_empty());
+    }
+
+    #[test]
+    fn regex_and_validation() {
+        assert!(TextMatch::regex("^Hello, .+! clicks: [0-9]+$").matches("Hello, World! clicks: 1"));
+        assert!(!TextMatch::regex("^World").matches("Hello, World!"));
+        assert!(TextMatch::regex("(").validate().is_some());
+        assert!(TextMatch::exact("").validate().is_some());
+    }
+}

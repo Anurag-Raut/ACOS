@@ -1,0 +1,1058 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Backend": {
+      "description": "Which thing actually produced the verdict.",
+      "oneOf": [
+        {
+          "description": "The ACOS Rust runtime (VM, native loader, renderer, UI).",
+          "enum": [
+            "acos-native"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The legacy ACVM/AOSP reference backend.",
+          "enum": [
+            "acvm-reference"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Static host tooling (APK/DEX parsing, lint, build).",
+          "enum": [
+            "host-tooling"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A host JVM used as a weak semantics oracle.",
+          "enum": [
+            "jvm"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A physical Android device.",
+          "enum": [
+            "physical-device"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "ErrorCode": {
+      "description": "A stable, machine-readable ACOS error code.\n\nThe serde representation is the exact `SCREAMING_SNAKE_CASE` string that agents branch on. Codes are additive: a code is never renamed or re-used for a different meaning.",
+      "oneOf": [
+        {
+          "description": "The native engine lacks a required `android.*` API or behaviour.",
+          "enum": [
+            "UNSUPPORTED_ANDROID_API"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The native engine lacks a required Java/library API.",
+          "enum": [
+            "UNSUPPORTED_JAVA_API"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A Dalvik opcode or bytecode feature is not implemented.",
+          "enum": [
+            "UNSUPPORTED_BYTECODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required native (ELF/Bionic/JNI) symbol is not implemented.",
+          "enum": [
+            "UNSUPPORTED_NATIVE_SYMBOL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The behaviour needs a real device, OEM service or hardware target.",
+          "enum": [
+            "NEEDS_REAL_DEVICE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app requires licensed Google Mobile Services.",
+          "enum": [
+            "REQUIRES_GMS"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The APK/native library ABI is not supported by this engine.",
+          "enum": [
+            "WRONG_ABI"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Capture/observe was requested on a headless session.",
+          "enum": [
+            "NO_DISPLAY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Text/semantics were requested but the chosen route cannot provide them.",
+          "enum": [
+            "NO_TEXT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native relocation kind is not implemented by the loader.",
+          "enum": [
+            "UNSUPPORTED_RELOCATION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The renderer hit an operation it cannot draw faithfully.",
+          "enum": [
+            "RENDER_UNSUPPORTED_OP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested backend does not exist in this build.",
+          "enum": [
+            "UNSUPPORTED_BACKEND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "No frame satisfying the request (freshness / sequencing) exists.",
+          "enum": [
+            "NO_FRESH_FRAME"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Evidence cannot be tied to the required fidelity level.",
+          "enum": [
+            "UNVERIFIED_FIDELITY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The input is not a readable zip/APK container.",
+          "enum": [
+            "APK_NOT_ZIP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The container is a zip but has no `AndroidManifest.xml`.",
+          "enum": [
+            "APK_NO_MANIFEST"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "I/O failure while reading the APK from disk.",
+          "enum": [
+            "APK_IO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A zip entry could not be read or decompressed.",
+          "enum": [
+            "APK_ENTRY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The APK Signing Block is present but malformed.",
+          "enum": [
+            "APK_SIGNING_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The binary `AndroidManifest.xml` (AXML) is malformed.",
+          "enum": [
+            "AXML_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The `resources.arsc` resource table is malformed.",
+          "enum": [
+            "ARSC_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX magic is not `dex\\n`.",
+          "enum": [
+            "DEX_BAD_MAGIC"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX version is not supported.",
+          "enum": [
+            "DEX_UNSUPPORTED_VERSION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX Adler-32 checksum does not match.",
+          "enum": [
+            "DEX_BAD_CHECKSUM"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX SHA-1 signature does not match.",
+          "enum": [
+            "DEX_BAD_SIGNATURE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX is truncated relative to its header/map.",
+          "enum": [
+            "DEX_TRUNCATED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX endian tag is invalid.",
+          "enum": [
+            "DEX_BAD_ENDIAN"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX index is out of range.",
+          "enum": [
+            "DEX_INDEX_OUT_OF_RANGE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX instruction is malformed.",
+          "enum": [
+            "DEX_BAD_INSTRUCTION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX opcode is defined as unused.",
+          "enum": [
+            "DEX_UNUSED_OPCODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX LEB128 value is malformed.",
+          "enum": [
+            "DEX_BAD_LEB128"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX MUTF-8 string is malformed.",
+          "enum": [
+            "DEX_BAD_MUTF8"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX encoded value is malformed.",
+          "enum": [
+            "DEX_BAD_ENCODED_VALUE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX class data item is malformed.",
+          "enum": [
+            "DEX_BAD_CLASS_DATA"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX code item is malformed.",
+          "enum": [
+            "DEX_BAD_CODE_ITEM"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX debug info is malformed.",
+          "enum": [
+            "DEX_BAD_DEBUG_INFO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX annotation is malformed.",
+          "enum": [
+            "DEX_BAD_ANNOTATION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The DEX map is malformed.",
+          "enum": [
+            "DEX_BAD_MAP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The DEX header is malformed.",
+          "enum": [
+            "DEX_BAD_HEADER"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "DEX structural or bytecode verification failed.",
+          "enum": [
+            "DEX_VERIFY_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Integer overflow while parsing a DEX structure.",
+          "enum": [
+            "DEX_OVERFLOW"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A DEX file could not be loaded into the VM.",
+          "enum": [
+            "DEX_LOAD_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An ELF native library is malformed.",
+          "enum": [
+            "ELF_MALFORMED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native dependency is missing.",
+          "enum": [
+            "NATIVE_DEP_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native library initializer failed.",
+          "enum": [
+            "NATIVE_INIT_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Native I/O failed.",
+          "enum": [
+            "NATIVE_IO_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required native symbol was not found.",
+          "enum": [
+            "NATIVE_SYMBOL_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native-loader argument is invalid.",
+          "enum": [
+            "NATIVE_INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A VM invariant or implementation bug (never user input).",
+          "enum": [
+            "VM_INTERNAL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A live Java exception escaped the entry point.",
+          "enum": [
+            "JAVA_EXCEPTION"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app process crashed (uncaught exception / signal / abort).",
+          "enum": [
+            "APP_CRASHED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app is not responding (ANR / main-thread stall).",
+          "enum": [
+            "APP_NOT_RESPONDING"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An assertion ran and did not hold.",
+          "enum": [
+            "ASSERTION_FAILED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A selector matched no node.",
+          "enum": [
+            "ELEMENT_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A UI node reference is no longer valid.",
+          "enum": [
+            "STALE_REF"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested session does not exist (or was already destroyed).",
+          "enum": [
+            "SESSION_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The session is busy with another request.",
+          "enum": [
+            "SESSION_BUSY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested isolation level is not implemented for this app.",
+          "enum": [
+            "ISOLATION_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested isolation level is advertised but its guarantees are unmet.",
+          "enum": [
+            "ISOLATION_UNSATISFIED"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A memory admission/guard rule was triggered.",
+          "enum": [
+            "RAM_GUARD"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Execution was aborted by the RAM guard.",
+          "enum": [
+            "RAM_ABORT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The operation exceeded its wall/CPU budget.",
+          "enum": [
+            "TIMEOUT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A declared resource budget was exhausted.",
+          "enum": [
+            "RESOURCE_LIMIT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The scenario is structurally or semantically invalid.",
+          "enum": [
+            "INVALID_SCENARIO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A request argument is invalid.",
+          "enum": [
+            "INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An artifact path was rejected (escape, absolute path, symlink, ...).",
+          "enum": [
+            "UNSAFE_PATH"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The artifacts directory is incomplete or contradicts its verdict.",
+          "enum": [
+            "ARTIFACTS_INVALID"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A render handle is invalid or already released.",
+          "enum": [
+            "RENDER_BAD_HANDLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A required font could not be found.",
+          "enum": [
+            "RENDER_FONT_NOT_FOUND"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A renderer argument is invalid.",
+          "enum": [
+            "RENDER_INVALID_ARGUMENT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A render surface has invalid dimensions.",
+          "enum": [
+            "RENDER_SIZE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An image could not be decoded.",
+          "enum": [
+            "RENDER_DECODE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Renderer I/O failed.",
+          "enum": [
+            "RENDER_IO"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Strict rendering mode escalated an otherwise-recordable fidelity loss.",
+          "enum": [
+            "RENDER_STRICT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "ACOS itself failed (distinct from an app crash).",
+          "enum": [
+            "INTERNAL"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Evidence": {
+      "description": "Paths to evidence that backs this response.",
+      "properties": {
+        "events": {
+          "description": "Event stream path (JSONL).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log": {
+          "description": "Log file path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "screenshot": {
+          "description": "Fresh screenshot path (relative to the artifacts directory).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tree": {
+          "description": "UI tree JSON path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "Verdict file path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Fidelity": {
+      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success.",
+      "oneOf": [
+        {
+          "description": "Static host analysis only.",
+          "enum": [
+            "static-analysis"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Host JVM (weak oracle; never Android-verified).",
+          "enum": [
+            "jvm-reference"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "ACOS native execution; not ART-validated by itself.",
+          "enum": [
+            "native-runtime"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Real ART reference capture/execution.",
+          "enum": [
+            "art-reference"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Physical device/OEM target.",
+          "enum": [
+            "physical-device"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Mocked/simulated behaviour.",
+          "enum": [
+            "simulated"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "FrameMeta": {
+      "description": "Metadata for one produced frame.\n\nA frame answers a *cause* (the request/action id that produced it) and has a monotonically increasing per-session `frame_seq`. `content_hash` is the SHA-256 of the encoded pixels. `meaningful` is false for blank/placeholder frames; a placeholder must never satisfy a UI assertion.",
+      "properties": {
+        "cause_id": {
+          "description": "The request id that caused this frame (for example `req_19`).",
+          "type": "string"
+        },
+        "content_hash": {
+          "description": "SHA-256 of the encoded frame pixels (lowercase hex).",
+          "type": "string"
+        },
+        "density": {
+          "description": "Display density in dots per inch.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "frame_seq": {
+          "description": "Monotonic per-session frame sequence number.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "height": {
+          "description": "Frame height in pixels.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "meaningful": {
+          "description": "True only when the frame reflects real rendered UI content.",
+          "type": "boolean"
+        },
+        "produced_at": {
+          "description": "RFC 3339 UTC timestamp when the frame was produced by ACOS.",
+          "type": "string"
+        },
+        "width": {
+          "description": "Frame width in pixels.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cause_id",
+        "content_hash",
+        "density",
+        "frame_seq",
+        "height",
+        "meaningful",
+        "produced_at",
+        "width"
+      ],
+      "type": "object"
+    },
+    "IsolationLevel": {
+      "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
+      "oneOf": [
+        {
+          "description": "Another activity/task in a shared process and shared app data. No isolation.",
+          "enum": [
+            "shared-task"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process, potentially the same package/storage identity.",
+          "enum": [
+            "process"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Separate process/UID/credentials/mount namespace and app data.",
+          "enum": [
+            "sandbox"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fully separate engine instance (strongest short of a VM).",
+          "enum": [
+            "core"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Sandboxed full Android/backend for untrusted or device-level fidelity.",
+          "enum": [
+            "vm"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "Metrics": {
+      "description": "Wall/CPU/VM metrics for one request.\n\nAll fields are optional except `wall_ms`; the extra fields make the same object compatible with the existing `run-dex` metrics.",
+      "properties": {
+        "allocations": {
+          "description": "Heap allocations (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "classes_loaded": {
+          "description": "Classes loaded (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cpu_ms": {
+          "description": "Process CPU time in milliseconds, when measured.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gc_count": {
+          "description": "Garbage-collection count (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gc_ms": {
+          "description": "Garbage-collection time in milliseconds (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "heap_peak_bytes": {
+          "description": "Heap peak in bytes (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "instructions": {
+          "description": "Interpreted VM instructions (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "invokes": {
+          "description": "Method invokes (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "peak_rss_bytes": {
+          "description": "Peak resident set size in bytes, when measured.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "startup_ms": {
+          "description": "VM start/load time in milliseconds (`run-dex`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_ms": {
+          "default": 0,
+          "description": "Wall-clock duration in milliseconds.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ProtocolError": {
+      "description": "A structured error: stable code, human message, next action, retryability.",
+      "properties": {
+        "code": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ErrorCode"
+            }
+          ],
+          "description": "The stable machine code."
+        },
+        "details": {
+          "description": "Optional structured detail (API/symbol/opcode/path/step index, ...)."
+        },
+        "hint": {
+          "description": "What the agent should do next. Filled from [`ErrorCode::hint`] by default.",
+          "type": "string"
+        },
+        "message": {
+          "description": "Human-readable detail (may change; never branch on it).",
+          "type": "string"
+        },
+        "retryable": {
+          "description": "Whether retrying the same request without changing inputs may succeed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "hint",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "description": "The outcome of a request.\n\n`unsupported`, `blocked`, `crash` and `timeout` are failures. An agent must never treat any of them as a pass.",
+      "oneOf": [
+        {
+          "description": "The request ran and every requested check held under the stated fidelity.",
+          "enum": [
+            "pass"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The request ran and a correctness check or assertion did not hold.",
+          "enum": [
+            "fail"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The harness, engine or input failed; not an app verdict.",
+          "enum": [
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The engine cannot perform the requested behaviour (never a pass).",
+          "enum": [
+            "unsupported"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app crashed.",
+          "enum": [
+            "crash"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The request exceeded a wall/CPU budget or the app is not responding.",
+          "enum": [
+            "timeout"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The request cannot start until an external condition is resolved (resource guard, busy session, unavailable isolation).",
+          "enum": [
+            "blocked"
+          ],
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "description": "The one JSON object every command returns inside `result`.\n\nFields are private so that `ok`, `status` and `error` cannot drift out of sync after construction. Use the getters and builders.",
+  "properties": {
+    "backend": {
+      "$ref": "#/definitions/Backend"
+    },
+    "capabilities_used": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProtocolError"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Evidence"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fidelity": {
+      "$ref": "#/definitions/Fidelity"
+    },
+    "frame": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/FrameMeta"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "isolation": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IsolationLevel"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "job_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metrics": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Metrics"
+        }
+      ],
+      "default": {
+        "wall_ms": 0
+      }
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "result": true,
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/definitions/Status"
+    },
+    "validated_against": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Fidelity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "backend",
+    "fidelity",
+    "ok",
+    "request_id",
+    "status"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}
