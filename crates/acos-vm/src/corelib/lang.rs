@@ -1125,11 +1125,34 @@ fn sb_append_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+/// Append the decimal representation of `v` to a UTF-16 buffer without the
+/// intermediate `String` allocation `v.to_string()` used to make.
+#[inline]
+fn append_i64_utf16(buf: &mut Vec<u16>, v: i64) {
+    if v == 0 {
+        buf.push(b'0' as u16);
+        return;
+    }
+    let neg = v < 0;
+    // `i64::MIN` has no positive counterpart; work on the wrapped magnitude.
+    let mut u = if neg { (v as u64).wrapping_neg() } else { v as u64 };
+    let mut tmp = [0u16; 20];
+    let mut i = tmp.len();
+    while u > 0 {
+        i -= 1;
+        tmp[i] = (b'0' as u64 + (u % 10)) as u16;
+        u /= 10;
+    }
+    if neg {
+        buf.push(b'-' as u16);
+    }
+    buf.extend_from_slice(&tmp[i..]);
+}
+
 fn sb_append_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let v = vm.arg_i32(ctx, 0);
-    let s = v.to_string();
-    sb_buf(vm, this)?.extend(s.encode_utf16());
+    append_i64_utf16(sb_buf(vm, this)?, v as i64);
     vm.ret_ref(ctx, this);
     Ok(())
 }
@@ -1137,8 +1160,7 @@ fn sb_append_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn sb_append_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let v = vm.arg_i64(ctx, 0);
-    let s = v.to_string();
-    sb_buf(vm, this)?.extend(s.encode_utf16());
+    append_i64_utf16(sb_buf(vm, this)?, v);
     vm.ret_ref(ctx, this);
     Ok(())
 }

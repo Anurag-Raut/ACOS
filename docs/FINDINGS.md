@@ -279,3 +279,92 @@ Analysis only; no builds were run by the advisor. Adopted/decision points:
 5. Do not treat one captured trace as the contract; vary text/width/theme to detect overfitting.
 6. Order: finish M2, then one vertical slice launch -> screenshot + ui tree -> real InputEventReceiver tap -> changed screenshot/tree (clicks:1 in both). Defer rotation, IME typing, snapshots, concurrency, damage optimisation until that loop works.
 7. Interpreter-only is fine through the slice; measure launch-to-frame and tap-to-frame separately (load/init/interpret/native/GC/raster), then choose snapshot (init-dominated) or JIT (steady-state-dominated).
+
+---
+
+### F-0010 — M1 is verified on the real core library; the console corpus grew to 25 — 2026-11-10
+
+**Finding.** All 20 original `dexprogs` execute on the real Android 14
+`core-oj`/`core-libart`/`core-icu4j` DEX and match the ART oracle byte for byte,
+normal and GC-stress. The corpus is now 25 programs; W25-B records
+`--corelib real` at **25 pass / 0 fail / 0 unsupported**, while the committed
+`results/vm/dexprogs-real-normal.json` still lags at 24/25
+(`25_security_digest`). Running count: 123 opcodes executed, 95 implemented but
+unexercised, 6 unsupported.
+
+**Evidence.** `results/m1/README.md`; `results/vm/OS_NATIVES_AUDIT.md` §3;
+`results/vm/dexprogs-real-normal.json`; `results/vm/opcode-coverage.json`.
+
+**Design impact.** The interpreter + Rust-natives core-library path is the
+verified foundation M2+ builds on. Re-record the committed dexprogs artifact
+when the tree is frozen.
+
+### F-0011 — M2 reaches `bindApplication` + `ClientTransaction`, not the callback — 2026-11-10
+
+**Finding.** The real `framework.jar` bytecode boots `ActivityThread`, receives
+`attachApplication` in the Rust ATMS, runs `handleBindApplication`, and a real
+`ClientTransaction` is scheduled (`transaction_scheduled=true`); the M2 gate
+stays `#[ignore]`d/red with `app_created=false`, `tx_delivered=false`. The
+blocker chain was cleared in order (ICU `likelySubtags` → `FileChannel.map0` →
+fonts → `OverlayProperties` → display `DisplayInfo` parcel →
+`TetheringManager`); the display parcel codec and APEX boot-classpath merge sit
+uncommitted in the working tree.
+
+**Evidence.** `results/m2/M2_LOG.md`; `crates/acos-runtime/tests/m2.rs`;
+`crates/acos-runtime/src/display_java.rs` + `tests/display.rs` (working tree);
+`crates/acos-runtime/tests/boot_classpath.rs`.
+
+**Design impact.** The honesty invariant holds: a transaction is never reported
+delivered until `ActivityClientRecord.activity` is set. Next gate is the
+recorded `onCreate→onStart→onResume` lifecycle.
+
+### F-0012 — `art-reference` captures exist for six apps; `physical-device` does not — 2026-11-10
+
+**Finding.** Authoritative ART captures (API-34 `google_apis` x86_64 emulator)
+exist for `hello-views`, `hello-jni`, `counter`, `todo-list`, `multi-activity`
+and `form-validation`, plus all 25 console programs; JVM vs ART agree on 19/20
+stdout, with `20_uncaught` differing only in stderr stack text. The
+`physical-device` tier was **not** captured (the target device was absent from
+`adb devices`).
+
+**Evidence.** `fixtures/reference/**/art-api34-x86_64/`;
+`fixtures/expected-art/dexprogs/`; `results/oracle/jvm-vs-art.md`;
+`results/oracle/dexprogs-runs.json`; `docs/DEV_WORKFLOW.md` §11.
+
+**Design impact.** App assertions use `art-reference`; any `physical-device`
+claim needs its own capture and must record SDK/fingerprint without overwriting
+the API-34 references.
+
+### F-0013 — Interpreter speedups landed but the Alloc/Loop targets were missed — 2026-11-10
+
+**Finding.** `tools/bench-vm.sh` (10 reps, host OpenJDK 17) after the invoke/
+dispatch/frame-pool work: BenchFib 4.17× (528 ms, 1.55× slower than
+`java -Xint`), BenchString 3.30× **faster** than `-Xint`, BenchLoop 3.48×
+(1,696 ms, 4.13× slower), BenchAlloc 3.58× (2,109 ms, 1.73× slower). The
+≥4× Fib target was met; ≥4× Alloc and ≥5× Loop were not. Per-opcode dispatch
+(~2.7–3.3 ns/insn) and call overhead (~50–63 ns) remain the floor; removing
+bounds checks with `unsafe` gave no gain, so `#![forbid(unsafe_code)]` stayed.
+
+**Evidence.** `crates/acos-vm/PERF.md` "Final comparison";
+`results/vm/bench-2026-11-10-160048.json`; `results/vm/bench-2026-11-10-141049.json`.
+
+**Design impact.** The interpreter is acceptable for the console tier and the
+snapshot strategy (init-dominated), but the interaction path needs compact
+pre-decoded ops and/or a JIT (ADR-0013).
+
+### F-0014 — `OsConstants` is fully captured; `libcore.io.Linux` is 64/9/61 — 2026-11-10
+
+**Finding.** W25-B implemented `android.system.OsConstants.initConstants` with
+**538/538** fields captured from the ART oracle (not header-derived) and audited
+the real `libcore.io.Linux` surface: 134 declared natives — 64 implemented, 9
+pending, 61 unsupported-by-design (process control, networking, `mmap`, xattrs).
+The old table had wrong resolver and `SIGRTMIN` values; the `x86_64`/`aarch64`
+divergence is only `O_DIRECT` and `O_NOFOLLOW`.
+
+**Evidence.** `results/vm/OS_NATIVES_AUDIT.md` §1–§2;
+`crates/acos-vm/src/natives/os_constants.rs`; `crates/acos-vm/tests/os_constants.rs`.
+
+**Design impact.** `Os`/`OsConstants` are no longer a boot blocker; commit the
+work and close the 9 pending sandbox-safe natives (`inet_pton`, `getnameinfo`,
+`android_getaddrinfo`, `getsockoptByte`, `mkfifo`, `getpwnam`, the
+`android_fdsan_get_*` getters).

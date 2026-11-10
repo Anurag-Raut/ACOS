@@ -1,0 +1,8 @@
+11-10 21:10:21.970 I/AcosMulti( 7333): Main.onPause
+11-10 21:10:21.977 I/AcosMulti( 7333): Main.onStop
+11-10 21:10:21.978 I/AcosMulti( 7333): Main.onSaveInstanceState message=Hello
+11-10 21:10:21.978 I/AcosMulti( 7333): Main.onDestroy
+11-10 21:10:21.996 I/AcosMulti( 7333): Main.onCreate
+11-10 21:10:22.008 I/AcosMulti( 7333): Main.restored message=Hello
+11-10 21:10:22.009 I/AcosMulti( 7333): Main.onStart
+11-10 21:10:22.011 I/AcosMulti( 7333): Main.onResume

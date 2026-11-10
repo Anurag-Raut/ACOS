@@ -1,0 +1,23 @@
+Page: dev.acos.fixtures.counter
+App: dev.acos.fixtures.counter
+Snapshot: 24 visible nodes
+@e1 [text] "9:09"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image] "Wifi signal full."
+@e6 [group] "Battery charging, 41 percent."
+  @e7 [image]
+  @e8 [text] "41%"
+    @e11 [group]
+      @e12 [group]
+        @e13 [group]
+          @e14 [scroll-area] "com.motorola.launcher3:id/workspace" [scrollable]
+            [content above scroll-area hidden]
+            @e17 [text] "AnkiDroid"
+          @e18 [group] "Home" [covered]
+          @e19 [group]
+            @e21 [text] "Phone"
+            @e22 [text] "Messages"
+            @e23 [text] "Chrome"
+            @e24 [text] "Camera"

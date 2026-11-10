@@ -1,0 +1,8 @@
+11-10 21:09:21.107 I/AcosCounter( 4812): onPause
+11-10 21:09:21.110 I/AcosCounter( 4812): onStop
+11-10 21:09:21.111 I/AcosCounter( 4812): onSaveInstanceState count=2
+11-10 21:09:21.111 I/AcosCounter( 4812): onDestroy
+11-10 21:09:21.137 I/AcosCounter( 4812): onCreate
+11-10 21:09:21.160 I/AcosCounter( 4812): restored count=2
+11-10 21:09:21.160 I/AcosCounter( 4812): onStart
+11-10 21:09:21.163 I/AcosCounter( 4812): onResume

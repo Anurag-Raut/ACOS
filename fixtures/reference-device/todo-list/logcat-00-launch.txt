@@ -1,0 +1,4 @@
+--------- beginning of main
+11-10 21:09:33.107 I/AcosTodo( 5909): onCreate
+11-10 21:09:33.179 I/AcosTodo( 5909): onStart
+11-10 21:09:33.186 I/AcosTodo( 5909): onResume

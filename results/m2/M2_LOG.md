@@ -598,3 +598,293 @@ delta from W21-A's 23 pass is the concurrently-landed zip fixture
   `fwk_conscrypt.rs`, not by this session.
 * The M2 gate is still red: `app_created=false`, `tx_delivered=false`; no
   Application/Activity callback is claimed.
+
+---
+
+# W24b session — app class loader + real `ClientTransaction` delivery (T-23)
+
+**Status: the app class loader is real and tested end to end; the
+`ClientTransaction` is built and executed by the real framework, but
+`Application.onCreate`/`Activity.onCreate` are still blocked outside this
+task's files by the display-service `DisplayInfo` reply.**
+
+## 1. App class loader (`dalvik.system.DexFile`)
+
+New `crates/acos-vm/src/natives/fwk_dexfile.rs` (one-line registration in
+`natives/mod.rs`) implements the class-loader DEX natives against the
+sandboxed VFS and the VM's real DEX providers:
+
+| native | behaviour |
+|---|---|
+| `openDexFileNative(sourceName, outputName, flags, loader, elements)` | opens the **guest** path through `Vfs` (never a host path), accepts a plain `.dex`, a zip/APK (`classes*.dex`, sorted) or a directory of `.dex` files, parses each with `acos_dex`, registers it with `add_shared_dex`, and returns ART's cookie type — a Java `long[]` of provider indices. |
+| `openInMemoryDexFilesNative(bufs, arrays, starts, ends, ...)` | reads the `[position, limit)` window from the non-direct backing array, or from a direct buffer's `memoryRef.allocatedAddress` region. |
+| `defineClassNative(name, loader, cookie, dexFile)` | converts the binary name to a descriptor, resolves it **only in the cookie's providers** (`Vm::load_class_from_dex`), and returns the real `java.lang.Class` (`Vm::class_object`). Not found → `null`, exactly like ART (the Java wrapper records `NoClassDefFoundError`). |
+| `getClassNameList(cookie)` | enumerates the cookie's real `class_defs`, dotted names. |
+| `closeDexFile` | returns true. Declared divergence: ACOS has no class unloading, so a provider is permanent (the cookie is dropped). |
+| `setTrusted` / `verifyInBackgroundNative` | no-ops (ACOS never runs a background verifier). |
+| `isDexOptNeeded` / `getDexOptNeeded` | report "not needed": ACOS runs DEX directly and has no oat pipeline, i.e. the same answer a device gives for an already-optimised APK. Compiler-filter predicates report `assume-verified`/valid. |
+| OAT introspection (`getDexFileOutputPaths`, `getDexFileStatus`, `getDexFileOptimizationStatus`, `getStaticSizeOfDexFile`) | deliberately unregistered → structured `UNSUPPORTED_JAVA_API`. |
+
+`Vm::load_class_from_dex` is a new `pub(crate)` method in `acos-vm/src/vm.rs`
+(a public wrapper over the existing `load_dex_class`); it returns an already
+loaded class by descriptor first, matching `defineClassNative`'s repeat-call
+semantics.
+
+`crates/acos-runtime/src/apk_loader.rs` stages the fixture APK into the guest
+sandbox at `<dataDir>/base.apk` and rewrites `ApplicationInfo.sourceDir` /
+`publicSourceDir` to that guest path. From then on the framework's
+`LoadedApk`/`ClassLoaderFactory`/`ResourcesManager` use a `/data/...` path.
+`fwk_res.rs`'s path mapper now maps `/data/**` onto the same VFS session root,
+so `ApkAssets.nativeLoad` can open the app APK.
+
+### Acceptance
+
+`crates/acos-runtime/tests/dex_loader.rs` + `tests/java/DexLoaderMain.java` (+ a
+signature-only `MainActivity` stub in `tests/java/stubs/`) runs on the real
+API-34 core library and proves, in this order:
+
+1. the counter APK is staged at
+   `/data/user/0/dev.acos.fixtures.counter/base.apk`;
+2. `dev.acos.fixtures.counter.MainActivity` is **not** in the VM's providers
+   before the loader runs (asserted, so the test cannot pass trivially);
+3. a real `new PathClassLoader(apkPath, ClassLoader.getSystemClassLoader())`
+   resolves the class through `BaseDexClassLoader` → `DexPathList` →
+   `DexFile.defineClassNative`;
+4. the app class's own static `MainActivity.probe()` (call site compiled against
+   the d8 `--lib` stub, never bundled) returns **4242**;
+5. after the run the VM has an APK-derived provider and the class descriptor is
+   defined.
+
+`cargo test -p acos-runtime --test dex_loader`: **1 passed**.
+
+## 2. `ClientTransaction` delivery (T-23)
+
+New `crates/acos-runtime/src/client_transaction.rs` builds the real API-34
+objects through the Java bridge:
+
+* `ActivityInfo` from the manifest's `MAIN`/`LAUNCHER` activity (via
+  `pms_java::activity_info`, so it carries the staged `ApplicationInfo`);
+* a real `Intent.setClassName(package, activity)`;
+* `LaunchActivityItem.obtain(intent, ident, info, config, config, …)` (21 args,
+  `PROCESS_STATE_TOP`);
+* `ResumeActivityItem.obtain(false, false)`;
+* `ClientTransaction.obtain(appThread, token)` with a real `android.os.Binder`
+  activity token, `addCallback(launchItem)` and
+  `setLifecycleStateRequest(resumeItem)`;
+* the real `ActivityThread$ApplicationThread.scheduleTransaction(ClientTransaction)`
+  bytecode (→ `ActivityThread.scheduleTransaction` → `H.EXECUTE_TRANSACTION`).
+
+The `Parcel` boundary between two in-process objects is skipped (there is no
+remote process), the same documented invariant `bind_app.rs` follows; every
+object and every consuming method is the real framework.
+
+`LifecycleReport` now separates two facts:
+
+* `transaction_scheduled` — `scheduleTransaction` accepted the transaction;
+* `transaction_delivered` — `ActivityThread.mActivities[token].activity` is
+  non-null (i.e. `Activity.onCreate` returned). The honesty test keeps its old
+  meaning.
+
+`crates/acos-runtime/tests/client_transaction.rs` boots `ActivityThread`,
+enters `Looper.loop()`, stages the counter APK and delivers the transaction.
+Evidence (`--nocapture`):
+
+```
+client_transaction: scheduled=true record=false run=Err(UnsupportedApi { api: "Landroid/net/TetheringManager;", ... })
+exact blocker after handleLaunchActivity entry, before onCreate: Landroid/net/TetheringManager; is not implemented (at )
+```
+
+The test asserts `ActivityThread.mSomeActivitiesChanged == true`, which
+`handleLaunchActivity` sets at entry — the real `LaunchActivityItem.execute`
+ran and called `handleLaunchActivity` → `performLaunchActivity`. It then stops
+in `LoadedApk.makeApplication` because `android.net.TetheringManager` is not in
+the extracted boot classpath (`framework.jar` references it but does not define
+it; it lives in `framework-connectivity.jar`, which
+`tools/extract-bootclasspath.sh` does not extract). That is boot-classpath
+coverage, not the transaction machinery.
+
+## 3. Cross-scope blockers found (documented, not faked)
+
+The full `bindApplication` chain now gets past `Typeface.<clinit>` (fonts
+landed) and past `OverlayProperties.<clinit>` (W24b added
+`crates/acos-vm/src/natives/fwk_display.rs` + `nativeGetThemeFreeFunction` in
+`fwk_res.rs`: ACOS themes/overlay properties are Rust handles or `null`, so the
+`NativeAllocationRegistry` free function is genuinely absent). It then throws:
+
+```
+java.lang.RuntimeException: bad array lengths
+  at android.os.Looper.loopOnce(220)
+  at android.os.Looper.loop(294)
+```
+
+from `IDisplayManager.getDisplayInfo` / `getOverlaySupport` during
+`ResourcesManager.applyConfigurationToResources`. The reply encoder
+`acos-services/src/display.rs::DisplayInfo::to_parcelable` (with
+`FieldOp::IgnoredNamed` cutout/shape and a bare `Int(1)` for
+`supportedModes`) does not match the real `DisplayInfo.writeToParcel` /
+`Mode[]` / `DisplayCutout` reader, so the `Parcel` desynchronises and
+`readIntArray`/`readBinderArray` sees a bad length. This is the display
+service's parcelable codec (WMS/display owner), not a native; it is the next
+gate for `Application.onCreate`.
+
+Second cross-scope gate, after the transaction: `Landroid/net/TetheringManager;`
+is absent from the boot-classpath cache. The extractor should include
+`/system/framework/framework-connectivity.jar` (or the APEX that exports it).
+
+## 4. Honesty
+
+* No fake class loader: the dex is opened from the guest VFS, `defineClassNative`
+  resolves only in that `DexFile`'s providers, and the test asserts the class was
+  not preloaded.
+* No fake transaction: the framework builds the transaction through its own
+  `obtain` factories; `transaction_delivered` is only true when the
+  `ActivityClientRecord.activity` field is set (onCreate returned).
+* `closeDexFile`/`isDexOptNeeded`/`nativeGetThemeFreeFunction` return
+  structurally-correct values for an interpreter with no unload/oat/malloc'd
+  theme; the divergences are listed above rather than hidden.
+* No `Ok(())` was used for the unimplemented OAT introspection natives; they
+  remain structured `UNSUPPORTED_JAVA_API`.
+
+## 5. Files
+
+New: `crates/acos-vm/src/natives/fwk_dexfile.rs`,
+`crates/acos-vm/src/natives/fwk_display.rs`,
+`crates/acos-runtime/src/apk_loader.rs`,
+`crates/acos-runtime/src/client_transaction.rs`,
+`crates/acos-runtime/tests/dex_loader.rs`,
+`crates/acos-runtime/tests/client_transaction.rs`,
+`crates/acos-runtime/tests/java/DexLoaderMain.java`,
+`crates/acos-runtime/tests/java/stubs/dev/acos/fixtures/counter/MainActivity.java`.
+Edited: `natives/mod.rs` (registration), `vm.rs` (`load_class_from_dex`),
+`Cargo.toml` (`zip`), `fwk_res.rs` (`/data/**` mapping +
+`nativeGetThemeFreeFunction`), `lifecycle.rs`, `bind_app.rs` (`build_config`
+visibility), `pms_java.rs` (`activity_info` visibility), `tests/m2.rs`,
+`examples/lifecycle_probe.rs`, `fixtures/apps/counter/.../MainActivity.java`
+(static `probe()` test hook).
+
+## 6. Verification
+
+```
+cargo test -p acos-runtime --test dex_loader           # 1 passed
+cargo test -p acos-runtime --test client_transaction   # 1 passed
+cargo test -p acos-runtime --test m2                   # 2 passed, gate ignored
+```
+
+The M2 gate test stays `#[ignore]`d with the current exact reason
+(`DisplayInfo` reply / `bad array lengths`), never a silent pass.
+
+## 7. W26-A: DisplayInfo reply, APEX boot classpath, M2 chain natives
+
+HEAD `40f075c`. The two cross-scope blockers recorded in §3 are fixed, and the
+gate now reaches a new, precise blocker.
+
+### 7.1 `IDisplayManager` replies are real framework parcelables
+
+API 34's `DisplayInfo.writeToParcel` writes **49** fields. The previous
+`acos-services::display::DisplayInfo::to_parcelable` emitted a 21-field prefix
+whose order did not even match (`layerStack, flags, type, displayId,
+displayGroupId` come first, then `name`), and wrote `supportedModes` as a bare
+`Int(1)`. `DisplayInfo.CREATOR` then read a `Mode[]` out of the following
+fields and the `Parcel` desynchronised (`RuntimeException: bad array lengths`).
+
+New `crates/acos-runtime/src/display_java.rs` materialises the real Java
+`android.view.DisplayInfo` / `android.hardware.OverlayProperties` and calls
+their own `writeToParcel` into a real `Parcel`, following the §3.6 invariant.
+The transport routes `android.hardware.display.IDisplayManager` replies through
+it exactly like `IPackageManager` (`transport.rs`). Values: display 1080x2400,
+app 1080x2209, @420dpi, `Display.Mode(1,1080,2400,60.000004)`,
+`DisplayCutout.NO_CUTOUT`, and an `OverlayProperties` with the ACOS "no
+overlay" native handle. The `overlay` case also exposed that the old two-bool
+`OverlayProperties` codec never matched the real `int` native-object marker.
+
+Evidence: `cargo test -p acos-runtime --test display` drives the real
+`IDisplayManager$Stub$Proxy` over the Binder transport; `DisplayMain.java`
+asserts every field after the real `DisplayInfo.CREATOR` read, including the
+`Mode[]` and the overlay object. It passes.
+
+### 7.2 Boot classpath merges every APEX classpath fragment
+
+`android.net.TetheringManager` is defined in `framework-connectivity.jar`
+inside `com.google.android.tethering.apex`, not `framework.jar`.
+`tools/extract-bootclasspath.sh` now extracts **every** `/system/apex/*.apex`,
+merges all `*_bootclasspath.pb` / `*_systemserverclasspath.pb` fragments (not a
+hard-coded source list), and emits `BOOTCLASSPATH` plus a new
+`SYSTEMSERVERCLASSPATH`. The re-extracted cache's `BOOTCLASSPATH` grew from 14
+to 35 jars (framework-connectivity, framework-tethering, framework-permission,
+framework-wifi, framework-uwb, framework-adservices, updatable-media,
+framework-sdkextensions, framework-bluetooth, android.net.ipsec.ike, ...).
+
+Evidence: `cargo test -p acos-runtime --test boot_classpath` resolves six
+classes that live in APEX boot jars through the real VM boot loader.
+
+### 7.3 M2 chain: new `ActivityThread` / class-loader natives
+
+`crates/acos-vm/src/natives/fwk_m2_chain.rs` (registered from `natives/mod.rs`)
+lands the small natives the real `handleBindApplication` needs, each documented
+with its framework call site:
+
+| native | real semantics |
+| --- | --- |
+| `ActivityThread.nInitZygoteChildHeapProfiling()V` | arms heapprofd only when profiling is configured; no ART heap in ACOS, so structural no-op |
+| `ClassLoaderFactory.createClassloaderNamespace(...)String` | installs a dlopen namespace; ACOS has none, so `null` = success (the real `PathClassLoader` is already built by `apk_loader`) |
+
+`natives/vmrt.rs`'s `VMRuntime.properties()` now also returns
+`java.library.path=/system/lib64:/system/lib`. API 34
+`LoadedApk.createOrUpdateClassLoaderLocked` reads it **unconditionally**
+(`System.getProperty("java.library.path").contains("/vendor/lib")`), so the
+missing property was a fatal NPE during `handleBindApplication`
+(`LoadedApk.createOrUpdateClassLoaderLocked:897`).
+
+### 7.4 Exact current blocker
+
+```
+M2[normal] wall=16.7s peak_rss=452068kB classes=1537 bind=true app=false
+           txscheduled=false tx=false quit=false events=[]
+error: vm: Llibcore/io/Linux;->setxattr(Ljava/lang/String;Ljava/lang/String;[BI)V
+  is not implemented
+    at libcore.io.Linux.setxattr
+    at libcore.io.ForwardingOs.setxattr
+    at libcore.io.BlockGuardOs.setxattr
+    at android.system.Os.setxattr
+    at android.app.ContextImpl.ensurePrivateDirExists
+    at android.app.ContextImpl.ensurePrivateCacheDirExists
+    at android.app.ContextImpl.getCacheDir
+    at android.app.ActivityThread.setupGraphicsSupport
+    at android.app.ActivityThread.handleBindApplication
+```
+
+`ContextImpl.ensurePrivateDirExists` sets a security xattr on the newly created
+cache dir and catches `ErrnoException`, so the correct implementation is for
+`Llibcore/io/Linux;.setxattr` to raise
+`android.system.ErrnoException(ENOTSUP)` (the guest VFS models no xattrs), not
+to silently succeed. That native lives in `natives/io_linux.rs`, which the
+file-I/O W25 workstream is actively extending, so it was recorded rather than
+edited here. Owner: the file-I/O/W25 workstream.
+
+`classes=1537` is the class count at the blocker. The gate stays `#[ignore]`d
+with exactly this reason; `Application.onCreate` has still not run
+(`app=false`), and no lifecycle callback is faked. The display and boot-class
+gates before it are now honest passes.
+
+### 7.5 Verification (W26-A)
+
+```
+cargo test -p acos-services -p acos-runtime      # all non-ignored pass
+cargo test -p acos-runtime --test display         # 1 passed (real CREATOR round trip)
+cargo test -p acos-runtime --test boot_classpath  # 1 passed (APEX boot classes)
+cargo test -p acos-runtime --test m2 -- --ignored # fails at the exact setxattr blocker
+tools/diff-dexprogs.sh                            # real 25/25 unchanged
+```
+
+New: `crates/acos-runtime/src/display_java.rs`,
+`crates/acos-runtime/tests/display.rs`,
+`crates/acos-runtime/tests/boot_classpath.rs`,
+`crates/acos-runtime/tests/java/DisplayMain.java`,
+`crates/acos-runtime/tests/java/stubs/android/view/DisplayInfo.java`,
+`crates/acos-runtime/tests/java/stubs/android/hardware/OverlayProperties.java`,
+`crates/acos-runtime/tests/java/stubs/android/hardware/display/IDisplayManager.java`,
+`crates/acos-vm/src/natives/fwk_m2_chain.rs`.
+Edited: `crates/acos-services/src/display.rs` (served-value cache),
+`crates/acos-runtime/src/{lib,pms_java,transport}.rs`,
+`crates/acos-vm/src/natives/{mod,vmrt}.rs`, `tools/extract-bootclasspath.sh`,
+`crates/acos-runtime/tests/m2.rs` (ignore reason).

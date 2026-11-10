@@ -33,7 +33,9 @@ mod gfx_state;
 pub mod gfx_text;
 pub mod fwk_jni;
 mod fwk_m2_filechannel;
+mod fwk_m2_chain;
 pub mod fwk_surface;
+pub mod fwk_vsync;
 mod fwk_reflect;
 mod fwk_res;
 mod icu;
@@ -47,6 +49,7 @@ mod math;
 mod memintarray;
 mod native_mem;
 mod os_clock;
+mod os_constants;
 mod parcel;
 pub mod os_log;
 pub mod os_misc;
@@ -70,6 +73,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // Registered after `io`: the file-I/O natives replace the std-stream stubs
     // and own every path/descriptor operation.
     io_linux::install(vm);
+    // After `io`/`io_linux`: the full 538-field bionic `OsConstants` table.
+    os_constants::install(vm);
     zip::install(vm)?;
     vmrt::install(vm)?;
     math::install(vm)?;
@@ -97,7 +102,9 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     gfx_hwui::install(vm)?;
     fwk_jni::install(vm)?;
     fwk_m2_filechannel::install(vm)?;
+    fwk_m2_chain::install(vm)?;
     fwk_surface::install(vm)?;
+    fwk_vsync::install(vm)?;
     parcel::install(vm)?;
     unsafe_natives::install(vm)?;
     looper::install(vm)?;

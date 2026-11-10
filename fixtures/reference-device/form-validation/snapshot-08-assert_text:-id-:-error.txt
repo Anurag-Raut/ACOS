@@ -1,0 +1,19 @@
+Page: dev.acos.fixtures.formvalidation
+App: dev.acos.fixtures.formvalidation
+Snapshot: 18 nodes
+@e1 [text] "9:10"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image]
+@e6 [image] "Wifi signal full."
+@e7 [group] "Battery charging, 42 percent."
+  @e8 [image]
+  @e9 [text] "42%"
+  @e11 [group]
+    @e12 [text] "Form Validation"
+    @e13 [group]
+      @e15 [text-field] "Name" [editable]
+      @e16 [text-field] "Email" [editable]
+      @e17 [button] "Submit"
+      @e18 [text] "Name is required"

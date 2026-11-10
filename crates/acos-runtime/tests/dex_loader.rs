@@ -49,7 +49,7 @@ fn path_class_loader_loads_app_class_from_counter_apk_dex() {
     // yet, otherwise the test could pass without the class loader doing work.
     let descriptor = "Ldev/acos/fixtures/counter/MainActivity;";
     assert!(
-        rt.vm().class_by_desc.get(descriptor).is_none(),
+        !rt.vm().class_by_desc.contains_key(descriptor),
         "counter class was preloaded before the class loader ran"
     );
 

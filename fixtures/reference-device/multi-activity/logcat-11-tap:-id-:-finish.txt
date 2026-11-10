@@ -1,0 +1,6 @@
+11-10 21:10:15.644 I/AcosMulti( 7333): Second.finish
+11-10 21:10:15.661 I/AcosMulti( 7333): Second.onPause
+11-10 21:10:15.679 I/AcosMulti( 7333): Main.onStart
+11-10 21:10:15.680 I/AcosMulti( 7333): Main.onResume
+11-10 21:10:15.878 I/AcosMulti( 7333): Second.onStop
+11-10 21:10:15.878 I/AcosMulti( 7333): Second.onDestroy

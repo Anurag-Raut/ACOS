@@ -1,0 +1,54 @@
+{
+  "tier": "physical-device",
+  "fidelity": "physical-device",
+  "device": {
+    "model": "moto g35 5G",
+    "manufacturer": "motorola",
+    "device": "manila",
+    "product": "",
+    "android_release": "15",
+    "api_level": "35",
+    "build_id": "VUOA35.116-151",
+    "fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "abi": "arm64-v8a",
+    "abi_list": "arm64-v8a,armeabi-v7a,armeabi",
+    "locale": "en-US",
+    "resolution": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0",
+    "user_rotation": "1",
+    "accelerometer_rotation": "1",
+    "current_display": "1080x2400"
+  },
+  "serial_sha256": "74c946119e36b4e4529639cb8b53c7fa789c7ac5628d4cf9d50a846286fa2e62",
+  "apps_dir": "/home/Qui/Projects/acos/fixtures/build/apps",
+  "scenario_dir": "/home/Qui/Projects/acos/scenarios",
+  "emulator_reference": "/home/Qui/Projects/acos/fixtures/reference",
+  "captured": "2026-11-10T15:40:55.107+00:00",
+  "apps": {
+    "counter": {
+      "installed": true,
+      "package": "dev.acos.fixtures.counter",
+      "steps": 23,
+      "issues": []
+    },
+    "todo-list": {
+      "installed": true,
+      "package": "dev.acos.fixtures.todolist",
+      "steps": 29,
+      "issues": []
+    },
+    "multi-activity": {
+      "installed": true,
+      "package": "dev.acos.fixtures.multiactivity",
+      "steps": 21,
+      "issues": []
+    },
+    "form-validation": {
+      "installed": true,
+      "package": "dev.acos.fixtures.formvalidation",
+      "steps": 26,
+      "issues": []
+    }
+  }
+}

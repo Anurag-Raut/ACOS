@@ -5,6 +5,7 @@
 //! (`init=1080x2400 420dpi app=1080x2209`, `ROTATION_0`,
 //! `NavigationBar0` present) and `device-config.json`.
 
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
@@ -127,6 +128,27 @@ impl DisplayInfo {
     }
 }
 
+thread_local! {
+    static LAST_DISPLAY_INFO: RefCell<Option<DisplayInfo>> = const { RefCell::new(None) };
+}
+
+/// Record the [`DisplayInfo`] a `getDisplayInfo` handler just served (or `None`
+/// for an unknown display id).
+///
+/// The runtime transport re-encodes the reply through the real Java
+/// `DisplayInfo.writeToParcel` (see `acos-runtime::display_java`); it cannot see
+/// this crate's state, so the handler leaves the served value here the same way
+/// the PMS caches its typed description.
+pub fn cache_display_info(info: Option<DisplayInfo>) {
+    LAST_DISPLAY_INFO.with(|slot| *slot.borrow_mut() = info);
+}
+
+/// The [`DisplayInfo`] recorded by the last `getDisplayInfo` handler call.
+#[must_use]
+pub fn cached_display_info() -> Option<DisplayInfo> {
+    LAST_DISPLAY_INFO.with(|slot| slot.borrow().clone())
+}
+
 /// Mutable display state.
 #[derive(Debug)]
 pub struct DisplayState {
@@ -184,8 +206,10 @@ impl ServiceObject for DisplayService {
             "getDisplayInfo" => {
                 let id = args.first().and_then(Value::as_int).unwrap_or(0);
                 if id != 0 {
+                    cache_display_info(None);
                     vec![Value::TypedObject(Parcelable::Null)]
                 } else {
+                    cache_display_info(Some(state.default_display.clone()));
                     vec![Value::TypedObject(state.default_display.to_parcelable())]
                 }
             }

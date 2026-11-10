@@ -1,0 +1,19 @@
+Page: dev.acos.fixtures.todolist
+App: dev.acos.fixtures.todolist
+Snapshot: 19 nodes
+@e1 [text] "9:09"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image]
+@e6 [image] "Wifi signal full."
+@e7 [group] "Battery charging, 41 percent."
+  @e8 [image]
+  @e9 [text] "41%"
+  @e11 [group]
+    @e12 [text] "Todo List"
+    @e13 [group]
+      @e15 [text-field] "New item" [editable]
+        @e17 [button] "Add"
+        @e18 [button] "Clear all"
+      @e19 [list]

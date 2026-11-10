@@ -194,6 +194,18 @@ impl BinderTransport for ServiceTransport {
                         }
                     }
                 }
+                // `IDisplayManager` replies are real framework parcelables too
+                // (`DisplayInfo.writeToParcel` is 49 fields long); the Java
+                // object marshals its own bytes so `DisplayInfo.CREATOR` reads
+                // exactly what was written.
+                if descriptor == "android.hardware.display.IDisplayManager" {
+                    if let Some(method) = acos_aidl::lookup(descriptor, code) {
+                        if crate::display_java::owns_method(&method.name) {
+                            crate::display_java::rewrite_reply(vm, &method.name, reply)
+                                .map_err(|e| format!("display_java: {e}"))?;
+                        }
+                    }
+                }
             }
         }
 

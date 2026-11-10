@@ -1,0 +1,450 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "index": 0,
+        "type": "android.widget.TextView",
+        "label": "9:10",
+        "contentDescription": "9:10\u202fPM",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/clock",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 45,
+          "y": 33,
+          "width": 83,
+          "height": 42
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e1",
+        "kind": "text"
+      },
+      {
+        "index": 1,
+        "type": "android.widget.ImageView",
+        "label": "Android System notification: ",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 128,
+          "y": 0,
+          "width": 55,
+          "height": 108
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e2",
+        "kind": "image"
+      },
+      {
+        "index": 2,
+        "type": "android.widget.ImageView",
+        "label": "Settings notification: ",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 183,
+          "y": 0,
+          "width": 55,
+          "height": 108
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e3",
+        "kind": "image"
+      },
+      {
+        "index": 3,
+        "type": "android.widget.ImageView",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/wifi_in",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 825,
+          "y": 32,
+          "width": 16,
+          "height": 38
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e4",
+        "kind": "image"
+      },
+      {
+        "index": 4,
+        "type": "android.widget.ImageView",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/wifi_out",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 825,
+          "y": 32,
+          "width": 16,
+          "height": 38
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e5",
+        "kind": "image"
+      },
+      {
+        "index": 5,
+        "type": "android.widget.ImageView",
+        "label": "Wifi signal full.",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/wifi_signal",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 841,
+          "y": 34,
+          "width": 38,
+          "height": 38
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e6",
+        "kind": "image"
+      },
+      {
+        "index": 6,
+        "type": "android.widget.LinearLayout",
+        "label": "Battery charging, 41 percent.",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/battery",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 894,
+          "y": 32,
+          "width": 101,
+          "height": 42
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "systemBar": "status",
+        "ref": "e7",
+        "kind": "group"
+      },
+      {
+        "index": 7,
+        "type": "android.widget.ImageView",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 894,
+          "y": 36,
+          "width": 19,
+          "height": 33
+        },
+        "visibleToUser": true,
+        "depth": 1,
+        "parentIndex": 6,
+        "systemBar": "status",
+        "ref": "e8",
+        "kind": "image"
+      },
+      {
+        "index": 8,
+        "type": "android.widget.TextView",
+        "label": "41%",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "com.android.systemui:id/battery_percentage_view",
+        "bundleId": "com.android.systemui",
+        "rect": {
+          "x": 913,
+          "y": 32,
+          "width": 77,
+          "height": 42
+        },
+        "visibleToUser": true,
+        "depth": 1,
+        "parentIndex": 6,
+        "systemBar": "status",
+        "ref": "e9",
+        "kind": "text"
+      },
+      {
+        "index": 9,
+        "type": "android.widget.FrameLayout",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1080,
+          "height": 2400
+        },
+        "visibleToUser": true,
+        "depth": 0,
+        "ref": "e10",
+        "kind": "group"
+      },
+      {
+        "index": 10,
+        "type": "android.view.ViewGroup",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "android:id/decor_content_parent",
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1080,
+          "height": 2400
+        },
+        "visibleToUser": true,
+        "depth": 1,
+        "parentIndex": 9,
+        "ref": "e11",
+        "kind": "group"
+      },
+      {
+        "index": 11,
+        "type": "android.widget.TextView",
+        "label": "Form Validation",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 40,
+          "y": 145,
+          "width": 356,
+          "height": 66
+        },
+        "visibleToUser": true,
+        "depth": 2,
+        "parentIndex": 10,
+        "ref": "e12",
+        "kind": "text"
+      },
+      {
+        "index": 12,
+        "type": "android.widget.FrameLayout",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "android:id/content",
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 0,
+          "y": 248,
+          "width": 1080,
+          "height": 2152
+        },
+        "visibleToUser": true,
+        "depth": 2,
+        "parentIndex": 10,
+        "ref": "e13",
+        "kind": "group"
+      },
+      {
+        "index": 13,
+        "type": "android.widget.LinearLayout",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 0,
+          "y": 248,
+          "width": 1080,
+          "height": 2152
+        },
+        "visibleToUser": true,
+        "depth": 3,
+        "parentIndex": 12,
+        "ref": "e14",
+        "kind": "group"
+      },
+      {
+        "index": 14,
+        "type": "android.widget.EditText",
+        "label": "Name",
+        "value": "",
+        "enabled": true,
+        "selected": false,
+        "editable": true,
+        "password": false,
+        "hintShowing": true,
+        "placeholder": "Name",
+        "identifier": "dev.acos.fixtures.formvalidation:id/name",
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 40,
+          "y": 288,
+          "width": 1000,
+          "height": 112
+        },
+        "visibleToUser": true,
+        "hittable": true,
+        "depth": 4,
+        "parentIndex": 13,
+        "ref": "e15",
+        "kind": "text-field"
+      },
+      {
+        "index": 15,
+        "type": "android.widget.EditText",
+        "label": "Email",
+        "value": "",
+        "enabled": true,
+        "selected": false,
+        "editable": true,
+        "password": false,
+        "hintShowing": true,
+        "placeholder": "Email",
+        "identifier": "dev.acos.fixtures.formvalidation:id/email",
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 40,
+          "y": 400,
+          "width": 1000,
+          "height": 112
+        },
+        "visibleToUser": true,
+        "hittable": true,
+        "depth": 4,
+        "parentIndex": 13,
+        "ref": "e16",
+        "kind": "text-field"
+      },
+      {
+        "index": 16,
+        "type": "android.widget.Button",
+        "label": "Submit",
+        "enabled": true,
+        "selected": false,
+        "editable": false,
+        "password": false,
+        "hintShowing": false,
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "bundleId": "dev.acos.fixtures.formvalidation",
+        "rect": {
+          "x": 40,
+          "y": 512,
+          "width": 220,
+          "height": 120
+        },
+        "visibleToUser": true,
+        "hittable": true,
+        "depth": 4,
+        "parentIndex": 13,
+        "ref": "e17",
+        "kind": "button"
+      }
+    ],
+    "truncated": false,
+    "appName": "dev.acos.fixtures.formvalidation",
+    "appBundleId": "dev.acos.fixtures.formvalidation",
+    "visibility": {
+      "partial": false,
+      "visibleNodeCount": 17,
+      "totalNodeCount": 17,
+      "reasons": []
+    },
+    "keyboard": {
+      "kind": "absent"
+    },
+    "viewport": {
+      "width": 1080,
+      "height": 2400
+    },
+    "androidSnapshot": {
+      "backend": "android-helper",
+      "pixelDensity": 2.5,
+      "helperVersion": "0.21.31",
+      "helperApiVersion": "2",
+      "helperTransport": "persistent-session",
+      "helperSessionReused": true,
+      "installReason": "current",
+      "waitForIdleTimeoutMs": 500,
+      "waitForIdleQuietMs": 100,
+      "timeoutMs": 2000,
+      "maxDepth": 128,
+      "maxNodes": 5000,
+      "rootPresent": true,
+      "cacheInvalidated": true,
+      "captureMode": "interactive-windows",
+      "windowCount": 2,
+      "missingRootWindowTypes": [],
+      "nodeCount": 43,
+      "helperTruncated": false,
+      "elapsedMs": 18
+    },
+    "snapshotQuality": {
+      "state": "healthy",
+      "backend": "android-helper"
+    },
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 5,
+        "p50Ms": 20,
+        "p95Ms": 432,
+        "maxMs": 432,
+        "slowThresholdMs": 1500,
+        "platform": "android",
+        "backends": {
+          "android": 5
+        }
+      }
+    },
+    "refsGeneration": 133685
+  }
+}

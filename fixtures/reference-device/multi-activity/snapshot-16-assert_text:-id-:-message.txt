@@ -1,0 +1,84 @@
+Page: dev.acos.fixtures.multiactivity
+App: dev.acos.fixtures.multiactivity
+Snapshot: 90 visible nodes (145 total)
+Collapsed 55 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [text] "9:10"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image]
+@e6 [image] "Wifi signal full."
+@e7 [group] "Battery charging, 41 percent."
+  @e8 [image]
+  @e9 [text] "41%"
+    @e12 [group]
+      @e13 [group]
+        @e14 [group]
+          @e15 [group]
+            @e17 [text-field] "Hello" [focused] [editable]
+            @e18 [group]
+              @e19 [button] "DONE"
+        @e20 [group]
+          @e21 [group] "., English, ,, ?123, m, n, b, v, c, x, z, l, k, j, h, g, f, d, s, a, p, o, i, u, y, t, r, e, w, q, 🤗 emoji, 👋 emoji, Yello, Hello"
+            @e22 [group] [same label as parent]
+              @e24 [group]
+                @e25 [group]
+                  @e27 [group]
+                    @e28 [button] "Open features menu"
+                    @e30 [group] [same label as parent]
+                      @e31 [group] [same label as parent]
+                        @e32 [group]
+                          @e33 [group] "Hello"
+                          @e36 [group] "Yello"
+                          @e39 [group]
+                            @e40 [group] "👋 emoji"
+                            @e43 [group] "🤗 emoji"
+                    @e45 [voicedictationbutton] "Use voice typing"
+                @e47 [group]
+                  @e50 [group]
+                    @e51 [group]
+                      @e52 [group] "1"
+                      @e54 [group] "2"
+                      @e56 [group] "3"
+                      @e58 [group] "4"
+                      @e60 [group] "5"
+                      @e62 [group] "6"
+                      @e64 [group] "7"
+                      @e66 [group] "8"
+                      @e68 [group] "9"
+                      @e70 [group] "0"
+                      @e73 [group] "q"
+                      @e75 [group] "w"
+                      @e77 [group] "e"
+                      @e79 [group] "r"
+                      @e81 [group] "t"
+                      @e83 [group] "y"
+                      @e85 [group] "u"
+                      @e87 [group] "i"
+                      @e89 [group] "o"
+                      @e91 [group] "p"
+                      @e94 [group] "a"
+                      @e96 [group] "s"
+                      @e98 [group] "d"
+                      @e100 [group] "f"
+                      @e102 [group] "g"
+                      @e104 [group] "h"
+                      @e106 [group] "j"
+                      @e108 [group] "k"
+                      @e110 [group] "l"
+                      @e113 [group] "Shift"
+                      @e115 [group] "z"
+                      @e117 [group] "x"
+                      @e119 [group] "c"
+                      @e121 [group] "v"
+                      @e123 [group] "b"
+                      @e125 [group] "n"
+                      @e127 [group] "m"
+                      @e129 [group] "Delete"
+                  @e131 [group] [same label as parent]
+                    @e132 [group] "Symbol keyboard"
+                    @e134 [group] ","
+                    @e136 [group] "Emoji button"
+                    @e138 [group] "Space"
+                    @e140 [group] "Period"
+                    @e142 [group] "Done"

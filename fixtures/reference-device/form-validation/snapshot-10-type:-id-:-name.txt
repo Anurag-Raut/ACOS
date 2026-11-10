@@ -1,0 +1,85 @@
+Page: dev.acos.fixtures.formvalidation
+App: dev.acos.fixtures.formvalidation
+Snapshot: 92 visible nodes (145 total)
+Collapsed 53 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [text] "9:10"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image]
+@e6 [image] "Wifi signal full."
+@e7 [group] "Battery charging, 42 percent."
+  @e8 [image]
+  @e9 [text] "42%"
+    @e12 [group]
+      @e13 [group]
+        @e14 [group]
+          @e15 [group] "., English, ,, ?123, m, n, b, v, c, x, z, l, k, j, h, g, f, d, s, a, p, o, i, u, y, t, r, e, w, q, Eda, Uda, Ada"
+            @e16 [group] [same label as parent]
+              @e18 [group]
+                @e19 [group]
+                  @e21 [group]
+                    @e22 [button] "Open features menu"
+                    @e24 [group] [same label as parent]
+                      @e25 [group] [same label as parent]
+                        @e26 [group]
+                          @e27 [group] "Ada"
+                          @e30 [group] "Uda"
+                          @e33 [group]
+                            @e34 [group] "Eda"
+                    @e36 [voicedictationbutton] "Use voice typing"
+                @e38 [group]
+                  @e41 [group]
+                    @e42 [group]
+                      @e43 [group] "1"
+                      @e45 [group] "2"
+                      @e47 [group] "3"
+                      @e49 [group] "4"
+                      @e51 [group] "5"
+                      @e53 [group] "6"
+                      @e55 [group] "7"
+                      @e57 [group] "8"
+                      @e59 [group] "9"
+                      @e61 [group] "0"
+                      @e64 [group] "q"
+                      @e66 [group] "w"
+                      @e68 [group] "e"
+                      @e70 [group] "r"
+                      @e72 [group] "t"
+                      @e74 [group] "y"
+                      @e76 [group] "u"
+                      @e78 [group] "i"
+                      @e80 [group] "o"
+                      @e82 [group] "p"
+                      @e85 [group] "a"
+                      @e87 [group] "s"
+                      @e89 [group] "d"
+                      @e91 [group] "f"
+                      @e93 [group] "g"
+                      @e95 [group] "h"
+                      @e97 [group] "j"
+                      @e99 [group] "k"
+                      @e101 [group] "l"
+                      @e104 [group] "Shift"
+                      @e106 [group] "z"
+                      @e108 [group] "x"
+                      @e110 [group] "c"
+                      @e112 [group] "v"
+                      @e114 [group] "b"
+                      @e116 [group] "n"
+                      @e118 [group] "m"
+                      @e120 [group] "Delete"
+                  @e122 [group] [same label as parent]
+                    @e123 [group] "Symbol keyboard"
+                    @e125 [group] ","
+                    @e127 [group] "Emoji button"
+                    @e129 [group] "Space"
+                    @e131 [group] "Period"
+                    @e133 [group] "Next"
+  @e138 [group]
+    @e139 [text] "Form Validation"
+    @e140 [group]
+      @e142 [text-field] "Ada" [focused] [editable]
+      @e143 [text-field] "Email" [editable]
+      @e144 [button] "Submit"
+      @e145 [text] "Name is required"

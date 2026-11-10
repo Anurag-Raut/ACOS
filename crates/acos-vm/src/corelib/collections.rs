@@ -144,26 +144,45 @@ fn al_add(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+/// Length of the backing list without cloning it (the hot read-only path).
+#[inline]
+fn list_len(vm: &Vm, this: Handle) -> usize {
+    match vm.heap.get(this) {
+        Some(Object::Builtin {
+            data: BuiltinData::List(v),
+            ..
+        }) => v.len(),
+        _ => 0,
+    }
+}
+
 fn al_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let i = vm.arg_i32(ctx, 0);
-    let items = list_items(vm, this);
-    if i < 0 || i as usize >= items.len() {
-        return Err(vm.throw_new("Ljava/lang/IndexOutOfBoundsException;", Some(&format!("Index: {i}, Size: {}", items.len()))));
+    let len = list_len(vm, this);
+    if i < 0 || i as usize >= len {
+        return Err(vm.throw_new("Ljava/lang/IndexOutOfBoundsException;", Some(&format!("Index: {i}, Size: {len}"))));
     }
-    vm.ret_ref(ctx, items[i as usize]);
+    let item = match vm.heap.get(this) {
+        Some(Object::Builtin {
+            data: BuiltinData::List(v),
+            ..
+        }) => v[i as usize],
+        _ => NULL,
+    };
+    vm.ret_ref(ctx, item);
     Ok(())
 }
 
 fn al_size(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    vm.ret_i32(ctx, list_items(vm, this).len() as i32);
+    vm.ret_i32(ctx, list_len(vm, this) as i32);
     Ok(())
 }
 
 fn al_is_empty(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    vm.ret_bool(ctx, list_items(vm, this).is_empty());
+    vm.ret_bool(ctx, list_len(vm, this) == 0);
     Ok(())
 }
 

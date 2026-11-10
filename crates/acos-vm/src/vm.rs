@@ -25,6 +25,11 @@ pub struct DexCtx {
     pub field_cache: Vec<Option<ResolvedField>>,
     pub method_cache: Vec<Option<MethodId>>,
     pub class_cache: Vec<Option<ClassId>>,
+    /// One-entry (receiver class -> method) inline cache per virtual/interface
+    /// call site. Monomorphic call sites (the overwhelming majority in both
+    /// console benchmarks and framework code) never touch the `dispatch_cache`
+    /// `HashMap` after the first call.
+    pub virtual_cache: Vec<Option<(ClassId, MethodId)>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -268,6 +273,12 @@ pub struct Vm {
     pub dexs: Vec<DexCtx>,
     pub classes: Vec<Class>,
     pub class_by_desc: HashMap<String, ClassId>,
+    /// Array element descriptors whose `[<elem>` class has already been loaded.
+    /// `Vm::alloc` used to `format!("[{elem}")` and probe `class_by_desc` on
+    /// **every** array allocation; array benchmarks allocate millions of
+    /// arrays, so this keyed-by-`elem_desc` set removes the per-allocation
+    /// `String` allocation and the `"["`-prefixed hash.
+    pub(crate) loaded_array_elems: HashSet<String>,
     /// Descriptors of DEX classes whose `load_dex_class` is on the stack.
     ///
     /// A class is only inserted into `class_by_desc` once its fields, methods
@@ -370,6 +381,7 @@ impl Vm {
             dexs: Vec::new(),
             classes: Vec::new(),
             class_by_desc: HashMap::new(),
+            loaded_array_elems: HashSet::new(),
             loading_classes: HashSet::new(),
             types: Vec::new(),
             type_by_desc: HashMap::new(),
@@ -1278,6 +1290,7 @@ impl Vm {
             string_cache: vec![None; strings],
             field_cache: vec![None; fields],
             method_cache: vec![None; methods],
+            virtual_cache: vec![None; methods],
             class_cache: vec![None; types],
         });
         idx
@@ -1292,9 +1305,10 @@ impl Vm {
         // allocation (throttled internally).
         self.host.check()?;
         if let Object::Array(a) = &obj {
-            let desc = format!("[{}", a.elem_desc);
-            if !self.class_by_desc.contains_key(&desc) {
+            if !self.loaded_array_elems.contains(a.elem_desc.as_str()) {
+                let desc = format!("[{}", a.elem_desc);
                 self.load_class(&desc)?;
+                self.loaded_array_elems.insert(a.elem_desc.clone());
             }
         }
         if self.gc_stress || self.heap.live_bytes >= self.gc_threshold {

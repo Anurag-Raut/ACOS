@@ -169,7 +169,7 @@ fn package_info(vm: &mut Vm, app: &AppInfo, pkg: &PackageInfo) -> JResult<Handle
 
 /// Write `obj.writeToParcel(parcel, 0)` into a fresh Java `Parcel` and return
 /// the marshalled payload bytes.
-fn write_object_payload(vm: &mut Vm, obj: Handle) -> JResult<Vec<u8>> {
+pub(crate) fn write_object_payload(vm: &mut Vm, obj: Handle) -> JResult<Vec<u8>> {
     let parcel = as_obj(
         vm.call_static("android.os.Parcel", "obtain", "()Landroid/os/Parcel;", &[])
             .map_err(err)?,
@@ -210,7 +210,7 @@ fn append(reply: &mut Parcel, bytes: &[u8]) -> JResult<()> {
 }
 
 /// Write a materialised typed object (presence marker + payload) or null.
-fn typed_object(vm: &mut Vm, obj: Option<Handle>, reply: &mut Parcel) -> JResult<()> {
+pub(crate) fn typed_object(vm: &mut Vm, obj: Option<Handle>, reply: &mut Parcel) -> JResult<()> {
     match obj {
         None => {
             reply.write_int32(0);

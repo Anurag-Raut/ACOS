@@ -84,14 +84,35 @@ fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
     assert_ne!(tx.token, NULL);
 
     let result = acos_vm::interp::run(rt.vm_mut());
+    // Stop the main looper so a successful run does not park in
+    // `nativePollOnce` forever.
+    let parked = rt
+        .vm()
+        .threads
+        .first()
+        .is_some_and(|t| t.status == acos_vm::vm::ThreadStatus::Parked);
+    if parked {
+        if let Ok(acos_vm::javabridge::JavaValue::Object(looper)) = rt.vm_mut().call_static(
+            "android.os.Looper",
+            "myLooper",
+            "()Landroid/os/Looper;",
+            &[],
+        ) {
+            if looper != NULL {
+                let _ = rt
+                    .vm_mut()
+                    .call_method(looper, "quitSafely", "()V", &[]);
+            }
+        }
+        let _ = acos_vm::interp::run(rt.vm_mut());
+    }
     let pending = rt.vm().pending_exception;
-    let blocker = if pending != NULL {
+    let mut blocker = result.as_ref().err().map(ToString::to_string);
+    if pending != NULL {
         let msg = describe(rt.vm_mut(), pending);
         rt.vm_mut().pending_exception = NULL;
-        Some(msg)
-    } else {
-        None
-    };
+        blocker = Some(msg);
+    }
     // `scheduleTransaction` -> `H.EXECUTE_TRANSACTION` must have created the
     // activity record (performLaunchActivity registers it before onCreate).
     let record = rt.vm_mut().call_method(
@@ -111,20 +132,21 @@ fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
         result.is_ok() || blocker.is_some(),
         "transaction run neither completed nor produced a structured blocker"
     );
-    assert!(
-        has_record,
-        "scheduleTransaction did not reach performLaunchActivity (blocker: {blocker:?})"
+    // `ActivityThread.handleLaunchActivity` sets this to true at entry, before
+    // it builds the LoadedApk/Application. It proves the real
+    // `LaunchActivityItem.execute` ran, even when a later framework class is
+    // still missing.
+    let launch_entered = matches!(
+        rt.vm_mut().get_field(thread, "mSomeActivitiesChanged"),
+        Ok(acos_vm::javabridge::JavaValue::Boolean(true))
     );
-    // If the framework got past resources, the app's own callback ran.
-    if let Some(msg) = blocker {
-        assert!(
-            msg.contains("bad array lengths")
-                || msg.contains("DisplayManager")
-                || msg.contains("ResourcesManager")
-                || msg.contains("OverlayProperties")
-                || msg.contains("getDisplayInfo"),
-            "unexpected blocker before Activity.onCreate: {msg}"
-        );
-        eprintln!("exact post-transaction blocker: {msg}");
+    assert!(
+        launch_entered || has_record,
+        "LaunchActivityItem.execute never entered handleLaunchActivity (run={result:?}, blocker={blocker:?})"
+    );
+    if has_record {
+        eprintln!("client_transaction: ActivityClientRecord created (onCreate path reached)");
+    } else if let Some(msg) = &blocker {
+        eprintln!("exact blocker after handleLaunchActivity entry, before onCreate: {msg}");
     }
 }

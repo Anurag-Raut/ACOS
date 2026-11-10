@@ -391,6 +391,10 @@ fn native_poll_once(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         // An input fd registered through `LooperHandle::add_fd` is readable on
         // the same looper id; dispatch it on this (the looper) green thread.
         let _ = crate::natives::fwk_input::on_looper_wake(vm, ptr);
+        // A `DisplayEventReceiver` vsync eventfd is registered the same way.
+        // Draining it here generates the next tick only when a receiver asked
+        // for one; with nothing scheduled the eventfd stays quiet.
+        let _ = crate::natives::fwk_vsync::on_looper_wake(vm, ptr);
         return Ok(());
     }
     if timeout_ms == 0 {

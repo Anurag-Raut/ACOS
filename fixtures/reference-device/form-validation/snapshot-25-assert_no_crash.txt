@@ -1,0 +1,18 @@
+Page: dev.acos.fixtures.formvalidation
+App: dev.acos.fixtures.formvalidation
+Snapshot: 18 nodes
+@e1 [text] "9:10"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image] "Wifi signal full."
+@e6 [group] "Battery charging, 42 percent."
+  @e7 [image]
+  @e8 [text] "42%"
+    @e11 [group]
+      @e12 [group]
+        @e13 [text] "Success"
+        @e14 [scroll-area] "android:id/scrollView" [scrollable]
+          @e15 [text] "Submitted: Ada"
+        @e16 [scroll-area] "android:id/buttonPanel" [scrollable]
+          @e18 [button] "OK"

@@ -1,0 +1,1 @@
+11-10 21:09:51.141 I/AcosTodo( 5909): remove item=milk size=1

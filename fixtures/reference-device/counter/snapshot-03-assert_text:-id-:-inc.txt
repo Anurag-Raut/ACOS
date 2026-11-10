@@ -1,0 +1,17 @@
+Page: dev.acos.fixtures.counter
+App: dev.acos.fixtures.counter
+Snapshot: 16 nodes
+@e1 [text] "9:09"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image]
+@e5 [image] "Wifi signal full."
+@e6 [group] "Battery charging, 41 percent."
+  @e7 [image]
+  @e8 [text] "41%"
+  @e10 [group]
+    @e11 [text] "Counter"
+    @e12 [group]
+      @e14 [text] "0"
+      @e15 [button] "Increment"
+      @e16 [button] "Reset"

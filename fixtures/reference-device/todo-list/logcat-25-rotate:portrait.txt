@@ -1,0 +1,8 @@
+11-10 21:09:58.404 I/AcosTodo( 5909): onPause
+11-10 21:09:58.404 I/AcosTodo( 5909): saved count=1
+11-10 21:09:58.405 I/AcosTodo( 5909): onStop
+11-10 21:09:58.406 I/AcosTodo( 5909): onDestroy
+11-10 21:09:58.424 I/AcosTodo( 5909): onCreate
+11-10 21:09:58.437 I/AcosTodo( 5909): loaded count=1
+11-10 21:09:58.438 I/AcosTodo( 5909): onStart
+11-10 21:09:58.441 I/AcosTodo( 5909): onResume

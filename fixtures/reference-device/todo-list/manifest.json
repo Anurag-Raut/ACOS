@@ -1,0 +1,4366 @@
+{
+  "tier": "physical-device",
+  "fidelity": "physical-device",
+  "fidelity_note": "Physical Android device evidence. Not ART-reference and not interchangeable with fixtures/reference/<app>/art-api34-x86_64.",
+  "app": "todo-list",
+  "package": "dev.acos.fixtures.todolist",
+  "activity": "dev.acos.fixtures.todolist/.MainActivity",
+  "device": {
+    "model": "moto g35 5G",
+    "manufacturer": "motorola",
+    "android_release": "15",
+    "api_level": "35",
+    "fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "resolution": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0",
+    "abi": "arm64-v8a",
+    "serial_sha256": "74c946119e36b4e4529639cb8b53c7fa789c7ac5628d4cf9d50a846286fa2e62"
+  },
+  "apk": "../fixtures/build/apps/todo-list.apk",
+  "apk_sha256": "bbde917f691f1e00d57ec193f811f858967a97ed8c59a8e3cce577c9ec63b40f",
+  "scenario": "todo-list.yaml",
+  "scenario_sha256": "707d0844de7bfea29671cb5ea974730274687a361afa0c3c63d432c6b6cb71c6",
+  "expectation": "pass",
+  "display_expected": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "capture_started": "2026-11-10T15:39:31.106+00:00",
+  "install": {
+    "ok": true,
+    "error": null,
+    "stdout": "{\n  \"success\": true,\n  \"data\": {\n    \"app\": \"dev.acos.fixtures.todolist\",\n    \"appPath\": \"/home/Qui/Projects/acos/fixtures/build/apps/todo-list.apk\",\n    \"platform\": \"android\",\n    \"appId\": \"dev.acos.fixtures.todolist\",\n    \"package\": \"dev.acos.fixtures.todolist\",\n    \"message\": \"Installed: dev.acos.fixtures.todolist\"\n  }\n}\n",
+    "stderr": "",
+    "ts": "2026-11-10T15:39:32.531+00:00"
+  },
+  "steps": [
+    {
+      "seq": 0,
+      "step": "launch",
+      "timestamp": "2026-11-10T15:39:35.193+00:00",
+      "screenshot": "screenshot-00-launch.png",
+      "snapshot_json": "snapshot-00-launch.json",
+      "snapshot_text": "snapshot-00-launch.txt",
+      "logcat": "logcat-00-launch.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "launch",
+      "scenario_step": {
+        "launch": {
+          "activity": "dev.acos.fixtures.todolist/.MainActivity",
+          "clear_state": true
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 1,
+      "step": "wait_for:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:35.797+00:00",
+      "screenshot": "screenshot-01-wait_for:-id-:-input.png",
+      "snapshot_json": "snapshot-01-wait_for:-id-:-input.json",
+      "snapshot_text": "snapshot-01-wait_for:-id-:-input.txt",
+      "logcat": "logcat-01-wait_for:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "wait_for",
+      "scenario_step": {
+        "wait_for": {
+          "selector": {
+            "id": "input"
+          },
+          "timeout_ms": 5000
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 2,
+      "step": "assert_text:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:36.287+00:00",
+      "screenshot": "screenshot-02-assert_text:-id-:-input.png",
+      "snapshot_json": "snapshot-02-assert_text:-id-:-input.json",
+      "snapshot_text": "snapshot-02-assert_text:-id-:-input.txt",
+      "logcat": "logcat-02-assert_text:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "id": "input"
+          },
+          "text": {
+            "exact": "New item"
+          },
+          "bounds": [
+            42,
+            317,
+            1038,
+            435
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 3,
+      "step": "assert_text:{\"id\": \"add\"}",
+      "timestamp": "2026-11-10T15:39:36.794+00:00",
+      "screenshot": "screenshot-03-assert_text:-id-:-add.png",
+      "snapshot_json": "snapshot-03-assert_text:-id-:-add.json",
+      "snapshot_text": "snapshot-03-assert_text:-id-:-add.txt",
+      "logcat": "logcat-03-assert_text:-id-:-add.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "id": "add"
+          },
+          "text": {
+            "exact": "Add"
+          },
+          "bounds": [
+            42,
+            435,
+            273,
+            561
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 4,
+      "step": "assert_text:{\"id\": \"clear\"}",
+      "timestamp": "2026-11-10T15:39:37.302+00:00",
+      "screenshot": "screenshot-04-assert_text:-id-:-clear.png",
+      "snapshot_json": "snapshot-04-assert_text:-id-:-clear.json",
+      "snapshot_text": "snapshot-04-assert_text:-id-:-clear.txt",
+      "logcat": "logcat-04-assert_text:-id-:-clear.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "id": "clear"
+          },
+          "text": {
+            "exact": "Clear all"
+          },
+          "bounds": [
+            273,
+            435,
+            504,
+            561
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 5,
+      "step": "assert_log",
+      "timestamp": "2026-11-10T15:39:37.806+00:00",
+      "screenshot": "screenshot-05-assert_log.png",
+      "snapshot_json": "snapshot-05-assert_log.json",
+      "snapshot_text": "snapshot-05-assert_log.txt",
+      "logcat": "logcat-05-assert_log.txt",
+      "pid": "5909",
+      "screenshot_bytes": 34337,
+      "kind": "assert_log",
+      "scenario_step": {
+        "assert_log": {
+          "tag": "AcosTodo",
+          "since_previous_step": false,
+          "ordered": true,
+          "patterns": [
+            "^onCreate$",
+            "^onStart$",
+            "^onResume$"
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 6,
+      "step": "tap:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:39.660+00:00",
+      "screenshot": "screenshot-06-tap:-id-:-input.png",
+      "snapshot_json": "snapshot-06-tap:-id-:-input.json",
+      "snapshot_text": "snapshot-06-tap:-id-:-input.txt",
+      "logcat": "logcat-06-tap:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 92955,
+      "kind": "tap",
+      "scenario_step": {
+        "tap": {
+          "selector": {
+            "id": "input"
+          }
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 7,
+      "step": "type:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:41.540+00:00",
+      "screenshot": "screenshot-07-type:-id-:-input.png",
+      "snapshot_json": "snapshot-07-type:-id-:-input.json",
+      "snapshot_text": "snapshot-07-type:-id-:-input.txt",
+      "logcat": "logcat-07-type:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 90819,
+      "kind": "type",
+      "scenario_step": {
+        "type": {
+          "selector": {
+            "id": "input"
+          },
+          "text": "milk"
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 8,
+      "step": "tap:{\"id\": \"add\"}",
+      "timestamp": "2026-11-10T15:39:43.365+00:00",
+      "screenshot": "screenshot-08-tap:-id-:-add.png",
+      "snapshot_json": "snapshot-08-tap:-id-:-add.json",
+      "snapshot_text": "snapshot-08-tap:-id-:-add.txt",
+      "logcat": "logcat-08-tap:-id-:-add.txt",
+      "pid": "5909",
+      "screenshot_bytes": 94311,
+      "kind": "tap",
+      "scenario_step": {
+        "tap": {
+          "selector": {
+            "id": "add"
+          }
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 9,
+      "step": "assert_log",
+      "timestamp": "2026-11-10T15:39:43.974+00:00",
+      "screenshot": "screenshot-09-assert_log.png",
+      "snapshot_json": "snapshot-09-assert_log.json",
+      "snapshot_text": "snapshot-09-assert_log.txt",
+      "logcat": "logcat-09-assert_log.txt",
+      "pid": "5909",
+      "screenshot_bytes": 94256,
+      "kind": "assert_log",
+      "scenario_step": {
+        "assert_log": {
+          "tag": "AcosTodo",
+          "since_previous_step": true,
+          "ordered": true,
+          "patterns": [
+            "^add item=milk size=1$"
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 10,
+      "step": "assert_text:{\"text\": {\"exact\": \"milk\"}}",
+      "timestamp": "2026-11-10T15:39:44.577+00:00",
+      "screenshot": "screenshot-10-assert_text:-text-:-exact-:-milk.png",
+      "snapshot_json": "snapshot-10-assert_text:-text-:-exact-:-milk.json",
+      "snapshot_text": "snapshot-10-assert_text:-text-:-exact-:-milk.txt",
+      "logcat": "logcat-10-assert_text:-text-:-exact-:-milk.txt",
+      "pid": "5909",
+      "screenshot_bytes": 94311,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "text": {
+              "exact": "milk"
+            }
+          },
+          "text": {
+            "exact": "milk"
+          },
+          "bounds": [
+            42,
+            561,
+            1038,
+            687
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 11,
+      "step": "capture:after-add-milk",
+      "timestamp": "2026-11-10T15:39:45.272+00:00",
+      "screenshot": "screenshot-11-capture:after-add-milk.png",
+      "snapshot_json": "snapshot-11-capture:after-add-milk.json",
+      "snapshot_text": "snapshot-11-capture:after-add-milk.txt",
+      "logcat": "logcat-11-capture:after-add-milk.txt",
+      "pid": "5909",
+      "screenshot_bytes": 94256,
+      "kind": "capture",
+      "scenario_step": {
+        "capture": {
+          "name": "after-add-milk",
+          "format": "png",
+          "fresh": true
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 12,
+      "step": "tap:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:46.660+00:00",
+      "screenshot": "screenshot-12-tap:-id-:-input.png",
+      "snapshot_json": "snapshot-12-tap:-id-:-input.json",
+      "snapshot_text": "snapshot-12-tap:-id-:-input.txt",
+      "logcat": "logcat-12-tap:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 94537,
+      "kind": "tap",
+      "scenario_step": {
+        "tap": {
+          "selector": {
+            "id": "input"
+          }
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 13,
+      "step": "type:{\"id\": \"input\"}",
+      "timestamp": "2026-11-10T15:39:48.497+00:00",
+      "screenshot": "screenshot-13-type:-id-:-input.png",
+      "snapshot_json": "snapshot-13-type:-id-:-input.json",
+      "snapshot_text": "snapshot-13-type:-id-:-input.txt",
+      "logcat": "logcat-13-type:-id-:-input.txt",
+      "pid": "5909",
+      "screenshot_bytes": 97282,
+      "kind": "type",
+      "scenario_step": {
+        "type": {
+          "selector": {
+            "id": "input"
+          },
+          "text": "bread"
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 14,
+      "step": "tap:{\"id\": \"add\"}",
+      "timestamp": "2026-11-10T15:39:49.979+00:00",
+      "screenshot": "screenshot-14-tap:-id-:-add.png",
+      "snapshot_json": "snapshot-14-tap:-id-:-add.json",
+      "snapshot_text": "snapshot-14-tap:-id-:-add.txt",
+      "logcat": "logcat-14-tap:-id-:-add.txt",
+      "pid": "5909",
+      "screenshot_bytes": 97010,
+      "kind": "tap",
+      "scenario_step": {
+        "tap": {
+          "selector": {
+            "id": "add"
+          }
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 15,
+      "step": "assert_log",
+      "timestamp": "2026-11-10T15:39:50.636+00:00",
+      "screenshot": "screenshot-15-assert_log.png",
+      "snapshot_json": "snapshot-15-assert_log.json",
+      "snapshot_text": "snapshot-15-assert_log.txt",
+      "logcat": "logcat-15-assert_log.txt",
+      "pid": "5909",
+      "screenshot_bytes": 97062,
+      "kind": "assert_log",
+      "scenario_step": {
+        "assert_log": {
+          "tag": "AcosTodo",
+          "since_previous_step": true,
+          "ordered": true,
+          "patterns": [
+            "^add item=bread size=2$"
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 16,
+      "step": "assert_text:{\"text\": {\"exact\": \"bread\"}}",
+      "timestamp": "2026-11-10T15:39:51.311+00:00",
+      "screenshot": "screenshot-16-assert_text:-text-:-exact-:-bread.png",
+      "snapshot_json": "snapshot-16-assert_text:-text-:-exact-:-bread.json",
+      "snapshot_text": "snapshot-16-assert_text:-text-:-exact-:-bread.txt",
+      "logcat": "logcat-16-assert_text:-text-:-exact-:-bread.txt",
+      "pid": "5909",
+      "screenshot_bytes": 97062,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "text": {
+            "exact": "bread"
+          },
+          "bounds": [
+            42,
+            690,
+            1038,
+            816
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 17,
+      "step": "tap:{\"text\": {\"exact\": \"milk\"}}",
+      "timestamp": "2026-11-10T15:39:52.919+00:00",
+      "screenshot": "screenshot-17-tap:-text-:-exact-:-milk.png",
+      "snapshot_json": "snapshot-17-tap:-text-:-exact-:-milk.json",
+      "snapshot_text": "snapshot-17-tap:-text-:-exact-:-milk.txt",
+      "logcat": "logcat-17-tap:-text-:-exact-:-milk.txt",
+      "pid": "5909",
+      "screenshot_bytes": 96041,
+      "kind": "tap",
+      "scenario_step": {
+        "tap": {
+          "selector": {
+            "text": {
+              "exact": "milk"
+            }
+          }
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 18,
+      "step": "assert_log",
+      "timestamp": "2026-11-10T15:39:53.545+00:00",
+      "screenshot": "screenshot-18-assert_log.png",
+      "snapshot_json": "snapshot-18-assert_log.json",
+      "snapshot_text": "snapshot-18-assert_log.txt",
+      "logcat": "logcat-18-assert_log.txt",
+      "pid": "5909",
+      "screenshot_bytes": 96094,
+      "kind": "assert_log",
+      "scenario_step": {
+        "assert_log": {
+          "tag": "AcosTodo",
+          "since_previous_step": true,
+          "ordered": true,
+          "patterns": [
+            "^remove item=milk size=1$"
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 19,
+      "step": "assert_not_visible:{\"text\": {\"exact\": \"milk\"}}",
+      "timestamp": "2026-11-10T15:39:54.234+00:00",
+      "screenshot": "screenshot-19-assert_not_visible:-text-:-exact-:-milk.png",
+      "snapshot_json": "snapshot-19-assert_not_visible:-text-:-exact-:-milk.json",
+      "snapshot_text": "snapshot-19-assert_not_visible:-text-:-exact-:-milk.txt",
+      "logcat": "logcat-19-assert_not_visible:-text-:-exact-:-milk.txt",
+      "pid": "5909",
+      "screenshot_bytes": 96041,
+      "kind": "assert_not_visible",
+      "scenario_step": {
+        "assert_not_visible": {
+          "selector": {
+            "text": {
+              "exact": "milk"
+            }
+          }
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 20,
+      "step": "assert_text:{\"text\": {\"exact\": \"bread\"}}",
+      "timestamp": "2026-11-10T15:39:54.833+00:00",
+      "screenshot": "screenshot-20-assert_text:-text-:-exact-:-bread.png",
+      "snapshot_json": "snapshot-20-assert_text:-text-:-exact-:-bread.json",
+      "snapshot_text": "snapshot-20-assert_text:-text-:-exact-:-bread.txt",
+      "logcat": "logcat-20-assert_text:-text-:-exact-:-bread.txt",
+      "pid": "5909",
+      "screenshot_bytes": 95860,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "text": {
+            "exact": "bread"
+          },
+          "bounds": [
+            42,
+            561,
+            1038,
+            687
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 21,
+      "step": "capture:after-remove",
+      "timestamp": "2026-11-10T15:39:55.435+00:00",
+      "screenshot": "screenshot-21-capture:after-remove.png",
+      "snapshot_json": "snapshot-21-capture:after-remove.json",
+      "snapshot_text": "snapshot-21-capture:after-remove.txt",
+      "logcat": "logcat-21-capture:after-remove.txt",
+      "pid": "5909",
+      "screenshot_bytes": 95907,
+      "kind": "capture",
+      "scenario_step": {
+        "capture": {
+          "name": "after-remove",
+          "format": "png",
+          "fresh": true
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 22,
+      "step": "rotate:landscape",
+      "timestamp": "2026-11-10T15:39:57.126+00:00",
+      "screenshot": "screenshot-22-rotate:landscape.png",
+      "snapshot_json": "snapshot-22-rotate:landscape.json",
+      "snapshot_text": "snapshot-22-rotate:landscape.txt",
+      "logcat": "logcat-22-rotate:landscape.txt",
+      "pid": "5909",
+      "screenshot_bytes": 85490,
+      "kind": "rotate",
+      "scenario_step": {
+        "rotate": {
+          "orientation": "landscape"
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 23,
+      "step": "assert_text:{\"text\": {\"exact\": \"bread\"}}",
+      "timestamp": "2026-11-10T15:39:57.736+00:00",
+      "screenshot": "screenshot-23-assert_text:-text-:-exact-:-bread.png",
+      "snapshot_json": "snapshot-23-assert_text:-text-:-exact-:-bread.json",
+      "snapshot_text": "snapshot-23-assert_text:-text-:-exact-:-bread.txt",
+      "logcat": "logcat-23-assert_text:-text-:-exact-:-bread.txt",
+      "pid": "5909",
+      "screenshot_bytes": 85490,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "text": {
+            "exact": "bread"
+          },
+          "bounds": [
+            170,
+            475,
+            2358,
+            601
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 24,
+      "step": "assert_not_visible:{\"text\": {\"exact\": \"milk\"}}",
+      "timestamp": "2026-11-10T15:39:58.385+00:00",
+      "screenshot": "screenshot-24-assert_not_visible:-text-:-exact-:-milk.png",
+      "snapshot_json": "snapshot-24-assert_not_visible:-text-:-exact-:-milk.json",
+      "snapshot_text": "snapshot-24-assert_not_visible:-text-:-exact-:-milk.txt",
+      "logcat": "logcat-24-assert_not_visible:-text-:-exact-:-milk.txt",
+      "pid": "5909",
+      "screenshot_bytes": 85453,
+      "kind": "assert_not_visible",
+      "scenario_step": {
+        "assert_not_visible": {
+          "selector": {
+            "text": {
+              "exact": "milk"
+            }
+          }
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 25,
+      "step": "rotate:portrait",
+      "timestamp": "2026-11-10T15:40:00.059+00:00",
+      "screenshot": "screenshot-25-rotate:portrait.png",
+      "snapshot_json": "snapshot-25-rotate:portrait.json",
+      "snapshot_text": "snapshot-25-rotate:portrait.txt",
+      "logcat": "logcat-25-rotate:portrait.txt",
+      "pid": "5909",
+      "screenshot_bytes": 95907,
+      "kind": "rotate",
+      "scenario_step": {
+        "rotate": {
+          "orientation": "portrait"
+        }
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 26,
+      "step": "assert_text:{\"text\": {\"exact\": \"bread\"}}",
+      "timestamp": "2026-11-10T15:40:00.764+00:00",
+      "screenshot": "screenshot-26-assert_text:-text-:-exact-:-bread.png",
+      "snapshot_json": "snapshot-26-assert_text:-text-:-exact-:-bread.json",
+      "snapshot_text": "snapshot-26-assert_text:-text-:-exact-:-bread.txt",
+      "logcat": "logcat-26-assert_text:-text-:-exact-:-bread.txt",
+      "pid": "5909",
+      "screenshot_bytes": 96094,
+      "kind": "assert_text",
+      "scenario_step": {
+        "assert_text": {
+          "selector": {
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "text": {
+            "exact": "bread"
+          },
+          "bounds": [
+            42,
+            561,
+            1038,
+            687
+          ]
+        }
+      },
+      "action_ok": null
+    },
+    {
+      "seq": 27,
+      "step": "back",
+      "timestamp": "2026-11-10T15:40:01.458+00:00",
+      "screenshot": "screenshot-27-back.png",
+      "snapshot_json": "snapshot-27-back.json",
+      "snapshot_text": "snapshot-27-back.txt",
+      "logcat": "logcat-27-back.txt",
+      "pid": "5909",
+      "screenshot_bytes": 65483,
+      "kind": "back",
+      "scenario_step": {
+        "back": {}
+      },
+      "action_ok": true
+    },
+    {
+      "seq": 28,
+      "step": "assert_no_crash",
+      "timestamp": "2026-11-10T15:40:02.002+00:00",
+      "screenshot": "screenshot-28-assert_no_crash.png",
+      "snapshot_json": "snapshot-28-assert_no_crash.json",
+      "snapshot_text": "snapshot-28-assert_no_crash.txt",
+      "logcat": "logcat-28-assert_no_crash.txt",
+      "pid": "5909",
+      "screenshot_bytes": 37030,
+      "kind": "assert_no_crash",
+      "scenario_step": {
+        "assert_no_crash": {}
+      },
+      "action_ok": null
+    }
+  ],
+  "issues": [],
+  "commands": [
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "get-state"
+      ],
+      "ts": "2026-11-10T15:39:09.273+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.model"
+      ],
+      "ts": "2026-11-10T15:39:09.274+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.manufacturer"
+      ],
+      "ts": "2026-11-10T15:39:09.299+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.device"
+      ],
+      "ts": "2026-11-10T15:39:09.326+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.product"
+      ],
+      "ts": "2026-11-10T15:39:09.347+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.build.version.release"
+      ],
+      "ts": "2026-11-10T15:39:09.373+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.build.version.sdk"
+      ],
+      "ts": "2026-11-10T15:39:09.396+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.build.id"
+      ],
+      "ts": "2026-11-10T15:39:09.422+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.build.fingerprint"
+      ],
+      "ts": "2026-11-10T15:39:09.444+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.cpu.abi"
+      ],
+      "ts": "2026-11-10T15:39:09.470+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "ro.product.cpu.abilist"
+      ],
+      "ts": "2026-11-10T15:39:09.495+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "getprop",
+        "persist.sys.locale"
+      ],
+      "ts": "2026-11-10T15:39:09.521+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "wm",
+        "size"
+      ],
+      "ts": "2026-11-10T15:39:09.547+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "wm",
+        "density"
+      ],
+      "ts": "2026-11-10T15:39:09.591+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "font_scale"
+      ],
+      "ts": "2026-11-10T15:39:09.638+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "user_rotation"
+      ],
+      "ts": "2026-11-10T15:39:09.684+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "accelerometer_rotation"
+      ],
+      "ts": "2026-11-10T15:39:09.730+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "dumpsys",
+        "window",
+        "displays"
+      ],
+      "ts": "2026-11-10T15:39:09.774+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "install",
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:09.818+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-c"
+      ],
+      "ts": "2026-11-10T15:39:10.958+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pm",
+        "clear",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:11.081+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "open",
+        "dev.acos.fixtures.counter",
+        "--activity",
+        "dev.acos.fixtures.counter/.MainActivity",
+        "--relaunch",
+        "--foreground",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:11.185+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-00-launch.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:13.113+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:13.412+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:13.498+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:13.582+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:13.627+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "wait",
+        "id=dev.acos.fixtures.counter:id/count",
+        "5000",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:13.677+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-01-wait_for:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:13.760+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:14.028+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:14.115+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:14.200+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:14.234+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-02-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:14.271+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:14.525+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:14.606+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:14.694+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:14.732+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-03-assert_text:-id-:-inc.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:14.778+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:15.038+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:15.124+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:15.209+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:15.242+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-04-assert_text:-id-:-reset.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:15.279+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:15.552+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:15.643+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:15.728+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:15.763+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-05-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:15.803+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:16.062+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:16.147+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:16.228+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:16.262+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.counter:id/inc",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:16.302+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-06-tap:-id-:-inc.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:17.036+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:17.301+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:17.384+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:17.470+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:17.506+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-07-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:17.548+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:17.806+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:17.924+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:18.025+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:18.058+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-08-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:18.098+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:18.365+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:18.451+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:18.537+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:18.570+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-09-capture:after-inc1.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:18.610+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:18.868+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:18.951+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:19.040+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:19.073+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.counter:id/inc",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:19.117+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-10-tap:-id-:-inc.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:19.820+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:20.083+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:20.168+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:20.251+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:20.283+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-11-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:20.321+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:20.580+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:20.666+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:20.750+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:20.781+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-12-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:20.820+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:21.081+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:21.163+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:21.248+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:21.281+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "orientation",
+        "landscape-left",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:21.322+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-13-rotate:landscape.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:21.634+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:21.921+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:22.080+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:22.165+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:22.199+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-14-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:22.246+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:22.501+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:22.588+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:22.673+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:22.706+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-15-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:22.751+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:23.007+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:23.094+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:23.179+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:23.210+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "orientation",
+        "portrait",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:23.254+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-16-rotate:portrait.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:24.225+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:24.479+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:24.565+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:24.648+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:24.681+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-17-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:24.728+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:24.991+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:25.080+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:25.168+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:25.202+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.counter:id/reset",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:25.250+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-18-tap:-id-:-reset.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:25.948+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:26.207+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:26.293+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:26.377+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:26.410+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-19-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:26.460+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:26.722+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:26.808+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:26.967+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:27.001+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-20-assert_text:-id-:-count.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:27.051+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:27.315+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:27.401+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:27.481+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:27.514+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "back",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:27.563+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-21-back.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:27.684+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:28.660+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:28.756+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:28.850+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:28.882+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/counter/screenshot-22-assert_no_crash.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:28.935+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:29.814+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:30.088+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.counter"
+      ],
+      "ts": "2026-11-10T15:39:30.182+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosCounter:V"
+      ],
+      "ts": "2026-11-10T15:39:30.214+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "close",
+        "dev.acos.fixtures.counter",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:30.265+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "uninstall",
+        "dev.acos.fixtures.counter",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:30.717+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "install",
+        "/home/Qui/Projects/acos/fixtures/build/apps/todo-list.apk",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:31.106+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-c"
+      ],
+      "ts": "2026-11-10T15:39:32.531+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pm",
+        "clear",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:32.646+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "open",
+        "dev.acos.fixtures.todolist",
+        "--activity",
+        "dev.acos.fixtures.todolist/.MainActivity",
+        "--relaunch",
+        "--foreground",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:32.742+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-00-launch.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:34.660+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:34.956+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:35.041+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:35.124+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:35.158+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "wait",
+        "id=dev.acos.fixtures.todolist:id/input",
+        "5000",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:35.193+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-01-wait_for:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:35.296+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:35.552+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:35.642+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:35.728+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:35.762+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-02-assert_text:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:35.798+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:36.051+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:36.136+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:36.219+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:36.250+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-03-assert_text:-id-:-add.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:36.287+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:36.548+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:36.636+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:36.723+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:36.757+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-04-assert_text:-id-:-clear.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:36.795+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:37.054+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:37.142+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:37.229+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:37.264+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-05-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:37.302+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:37.563+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:37.651+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:37.736+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:37.769+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/input",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:37.806+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-06-tap:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:39.063+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:39.345+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:39.464+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:39.584+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:39.618+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/input",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:39.660+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "type",
+        "milk",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:40.458+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-07-type:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:40.854+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:41.130+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:41.248+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:41.463+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:41.498+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/add",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:41.540+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-08-tap:-id-:-add.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:42.758+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:43.033+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:43.157+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:43.286+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:43.320+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-09-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:43.365+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:43.646+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:43.772+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:43.895+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:43.929+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-10-assert_text:-text-:-exact-:-milk.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:43.974+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:44.254+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:44.377+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:44.502+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:44.534+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-11-capture:after-add-milk.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:44.577+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:44.857+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:44.982+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:45.195+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:45.227+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/input",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:45.272+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-12-tap:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:46.062+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:46.333+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:46.453+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:46.576+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:46.612+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/input",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:46.660+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "type",
+        "bread",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:47.463+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-13-type:-id-:-input.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:47.813+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:48.087+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:48.206+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:48.416+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:48.449+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "id=dev.acos.fixtures.todolist:id/add",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:48.497+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-14-tap:-id-:-add.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:49.357+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:49.640+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:49.766+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:49.894+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:49.927+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-15-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:49.979+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:50.254+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:50.393+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:50.541+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:50.580+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-16-assert_text:-text-:-exact-:-bread.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:50.636+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:50.909+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:51.032+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:51.228+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:51.259+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "press",
+        "text=\"milk\"",
+        "--settle",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:51.311+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-17-tap:-text-:-exact-:-milk.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:52.303+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:52.576+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:52.698+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:52.830+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:52.867+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-18-assert_log.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:52.919+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:53.200+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:53.338+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:53.461+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:53.493+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-19-assert_not_visible:-text-:-exact-:-milk.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:53.545+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:53.825+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:53.945+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:54.144+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:54.179+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-20-assert_text:-text-:-exact-:-bread.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:54.235+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:54.513+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:54.635+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:54.750+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:54.782+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-21-capture:after-remove.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:54.833+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:55.107+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:55.228+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:55.349+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:55.382+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "orientation",
+        "landscape-left",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:55.435+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-22-rotate:landscape.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:56.413+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:56.690+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:56.821+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:57.031+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:57.065+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-23-assert_text:-text-:-exact-:-bread.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:57.126+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:57.402+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:57.519+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:57.641+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:57.674+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-24-assert_not_visible:-text-:-exact-:-milk.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:57.736+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:58.013+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:58.167+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:58.291+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:58.325+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "orientation",
+        "portrait",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:58.386+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-25-rotate:portrait.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:59.342+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:39:59.625+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:39:59.742+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:39:59.954+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:39:59.987+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-26-assert_text:-text-:-exact-:-bread.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:00.060+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:00.336+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:40:00.540+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:40:00.659+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:40:00.693+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "back",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:00.764+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-27-back.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:00.917+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:01.181+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:40:01.266+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:40:01.351+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:40:01.386+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "screenshot",
+        "/home/Qui/Projects/acos/fixtures/reference-device/todo-list/screenshot-28-assert_no_crash.png",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:01.458+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:01.728+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "snapshot",
+        "--force-full"
+      ],
+      "ts": "2026-11-10T15:40:01.812+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "shell",
+        "pidof",
+        "dev.acos.fixtures.todolist"
+      ],
+      "ts": "2026-11-10T15:40:01.897+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "-s",
+        "ZA222WGJPP",
+        "logcat",
+        "-d",
+        "-v",
+        "time",
+        "-s",
+        "AcosTodo:V"
+      ],
+      "ts": "2026-11-10T15:40:01.930+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "--serial",
+        "ZA222WGJPP",
+        "close",
+        "dev.acos.fixtures.todolist",
+        "--json"
+      ],
+      "ts": "2026-11-10T15:40:02.003+00:00"
+    }
+  ],
+  "final_state": {
+    "seq": 28,
+    "step": "assert_no_crash",
+    "timestamp": "2026-11-10T15:40:02.002+00:00",
+    "screenshot": "screenshot-28-assert_no_crash.png",
+    "snapshot_json": "snapshot-28-assert_no_crash.json",
+    "snapshot_text": "snapshot-28-assert_no_crash.txt",
+    "logcat": "logcat-28-assert_no_crash.txt",
+    "pid": "5909",
+    "screenshot_bytes": 37030,
+    "kind": "assert_no_crash",
+    "scenario_step": {
+      "assert_no_crash": {}
+    },
+    "action_ok": null
+  },
+  "final_nodes": [
+    {
+      "identifier": "android:id/decor_content_parent",
+      "type": "android.view.ViewGroup",
+      "label": null,
+      "text": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    },
+    {
+      "identifier": "android:id/content",
+      "type": "android.widget.FrameLayout",
+      "label": null,
+      "text": null,
+      "rect": {
+        "x": 0,
+        "y": 248,
+        "width": 1080,
+        "height": 2152
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    },
+    {
+      "identifier": "dev.acos.fixtures.todolist:id/input",
+      "type": "android.widget.EditText",
+      "label": "New item",
+      "text": "New item",
+      "rect": {
+        "x": 40,
+        "y": 288,
+        "width": 1000,
+        "height": 112
+      },
+      "enabled": true,
+      "editable": true,
+      "clickable": null
+    },
+    {
+      "identifier": "dev.acos.fixtures.todolist:id/add",
+      "type": "android.widget.Button",
+      "label": "Add",
+      "text": "Add",
+      "rect": {
+        "x": 40,
+        "y": 400,
+        "width": 220,
+        "height": 120
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    },
+    {
+      "identifier": "dev.acos.fixtures.todolist:id/clear",
+      "type": "android.widget.Button",
+      "label": "Clear all",
+      "text": "Clear all",
+      "rect": {
+        "x": 260,
+        "y": 400,
+        "width": 220,
+        "height": 120
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    },
+    {
+      "identifier": "dev.acos.fixtures.todolist:id/list",
+      "type": "android.widget.ListView",
+      "label": null,
+      "text": null,
+      "rect": {
+        "x": 40,
+        "y": 520,
+        "width": 1000,
+        "height": 1840
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    },
+    {
+      "identifier": "android:id/text1",
+      "type": "android.widget.TextView",
+      "label": "bread",
+      "text": "bread",
+      "rect": {
+        "x": 40,
+        "y": 520,
+        "width": 1000,
+        "height": 120
+      },
+      "enabled": true,
+      "editable": false,
+      "clickable": null
+    }
+  ],
+  "capture_finished": "2026-11-10T15:40:02.478+00:00"
+}

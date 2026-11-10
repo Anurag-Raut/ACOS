@@ -752,6 +752,24 @@ impl Vfs {
             .unwrap_or(false)
     }
 
+    /// `getsockopt(2)` for the options the sandbox can answer truthfully.
+    /// Every ACOS socket is `AF_UNIX`, so `SOL_SOCKET/SO_DOMAIN` is `AF_UNIX`;
+    /// anything else is `ENOPROTOOPT` rather than a faked host value.
+    pub fn getsockopt_int(&self, fd: i32, level: i32, optname: i32) -> Result<i32, i32> {
+        const SOL_SOCKET: i32 = 1;
+        const SO_DOMAIN: i32 = 39;
+        const ENOTSOCK: i32 = 88;
+        const ENOPROTOOPT: i32 = 92;
+        let of = self.get(fd)?;
+        if !matches!(of.source, Source::File(_)) {
+            return Err(ENOTSOCK);
+        }
+        if level == SOL_SOCKET && optname == SO_DOMAIN {
+            return Ok(1); // AF_UNIX
+        }
+        Err(ENOPROTOOPT)
+    }
+
     /// `access(2)`: `Ok(())` when allowed, `Err(errno)` otherwise.
     pub fn access(&self, guest: &str, mode: i32) -> Result<(), i32> {
         self.check_broken()?;
@@ -1144,6 +1162,95 @@ impl Vfs {
             }
         };
         Ok((rfd, wfd))
+    }
+
+    /// `socketpair(AF_UNIX, type | flags, 0)`, returning the two descriptor
+    /// numbers. Only local `AF_UNIX` pairs are created: they are the
+    /// sandbox-safe case (`ParcelFileDescriptor.createPipe`,
+    /// `LocalSocket`); every other family/protocol is refused rather than
+    /// touching the host network.
+    pub fn socketpair(&mut self, domain: i32, type_: i32, protocol: i32) -> Result<(i32, i32), i32> {
+        self.check_broken()?;
+        const AF_UNIX: i32 = 1;
+        const EAFNOSUPPORT: i32 = 97;
+        const EPROTONOSUPPORT: i32 = 93;
+        if domain != AF_UNIX {
+            return Err(EAFNOSUPPORT);
+        }
+        if protocol != 0 {
+            return Err(EPROTONOSUPPORT);
+        }
+        use rustix::net::{AddressFamily, SocketFlags, SocketType};
+        // `type` may carry the two socket flags Linux allows alongside it.
+        let flags = type_ & (O_CLOEXEC | O_NONBLOCK);
+        let type_bits = type_ & !(O_CLOEXEC | O_NONBLOCK);
+        let sock_type = match type_bits {
+            1 => SocketType::STREAM,
+            2 => SocketType::DGRAM,
+            3 => SocketType::RAW,
+            5 => SocketType::SEQPACKET,
+            _ => return Err(EPROTONOSUPPORT),
+        };
+        let mut sflags = SocketFlags::empty();
+        if flags & O_CLOEXEC != 0 {
+            sflags |= SocketFlags::CLOEXEC;
+        }
+        if flags & O_NONBLOCK != 0 {
+            sflags |= SocketFlags::NONBLOCK;
+        }
+        let (a, b) =
+            rustix::net::socketpair(AddressFamily::UNIX, sock_type, sflags, None).map_err(rustix_errno)?;
+        if self.fd_table.len() + 2 > self.max_open_fds {
+            return Err(EMFILE);
+        }
+        let afd = self.alloc_fd(OpenFile {
+            source: Source::File(File::from(a)),
+            guest_path: "socketpair:[0]".to_string(),
+            flags: O_RDWR | flags,
+            readable: true,
+            writable: true,
+            append: false,
+        })?;
+        let bfd = match self.alloc_fd(OpenFile {
+            source: Source::File(File::from(b)),
+            guest_path: "socketpair:[1]".to_string(),
+            flags: O_RDWR | flags,
+            readable: true,
+            writable: true,
+            append: false,
+        }) {
+            Ok(fd) => fd,
+            Err(e) => {
+                self.fd_table.remove(&afd);
+                return Err(e);
+            }
+        };
+        Ok((afd, bfd))
+    }
+
+    /// `memfd_create(name, flags)`, a real anonymous host memory fd tracked by
+    /// the descriptor table. The name only labels the fd for diagnostics.
+    pub fn memfd_create(&mut self, name: &str, flags: i32) -> Result<i32, i32> {
+        self.check_broken()?;
+        const MFD_CLOEXEC: i32 = 1;
+        const MFD_ALLOW_SEALING: i32 = 2;
+        use rustix::fs::MemfdFlags;
+        let mut mflags = MemfdFlags::empty();
+        if flags & MFD_CLOEXEC != 0 {
+            mflags |= MemfdFlags::CLOEXEC;
+        }
+        if flags & MFD_ALLOW_SEALING != 0 {
+            mflags |= MemfdFlags::ALLOW_SEALING;
+        }
+        let owned = rustix::fs::memfd_create(name, mflags).map_err(rustix_errno)?;
+        self.alloc_fd(OpenFile {
+            source: Source::File(File::from(owned)),
+            guest_path: format!("memfd:{name}"),
+            flags: O_RDWR | (flags & O_CLOEXEC),
+            readable: true,
+            writable: true,
+            append: false,
+        })
     }
 
     /// `poll(2)`. `fds` is `(fd, events, revents)`; `revents` is written back.

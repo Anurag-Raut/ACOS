@@ -231,6 +231,14 @@ impl Vm {
         if let (Some(x), Some(y)) = (self.str_units(a).map(|u| u.to_vec()), self.str_units(b).map(|u| u.to_vec())) {
             return Ok(x == y);
         }
+        // Boxed `Integer.equals` fast path: `HashMap`/`ArrayList` linear scans
+        // call this tens of millions of times in collection-heavy code, and
+        // the generic path pays a full Java dispatch + `call_method` per probe.
+        if self.class_of_object(a) == Some(self.c_integer)
+            && self.class_of_object(b) == Some(self.c_integer)
+        {
+            return Ok(self.int_field(a) == self.int_field(b));
+        }
         let m = match self.dispatch(a, "equals", "(Ljava/lang/Object;)Z") {
             Ok(m) => m,
             Err(_) => return Ok(false),

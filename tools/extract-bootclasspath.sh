@@ -16,6 +16,7 @@
 #   jars/<name>.jar                     real system/APEX jars
 #   dex/<jar-name>/classes*.dex         unzipped dex from each jar
 #   BOOTCLASSPATH                       one jar name per line, real boot order
+#   SYSTEMSERVERCLASSPATH               same for the system-server classpath
 #   build.prop                          /system/build.prop from the image
 #   fonts/                              /system/fonts/*.{ttf,otf,ttc} + fonts.xml
 #   framework-res.apk                   /system/framework/framework-res.apk
@@ -58,7 +59,8 @@ SHA256="$(need sha256sum)"
 [ -f "$IMG_DIR/system.img" ] || die "system image not found: $IMG_DIR/system.img (set ANDROID_HOME/ANDROID_IMAGE_REL)"
 
 # --- idempotency fast path ---------------------------------------------------
-if [ "$FORCE" -ne 1 ] && [ -f "$OUT/manifest.json" ] && [ -f "$OUT/BOOTCLASSPATH" ]; then
+if [ "$FORCE" -ne 1 ] && [ -f "$OUT/manifest.json" ] && [ -f "$OUT/BOOTCLASSPATH" ] \
+    && [ -f "$OUT/SYSTEMSERVERCLASSPATH" ]; then
     log "already extracted: $OUT (use --force to redo)"
     log "BOOTCLASSPATH:"
     sed 's/^/    /' "$OUT/BOOTCLASSPATH"
@@ -184,36 +186,35 @@ else
     log "warning: /system/etc/preloaded-classes not present in image"
 fi
 
-# --- 3. APEX payloads (ART / i18n / conscrypt) ------------------------------
-# Extract the javalib jars and classpath config from these APEXes.
-APEX_NAMES=(
-    com.google.android.art.apex
-    com.android.i18n.apex
-    com.android.runtime.apex
-    com.google.android.conscrypt.apex
-    com.android.tzdata.apex
-)
+# --- 3. APEX payloads --------------------------------------------------------
+# Every APEX may contribute a classpath fragment (`bootclasspath.pb` /
+# `systemserverclasspath.pb`) and the `/javalib` jars those fragments
+# reference. Extract them all instead of a hard-coded list, so the derivation
+# below merges the real fragments (`framework-connectivity.jar` from the
+# tethering APEX, `framework-permission.jar`, ...). `framework.jar` references
+# classes defined in those sibling jars, so a boot classpath without them is
+# incomplete.
 mkdir -p "$WORK/apex"
-APEX_LIST="$("$DEBUGFS" -R 'ls -l /system/apex' "$SYSIMG" 2>/dev/null | awk '{print $NF}')"
-for apex in "${APEX_NAMES[@]}"; do
+APEX_LIST="$("$DEBUGFS" -R 'ls -l /system/apex' "$SYSIMG" 2>/dev/null \
+    | awk '{print $NF}' | grep -E '\.apex$' | sort)"
+[ -n "$APEX_LIST" ] || die "could not list /system/apex"
+while read -r apex; do
+    [ -n "$apex" ] || continue
     loc="/system/apex/$apex"
-    if ! printf '%s\n' "$APEX_LIST" | grep -qx "$apex"; then
-        log "skipping absent APEX $apex"
-        continue
-    fi
     log "APEX: $apex"
     debugfs_dump "$SYSIMG" "$loc" "$WORK/apex/$apex"
     payload="$WORK/apex/${apex%.apex}.img"
     if "$UNZIP" -l "$WORK/apex/$apex" 2>/dev/null | grep -q 'original_apex'; then
-        "$UNZIP" -o -q "$WORK/apex/$apex" original_apex -d "$WORK/apex/x_${apex%.apex}" \
-            || die "failed to unwrap original_apex from $apex"
-        "$UNZIP" -o -q "$WORK/apex/x_${apex%.apex}/original_apex" apex_payload.img -d "$WORK/apex/x2_${apex%.apex}" \
-            || die "failed to unwrap apex_payload.img from $apex"
-        mv "$WORK/apex/x2_${apex%.apex}/apex_payload.img" "$payload"
+        "$UNZIP" -o -q "$WORK/apex/$apex" original_apex -d "$WORK/apex/x_${apex%.apex}" 2>/dev/null || true
+        "$UNZIP" -o -q "$WORK/apex/x_${apex%.apex}/original_apex" apex_payload.img -d "$WORK/apex/x2_${apex%.apex}" 2>/dev/null || true
+        mv "$WORK/apex/x2_${apex%.apex}/apex_payload.img" "$payload" 2>/dev/null || true
     else
-        "$UNZIP" -o -q "$WORK/apex/$apex" apex_payload.img -d "$WORK/apex/y_${apex%.apex}" \
-            || die "failed to extract apex_payload.img from $apex"
-        mv "$WORK/apex/y_${apex%.apex}/apex_payload.img" "$payload"
+        "$UNZIP" -o -q "$WORK/apex/$apex" apex_payload.img -d "$WORK/apex/y_${apex%.apex}" 2>/dev/null || true
+        mv "$WORK/apex/y_${apex%.apex}/apex_payload.img" "$payload" 2>/dev/null || true
+    fi
+    if [ ! -f "$payload" ]; then
+        log "  (no apex_payload.img; skipping)"
+        continue
     fi
 
     # javalib/*.jar -> jars/
@@ -252,28 +253,37 @@ for apex in "${APEX_NAMES[@]}"; do
             esac
         done < <(printf '%s\n' "$CLASSROOM" | awk '{print $NF}' | grep -E '\.pb$' | sort -u)
     fi
-done
+done < <(printf '%s\n' "$APEX_LIST")
 
-# --- 4. BOOTCLASSPATH in real order -----------------------------------------
+# --- 4. BOOTCLASSPATH / SYSTEMSERVERCLASSPATH --------------------------------
 # `derive_classpath` merges the per-APEX and system classpath configs. The ART
 # APEX holds the core Java boot jars; `/system/etc/classpaths` holds the
-# framework jars; the conscrypt APEX contributes `conscrypt.jar` (the
-# `com.android.org.conscrypt` provider classes that `java.security.Security`
-# instantiates from `security.properties`).
-log "deriving BOOTCLASSPATH order"
+# framework jars; every other APEX contributes its own fragment
+# (`framework-connectivity.jar` from tethering, `framework-permission.jar`,
+# ...). Merge every `*_<kind>.pb` fragment rather than a hard-coded source list
+# so a jar added by a future APEX is picked up from the image itself.
+log "deriving classpath order"
 debugfs_dump "$SYSIMG" "/system/etc/classpaths/bootclasspath.pb" "$WORK/classpaths/bootclasspath_pb"
+debugfs_dump_optional "$SYSIMG" "/system/etc/classpaths/systemserverclasspath.pb" \
+    "$WORK/classpaths/systemserverclasspath_pb" || true
 
-"$PYTHON" - "$WORK/classpaths" "$OUT/jars" >"$OUT/BOOTCLASSPATH" <<'PYEOF' || die "failed to derive BOOTCLASSPATH"
+emit_classpath() { # <kind> <output-file>
+    "$PYTHON" - "$WORK/classpaths" "$OUT/jars" "$1" "$2" <<'PYEOF' || die "failed to derive $1"
 import os, re, sys
-cpdir, jardir = sys.argv[1], sys.argv[2]
-# Source files in the order they appear on the real boot classpath.
-sources = [
-    os.path.join(cpdir, "com.google.android.art_bootclasspath.pb"),      # ART APEX boot jars
-    os.path.join(cpdir, "com.android.conscrypt_bootclasspath.pb"),        # conscrypt APEX
-    os.path.join(cpdir, "bootclasspath_pb"),                             # /system/etc/classpaths
-]
-order = []
-seen = set()
+cpdir, jardir, kind, outfile = sys.argv[1:5]
+system_file = os.path.join(cpdir, kind + "_pb")
+if kind == "bootclasspath":
+    # The core-oj/... jars and conscrypt come first; the rest are appended.
+    preferred = [
+        os.path.join(cpdir, "com.google.android.art_bootclasspath.pb"),       # ART APEX
+        os.path.join(cpdir, "com.google.android.conscrypt_bootclasspath.pb"), # conscrypt APEX
+        system_file,                                                          # /system/etc/classpaths
+    ]
+else:
+    preferred = [system_file]
+rest = sorted(f for f in os.listdir(cpdir) if f.endswith("_" + kind + ".pb"))
+sources = preferred + [os.path.join(cpdir, f) for f in rest]
+order, seen = [], set()
 for src in sources:
     if not os.path.exists(src):
         continue
@@ -288,13 +298,19 @@ for src in sources:
 jars = set(os.listdir(jardir)) if os.path.isdir(jardir) else set()
 missing = [b for b in order if b not in jars]
 if missing:
-    sys.stderr.write("missing jars for BOOTCLASSPATH: %s\n" % ", ".join(missing))
+    sys.stderr.write("missing jars for %s: %s\n" % (kind, ", ".join(missing)))
     sys.exit(1)
 if not order:
-    sys.stderr.write("no jars parsed from classpath configs\n")
+    sys.stderr.write("no jars parsed from %s configs\n" % kind)
     sys.exit(1)
-sys.stdout.write("\n".join(order) + "\n")
+with open(outfile, "w") as f:
+    f.write("\n".join(order) + "\n")
+sys.stdout.write("%s: %d jars\n" % (kind, len(order)))
 PYEOF
+}
+emit_classpath bootclasspath "$OUT/BOOTCLASSPATH"
+emit_classpath systemserverclasspath "$OUT/SYSTEMSERVERCLASSPATH"
+log "BOOTCLASSPATH: $(paste -sd, "$OUT/BOOTCLASSPATH")"
 
 # --- 5. unzip dex from every jar --------------------------------------------
 log "unzipping dex from jars"
@@ -337,6 +353,7 @@ manifest = {
     "abi": "x86_64",
     "source_image": "system-images/android-34/google_apis/x86_64/system.img",
     "bootclasspath": open(os.path.join(out, "BOOTCLASSPATH")).read().split(),
+    "systemserverclasspath": open(os.path.join(out, "SYSTEMSERVERCLASSPATH")).read().split(),
     "file_count": len(files),
     "total_bytes": sum(e["size"] for e in files),
     "files": files,
@@ -363,3 +380,4 @@ printf '    %-18s %s\n' "dex files"     "$dex_count ($(numfmt --to=iec "$dex_byt
 printf '    %-18s %s\n' "fonts"         "$(find "$OUT/fonts" -type f | wc -l)"
 printf '    %-18s %s\n' "total size"    "$(du -sh --exclude=.work "$OUT" | cut -f1) (peak work +$(du -sh "$WORK" 2>/dev/null | cut -f1))"
 printf '    %-18s %s\n' "BOOTCLASSPATH" "$(paste -sd, "$OUT/BOOTCLASSPATH")"
+printf '    %-18s %s\n' "SYSTEMSERVERCLASSPATH" "$(paste -sd, "$OUT/SYSTEMSERVERCLASSPATH")"

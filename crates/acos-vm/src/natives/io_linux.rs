@@ -164,6 +164,70 @@ pub(crate) fn install(vm: &mut Vm) {
     );
     vm.register_native(c, "pipe2", "(I)[Ljava/io/FileDescriptor;", linux_pipe2);
     vm.register_native(c, "poll", "([Landroid/system/StructPollfd;I)I", linux_poll);
+    // Scatter/gather I/O over sandboxed descriptors (`Os.readv`/`Os.writev`).
+    vm.register_native(
+        c,
+        "readv",
+        "(Ljava/io/FileDescriptor;[Ljava/lang/Object;[I[I)I",
+        linux_readv,
+    );
+    vm.register_native(
+        c,
+        "writev",
+        "(Ljava/io/FileDescriptor;[Ljava/lang/Object;[I[I)I",
+        linux_writev,
+    );
+    // `unlink` is the same sandboxed removal as `remove`.
+    vm.register_native(c, "unlink", "(Ljava/lang/String;)V", linux_remove);
+    // Process/file metadata that has a safe in-sandbox answer.
+    vm.register_native(c, "umaskImpl", "(I)I", linux_umask);
+    vm.register_native(
+        c,
+        "getrlimit",
+        "(I)Landroid/system/StructRlimit;",
+        linux_getrlimit,
+    );
+    vm.register_native(c, "getpgid", "(I)I", linux_getpgid);
+    vm.register_native(c, "strsignal", "(I)Ljava/lang/String;", linux_strsignal);
+    vm.register_native(c, "gai_strerror", "(I)Ljava/lang/String;", linux_gai_strerror);
+    vm.register_native(c, "environ", "()[Ljava/lang/String;", linux_environ);
+    vm.register_native(c, "sysconf", "(I)J", linux_sysconf);
+    // Local-only socket pairs and anonymous memory fds, both tracked by the
+    // VFS descriptor table; real network sockets stay unbound.
+    vm.register_native(
+        c,
+        "socketpair",
+        "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V",
+        linux_socketpair,
+    );
+    vm.register_native(
+        c,
+        "memfd_create",
+        "(Ljava/lang/String;I)Ljava/io/FileDescriptor;",
+        linux_memfd_create,
+    );
+    vm.register_native(
+        c,
+        "posix_fallocate",
+        "(Ljava/io/FileDescriptor;JJ)V",
+        linux_posix_fallocate,
+    );
+    // Socket options on the close path: `java.io.FileDescriptor.close()`
+    // probes `SO_DOMAIN` (is this an INET socket?) and `SO_LINGER` before
+    // releasing a socket. ACOS only creates `AF_UNIX` sockets and never sets
+    // linger, so both have a truthful sandbox answer without host network I/O.
+    vm.register_native(
+        c,
+        "getsockoptInt",
+        "(Ljava/io/FileDescriptor;II)I",
+        linux_getsockopt_int,
+    );
+    vm.register_native(
+        c,
+        "getsockoptLinger",
+        "(Ljava/io/FileDescriptor;II)Landroid/system/StructLinger;",
+        linux_getsockopt_linger,
+    );
 
     // `java.io.FileDescriptor`'s two natives (core-oj).
     vm.register_native("Ljava/io/FileDescriptor;", "isSocket", "(I)Z", fd_is_socket);
@@ -800,6 +864,334 @@ fn linux_poll(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.set_instance_field_by_name(*h, "revents", u32::from(slot.2 as u16));
     }
     vm.ret_i32(ctx, n as i32);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// scatter/gather, sockets, limits, misc metadata
+// ---------------------------------------------------------------------------
+
+/// An `Object[]` of references, or `None` for any other array/type.
+fn ref_array(vm: &Vm, h: Handle) -> Option<Vec<Handle>> {
+    match vm.heap.get(h) {
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Ref(v),
+            ..
+        })) => Some(v.clone()),
+        _ => None,
+    }
+}
+
+/// An `int[]`, or `None`.
+fn int_array(vm: &Vm, h: Handle) -> Option<Vec<i32>> {
+    match vm.heap.get(h) {
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Int(v),
+            ..
+        })) => Some(v.clone()),
+        _ => None,
+    }
+}
+
+/// `(fd, Object[] buffers, int[] offsets, int[] lengths)` shared by
+/// `readv`/`writev`; errors are already the real `ErrnoException` shape.
+type IovArgs = (i32, Vec<Handle>, Vec<i32>, Vec<i32>);
+
+fn iov_args(vm: &mut Vm, ctx: NativeCtx, function: &str) -> VmResult<IovArgs> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let fd = fd_of(vm, fd_obj).ok_or_else(|| errno_exception(vm, function, vfs::EBADF))?;
+    let bufs = ref_array(vm, vm.arg_ref(ctx, 1))
+        .ok_or_else(|| errno_exception(vm, function, vfs::EINVAL))?;
+    let offsets = int_array(vm, vm.arg_ref(ctx, 2))
+        .ok_or_else(|| errno_exception(vm, function, vfs::EINVAL))?;
+    let lengths = int_array(vm, vm.arg_ref(ctx, 3))
+        .ok_or_else(|| errno_exception(vm, function, vfs::EINVAL))?;
+    if bufs.len() != offsets.len() || bufs.len() != lengths.len() {
+        return Err(errno_exception(vm, function, vfs::EINVAL));
+    }
+    Ok((fd, bufs, offsets, lengths))
+}
+
+fn linux_readv(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let (fd, bufs, offsets, lengths) = iov_args(vm, ctx, "readv")?;
+    let mut total = 0i32;
+    for i in 0..bufs.len() {
+        let want = lengths[i].max(0) as usize;
+        if want == 0 {
+            continue;
+        }
+        if byte_array(vm, bufs[i]).is_none() {
+            return Err(errno_exception(vm, "readv", vfs::EINVAL));
+        }
+        let mut tmp = vec![0u8; want];
+        let got = if fd == 0 {
+            use std::io::Read;
+            std::io::stdin().read(&mut tmp).unwrap_or(0)
+        } else {
+            vm.vfs
+                .read(fd, &mut tmp)
+                .map_err(|e| errno_exception(vm, "readv", e))?
+        };
+        write_byte_array(vm, bufs[i], offsets[i].max(0) as usize, &tmp[..got]);
+        total += got as i32;
+        if got < want {
+            break;
+        }
+    }
+    vm.ret_i32(ctx, total);
+    Ok(())
+}
+
+fn linux_writev(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let (fd, bufs, offsets, lengths) = iov_args(vm, ctx, "writev")?;
+    let mut total = 0i32;
+    for i in 0..bufs.len() {
+        let Some(bytes) = byte_array(vm, bufs[i]) else {
+            return Err(errno_exception(vm, "writev", vfs::EINVAL));
+        };
+        let off = offsets[i].max(0) as usize;
+        let want = lengths[i].max(0) as usize;
+        let end = (off + want).min(bytes.len());
+        let slice = &bytes[off.min(end)..end];
+        if fd == 1 {
+            vm.out_buf.extend_from_slice(slice);
+            total += slice.len() as i32;
+            continue;
+        }
+        if fd == 2 {
+            vm.err_buf.extend_from_slice(slice);
+            total += slice.len() as i32;
+            continue;
+        }
+        let wrote = vm
+            .vfs
+            .write(fd, slice)
+            .map_err(|e| errno_exception(vm, "writev", e))?;
+        total += wrote as i32;
+        if wrote < slice.len() {
+            break;
+        }
+    }
+    vm.ret_i32(ctx, total);
+    Ok(())
+}
+
+/// `umask(2)`: the ACOS sandbox always creates files with the caller-supplied
+/// mode inside its own root, so the process umask is a fixed `0022` and only
+/// the previous value is reported.
+fn linux_umask(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let _ = vm.arg_i32(ctx, 0);
+    vm.ret_i32(ctx, 0o022);
+    Ok(())
+}
+
+/// `getrlimit(2)`: `RLIMIT_NOFILE` mirrors the VFS descriptor ceiling; every
+/// other resource reports `RLIM_INFINITY`, since the sandbox imposes no other
+/// host limit on guest file descriptors.
+fn linux_getrlimit(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    const RLIMIT_NOFILE: i32 = 7;
+    let resource = vm.arg_i32(ctx, 0);
+    let (cur, max) = if resource == RLIMIT_NOFILE {
+        (1024u64, 1048576u64)
+    } else {
+        (u64::MAX, u64::MAX)
+    };
+    let cid = vm.load_class("Landroid/system/StructRlimit;")?;
+    let obj = vm.alloc_instance(cid)?;
+    vm.native_roots.push(obj);
+    let result = (|| -> VmResult<()> {
+        let ctor = vm.find_method(cid, "<init>", "(JJ)V", InvokeKind::Direct)?;
+        crate::interp::call_method(vm, ctor, obj, &[cur, max])?;
+        Ok(())
+    })();
+    vm.native_roots.pop();
+    result?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+/// `getpgid(pid)`: the guest is a single process group, so any live pid maps
+/// to its own process id.
+fn linux_getpgid(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i32(ctx, std::process::id() as i32);
+    Ok(())
+}
+
+/// `strsignal(2)`: bionic's short description for the common fatal signals.
+fn linux_strsignal(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let sig = vm.arg_i32(ctx, 0);
+    let text = match sig {
+        1 => "Hangup",
+        2 => "Interrupt",
+        3 => "Quit",
+        4 => "Illegal instruction",
+        6 => "Aborted",
+        8 => "Floating point exception",
+        9 => "Killed",
+        11 => "Segmentation fault",
+        13 => "Broken pipe",
+        14 => "Alarm clock",
+        15 => "Terminated",
+        17 => "Child exited",
+        19 => "Stopped (signal)",
+        20 => "Stopped",
+        _ => "Unknown signal",
+    };
+    let h = vm.new_string(text)?;
+    vm.ret_ref(ctx, h);
+    Ok(())
+}
+
+/// `gai_strerror(2)`: bionic's text for the Android `EAI_*` values.
+fn linux_gai_strerror(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let err = vm.arg_i32(ctx, 0);
+    let text = match err {
+        1 => "Address family for hostname not supported",
+        2 => "Try again",
+        3 => "Invalid value for ai_flags",
+        4 => "Non-recoverable failure in name resolution",
+        5 => "ai_family not supported",
+        6 => "Memory allocation failure",
+        7 => "No address associated with hostname",
+        8 => "hostname nor servname provided, or not known",
+        9 => "servname not supported for ai_socktype",
+        10 => "ai_socktype not supported",
+        11 => "System error",
+        14 => "Argument buffer overflow",
+        _ => "Unknown error",
+    };
+    let h = vm.new_string(text)?;
+    vm.ret_ref(ctx, h);
+    Ok(())
+}
+
+/// `environ(7)`: the guest gets an empty environment. The sandbox never
+/// exports host variables (they can carry host paths/secrets), and the
+/// property table, not the environment, seeds Android configuration.
+fn linux_environ(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let array = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "Ljava/lang/String;".to_string(),
+        data: ArrayData::Ref(Vec::new()),
+    }));
+    let array = array?;
+    vm.ret_ref(ctx, array);
+    Ok(())
+}
+
+/// `sysconf(3)` for the `_SC_*` questions the framework asks. Unknown names
+/// return `-1` (indeterminate), exactly like libc.
+fn linux_sysconf(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let name = vm.arg_i32(ctx, 0);
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get() as i64)
+        .unwrap_or(4);
+    let value = match name {
+        0 => 2_097_152,  // _SC_ARG_MAX
+        5 => 7_866,      // _SC_CHILD_MAX
+        6 => 100,        // _SC_CLK_TCK
+        10 => 65_536,    // _SC_NGROUPS_MAX
+        11 => 32_768,    // _SC_OPEN_MAX
+        27 => 20,        // _SC_STREAM_MAX
+        28 => 6,         // _SC_TZNAME_MAX
+        38 => 1_024,     // _SC_IOV_MAX
+        39 => 4_096,     // _SC_PAGESIZE
+        40 => 4_096,     // _SC_PAGE_SIZE
+        73 => 256,       // _SC_LOGIN_NAME_MAX
+        78 => 32,        // _SC_TTY_NAME_MAX
+        96 | 97 => cpus, // _SC_NPROCESSORS_{CONF,ONLN}
+        _ => -1,
+    };
+    vm.ret_i64(ctx, value);
+    Ok(())
+}
+
+/// `socketpair(2)`: local `AF_UNIX` pairs, inserted into the VFS descriptor
+/// table. The two caller-provided `FileDescriptor` objects are filled in, as
+/// `jniSetFileDescriptorOfFD` does on ART.
+fn linux_socketpair(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let domain = vm.arg_i32(ctx, 0);
+    let type_ = vm.arg_i32(ctx, 1);
+    let protocol = vm.arg_i32(ctx, 2);
+    let fd1 = vm.arg_ref(ctx, 3);
+    let fd2 = vm.arg_ref(ctx, 4);
+    let (a, b) = vm
+        .vfs
+        .socketpair(domain, type_, protocol)
+        .map_err(|e| errno_exception(vm, "socketpair", e))?;
+    vm.set_instance_field_by_name(fd1, "descriptor", a as u32);
+    vm.set_instance_field_by_name(fd2, "descriptor", b as u32);
+    Ok(())
+}
+
+/// `memfd_create(2)`: a real anonymous host memory fd inside the VFS table.
+fn linux_memfd_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let name = string_arg(vm, ctx, 0);
+    let flags = vm.arg_i32(ctx, 1);
+    let fd = vm
+        .vfs
+        .memfd_create(&name, flags)
+        .map_err(|e| errno_exception(vm, "memfd_create", e))?;
+    let obj = make_file_descriptor(vm, fd)?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+/// `posix_fallocate(2)`: the sandbox only guarantees that the file is large
+/// enough (`ftruncate`); the host is responsible for actually reserving space.
+fn linux_posix_fallocate(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let offset = vm.arg_i64(ctx, 1).max(0) as u64;
+    let len = vm.arg_i64(ctx, 2).max(0) as u64;
+    let fd = fd_of(vm, fd_obj).ok_or_else(|| errno_exception(vm, "posix_fallocate", vfs::EBADF))?;
+    let end = offset.saturating_add(len);
+    let cur = vm
+        .vfs
+        .fstat(fd)
+        .map_err(|e| errno_exception(vm, "posix_fallocate", e))?
+        .size;
+    if cur < end {
+        vm.vfs
+            .ftruncate(fd, end)
+            .map_err(|e| errno_exception(vm, "posix_fallocate", e))?;
+    }
+    Ok(())
+}
+
+/// `getsockoptInt(SOL_SOCKET, SO_DOMAIN)`: every ACOS socket is `AF_UNIX`.
+/// Any other option is refused with `ENOPROTOOPT`, exactly like a real
+/// descriptor that does not carry it.
+fn linux_getsockopt_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let fd = fd_of(vm, fd_obj).ok_or_else(|| errno_exception(vm, "getsockopt", vfs::EBADF))?;
+    let level = vm.arg_i32(ctx, 1);
+    let optname = vm.arg_i32(ctx, 2);
+    let value = vm
+        .vfs
+        .getsockopt_int(fd, level, optname)
+        .map_err(|e| errno_exception(vm, "getsockopt", e))?;
+    vm.ret_i32(ctx, value);
+    Ok(())
+}
+
+/// `getsockoptLinger(SOL_SOCKET, SO_LINGER)`: ACOS never enables linger, so
+/// the answer is the default `(l_onoff = 0, l_linger = 0)`.
+fn linux_getsockopt_linger(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let fd = fd_of(vm, fd_obj).ok_or_else(|| errno_exception(vm, "getsockopt", vfs::EBADF))?;
+    if !vm.vfs.is_socket(fd) {
+        return Err(errno_exception(vm, "getsockopt", 88)); // ENOTSOCK
+    }
+    let cid = vm.load_class("Landroid/system/StructLinger;")?;
+    let obj = vm.alloc_instance(cid)?;
+    vm.native_roots.push(obj);
+    let result = (|| -> VmResult<()> {
+        let ctor = vm.find_method(cid, "<init>", "(II)V", InvokeKind::Direct)?;
+        crate::interp::call_method(vm, ctor, obj, &[0, 0])?;
+        Ok(())
+    })();
+    vm.native_roots.pop();
+    result?;
+    vm.ret_ref(ctx, obj);
     Ok(())
 }
 

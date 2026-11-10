@@ -204,3 +204,122 @@ subject.
 *No execution experiment has been run yet: no DEX is interpreted on the real
 core library, no Activity runs, no frame is rendered. The next entry must be a
 real execution artifact (the E2.1 C1 gate), not a plan.*
+
+---
+
+## E2.1 — M1: the real Android 14 core library on the Rust VM — MEASURED
+
+- **Date / commit:** 2026-11-10; through `ced0d70`/`40f075c`.
+- **Question / goal:** execute the real boot-classpath bytecode for the console
+  tier and match the ART oracle.
+- **Method:** `tools/diff-dexprogs.sh --corelib real` (normal and
+  `ACOS_GC_STRESS=1`), against `fixtures/expected-art/dexprogs/`.
+- **Result:** the original 20-program gate passes byte-identical stdout + exit
+  (`results/m1/README.md`); the corpus is now 25 programs, and W25-B records
+  `25 pass / 0 fail / 0 unsupported` (`results/vm/OS_NATIVES_AUDIT.md` §3).
+- **Finding:** the Rust VM can run the real `core-oj`/`core-libart`/`core-icu4j`
+  DEX with Rust natives; the console tier is `art-reference`-verified.
+- **Fidelity / evidence:** `art-reference`; `results/m1/README.md`,
+  `results/vm/dexprogs-real-normal.json`, `results/vm/OS_NATIVES_AUDIT.md`.
+- **Regression / false pass:** none; per-program PASS/FAIL recorded in JSON.
+- **Conclusion / next:** framework boot (E2.2). The committed
+  `results/vm/dexprogs-real-normal.json` still records 24/25
+  (`25_security_digest`); re-record the artifact.
+
+## E2.2 — M2: `bindApplication` delivered, no lifecycle callback — MEASURED (partial)
+
+- **Date / commit:** 2026-11-10; `40f075c` + working tree.
+- **Question / goal:** reach `Application.onCreate`/`Activity.onCreate` on the
+  real framework.
+- **Method:** `cargo run -p acos-runtime --example lifecycle_probe` and
+  `cargo test -p acos-runtime --test m2` (gate `#[ignore]`d).
+- **Result:** `ActivityThread` boots, `attachApplication` reaches the Rust ATMS,
+  `bindApplication` is delivered, and a real `ClientTransaction` is scheduled
+  (`transaction_scheduled=true`); the gate stays red (`app_created=false`,
+  `tx_delivered=false`). Blockers were worked through in order: ICU
+  `likelySubtags` → `FileChannel.map0` → `Font$Builder.nInitBuilder` →
+  `OverlayProperties` → display `DisplayInfo` parcel → `TetheringManager`.
+- **Finding:** the framework path is real (no faked callbacks); the remaining
+  gate is the display reply codec + Activity transaction delivery.
+- **Fidelity / evidence:** `art-reference` target; `results/m2/M2_LOG.md`,
+  `results/m2/boot-release.json`, `crates/acos-runtime/tests/m2.rs`.
+- **Regression / false pass:** the honesty invariant refuses to report a
+  delivered transaction unless `ActivityClientRecord.activity` is set.
+- **Conclusion / next:** land the working-tree display parcel + APEX boot
+  classpath, then record the lifecycle gate.
+
+## E2.3 — Snapshot/restore proof of concept — MEASURED
+
+- **Date / commit:** 2026-11-10; commit `0cdfacd` + task changes.
+- **Question / goal:** does a VM snapshot restore into a fresh VM with identical
+  behaviour (ADR-0010 gate 2)?
+- **Method:** `cargo test --release -p acos-vm --test snapshot`.
+- **Result:** 16/16 pass; 23/23 real dexprogs run identically after restore,
+  normal and GC-stress; restore p50 13.34 ms real / 222 µs bootstrap; snapshot
+  size 6,633 B real / 3,328 B bootstrap.
+- **Finding:** the dominant restore cost is re-parsing boot DEX (~13 ms), not
+  copying the arena (memcpy surrogate 581 ns); T-43/T-44 must share the parsed
+  provider.
+- **Fidelity / evidence:** `native-runtime`; `results/snapshot/REPORT.md`,
+  `results/snapshot/probe-{bootstrap,real}.json`.
+- **Regression / false pass:** determinism/idempotence/fingerprint-refusal
+  invariants each tested.
+- **Conclusion / next:** T-43 framework snapshot needs a shared boot-DEX provider
+  and re-seed hooks.
+
+## E2.4 — V1 benchmark harness + first measured rows — MEASURED
+
+- **Date / commit:** 2026-11-10; `7f7b729`…`ced0d70`.
+- **Question / goal:** measure every metric the harness can support vs the
+  legacy ACVM baseline.
+- **Method:** `tools/bench-acos.sh` (`>=20` samples, p50/p95), artifacts under
+  `results/bench/`.
+- **Result (from `results/bench/REPORT.md`):** M1 157.6 MiB vs 206.0 MiB
+  (`-23.5%`), M2 N=5 43.032 MiB/session vs 78.7 MiB (`-45.3%`), per-session N=1
+  157.602 MiB vs 130.3 MiB (`+21.0%`, worse); M3–M8/M10/M11 not measurable.
+- **Finding:** memory at N≥2 beats legacy; N=1 is worse; no correctness/frame
+  metric can be measured yet.
+- **Fidelity / evidence:** `native-runtime` (not ART-verified);
+  `results/bench/REPORT.md`, `run-2026-11-10-201637.json`,
+  `results/bench/MEMORY_PROFILE.md`.
+- **Regression / false pass:** gate `tools/bench-acos.sh --check` against
+  `results/bench/baseline.json`.
+- **Conclusion / next:** measure M3–M11 as the capabilities land.
+
+## E2.5 — Interpreter performance vs `java -Xint` — MEASURED (targets missed)
+
+- **Date / commit:** 2026-11-10; `2563a86` (perf merge).
+- **Question / goal:** close the interpreter gap (ADR-0013 step 1) and hit the
+  ≥4×/≥5× speedup targets.
+- **Method:** `tools/bench-vm.sh`, 10 reps, host OpenJDK 17; `crates/acos-vm/PERF.md`.
+- **Result:** BenchFib 4.17× (528 ms vs 341 ms `-Xint`, 1.55× slower);
+  BenchLoop 3.48× (1,696 ms vs 411 ms, 4.13× slower); BenchAlloc 3.58×
+  (2,109 ms vs 1,216 ms, 1.73× slower); BenchString 3.30× **faster** than
+  `-Xint`. Target ≥4× Fib met; ≥4× Alloc and ≥5× Loop not met.
+- **Finding:** per-opcode dispatch (~2.7–3.3 ns/insn) and call overhead
+  (~50–63 ns) are the floor; `unsafe` bounds-check removal gave no gain.
+- **Fidelity / evidence:** `jvm-reference`; `crates/acos-vm/PERF.md`,
+  `results/vm/bench-2026-11-10-160048.json`.
+- **Regression / false pass:** fast-dispatch path equal to general path
+  (`35846b8`/`3c6d3a5`).
+- **Conclusion / next:** compact pre-decoded ops, zeroing-free frames, and a
+  hash-backed `HashMap` corelib.
+
+## E2.6 — ART oracle captures + render text parity — MEASURED
+
+- **Date / commit:** 2026-11-10; `ced0d70`/`40f075c`.
+- **Question / goal:** authoritative references and text fidelity.
+- **Method:** `tools/oracle/*` (emulator, capture, `compare-jvm-art`);
+  `cargo test -p acos-render`.
+- **Result:** art-reference captures for `hello-views`, `hello-jni`, `counter`,
+  `todo-list`, `multi-activity`, `form-validation`; JVM vs ART: 19/20 identical
+  stdout, `20_uncaught` stderr differs; renderer 88 tests, text advance within
+  0.3% of the ART UI dump (height delta 15.6% is widget padding).
+- **Finding:** ART and the JVM agree on the pure-Java console tier; the
+  authoritative tier is now available for app references.
+- **Fidelity / evidence:** `art-reference`; `fixtures/reference/**`,
+  `results/oracle/jvm-vs-art.md`, `results/render/README.md`.
+- **Regression / false pass:** renderer golden/contract tests; ART captured 3×
+  with no non-determinism (`results/oracle/dexprogs-nondeterminism.txt`).
+- **Conclusion / next:** `physical-device` still not captured; bind the renderer
+  to the framework graphics natives (M3).

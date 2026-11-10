@@ -908,8 +908,17 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let off = f.offset as usize;
             // VM-internal shadow fields (`String.count`/`hash`, `Class`, ...)
             // take precedence; `Some` means the hook handled the read and the
-            // normal instance-field path must be skipped.
-            if let Some(v) = crate::bridge::internal_field_get(vm, obj, dex, insn.index) {
+            // normal instance-field path must be skipped. The hook materialises
+            // descriptor `String`s and probes them, so only reach it when the
+            // declaring class is one of the three bridged classes: for ordinary
+            // user fields this skips two allocations and the whole probe.
+            let internal = f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
+            let handled = if internal {
+                crate::bridge::internal_field_get(vm, obj, dex, insn.index)
+            } else {
+                None
+            };
+            if let Some(v) = handled {
                 if op == 0x54 {
                     set_ref(vm, t, fi, r0, v);
                 } else {
@@ -944,7 +953,8 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let dex = frame_dex(vm, t, fi);
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
-            if crate::bridge::internal_field_put(vm, obj, dex, insn.index) {
+            let internal = f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
+            if internal && crate::bridge::internal_field_put(vm, obj, dex, insn.index) {
                 // Shadow String fields (`hash`) are cached in a side table.
             } else if f.width == 2 {
                 let val = get_wide(vm, t, fi, r0);
@@ -1757,14 +1767,39 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                 rclass = vm.array_class(receiver);
             }
             match rclass {
-                Some(rc) => match vm.dispatch_cache.get(&(dex, insn.index, rc)) {
-                    Some(&m) => m,
-                    None => {
-                        let m = dispatch_uncached(vm, dex, insn.index, receiver, t, fi)?;
-                        vm.dispatch_cache.insert((dex, insn.index, rc), m);
-                        m
+                Some(rc) => {
+                    // Probe the one-entry inline cache first; a hit skips the
+                    // tuple-keyed `HashMap` probe entirely.
+                    let hit = match vm.dexs[dex as usize]
+                        .virtual_cache
+                        .get(insn.index as usize)
+                        .copied()
+                        .flatten()
+                    {
+                        Some((c, m)) if c == rc => Some(m),
+                        _ => None,
+                    };
+                    match hit {
+                        Some(m) => m,
+                        None => {
+                            let m = match vm.dispatch_cache.get(&(dex, insn.index, rc)) {
+                                Some(&m) => m,
+                                None => {
+                                    let m =
+                                        dispatch_uncached(vm, dex, insn.index, receiver, t, fi)?;
+                                    vm.dispatch_cache.insert((dex, insn.index, rc), m);
+                                    m
+                                }
+                            };
+                            if let Some(slot) =
+                                vm.dexs[dex as usize].virtual_cache.get_mut(insn.index as usize)
+                            {
+                                *slot = Some((rc, m));
+                            }
+                            m
+                        }
                     }
-                },
+                }
                 None => dispatch_uncached(vm, dex, insn.index, receiver, t, fi)?,
             }
         }

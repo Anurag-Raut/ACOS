@@ -391,13 +391,20 @@ fn ret_null(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 ///
 /// ART's `AndroidRuntime::start` sets `user.dir=/` (the zygote chdirs to `/`),
 /// which `jdk.internal.util.StaticProperty` and `java.io.UnixFileSystem`
-/// require to be present (they throw `InternalError` otherwise). The other
-/// Java properties (`java.home`, `user.home`, `user.name`, `java.io.tmpdir`,
-/// `os.*`, ICU versions) are derived by `System.initUnchangeableSystemProperties`
-/// from `Libcore.os`, `ICU` and the hardcoded table, so they are not repeated
-/// here.
+/// require to be present (they throw `InternalError` otherwise). It also
+/// passes the linker library search path as `java.library.path`; API 34's
+/// `LoadedApk.createOrUpdateClassLoaderLocked` reads it unconditionally
+/// (`System.getProperty("java.library.path").contains("/vendor/lib")`), so a
+/// `null` value is a fatal NPE during `handleBindApplication`. The other Java
+/// properties (`java.home`, `user.home`, `user.name`, `java.io.tmpdir`,
+/// `os.*`, ICU versions) are derived by
+/// `System.initUnchangeableSystemProperties` from `Libcore.os`, `ICU` and the
+/// hardcoded table, so they are not repeated here.
 fn runtime_properties(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let entries = ["user.dir=/"];
+    // A non-null library search path that does not contain `/vendor/lib`, the
+    // same shape a real app process gets from the linker namespace. ACOS loads
+    // native libraries through the extracted boot cache, not this path.
+    let entries = ["user.dir=/", "java.library.path=/system/lib64:/system/lib"];
     let mut refs = Vec::with_capacity(entries.len());
     // Root each string: `vm.alloc` below may trigger a (stress) GC and the
     // handles in `refs` are not roots yet.

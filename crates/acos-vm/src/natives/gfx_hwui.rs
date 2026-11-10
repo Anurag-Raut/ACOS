@@ -19,6 +19,7 @@ use acos_render::render_node::DisplayOp;
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
+use crate::javabridge::JavaValue;
 use crate::natives::gfx_handles::{Handle, HandleTable};
 use crate::natives::gfx_state::{gj, render_err, rh, stale, with_ctx};
 use crate::vm::Vm;
@@ -101,6 +102,9 @@ struct Proxy {
     root: RHandle,
     surface: Option<RHandle>,
     surface_size: (u32, u32),
+    /// The `SurfaceControl` layer bound by the WMS backend, if any. Frames are
+    /// submitted to this layer instead of the synthetic per-proxy window.
+    bound_layer: Option<u64>,
     stopped: bool,
     paused: bool,
     name: String,
@@ -217,6 +221,7 @@ fn h_create_proxy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             root,
             surface: None,
             surface_size: (0, 0),
+            bound_layer: None,
             stopped: false,
             paused: false,
             name: String::new(),
@@ -244,15 +249,34 @@ fn h_delete_proxy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn h_set_surface(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = proxy(vm, ctx)?;
-    // The real Surface is owned by W19-A's compositor; the proxy only records
-    // that a surface was attached. A `null` Surface detaches (Android allows
-    // this to tear the renderer off a window).
-    // The real `Surface` buffer is owned by the compositor (W19-A); the proxy
-    // only records that a surface was attached (or detached for jlong 0).
-    let _attached = vm.arg_ref(ctx, 1) != 0;
+    // The real `Surface` is owned by W19-A's compositor; resolve its native
+    // handle to the `SurfaceControl` layer bound by the WMS backend so the
+    // frame handoff can submit to the real layer and use its buffer size.
+    // A `null` Surface detaches (Android allows this to tear the renderer off a
+    // window).
+    let surface_obj = vm.arg_ref(ctx, 1);
+    let (bound, bound_size) = if surface_obj != 0 {
+        match vm.get_field(surface_obj, "mNativeObject") {
+            Ok(JavaValue::Long(v)) => {
+                let handle = v as u64;
+                (
+                    crate::natives::fwk_surface::surface_layer(handle),
+                    crate::natives::fwk_surface::surface_size(handle),
+                )
+            }
+            _ => (None, None),
+        }
+    } else {
+        (None, None)
+    };
     HWUI.with(|s| {
         if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
             p.stopped = false;
+            p.surface = None;
+            p.bound_layer = bound;
+            p.surface_size = bound_size
+                .map(|(w, h)| (w.max(0) as u32, h.max(0) as u32))
+                .unwrap_or((0, 0));
         }
     });
     Ok(())
@@ -260,11 +284,17 @@ fn h_set_surface(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn h_sync_and_draw(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = proxy(vm, ctx)?;
-    let (root, mut surface, mut size, active) = HWUI.with(|s| {
+    let (root, mut surface, mut size, active, bound_layer) = HWUI.with(|s| {
         let s = s.borrow();
         match s.proxies.get(h) {
-            Ok(p) => (p.root, p.surface, p.surface_size, !p.stopped && p.drawing_enabled),
-            Err(_) => (RHandle(0), None, (0, 0), false),
+            Ok(p) => (
+                p.root,
+                p.surface,
+                p.surface_size,
+                !p.stopped && p.drawing_enabled,
+                p.bound_layer,
+            ),
+            Err(_) => (RHandle(0), None, (0, 0), false, None),
         }
     });
     if !active {
@@ -273,8 +303,13 @@ fn h_sync_and_draw(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.ret_i32(ctx, 0);
         return Ok(());
     }
-    // Rasterise the tree, sizing the surface to the subtree extent.
-    let (w, hgt) = with_ctx(|c| subtree_extent(c, root));
+    // Rasterise the tree. A surface bound through the WMS backend supplies the
+    // real layer size; without one (the in-memory path) size to the subtree.
+    let (w, hgt) = if size.0 > 0 && size.1 > 0 {
+        size
+    } else {
+        with_ctx(|c| subtree_extent(c, root))
+    };
     let (w, hgt) = (w.max(1), hgt.max(1));
     if surface.is_none() || size != (w, hgt) {
         surface = with_ctx(|c| c.surface_create(w, hgt, 1.0).ok());
@@ -287,23 +322,24 @@ fn h_sync_and_draw(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         ));
     };
     let cause = HWUI.with(|s| s.borrow().proxies.get(h).map(|p| p.frames as i64 + 1).unwrap_or(1));
-    let seq = with_ctx(|c| {
+    let _ = with_ctx(|c| {
         c.surface_render_node(surface, root, cause)
             .map_err(|e| render_err("HardwareRenderer.syncAndDrawFrame", e))
     })?;
     let rgba = with_ctx(|c| c.surface_rgba8(surface).map_err(|e| render_err("surface_rgba8", e)))?;
-    // Record the frame-timeline sample and remember the surface for reuse.
+    let window = bound_layer.unwrap_or_else(|| HWUI.with(|s| s.borrow().next_window));
+    let frame = SINK
+        .with(|s| s.borrow_mut().submit_frame(window, w, hgt, &rgba, cause));
+    // Record the frame-timeline sample and the compositor frame id (not the
+    // renderer's internal raster sequence), and remember the surface for reuse.
     HWUI.with(|s| {
         if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
             p.samples += 1;
-            p.frames = seq;
+            p.frames = frame;
             p.surface = Some(surface);
             p.surface_size = size;
         }
     });
-    let window = HWUI.with(|s| s.borrow().next_window);
-    let frame = SINK
-        .with(|s| s.borrow_mut().submit_frame(window, w, hgt, &rgba, cause));
     LAST.with(|l| {
         *l.borrow_mut() = Some(CapturedFrame {
             window_id: window,

@@ -1,0 +1,4 @@
+--------- beginning of main
+11-10 21:10:04.853 I/AcosMulti( 7333): Main.onCreate
+11-10 21:10:04.914 I/AcosMulti( 7333): Main.onStart
+11-10 21:10:04.922 I/AcosMulti( 7333): Main.onResume

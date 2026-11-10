@@ -85,11 +85,12 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
     let report = rt.boot_and_run_lifecycle(&apk);
     let wall = started.elapsed();
     eprintln!(
-        "M2[{label}] wall={wall:?} peak_rss={}kB classes={} bind={} app={} tx={} quit={} events={:?} error={:?}",
+        "M2[{label}] wall={wall:?} peak_rss={}kB classes={} bind={} app={} txscheduled={} tx={} quit={} events={:?} error={:?}",
         peak_rss_kb(),
         report.classes_loaded,
         report.bind_delivered,
         report.app_created,
+        report.transaction_scheduled,
         report.transaction_delivered,
         report.looper_quit,
         report.events,
@@ -102,7 +103,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// before `Application.onCreate`; run with
 /// `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
 #[test]
-#[ignore = "M2 not reached: handleBindApplication blocks in android.graphics.Typeface.<clinit> at com.android.icu.util.regex.PatternNative.compileImpl (needs ICU regex + file-I/O + /system path mapping; results/m2/M2_LOG.md)"]
+#[ignore = "M2 not reached: display reply + boot classpath are fixed and handleBindApplication now reaches ContextImpl.setupGraphicsSupport, which needs libcore.io.Linux.setxattr (guest VFS has no xattrs; should raise ErrnoException ENOTSUP); results/m2/M2_LOG.md"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");

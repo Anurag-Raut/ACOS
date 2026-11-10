@@ -28,9 +28,10 @@ fn main() {
     let report = rt.boot_and_run_lifecycle(&apk);
     eprintln!("lifecycle in {:?}", report.elapsed);
     eprintln!(
-        "  bind_delivered={} app_created={} tx_delivered={} looper_quit={}",
+        "  bind_delivered={} app_created={} tx_scheduled={} tx_delivered={} looper_quit={}",
         report.bind_delivered,
         report.app_created,
+        report.transaction_scheduled,
         report.transaction_delivered,
         report.looper_quit
     );

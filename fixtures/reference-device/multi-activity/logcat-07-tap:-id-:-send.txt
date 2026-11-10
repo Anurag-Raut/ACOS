@@ -1,0 +1,8 @@
+11-10 21:10:12.432 I/AcosMulti( 7333): Main.send message=Hello
+11-10 21:10:12.475 I/AcosMulti( 7333): Main.onPause
+11-10 21:10:12.483 I/AcosMulti( 7333): Second.onCreate
+11-10 21:10:12.488 I/AcosMulti( 7333): Second.received=Hello
+11-10 21:10:12.488 I/AcosMulti( 7333): Second.onStart
+11-10 21:10:12.490 I/AcosMulti( 7333): Second.onResume
+11-10 21:10:12.707 I/AcosMulti( 7333): Main.onStop
+11-10 21:10:12.708 I/AcosMulti( 7333): Main.onSaveInstanceState message=Hello

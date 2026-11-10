@@ -1,0 +1,85 @@
+Page: dev.acos.fixtures.todolist
+App: dev.acos.fixtures.todolist
+Snapshot: 93 visible nodes (145 total)
+Collapsed 52 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [text] "9:09"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image] "Wifi signal full."
+@e5 [group] "Battery charging, 41 percent."
+  @e6 [image]
+  @e7 [text] "41%"
+    @e10 [group]
+      @e11 [group]
+        @e12 [group]
+          @e13 [group] "., English, ,, ?123, m, n, b, v, c, x, z, l, k, j, h, g, f, d, s, a, p, o, i, u, y, t, r, e, w, q"
+            @e14 [group] [same label as parent]
+              @e16 [group]
+                @e17 [group]
+                  @e19 [group]
+                    @e20 [button] "Open features menu"
+                    @e22 [group] [same label as parent]
+                      @e23 [group] [same label as parent]
+                        @e24 [group] [same label as parent]
+                          @e25 [button] "GIF Keyboard, This app does not support images here" [disabled]
+                          @e27 [button] "Translate"
+                          @e29 [button] "Settings"
+                          @e31 [button] "Theme settings"
+                    @e33 [voicedictationbutton] "Use voice typing"
+                @e35 [group]
+                  @e38 [group]
+                    @e39 [group]
+                      @e40 [group] "1"
+                      @e42 [group] "2"
+                      @e44 [group] "3"
+                      @e46 [group] "4"
+                      @e48 [group] "5"
+                      @e50 [group] "6"
+                      @e52 [group] "7"
+                      @e54 [group] "8"
+                      @e56 [group] "9"
+                      @e58 [group] "0"
+                      @e61 [group] "q"
+                      @e63 [group] "w"
+                      @e65 [group] "e"
+                      @e67 [group] "r"
+                      @e69 [group] "t"
+                      @e71 [group] "y"
+                      @e73 [group] "u"
+                      @e75 [group] "i"
+                      @e77 [group] "o"
+                      @e79 [group] "p"
+                      @e82 [group] "a"
+                      @e84 [group] "s"
+                      @e86 [group] "d"
+                      @e88 [group] "f"
+                      @e90 [group] "g"
+                      @e92 [group] "h"
+                      @e94 [group] "j"
+                      @e96 [group] "k"
+                      @e98 [group] "l"
+                      @e101 [group] "Shift"
+                      @e103 [group] "z"
+                      @e105 [group] "x"
+                      @e107 [group] "c"
+                      @e109 [group] "v"
+                      @e111 [group] "b"
+                      @e113 [group] "n"
+                      @e115 [group] "m"
+                      @e117 [group] "Delete"
+                  @e119 [group] [same label as parent]
+                    @e120 [group] "Symbol keyboard"
+                    @e122 [group] ","
+                    @e124 [group] "Emoji button"
+                    @e126 [group] "Space"
+                    @e128 [group] "Period"
+                    @e130 [group] "Done"
+  @e135 [group]
+    @e136 [text] "Todo List"
+    @e137 [group]
+      @e139 [text-field] "New item" [focused] [editable]
+        @e141 [button] "Add"
+        @e142 [button] "Clear all"
+      @e143 [list]
+        @e144 [text] "milk"
+        @e145 [text] "bread"

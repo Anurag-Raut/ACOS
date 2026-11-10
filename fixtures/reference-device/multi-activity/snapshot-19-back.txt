@@ -1,0 +1,15 @@
+Page: dev.acos.fixtures.multiactivity
+App: dev.acos.fixtures.multiactivity
+Snapshot: 14 nodes
+@e1 [text] "9:10"
+@e2 [image] "Android System notification:"
+@e3 [image] "Settings notification:"
+@e4 [image] "Wifi signal full."
+@e5 [group] "Battery charging, 41 percent."
+  @e6 [image]
+  @e7 [text] "41%"
+  @e9 [group]
+    @e10 [text] "Multi Activity"
+    @e11 [group]
+      @e13 [text-field] "Hello" [focused] [editable]
+      @e14 [button] "Send"

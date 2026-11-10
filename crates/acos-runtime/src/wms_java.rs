@@ -35,15 +35,18 @@ use std::os::fd::AsFd;
 
 use acos_parcel::binder::BinderId;
 use acos_parcel::{Parcel, ParcelError};
+use acos_render::{Bitmap, BitmapConfig};
 use acos_services::wms::WmsState;
 use acos_vm::natives::binder::BinderDelivery;
-use acos_vm::natives::fwk_surface::{install_backend, presented_frames, SurfaceBackend, SurfaceOp};
+use acos_vm::natives::fwk_surface::{presented_frames, SurfaceBackend, SurfaceOp};
 use acos_wm::codec::{
     ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
     ParcelCodec, SurfaceControlInfo,
 };
 use acos_wm::geom::{PointI, RectI};
 use acos_wm::wms::ADD_OKAY;
+
+use crate::frame_handoff::CompletedFrame;
 
 thread_local! {
     static WMS: RefCell<WmsState> = RefCell::new(WmsState::new());
@@ -508,6 +511,8 @@ fn handle_session(
 pub struct WmSurfaceBackend {
     compositor: acos_wm::compositor::Compositor,
     layers: HashMap<u64, u64>,
+    /// Monotonic client frame number handed to the compositor.
+    next_frame: u64,
 }
 
 impl std::fmt::Debug for WmSurfaceBackend {
@@ -528,12 +533,77 @@ impl WmSurfaceBackend {
         Ok(Self {
             compositor,
             layers: HashMap::new(),
+            next_frame: 0,
         })
     }
 
     fn layer(&self, handle: u64) -> Option<u64> {
         self.layers.get(&handle).copied()
     }
+
+    fn ensure_layer(&mut self, handle: u64) -> u64 {
+        if let Some(layer) = self.layers.get(&handle) {
+            return *layer;
+        }
+        let layer = self.compositor.create_layer(
+            None,
+            format!("frame-handoff-{handle}"),
+            handle as i64,
+        );
+        self.layers.insert(handle, layer);
+        layer
+    }
+
+    /// Submit a completed RGBA8888 frame to the compositor layer bound to
+    /// `window` and return the completed-frame record.
+    ///
+    /// This is the only path that publishes a frame: `finishDrawing` alone
+    /// never reaches here.
+    pub fn submit_frame(
+        &mut self,
+        window: u64,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+        cause_id: i64,
+    ) -> Result<CompletedFrame, String> {
+        let layer = self.ensure_layer(window);
+        let bitmap = bitmap_from_rgba(width, height, rgba)?;
+        self.next_frame = self.next_frame.wrapping_add(1);
+        self.compositor
+            .set_buffer(layer, bitmap, self.next_frame, cause_id)
+            .map_err(err)?;
+        let seq = self.compositor.present(cause_id).map_err(err)?;
+        let frame = self
+            .compositor
+            .capture()
+            .ok_or_else(|| "wms_java: no frame after present".to_string())?;
+        Ok(CompletedFrame {
+            frame_id: seq.unwrap_or(frame.seq),
+            window,
+            content_hash: frame.content_hash,
+            cause_id: frame.cause_id,
+            width: frame.width,
+            height: frame.height,
+            pixels: frame.rgba8().to_vec(),
+        })
+    }
+}
+
+fn bitmap_from_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<Bitmap, String> {
+    let mut bitmap = Bitmap::new(width, height, BitmapConfig::Rgba8888).map_err(err)?;
+    let expected = width as usize * height as usize * 4;
+    if rgba.len() < expected {
+        return Err(format!(
+            "wms_java: rgba buffer {} bytes, expected {expected}",
+            rgba.len()
+        ));
+    }
+    for (i, pixel) in bitmap.pixels_mut().iter_mut().enumerate() {
+        let o = i * 4;
+        *pixel = u32::from_le_bytes([rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3]]);
+    }
+    Ok(bitmap)
 }
 
 impl SurfaceBackend for WmSurfaceBackend {
@@ -608,9 +678,8 @@ pub fn install_surface_backend() -> WResult<()> {
         if *installed.borrow() {
             return Ok(());
         }
-        match WmSurfaceBackend::new() {
-            Ok(b) => {
-                install_backend(Box::new(b));
+        match crate::frame_handoff::install_frame_handoff() {
+            Ok(_store) => {
                 *installed.borrow_mut() = true;
                 Ok(())
             }

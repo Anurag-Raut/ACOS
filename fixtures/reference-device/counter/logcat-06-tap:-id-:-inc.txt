@@ -1,0 +1,1 @@
+11-10 21:09:16.065 I/AcosCounter( 4812): increment value=1

@@ -355,3 +355,84 @@ dependency in the message — it never returns a number.
   metric, `CARGO_TARGET_DIR` respected.
 - This section is the only place ACOS results are recorded; §4's table stays
   empty on purpose (single authoritative table, §8.1).
+
+### 8.6 Interpreter hot-path wave w25a (2026-11-10, commit 40f075c)
+
+Profile: no `perf`/`samply` on the host, so the profile used the interpreter's
+own counters (`vmbench --ops`, which routes every instruction through the
+general path and prints the opcode histogram) plus per-opcode before/after wall
+time on the `crates/acos-vm/benches/java` programs. Builds: `release`, own
+`CARGO_TARGET_DIR=.cache/target-w25a`, `CARGO_BUILD_JOBS=6`, every command under
+`tools/guarded.sh`. Each timed row is **p50 over 5 fresh processes, each
+`best-of-2` internal repetitions** (10 samples per program); spread is
+`(max-min)/p50` and is 1-8 % under host loadavg 4-25 (other agents were
+building/running concurrently, so before/after pairs are read within one
+optimisation's window, never across distant windows).
+
+| Program | p50 before (ms) | p50 after (ms) | Speedup | Dominant opcodes (histogram) |
+|---|---:|---:|---:|---|
+| `BenchFields` | 642.09 | 429.11 | **1.50x** | iget/iput/iget-object/aget-object |
+| `BenchCollections` | 1860.84 | 130.85 | **14.2x** | ArrayList.get + HashMap.get + boxing |
+| `BenchVirtualCall` | 4566.87 | 3890.12 | **1.17x** | invoke-virtual + return |
+| `BenchGc` | 693.58 | 624.19 | **1.11x** | new-array + GC |
+| `BenchAlloc` | 3064.05 | 2837.86 | **1.08x** | new-instance + invoke-direct + iget/iput |
+| `BenchFib` | 621.81 | 580.26 | 1.07x | invoke-static recursion |
+| `BenchString` | 198.88 | 189.95 | 1.05x | StringBuilder.append(int/char) |
+| `BenchStaticCall` | 3952.70 | 3892.01 | 1.02x | invoke-static + return |
+| `BenchVirtual` | 2220.54 | 2283.65 | 0.97x (noise) | 3-class invoke-interface |
+| `BenchLoop` | 1643.76 | (unchanged) | — | and-int/lit16, aget/aput, add-int/lit8 |
+| `BenchArith` | 1833.40 | (unchanged) | — | int-to-long, add-long/2addr, add-int/2addr |
+| `BenchArray` | 1186.81 | (unchanged) | — | aget, aput, and-int/lit16 |
+
+Kept changes (each measured separately; dropped if it did not win):
+
+1. **`iget`/`iput` bridge gating** (`interp.rs`). `bridge::internal_field_get`
+   allocated two descriptor `String`s and probed them on **every** instance
+   field read, even for ordinary user classes. The interpreter now calls the
+   hook only when the resolved declaring class is `java/lang/Object`,
+   `java/lang/Class` or `java/lang/String`. `BenchFields` 642→431 ms.
+2. **Virtual/interface inline cache** (`vm.rs` `DexCtx::virtual_cache` +
+   `interp.rs`). One-entry `(receiver class → method)` cache per call site ahead
+   of the tuple-keyed `dispatch_cache` `HashMap`; monomorphic sites never touch
+   the hash map after the first call. `BenchVirtualCall` 4567→3890 ms.
+3. **Boxed-`Integer` equality fast path** (`corelib/mod.rs` `value_equals`).
+   `HashMap`/`ArrayList` linear scans call `equals` O(n) per probe; the generic
+   path paid a full Java dispatch + `call_method`. Two Integers now compare
+   their `value` slots directly. `BenchCollections` 1861→142 ms.
+4. **Array-class probe cache** (`vm.rs` `loaded_array_elems`). `Vm::alloc` used
+   `format!("[{elem}")` + `class_by_desc` probe on every array allocation; the
+   per-VM `elem_desc` set removes that allocation. `BenchGc` 694→624 ms.
+5. **`ArrayList` read path** (`corelib/collections.rs`). `get`/`size`/`isEmpty`
+   cloned the whole backing `Vec<Handle>` per call; now length/bounds are read
+   in place. Neutral in wall time on `BenchCollections` (map equality dominated)
+   but removes an O(n) copy per access.
+6. **StringBuilder int/long append** (`corelib/lang.rs`). Decimal digits are
+   written straight into the UTF-16 buffer instead of `v.to_string()` +
+   `encode_utf16()`. Neutral in wall time on `BenchString` (native-call overhead
+   dominates) but removes a per-append heap allocation.
+
+Not done / rejected: superinstructions and a full invoke/return fast path were
+not attempted — the general path still pays a frame push/pop per call, and the
+measurement budget was spent on the wins above. No change regressed a benchmark
+beyond its measured spread.
+
+Correctness for the wave (all on commit 40f075c + these changes):
+
+* `tests/fast_path_equivalence.rs`: 2/2 pass (fast path == general path, normal
+  and GC stress).
+* `tools/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
+  **25 pass / 0 fail**.
+* `cargo test --release -p acos-vm -- --skip thousand_events`: every target
+  green except the two `res_natives` cases, which **already fail at HEAD without
+  these changes** (verified by reverting the wave patch and re-running);
+  `clippy --release -p acos-vm` reports no warning in any touched file (the one
+  warning is the pre-existing `let_unit_value` in `natives/fwk_surface.rs`).
+
+Interpreter-metric rerun (`tools/bench-acos.sh interpreter`,
+`run-2026-11-10-205045.json`, loadavg1 4.80): `02_int_arith` 16.048 ms p50 /
+18.218 p95, `05_branches_loops` 15.054 / 16.372, `09_strings` 19.730 / 25.791.
+That metric's wall covers `Vm::new` (boot/native bring-up) as well as
+interpretation, so it is a startup + host-load measurement, not a per-instruction
+one; it stays better than the committed `baseline.json` p50 (22.823 / 22.663 /
+24.559 ms) but worse than the low-load `ced0d70` run. The `vmbench` table above
+is the per-instruction evidence.

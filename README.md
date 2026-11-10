@@ -5,6 +5,23 @@ ACOS runs Android apps natively in Rust: a DEX interpreter and managed heap
 APK/DEX tooling and an MCP/JSON surface for AI agents. See `ARCHITECTURE.md`,
 `SPEC.md`, and `docs/V1.md`.
 
+## Status (2026-11-10, HEAD `40f075c` + working tree)
+
+- **Verified:** static APK/DEX analysis (`dexdump`/`aapt2` differentials); the 25
+  console `dexprogs` run on the real Android 14 core library and match the ART
+  oracle; ART-reference captures for six fixture apps; the `acos-render`,
+  `acos-wm`, `acos-services` and snapshot acceptance suites; the ELF/JNI native
+  loader.
+- **Partial:** framework boot reaches `ActivityThread.bindApplication` and a real
+  `ClientTransaction`, but no `Application`/`Activity` callback, frame, UI tree,
+  input, reset or concurrency state exists yet. `acos verify` runs but the native
+  backend stops at the first UI step.
+- **Not started:** the V1 verdict, `physical-device` reference tier.
+
+See `STATUS.md` for the milestone table, per-metric comparison against the
+legacy baseline, and the current risk list. Fidelity tiers are `jvm-reference`
+(weak) and `art-reference` (authoritative) per `DECISIONS.md` ADR-0005.
+
 ## Building and running
 
 ```bash

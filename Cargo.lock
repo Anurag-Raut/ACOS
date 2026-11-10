@@ -148,6 +148,7 @@ dependencies = [
  "acos-apk",
  "acos-dex",
  "acos-parcel",
+ "acos-render",
  "acos-services",
  "acos-vm",
  "acos-wm",

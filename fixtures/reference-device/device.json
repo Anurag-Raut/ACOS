@@ -1,0 +1,25 @@
+{
+  "tier": "physical-device",
+  "device": {
+    "model": "moto g35 5G",
+    "manufacturer": "motorola",
+    "device": "manila",
+    "product": "manila_g",
+    "android_release": "15",
+    "api_level": "35",
+    "build_id": "VUOA35.116-151",
+    "fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "abi": "arm64-v8a",
+    "abi_list": "arm64-v8a,armeabi-v7a,armeabi",
+    "locale": "en-US",
+    "resolution": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0",
+    "user_rotation": "null",
+    "accelerometer_rotation": "1",
+    "current_display": "1080x2400"
+  },
+  "serial_sha256": "74c946119e36b4e4529639cb8b53c7fa789c7ac5628d4cf9d50a846286fa2e62",
+  "captured": "2026-11-10T15:39:09.814+00:00",
+  "run_start_user_rotation": "1"
+}

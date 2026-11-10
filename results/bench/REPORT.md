@@ -3,6 +3,7 @@
 - run: `run-2026-11-10-201637.json` (2026-11-10T20:20:21, commit `ced0d70`, 20 samples/metric, `release` profile)
 - host: 32 threads, 60 GiB RAM, loadavg1 2.93, kernel 7.2.11-arch1-1, `rustc 1.90.0 (1159e78c4 2025-09-14)`
 - method: BENCHMARKS.md §2: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric
+- interpreter rows: w25a hot-path rerun `run-2026-11-10-205045.json` (commit `40f075c`, `release`, 20 samples, loadavg1 4.80). That metric's wall time is dominated by `Vm::new` startup rather than by interpretation, so it is host-load-sensitive; the honest per-instruction evidence for this wave is the `vmbench` table in BENCHMARKS.md §8.6 (commit 40f075c, own target dir, 5 processes × best-of-2).
 - fidelity: `native-runtime` (ACOS executes the code itself). No row here is ART-verified, and no legacy value is an ACOS result.
 
 Metric types are never mixed: RSS, PSS, anon+shmem (`RssAnon+RssShmem`) and private/shared pages are reported in separate labelled columns.
@@ -57,9 +58,9 @@ Metric types are never mixed: RSS, PSS, anon+shmem (`RssAnon+RssShmem`) and priv
 | marginal N=5->N=10 (shared boot) | 14.323 MiB/session | anon+shmem | fresh process |
 | marginal N=10->N=20 (shared boot) | 14.33 MiB/session | anon+shmem | fresh process |
 | idle CPU, parked/blocked | 0.0 / 0.0 ticks over 5 s (0.0 / 0.0 % of one core), zero_ticks=True | CPU window | parked |
-| interpreter `02_int_arith` | 6.361 / 6.425 ms, 62380 insns, 9806216.399 insn/s | wall + VM counters | cold |
-| interpreter `05_branches_loops` | 5.992 / 6.182 ms, 49732 insns, 8299451.804 insn/s | wall + VM counters | cold |
-| interpreter `09_strings` | 8.267 / 9.122 ms, 143608 insns, 17371896.957 insn/s | wall + VM counters | cold |
+| interpreter `02_int_arith` | 16.048 / 18.218 ms, 62380 insns, 3860458.116 insn/s | wall + VM counters | cold |
+| interpreter `05_branches_loops` | 15.054 / 16.372 ms, 49732 insns, 3289003.346 insn/s | wall + VM counters | cold |
+| interpreter `09_strings` | 19.730 / 25.791 ms, 143608 insns, 7235423.952 insn/s | wall + VM counters | cold |
 
 ## 2. ACOS vs legacy, every row of BENCHMARKS.md
 
