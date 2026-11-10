@@ -9,7 +9,7 @@ use crate::error::DexResult;
 use crate::reader::Reader;
 
 /// A single decoded annotation: visibility plus the encoded annotation body.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct Annotation {
     pub visibility: u8,
     pub annotation: EncodedAnnotation,
@@ -25,7 +25,7 @@ impl Annotation {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct AnnotationsDirectory {
     pub class_annotations: Vec<Annotation>,
     pub field_annotations: Vec<(u32, Vec<Annotation>)>,

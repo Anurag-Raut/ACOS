@@ -52,6 +52,7 @@ dependencies = [
 name = "acos-dex"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "serde_json",
  "thiserror",
  "zip",

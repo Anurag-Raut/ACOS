@@ -109,6 +109,48 @@ impl BootCache {
         Ok(map.entry(key).or_insert(parsed).clone())
     }
 
+    /// Return the shared parsed form of `path`, rebuilding it from serialized
+    /// [`crate::DexTables`] when the file is not already resident.
+    ///
+    /// This is the cold-process path for the boot-image cache: the caller has a
+    /// `DexTables` snapshot from the same boot-classpath fingerprint and only
+    /// needs the raw bytes re-read. Any table failure (version, size, magic) is
+    /// a transparent fallback to a full [`DexFile::parse`]; the cache never
+    /// installs a half-validated file.
+    pub fn get_or_load_with_tables(
+        &self,
+        path: &Path,
+        tables: Option<crate::DexTables>,
+    ) -> Result<Arc<DexFile>, String> {
+        let key = file_key(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if let Some(file) = self
+            .map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+            return Ok(file);
+        }
+
+        let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let raw: Arc<[u8]> = bytes.into();
+        let parsed = match tables {
+            Some(tables) => match DexFile::from_tables(tables, raw.clone()) {
+                Ok(file) => file,
+                Err(_) => DexFile::parse(raw)
+                    .map_err(|e| format!("parse {}: {e}", path.display()))?,
+            },
+            None => DexFile::parse(raw).map_err(|e| format!("parse {}: {e}", path.display()))?,
+        };
+        let parsed = Arc::new(parsed);
+        self.loads.fetch_add(1, Ordering::Relaxed);
+
+        let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
+        Ok(map.entry(key).or_insert(parsed).clone())
+    }
+
     /// Number of parsed files currently resident.
     pub fn len(&self) -> usize {
         self.map

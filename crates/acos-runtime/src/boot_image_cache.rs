@@ -42,9 +42,10 @@ use acos_vm::CoreLib;
 const MAGIC: [u8; 8] = *b"ACOSBIMG";
 /// Fixed header length in bytes (magic, format, key, len, checksum, ver-len).
 const HEADER_LEN: usize = 8 + 4 + 8 + 8 + 8 + 4;
-/// On-disk header format version. Bump on any layout change. Version 2 adds the
-/// serialized, fully linked `BootImage` segment to the framed payload.
-pub const CACHE_FORMAT_VERSION: u32 = 2;
+/// On-disk header format version. Bump on any layout change. Version 2 added the
+/// serialized, fully linked `BootImage` segment; version 3 adds the parsed
+/// DEX id/string/type/method pools beside it.
+pub const CACHE_FORMAT_VERSION: u32 = 3;
 /// Hard ceiling on a cache file read into memory; larger files are refused.
 pub const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// Default total budget for the cache directory before LRU eviction.
@@ -525,17 +526,77 @@ fn open_private_exclusive(path: &Path) -> io::Result<File> {
 }
 
 fn ensure_private_dir(dir: &Path) -> io::Result<()> {
+    // Reject a symlinked cache root before creating anything: `create_dir_all`
+    // follows symlinks, so an attacker-supplied `ACOS_CACHE_DIR` pointing at a
+    // symlink would otherwise be silently accepted. `symlink_metadata` does not
+    // follow the final component.
+    if let Ok(meta) = fs::symlink_metadata(dir) {
+        if meta.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cache dir {} is a symlink", dir.display()),
+            ));
+        }
+    }
     fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        // Re-check after creation (the final component could have been swapped
+        // in between) and require a directory owned by the effective user with
+        // no group/other access. The cache is private and metadata-only, but a
+        // shared/attacker-owned directory would let another local user pre-seed
+        // an entry under a non-secret key.
+        let meta = fs::symlink_metadata(dir)?;
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cache dir {} is not a real directory", dir.display()),
+            ));
+        }
+        if meta.uid() != nix_effective_uid() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "cache dir {} is owned by uid {} (effective {})",
+                    dir.display(),
+                    meta.uid(),
+                    nix_effective_uid()
+                ),
+            ));
+        }
+        let mode = meta.permissions().mode() & 0o777;
+        if mode & 0o077 != 0 {
+            // The cache is private; tighten a pre-existing directory, then
+            // verify the change stuck.
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+        }
         let mode = fs::metadata(dir)?.permissions().mode() & 0o777;
         if mode & 0o077 != 0 {
-            // The cache is private; tighten a pre-existing directory.
-            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cache dir {} is not private (mode {mode:o})", dir.display()),
+            ));
         }
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn nix_effective_uid() -> u32 {
+    // `geteuid` is the only libc call needed here; the crate avoids `unsafe`,
+    // and `std` does not expose the effective uid, so read `/proc/self/status`
+    // instead. The parse falls back to `u32::MAX` (which can never match a real
+    // file owner) so an unreadable `/proc` fails closed.
+    fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find_map(|l| l.strip_prefix("Uid:"))
+                .and_then(|rest| rest.split_whitespace().nth(1))
+                .and_then(|uid| uid.parse().ok())
+        })
+        .unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]
@@ -723,6 +784,27 @@ mod tests {
             .map(|m| m.len())
             .sum();
         assert!(total <= 200, "cache exceeded budget: {total}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlinked_cache_dir_is_rejected() {
+        use std::os::unix::fs::symlink;
+        let dir = TempDir::new("symlink");
+        let link = dir.path().join("cache-link");
+        symlink(dir.path(), &link).unwrap();
+        // `ensure_private_dir` must refuse the symlinked root, so the cache is
+        // disabled rather than following an attacker-controlled link.
+        assert!(BootImageCache::with_dir(&link).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn non_directory_cache_root_is_rejected() {
+        let dir = TempDir::new("notdir");
+        let file = dir.path().join("not-a-dir");
+        fs::write(&file, b"x").unwrap();
+        assert!(BootImageCache::with_dir(&file).is_err());
     }
 
     #[test]

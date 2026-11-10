@@ -9,7 +9,7 @@ use crate::reader::Reader;
 /// input (a stack overflow would be an abort, not a structured error).
 const MAX_DEPTH: u32 = 64;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub enum EncodedValue {
     Byte(i8),
     Short(i16),
@@ -33,13 +33,13 @@ pub enum EncodedValue {
     Boolean(bool),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct EncodedAnnotation {
     pub type_idx: u32,
     pub elements: Vec<AnnotationElement>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct AnnotationElement {
     pub name_idx: u32,
     pub value: EncodedValue,

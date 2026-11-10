@@ -65,6 +65,7 @@ pub mod hash;
 pub mod hiddenapi;
 pub mod mutf8;
 pub mod opcode;
+pub mod persist;
 pub mod reader;
 pub mod verify;
 
@@ -81,6 +82,7 @@ pub use encoded::{EncodedAnnotation, EncodedValue};
 pub use error::{DexError, DexResult};
 pub use hiddenapi::HiddenApiClassData;
 pub use opcode::{defined_opcodes, Format, Opcode};
+pub use persist::{DexTables, DEX_TABLES_VERSION};
 pub use reader::Reader;
 pub use verify::{verify, VerifyReport};
 
@@ -97,7 +99,7 @@ use std::sync::OnceLock;
 /// two ids; sharing one parsed file (see [`cache::shared_dex`]) shares one id.
 static NEXT_DEX_ID: AtomicU64 = AtomicU64::new(1);
 
-fn next_dex_id() -> u64 {
+pub(crate) fn next_dex_id() -> u64 {
     NEXT_DEX_ID.fetch_add(1, Ordering::Relaxed)
 }
 
@@ -212,7 +214,7 @@ pub mod map_type {
 }
 
 /// Parsed DEX header (the fixed 112-byte `header_item`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct Header {
     /// Numeric version: 35, 37, 38 or 39.
     pub version: u32,
@@ -241,7 +243,7 @@ pub struct Header {
 }
 
 /// `proto_id_item` plus its eagerly-resolved parameter type indices.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct ProtoId {
     pub shorty_idx: u32,
     pub return_type_idx: u32,
@@ -250,7 +252,7 @@ pub struct ProtoId {
 }
 
 /// `field_id_item`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct FieldId {
     pub class_idx: u16,
     pub type_idx: u16,
@@ -258,7 +260,7 @@ pub struct FieldId {
 }
 
 /// `method_id_item`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct MethodId {
     pub class_idx: u16,
     pub proto_idx: u16,
@@ -266,7 +268,7 @@ pub struct MethodId {
 }
 
 /// `class_def_item` plus its eagerly-parsed interface list and annotations.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct ClassDef {
     pub class_idx: u32,
     pub access_flags: u32,
@@ -281,7 +283,7 @@ pub struct ClassDef {
 }
 
 /// `method_handle_item`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct MethodHandle {
     pub handle_type: u16,
     pub unused1: u16,
@@ -290,7 +292,7 @@ pub struct MethodHandle {
 }
 
 /// `map_item`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct MapItem {
     pub type_: u16,
     pub unused: u16,

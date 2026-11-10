@@ -224,6 +224,19 @@ impl BootImage {
                 .iter()
                 .map(|p| p.as_ref().map(|p| p.to_string_lossy().into_owned()))
                 .collect(),
+            // Parsed id/string/type/method pools, one per provider. A cold
+            // process rebuilds each `DexFile` from these plus a plain re-read
+            // of the raw bytes instead of re-running `DexFile::parse`.
+            // Measured a net loss (W131-A: +4 ms boot, +21 MB), so they are
+            // opt-in via `ACOS_BOOT_CACHE_DEX_TABLES=1`.
+            dex_tables: if std::env::var_os("ACOS_BOOT_CACHE_DEX_TABLES").is_none() {
+                Vec::new()
+            } else {
+                self.dex_files
+                    .iter()
+                    .map(|f| Some(f.to_tables()))
+                    .collect()
+            },
         };
         borsh::to_vec(&data).expect("in-memory borsh serialization cannot fail")
     }
@@ -235,16 +248,57 @@ impl BootImage {
     pub(crate) fn from_bytes(bytes: &[u8]) -> VmResult<BootImage> {
         let data: SerializedBootImage = borsh::from_slice(bytes)
             .map_err(|e| VmError::SnapshotFormat(format!("linked boot image: {e}")))?;
-        let mut dex_files = Vec::with_capacity(data.dex_paths.len());
-        for path in &data.dex_paths {
+        // The cache payload is untrusted input. Every provider path must
+        // resolve inside the configured boot directory, so a poisoned entry
+        // cannot make the host `read`/parse an arbitrary file as DEX. A failure
+        // is a structured error (the caller falls back to a fresh boot), never
+        // a panic or an out-of-tree open.
+        let boot_root = match data.boot_dir.as_deref() {
+            Some(dir) => Some(std::fs::canonicalize(dir).map_err(|e| {
+                VmError::SnapshotFormat(format!(
+                    "linked boot image boot_dir {dir:?} is not resolvable: {e}"
+                ))
+            })?),
+            None => None,
+        };
+        let dex_paths = data.dex_paths;
+        let mut dex_tables = data.dex_tables.into_iter();
+        let mut dex_tables_used = 0u64;
+        let mut dex_files = Vec::with_capacity(dex_paths.len());
+        for path in &dex_paths {
             let Some(path) = path else {
                 return Err(VmError::SnapshotFormat(
                     "linked boot image contains a non-boot DEX provider".to_string(),
                 ));
             };
-            let file = acos_dex::shared_dex(Path::new(path)).map_err(VmError::Load)?;
+            if let Some(root) = &boot_root {
+                let resolved = std::fs::canonicalize(path).map_err(|e| {
+                    VmError::SnapshotFormat(format!(
+                        "linked boot image provider {path:?} is not resolvable: {e}"
+                    ))
+                })?;
+                if !resolved.starts_with(root) {
+                    return Err(VmError::SnapshotFormat(format!(
+                        "linked boot image provider {path:?} is outside the boot dir"
+                    )));
+                }
+            }
+            let tables = dex_tables.next().flatten();
+            let tables = if std::env::var_os("ACOS_BOOT_CACHE_DEX_TABLES").is_none() {
+                None
+            } else {
+                tables
+            };
+            if tables.is_some() {
+                dex_tables_used += 1;
+            }
+            let file = acos_dex::cache::boot_cache()
+                .get_or_load_with_tables(Path::new(path), tables)
+                .map_err(VmError::Load)?;
             dex_files.push(file);
         }
+        crate::profile::set_note("dex_tables_used", dex_tables_used);
+        crate::profile::set_note("dex_providers", dex_files.len() as u64);
         Ok(BootImage {
             classes: data.classes,
             methods: data.methods,
@@ -264,8 +318,7 @@ impl BootImage {
             c_print_stream: data.c_print_stream,
             c_system: data.c_system,
             dex_files,
-            dex_paths: data
-                .dex_paths
+            dex_paths: dex_paths
                 .into_iter()
                 .map(|p| p.map(PathBuf::from))
                 .collect(),
@@ -302,6 +355,9 @@ struct SerializedBootImage {
     boot_lazy_jars: Vec<String>,
     boot_dir: Option<String>,
     dex_paths: Vec<Option<String>>,
+    /// Serialized parsed pools, parallel to `dex_paths`. `None` is a legacy /
+    /// non-boot entry and falls back to a full parse.
+    dex_tables: Vec<Option<acos_dex::DexTables>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

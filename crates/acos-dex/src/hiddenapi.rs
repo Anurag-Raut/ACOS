@@ -17,7 +17,7 @@ use crate::error::{DexError, DexResult};
 use crate::reader::Reader;
 
 /// Raw hiddenapi flags for every class, in `class_defs` order.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct HiddenApiClassData {
     /// `per_class[i]` holds the raw flags for the class at index `i` in
     /// `class_defs` order; the slice length equals that class's field+method

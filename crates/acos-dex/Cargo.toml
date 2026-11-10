@@ -8,6 +8,9 @@ description = "Clean-room parser, instruction decoder, and structural verifier f
 
 [dependencies]
 thiserror.workspace = true
+# Derive-only serialization of the parsed id/string/type/method pools for the
+# on-disk boot cache. borsh is already in the workspace lock graph via acos-vm.
+borsh = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 serde_json.workspace = true

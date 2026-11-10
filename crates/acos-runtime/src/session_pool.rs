@@ -247,75 +247,56 @@ fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload, String> {
     if count > MAX_BOOT_PAYLOAD_ENTRIES {
         return Err(format!("binder layout entry count {count} too large"));
     }
+    // Every length below is a full `u64` from the untrusted frame. Use checked
+    // arithmetic and a `remaining = len - pos` comparison so a crafted length
+    // (including `u64::MAX`) is a clean `Err`, never a wrap or a slice panic.
+    let take = |pos: usize, n: usize| -> Result<usize, String> {
+        pos.checked_add(n)
+            .filter(|&end| end <= bytes.len())
+            .ok_or_else(|| "truncated or overflowing payload".to_string())
+    };
     let mut pos = 8usize;
     let mut layout = Vec::with_capacity(count);
     for _ in 0..count {
-        if bytes.len() < pos + 12 {
-            return Err("truncated binder entry".to_string());
-        }
-        let id = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
-        pos += 8;
-        let dlen = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap_or_default()) as usize;
-        pos += 4;
-        if bytes.len() < pos + dlen + 1 {
-            return Err("truncated binder descriptor".to_string());
-        }
-        let desc = std::str::from_utf8(&bytes[pos..pos + dlen])
+        pos = take(pos, 12)?;
+        let id = u64::from_le_bytes(bytes[pos - 12..pos - 4].try_into().unwrap_or_default());
+        let dlen = u32::from_le_bytes(bytes[pos - 4..pos].try_into().unwrap_or_default()) as usize;
+        pos = take(pos, dlen)?;
+        let desc = std::str::from_utf8(&bytes[pos - dlen..pos])
             .map_err(|_| "binder descriptor is not utf-8".to_string())?
             .to_string();
-        pos += dlen;
-        let kind = kind_from_code(bytes[pos]).ok_or_else(|| "bad binder kind".to_string())?;
-        pos += 1;
+        pos = take(pos, 1)?;
+        let kind = kind_from_code(bytes[pos - 1]).ok_or_else(|| "bad binder kind".to_string())?;
         layout.push((id, desc, kind));
     }
-    if bytes.len() < pos + 1 {
-        return Err("truncated attach marker".to_string());
-    }
-    let attach = match bytes[pos] {
+    pos = take(pos, 1)?;
+    let attach = match bytes[pos - 1] {
         0 => None,
         1 => {
-            pos += 1;
-            if bytes.len() < pos + 20 {
-                return Err("truncated attach record".to_string());
-            }
+            pos = take(pos, 20)?;
             let app_thread =
-                u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
-            pos += 8;
-            let seq = i64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
-            pos += 8;
-            let plen =
-                u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap_or_default()) as usize;
-            pos += 4;
-            if bytes.len() < pos + plen {
-                return Err("truncated attach package".to_string());
-            }
-            let package = std::str::from_utf8(&bytes[pos..pos + plen])
+                u64::from_le_bytes(bytes[pos - 20..pos - 12].try_into().unwrap_or_default());
+            let seq = i64::from_le_bytes(bytes[pos - 12..pos - 4].try_into().unwrap_or_default());
+            let plen = u32::from_le_bytes(bytes[pos - 4..pos].try_into().unwrap_or_default()) as usize;
+            pos = take(pos, plen)?;
+            let package = std::str::from_utf8(&bytes[pos - plen..pos])
                 .map_err(|_| "attach package is not utf-8".to_string())?
                 .to_string();
-            pos += plen;
             Some((app_thread, seq, package))
         }
         other => return Err(format!("bad attach marker {other}")),
     };
-    if bytes.len() < pos + 8 {
-        return Err("truncated snapshot length".to_string());
-    }
-    let snap_len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default()) as usize;
-    pos += 8;
-    if bytes.len() < pos + snap_len {
-        return Err("snapshot length mismatch".to_string());
-    }
-    let snapshot = bytes[pos..pos + snap_len].to_vec();
-    pos += snap_len;
-    if bytes.len() < pos + 8 {
-        return Err("truncated linked-image length".to_string());
-    }
-    let img_len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default()) as usize;
-    pos += 8;
-    if bytes.len() != pos + img_len {
-        return Err("linked-image length mismatch".to_string());
-    }
-    Ok((snapshot, layout, attach, bytes[pos..].to_vec()))
+    pos = take(pos, 8)?;
+    let snap_len = u64::from_le_bytes(bytes[pos - 8..pos].try_into().unwrap_or_default()) as usize;
+    pos = take(pos, snap_len)?;
+    let snapshot = bytes[pos - snap_len..pos].to_vec();
+    pos = take(pos, 8)?;
+    let img_len = u64::from_le_bytes(bytes[pos - 8..pos].try_into().unwrap_or_default()) as usize;
+    let end = pos
+        .checked_add(img_len)
+        .filter(|&end| end == bytes.len())
+        .ok_or_else(|| "linked-image length mismatch".to_string())?;
+    Ok((snapshot, layout, attach, bytes[pos..end].to_vec()))
 }
 
 /// Structured pool failure.
@@ -1686,4 +1667,73 @@ fn quit_main_looper(vm: &mut Vm) -> Result<(), String> {
     vm.call_method(looper, "quitSafely", "()V", &[])
         .map_err(|e| format!("quitSafely: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod payload_tests {
+    use super::*;
+
+    /// Build a minimal valid frame: no binder entries, no attach record, one
+    /// snapshot byte and one image byte.
+    fn valid_frame() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&BOOT_PAYLOAD_MAGIC.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.push(0); // attach marker: none
+        out.extend_from_slice(&1u64.to_le_bytes());
+        out.push(b'S');
+        out.extend_from_slice(&1u64.to_le_bytes());
+        out.push(b'I');
+        out
+    }
+
+    #[test]
+    fn valid_frame_round_trips() {
+        let (snapshot, layout, attach, image) =
+            decode_boot_payload(&valid_frame()).expect("valid frame");
+        assert_eq!(snapshot, b"S");
+        assert!(layout.is_empty());
+        assert!(attach.is_none());
+        assert_eq!(image, b"I");
+    }
+
+    #[test]
+    fn crafted_lengths_are_errors_not_panics() {
+        // Every crafted length must return `Err`, never wrap or slice-panic.
+        // The snapshot length sits at a known offset in this frame; find it by
+        // rebuilding the prefix so the mutation is unambiguous.
+        let prefix_len = 8 + 1; // magic+count, attach marker
+        let snap_len_off = prefix_len;
+        let img_len_off = prefix_len + 8 + 1;
+
+        for &(off, name) in &[(snap_len_off, "snap_len"), (img_len_off, "img_len")] {
+            for &value in &[u64::MAX, u64::MAX - 7, u32::MAX as u64, 1u64 << 62] {
+                let mut frame = valid_frame();
+                frame[off..off + 8].copy_from_slice(&value.to_le_bytes());
+                let err = decode_boot_payload(&frame)
+                    .expect_err(&format!("crafted {name}={value} must be rejected"));
+                assert!(!err.is_empty());
+            }
+        }
+
+        // A crafted binder descriptor length must also be rejected cleanly.
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&BOOT_PAYLOAD_MAGIC.to_le_bytes());
+        frame.extend_from_slice(&1u32.to_le_bytes());
+        frame.extend_from_slice(&7u64.to_le_bytes());
+        frame.extend_from_slice(&u32::MAX.to_le_bytes());
+        let err = decode_boot_payload(&frame).expect_err("descriptor length must be rejected");
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn truncated_frames_are_errors() {
+        for cut in 0..valid_frame().len() {
+            let frame = &valid_frame()[..cut];
+            assert!(
+                decode_boot_payload(frame).is_err(),
+                "truncated frame of {cut} bytes must be rejected"
+            );
+        }
+    }
 }

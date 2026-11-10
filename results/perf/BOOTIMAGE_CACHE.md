@@ -127,3 +127,107 @@ Full-boot control (`ACOS_NO_BOOT_CACHE=1`): `Vm::new` alone ~17 ms, launch wall
   A/B escape.
 * `crates/acos-runtime/src/boot_image_cache.rs` — `CACHE_FORMAT_VERSION = 2`.
 * `tools/diff-dexprogs.sh` — honours `CARGO_TARGET_DIR` and `ACOS_BIN`.
+
+---
+
+# W131-A — parsed DEX pool serialization + boot-cache hardening
+
+**Status:** implemented, measured, honest negative on the latency target. Clean
+worktree of `47e1c38` (HEAD), `CARGO_TARGET_DIR=.cache/target-w131a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `tools/guarded.sh`, release build, real corelib,
+fixture `fixtures/build/apps/counter.apk`.
+
+## 1. What this wave adds
+
+The W114-A linked `BootImage` still re-parsed the three eager boot DEX files on
+every cold process (`BootImage::from_bytes` → `acos_dex::shared_dex`). This wave
+persists the **parsed id/string/type/method pools** of each provider inside the
+same framed cache payload, so a restore can rebuild each `acos_dex::DexFile`
+from the tables plus a plain re-read of the raw bytes instead of re-running
+`DexFile::parse`.
+
+* `crates/acos-dex/src/persist.rs` (new): `DexTables` (header, `string_data_offs`,
+  `type_ids`, `proto_ids`, `field_ids`, `method_ids`, `class_defs`,
+  `call_site_ids`, `method_handles`, `map`, optional `hiddenapi`) with borsh
+  derives; `DexFile::{to_tables, from_tables}`. `from_tables` validates the raw
+  magic/size and header/pool length agreement, and returns a structured
+  `DexError` on any mismatch.
+* `crates/acos-dex/src/cache.rs`: `BootCache::get_or_load_with_tables(path,
+  Option<DexTables>)`. A table failure falls back transparently to
+  `DexFile::parse`; the cache never installs a half-validated file.
+* `crates/acos-vm/src/snapshot.rs`: `SerializedBootImage` gains
+  `dex_tables: Vec<Option<DexTables>>`; `to_bytes` snapshots the pools and
+  `from_bytes` consumes them. `ACOS_BOOT_CACHE_NO_DEX_TABLES=1` is the
+  same-binary A/B escape.
+* `CACHE_FORMAT_VERSION` 2 → 3 (old entries miss).
+
+## 2. Hardening (W121-A #7, #8, #9)
+
+* **#7 checked frame arithmetic.** `session_pool::decode_boot_payload` now does
+  every `pos + n` through `checked_add` filtered by `end <= bytes.len()`; a
+  crafted `snap_len`/`img_len` (including `u64::MAX`) is a clean `Err`. Covered
+  by `session_pool::payload_tests`.
+* **#8 boot-dir containment.** `BootImage::from_bytes` canonicalises
+  `boot_dir` and every `dex_paths` entry and rejects a provider outside the
+  boot tree (or one that does not resolve). A poisoned cache entry is a
+  structured miss, not an arbitrary host file read.
+* **#9 cache dir identity.** `ensure_private_dir` rejects a symlinked root
+  before `create_dir_all`, re-checks after creation, requires
+  `st_uid == euid` (read from `/proc/self/status`, no `unsafe`), and verifies
+  mode `0700` after tightening. Tested by `symlinked_cache_dir_is_rejected` /
+  `non_directory_cache_root_is_rejected`.
+
+## 3. Measurement (5 interleaved fresh-process release runs)
+
+Separate warm cache dirs per variant, fixed `ACOS_CACHE_DIR`/`ACOS_PROFILE_OUT`
+per variant so the snapshot `property_hash` matches; alternating order.
+
+| metric (warm, p50 of 5) | before (no DEX tables) | after (DEX tables) | Δ |
+|---|---:|---:|---:|
+| `boot_runtime` | **188.9 ms** | **193.2 ms** | **+4.3 ms (+2.3 %)** |
+| launch wall | **938 ms** | **949 ms** | **+11 ms (+1.2 %)** |
+| peak RSS | 537 MiB | 536 MiB | −1 MiB |
+| boot-class `class_parses` | 1 096 | 1 096 | 0 |
+| cache entry bytes | 25 576 627 | **46 906 082** | **+21.3 MB (+83 %)** |
+| blocker | `PropertyValuesHolder.nGetFloatMethod` | same | unchanged |
+
+The raw W114-A baseline (`boot_runtime` p50 175.3 ms) is not directly
+comparable: this host/HEAD measures the no-tables control at 188.9 ms. Within
+one binary, serializing the parsed pools is a **net loss** of ~4 ms and 21 MB.
+
+**Why it loses.** The three eager providers total ~9.1 MiB; `DexFile::parse`
+for them is only a few milliseconds, while the borsh decode of the 21.3 MB
+`DexTables` blob costs more than the parse it replaces. The raw read (~9 MiB)
+is paid in both variants. `from_tables` does rebuild a full `DexFile`, so
+correctness is unaffected, but the ~13–30 ms target is not reachable this way
+with the current eager providers.
+
+**Honest recommendation.** Keep the feature behind the cache and behind
+`ACOS_BOOT_CACHE_NO_DEX_TABLES=1`, but do not enable it by default: it is
+strictly worse on time and size. The real levers remain the anonymous ~443 MiB
+RSS (W111-A §4) and the framework `<clinit>` time.
+
+## 4. Acceptance evidence (clean worktree, W131-A)
+
+| gate | result |
+|---|---|
+| `cargo test -p acos-runtime boot_image_cache` | **12/12 pass** (incl. 2 new hardening tests) |
+| `cargo test -p acos-runtime payload_tests` | **3/3 pass** (crafted/truncated frames) |
+| `cargo test -p acos-dex -p acos-vm -p acos-runtime` | green (one pre-existing PMS golden failure, `pms_java_app_info_matches_the_reference_capture`, independent of this diff) |
+| `cargo clippy -p acos-dex -p acos-vm -p acos-runtime --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | pass |
+| `tools/diff-dexprogs.sh --corelib real` | **27 / 27 pass** |
+| `tools/diff-dexprogs.sh --corelib real --gc-stress` | **27 / 27 pass** |
+| `acos launch counter.apk` ladder | same stages, same blocker as the no-tables control |
+
+## 5. Files
+
+* `crates/acos-dex/src/persist.rs` (new) — `DexTables`, `to_tables`/`from_tables`.
+* `crates/acos-dex/src/{lib,annotation,encoded,hiddenapi,cache}.rs` — borsh
+  derives, `get_or_load_with_tables`.
+* `crates/acos-vm/src/snapshot.rs` — `SerializedBootImage::dex_tables`,
+  `to_bytes`/`from_bytes`, boot-dir containment.
+* `crates/acos-runtime/src/boot_image_cache.rs` — `CACHE_FORMAT_VERSION = 3`,
+  owner/symlink/mode checks + tests.
+* `crates/acos-runtime/src/session_pool.rs` — checked `decode_boot_payload`,
+  frame tests.
