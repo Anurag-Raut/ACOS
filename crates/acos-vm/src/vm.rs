@@ -1006,6 +1006,7 @@ impl Vm {
 
     /// Build the vtable / interface default tables for a class.
     pub fn link_class(&mut self, id: ClassId) -> VmResult<()> {
+        let __prof = crate::profile::start();
         // Start from the superclass tables.
         let (mut vtable, mut vindex, mut vmap) = if let Some(sup) =
             self.classes[id as usize].super_class
@@ -1070,6 +1071,7 @@ impl Vm {
         c.vtable = vtable;
         c.vtable_index = vindex;
         c.virtual_map = vmap;
+        crate::profile::record_class_link(self, id, __prof);
         Ok(())
     }
 
@@ -1182,6 +1184,7 @@ impl Vm {
         def_idx: usize,
         desc: &str,
     ) -> VmResult<ClassId> {
+        let __prof = crate::profile::start();
         let def = &file.class_defs()[def_idx];
         let is_interface = def.access_flags & acos_dex::access::INTERFACE != 0;
         let id = self.create_class(ClassSpec {
@@ -1257,6 +1260,7 @@ impl Vm {
         // caller can observe a partially linked class.
         self.class_by_desc.insert(desc.to_string(), id);
         self.metrics.classes_loaded = self.classes.len();
+        crate::profile::record_class_parse(desc, __prof);
         Ok(id)
     }
 
@@ -1647,6 +1651,7 @@ impl Vm {
         self.heap.gc_count += 1;
         self.heap.gc_nanos += start.elapsed().as_nanos() as u64;
         self.metrics.gc_count = self.heap.gc_count;
+        crate::profile::record_gc(start);
         self.gc_threshold = (self.heap.live_bytes * 2)
             .max(self.heap.max_bytes / 16)
             .max(1 << 20);
@@ -2025,6 +2030,7 @@ impl Vm {
     }
 
     pub fn throw_new(&mut self, desc: &str, message: Option<&str>) -> VmError {
+        crate::profile::record_exception();
         let thread = self.current_thread;
         match self.new_throwable(desc, message) {
             Ok(h) => {

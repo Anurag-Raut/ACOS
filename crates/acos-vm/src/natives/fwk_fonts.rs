@@ -230,7 +230,7 @@ fn fb_build(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             .map(|b| b.axes)
             .unwrap_or_default()
     });
-    let (_bytes, addr) = read_font_buffer(vm, buffer)?;
+    let addr = font_buffer_addr(vm, buffer)?;
     let font = resolve_font_ref(&path, ttc as u32, weight, italic, &axes);
     let rec = FontRec {
         path,
@@ -578,20 +578,22 @@ fn long_array(vm: &Vm, h: Handle) -> VmResult<Vec<i64>> {
     }
 }
 
-/// Read the `java.nio.Buffer` direct address + `[position, limit)` window and
-/// copy the bytes out of the native-memory region.
-fn read_font_buffer(vm: &mut Vm, buffer: Handle) -> VmResult<(Vec<u8>, i64)> {
+/// Resolve a font `ByteBuffer`'s direct address without copying the font bytes.
+///
+/// `Font$Builder.nBuild` only stores the address for later rendering; it never
+/// reads the buffer. Copying the whole (often multi-hundred-KB) font out of
+/// native memory per font made booting the system font list a large native
+/// cost of a launch, so validate the buffer shape and return the address only.
+fn font_buffer_addr(vm: &mut Vm, buffer: Handle) -> VmResult<i64> {
     if buffer == crate::heap::NULL {
         return Err(unsupported("Font$Builder.nBuild without a font buffer"));
     }
     let addr = read_long_field(vm, buffer, "address")
         .ok_or_else(|| unsupported("Font$Builder.nBuild on a non-direct ByteBuffer"))?;
-    let pos = vm.get_instance_field_by_name(buffer, "position").unwrap_or(0) as i32;
-    let limit = vm.get_instance_field_by_name(buffer, "limit").unwrap_or(0) as i32;
-    let len = (limit - pos).max(0) as usize;
-    let start = addr + pos as i64;
-    let bytes = native_mem::read_bytes_at(vm, start, len)?;
-    Ok((bytes, addr))
+    // Touch the first byte so the mapped-region check the copying version
+    // performed still runs, without materialising the region.
+    let _ = native_mem::read_bytes_at(vm, addr, 1)?;
+    Ok(addr)
 }
 
 /// Read a 64-bit instance field (two consecutive slots) by name.

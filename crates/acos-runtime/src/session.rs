@@ -945,6 +945,7 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
     let started = Instant::now();
 
     // --- apk_parsed ---------------------------------------------------------
+    let __t = Instant::now();
     let apk_file = match Apk::open(apk) {
         Ok(apk) => apk,
         Err(e) => {
@@ -965,6 +966,10 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         ),
         Err(_) => (None, None),
     };
+    acos_vm::profile::add_stage(
+        "apk_parse",
+        __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+    );
 
     // A fresh launch replaces any prior VM state (the transport/surface seams
     // are process-global). This is the documented `shared-task` behaviour.
@@ -983,6 +988,7 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         trace_natives: state.limits.trace_natives,
         ..VmOptions::default()
     };
+    let __t = Instant::now();
     let (mut runtime, boot_thread) = match build_launch_runtime(options) {
         Ok(pair) => pair,
         Err(e) => {
@@ -995,8 +1001,13 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
             );
         }
     };
+    acos_vm::profile::add_stage(
+        "boot_runtime",
+        __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+    );
     runtime.vm_mut().host = HostGuard::new(state.limits.rss_max_bytes, state.limits.wall_secs);
 
+    let __t = Instant::now();
     // Route the APK's DEX `native` methods to the JNI dispatcher. This is
     // unconditional: without a JNI host (the default) a native call reports
     // `UNSUPPORTED_JAVA_API` with the `--native` hint.
@@ -1013,14 +1024,23 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
             return Err(e);
         }
     }
+    acos_vm::profile::add_stage(
+        "register_natives",
+        __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+    );
 
     // A cache-restored framework is already past `prepareMainLooper` +
     // `ActivityThread` + `attach`, so it skips `boot_app_process` and runs the
     // same real lifecycle from the restored heap (T-43/W102-A).
+    let __t = Instant::now();
     let report: LifecycleReport = match boot_thread {
         Some(thread) => runtime.boot_and_run_lifecycle_from_boot(apk, thread),
         None => runtime.boot_and_run_lifecycle(apk),
     };
+    acos_vm::profile::add_stage(
+        "lifecycle",
+        __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+    );
     let log_records = os_log::records();
     let mut lifecycle_msgs: Vec<String> = report.events.clone();
     lifecycle_msgs.extend(log_records.iter().map(|r| r.msg.clone()));
@@ -1084,6 +1104,11 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
     state.apk = Some(apk.to_path_buf());
     state.stage_reached = reached_stage;
     state.launch_events = lifecycle_msgs.clone();
+
+    if let Some(rt) = state.runtime.as_ref() {
+        acos_vm::profile::note_vm_footprint(rt.vm());
+    }
+    acos_vm::profile::emit_if_enabled();
 
     Ok(LaunchReport {
         stages,

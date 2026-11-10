@@ -174,10 +174,20 @@ impl Runtime {
         };
         let inner = (|| -> Result<Handle, LifecycleError> {
             let apk_path = apk_path.as_ref();
+            let __t = std::time::Instant::now();
             self.host()
                 .borrow_mut()
                 .install_package_from_apk(apk_path)?;
+            acos_vm::profile::add_stage(
+                "install_package",
+                __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+            );
+            let __t = std::time::Instant::now();
             self.load_app_dex(apk_path)?;
+            acos_vm::profile::add_stage(
+                "load_app_dex",
+                __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+            );
             self.run_lifecycle_after_boot(apk_path, activity_thread, &mut report)
         })();
         if let Err(e) = inner {
@@ -244,23 +254,38 @@ impl Runtime {
             .push_static_call("android.os.Looper", "loop", "()V", &[])?;
 
         // --- bindApplication -------------------------------------------------
+        let __t = std::time::Instant::now();
         let providers = provider_specs(apk_path)?;
         let app_thread =
             bind_app::deliver_bind_application(self.vm_mut(), thread, &app, &providers)?;
         report.bind_delivered = true;
         run_phase(self.vm_mut())?;
         report.app_created = initial_application_non_null(self.vm_mut(), thread);
+        acos_vm::profile::add_stage(
+            "bind_application",
+            __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+        );
 
         // --- ClientTransaction (launch + resume) -----------------------------
+        let __t = std::time::Instant::now();
         let tx = deliver_launch_transaction(self.vm_mut(), app_thread, &app, thread, apk_path)?;
         report.transaction_scheduled = true;
         run_phase(self.vm_mut())?;
         report.transaction_delivered = activity_created(self.vm_mut(), thread, tx.token);
+        acos_vm::profile::add_stage(
+            "client_transaction",
+            __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+        );
 
         // --- bounded shutdown ------------------------------------------------
+        let __t = std::time::Instant::now();
         quit_main_looper(self.vm_mut())?;
         run_phase(self.vm_mut())?;
         report.looper_quit = true;
+        acos_vm::profile::add_stage(
+            "shutdown",
+            __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+        );
         Ok(app_thread)
     }
 }

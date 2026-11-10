@@ -130,6 +130,7 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
         vm.threads[t].status = ThreadStatus::Running;
         let n = run_batch(vm, t, 0, true)?;
         vm.metrics.instructions += n;
+        crate::profile::add_instructions(n);
         if vm.threads.len() > 1 && vm.metrics.instructions >= next_yield {
             // Pre-empt the running thread for scheduling fairness, but never
             // resurrect a thread that blocked/parked during the batch. Race:
@@ -422,8 +423,9 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
     if let Some(f) = native {
         vm.metrics.invokes += 1;
         crate::bridge::record_native(vm, method);
+        let __prof = crate::profile::native_begin(vm, method);
         let ctx = NativeCtx { thread: t, frame: fi };
-        return match f(vm, ctx) {
+        let __r = match f(vm, ctx) {
             Ok(()) => {
                 pop_frame(vm, t);
                 Ok(())
@@ -434,6 +436,8 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
             }
             Err(e) => Err(e),
         };
+        crate::profile::native_end(__prof);
+        return __r;
     }
 
     if !matches!(
@@ -2339,6 +2343,7 @@ fn run_current_until_body(vm: &mut Vm, t: usize, base_depth: usize) -> VmResult<
     while vm.threads[t].frames.len() > base_depth {
         let n = run_batch(vm, t, base_depth, false)?;
         vm.metrics.instructions += n;
+        crate::profile::add_instructions(n);
     }
     if vm.pending_exception != NULL {
         let h = vm.pending_exception;
@@ -2426,6 +2431,7 @@ impl Vm {
             .copied();
         if let Some(mid) = clinit {
             self.note_clinit();
+            let __prof = crate::profile::clinit_begin(&self.class_desc_of_id(id));
             let t = self.current_thread;
             let base = self.threads[t].frames.len();
             push_frame_values(self, mid, NULL, &[])?;
@@ -2433,6 +2439,7 @@ impl Vm {
                 self.classes[id as usize].init = InitState::Failed;
                 return Err(self.wrap_in_exception_in_initializer(e));
             }
+            crate::profile::clinit_end(__prof);
         }
         self.classes[id as usize].init = InitState::Init;
         Ok(())

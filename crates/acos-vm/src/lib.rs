@@ -25,6 +25,7 @@ pub mod interp;
 pub mod javabridge;
 pub mod limits;
 pub mod natives;
+pub mod profile;
 pub mod snapshot;
 pub mod vfs;
 pub mod vm;
