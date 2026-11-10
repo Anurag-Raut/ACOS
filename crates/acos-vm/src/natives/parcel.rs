@@ -301,6 +301,13 @@ fn native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+/// Restore re-seed (T-43): allocate a fresh native parcel for a Java `Parcel`
+/// object that survived a snapshot. The boot process's handle is meaningless in
+/// a new process, and a restored `Parcel` at rest carries no live bytes.
+pub(crate) fn create_parcel_handle() -> u64 {
+    with_store(|s| s.table.create())
+}
+
 fn native_destroy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let _ = with_store(|s| s.table.free(handle));

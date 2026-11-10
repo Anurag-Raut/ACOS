@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use acos_aidl::{InterfaceInfo, MethodInfo, WireOp};
-use acos_parcel::{BinderId, BinderRegistry, Parcel};
+use acos_parcel::{BinderId, BinderKind, BinderRegistry, Parcel};
 use acos_protocol::Event;
 
 use crate::codec;
@@ -202,6 +202,52 @@ impl ServiceHost {
         &self.registry
     }
 
+    /// Every binder handle this host knows, as `(id, descriptor, kind)` sorted
+    /// by id. Snapshot of the process binder-id layout (T-43/W102-A).
+    #[must_use]
+    pub fn export_binder_layout(&self) -> Vec<(u64, String, BinderKind)> {
+        self.registry.binders()
+    }
+
+    /// Re-create the binder handles at their boot-process ids and re-point the
+    /// dispatch tables at them (T-43/W102-A restore re-seed).
+    ///
+    /// A restored heap still carries the boot process's raw `mObject` /
+    /// `mNativeData` values; without this a `BinderProxy` transaction reaches a
+    /// fresh host whose ids were allocated in a different order and fails with
+    /// `unknown binder handle`.
+    pub fn import_binder_layout(&mut self, layout: &[(u64, String, BinderKind)]) {
+        for (id, desc, kind) in layout {
+            self.registry.register_at(*id, desc.clone(), *kind);
+        }
+        // Re-point the dispatch tables. Iterating by ascending id means the
+        // highest id for a descriptor wins, matching the boot host (a later
+        // `register` of the same descriptor, e.g. the recording ATMS wrapper,
+        // is what `entries[descriptor].binder` held).
+        for (id, desc, _) in layout {
+            let static_desc = self
+                .entries
+                .keys()
+                .copied()
+                .find(|k| *k == desc.as_str())
+                .or_else(|| {
+                    self.aux
+                        .keys()
+                        .copied()
+                        .find(|k| *k == desc.as_str())
+                });
+            if let Some(d) = static_desc {
+                self.binder_descriptors.insert(*id, d);
+                if let Some(entry) = self.entries.get_mut(d) {
+                    entry.binder = BinderId(*id);
+                }
+                if self.aux.contains_key(d) {
+                    self.aux.insert(d, BinderId(*id));
+                }
+            }
+        }
+    }
+
     /// Enable the per-call trace.
     pub fn enable_trace(&mut self, sink: Box<dyn TraceSink>) {
         self.trace = Some(sink);
@@ -313,6 +359,36 @@ impl ServiceHost {
             .and_then(|e| e.object.as_mut())
             .map(Box::as_mut)
             .expect("service object was just constructed"))
+    }
+
+    /// The ATMS attach record, if the activity service has one (T-43 re-seed).
+    #[must_use]
+    pub fn attached_process(&mut self) -> Option<(u64, i64, String)> {
+        let object = self.ensure("android.app.IActivityManager").ok()?;
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .and_then(|s| s.attached_process())
+    }
+
+    /// Re-create the `attachApplication` record in a fresh host after a
+    /// snapshot restore, so the restored framework's `finishAttachApplication`
+    /// finds its process (T-43).
+    pub fn seed_attached_process(
+        &mut self,
+        app_thread: u64,
+        seq: i64,
+        package: &str,
+    ) -> Result<()> {
+        let object = self.ensure("android.app.IActivityManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity service is not an AtmsService".into())
+            })?;
+        service.seed_attach(app_thread, seq, package);
+        Ok(())
     }
 
     /// Re-point the in-process package manager at `apk_path`.

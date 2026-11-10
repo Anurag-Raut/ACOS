@@ -708,6 +708,31 @@ impl AtmsService {
     }
 }
 
+impl AtmsService {
+    /// The attached process record, if any: `(app thread binder id, attach
+    /// seq, package)` (T-43 restore re-seed).
+    #[must_use]
+    pub fn attached_process(&self) -> Option<(u64, i64, String)> {
+        self.state.lock().ok().and_then(|s| {
+            s.process
+                .as_ref()
+                .map(|p| (p.app_thread.unwrap_or(0), p.attach_seq, p.package_name.clone()))
+        })
+    }
+
+    /// Re-create the `attachApplication` record after a snapshot restore.
+    ///
+    /// The snapshot carries the restored heap but not the in-process ATMS
+    /// state, so without this `finishAttachApplication` reports
+    /// `finishAttachApplication before attachApplication`. The record is the
+    /// same one the boot's real `attach` produced.
+    pub fn seed_attach(&mut self, app_thread: u64, seq: i64, package: &str) {
+        if let Ok(mut s) = self.state.lock() {
+            s.attach_application(app_thread, seq, package);
+        }
+    }
+}
+
 impl ServiceObject for AtmsService {
     fn call(
         &mut self,
@@ -737,7 +762,11 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);
                 let seq = args.get(1).and_then(Value::as_long).unwrap_or(0);
-                state.attach_application(app_thread.unwrap_or(0), seq, "dev.acos.fixtures.helloviews");
+                state.attach_application(
+                    app_thread.unwrap_or(0),
+                    seq,
+                    "dev.acos.fixtures.helloviews",
+                );
                 vec![]
             }
             (AtmsInterface::ActivityManager, "finishAttachApplication") => {
@@ -881,6 +910,10 @@ impl ServiceObject for AtmsService {
     fn drain_events(&mut self) -> Vec<Event> {
         let mut state = self.state.lock().unwrap();
         std::mem::take(&mut state.protocol_events)
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
     }
 }
 

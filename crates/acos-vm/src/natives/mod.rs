@@ -71,6 +71,12 @@ mod zip;
 use crate::error::VmResult;
 use crate::vm::Vm;
 
+/// Restore re-seed hook for `android.os.Parcel` (T-43): allocate a fresh
+/// native parcel handle for a restored Java `Parcel` object.
+pub(crate) fn create_parcel_handle() -> u64 {
+    parcel::create_parcel_handle()
+}
+
 /// Register every true native the M1 console tier needs.
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     lang::install(vm)?;

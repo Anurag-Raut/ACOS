@@ -260,6 +260,42 @@ impl BinderRegistry {
         self.register(descriptor, BinderKind::Local)
     }
 
+    /// Every registered handle as `(id, descriptor, kind)`, sorted by id.
+    ///
+    /// The boot-image cache uses this to snapshot the process's binder id
+    /// layout so a restored heap's raw handles can be re-seeded (T-43/W102-A).
+    #[must_use]
+    pub fn binders(&self) -> Vec<(u64, String, BinderKind)> {
+        let inner = lock(&self.inner);
+        let mut v: Vec<(u64, String, BinderKind)> = inner
+            .objects
+            .iter()
+            .map(|(id, r)| (*id, r.descriptor.clone(), r.kind))
+            .collect();
+        v.sort_unstable_by_key(|(id, _, _)| *id);
+        v
+    }
+
+    /// Re-create a handle at exactly `id` (restore re-seed).
+    ///
+    /// Unlike [`Self::register_local`] this preserves the boot process's id so
+    /// a restored heap's raw `mObject`/`mNativeData` value resolves, and it
+    /// advances `next_id` past `id` so a later allocation cannot collide.
+    pub fn register_at(&self, id: u64, descriptor: impl Into<String>, kind: BinderKind) {
+        let mut inner = lock(&self.inner);
+        inner.objects.insert(
+            id,
+            BinderRecord {
+                descriptor: descriptor.into(),
+                kind,
+                death_recipients: HashSet::new(),
+            },
+        );
+        if inner.next_id <= id {
+            inner.next_id = id.wrapping_add(1).max(1);
+        }
+    }
+
     /// Register a proxy (`android.os.BinderProxy`).
     pub fn register_proxy(&self, descriptor: impl Into<String>) -> BinderId {
         self.register(descriptor, BinderKind::Proxy)

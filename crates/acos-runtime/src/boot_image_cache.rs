@@ -109,6 +109,11 @@ fn next_nonce() -> u64 {
 /// disabled cache, not a launch error.
 #[must_use]
 pub fn from_env() -> Option<BootImageCache> {
+    if std::env::var("ACOS_NO_BOOT_CACHE").is_ok_and(|v| {
+        v == "1" || v.eq_ignore_ascii_case("on") || v.eq_ignore_ascii_case("true")
+    }) {
+        return None;
+    }
     if std::env::var("ACOS_BOOT_CACHE").is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("off")) {
         return None;
     }
@@ -338,6 +343,22 @@ impl BootImageCache {
             }
         }
     }
+}
+
+/// Domain-separated cache key: [`image_key`] mixed with a variant tag.
+///
+/// The framework-init snapshot (`variant = "framework"`) and a bare core-VM
+/// template (`variant = "session-template"`) share the same boot classpath and
+/// ACOS version but are different payloads, so they must not collide.
+#[must_use]
+pub fn salted_key(variant: &str, boot_dir: Option<&Path>, corelib: CoreLib) -> u64 {
+    let mut h = image_key(boot_dir, corelib);
+    for b in variant.as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h ^= 0xff;
+    h.wrapping_mul(0x0000_0100_0000_01b3)
 }
 
 /// Compute the content-addressed key for a boot classpath definition.

@@ -328,6 +328,24 @@ impl BinderTransport for ServiceTransport {
     fn unlink_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
+
+    fn seed_binder(&self, id: u64, handle: Handle, proxy: bool) {
+        if proxy {
+            insert_bounded(
+                &mut self.proxies.borrow_mut(),
+                id,
+                handle,
+                MAX_BINDER_IDENTITIES,
+            );
+        } else {
+            insert_bounded(
+                &mut self.locals.borrow_mut(),
+                id,
+                handle,
+                MAX_BINDER_IDENTITIES,
+            );
+        }
+    }
 }
 
 /// True when the decoded method for `(descriptor, code)` is owned by the

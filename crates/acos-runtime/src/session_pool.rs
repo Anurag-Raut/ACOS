@@ -49,7 +49,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use acos_dex::DexFile;
-use acos_parcel::{set_process_identity, BinderId};
+use acos_parcel::{set_process_identity, BinderId, BinderKind};
 use acos_services::ServiceHost;
 use acos_vm::javabridge::JavaValue;
 use acos_vm::limits::HostGuard;
@@ -61,6 +61,143 @@ use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread
 use crate::boot_image_cache::{BootImageCache, LoadResult};
 use crate::transport::ServiceTransport;
 use crate::{Runtime, FIXTURE_UID};
+
+/// Magic for the framed boot-cache payload (VM snapshot + binder layout).
+const BOOT_PAYLOAD_MAGIC: u32 = 0x314C_4241;
+/// Sanity bound on the binder-layout entry count decoded from a cache file.
+const MAX_BOOT_PAYLOAD_ENTRIES: usize = 1 << 20;
+
+/// A decoded boot-cache payload: `(vm snapshot, binder layout, attach record)`.
+type BootPayload = (
+    Vec<u8>,
+    Vec<(u64, String, BinderKind)>,
+    Option<(u64, i64, String)>,
+);
+
+fn kind_code(kind: BinderKind) -> u8 {
+    match kind {
+        BinderKind::Local => 0,
+        BinderKind::Proxy => 1,
+        BinderKind::WeakLocal => 2,
+        BinderKind::WeakProxy => 3,
+    }
+}
+
+fn kind_from_code(code: u8) -> Option<BinderKind> {
+    Some(match code {
+        0 => BinderKind::Local,
+        1 => BinderKind::Proxy,
+        2 => BinderKind::WeakLocal,
+        3 => BinderKind::WeakProxy,
+        _ => return None,
+    })
+}
+
+/// Frame an `ACOSSNAP` snapshot together with the binder-id layout the restored
+/// heap depends on. The cache stores this single opaque payload (T-43).
+fn encode_boot_payload(
+    snapshot: &[u8],
+    layout: &[(u64, String, BinderKind)],
+    attach: Option<&(u64, i64, String)>,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(snapshot.len() + 96 + layout.len() * 48);
+    out.extend_from_slice(&BOOT_PAYLOAD_MAGIC.to_le_bytes());
+    out.extend_from_slice(&(layout.len() as u32).to_le_bytes());
+    for (id, desc, kind) in layout {
+        out.extend_from_slice(&id.to_le_bytes());
+        let bytes = desc.as_bytes();
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(bytes);
+        out.push(kind_code(*kind));
+    }
+    match attach {
+        Some((app_thread, seq, package)) => {
+            out.push(1);
+            out.extend_from_slice(&app_thread.to_le_bytes());
+            out.extend_from_slice(&seq.to_le_bytes());
+            out.extend_from_slice(&(package.len() as u32).to_le_bytes());
+            out.extend_from_slice(package.as_bytes());
+        }
+        None => out.push(0),
+    }
+    out.extend_from_slice(&(snapshot.len() as u64).to_le_bytes());
+    out.extend_from_slice(snapshot);
+    out
+}
+
+/// Decode a [`encode_boot_payload`] frame. Every field is length-checked, so a
+/// corrupt cache file is a clean `Err` and the caller falls back to a boot.
+fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload, String> {
+    if bytes.len() < 8 {
+        return Err("truncated payload header".to_string());
+    }
+    if u32::from_le_bytes(bytes[0..4].try_into().unwrap_or_default()) != BOOT_PAYLOAD_MAGIC {
+        return Err("bad payload magic".to_string());
+    }
+    let count = u32::from_le_bytes(bytes[4..8].try_into().unwrap_or_default()) as usize;
+    if count > MAX_BOOT_PAYLOAD_ENTRIES {
+        return Err(format!("binder layout entry count {count} too large"));
+    }
+    let mut pos = 8usize;
+    let mut layout = Vec::with_capacity(count);
+    for _ in 0..count {
+        if bytes.len() < pos + 12 {
+            return Err("truncated binder entry".to_string());
+        }
+        let id = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
+        pos += 8;
+        let dlen = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap_or_default()) as usize;
+        pos += 4;
+        if bytes.len() < pos + dlen + 1 {
+            return Err("truncated binder descriptor".to_string());
+        }
+        let desc = std::str::from_utf8(&bytes[pos..pos + dlen])
+            .map_err(|_| "binder descriptor is not utf-8".to_string())?
+            .to_string();
+        pos += dlen;
+        let kind = kind_from_code(bytes[pos]).ok_or_else(|| "bad binder kind".to_string())?;
+        pos += 1;
+        layout.push((id, desc, kind));
+    }
+    if bytes.len() < pos + 1 {
+        return Err("truncated attach marker".to_string());
+    }
+    let attach = match bytes[pos] {
+        0 => None,
+        1 => {
+            pos += 1;
+            if bytes.len() < pos + 20 {
+                return Err("truncated attach record".to_string());
+            }
+            let app_thread =
+                u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
+            pos += 8;
+            let seq = i64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default());
+            pos += 8;
+            let plen =
+                u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap_or_default()) as usize;
+            pos += 4;
+            if bytes.len() < pos + plen {
+                return Err("truncated attach package".to_string());
+            }
+            let package = std::str::from_utf8(&bytes[pos..pos + plen])
+                .map_err(|_| "attach package is not utf-8".to_string())?
+                .to_string();
+            pos += plen;
+            Some((app_thread, seq, package))
+        }
+        other => return Err(format!("bad attach marker {other}")),
+    };
+    if bytes.len() < pos + 8 {
+        return Err("truncated snapshot length".to_string());
+    }
+    let snap_len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default()) as usize;
+    pos += 8;
+    if bytes.len() != pos + snap_len {
+        return Err("snapshot length mismatch".to_string());
+    }
+    Ok((bytes[pos..].to_vec(), layout, attach))
+}
 
 /// Structured pool failure.
 #[derive(Debug, thiserror::Error)]
@@ -271,23 +408,61 @@ pub struct SessionTemplate {
     heap_max_bytes: usize,
     boot_classes: usize,
     boot_wall: Duration,
+    from_cache: bool,
 }
 
 impl SessionTemplate {
     /// Boot a core `Vm` once and snapshot it. This is the only step that pays
     /// the full boot-classpath cost; every session afterwards is a restore.
+    ///
+    /// When the on-disk boot cache is enabled a warm bare-VM snapshot is loaded
+    /// instead of booting; a miss boots once and publishes the snapshot. Set
+    /// `ACOS_NO_BOOT_CACHE=1` (or `ACOS_BOOT_CACHE=0`) to opt out.
     pub fn boot(options: VmOptions) -> Result<SessionTemplate, PoolError> {
+        let cache = crate::boot_image_cache::from_env();
+        let boot_dir = acos_vm::vm::default_boot_dir(options.boot_dir.as_deref());
+        let key = cache.as_ref().map(|_| {
+            crate::boot_image_cache::salted_key(
+                "session-template",
+                boot_dir.as_deref(),
+                options.corelib,
+            )
+        });
+        if let (Some(cache), Some(key)) = (cache.as_ref(), key) {
+            if let LoadResult::Hit(bytes) = cache.load(key) {
+                if let Ok(vm) = Vm::restore(&bytes) {
+                    return Ok(SessionTemplate {
+                        snapshot: Arc::from(bytes.into_boxed_slice()),
+                        corelib: options.corelib,
+                        heap_max_bytes: options.heap_max_bytes,
+                        boot_classes: vm.classes.len(),
+                        boot_wall: Duration::ZERO,
+                        from_cache: true,
+                    });
+                }
+            }
+        }
         let started = Instant::now();
         let vm = Vm::new(options.clone()).map_err(PoolError::Boot)?;
         let snapshot = vm.snapshot().map_err(PoolError::Boot)?;
+        if let (Some(cache), Some(key)) = (cache.as_ref(), key) {
+            let _ = cache.store(key, &snapshot);
+        }
         let template = SessionTemplate {
             snapshot: Arc::from(snapshot.into_boxed_slice()),
             corelib: options.corelib,
             heap_max_bytes: options.heap_max_bytes,
             boot_classes: vm.classes.len(),
             boot_wall: started.elapsed(),
+            from_cache: false,
         };
         Ok(template)
+    }
+
+    /// Whether the template snapshot came from the on-disk boot cache.
+    #[must_use]
+    pub fn from_cache(&self) -> bool {
+        self.from_cache
     }
 
     /// Restore one fresh session `Vm` from the template snapshot.
@@ -824,6 +999,13 @@ impl Drop for SessionPool {
 #[derive(Debug, Clone)]
 pub struct RuntimeTemplate {
     snapshot: Arc<[u8]>,
+    /// The boot process's binder-id layout, re-applied on every restore so the
+    /// restored heap's raw `mObject`/`mNativeData` handles resolve (T-43).
+    binder_layout: Arc<[(u64, String, BinderKind)]>,
+    /// The boot process's `attachApplication` record `(app thread binder id,
+    /// attach seq, package)`, replayed into a fresh ATMS so the restored
+    /// framework's `finishAttachApplication` finds its process (T-43).
+    attach: Option<(u64, i64, String)>,
     activity_thread: u32,
     boot_ms: f64,
     snapshot_ms: f64,
@@ -909,6 +1091,17 @@ impl RuntimeTemplate {
         }
 
         let boot_ms = started.elapsed().as_secs_f64() * 1000.0;
+        // Capture the binder id layout *before* the snapshot bytes leave the
+        // process: the restored heap references these raw ids.
+        let binder_layout: Vec<(u64, String, BinderKind)> =
+            rt.host().borrow().export_binder_layout();
+        // The ATMS attach record is per-process state the restored heap has
+        // already executed; replay it into the fresh host on restore.
+        let attach_seed: Option<(u64, i64, String)> = rt
+            .host()
+            .borrow_mut()
+            .attached_process()
+            .or_else(|| attach.app_thread.map(|b| (b.0, attach.start_seq, String::new())));
         let t = Instant::now();
         let snapshot = rt.vm().snapshot().map_err(PoolError::Boot)?;
         let snapshot_ms = t.elapsed().as_secs_f64() * 1000.0;
@@ -922,11 +1115,14 @@ impl RuntimeTemplate {
                 ))
             })?;
         if let (Some(cache), Some(key)) = (cache, cache_key) {
-            let _ = cache.store(key, &snapshot);
+            let payload = encode_boot_payload(&snapshot, &binder_layout, attach_seed.as_ref());
+            let _ = cache.store(key, &payload);
         }
         drop(guard);
         Ok(RuntimeTemplate {
             snapshot: Arc::from(snapshot),
+            binder_layout: Arc::from(binder_layout),
+            attach: attach_seed,
             activity_thread,
             boot_ms,
             snapshot_ms,
@@ -969,7 +1165,12 @@ impl RuntimeTemplate {
     /// launch; the restored `Vm` is dropped after recovering the preserved
     /// `ActivityThread` handle.
     fn from_cached(bytes: Vec<u8>, started: Instant) -> Result<RuntimeTemplate, PoolError> {
-        let vm = Vm::restore(&bytes).map_err(PoolError::Restore)?;
+        let (snapshot, binder_layout, attach) = decode_boot_payload(&bytes).map_err(|e| {
+            PoolError::Restore(VmError::SnapshotFormat(format!(
+                "boot cache payload: {e}"
+            )))
+        })?;
+        let vm = Vm::restore(&snapshot).map_err(PoolError::Restore)?;
         let activity_thread = vm
             .find_instance_of_class("Landroid/app/ActivityThread;")
             .ok_or_else(|| {
@@ -981,7 +1182,9 @@ impl RuntimeTemplate {
         drop(vm);
         let load_ms = started.elapsed().as_secs_f64() * 1000.0;
         Ok(RuntimeTemplate {
-            snapshot: Arc::from(bytes),
+            snapshot: Arc::from(snapshot),
+            binder_layout: Arc::from(binder_layout),
+            attach,
             activity_thread,
             boot_ms: 0.0,
             snapshot_ms: load_ms,
@@ -1026,8 +1229,29 @@ impl RuntimeTemplate {
     /// `ActivityThread` and its `Looper`) comes from the snapshot. The app DEX
     /// is added by the caller before [`RuntimeLaunch::run`].
     pub fn restore_runtime(&self) -> Result<Runtime, PoolError> {
-        let vm = Vm::restore(&self.snapshot).map_err(PoolError::Restore)?;
-        Ok(Runtime::with_vm(vm, ServiceHost::standard()))
+        let mut vm = Vm::restore(&self.snapshot).map_err(PoolError::Restore)?;
+        // Looper/parcel/binder identity are process state the snapshot does not
+        // carry; rebuild them before any framework bytecode runs (T-43).
+        let seed = vm.reseed_after_restore();
+        let mut host = ServiceHost::standard();
+        host.import_binder_layout(&self.binder_layout);
+        // Re-create the ATMS attach record the restored ActivityThread already
+        // performed, so `finishAttachApplication` finds its process.
+        if let Some((app_thread, seq, package)) = &self.attach {
+            if let Err(e) = host.seed_attached_process(*app_thread, *seq, package) {
+                // A missing activity service means the launch will surface the
+                // same error later; do not fail the restore here.
+                let _ = e;
+            }
+        }
+        let rt = Runtime::with_vm(vm, host);
+        for &(id, handle) in &seed.local_binders {
+            acos_vm::natives::binder::seed_local_binder(id, handle);
+        }
+        for &(id, handle) in &seed.binder_proxies {
+            acos_vm::natives::binder::seed_binder_proxy(id, handle);
+        }
+        Ok(rt)
     }
 
     /// The preserved `android.app.ActivityThread` handle in the restored `Vm`.

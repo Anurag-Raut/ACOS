@@ -51,6 +51,7 @@ use crate::heap::{
     ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, StackTraceElementData, ThreadData,
     NULL,
 };
+use crate::javabridge::JavaValue;
 use crate::vm::{CoreLib, ThreadRT, ThreadStatus, Vm, VmOptions};
 
 /// File magic at offset 0 of every snapshot.
@@ -58,6 +59,17 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"ACOSSNAP";
 /// Snapshot format version. Bump on any layout change; restore refuses to read
 /// a stream whose version differs.
 pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+
+/// Process-native identity recovered from a restored `Vm` (T-43).
+#[derive(Clone, Debug, Default)]
+pub struct RestoreSeed {
+    /// Local Java `Binder` instances: `(binder id, heap handle)`.
+    pub local_binders: Vec<(u64, Handle)>,
+    /// Java `BinderProxy` instances: `(binder id, heap handle)`.
+    pub binder_proxies: Vec<(u64, Handle)>,
+    /// `android.os.MessageQueue.mPtr` values that need a live native looper.
+    pub message_queue_ptrs: Vec<u64>,
+}
 
 /// Parsed snapshot header (also the tamper surface for mismatch tests).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -757,6 +769,87 @@ impl Vm {
             }
         }
         None
+    }
+
+    /// Every heap instance whose class is `desc` or a subclass of it.
+    ///
+    /// Heap handles are slot-preserving across snapshot/restore, so the
+    /// returned handles are valid after restore. Used by the T-43 re-seed to
+    /// find the binder and looper objects a restored heap still references.
+    #[must_use]
+    pub fn instances_of_class(&self, desc: &str) -> Vec<Handle> {
+        let Some(&root) = self.class_by_desc.get(desc) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for (idx, slot) in self.heap.objects.iter().enumerate() {
+            let Some(Object::Instance { class, .. }) = slot else {
+                continue;
+            };
+            let mut cur = Some(*class);
+            while let Some(c) = cur {
+                if c == root {
+                    out.push(idx as Handle);
+                    break;
+                }
+                cur = self.classes.get(c as usize).and_then(|k| k.super_class);
+            }
+        }
+        out
+    }
+
+    /// Re-seed the process-native tables a restored heap still references and
+    /// return the binder identity the runtime must import (T-43).
+    ///
+    /// The snapshot stores Java `Binder`/`BinderProxy` handles (the boot
+    /// process's `mObject`/`mNativeData`), `MessageQueue.mPtr` and `Parcel`
+    /// native handles, but not the native tables they index. This recreates a
+    /// live looper for every restored `MessageQueue`, a fresh native parcel for
+    /// every restored `Parcel`, and returns the binder ids for the runtime to
+    /// seed into its transport.
+    pub fn reseed_after_restore(&mut self) -> RestoreSeed {
+        // Loopers: `nativePollOnce` would otherwise fail on the first park.
+        for handle in self.instances_of_class("Landroid/os/MessageQueue;") {
+            if let Ok(JavaValue::Long(ptr)) = self.get_field(handle, "mPtr") {
+                if ptr > 0 {
+                    let _ = crate::natives::looper::ensure_looper(ptr as u64);
+                }
+            }
+        }
+        // Parcels: a restored `Parcel` carries a boot-process handle into a
+        // table that no longer exists; give it a live one (empty at rest).
+        for handle in self.instances_of_class("Landroid/os/Parcel;") {
+            let new = crate::natives::create_parcel_handle();
+            let _ = self.set_field(handle, "mNativePtr", JavaValue::Long(new as i64));
+        }
+
+        let mut seed = RestoreSeed::default();
+        for handle in self.instances_of_class("Landroid/os/Binder;") {
+            if let Ok(JavaValue::Long(v)) = self.get_field(handle, "mObject") {
+                if v > 0 {
+                    seed.local_binders.push((v as u64, handle));
+                }
+            }
+        }
+        for handle in self.instances_of_class("Landroid/os/BinderProxy;") {
+            if let Ok(JavaValue::Long(v)) = self.get_field(handle, "mNativeData") {
+                if v > 0 {
+                    seed.binder_proxies.push((v as u64, handle));
+                }
+            }
+        }
+        for handle in self.instances_of_class("Landroid/os/MessageQueue;") {
+            if let Ok(JavaValue::Long(v)) = self.get_field(handle, "mPtr") {
+                if v > 0 {
+                    seed.message_queue_ptrs.push(v as u64);
+                }
+            }
+        }
+        seed.local_binders.sort_unstable_by_key(|(id, _)| *id);
+        seed.binder_proxies.sort_unstable_by_key(|(id, _)| *id);
+        seed.message_queue_ptrs.sort_unstable();
+        seed.message_queue_ptrs.dedup();
+        seed
     }
 
     /// Parse only the header of a snapshot (used for refusal tests and

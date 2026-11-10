@@ -157,6 +157,38 @@ pub fn handle_for_ptr(ptr: u64) -> Option<LooperHandle> {
     PROC.with(|p| p.borrow().loopers.get(&ptr).map(|l| l.handle.clone()))
 }
 
+/// Restore re-seed: make sure a live looper exists for `ptr`.
+///
+/// A restored snapshot carries the boot process's `MessageQueue.mPtr` in a Java
+/// field but no native `epoll`/`eventfd` state; without this the first
+/// `nativePollOnce` reports `unknown MessageQueue pointer`. Looper ids are
+/// allocated sequentially from 1, so re-creating loopers until `ptr` is reached
+/// reproduces the boot id. Returns `false` for a `0`/implausible pointer (the
+/// caller then falls back to the real boot).
+#[must_use]
+pub fn ensure_looper(ptr: u64) -> bool {
+    if ptr == 0 {
+        return true;
+    }
+    if handle_for_ptr(ptr).is_some() {
+        return true;
+    }
+    // A corrupt snapshot must not make the re-seed allocate without bound.
+    const MAX_SEED_LOOPER_ID: u64 = 4096;
+    if ptr > MAX_SEED_LOOPER_ID {
+        return false;
+    }
+    PROC.with(|p| {
+        let mut p = p.borrow_mut();
+        while p.next_id < ptr {
+            if p.create_looper().is_err() {
+                return false;
+            }
+        }
+        p.loopers.contains_key(&ptr)
+    })
+}
+
 #[derive(Debug)]
 struct LooperState {
     handle: LooperHandle,

@@ -1,0 +1,37 @@
+{
+  "wave": "W102-A",
+  "task": "framework bring-up through the boot cache (control for the BootImage lever)",
+  "date": "2026-11-11",
+  "fixture": "fixtures/build/apps/counter.apk",
+  "profile": "dev",
+  "corelib": "real",
+  "method": "5 interleaved fresh-process rounds of `acos bench launch --runs 1`; before = ACOS_NO_BOOT_CACHE=1 (full Vm::new framework boot), after = warm ACOS_CACHE_DIR (disk ACOSSNAP load + Vm::restore with the ~54 ms cold class relink).",
+  "before_boot_ms": {
+    "raw": [
+      87.067,
+      78.302,
+      77.656,
+      76.967,
+      77.479
+    ],
+    "p50": 77.656
+  },
+  "after_snapshot_ms": {
+    "raw": [
+      62.313,
+      64.329,
+      64.461,
+      64.074,
+      64.052
+    ],
+    "p50": 64.074
+  },
+  "after_from_cache": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "note": "The linked-class BootImage is still not serialized (task 2 not completed in W102-A), so the cold restore pays the class relink and stays ~65 ms rather than the in-process ~12.8 ms of BENCHMARKS 8.13. This file documents that the launch-path re-seed did not change the framework bring-up cost."
+}

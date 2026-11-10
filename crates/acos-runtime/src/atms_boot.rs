@@ -89,6 +89,12 @@ impl ServiceObject for RecordingAtms {
         }
         self.inner.call(interface, method, args)
     }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        // Expose the wrapped real ATMS so a host query (T-43 attach re-seed)
+        // can see the recorded process through the recording decorator.
+        self.inner.as_any_mut()
+    }
 }
 
 /// The first recorded attach, if any.

@@ -133,6 +133,13 @@ pub trait BinderTransport {
     fn unlink_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
+
+    /// Restore-time re-seed: record `id` → `handle` in this transport's
+    /// identity caches. `proxy` distinguishes a `BinderProxy` from a local
+    /// `Binder`. Called once per binder object in a restored heap (T-43
+    /// binder-identity re-seed); the default is a no-op so a transport that
+    /// has no identity cache need not implement it.
+    fn seed_binder(&self, _id: u64, _handle: Handle, _proxy: bool) {}
 }
 
 thread_local! {
@@ -170,6 +177,23 @@ fn exit_transaction() {
 /// makes `binder_object` fall through to the installed transport, so a bound
 /// is safe and keeps a long-lived session's memory flat (W94-A #10).
 const MAX_LOCAL_OBJECTS: usize = 4096;
+
+/// Re-seed a local Java `Binder` binding after a snapshot restore.
+///
+/// The restored heap still carries the boot process's `mObject` id; the fresh
+/// transport must be able to resolve it back to the same Java handle without
+/// re-executing the binder allocation that created it. Also records the
+/// re-entrancy mirror (`LOCAL_OBJECTS`) so a reply parcel read while the
+/// transport is already borrowed resolves.
+pub fn seed_local_binder(id: u64, handle: Handle) {
+    register_local_object(id, handle);
+    with_transport(|t| t.seed_binder(id, handle, false));
+}
+
+/// Re-seed a Java `BinderProxy` binding after a snapshot restore.
+pub fn seed_binder_proxy(id: u64, handle: Handle) {
+    with_transport(|t| t.seed_binder(id, handle, true));
+}
 
 /// Record a local binder handle so a re-entrant `binder_object` can resolve it.
 pub fn register_local_object(id: u64, handle: Handle) {

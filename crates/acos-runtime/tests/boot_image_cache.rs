@@ -171,3 +171,132 @@ fn corrupt_template_entry_falls_back_and_reboots() {
         "the fallback boot must repair the entry"
     );
 }
+
+// ---------------------------------------------------------------------------
+// T-43 binder-identity re-seed: cold-process restore must reach the same
+// launch ladder rung as the uncached launch (W102-A).
+// ---------------------------------------------------------------------------
+
+/// Environment variable carrying the cache dir to the cold child process.
+const COLD_ENV: &str = "W102A_COLD_CACHE";
+
+/// Parse `W102A bind=.. app=.. tx=.. txd=..` from the child's stdout.
+fn parse_ladder(line: &str) -> Option<(bool, bool, bool, bool)> {
+    let field = |name: &str| -> Option<bool> {
+        line.split_whitespace()
+            .find_map(|part| part.strip_prefix(name))
+            .and_then(|v| match v {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => None,
+            })
+    };
+    Some((
+        field("bind=")?,
+        field("app=")?,
+        field("tx=")?,
+        field("txd=")?,
+    ))
+}
+
+/// Run the real launch ladder on a `Runtime` restored from the on-disk cache.
+///
+/// This is a normal test (it no-ops without `W102A_COLD_CACHE`) that is
+/// re-executed as a child process by
+/// [`cold_restore_matches_uncached_ladder`], so the restore happens in a
+/// genuinely fresh process with an empty binder/looper/parcel table.
+#[test]
+fn cold_restore_helper() {
+    let Ok(dir) = std::env::var(COLD_ENV) else {
+        return;
+    };
+    let apk = repo_root().join("fixtures/build/apps/counter.apk");
+    let Some(options) = real_options() else {
+        println!("W102A skip=no-boot-classpath");
+        return;
+    };
+    let cache = BootImageCache::with_dir(&dir).expect("cache");
+    let template = RuntimeTemplate::boot_with_options(options, Some(&cache)).expect("template");
+    assert!(
+        template.from_cache(),
+        "the cold child must be a cache hit, not a fresh boot"
+    );
+    let thread = template.activity_thread();
+    let mut rt = template.restore_runtime().expect("restore from cached template");
+    let report = rt.boot_and_run_lifecycle_from_boot(&apk, thread);
+    println!(
+        "W102A bind={} app={} tx={} txd={}",
+        report.bind_delivered,
+        report.app_created,
+        report.transaction_scheduled,
+        report.transaction_delivered
+    );
+}
+
+/// A cold process restoring the post-attach framework snapshot from the disk
+/// cache must reach the same lifecycle rung as the uncached launch.
+#[test]
+fn cold_restore_matches_uncached_ladder() {
+    use std::process::Command;
+
+    let apk = repo_root().join("fixtures/build/apps/counter.apk");
+    if !apk.is_file() {
+        eprintln!("SKIP cold_restore_matches_uncached_ladder: counter.apk missing");
+        return;
+    }
+    let Some(options) = real_options() else {
+        eprintln!("SKIP cold_restore_matches_uncached_ladder: no boot classpath");
+        return;
+    };
+
+    // Reference: the real `acos launch` path (fresh Vm + framework boot).
+    let mut rt = acos_runtime::Runtime::standard_with(options.clone()).expect("runtime");
+    let uncached = rt.boot_and_run_lifecycle(&apk);
+    assert!(uncached.bind_delivered, "uncached launch did not bind");
+    assert!(uncached.app_created, "uncached launch did not create the app");
+    assert!(
+        uncached.transaction_scheduled,
+        "uncached launch did not reach client_transaction"
+    );
+
+    // Populate the on-disk cache from one framework boot + ACOSSNAP.
+    let dir = TempDir::new("cold");
+    let cache = BootImageCache::with_dir(dir.path()).expect("cache");
+    let _ = RuntimeTemplate::boot_with_options(options, Some(&cache)).expect("populate cache");
+
+    // Restore + launch in a genuinely fresh process.
+    let exe = std::env::current_exe().expect("current test exe");
+    let out = Command::new(&exe)
+        .args(["--exact", "cold_restore_helper", "--nocapture"])
+        .env(COLD_ENV, dir.path())
+        .output()
+        .expect("spawn cold helper");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("W102A ") || l.starts_with("W102A bind="))
+        .unwrap_or_else(|| {
+            panic!(
+                "cold helper produced no ladder; status={:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                out.status
+            )
+        });
+    if line.contains("skip=") {
+        eprintln!("SKIP cold_restore_matches_uncached_ladder: child skipped ({line})");
+        return;
+    }
+    let (bind, app, tx, txd) = parse_ladder(line).expect("parse child ladder");
+    assert_eq!(
+        (bind, app, tx),
+        (
+            uncached.bind_delivered,
+            uncached.app_created,
+            uncached.transaction_scheduled
+        ),
+        "cold cache restore ladder diverged from the uncached launch: {line}"
+    );
+    // `txd` is the same on both paths (the counter fixture blocks in
+    // `Activity.onCreate` on an unimplemented VectorDrawable native).
+    assert_eq!(txd, uncached.transaction_delivered, "activity-on-create rung diverged");
+}

@@ -983,8 +983,8 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         trace_natives: state.limits.trace_natives,
         ..VmOptions::default()
     };
-    let mut runtime = match Runtime::standard_with(options) {
-        Ok(rt) => rt,
+    let (mut runtime, boot_thread) = match build_launch_runtime(options) {
+        Ok(pair) => pair,
         Err(e) => {
             state.stage_reached = "apk_parsed";
             return Err(
@@ -1014,7 +1014,13 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         }
     }
 
-    let report: LifecycleReport = runtime.boot_and_run_lifecycle(apk);
+    // A cache-restored framework is already past `prepareMainLooper` +
+    // `ActivityThread` + `attach`, so it skips `boot_app_process` and runs the
+    // same real lifecycle from the restored heap (T-43/W102-A).
+    let report: LifecycleReport = match boot_thread {
+        Some(thread) => runtime.boot_and_run_lifecycle_from_boot(apk, thread),
+        None => runtime.boot_and_run_lifecycle(apk),
+    };
     let log_records = os_log::records();
     let mut lifecycle_msgs: Vec<String> = report.events.clone();
     lifecycle_msgs.extend(log_records.iter().map(|r| r.msg.clone()));
@@ -1090,6 +1096,32 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
         wall_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         peak_rss_bytes: peak_rss_bytes(),
     })
+}
+
+/// Build the `Runtime` a launch runs on, preferring the on-disk boot-image
+/// cache (T-43/W102-A).
+///
+/// With the cache enabled a warm entry restores the post-attach framework
+/// snapshot in milliseconds and returns the preserved `ActivityThread` handle;
+/// a miss boots the framework once (populating the cache) and then restores it,
+/// exactly as [`crate::session_pool::RuntimeTemplate`] does. With the cache
+/// disabled (`ACOS_NO_BOOT_CACHE=1` / `ACOS_BOOT_CACHE=0`) or on any template
+/// failure this is the plain `Runtime::standard_with` boot and the caller runs
+/// the normal `boot_app_process` lifecycle.
+fn build_launch_runtime(
+    options: VmOptions,
+) -> Result<(Runtime, Option<u32>), acos_vm::VmError> {
+    if let Some(cache) = crate::boot_image_cache::from_env() {
+        if let Ok(template) =
+            crate::session_pool::RuntimeTemplate::boot_with_options(options.clone(), Some(&cache))
+        {
+            let thread = template.activity_thread();
+            if let Ok(rt) = template.restore_runtime() {
+                return Ok((rt, Some(thread)));
+            }
+        }
+    }
+    Ok((Runtime::standard_with(options)?, None))
 }
 
 fn blocker_for(idx: usize, report: &LifecycleReport, msgs: &[String]) -> StageBlocker {
