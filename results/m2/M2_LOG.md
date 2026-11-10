@@ -1194,3 +1194,112 @@ whatever native it names.
   with only this change applied.
 * `crates/acos-vm/tests/res_natives.rs` fails at HEAD (`resolve=false` vs the
   expected `resolve=true`); it is untouched by this change and pre-existing.
+
+## W40-A — launch diagnostics, ICU data path, per-APK PMS, content-provider arg order
+
+Worked in a clean `git worktree` of HEAD (`66e4232`) at
+`~/Projects/acos-w40a` with `CARGO_TARGET_DIR=.cache/target-w40a`,
+`CARGO_PROFILE_DEV_DEBUG=0`; the shared tree's W39-A `exec.rs` WIP was not
+touched. Evidence commands below use
+`ACOS_BOOT_DIR=~/Projects/acos/.cache/boot/android-34`.
+
+### Fix 1 — cause-chain diagnostics (the requested Step 1)
+
+`Vm::throwable_cause` follows `ExceptionInInitializerError.exception` (API 34
+overrides `getCause()`) / `Throwable.cause`, treating `cause == this` as "no
+cause" (the default `Throwable` constructor self-reference). `throw_new` now
+captures the stack at construction for VM-thrown exceptions, and
+`lifecycle::describe_throwable` walks up to 8 causes and prints each
+`caused by: <class>: <message>` plus frames.
+
+Before: `java exception: java.lang.ExceptionInInitializerError` (frame-less).
+After: the blocker that had been hidden was
+`java.util.MissingResourceException: Could not find the bundle
+android/icu/impl/data/icudt72b/likelySubtags` from
+`android.graphics.Typeface.<clinit>`.
+
+Regression: `crates/acos-runtime/src/lifecycle.rs`
+`describe_throwable_unwraps_exception_in_initializer_error`.
+
+### Fix 2 — ICU data under the real device path
+
+`AndroidDataFiles.generateIcuDataPath()` reads `ANDROID_I18N_ROOT` (guest
+`System.getenv` -> `libcore.io.Linux.getenv` seeds `/apex/com.android.i18n`)
+and opens `<root>/etc/icu/icudt72l.dat`. The VFS mapped `/system/**` and
+`/apex/com.android.tzdata/**` but not `/apex/com.android.i18n/**`, so the open
+was `ENOENT` and every `Typeface.<clinit>` failed. Added the
+`/apex/com.android.i18n/**` -> `<boot>/apex/com.android.i18n/**` read-only
+mapping (the `/system/apex/...` spelling still works) and aligned the host env
+in `boot.rs` / `font_natives.rs` to the device spelling.
+
+Evidence: `acos launch fixtures/build/apps/counter.apk` moved from
+`blocked application_on_create / ExceptionInInitializerError` to
+`ok application_on_create; ok client_transaction` (classes 591 -> 1795).
+
+Regression: `crates/acos-vm/src/vfs.rs`
+`reads_i18n_apex_icu_data_under_the_real_device_path`.
+
+### Fix 3 — per-APK package manager
+
+`ServiceHost::standard()` seeds the PMS with the `hello-views` fixture, so
+launching any other APK made `handleBindApplication` query
+`getApplicationInfo(<launched pkg>)` and raise
+`unknown service name "dev.acos.fixtures.counter"`. Added
+`ServiceHost::install_package_from_apk` (via a `ServiceObject::as_any_mut`
+downcast) and `Runtime::run_lifecycle_inner` now re-points the PMS at the APK
+before boot. A missing APK is a structured error, never a fallback to the
+previous package.
+
+Regression: `crates/acos-services/tests/host.rs`
+`installing_a_package_from_apk_repoints_the_package_manager`.
+
+### Fix 4 — `getContentProvider` argument order
+
+`IActivityManager$Stub$Proxy.getContentProvider` params are
+`(caller, callingPackage, name, userId, stable)` (confirmed from the API 34
+bytecode); the framework passes `context.getOpPackageName()` as
+`callingPackage` and the requested authority as `name`. `AtmsService` read the
+**first** string as the authority, so `Settings$NameValueCache`'s
+`acquireProvider("settings")` got `null` and NPE'd at
+`Settings$ContentProviderHolder.getProvider` before `Activity.onCreate`.
+Now reads the second string.
+
+Evidence: the NPE became a real framework reply problem —
+`IllegalStateException: Bundle length is not aligned by 4: 778923875` in the
+`android.app.ContentProviderHolder` parcel (see the blocker table).
+
+Regression: `crates/acos-services/tests/replay.rs`
+`get_content_provider_resolves_the_authority_from_the_name_argument` (the
+recorded `IActivityManager.getContentProvider` case was corrected to the real
+`[caller, package, settings, ...]` order).
+
+### Evidence
+
+* `acos launch fixtures/build/apps/counter.apk` (release, W40-A tree):
+  `reached client_transaction`; stages `apk_parsed`, `process_booted`,
+  `bind_application`, `application_on_create`, `client_transaction` all `ok`;
+  `activity_on_create` blocked with `JAVA_EXCEPTION` (cause chain printed).
+* `cargo test -p acos-runtime --test m2`: `bind_application_is_delivered...`
+  and `lifecycle_never_claims_an_undelivered_transaction` pass;
+  `app_created=true`, `transaction_scheduled=true`. The gate stays `#[ignore]`d
+  with the new (current) blocker.
+* `cargo test -p acos-vm --lib vfs::...`, `cargo test -p acos-services --test
+  host --test replay` (14 tests) and the lifecycle unit test all pass.
+* `tools/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported
+  of 27** (normal; ART expectations).
+
+### Blocker table (furthest stage reached)
+
+| Stage | Status | Blocker |
+|---|---|---|
+| bind_application | ok | — |
+| application_on_create | ok | — |
+| client_transaction | ok | — |
+| activity_on_create | blocked | `android.app.ContentProviderHolder` parcel spec is missing `connection` (IBinder), `noReleaseNeeded` (int) and `mLocal` (int), and its `ProviderInfo.info` must be written inline (not as a typed object); Java's `ContentProviderHolder.CREATOR` therefore mis-reads `ProviderInfo.metaData` and throws `IllegalStateException: Bundle length is not aligned by 4`. Next step: model `ProviderInfo`/`ContentProviderHolder` exactly (or materialise a real Java instance and call `writeToParcel`, per the `pms_java` pattern). |
+
+### Caveats
+
+* `crates/acos-vm/tests/res_natives.rs` still fails at HEAD (`resolve=false`
+  vs expected `resolve=true`), untouched and pre-existing.
+* The shared tree did not compile at the time of writing (W39-A `exec.rs` WIP).
+  All evidence was collected in the clean worktree.

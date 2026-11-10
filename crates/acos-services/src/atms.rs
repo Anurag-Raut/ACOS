@@ -306,6 +306,8 @@ pub struct AtmsState {
     pub controller_binder: u64,
     /// Content-provider binder.
     pub provider_binder: u64,
+    /// Guest-initiated activity/service/broadcast/provider state (W50-A).
+    pub ams: crate::ams::AmsState,
 }
 
 impl AtmsState {
@@ -324,6 +326,7 @@ impl AtmsState {
             next_seq: 1,
             controller_binder: 0,
             provider_binder: 0,
+            ams: crate::ams::AmsState::new(),
         }
     }
 
@@ -693,8 +696,7 @@ impl AtmsService {
         Some(Parcelable::ordered(
             "android.app.ContentProviderHolder",
             vec![
-                Value::TypedObject(provider_info),
-                Value::TypedObject(Parcelable::ordered(
+                Value::TypedObject(provider_info),                Value::TypedObject(Parcelable::ordered(
                     "android.os.IBinder",
                     vec![Value::Int(
                         i32::try_from(state.provider_binder).unwrap_or(-1),
@@ -745,7 +747,13 @@ impl ServiceObject for AtmsService {
                 vec![]
             }
             (AtmsInterface::ActivityManager, "getContentProvider") => {
-                let authority = args.get(1).and_then(Value::as_str).unwrap_or_default();
+                // The framework calls this as `(caller, context.getOpPackageName(),
+                // name, userId, stable)`, so the requested authority is the
+                // *second* string argument. Reading the first returned
+                // `dev.acos.fixtures.counter` for the `settings` lookup,
+                // `ContentResolver.acquireProvider` got `null`, and
+                // `Settings$NameValueCache` NPE'd before `Activity.onCreate`.
+                let authority = args.get(2).and_then(Value::as_str).unwrap_or_default();
                 let holder = self.content_provider_holder(authority, &state);
                 vec![match holder {
                     Some(h) => Value::TypedObject(h),
@@ -827,11 +835,16 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ClientController, "activityRelaunched") => Vec::new(),
             _ => {
+                if let Some(result) =
+                    crate::ams::dispatch(&mut state.ams, interface, method, args)?
+                {
+                    return Ok(result);
+                }
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),
                     code: method.code,
                     method: method.name.clone(),
-                })
+                });
             }
         };
 

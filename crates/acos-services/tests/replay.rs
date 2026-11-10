@@ -154,7 +154,7 @@ fn launch_cases() -> Vec<Case> {
             name: "IActivityManager.getContentProvider",
             interface: "android.app.IActivityManager",
             method: "getContentProvider",
-            args: vec![b(app_thread), s("settings"), s(""), Value::Int(0), Value::Bool(false)],
+            args: vec![b(app_thread), s(pkg), s("settings"), Value::Int(0), Value::Bool(false)],
         },
         Case {
             name: "IAccessibilityManager.addClient",
@@ -604,6 +604,33 @@ fn replay_all_measured_outgoing_calls() {
     assert!(
         ok >= 45,
         "expected at least 45 owned rows to replay, got {ok}"
+    );
+}
+
+/// Regression (W40-A): `IActivityManager.getContentProvider` passes the
+/// caller's op-package name first and the requested authority second. Reading
+/// the first string made `ContentResolver.acquireProvider("settings")` return
+/// null and `Settings$NameValueCache` NPE before `Activity.onCreate`.
+#[test]
+fn get_content_provider_resolves_the_authority_from_the_name_argument() {
+    let mut host = ServiceHost::standard();
+    let case = Case {
+        name: "IActivityManager.getContentProvider",
+        interface: "android.app.IActivityManager",
+        method: "getContentProvider",
+        args: vec![
+            b(0x1000),
+            s("dev.acos.fixtures.counter"),
+            s("settings"),
+            Value::Int(0),
+            Value::Bool(false),
+        ],
+    };
+    let reply = replay(&mut host, &case).expect("getContentProvider");
+    let holder = reply.first().expect("one reply value");
+    assert!(
+        !matches!(holder, Value::TypedObject(Parcelable::Null)),
+        "settings authority must resolve to a holder, got {holder:?}"
     );
 }
 

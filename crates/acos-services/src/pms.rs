@@ -601,6 +601,18 @@ impl PmsService {
         }
     }
 
+    /// Replace the installed package with the APK being launched.
+    ///
+    /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;
+    /// the launch path re-points it at the real APK before the framework asks
+    /// for `getApplicationInfo`. A missing APK is a structured error, never a
+    /// silent fallback to the previous package.
+    pub fn set_package_from_apk(&mut self, apk_path: &Path) -> Result<()> {
+        let state = PmsState::from_apk(apk_path)?;
+        *self.state.lock().unwrap() = state;
+        Ok(())
+    }
+
     fn lookup<'a>(state: &'a PmsState, package: Option<&str>) -> Result<&'a PackageInfo> {
         match package {
             Some(p) if p == state.package.package_name => Ok(&state.package),
@@ -614,6 +626,10 @@ impl PmsService {
 }
 
 impl ServiceObject for PmsService {
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn call(
         &mut self,
         interface: &str,

@@ -104,7 +104,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// The M2 gate. Ignored while the framework blocks before `Activity.onCreate`;
 /// run with `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
 #[test]
-#[ignore = "M2 not reached: Application.onCreate now runs (app_created=true) and the ClientTransaction launch reaches performLaunchActivity -> Activity.attach -> PhoneWindow.<init>, where Settings.getPublicSettingsForClass calls Field.getAnnotation(Settings$Readable.class). ACOS has no annotation metadata, so it returns null and Settings.getString throws SecurityException for the @Readable key render_shadows_in_compositor; results/m2/M2_LOG.md §W33-A"]
+#[ignore = "M2 not reached: bindApplication + Application.onCreate + the launch ClientTransaction all run (app_created=true, transaction_scheduled=true) and performLaunchActivity reaches Activity.attach -> PhoneWindow.<init>; the framework then reads Settings.Global over the content-provider path and ACOS's `android.app.ContentProviderHolder` parcel is missing its trailing fields (connection/noReleaseNeeded/mLocal), so ContentResolver.acquireProvider throws IllegalStateException 'Bundle length is not aligned by 4'; results/m2/M2_LOG.md §W40-A"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");

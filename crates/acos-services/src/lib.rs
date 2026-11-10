@@ -39,6 +39,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ams;
 pub mod atms;
 pub mod clipboard;
 pub mod declared;

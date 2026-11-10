@@ -1904,8 +1904,17 @@ impl Vm {
     }
 
     pub fn throw_new(&mut self, desc: &str, message: Option<&str>) -> VmError {
+        let thread = self.current_thread;
         match self.new_throwable(desc, message) {
-            Ok(h) => VmError::JavaException(h),
+            Ok(h) => {
+                // Real JVMs fill in the stack at construction. Capture it here
+                // for VM-thrown exceptions (natives and interpreter help paths)
+                // so a `throw_new` NPE is diagnosable, not a frame-less cause.
+                if thread < self.threads.len() && !self.threads[thread].frames.is_empty() {
+                    self.capture_stack(h, thread);
+                }
+                VmError::JavaException(h)
+            }
             Err(_) => VmError::JavaException(self.oom_object),
         }
     }
@@ -2086,6 +2095,26 @@ impl Vm {
             c = self.classes[cur as usize].super_class;
         }
         None
+    }
+
+    /// The direct cause of `h`, if any. API 34's
+    /// `ExceptionInInitializerError` overrides `getCause()` to read its own
+    /// `exception` field; every other `Throwable` uses the inherited `cause`
+    /// field. Diagnostics follow this chain so a wrapper like
+    /// `ExceptionInInitializerError` never hides the real `<clinit>` failure.
+    pub fn throwable_cause(&self, h: Handle) -> Option<Handle> {
+        let class = self.class_of_object(h)?;
+        let field = if self.class_desc_of_id(class) == "java.lang.ExceptionInInitializerError" {
+            "exception"
+        } else {
+            "cause"
+        };
+        match self.get_instance_field_by_name(h, field) {
+            // `Throwable` initialises `cause` to `this`; `getCause()` treats
+            // that as "no cause". Mirror it so the chain terminates.
+            Some(v) if v != NULL && v != h => Some(v),
+            _ => None,
+        }
     }
 
     pub fn make_thread(&mut self, name: &str, target: Handle) -> VmResult<Handle> {

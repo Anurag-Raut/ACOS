@@ -93,6 +93,9 @@ pub enum LifecycleError {
     /// A VM-level failure.
     #[error("vm: {0}")]
     Vm(#[from] VmError),
+    /// Configuring the in-process services for the launched APK failed.
+    #[error("service setup: {0}")]
+    Service(#[from] acos_services::ServiceError),
     /// A step is not wired yet. Returned instead of pretending the work was
     /// done; the message names the exact missing piece.
     #[error("unsupported: {0}")]
@@ -149,6 +152,13 @@ impl Runtime {
         apk_path: &Path,
         report: &mut LifecycleReport,
     ) -> Result<Handle, LifecycleError> {
+        // The in-process PMS is seeded with the `hello-views` fixture; point it
+        // at the APK actually being launched before the framework asks for
+        // `getApplicationInfo`, or `handleBindApplication` raises
+        // `unknown service name <package>`.
+        self.host()
+            .borrow_mut()
+            .install_package_from_apk(apk_path)?;
         let boot = self.boot_app_process(apk_path)?;
         let mut app = app_info_for(apk_path)?;
         // The framework's `LoadedApk`/`PathClassLoader`/`AssetManager` must see
@@ -220,22 +230,42 @@ fn run_phase(vm: &mut Vm) -> Result<(), LifecycleError> {
 /// helper: `class_of_object` / `class_desc_of_id` / `throwable_message` and
 /// `throwable_stacks` are all public.
 fn describe_throwable(vm: &Vm, h: Handle) -> String {
-    let class = vm
-        .class_of_object(h)
-        .map(|c| vm.class_desc_of_id(c))
-        .unwrap_or_else(|| "java.lang.Throwable".to_string());
-    let mut out = match vm.throwable_message(h) {
-        Some(m) => format!("{class}: {m}"),
-        None => class,
-    };
-    if let Some(entries) = vm.throwable_stacks.get(&h) {
-        for e in entries {
-            out.push_str(&format!("\n    at {}.{}({})", e.class, e.method, e.line));
+    let mut out = String::new();
+    // Walk the cause chain so a wrapper such as `ExceptionInInitializerError`
+    // cannot hide the failed `<clinit>`. Bounded so a cyclic/self-referential
+    // chain (or a corrupted handle) cannot loop forever.
+    let mut current = Some(h);
+    let mut depth = 0;
+    while let Some(cur) = current {
+        if depth > 0 {
+            out.push_str(&format!("\n  caused by: "));
         }
+        let class = vm
+            .class_of_object(cur)
+            .map(|c| vm.class_desc_of_id(c))
+            .unwrap_or_else(|| "java.lang.Throwable".to_string());
+        match vm.throwable_message(cur) {
+            Some(m) => out.push_str(&format!("{class}: {m}")),
+            None => out.push_str(&class),
+        }
+        if let Some(entries) = vm.throwable_stacks.get(&cur) {
+            for e in entries {
+                out.push_str(&format!("\n    at {}.{}({})", e.class, e.method, e.line));
+            }
+        }
+        current = if depth >= MAX_CAUSE_DEPTH {
+            out.push_str("\n  ... cause chain truncated");
+            None
+        } else {
+            vm.throwable_cause(cur)
+        };
+        depth += 1;
     }
-    out.push_str(&format!("\n  native-tail: {}", native_tail(vm)));
     out
 }
+
+/// Bound on how deep [`describe_throwable`] follows the cause chain.
+const MAX_CAUSE_DEPTH: usize = 8;
 
 /// The last 15 natives invoked for the first time, in invocation order. The
 /// tail localises the framework call that precedes an otherwise shallow
@@ -335,4 +365,45 @@ fn activity_created(vm: &mut Vm, thread: Handle, token: Handle) -> bool {
         vm.get_field(record, "activity"),
         Ok(JavaValue::Object(h)) if h != NULL
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acos_vm::{CoreLib, VmOptions};
+
+    /// Regression (W40-A): `describe_throwable` must follow the
+    /// `ExceptionInInitializerError.exception` / `Throwable.cause` chain, or a
+    /// failed `<clinit>` is reported as a frame-less wrapper with no clue.
+    #[test]
+    fn describe_throwable_unwraps_exception_in_initializer_error() {
+        let mut rt = match Runtime::standard_with(VmOptions {
+            corelib: CoreLib::Real,
+            ..VmOptions::default()
+        }) {
+            Ok(rt) => rt,
+            Err(VmError::BootClasspathMissing(msg)) => {
+                eprintln!("SKIP describe_throwable_unwraps_exception_in_initializer_error: {msg}");
+                return;
+            }
+            Err(e) => panic!("Runtime::standard_with failed: {e}"),
+        };
+        let vm = rt.vm_mut();
+        let cause = vm
+            .new_throwable("Ljava/util/MissingResourceException;", Some("bundle"))
+            .expect("cause");
+        vm.native_roots.push(cause);
+        let wrapper = vm
+            .new_throwable("Ljava/lang/ExceptionInInitializerError;", None)
+            .expect("wrapper");
+        vm.native_roots.push(wrapper);
+        vm.set_instance_field_by_name(wrapper, "exception", cause);
+        vm.native_roots.pop();
+        vm.native_roots.pop();
+
+        let text = describe_throwable(vm, wrapper);
+        assert!(text.contains("ExceptionInInitializerError"), "{text}");
+        assert!(text.contains("caused by:"), "{text}");
+        assert!(text.contains("MissingResourceException: bundle"), "{text}");
+    }
 }

@@ -27,6 +27,40 @@ fn unknown_service_name_returns_none() {
     assert!(host.check_service("definitely_not_a_service").unwrap().is_none());
 }
 
+/// Regression (W40-A): the PMS is seeded with `hello-views`; the launch path
+/// must re-point it at the APK being launched or `getApplicationInfo` for the
+/// real package raises `unknown service name <package>` during
+/// `handleBindApplication`.
+#[test]
+fn installing_a_package_from_apk_repoints_the_package_manager() {
+    let apk = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/build/apps/counter.apk");
+    if !apk.is_file() {
+        eprintln!(
+            "SKIP installing_a_package_from_apk_repoints_the_package_manager: {}",
+            apk.display()
+        );
+        return;
+    }
+    let mut host = ServiceHost::standard();
+    host.install_package_from_apk(&apk)
+        .expect("install counter.apk");
+    let package = host.check_service("package").unwrap().unwrap();
+    let reply = host
+        .invoke(
+            package,
+            "android.content.pm.IPackageManager",
+            "getApplicationInfo",
+            &[
+                Value::Str(Some("dev.acos.fixtures.counter".into())),
+                Value::Long(0),
+                Value::Int(0),
+            ],
+        )
+        .expect("getApplicationInfo for the launched package");
+    assert!(!reply.is_empty());
+}
+
 #[test]
 fn unknown_transaction_is_structured_error() {
     let mut host = ServiceHost::standard();

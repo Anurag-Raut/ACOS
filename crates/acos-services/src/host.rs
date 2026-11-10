@@ -68,6 +68,13 @@ pub trait ServiceObject: Send {
     fn drain_events(&mut self) -> Vec<Event> {
         Vec::new()
     }
+
+    /// Downcast hook so the host can configure a specific service (for
+    /// example, point the package manager at the APK being launched). Default
+    /// services are not configurable this way.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        None
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -236,8 +243,7 @@ impl ServiceHost {
 
     /// Resolve a service-manager name to its binder, constructing the service
     /// on first request. Unknown names return `None` (Android returns `null`).
-    pub fn check_service(&mut self, name: &str) -> Result<Option<BinderId>> {
-        let Some(descriptor) = self.names.get(name).copied() else {
+    pub fn check_service(&mut self, name: &str) -> Result<Option<BinderId>> {        let Some(descriptor) = self.names.get(name).copied() else {
             return Ok(None);
         };
         let Some(entry) = self.entries.get(&descriptor) else {
@@ -307,6 +313,24 @@ impl ServiceHost {
             .and_then(|e| e.object.as_mut())
             .map(Box::as_mut)
             .expect("service object was just constructed"))
+    }
+
+    /// Re-point the in-process package manager at `apk_path`.
+    ///
+    /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;
+    /// the runtime calls this before boot so the framework's
+    /// `getApplicationInfo(<launched package>)` resolves the real APK instead
+    /// of raising `unknown service name <package>`. Returns an error (never a
+    /// silent no-op) when the package service is missing or mistyped.
+    pub fn install_package_from_apk(&mut self, apk_path: &std::path::Path) -> Result<()> {
+        let object = self.ensure("android.content.pm.IPackageManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("package service is not a PmsService".into())
+            })?;
+        service.set_package_from_apk(apk_path)
     }
 
     /// Dispatch one transaction.

@@ -9,6 +9,7 @@
 //! |---|---|---|
 //! | `/system/**` (fonts, `etc`, framework) | `<boot>/…` (`.cache/boot/android-34`) | read-only |
 //! | `/apex/com.android.tzdata/**` | `<boot>/apex/com.android.tzdata/**` | read-only |
+//! | `/apex/com.android.i18n/**` | `<boot>/apex/com.android.i18n/**` | read-only |
 //! | `/data/user/<n>/<pkg>/**` | `<root>/data/user/<n>/<pkg>/**` | read/write |
 //! | `/data/data/<pkg>/**` | `<root>/data/user/0/<pkg>/**` (the device symlink) | read/write |
 //! | `/proc/self/{status,stat,maps}` | synthesised | read-only |
@@ -417,6 +418,20 @@ impl Vfs {
                 self.boot_root
                     .join("apex")
                     .join("com.android.tzdata")
+                    .join(rel),
+            );
+        }
+        // `AndroidDataFiles.generateIcuDataPath()` reads `ANDROID_I18N_ROOT`
+        // (seeded as `/apex/com.android.i18n`, the real device path) and then
+        // opens `<root>/etc/icu/icudt72l.dat`. Without this mapping the ICU
+        // resource bundles (`likelySubtags`) raise `MissingResourceException`
+        // from `Typeface.<clinit>`.
+        if let Some(rest) = guest.strip_prefix("/apex/com.android.i18n") {
+            let rel = rest.trim_start_matches('/');
+            return Target::ReadOnly(
+                self.boot_root
+                    .join("apex")
+                    .join("com.android.i18n")
                     .join(rel),
             );
         }
@@ -1878,6 +1893,35 @@ mod tests {
         let ttf = sb.vfs.open("/system/fonts/Roboto-Regular.ttf", O_RDONLY, 0);
         assert!(ttf.is_ok(), "{ttf:?}");
         sb.vfs.close(ttf.unwrap()).unwrap();
+    }
+
+    /// Regression: `AndroidDataFiles.generateIcuDataPath()` builds
+    /// `/apex/com.android.i18n/etc/icu/` from `ANDROID_I18N_ROOT`. That prefix
+    /// must resolve to the extracted i18n apex in the boot cache, or
+    /// `Typeface.<clinit>` throws `MissingResourceException` for
+    /// `likelySubtags` (W40-A).
+    #[test]
+    fn reads_i18n_apex_icu_data_under_the_real_device_path() {
+        let mut sb = Sandbox::new("i18n", 64, 1 << 20);
+        let icu = sb.vfs.boot_root().join("apex/com.android.i18n/etc/icu");
+        std::fs::create_dir_all(&icu).unwrap();
+        write_file(&icu.join("icudt72l.dat"), b"ICU-DATA");
+
+        let fd = sb
+            .vfs
+            .open("/apex/com.android.i18n/etc/icu/icudt72l.dat", O_RDONLY, 0)
+            .expect("open icudt72l.dat under /apex/com.android.i18n");
+        let mut buf = [0u8; 8];
+        assert_eq!(sb.vfs.read(fd, &mut buf).unwrap(), 8);
+        assert_eq!(&buf, b"ICU-DATA");
+        sb.vfs.close(fd).unwrap();
+
+        // The synthetic `/system/apex/...` spelling keeps working too.
+        let fd = sb
+            .vfs
+            .open("/system/apex/com.android.i18n/etc/icu/icudt72l.dat", O_RDONLY, 0)
+            .expect("open icudt72l.dat under /system/apex");
+        sb.vfs.close(fd).unwrap();
     }
 
     #[test]
