@@ -500,3 +500,12 @@ Status: accepted (owner directive, 2026-11-10).
   - **Root cause.** The vm-perf merge rewrote `interp.rs::run_batch` and omitted `ThreadStatus::Parked` from its yield condition; `interp::run` then reset the current thread to `Runnable` on its periodic pre-emption. A looper thread parked in `nativePollOnce` was therefore re-run forever at 100% host CPU once the VM held more than one thread, never reaching the blocking `pump`; the VM had no host-side ceiling, so the runaway was unbounded. Fixed by yielding on `Parked` and only pre-empting a thread that is still `Running`. Regression: `acos-vm` `tests/looper_cpu_mt.rs`, `tests/host_limits.rs`, and the `limits.rs` unit tests (the MT CPU test fails 308->808 ticks with the original code).
   - `tools/guarded.sh` is the mandatory bounded wrapper (`systemd-run` `MemoryMax`/swap-off, `ulimit -v` fallback, `timeout`, process-group kill, scratch cleanup); `tools/diff-dexprogs.sh`, `tools/bench-vm.sh` and `tools/build-*.sh` invoke it; `tools/ramguard.sh` is the host watchdog. See `tools/README.md`.
   - Resources are freed on every exit path: `guarded.sh` kills the whole process group and removes its scratch; `diff-dexprogs.sh` uses `target/tmp/` and traps its removal; `bench-vm.sh` removes `target/tmp/acos-bench`; `ramguard.sh` logs to `results/tmp/ramguard.log`.
+
+## ADR-0019 — Text rendering: FreeType + HarfBuzz glyph rasterisation; no Skia adoption (supersedes the Skia part of the advisor suggestion)
+
+Status: accepted (2026-11-10), based on research/render-fidelity/REPORT.md.
+
+- Measured per-glyph coverage error vs the real device screenshot (positions removed): tiny-skia no AA 0.0582 mean, tiny-skia + AA 0.0458, HarfBuzz + FreeType (no hinting, grayscale) 0.0163, Skia m157 CPU 0.0549 (and +12.5% ink). Android 14 uses Skia m112/m124; no skia-safe release maps to it, and building AOSP Skia/Minikin from source is a multi-day, >1 GB port.
+- Decision: keep the Rust renderer (acos-render), replace glyph rasterisation with FreeType (FT_LOAD_NO_HINTING | FT_LOAD_RENDER, grayscale A8 masks) shaped by rustybuzz (HarfBuzz port), blit masks in acos-render. Fix Paint::default().anti_alias (Android's Paint() has ANTI_ALIAS_FLAG; current default renders text with 2 grey levels).
+- Keep revisiting if shadows/layers/filters parity (non-text) becomes the dominant error; then re-evaluate a pinned Skia CPU path.
+- Licence: FreeType under FTL, HarfBuzz MIT.

@@ -1,0 +1,11 @@
+[package]
+name = "skia-text-poc"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+skia-safe = "0.157"
+png = "0.17"

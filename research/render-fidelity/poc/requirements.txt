@@ -1,0 +1,5 @@
+# PoC-only Python deps (create a venv with --system-site-packages for numpy/PIL):
+#   python3 -m venv --system-site-packages .cache/spike/ftenv
+#   .cache/spike/ftenv/bin/pip install -r research/render-fidelity/poc/requirements.txt
+freetype-py
+uharfbuzz
