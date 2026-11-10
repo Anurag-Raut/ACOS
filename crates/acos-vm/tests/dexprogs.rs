@@ -1,0 +1,158 @@
+//! Differential corpus test: every `fixtures/dexprogs` program is compiled to
+//! real DEX and its stdout / exit code must match the checked-in
+//! `jvm-reference` expectations byte for byte.
+//!
+//! The test is skipped (loudly) when `fixtures/build` is absent, so the crate
+//! still builds and tests on a checkout without the Android SDK.
+
+use std::path::{Path, PathBuf};
+
+use acos_dex::DexFile;
+use acos_vm::{Vm, VmOptions};
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn fixture_names() -> Vec<String> {
+    let dir = repo_root().join("fixtures/build/dexprogs");
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+fn run_one(name: &str, gc_stress: bool, count_opcodes: bool) -> (Vm, i32, String) {
+    let dex_path = repo_root().join(format!("fixtures/build/dexprogs/{name}/classes.dex"));
+    let bytes = std::fs::read(&dex_path).expect("read dex");
+    let options = VmOptions {
+        heap_max_bytes: 256 * 1024 * 1024,
+        gc_stress,
+    };
+    let mut vm = Vm::new(options).expect("vm new");
+    vm.count_opcodes = count_opcodes;
+    vm.add_dex(DexFile::parse(bytes).expect("parse dex"));
+    let outcome = vm.run("Main", &[]);
+    (vm, outcome.exit_code, outcome.stdout)
+}
+
+fn expected(name: &str, ext: &str) -> String {
+    let p = repo_root().join(format!("fixtures/expected/dexprogs/{name}.{ext}"));
+    std::fs::read_to_string(p).unwrap_or_default()
+}
+
+#[test]
+fn dexprogs_match_jvm_reference() {
+    let names = fixture_names();
+    if names.is_empty() {
+        eprintln!(
+            "SKIP dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent \
+             (run tools/build-fixtures.sh)"
+        );
+        return;
+    }
+    let mut executed = [0u64; 256];
+    let mut failures = Vec::new();
+    for name in &names {
+        let (vm, code, stdout) = run_one(name, false, true);
+        let want_stdout = expected(name, "stdout");
+        let want_exit: i32 = expected(name, "exit").trim().parse().unwrap_or(0);
+        if stdout != want_stdout || code != want_exit {
+            failures.push(format!(
+                "{name}: exit {code} (want {want_exit}), stdout {} bytes (want {} bytes)",
+                stdout.len(),
+                want_stdout.len()
+            ));
+        }
+        for (i, c) in vm.opcode_counts.iter().enumerate() {
+            executed[i] += c;
+        }
+    }
+
+    // Write the opcode coverage report.
+    write_coverage(&names, &executed);
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} dexprogs failed:\n{}",
+        failures.len(),
+        names.len(),
+        failures.join("\n")
+    );
+}
+
+/// The corpus must also pass with a collection before every allocation, which
+/// proves that every GC root is exact. (The heavy threading program 19 is
+/// excluded from the per-allocation stress run to keep the test bounded; it is
+/// still covered by the normal pass and by `tools/diff-dexprogs.sh --gc-stress`.)
+#[test]
+fn dexprogs_pass_gc_stress() {
+    let names = fixture_names();
+    if names.is_empty() {
+        eprintln!("SKIP dexprogs_pass_gc_stress: fixtures/build/dexprogs is absent");
+        return;
+    }
+    let mut failures = Vec::new();
+    for name in &names {
+        if name == "19_threads_sync" {
+            continue;
+        }
+        let (_vm, code, stdout) = run_one(name, true, false);
+        let want_stdout = expected(name, "stdout");
+        let want_exit: i32 = expected(name, "exit").trim().parse().unwrap_or(0);
+        if stdout != want_stdout || code != want_exit {
+            failures.push(format!("{name}: exit {code} (want {want_exit})"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "GC stress failures:\n{}",
+        failures.join("\n")
+    );
+}
+
+fn write_coverage(names: &[String], executed: &[u64; 256]) {
+    let out_dir = repo_root().join("results/vm");
+    let _ = std::fs::create_dir_all(&out_dir);
+    let unsupported: [u8; 6] = [0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff];
+    let mut exec = Vec::new();
+    let mut unexercised = Vec::new();
+    for op in acos_dex::defined_opcodes() {
+        let b = op.byte();
+        if unsupported.contains(&b) {
+            continue;
+        }
+        if executed[b as usize] > 0 {
+            exec.push(serde_json::json!({
+                "opcode": format!("0x{b:02x}"),
+                "mnemonic": op.mnemonic(),
+                "count": executed[b as usize],
+            }));
+        } else {
+            unexercised.push(format!("{} (0x{b:02x})", op.mnemonic()));
+        }
+    }
+    let doc = serde_json::json!({
+        "corpus": names,
+        "executed": exec,
+        "implemented_but_unexercised": unexercised,
+        "unsupported": [
+            {"opcode": "0xfa", "mnemonic": "invoke-polymorphic"},
+            {"opcode": "0xfb", "mnemonic": "invoke-polymorphic/range"},
+            {"opcode": "0xfc", "mnemonic": "invoke-custom"},
+            {"opcode": "0xfd", "mnemonic": "invoke-custom/range"},
+            {"opcode": "0xfe", "mnemonic": "const-method-handle"},
+            {"opcode": "0xff", "mnemonic": "const-method-type"},
+        ],
+    });
+    let path = out_dir.join("opcode-coverage.json");
+    if let Ok(s) = serde_json::to_string_pretty(&doc) {
+        let _ = std::fs::write(path, s);
+    }
+}

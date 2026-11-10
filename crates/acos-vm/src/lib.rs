@@ -1,0 +1,27 @@
+//! # acos-vm
+//!
+//! A Rust implementation of an Android/Dalvik execution engine: DEX
+//! interpreter, handle-based managed heap, precise mark-sweep GC, runtime
+//! class model, core-library builtins and cooperative green threads.
+//!
+//! The crate is `#![forbid(unsafe_code)]` and never fakes an unimplemented
+//! API: unknown classes, methods or opcodes stop execution with a structured
+//! error naming the exact call site.
+
+#![forbid(unsafe_code)]
+#![warn(missing_debug_implementations)]
+
+pub mod class;
+pub mod corelib;
+pub mod error;
+pub mod format;
+pub mod frame;
+pub mod heap;
+pub mod interp;
+pub mod vm;
+
+pub use error::{VmError, VmResult};
+pub use heap::{Handle, Object};
+pub use vm::{
+    descriptor_to_dotted, Metrics, RunOutcome, Uncaught, Vm, VmOptions,
+};

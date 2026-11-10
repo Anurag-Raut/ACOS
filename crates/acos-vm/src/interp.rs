@@ -1,0 +1,1901 @@
+//! The bytecode interpreter and thread scheduler.
+//!
+//! Execution is fully iterative: no Java invocation recurses on the host Rust
+//! stack. Frames live in per-thread VM stacks and the scheduler picks a
+//! runnable thread for each step.
+
+use std::rc::Rc;
+
+use crate::class::{ClassId, Insn, MethodCode, MethodImpl, MethodId, NativeCtx};
+use crate::error::{VmError, VmResult};
+use crate::frame::Frame;
+use crate::heap::{ArrayData, Handle, Object, NULL};
+use crate::vm::{InvokeKind, ThreadStatus, Vm};
+
+fn empty_code() -> Rc<MethodCode> {
+    Rc::new(MethodCode {
+        registers_size: 0,
+        ins_size: 0,
+        outs_size: 0,
+        insns: Vec::new(),
+        pc_to_idx: Vec::new(),
+        raw: Vec::new(),
+        tries: Vec::new(),
+        line_table: Vec::new(),
+        source_file: None,
+    })
+}
+
+/// Top-level scheduler: runs all runnable green threads to completion.
+pub fn run(vm: &mut Vm) -> VmResult<()> {
+    loop {
+        if vm.pending_exception != NULL {
+            break;
+        }
+        let t = vm.current_thread;
+        if vm.threads.get(t).is_none() {
+            break;
+        }
+        if vm.threads[t].frames.is_empty() {
+            finish_thread(vm, t);
+            if !pick_runnable(vm) {
+                break;
+            }
+            continue;
+        }
+        if !matches!(vm.threads[t].status, ThreadStatus::Runnable | ThreadStatus::Running) {
+            if !pick_runnable(vm) {
+                break;
+            }
+            continue;
+        }
+        vm.threads[t].status = ThreadStatus::Running;
+        step(vm)?;
+        vm.metrics.instructions += 1;
+        if vm.threads.len() > 1 && vm.metrics.instructions.is_multiple_of(8192) {
+            vm.threads[t].status = ThreadStatus::Runnable;
+            let _ = pick_runnable(vm);
+        }
+    }
+    Ok(())
+}
+
+fn finish_thread(vm: &mut Vm, t: usize) {
+    if vm.threads[t].status == ThreadStatus::Finished {
+        return;
+    }
+    vm.threads[t].status = ThreadStatus::Finished;
+    if let Some(Object::Builtin {
+        data: crate::heap::BuiltinData::Thread(td),
+        ..
+    }) = vm.heap.get_mut(vm.threads[t].object)
+    {
+        td.alive = false;
+    }
+    let joiners = vm.threads[t].joiners.clone();
+    for j in joiners {
+        if vm.threads.get(j).is_some() && vm.threads[j].status == ThreadStatus::Waiting {
+            vm.threads[j].status = ThreadStatus::Runnable;
+            vm.threads[j].joiners.clear();
+        }
+    }
+}
+
+fn pick_runnable(vm: &mut Vm) -> bool {
+    // Wake sleepers whose deadline passed, and monitor-blocked threads whose
+    // lock is now free.
+    let now = std::time::Instant::now();
+    for i in 0..vm.threads.len() {
+        match vm.threads[i].status {
+            ThreadStatus::Sleeping => {
+                if vm.threads[i].wake_at.map(|w| w <= now).unwrap_or(true) {
+                    vm.threads[i].status = ThreadStatus::Runnable;
+                }
+            }
+            ThreadStatus::BlockedMonitor(h) => {
+                if monitor_owner(vm, h).map(|o| o == i).unwrap_or(true) {
+                    vm.threads[i].status = ThreadStatus::Runnable;
+                }
+            }
+            _ => {}
+        }
+    }
+    let n = vm.threads.len();
+    for k in 1..=n {
+        let i = (vm.current_thread + k) % n;
+        if vm.threads[i].status == ThreadStatus::Runnable && !vm.threads[i].frames.is_empty() {
+            vm.current_thread = i;
+            return true;
+        }
+    }
+    // Nothing runnable; if someone is sleeping, busy-advance time.
+    if vm
+        .threads
+        .iter()
+        .any(|t| t.status == ThreadStatus::Sleeping)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        for i in 0..vm.threads.len() {
+            if vm.threads[i].status == ThreadStatus::Sleeping {
+                vm.threads[i].status = ThreadStatus::Runnable;
+                vm.current_thread = i;
+                return true;
+            }
+        }
+    }
+    // Deadlocked or finished.
+    false
+}
+
+fn monitor_owner(vm: &Vm, h: Handle) -> Option<usize> {
+    vm.monitors.get(&h).map(|(o, _)| *o)
+}
+
+fn step(vm: &mut Vm) -> VmResult<()> {
+    let t = vm.current_thread;
+    if vm.threads[t].frames.is_empty() {
+        return Ok(());
+    }
+    let fi = vm.threads[t].frames.len() - 1;
+    let method = vm.threads[t].frames[fi].method;
+    let imp = vm.methods[method as usize].imp.clone();
+    match imp {
+        MethodImpl::Native(f) => {
+            vm.metrics.invokes += 1;
+            let ctx = NativeCtx { thread: t, frame: fi };
+            match f(vm, ctx) {
+                Ok(()) => {
+                    pop_frame(vm, t);
+                    Ok(())
+                }
+                Err(VmError::JavaException(h)) => {
+                    pop_frame_quiet(vm, t);
+                    handle_exception(vm, h)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        MethodImpl::Dex { code, .. } => {
+            if code.is_none() {
+                let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
+                let name = vm.methods[method as usize].name.clone();
+                let sig = vm.methods[method as usize].sig.clone();
+                let e = vm.throw_new(
+                    "Ljava/lang/AbstractMethodError;",
+                    Some(&format!("{desc}.{name}{sig}")),
+                );
+                return Err(e);
+            }
+            let insn = {
+                let f = &vm.threads[t].frames[fi];
+                match f.code.insns.get(f.insn_index) {
+                    Some(i) => *i,
+                    None => {
+                        return Err(VmError::Internal(format!(
+                            "pc out of range in {}",
+                            vm.methods[method as usize].name
+                        )))
+                    }
+                }
+            };
+            match execute(vm, t, fi, &insn) {
+                Ok(()) => Ok(()),
+                Err(VmError::JavaException(h)) => {
+                    handle_exception(vm, h)?;
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
+        }
+        MethodImpl::Abstract => {
+            let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
+            let name = vm.methods[method as usize].name.clone();
+            let sig = vm.methods[method as usize].sig.clone();
+            let e = vm.throw_new(
+                "Ljava/lang/AbstractMethodError;",
+                Some(&format!("{desc}.{name}{sig}")),
+            );
+            Err(e)
+        }
+    }
+}
+
+fn pop_frame(vm: &mut Vm, t: usize) {
+    let f = vm.threads[t].frames.pop().unwrap();
+    if let Some(m) = f.monitor {
+        exit_monitor(vm, m);
+    }
+    if let Some(caller) = vm.threads[t].frames.last_mut() {
+        caller.pending_result = f.pending_result;
+        caller.pending_result_is_ref = f.pending_result_is_ref;
+        caller.has_pending_result = true;
+        if f.advance_on_return {
+            let size = caller
+                .code
+                .insns
+                .get(caller.insn_index)
+                .map(|i| i.size)
+                .unwrap_or(0);
+            caller.pc += size as u32;
+            caller.insn_index += 1;
+        }
+    }
+}
+
+/// Pop a frame without transferring a result (used when an exception is
+/// propagating out of a native call).
+fn pop_frame_quiet(vm: &mut Vm, t: usize) {
+    if let Some(f) = vm.threads[t].frames.pop() {
+        if let Some(m) = f.monitor {
+            exit_monitor(vm, m);
+        }
+    }
+}
+
+fn handle_exception(vm: &mut Vm, h: Handle) -> VmResult<()> {
+    vm.native_roots.push(h);
+    let result = handle_exception_inner(vm, h);
+    vm.native_roots.pop();
+    result
+}
+
+fn handle_exception_inner(vm: &mut Vm, h: Handle) -> VmResult<()> {
+    let t = vm.current_thread;
+    loop {
+        if vm.threads[t].frames.is_empty() {
+            vm.pending_exception = h;
+            return Ok(());
+        }
+        let fi = vm.threads[t].frames.len() - 1;
+        let (pc, code) = {
+            let f = &vm.threads[t].frames[fi];
+            (f.pc, f.code.clone())
+        };
+        if let Some(addr) = find_handler(vm, &code, pc, h)? {
+            let idx = code.pc_to_idx[addr as usize] as usize;
+            let f = &mut vm.threads[t].frames[fi];
+            f.pc = addr;
+            f.insn_index = idx;
+            f.pending_exception = h;
+            f.has_pending_result = false;
+            return Ok(());
+        }
+        pop_frame_quiet(vm, t);
+    }
+}
+
+fn find_handler(
+    vm: &mut Vm,
+    code: &MethodCode,
+    pc: u32,
+    exception: Handle,
+) -> VmResult<Option<u32>> {
+    let exc_class = vm
+        .class_of_object(exception)
+        .ok_or_else(|| VmError::Internal("exception has no class".into()))?;
+    for tr in &code.tries {
+        if pc < tr.start || pc >= tr.end {
+            continue;
+        }
+        for (desc, addr) in &tr.typed {
+            let target = vm.load_class(desc)?;
+            if vm.is_assignable(exc_class, target)? {
+                return Ok(Some(*addr));
+            }
+        }
+        if let Some(addr) = tr.catch_all {
+            return Ok(Some(addr));
+        }
+    }
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------
+// Register helpers
+// ---------------------------------------------------------------------------
+
+#[inline]
+fn reg(vm: &Vm, t: usize, fi: usize, r: u16) -> u32 {
+    vm.threads[t].frames[fi].regs[r as usize]
+}
+#[inline]
+fn set_reg(vm: &mut Vm, t: usize, fi: usize, r: u16, v: u32) {
+    let f = &mut vm.threads[t].frames[fi];
+    f.regs[r as usize] = v;
+    f.refs[r as usize] = false;
+}
+#[inline]
+fn set_ref(vm: &mut Vm, t: usize, fi: usize, r: u16, v: Handle) {
+    let f = &mut vm.threads[t].frames[fi];
+    f.regs[r as usize] = v;
+    f.refs[r as usize] = true;
+}
+#[inline]
+fn set_wide(vm: &mut Vm, t: usize, fi: usize, r: u16, v: u64) {
+    let f = &mut vm.threads[t].frames[fi];
+    f.regs[r as usize] = v as u32;
+    f.regs[r as usize + 1] = (v >> 32) as u32;
+    f.refs[r as usize] = false;
+    f.refs[r as usize + 1] = false;
+}
+#[inline]
+fn get_wide(vm: &Vm, t: usize, fi: usize, r: u16) -> u64 {
+    let f = &vm.threads[t].frames[fi];
+    (f.regs[r as usize] as u64) | ((f.regs[r as usize + 1] as u64) << 32)
+}
+
+/// Advance the program counter past the current instruction.
+#[inline]
+fn advance(vm: &mut Vm, t: usize, fi: usize, size: u8) {
+    let f = &mut vm.threads[t].frames[fi];
+    f.pc += size as u32;
+    f.insn_index += 1;
+}
+
+#[inline]
+fn branch_to(vm: &mut Vm, t: usize, fi: usize, target_pc: u32) -> VmResult<()> {
+    let (code, idx) = {
+        let f = &vm.threads[t].frames[fi];
+        (f.code.clone(), f.code.pc_to_idx.get(target_pc as usize).copied())
+    };
+    let idx = idx.and_then(|i| if i == u32::MAX { None } else { Some(i as usize) });
+    let idx = match idx {
+        Some(i) => i,
+        None => {
+            return Err(VmError::Internal(format!(
+                "branch to non-instruction pc {target_pc} in {}",
+                code.source_file.clone().unwrap_or_default()
+            )))
+        }
+    };
+    let f = &mut vm.threads[t].frames[fi];
+    f.pc = target_pc;
+    f.insn_index = idx;
+    Ok(())
+}
+
+fn rel_target(pc: u32, target: i32) -> u32 {
+    (pc as i64 + target as i64) as u32
+}
+
+// ---------------------------------------------------------------------------
+// The dispatch table
+// ---------------------------------------------------------------------------
+
+fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let op = insn.op;
+    if vm.count_opcodes {
+        vm.opcode_counts[op as usize] += 1;
+    }
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    let r2 = insn.regs[2];
+    let pc = vm.threads[t].frames[fi].pc;
+
+    match op {
+        // ---- moves ----
+        0x01 | 0x07 => {
+            // move / move-object
+            let v = reg(vm, t, fi, r1);
+            if op == 0x07 {
+                set_ref(vm, t, fi, r0, v);
+            } else {
+                let is_ref = vm.threads[t].frames[fi].refs[r1 as usize];
+                set_reg(vm, t, fi, r0, v);
+                vm.threads[t].frames[fi].refs[r0 as usize] = is_ref;
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x02 | 0x08 => {
+            let v = reg(vm, t, fi, r1);
+            if op == 0x08 {
+                set_ref(vm, t, fi, r0, v);
+            } else {
+                let is_ref = vm.threads[t].frames[fi].refs[r1 as usize];
+                set_reg(vm, t, fi, r0, v);
+                vm.threads[t].frames[fi].refs[r0 as usize] = is_ref;
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x03 | 0x09 => {
+            let v = reg(vm, t, fi, r1);
+            if op == 0x09 {
+                set_ref(vm, t, fi, r0, v);
+            } else {
+                set_reg(vm, t, fi, r0, v);
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x04..=0x06 => {
+            let v = get_wide(vm, t, fi, r1);
+            set_wide(vm, t, fi, r0, v);
+            advance(vm, t, fi, insn.size);
+        }
+        0x0a => {
+            let v = vm.threads[t].frames[fi].pending_result as u32;
+            set_reg(vm, t, fi, r0, v);
+            vm.threads[t].frames[fi].has_pending_result = false;
+            advance(vm, t, fi, insn.size);
+        }
+        0x0b => {
+            let v = vm.threads[t].frames[fi].pending_result;
+            set_wide(vm, t, fi, r0, v);
+            vm.threads[t].frames[fi].has_pending_result = false;
+            advance(vm, t, fi, insn.size);
+        }
+        0x0c => {
+            let v = vm.threads[t].frames[fi].pending_result as u32;
+            set_ref(vm, t, fi, r0, v);
+            vm.threads[t].frames[fi].has_pending_result = false;
+            advance(vm, t, fi, insn.size);
+        }
+        0x0d => {
+            let e = vm.threads[t].frames[fi].pending_exception;
+            set_ref(vm, t, fi, r0, e);
+            vm.threads[t].frames[fi].pending_exception = NULL;
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- returns ----
+        0x0e => {
+            let f = &mut vm.threads[t].frames[fi];
+            f.pending_result = 0;
+            f.pending_result_is_ref = false;
+            pop_frame(vm, t);
+        }
+        0x0f => {
+            let v = reg(vm, t, fi, r0);
+            let f = &mut vm.threads[t].frames[fi];
+            f.pending_result = v as u64;
+            f.pending_result_is_ref = false;
+            pop_frame(vm, t);
+        }
+        0x10 => {
+            let v = get_wide(vm, t, fi, r0);
+            let f = &mut vm.threads[t].frames[fi];
+            f.pending_result = v;
+            f.pending_result_is_ref = false;
+            pop_frame(vm, t);
+        }
+        0x11 => {
+            let v = reg(vm, t, fi, r0);
+            let f = &mut vm.threads[t].frames[fi];
+            f.pending_result = v as u64;
+            f.pending_result_is_ref = true;
+            pop_frame(vm, t);
+        }
+
+        // ---- constants ----
+        0x12..=0x15 => {
+            set_reg(vm, t, fi, r0, insn.literal as u32);
+            advance(vm, t, fi, insn.size);
+        }
+        0x16..=0x19 => {
+            set_wide(vm, t, fi, r0, insn.literal as u64);
+            advance(vm, t, fi, insn.size);
+        }
+        0x1a..=0x1b => {
+            let dex = frame_dex(vm, t, fi);
+            let h = const_string(vm, dex, insn.index)?;
+            set_ref(vm, t, fi, r0, h);
+            advance(vm, t, fi, insn.size);
+        }
+        0x1c => {
+            let dex = frame_dex(vm, t, fi);
+            let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+            let cid = vm.load_class(&desc)?;
+            let h = vm.class_object(cid)?;
+            set_ref(vm, t, fi, r0, h);
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- monitors ----
+        0x1d => {
+            let h = reg(vm, t, fi, r0);
+            if h == NULL {
+                return Err(vm.throw_new(
+                    "Ljava/lang/NullPointerException;",
+                    Some("monitor-enter on null"),
+                ));
+            }
+            if try_enter_monitor(vm, h, t) {
+                advance(vm, t, fi, insn.size);
+            } else {
+                vm.threads[t].status = ThreadStatus::BlockedMonitor(h);
+            }
+        }
+        0x1e => {
+            let h = reg(vm, t, fi, r0);
+            if h == NULL {
+                return Err(vm.throw_new(
+                    "Ljava/lang/NullPointerException;",
+                    Some("monitor-exit on null"),
+                ));
+            }
+            exit_monitor(vm, h);
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- casts / type checks ----
+        0x1f => {
+            let v = reg(vm, t, fi, r0);
+            if v != NULL {
+                let dex = frame_dex(vm, t, fi);
+                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+                let target = vm.load_class(&desc)?;
+                let from = vm
+                    .class_of_object(v)
+                    .ok_or_else(|| VmError::Internal("check-cast non-object".into()))?;
+                if !vm.is_assignable(from, target)? {
+                    let name = crate::vm::descriptor_to_dotted(&desc);
+                    let msg = format!("class {} cannot be cast to class {}", vm.class_desc_of_id(from), name);
+                    return Err(vm.throw_new("Ljava/lang/ClassCastException;", Some(&msg)));
+                }
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x20 => {
+            let v = reg(vm, t, fi, r1);
+            let result = if v == NULL {
+                0
+            } else {
+                let dex = frame_dex(vm, t, fi);
+                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+                let target = vm.load_class(&desc)?;
+                let from = vm
+                    .class_of_object(v)
+                    .ok_or_else(|| VmError::Internal("instance-of non-object".into()))?;
+                vm.is_assignable(from, target)? as u32
+            };
+            set_reg(vm, t, fi, r0, result);
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- arrays ----
+        0x21 => {
+            let h = reg(vm, t, fi, r1);
+            let len = match vm.heap.get(h) {
+                Some(Object::Array(a)) => a.len() as u32,
+                Some(_) => {
+                    return Err(vm.throw_new(
+                        "Ljava/lang/IllegalArgumentException;",
+                        Some("array-length on non-array"),
+                    ))
+                }
+                None => return Err(vm.throw_new("Ljava/lang/NullPointerException;", None)),
+            };
+            set_reg(vm, t, fi, r0, len);
+            advance(vm, t, fi, insn.size);
+        }
+        0x22 => {
+            let dex = frame_dex(vm, t, fi);
+            let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+            let cid = vm.load_class(&desc)?;
+            vm.initialize_class(cid)?;
+            let h = vm.builtin_instance(cid)?;
+            set_ref(vm, t, fi, r0, h);
+            advance(vm, t, fi, insn.size);
+        }
+        0x23 => {
+            let len = reg(vm, t, fi, r1) as i32;
+            let dex = frame_dex(vm, t, fi);
+            let arr_desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+            let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc).to_string();
+            if len < 0 {
+                return Err(vm.throw_new(
+                    "Ljava/lang/NegativeArraySizeException;",
+                    Some(&len.to_string()),
+                ));
+            }
+            let obj = crate::vm::simple_array_object(&elem, len as usize)?;
+            let h = vm.alloc(obj)?;
+            set_ref(vm, t, fi, r0, h);
+            advance(vm, t, fi, insn.size);
+        }
+        0x24..=0x25 => {
+            let h = filled_new_array(vm, t, fi, insn)?;
+            // `filled-new-array` leaves the result for the following
+            // `move-result-object`, exactly like an invoke.
+            vm.threads[t].frames[fi].pending_result = h as u64;
+            vm.threads[t].frames[fi].pending_result_is_ref = true;
+            vm.threads[t].frames[fi].has_pending_result = true;
+            advance(vm, t, fi, insn.size);
+        }
+        0x26 => {
+            let arr = reg(vm, t, fi, r0);
+            let payload_pc = rel_target(pc, insn.target);
+            let code = vm.threads[t].frames[fi].code.clone();
+            let payload = acos_dex::decode_payload(&code.raw, payload_pc as usize)
+                .map_err(|e| VmError::Internal(format!("fill-array-data payload: {e}")))?;
+            if let acos_dex::Payload::FillArrayData(fad) = payload {
+                fill_array_data(vm, arr, &fad)?;
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x27 => {
+            let h = reg(vm, t, fi, r0);
+            if h == NULL {
+                return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+            }
+            vm.capture_stack(h, t);
+            return Err(VmError::JavaException(h));
+        }
+        0x28..=0x2a => {
+            let target = rel_target(pc, insn.target);
+            branch_to(vm, t, fi, target)?;
+        }
+        0x2b..=0x2c => {
+            let value = reg(vm, t, fi, r0) as i32;
+            let payload_pc = rel_target(pc, insn.target);
+            let code = vm.threads[t].frames[fi].code.clone();
+            let payload = acos_dex::decode_payload(&code.raw, payload_pc as usize)
+                .map_err(|e| VmError::Internal(format!("switch payload: {e}")))?;
+            let target = match payload {
+                acos_dex::Payload::PackedSwitch(sw) => {
+                    let base = sw.keys.first().copied().unwrap_or(0) as i64;
+                    let idx = value as i64 - base;
+                    if idx >= 0 && (idx as usize) < sw.keys.len() {
+                        Some(pc as i64 + sw.targets[idx as usize] as i64)
+                    } else {
+                        None
+                    }
+                }
+                acos_dex::Payload::SparseSwitch(sw) => sw
+                    .keys
+                    .iter()
+                    .position(|k| *k == value)
+                    .map(|i| pc as i64 + sw.targets[i] as i64),
+                _ => None,
+            };
+            match target {
+                Some(tp) => branch_to(vm, t, fi, tp as u32)?,
+                None => advance(vm, t, fi, insn.size),
+            }
+        }
+
+        // ---- compare ----
+        0x2d..=0x2e => {
+            let a = f32::from_bits(reg(vm, t, fi, r1));
+            let b = f32::from_bits(reg(vm, t, fi, r2));
+            let r: i32 = if a.is_nan() || b.is_nan() {
+                if op == 0x2d {
+                    -1
+                } else {
+                    1
+                }
+            } else if a < b {
+                -1
+            } else if a > b {
+                1
+            } else {
+                0
+            };
+            set_reg(vm, t, fi, r0, r as u32);
+            advance(vm, t, fi, insn.size);
+        }
+        0x2f..=0x30 => {
+            let a = f64::from_bits(get_wide(vm, t, fi, r1));
+            let b = f64::from_bits(get_wide(vm, t, fi, r2));
+            let r: i32 = if a.is_nan() || b.is_nan() {
+                if op == 0x2f {
+                    -1
+                } else {
+                    1
+                }
+            } else if a < b {
+                -1
+            } else if a > b {
+                1
+            } else {
+                0
+            };
+            set_reg(vm, t, fi, r0, r as u32);
+            advance(vm, t, fi, insn.size);
+        }
+        0x31 => {
+            let a = get_wide(vm, t, fi, r1) as i64;
+            let b = get_wide(vm, t, fi, r2) as i64;
+            let r = if a < b {
+                -1i32
+            } else if a > b {
+                1
+            } else {
+                0
+            };
+            set_reg(vm, t, fi, r0, r as u32);
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- if ----
+        0x32..=0x37 => {
+            let a = reg(vm, t, fi, r0);
+            let b = reg(vm, t, fi, r1);
+            let take = match op {
+                0x32 => a == b,
+                0x33 => a != b,
+                0x34 => (a as i32) < (b as i32),
+                0x35 => (a as i32) >= (b as i32),
+                0x36 => (a as i32) > (b as i32),
+                _ => (a as i32) <= (b as i32),
+            };
+            if take {
+                let target = rel_target(pc, insn.target);
+                branch_to(vm, t, fi, target)?;
+            } else {
+                advance(vm, t, fi, insn.size);
+            }
+        }
+        0x38..=0x3d => {
+            let a = reg(vm, t, fi, r0) as i32;
+            let take = match op {
+                0x38 => a == 0,
+                0x39 => a != 0,
+                0x3a => a < 0,
+                0x3b => a >= 0,
+                0x3c => a > 0,
+                _ => a <= 0,
+            };
+            if take {
+                let target = rel_target(pc, insn.target);
+                branch_to(vm, t, fi, target)?;
+            } else {
+                advance(vm, t, fi, insn.size);
+            }
+        }
+
+        // ---- array get ----
+        0x44..=0x4a => {
+            let arr = reg(vm, t, fi, r1);
+            let idx = reg(vm, t, fi, r2) as i32;
+            array_get(vm, t, fi, r0, arr, idx, op)?;
+            advance(vm, t, fi, insn.size);
+        }
+        // ---- array put ----
+        0x4b..=0x51 => {
+            let arr = reg(vm, t, fi, r1);
+            let idx = reg(vm, t, fi, r2) as i32;
+            array_put(vm, t, fi, r0, arr, idx, op)?;
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- instance fields ----
+        0x52..=0x58 => {
+            let obj = reg(vm, t, fi, r1);
+            if obj == NULL {
+                return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+            }
+            let dex = frame_dex(vm, t, fi);
+            let f = vm.resolve_field(dex, insn.index)?;
+            let off = f.offset as usize;
+            let desc = field_desc(vm, dex, insn.index)?;
+            if f.width == 2 {
+                let (lo, hi) = match vm.heap.get(obj) {
+                    Some(Object::Instance { fields, .. }) => (fields[off], fields[off + 1]),
+                    _ => (0, 0),
+                };
+                set_wide(vm, t, fi, r0, (lo as u64) | ((hi as u64) << 32));
+            } else if op == 0x54 {
+                let v = match vm.heap.get(obj) {
+                    Some(Object::Instance { fields, .. }) => fields[off],
+                    _ => 0,
+                };
+                set_ref(vm, t, fi, r0, v);
+            } else {
+                let v = match vm.heap.get(obj) {
+                    Some(Object::Instance { fields, .. }) => fields[off],
+                    _ => 0,
+                };
+                set_reg(vm, t, fi, r0, narrow_field(v, &desc));
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x59..=0x5f => {
+            let obj = reg(vm, t, fi, r1);
+            if obj == NULL {
+                return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+            }
+            let dex = frame_dex(vm, t, fi);
+            let f = vm.resolve_field(dex, insn.index)?;
+            let off = f.offset as usize;
+            let desc = field_desc(vm, dex, insn.index)?;
+            if f.width == 2 {
+                let val = get_wide(vm, t, fi, r0);
+                if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
+                    fields[off] = val as u32;
+                    fields[off + 1] = (val >> 32) as u32;
+                }
+            } else if op == 0x5b {
+                let val = reg(vm, t, fi, r0);
+                if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
+                    fields[off] = val;
+                }
+            } else {
+                let val = reg(vm, t, fi, r0);
+                if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
+                    fields[off] = widen_field(val, &desc);
+                }
+            }
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- static fields ----
+        0x60..=0x66 => {
+            let dex = frame_dex(vm, t, fi);
+            let f = vm.resolve_field(dex, insn.index)?;
+            vm.initialize_class(f.class)?;
+            let off = f.offset as usize;
+            let val = if f.width == 2 {
+                let c = &vm.classes[f.class as usize];
+                (c.statics[off] as u64) | ((c.statics[off + 1] as u64) << 32)
+            } else {
+                vm.classes[f.class as usize].statics[off] as u64
+            };
+            if f.width == 2 {
+                set_wide(vm, t, fi, r0, val);
+            } else if op == 0x62 {
+                set_ref(vm, t, fi, r0, val as u32);
+            } else {
+                let desc = field_desc(vm, dex, insn.index)?;
+                set_reg(vm, t, fi, r0, narrow_field(val as u32, &desc));
+            }
+            advance(vm, t, fi, insn.size);
+        }
+        0x67..=0x6d => {
+            let dex = frame_dex(vm, t, fi);
+            let f = vm.resolve_field(dex, insn.index)?;
+            vm.initialize_class(f.class)?;
+            let off = f.offset as usize;
+            let desc = field_desc(vm, dex, insn.index)?;
+            if f.width == 2 {
+                let val = get_wide(vm, t, fi, r0);
+                let c = &mut vm.classes[f.class as usize];
+                c.statics[off] = val as u32;
+                c.statics[off + 1] = (val >> 32) as u32;
+            } else {
+                let val = reg(vm, t, fi, r0);
+                let c = &mut vm.classes[f.class as usize];
+                c.statics[off] = if op == 0x69 {
+                    val
+                } else {
+                    widen_field(val, &desc)
+                };
+            }
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- invokes ----
+        0x6e..=0x72 | 0x74..=0x78 => {
+            invoke(vm, t, fi, insn)?;
+        }
+
+        // ---- unary ----
+        0x7b => {
+            let a = reg(vm, t, fi, r1) as i32;
+            set_reg(vm, t, fi, r0, a.wrapping_neg() as u32);
+            advance(vm, t, fi, insn.size);
+        }
+        0x7c => {
+            let a = reg(vm, t, fi, r1) as i32;
+            set_reg(vm, t, fi, r0, (!a) as u32);
+            advance(vm, t, fi, insn.size);
+        }
+        0x7d => {
+            let a = get_wide(vm, t, fi, r1) as i64;
+            set_wide(vm, t, fi, r0, a.wrapping_neg() as u64);
+            advance(vm, t, fi, insn.size);
+        }
+        0x7e => {
+            let a = get_wide(vm, t, fi, r1) as i64;
+            set_wide(vm, t, fi, r0, (!a) as u64);
+            advance(vm, t, fi, insn.size);
+        }
+        0x7f => {
+            let a = f32::from_bits(reg(vm, t, fi, r1));
+            set_reg(vm, t, fi, r0, (-a).to_bits());
+            advance(vm, t, fi, insn.size);
+        }
+        0x80 => {
+            let a = f64::from_bits(get_wide(vm, t, fi, r1));
+            set_wide(vm, t, fi, r0, (-a).to_bits());
+            advance(vm, t, fi, insn.size);
+        }
+        0x81..=0x8f => {
+            convert(vm, t, fi, insn);
+            advance(vm, t, fi, insn.size);
+        }
+
+        // ---- 3-register int/long/float/double arithmetic ----
+        0x90..=0xaf => {
+            arith3(vm, t, fi, insn)?;
+            advance(vm, t, fi, insn.size);
+        }
+        // ---- /2addr arithmetic ----
+        0xb0..=0xcf => {
+            arith2addr(vm, t, fi, insn)?;
+            advance(vm, t, fi, insn.size);
+        }
+        // ---- /lit16 and /lit8 ----
+        0xd0..=0xd7 => {
+            arith_lit16(vm, t, fi, insn)?;
+            advance(vm, t, fi, insn.size);
+        }
+        0xd8..=0xe2 => {
+            arith_lit8(vm, t, fi, insn)?;
+            advance(vm, t, fi, insn.size);
+        }
+
+        0xfa..=0xfd => {
+            return Err(VmError::unsupported_bytecode(
+                format!("{} (invoke-polymorphic/custom)", insn.mnemonic()),
+                format!("{} pc={pc}", vm.frames_label(t, fi)),
+            ));
+        }
+        0xfe..=0xff => {
+            return Err(VmError::unsupported_bytecode(
+                insn.mnemonic(),
+                format!("{} pc={pc}", vm.frames_label(t, fi)),
+            ));
+        }
+
+        0x00 => {
+            // nop (including payload pseudo-instructions encountered as nop)
+            advance(vm, t, fi, insn.size);
+        }
+
+        other => {
+            return Err(VmError::unsupported_bytecode(
+                format!("0x{other:02x}"),
+                format!("{} pc={pc}", vm.frames_label(t, fi)),
+            ));
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Field descriptor helpers
+// ---------------------------------------------------------------------------
+
+fn field_desc(vm: &mut Vm, dex: u32, field_idx: u32) -> VmResult<String> {
+    let d = vm.dexs[dex as usize].file.field_ref(field_idx)?.type_.to_string();
+    Ok(d)
+}
+
+fn narrow_field(v: u32, desc: &str) -> u32 {
+    match desc.as_bytes().first() {
+        Some(b'B') => (v as i8) as i32 as u32,
+        Some(b'S') => (v as i16) as i32 as u32,
+        Some(b'C') => (v as u16) as u32,
+        Some(b'Z') => (v != 0) as u32,
+        _ => v,
+    }
+}
+
+fn widen_field(v: u32, desc: &str) -> u32 {
+    match desc.as_bytes().first() {
+        Some(b'B') => (v as i8) as i32 as u32,
+        Some(b'S') => (v as i16) as i32 as u32,
+        Some(b'C') => (v as u16) as u32,
+        Some(b'Z') => (v != 0) as u32,
+        _ => v,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+fn const_string(vm: &mut Vm, dex: u32, index: u32) -> VmResult<Handle> {
+    vm.dex_string(dex, index)
+}
+
+// ---------------------------------------------------------------------------
+// Arrays
+// ---------------------------------------------------------------------------
+
+fn array_get(vm: &mut Vm, t: usize, fi: usize, dst: u16, arr: Handle, idx: i32, op: u8) -> VmResult<()> {
+    let len = match vm.heap.get(arr) {
+        Some(Object::Array(a)) => a.len(),
+        None => return Err(vm.throw_new("Ljava/lang/NullPointerException;", None)),
+        _ => return Err(VmError::Internal("aget on non-array".into())),
+    };
+    if idx < 0 || idx as usize >= len {
+        let msg = format!("Index {idx} out of bounds for length {len}");
+        return Err(vm.throw_new("Ljava/lang/ArrayIndexOutOfBoundsException;", Some(&msg)));
+    }
+    match vm.heap.get(arr) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Bool(v) => set_reg(vm, t, fi, dst, v[idx as usize] as u32),
+            ArrayData::Byte(v) => set_reg(vm, t, fi, dst, v[idx as usize] as i32 as u32),
+            ArrayData::Char(v) => set_reg(vm, t, fi, dst, v[idx as usize] as u32),
+            ArrayData::Short(v) => set_reg(vm, t, fi, dst, v[idx as usize] as i32 as u32),
+            ArrayData::Int(v) => set_reg(vm, t, fi, dst, v[idx as usize] as u32),
+            ArrayData::Long(v) => set_wide(vm, t, fi, dst, v[idx as usize] as u64),
+            ArrayData::Float(v) => set_reg(vm, t, fi, dst, v[idx as usize].to_bits()),
+            ArrayData::Double(v) => set_wide(vm, t, fi, dst, v[idx as usize].to_bits()),
+            ArrayData::Ref(v) => {
+                if op == 0x46 {
+                    set_ref(vm, t, fi, dst, v[idx as usize])
+                } else {
+                    set_reg(vm, t, fi, dst, v[idx as usize])
+                }
+            }
+        },
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn array_put(vm: &mut Vm, t: usize, fi: usize, src: u16, arr: Handle, idx: i32, op: u8) -> VmResult<()> {
+    let (len, elem_desc) = match vm.heap.get(arr) {
+        Some(Object::Array(a)) => (a.len(), a.elem_desc.clone()),
+        None => return Err(vm.throw_new("Ljava/lang/NullPointerException;", None)),
+        _ => return Err(VmError::Internal("aput on non-array".into())),
+    };
+    if idx < 0 || idx as usize >= len {
+        let msg = format!("Index {idx} out of bounds for length {len}");
+        return Err(vm.throw_new("Ljava/lang/ArrayIndexOutOfBoundsException;", Some(&msg)));
+    }
+    let rv = reg(vm, t, fi, src);
+    let rv_wide = if op == 0x4c {
+        get_wide(vm, t, fi, src)
+    } else {
+        0
+    };
+    if op == 0x4d {
+        // aput-object: check ArrayStoreException
+        if rv != NULL {
+            let comp_desc = elem_desc.clone();
+            let comp = vm.load_class(&comp_desc)?;
+            let from = vm
+                .class_of_object(rv)
+                .ok_or_else(|| VmError::Internal("aput-object non-object".into()))?;
+            if !vm.is_assignable(from, comp)? {
+                let msg = format!(
+                    "array element type mismatch: cannot store {} into {}",
+                    vm.class_desc_of_id(from),
+                    comp_desc
+                );
+                return Err(vm.throw_new("Ljava/lang/ArrayStoreException;", Some(&msg)));
+            }
+        }
+    }
+    match vm.heap.get_mut(arr) {
+        Some(Object::Array(a)) => match &mut a.data {
+            ArrayData::Bool(v) => v[idx as usize] = rv != 0,
+            ArrayData::Byte(v) => v[idx as usize] = rv as i8,
+            ArrayData::Char(v) => v[idx as usize] = rv as u16,
+            ArrayData::Short(v) => v[idx as usize] = rv as i16,
+            ArrayData::Int(v) => v[idx as usize] = rv as i32,
+            ArrayData::Long(v) => v[idx as usize] = rv_wide as i64,
+            ArrayData::Float(v) => v[idx as usize] = f32::from_bits(rv),
+            ArrayData::Double(v) => v[idx as usize] = f64::from_bits(rv_wide),
+            ArrayData::Ref(v) => v[idx as usize] = rv,
+        },
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn filled_new_array(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<Handle> {
+    let dex = frame_dex(vm, t, fi);
+    let arr_desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+    let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc).to_string();
+    let count = insn.reg_count as usize;
+    // Non-range: regs[0..count] are the argument registers.
+    // Range: regs[0] is the base and the arguments are consecutive.
+    let starts: Vec<u16> = if insn.op == 0x25 {
+        (0..count).map(|i| insn.regs[0] + i as u16).collect()
+    } else {
+        insn.regs[..count].to_vec()
+    };
+    let obj = crate::vm::simple_array_object(&elem, count)?;
+    let h = vm.alloc(obj)?;
+    vm.native_roots.push(h);
+    let mut vals: Vec<u64> = Vec::with_capacity(count);
+    for &s in &starts {
+        vals.push(reg(vm, t, fi, s) as u64);
+    }
+    fill_array_from_regs(vm, h, &vals)?;
+    vm.native_roots.pop();
+    Ok(h)
+}
+
+fn fill_array_from_regs(vm: &mut Vm, h: Handle, vals: &[u64]) -> VmResult<()> {
+    if let Some(Object::Array(a)) = vm.heap.get_mut(h) {
+        match &mut a.data {
+            ArrayData::Bool(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val != 0;
+                }
+            }
+            ArrayData::Byte(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val as i8;
+                }
+            }
+            ArrayData::Char(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val as u16;
+                }
+            }
+            ArrayData::Short(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val as i16;
+                }
+            }
+            ArrayData::Int(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val as i32;
+                }
+            }
+            ArrayData::Float(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = f32::from_bits(*val as u32);
+                }
+            }
+            ArrayData::Ref(v) => {
+                for (i, val) in vals.iter().enumerate() {
+                    v[i] = *val as u32;
+                }
+            }
+            ArrayData::Long(v) => {
+                for (i, pair) in vals.chunks(2).enumerate() {
+                    if i >= v.len() {
+                        break;
+                    }
+                    v[i] = (pair[0] | (pair.get(1).copied().unwrap_or(0) << 32)) as i64;
+                }
+            }
+            ArrayData::Double(v) => {
+                for (i, pair) in vals.chunks(2).enumerate() {
+                    if i >= v.len() {
+                        break;
+                    }
+                    let bits = pair[0] | (pair.get(1).copied().unwrap_or(0) << 32);
+                    v[i] = f64::from_bits(bits);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn fill_array_data(vm: &mut Vm, arr: Handle, fad: &acos_dex::FillArrayDataPayload) -> VmResult<()> {
+    if let Some(Object::Array(a)) = vm.heap.get_mut(arr) {
+        let w = fad.element_width as usize;
+        let n = fad.size as usize;
+        for i in 0..n {
+            let off = i * w;
+            if off + w > fad.data.len() {
+                break;
+            }
+            let bytes = &fad.data[off..off + w];
+            let mut raw: u64 = 0;
+            for (j, &b) in bytes.iter().enumerate() {
+                raw |= (b as u64) << (8 * j);
+            }
+            match &mut a.data {
+                ArrayData::Bool(v) => v[i] = raw != 0,
+                ArrayData::Byte(v) => v[i] = raw as i8,
+                ArrayData::Char(v) => v[i] = raw as u16,
+                ArrayData::Short(v) => v[i] = raw as i16,
+                ArrayData::Int(v) => v[i] = raw as i32,
+                ArrayData::Long(v) => v[i] = raw as i64,
+                ArrayData::Float(v) => v[i] = f32::from_bits(raw as u32),
+                ArrayData::Double(v) => v[i] = f64::from_bits(raw),
+                ArrayData::Ref(_) => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Conversions
+// ---------------------------------------------------------------------------
+
+fn convert(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) {
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    match insn.op {
+        0x81 => {
+            let v = reg(vm, t, fi, r1) as i32 as i64;
+            set_wide(vm, t, fi, r0, v as u64);
+        }
+        0x82 => {
+            let v = reg(vm, t, fi, r1) as i32 as f32;
+            set_reg(vm, t, fi, r0, v.to_bits());
+        }
+        0x83 => {
+            let v = reg(vm, t, fi, r1) as i32 as f64;
+            set_wide(vm, t, fi, r0, v.to_bits());
+        }
+        0x84 => {
+            let v = get_wide(vm, t, fi, r1) as i64 as i32;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0x85 => {
+            let v = get_wide(vm, t, fi, r1) as i64 as f32;
+            set_reg(vm, t, fi, r0, v.to_bits());
+        }
+        0x86 => {
+            let v = get_wide(vm, t, fi, r1) as i64 as f64;
+            set_wide(vm, t, fi, r0, v.to_bits());
+        }
+        0x87 => {
+            let v = f32::from_bits(reg(vm, t, fi, r1)) as i32;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0x88 => {
+            let v = f32::from_bits(reg(vm, t, fi, r1)) as i64;
+            set_wide(vm, t, fi, r0, v as u64);
+        }
+        0x89 => {
+            let v = f32::from_bits(reg(vm, t, fi, r1)) as f64;
+            set_wide(vm, t, fi, r0, v.to_bits());
+        }
+        0x8a => {
+            let v = f64::from_bits(get_wide(vm, t, fi, r1)) as i32;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0x8b => {
+            let v = f64::from_bits(get_wide(vm, t, fi, r1)) as i64;
+            set_wide(vm, t, fi, r0, v as u64);
+        }
+        0x8c => {
+            let v = f64::from_bits(get_wide(vm, t, fi, r1)) as f32;
+            set_reg(vm, t, fi, r0, v.to_bits());
+        }
+        0x8d => {
+            let v = reg(vm, t, fi, r1) as i32 as i8 as i32;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0x8e => {
+            let v = reg(vm, t, fi, r1) as u16;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0x8f => {
+            let v = reg(vm, t, fi, r1) as i32 as i16 as i32;
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Arithmetic
+// ---------------------------------------------------------------------------
+
+fn div_int(a: i32, b: i32) -> Result<i32, ()> {
+    if b == 0 {
+        Err(())
+    } else if a == i32::MIN && b == -1 {
+        Ok(i32::MIN)
+    } else {
+        Ok(a / b)
+    }
+}
+
+fn rem_int(a: i32, b: i32) -> Result<i32, ()> {
+    if b == 0 {
+        Err(())
+    } else if a == i32::MIN && b == -1 {
+        Ok(0)
+    } else {
+        Ok(a % b)
+    }
+}
+
+fn div_long(a: i64, b: i64) -> Result<i64, ()> {
+    if b == 0 {
+        Err(())
+    } else if a == i64::MIN && b == -1 {
+        Ok(i64::MIN)
+    } else {
+        Ok(a / b)
+    }
+}
+
+fn rem_long(a: i64, b: i64) -> Result<i64, ()> {
+    if b == 0 {
+        Err(())
+    } else if a == i64::MIN && b == -1 {
+        Ok(0)
+    } else {
+        Ok(a % b)
+    }
+}
+
+fn arith3(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    let r2 = insn.regs[2];
+    match insn.op {
+        0x90 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
+            set_reg(vm, t, fi, r0, a.wrapping_add(b) as u32)
+        }
+        0x91 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
+            set_reg(vm, t, fi, r0, a.wrapping_sub(b) as u32)
+        }
+        0x92 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
+            set_reg(vm, t, fi, r0, a.wrapping_mul(b) as u32)
+        }
+        0x93 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
+            match div_int(a, b) {
+                Ok(v) => set_reg(vm, t, fi, r0, v as u32),
+                Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            }
+        }
+        0x94 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
+            match rem_int(a, b) {
+                Ok(v) => set_reg(vm, t, fi, r0, v as u32),
+                Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            }
+        }
+        0x95 => {
+            let (a, b) = (reg(vm, t, fi, r1), reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a & b)
+        }
+        0x96 => {
+            let (a, b) = (reg(vm, t, fi, r1), reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a | b)
+        }
+        0x97 => {
+            let (a, b) = (reg(vm, t, fi, r1), reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a ^ b)
+        }
+        0x98 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a.wrapping_shl(b & 0x1f) as u32)
+        }
+        0x99 => {
+            let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a.wrapping_shr(b & 0x1f) as u32)
+        }
+        0x9a => {
+            let (a, b) = (reg(vm, t, fi, r1), reg(vm, t, fi, r2));
+            set_reg(vm, t, fi, r0, a.wrapping_shr(b & 0x1f))
+        }
+        0x9b..=0xa5 => {
+            let (a, b) = (get_wide(vm, t, fi, r1), get_wide(vm, t, fi, r2));
+            let (a, b) = (a as i64, b as i64);
+            let v: i64 = match insn.op {
+                0x9b => a.wrapping_add(b),
+                0x9c => a.wrapping_sub(b),
+                0x9d => a.wrapping_mul(b),
+                0x9e => match div_long(a, b) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0x9f => match rem_long(a, b) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0xa0 => a & b,
+                0xa1 => a | b,
+                0xa2 => a ^ b,
+                0xa3 => {
+                    let sh = (get_wide(vm, t, fi, r2) as i64 & 0x3f) as u32;
+                    (a as u64).wrapping_shl(sh) as i64
+                }
+                0xa4 => a.wrapping_shr((b & 0x3f) as u32),
+                0xa5 => ((a as u64).wrapping_shr((b & 0x3f) as u32)) as i64,
+                _ => 0,
+            };
+            set_wide(vm, t, fi, r0, v as u64);
+        }
+        0xa6..=0xaf => {
+            let is_double = insn.op >= 0xab;
+            if is_double {
+                let a = f64::from_bits(get_wide(vm, t, fi, r1));
+                let b = f64::from_bits(get_wide(vm, t, fi, r2));
+                let v = match insn.op {
+                    0xab => a + b,
+                    0xac => a - b,
+                    0xad => a * b,
+                    0xae => a / b,
+                    _ => a % b,
+                };
+                set_wide(vm, t, fi, r0, v.to_bits());
+            } else {
+                let a = f32::from_bits(reg(vm, t, fi, r1));
+                let b = f32::from_bits(reg(vm, t, fi, r2));
+                let v = match insn.op {
+                    0xa6 => a + b,
+                    0xa7 => a - b,
+                    0xa8 => a * b,
+                    0xa9 => a / b,
+                    _ => a % b,
+                };
+                set_reg(vm, t, fi, r0, v.to_bits());
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn arith2addr(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    match insn.op {
+        0xb0..=0xba => {
+            let a = reg(vm, t, fi, r0) as i32;
+            let b = reg(vm, t, fi, r1);
+            let v: i32 = match insn.op {
+                0xb0 => a.wrapping_add(b as i32),
+                0xb1 => a.wrapping_sub(b as i32),
+                0xb2 => a.wrapping_mul(b as i32),
+                0xb3 => match div_int(a, b as i32) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0xb4 => match rem_int(a, b as i32) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0xb5 => a & b as i32,
+                0xb6 => a | b as i32,
+                0xb7 => a ^ b as i32,
+                0xb8 => a.wrapping_shl(b & 0x1f),
+                0xb9 => a.wrapping_shr(b & 0x1f),
+                _ => (a as u32).wrapping_shr(b & 0x1f) as i32,
+            };
+            set_reg(vm, t, fi, r0, v as u32);
+        }
+        0xbb..=0xc5 => {
+            let a = get_wide(vm, t, fi, r0) as i64;
+            let b = get_wide(vm, t, fi, r1) as i64;
+            let v: i64 = match insn.op {
+                0xbb => a.wrapping_add(b),
+                0xbc => a.wrapping_sub(b),
+                0xbd => a.wrapping_mul(b),
+                0xbe => match div_long(a, b) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0xbf => match rem_long(a, b) {
+                    Ok(v) => v,
+                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                },
+                0xc0 => a & b,
+                0xc1 => a | b,
+                0xc2 => a ^ b,
+                0xc3 => ((a as u64).wrapping_shl((b & 0x3f) as u32)) as i64,
+                0xc4 => a.wrapping_shr((b & 0x3f) as u32),
+                _ => ((a as u64).wrapping_shr((b & 0x3f) as u32)) as i64,
+            };
+            set_wide(vm, t, fi, r0, v as u64);
+        }
+        0xc6..=0xcf => {
+            if insn.op >= 0xcb {
+                let a = f64::from_bits(get_wide(vm, t, fi, r0));
+                let b = f64::from_bits(get_wide(vm, t, fi, r1));
+                let v = match insn.op {
+                    0xcb => a + b,
+                    0xcc => a - b,
+                    0xcd => a * b,
+                    0xce => a / b,
+                    _ => a % b,
+                };
+                set_wide(vm, t, fi, r0, v.to_bits());
+            } else {
+                let a = f32::from_bits(reg(vm, t, fi, r0));
+                let b = f32::from_bits(reg(vm, t, fi, r1));
+                let v = match insn.op {
+                    0xc6 => a + b,
+                    0xc7 => a - b,
+                    0xc8 => a * b,
+                    0xc9 => a / b,
+                    _ => a % b,
+                };
+                set_reg(vm, t, fi, r0, v.to_bits());
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn arith_lit16(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    let lit = insn.literal as i32;
+    let a = reg(vm, t, fi, r1) as i32;
+    let v = match insn.op {
+        0xd0 => a.wrapping_add(lit),
+        0xd1 => lit.wrapping_sub(a),
+        0xd2 => a.wrapping_mul(lit),
+        0xd3 => match div_int(a, lit) {
+            Ok(v) => v,
+            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+        },
+        0xd4 => match rem_int(a, lit) {
+            Ok(v) => v,
+            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+        },
+        0xd5 => a & lit,
+        0xd6 => a | lit,
+        _ => a ^ lit,
+    };
+    set_reg(vm, t, fi, r0, v as u32);
+    Ok(())
+}
+
+fn arith_lit8(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let r0 = insn.regs[0];
+    let r1 = insn.regs[1];
+    let lit = insn.literal as i32;
+    let a = reg(vm, t, fi, r1) as i32;
+    let v = match insn.op {
+        0xd8 => a.wrapping_add(lit),
+        0xd9 => lit.wrapping_sub(a),
+        0xda => a.wrapping_mul(lit),
+        0xdb => match div_int(a, lit) {
+            Ok(v) => v,
+            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+        },
+        0xdc => match rem_int(a, lit) {
+            Ok(v) => v,
+            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+        },
+        0xdd => a & lit,
+        0xde => a | lit,
+        0xdf => a ^ lit,
+        0xe0 => a.wrapping_shl(lit as u32 & 0x1f),
+        0xe1 => a.wrapping_shr(lit as u32 & 0x1f),
+        _ => (a as u32).wrapping_shr(lit as u32 & 0x1f) as i32,
+    };
+    set_reg(vm, t, fi, r0, v as u32);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Invocation
+// ---------------------------------------------------------------------------
+
+fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let (kind, range) = invoke_kind(insn.op);
+    let dex = frame_dex(vm, t, fi);
+    let (ref_class, name, sig) = {
+        let r = vm.dexs[dex as usize].file.method_ref(insn.index)?;
+        (
+            r.class.to_string(),
+            r.name.to_string(),
+            format!("({}){}", r.parameters.concat(), r.return_type),
+        )
+    };
+
+    // Argument word registers (35c lists one register per argument *word*,
+    // so a wide argument contributes two entries).
+    let arg_starts: Vec<u16> = if range {
+        let base = insn.regs[0];
+        (0..insn.reg_count as u16)
+            .map(|i| base.wrapping_add(i))
+            .collect()
+    } else {
+        insn.regs[..insn.reg_count as usize].to_vec()
+    };
+
+    // Resolve the target.
+    let method = if kind == InvokeKind::Virtual || kind == InvokeKind::Interface {
+        let receiver = reg(vm, t, fi, arg_starts[0]);
+        if receiver == NULL {
+            return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+        }
+        match vm.dispatch(receiver, &name, &sig) {
+            Ok(m) => m,
+            Err(_) => {
+                let api = format!("{ref_class}->{name}{sig}");
+                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+                return Err(VmError::unsupported_api(api, at));
+            }
+        }
+    } else {
+        let cid = match vm.load_class(&ref_class) {
+            Ok(c) => c,
+            Err(_) => {
+                let api = format!("{ref_class}->{name}{sig}");
+                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+                return Err(VmError::unsupported_api(api, at));
+            }
+        };
+        match vm.find_method(cid, &name, &sig, kind) {
+            Ok(m) => m,
+            Err(_) => {
+                let api = format!("{ref_class}->{name}{sig}");
+                let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+                return Err(VmError::unsupported_api(api, at));
+            }
+        }
+    };
+
+    // Class initialization for static calls.
+    let m = vm.methods[method as usize].clone();
+    if m.is_static() {
+        vm.initialize_class(m.class)?;
+    }
+
+    let mut frame = build_frame(vm, method, &arg_starts)?;
+    // Synchronized method: acquire the monitor, blocking if another thread
+    // holds it. On block we leave the pc at the invoke so it is retried.
+    if m.is_synchronized() {
+        let target = if m.is_static() {
+            vm.class_object(m.class)?
+        } else {
+            frame.regs[frame.regs.len() - m.ins_size as usize]
+        };
+        if !try_enter_monitor(vm, target, t) {
+            vm.threads[t].status = ThreadStatus::BlockedMonitor(target);
+            return Ok(());
+        }
+        frame.monitor = Some(target);
+    }
+    vm.threads[t].frames.push(frame);
+    vm.metrics.invokes += 1;
+    Ok(())
+}
+
+fn invoke_kind(op: u8) -> (InvokeKind, bool) {
+    match op {
+        0x6e => (InvokeKind::Virtual, false),
+        0x6f => (InvokeKind::Super, false),
+        0x70 => (InvokeKind::Direct, false),
+        0x71 => (InvokeKind::Static, false),
+        0x72 => (InvokeKind::Interface, false),
+        0x74 => (InvokeKind::Virtual, true),
+        0x75 => (InvokeKind::Super, true),
+        0x76 => (InvokeKind::Direct, true),
+        0x77 => (InvokeKind::Static, true),
+        0x78 => (InvokeKind::Interface, true),
+        _ => (InvokeKind::Virtual, false),
+    }
+}
+
+/// Build a callee frame by copying argument *words* from the caller.
+fn build_frame(vm: &mut Vm, method: MethodId, arg_words: &[u16]) -> VmResult<Frame> {
+    if vm.threads[vm.current_thread].frames.len() >= vm.max_frames
+        && vm.stack_overflow_object != NULL
+    {
+        return Err(VmError::JavaException(vm.stack_overflow_object));
+    }
+    let m = vm.methods[method as usize].clone();
+    let (regs_size, code) = match &m.imp {
+        MethodImpl::Dex { code: Some(c), .. } => (c.registers_size as usize, c.clone()),
+        _ => (m.ins_size as usize, empty_code()),
+    };
+    let t = vm.current_thread;
+    let caller = vm.threads[t].frames.last().unwrap();
+    let caller_regs = &caller.regs;
+
+    let base = regs_size - m.ins_size as usize;
+    let mut slots = vec![0u32; regs_size];
+    let n = (m.ins_size as usize).min(arg_words.len());
+    for i in 0..n {
+        slots[base + i] = caller_regs[arg_words[i] as usize];
+    }
+    let mut frame = Frame::new(method, m.class, code, regs_size);
+    frame.regs = slots;
+    frame.advance_on_return = true;
+    // Reference map for incoming slots.
+    for (i, &is_ref) in m.ins_ref.iter().enumerate() {
+        if base + i < frame.refs.len() {
+            frame.refs[base + i] = is_ref;
+        }
+    }
+    Ok(frame)
+}
+
+/// Push a frame directly from raw parameter values (used by native callbacks
+/// and the top-level `main`).
+pub fn push_frame_values(
+    vm: &mut Vm,
+    method: MethodId,
+    this: Handle,
+    args: &[u64],
+) -> VmResult<()> {
+    if vm.threads[vm.current_thread].frames.len() >= vm.max_frames
+        && vm.stack_overflow_object != NULL
+    {
+        return Err(VmError::JavaException(vm.stack_overflow_object));
+    }
+    let m = vm.methods[method as usize].clone();
+    let (regs_size, code) = match &m.imp {
+        MethodImpl::Dex { code: Some(c), .. } => (c.registers_size as usize, c.clone()),
+        _ => (m.ins_size as usize, empty_code()),
+    };
+    let mut frame = Frame::new(method, m.class, code, regs_size);
+    let base = regs_size - m.ins_size as usize;
+    let mut pos = base;
+    if !m.is_static() {
+        frame.regs[pos] = this;
+        pos += 1;
+    }
+    for (i, &a) in args.iter().enumerate() {
+        let w = match m.params.get(i) {
+            Some(&p) => crate::class::type_width(vm.type_kind(p)),
+            None => 1,
+        };
+        frame.regs[pos] = a as u32;
+        if w == 2 {
+            frame.regs[pos + 1] = (a >> 32) as u32;
+        }
+        pos += w as usize;
+    }
+    for (i, &is_ref) in m.ins_ref.iter().enumerate() {
+        frame.refs[base + i] = is_ref;
+    }
+    vm.threads[vm.current_thread].frames.push(frame);
+    vm.metrics.invokes += 1;
+    Ok(())
+}
+
+/// Run the current thread until its frame depth returns to `base_depth`.
+pub fn run_current_until(vm: &mut Vm, base_depth: usize) -> VmResult<()> {
+    let t = vm.current_thread;
+    while vm.threads[t].frames.len() > base_depth {
+        step(vm)?;
+        vm.metrics.instructions += 1;
+    }
+    if vm.pending_exception != NULL {
+        let h = vm.pending_exception;
+        vm.pending_exception = NULL;
+        return Err(VmError::JavaException(h));
+    }
+    Ok(())
+}
+
+/// Call a Java method synchronously and return its raw 64-bit result.
+pub fn call_method(
+    vm: &mut Vm,
+    method: MethodId,
+    this: Handle,
+    args: &[u64],
+) -> VmResult<u64> {
+    let t = vm.current_thread;
+    let base = vm.threads[t].frames.len();
+    push_frame_values(vm, method, this, args)?;
+    run_current_until(vm, base)?;
+    let caller = vm.threads[t].frames.last().unwrap();
+    Ok(caller.pending_result)
+}
+
+// ---------------------------------------------------------------------------
+// Monitors
+// ---------------------------------------------------------------------------
+
+fn try_enter_monitor(vm: &mut Vm, h: Handle, t: usize) -> bool {
+    match vm.monitors.get_mut(&h) {
+        Some((owner, count)) => {
+            if *owner == t {
+                *count += 1;
+                true
+            } else {
+                false
+            }
+        }
+        None => {
+            vm.monitors.insert(h, (t, 1));
+            true
+        }
+    }
+}
+
+fn exit_monitor(vm: &mut Vm, h: Handle) {
+    if let Some((_, count)) = vm.monitors.get_mut(&h) {
+        if *count > 0 {
+            *count -= 1;
+        }
+        if *count == 0 {
+            vm.monitors.remove(&h);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Class initialization
+// ---------------------------------------------------------------------------
+
+impl Vm {
+    pub fn initialize_class(&mut self, id: ClassId) -> VmResult<()> {
+        use crate::class::InitState;
+        match self.classes[id as usize].init {
+            InitState::Init => return Ok(()),
+            InitState::InProgress => return Ok(()),
+            InitState::Failed => {
+                let desc = self.class_desc(id).to_string();
+                return Err(self.throw_new("Ljava/lang/NoClassDefFoundError;", Some(&desc)));
+            }
+            InitState::NotInit => {}
+        }
+        self.classes[id as usize].init = InitState::InProgress;
+        if !self.classes[id as usize].is_interface {
+            if let Some(sup) = self.classes[id as usize].super_class {
+                if let Err(e) = self.initialize_class(sup) {
+                    self.classes[id as usize].init = InitState::Failed;
+                    return Err(e);
+                }
+            }
+        }
+        let clinit = self.classes[id as usize]
+            .direct_map
+            .get(&("<clinit>".to_string(), "()V".to_string()))
+            .copied();
+        if let Some(mid) = clinit {
+            let t = self.current_thread;
+            let base = self.threads[t].frames.len();
+            push_frame_values(self, mid, NULL, &[])?;
+            if let Err(e) = run_current_until(self, base) {
+                self.classes[id as usize].init = InitState::Failed;
+                return Err(e);
+            }
+        }
+        self.classes[id as usize].init = InitState::Init;
+        Ok(())
+    }
+}
+
+/// Resolve the DEX index of the currently executing frame (DEX frames only).
+#[inline]
+fn frame_dex(vm: &Vm, t: usize, fi: usize) -> u32 {
+    let method = vm.threads[t].frames[fi].method;
+    match &vm.methods[method as usize].imp {
+        MethodImpl::Dex { dex, .. } => *dex,
+        _ => 0,
+    }
+}
+
+// Small helper used by the interpreter to name the current frame.
+impl Vm {
+    pub fn frames_label(&self, t: usize, fi: usize) -> String {
+        if let Some(f) = self.threads.get(t).and_then(|th| th.frames.get(fi)) {
+            let desc = self.class_desc(f.class);
+            let name = self
+                .methods
+                .get(f.method as usize)
+                .map(|m| m.name.as_str())
+                .unwrap_or("?");
+            format!("{desc}.{name}")
+        } else {
+            "<unknown>".to_string()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn integer_division_edge_semantics() {
+        assert_eq!(div_int(7, 2), Ok(3));
+        assert_eq!(div_int(-7, 2), Ok(-3));
+        assert_eq!(div_int(7, -2), Ok(-3));
+        assert_eq!(div_int(i32::MIN, -1), Ok(i32::MIN));
+        assert_eq!(div_int(1, 0), Err(()));
+        assert_eq!(rem_int(i32::MIN, -1), Ok(0));
+        assert_eq!(rem_int(-7, 3), Ok(-1));
+        assert_eq!(rem_int(1, 0), Err(()));
+        assert_eq!(div_long(i64::MIN, -1), Ok(i64::MIN));
+        assert_eq!(rem_long(i64::MIN, -1), Ok(0));
+        assert_eq!(div_long(1, 0), Err(()));
+    }
+
+    #[test]
+    fn shift_masking_matches_java() {
+        // Java masks the shift distance to 5 bits for int and 6 for long.
+        let a: i32 = 1;
+        assert_eq!(a.wrapping_shl(32 & 0x1f), 1);
+        assert_eq!(a.wrapping_shl(33 & 0x1f), 2);
+        let b: i64 = 1;
+        assert_eq!(b.wrapping_shl(64 & 0x3f), 1);
+        assert_eq!(b.wrapping_shl(65 & 0x3f), 2);
+    }
+}
+

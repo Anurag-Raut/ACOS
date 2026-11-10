@@ -1,0 +1,19 @@
+[package]
+name = "acos-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS Rust DEX interpreter: managed heap, class model, interpreter and core-library builtins."
+
+[dependencies]
+acos-dex = { path = "../acos-dex" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+
+[lib]
+name = "acos_vm"
+path = "src/lib.rs"

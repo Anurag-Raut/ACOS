@@ -1,0 +1,330 @@
+{
+  "mode": "normal",
+  "gc_stress": false,
+  "total": 20,
+  "pass": 20,
+  "fail": 0,
+  "unsupported": 0,
+  "programs": [
+    {
+      "program": "01_hello",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 31,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 3856,
+        "instructions": 65,
+        "invokes": 33,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "02_int_arith",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 106,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 10668,
+        "instructions": 721,
+        "invokes": 407,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "03_long_arith",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 111,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 11588,
+        "instructions": 740,
+        "invokes": 411,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "04_float_double",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 122,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 12444,
+        "instructions": 622,
+        "invokes": 349,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "05_branches_loops",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 65,
+        "classes_loaded": 81,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 6630,
+        "instructions": 2206,
+        "invokes": 198,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "06_switch",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 80,
+        "classes_loaded": 81,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 7910,
+        "instructions": 768,
+        "invokes": 345,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "07_static_methods_recursion",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 92,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 9136,
+        "instructions": 22840,
+        "invokes": 3549,
+        "startup_ms": 0,
+        "wall_ms": 1
+      }
+    },
+    {
+      "program": "08_arrays",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 113,
+        "classes_loaded": 88,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 11608,
+        "instructions": 788,
+        "invokes": 261,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "09_strings",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 191,
+        "classes_loaded": 81,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 19602,
+        "instructions": 861,
+        "invokes": 519,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "10_objects_fields",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 88,
+        "classes_loaded": 82,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 8988,
+        "instructions": 478,
+        "invokes": 256,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "11_inheritance_virtual",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 100,
+        "classes_loaded": 85,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 10476,
+        "instructions": 674,
+        "invokes": 329,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "12_interfaces",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 89,
+        "classes_loaded": 86,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 9270,
+        "instructions": 480,
+        "invokes": 255,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "13_exceptions",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 108,
+        "classes_loaded": 84,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 11694,
+        "instructions": 503,
+        "invokes": 272,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "14_instanceof_casts",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 124,
+        "classes_loaded": 85,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 13558,
+        "instructions": 915,
+        "invokes": 481,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "15_inner_lambda",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 92,
+        "classes_loaded": 98,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 9040,
+        "instructions": 529,
+        "invokes": 277,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "16_enums",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 94,
+        "classes_loaded": 89,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 9814,
+        "instructions": 728,
+        "invokes": 357,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "17_generics_collections",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 159,
+        "classes_loaded": 83,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 16380,
+        "instructions": 893,
+        "invokes": 550,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "18_string_format_misc",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 141,
+        "classes_loaded": 80,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 14542,
+        "instructions": 803,
+        "invokes": 483,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    },
+    {
+      "program": "19_threads_sync",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 56,
+        "classes_loaded": 86,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 5710,
+        "instructions": 1300514,
+        "invokes": 100168,
+        "startup_ms": 0,
+        "wall_ms": 43
+      }
+    },
+    {
+      "program": "20_uncaught",
+      "status": "pass",
+      "exit_code": 1,
+      "metrics": {
+        "allocations": 20,
+        "classes_loaded": 81,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 2114,
+        "instructions": 17,
+        "invokes": 8,
+        "startup_ms": 0,
+        "wall_ms": 0
+      }
+    }
+  ]
+}

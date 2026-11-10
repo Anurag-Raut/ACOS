@@ -10,6 +10,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use acos_apk::arsc::ResourceTable;
 use acos_apk::manifest::{Component, ComponentKind};
 use acos_apk::{Apk, ApkError};
+use acos_vm::{Vm, VmError, VmOptions};
 use clap::{Parser, Subcommand};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -26,6 +27,26 @@ struct Cli {
 enum Command {
     /// Inspect an APK and print a static-analysis summary.
     Inspect(InspectArgs),
+    /// Execute a DEX/APK's `main` on the ACOS Rust interpreter.
+    RunDex(RunDexArgs),
+}
+
+#[derive(Debug, clap::Args)]
+struct RunDexArgs {
+    /// Path to a `.dex`, `.apk`, or a directory containing `classes.dex`.
+    path: PathBuf,
+
+    /// Fully-qualified main class, e.g. `Main` or `com.example.Main`.
+    #[arg(long, default_value = "Main")]
+    main: String,
+
+    /// Emit the standard ACOS JSON response envelope instead of text.
+    #[arg(long)]
+    json: bool,
+
+    /// A program argument passed to `main(String[])` (repeatable).
+    #[arg(long = "arg")]
+    args: Vec<String>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -69,6 +90,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Inspect(args) => inspect(args),
+        Command::RunDex(args) => run_dex(args),
     }
 }
 
@@ -279,7 +301,204 @@ fn new_request_id() -> String {
     format!("req_{:x}_{:x}", std::process::id(), nanos)
 }
 
-fn print_json(envelope: &Envelope) {
+fn load_dex_images(path: &PathBuf) -> Result<Vec<Vec<u8>>, String> {
+    if path.is_dir() {
+        let mut out = Vec::new();
+        let mut entries: Vec<_> = std::fs::read_dir(path)
+            .map_err(|e| format!("read dir {path:?}: {e}"))?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
+            .collect();
+        entries.sort();
+        for p in entries {
+            out.push(std::fs::read(&p).map_err(|e| format!("read {p:?}: {e}"))?);
+        }
+        if out.is_empty() {
+            return Err(format!("no .dex files in {path:?}"));
+        }
+        return Ok(out);
+    }
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("apk") | Some("zip") => {
+            let apk = Apk::open(path).map_err(|e| format!("open apk: {e}"))?;
+            let mut out = Vec::new();
+            for d in &apk.dex_files {
+                if let Some(b) = apk.dex_bytes(&d.name) {
+                    out.push(b.to_vec());
+                }
+            }
+            if out.is_empty() {
+                return Err("apk contains no dex".to_string());
+            }
+            Ok(out)
+        }
+        _ => {
+            let b = std::fs::read(path).map_err(|e| format!("read {path:?}: {e}"))?;
+            Ok(vec![b])
+        }
+    }
+}
+
+fn run_dex(args: RunDexArgs) -> ExitCode {
+    let request_id = new_request_id();
+    let started = Instant::now();
+
+    let options = VmOptions {
+        heap_max_bytes: std::env::var("ACOS_HEAP_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(256 * 1024 * 1024),
+        gc_stress: std::env::var_os("ACOS_GC_STRESS").is_some(),
+    };
+
+    let images = match load_dex_images(&args.path) {
+        Ok(i) => i,
+        Err(msg) => {
+            return run_error(&request_id, args.json, "VM_INTERNAL", &msg, None, started)
+        }
+    };
+
+    let mut vm = match Vm::new(options) {
+        Ok(v) => v,
+        Err(e) => {
+            return run_error(&request_id, args.json, e.code(), &e.to_string(), None, started)
+        }
+    };
+    for img in images {
+        match acos_dex::DexFile::parse(img) {
+            Ok(dex) => {
+                vm.add_dex(dex);
+            }
+            Err(e) => {
+                return run_error(
+                    &request_id,
+                    args.json,
+                    "DEX_LOAD_ERROR",
+                    &format!("{e}"),
+                    None,
+                    started,
+                )
+            }
+        }
+    }
+
+    let startup_ms = started.elapsed().as_millis();
+    let outcome = vm.run(&args.main, &args.args);
+    let wall_ms = started.elapsed().as_millis();
+    let m = &outcome.metrics;
+
+    if !args.json {
+        use std::io::Write;
+        let _ = std::io::stdout().write_all(outcome.stdout.as_bytes());
+        let _ = std::io::stderr().write_all(outcome.stderr.as_bytes());
+        return ExitCode::from(outcome.exit_code.clamp(0, 255) as u8);
+    }
+
+    let result = json!({
+        "exit_code": outcome.exit_code,
+        "stdout": outcome.stdout,
+        "stderr": outcome.stderr,
+        "uncaught_exception": outcome.uncaught.as_ref().map(|u| json!({
+            "class": u.class,
+            "message": u.message,
+            "stack": u.stack,
+        })),
+    });
+
+    if outcome.exit_code == 70 && outcome.uncaught.is_none() {
+        let (code, message) = parse_vm_error(&outcome.stderr);
+        let details = outcome.vm_error.as_ref().and_then(vm_error_details);
+        return run_error(&request_id, true, &code, &message, details, started);
+    }
+
+    let envelope = json!({
+        "request_id": request_id,
+        "ok": true,
+        "status": "pass",
+        "backend": "acos-native",
+        "fidelity": "native-runtime",
+        "capabilities_used": ["dex.run"],
+        "error": Value::Null,
+        "result": result,
+        "metrics": {
+            "wall_ms": wall_ms,
+            "startup_ms": startup_ms,
+            "instructions": m.instructions,
+            "invokes": m.invokes,
+            "allocations": m.allocations,
+            "gc_count": m.gc_count,
+            "gc_ms": m.gc_ms,
+            "heap_peak_bytes": m.heap_peak_bytes,
+            "classes_loaded": m.classes_loaded,
+        },
+    });
+    print_json(&envelope);
+    ExitCode::from(outcome.exit_code.clamp(0, 255) as u8)
+}
+
+fn parse_vm_error(stderr: &str) -> (String, String) {
+    let line = stderr.lines().next().unwrap_or("");
+    let body = line.strip_prefix("acos-vm error: ").unwrap_or(line);
+    if let Some(rest) = body.strip_prefix("UNSUPPORTED_JAVA_API") {
+        return (
+            "UNSUPPORTED_JAVA_API".to_string(),
+            rest.trim_start_matches([':', ' ']).trim().to_string(),
+        );
+    }
+    if let Some(rest) = body.strip_prefix("UNSUPPORTED_BYTECODE") {
+        return (
+            "UNSUPPORTED_BYTECODE".to_string(),
+            rest.trim_start_matches([':', ' ']).trim().to_string(),
+        );
+    }
+    ("VM_INTERNAL".to_string(), body.to_string())
+}
+
+fn run_error(
+    request_id: &str,
+    json: bool,
+    code: &str,
+    message: &str,
+    details: Option<Value>,
+    started: Instant,
+) -> ExitCode {
+    if json {
+        let status = if code.starts_with("UNSUPPORTED") {
+            "unsupported"
+        } else {
+            "error"
+        };
+        let envelope = json!({
+            "request_id": request_id,
+            "ok": false,
+            "status": status,
+            "backend": "acos-native",
+            "fidelity": "native-runtime",
+            "capabilities_used": ["dex.run"],
+            "error": { "code": code, "message": message, "details": details },
+            "result": Value::Null,
+            "metrics": { "wall_ms": started.elapsed().as_millis() },
+        });
+        print_json(&envelope);
+    } else {
+        eprintln!("acos-vm error: {code}: {message}");
+    }
+    ExitCode::from(70u8)
+}
+
+#[allow(dead_code)]
+fn vm_error_details(e: &VmError) -> Option<Value> {
+    match e {
+        VmError::UnsupportedApi { api, at } => Some(json!({"api": api, "at": at})),
+        VmError::UnsupportedBytecode { opcode, at } => {
+            Some(json!({"opcode": opcode, "at": at}))
+        }
+        _ => None,
+    }
+}
+
+fn print_json<T: Serialize>(envelope: &T) {
     match serde_json::to_string_pretty(envelope) {
         Ok(s) => println!("{s}"),
         Err(e) => eprintln!("error: failed to serialize JSON envelope: {e}"),

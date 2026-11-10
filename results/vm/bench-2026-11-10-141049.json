@@ -1,0 +1,140 @@
+{
+  "timestamp": "2026-11-10T14:10:49",
+  "repetitions": 20,
+  "comparison_target": "HOST JVM (OpenJDK 17, default JIT); NOT Android/ART",
+  "fidelity": "host-jvm-baseline",
+  "methodology": {
+    "wall_clock": "monotonic clock around process start->exit",
+    "peak_rss": "os.wait4 rusage.ru_maxrss (Linux, KiB)",
+    "warmup_runs": 2,
+    "percentiles": "p50 = median, p95 = nearest-rank on sorted samples"
+  },
+  "startup_01_hello": [
+    {
+      "runtime": "acos",
+      "p50_ms": 0.684,
+      "p95_ms": 0.857,
+      "peak_rss_kb": 17636
+    },
+    {
+      "runtime": "java",
+      "p50_ms": 12.268,
+      "p95_ms": 13.039,
+      "peak_rss_kb": 51076
+    },
+    {
+      "runtime": "java -Xint",
+      "p50_ms": 11.61,
+      "p95_ms": 13.221,
+      "peak_rss_kb": 47940
+    },
+    {
+      "runtime": "java -Xshare:auto",
+      "p50_ms": 12.018,
+      "p95_ms": 12.41,
+      "peak_rss_kb": 50816
+    }
+  ],
+  "cpu_bound": [
+    {
+      "program": "BenchFib",
+      "instructions": 52868680,
+      "runtimes": [
+        {
+          "runtime": "acos",
+          "p50_ms": 2201.337,
+          "p95_ms": 2299.34,
+          "peak_rss_kb": 17636,
+          "instructions_per_second": 24016620
+        },
+        {
+          "runtime": "java -Xint",
+          "p50_ms": 337.815,
+          "p95_ms": 343.73,
+          "peak_rss_kb": 47984
+        },
+        {
+          "runtime": "java",
+          "p50_ms": 21.318,
+          "p95_ms": 31.309,
+          "peak_rss_kb": 51204
+        }
+      ]
+    },
+    {
+      "program": "BenchString",
+      "instructions": 9000039,
+      "runtimes": [
+        {
+          "runtime": "acos",
+          "p50_ms": 607.958,
+          "p95_ms": 625.56,
+          "peak_rss_kb": 46972,
+          "instructions_per_second": 14803725
+        },
+        {
+          "runtime": "java -Xint",
+          "p50_ms": 606.055,
+          "p95_ms": 623.525,
+          "peak_rss_kb": 79096
+        },
+        {
+          "runtime": "java",
+          "p50_ms": 47.14,
+          "p95_ms": 48.015,
+          "peak_rss_kb": 85344
+        }
+      ]
+    },
+    {
+      "program": "BenchLoop",
+      "instructions": 550000024,
+      "runtimes": [
+        {
+          "runtime": "acos",
+          "p50_ms": 5908.173,
+          "p95_ms": 6489.915,
+          "peak_rss_kb": 17636,
+          "instructions_per_second": 93091385
+        },
+        {
+          "runtime": "java -Xint",
+          "p50_ms": 388.142,
+          "p95_ms": 485.899,
+          "peak_rss_kb": 48248
+        },
+        {
+          "runtime": "java",
+          "p50_ms": 40.603,
+          "p95_ms": 42.339,
+          "peak_rss_kb": 52012
+        }
+      ]
+    },
+    {
+      "program": "BenchAlloc",
+      "instructions": 140000022,
+      "runtimes": [
+        {
+          "runtime": "acos",
+          "p50_ms": 7551.362,
+          "p95_ms": 8236.335,
+          "peak_rss_kb": 88352,
+          "instructions_per_second": 18539704
+        },
+        {
+          "runtime": "java -Xint",
+          "p50_ms": 1172.095,
+          "p95_ms": 1186.32,
+          "peak_rss_kb": 239120
+        },
+        {
+          "runtime": "java",
+          "p50_ms": 33.992,
+          "p95_ms": 35.848,
+          "peak_rss_kb": 243136
+        }
+      ]
+    }
+  ]
+}
