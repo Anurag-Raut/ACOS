@@ -595,6 +595,7 @@ pub(crate) fn blit_coverage(
         return;
     }
 
+    let gamma = text_mask_gamma();
     let clip_data = clip.map(|m| m.data());
     let cw = tw as usize;
     let mw = mask.width as usize;
@@ -604,19 +605,21 @@ pub(crate) fn blit_coverage(
         let src = &mask.coverage[sy * mw..sy * mw + mw];
         let dst = &mut pixels[dy as usize * cw..(dy as usize + 1) * cw];
         for dx in x0..x1 {
-            let cov = src[(dx - origin_x) as usize] as u32;
-            if cov == 0 {
+            let raw_cov = src[(dx - origin_x) as usize];
+            if raw_cov == 0 {
                 continue;
             }
             let clip_cov = match clip_data {
                 Some(d) => d[dy as usize * cw + dx as usize] as u32,
                 None => 255,
             };
-            // Combined glyph + clip coverage, then the paint's colour alpha.
-            let cov = (cov * clip_cov + 127) / 255;
+            // Combined glyph + clip coverage, then the gravity/gamma the
+            // device applies to the A8 mask (`SkMaskGamma`, ADR-0019).
+            let cov = (raw_cov as u32 * clip_cov + 127) / 255;
             if cov == 0 {
                 continue;
             }
+            let cov = apply_mask_gamma(cov, gamma);
             let sa = (ca * cov + 127) / 255;
             let sr = (cr * sa + 127) / 255;
             let sg = (cg * sa + 127) / 255;
@@ -639,6 +642,29 @@ pub(crate) fn blit_coverage(
             .unwrap_or(*p);
         }
     }
+}
+
+/// Gamma correction applied to grayscale glyph coverage before compositing,
+/// matching the device's `SkMaskGamma` table. `ACOS_TEXT_GAMMA` overrides it for
+/// calibration sweeps; 1.0 is a linear blit (no correction).
+fn text_mask_gamma() -> f32 {
+    use std::sync::OnceLock;
+    static G: OnceLock<f32> = OnceLock::new();
+    *G.get_or_init(|| {
+        std::env::var("ACOS_TEXT_GAMMA")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|g| *g > 0.0)
+            .unwrap_or(1.0)
+    })
+}
+
+fn apply_mask_gamma(cov: u32, gamma: f32) -> u32 {
+    if (gamma - 1.0).abs() < f32::EPSILON {
+        return cov;
+    }
+    let x = cov as f32 / 255.0;
+    ((x.powf(gamma) * 255.0).round() as i32).clamp(0, 255) as u32
 }
 
 /// Composite a premultiplied RGBA colour-glyph bitmap (emoji) with the paint's

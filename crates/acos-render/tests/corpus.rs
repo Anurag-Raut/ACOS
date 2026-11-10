@@ -108,19 +108,23 @@ const CASES: &[Case] = &[
         min_mean_ssim: 0.930,
         max_differing: 7.0,
     },
+    // W85-A: real AlertDialog geometry (28dp radius, #F0F0F3 panel), an
+    // elevation shadow calibrated to the reference profile, scrim inserted on
+    // top of the action bar, and a renderer-side ellipsize / progress / text
+    // colour pass tightened these two scenes well past the 0.98 goal.
     Case {
         app: "dialog-menu-dialog",
         reference: "fixtures/reference/dialog-menu/art-api34-x86_64/screenshot_dialog.png",
-        max_mae: 9.0,
-        min_mean_ssim: 0.930,
-        max_differing: 35.0,
+        max_mae: 1.8,
+        min_mean_ssim: 0.980,
+        max_differing: 7.0,
     },
     Case {
         app: "widget-gallery",
         reference: "fixtures/reference/widget-gallery/art-api34-x86_64/screenshot_initial.png",
-        max_mae: 5.5,
-        min_mean_ssim: 0.935,
-        max_differing: 7.5,
+        max_mae: 4.0,
+        min_mean_ssim: 0.948,
+        max_differing: 6.5,
     },
 ];
 

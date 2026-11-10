@@ -40,7 +40,24 @@ pub enum DisplayOp {
         bool,
     ),
     DrawText(Vec<u16>, f32, f32, Handle),
+    /// Text constrained to `max_width` device pixels: the string is truncated
+    /// on a UTF-16 boundary and the Unicode ellipsis (`U+2026`) inserted at the
+    /// requested end. This is the renderer side of Android
+    /// `TextUtils.ellipsize` / a single-line ellipsized `TextView`; the plain
+    /// `DrawText` op is left untouched so the `Canvas.drawText` natives need no
+    /// change.
+    DrawTextEllipsized(Vec<u16>, f32, f32, Handle, f32, EllipsizeMode),
     DrawRenderNode(Handle),
+}
+
+/// Android `TextUtils.TruncateAt`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum EllipsizeMode {
+    #[default]
+    None,
+    Start,
+    Middle,
+    End,
 }
 
 /// Android `RenderNode.LayerType`.

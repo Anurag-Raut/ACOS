@@ -364,83 +364,6 @@
      {
       "op": "roundRect",
       "rect": [
-       70,
-       1012,
-       1010,
-       1470
-      ],
-      "rx": 28,
-      "ry": 28,
-      "paint": {
-       "color": "#FFF7F2F7",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Confirm",
-      "x": 133,
-      "y": 1115,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 50,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "text",
-      "text": "Are you sure?",
-      "x": 133,
-      "y": 1198,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "text",
-      "text": "Cancel",
-      "x": 723,
-      "y": 1382,
-      "paint": {
-       "color": "#FF00668B",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       },
-       "align": "center"
-      }
-     },
-     {
-      "op": "text",
-      "text": "OK",
-      "x": 894,
-      "y": 1382,
-      "paint": {
-       "color": "#FF00668B",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       },
-       "align": "center"
-      }
-     },
-     {
-      "op": "roundRect",
-      "rect": [
        42,
        317,
        305,
@@ -514,6 +437,109 @@
         "italic": false
        }
       }
+     }
+    ],
+    "children": [
+     {
+      "name": "dialog-panel",
+      "bounds": [
+       0,
+       0,
+       1080,
+       2400
+      ],
+      "elevation": 36.0,
+      "ambientShadowColor": "#26000000",
+      "spotShadowColor": "#30000000",
+      "outline": {
+       "type": "roundRect",
+       "bounds": [
+        70.0,
+        1018.0,
+        1010.0,
+        1447.0
+       ],
+       "radius": 73.5
+      },
+      "ops": [
+       {
+        "op": "roundRect",
+        "rect": [
+         70,
+         1018,
+         1010,
+         1447
+        ],
+        "rx": 73.5,
+        "ry": 73.5,
+        "paint": {
+         "color": "#FFF0F0F3",
+         "antiAlias": true
+        }
+       },
+       {
+        "op": "text",
+        "text": "Confirm",
+        "x": 133,
+        "y": 1119,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 53.0,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "text",
+        "text": "Are you sure?",
+        "x": 133,
+        "y": 1202,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "text",
+        "text": "Cancel",
+        "x": 723,
+        "y": 1379,
+        "paint": {
+         "color": "#FF00668B",
+         "textSize": 36.75,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         },
+         "align": "center"
+        }
+       },
+       {
+        "op": "text",
+        "text": "OK",
+        "x": 894,
+        "y": 1379,
+        "paint": {
+         "color": "#FF00668B",
+         "textSize": 36.75,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         },
+         "align": "center"
+        }
+       }
+      ]
      }
     ]
    }

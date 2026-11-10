@@ -57,6 +57,12 @@ pub struct SceneNode {
     pub clip_to_bounds: bool,
     #[serde(default)]
     pub elevation: f32,
+    /// Override the default `#40000000` ambient shadow colour.
+    #[serde(default, rename = "ambientShadowColor")]
+    pub ambient_shadow_color: Option<String>,
+    /// Override the default `#59000000` spot shadow colour.
+    #[serde(default, rename = "spotShadowColor")]
+    pub spot_shadow_color: Option<String>,
     #[serde(default)]
     pub outline: Option<OutlineSpec>,
     #[serde(default)]
@@ -118,6 +124,13 @@ pub enum OpSpec {
         text: String,
         x: f32,
         y: f32,
+        /// Constrain the run to this many device pixels, truncating with `…`
+        /// when `ellipsize` is set (Android single-line `TextView`).
+        #[serde(default, rename = "maxWidth")]
+        max_width: Option<f32>,
+        /// `none` (default), `start`, `middle` or `end`.
+        #[serde(default)]
+        ellipsize: Option<String>,
         #[serde(default)]
         paint: Option<PaintSpec>,
     },
@@ -302,6 +315,19 @@ fn build_node(ctx: &mut RenderContext, node: &SceneNode, _parent: Option<Handle>
     if node.elevation != 0.0 {
         ctx.render_node_set_elevation(h, node.elevation)?;
     }
+    if node.ambient_shadow_color.is_some() || node.spot_shadow_color.is_some() {
+        let ambient = node
+            .ambient_shadow_color
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(0x4000_0000);
+        let spot = node
+            .spot_shadow_color
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(0x5900_0000);
+        ctx.render_node_set_shadow_colors(h, ambient, spot)?;
+    }
     if let Some(o) = &node.outline {
         match o {
             OutlineSpec::Rect { bounds } => {
@@ -358,9 +384,31 @@ fn build_op(ctx: &mut RenderContext, op: &OpSpec) -> RenderResult<Option<Display
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawLine(*x0, *y0, *x1, *y1, p))
         }
-        OpSpec::Text { text, x, y, paint } => {
+        OpSpec::Text {
+            text,
+            x,
+            y,
+            max_width,
+            ellipsize,
+            paint,
+        } => {
             let p = build_paint(ctx, paint.as_ref())?;
-            Some(DisplayOp::DrawText(text.encode_utf16().collect(), *x, *y, p))
+            let units: Vec<u16> = text.encode_utf16().collect();
+            match max_width {
+                Some(w) => {
+                    let mode = match ellipsize.as_deref() {
+                        None | Some("none") => crate::render_node::EllipsizeMode::None,
+                        Some("start") => crate::render_node::EllipsizeMode::Start,
+                        Some("middle") => crate::render_node::EllipsizeMode::Middle,
+                        Some("end") => crate::render_node::EllipsizeMode::End,
+                        Some(other) => {
+                            return Err(RenderError::invalid(format!("bad ellipsize {other}")))
+                        }
+                    };
+                    Some(DisplayOp::DrawTextEllipsized(units, *x, *y, p, *w, mode))
+                }
+                None => Some(DisplayOp::DrawText(units, *x, *y, p)),
+            }
         }
         OpSpec::Color { color } => {
             let c = parse_color(color).ok_or_else(|| RenderError::invalid("bad colour"))?;

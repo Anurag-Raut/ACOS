@@ -69,7 +69,7 @@ pub use paint::{
 };
 pub use path::{FillType, Path, PathMeasure, PathOp, Verb};
 pub use region::{Region, RegionOp};
-pub use render_node::{DisplayOp, LayerType, RenderNode};
+pub use render_node::{DisplayOp, EllipsizeMode, LayerType, RenderNode};
 pub use scene::{Scene, SceneRender};
 pub use surface::{Frame, FrameClass, PngSetting, Surface};
 pub use text::fonts::{FontCollection, FontRef};

@@ -1921,6 +1921,100 @@ impl RenderContext {
         self.draw_path_with_paint(surface, &path, &text_paint)
     }
 
+    /// Draw `text` constrained to `max_width` device pixels, truncating on a
+    /// UTF-16 boundary with the Unicode ellipsis (`U+2026`) at the requested
+    /// end. This is the renderer side of Android `TextUtils.ellipsize` (a
+    /// single-line ellipsized `TextView`); `Canvas.drawText` itself has no
+    /// ellipsize API, so the plain [`Self::canvas_draw_text`] is unchanged and
+    /// the natives need no edit.
+    pub fn canvas_draw_text_layout(
+        &mut self,
+        surface: Handle,
+        text: &[u16],
+        x: f32,
+        y: f32,
+        paint: Handle,
+        max_width: f32,
+        mode: crate::render_node::EllipsizeMode,
+    ) -> RenderResult<()> {
+        if text.is_empty()
+            || max_width <= 0.0
+            || mode == crate::render_node::EllipsizeMode::None
+        {
+            return self.canvas_draw_text(surface, text, x, y, paint);
+        }
+        let style = self.text_style_for(paint)?;
+        let shaped = self.text_engine_mut()?.shape(text, &style);
+        if shaped.total_advance <= max_width {
+            return self.canvas_draw_text(surface, text, x, y, paint);
+        }
+        let ellipsis = [0x2026u16];
+        let ellipsis_advance = self.text_engine_mut()?.measure_text(&ellipsis, &style);
+        let advances = shaped.char_advances.clone();
+        let budget = (max_width - ellipsis_advance).max(0.0);
+
+        let truncated: Vec<u16> = match mode {
+            crate::render_node::EllipsizeMode::None | crate::render_node::EllipsizeMode::End => {
+                let mut acc = 0.0f32;
+                let mut n = 0usize;
+                for (i, a) in advances.iter().enumerate() {
+                    if acc + a > budget {
+                        break;
+                    }
+                    acc += a;
+                    n = i + 1;
+                }
+                let mut out = text[..n].to_vec();
+                out.push(0x2026);
+                out
+            }
+            crate::render_node::EllipsizeMode::Start => {
+                let mut acc = 0.0f32;
+                let mut start = text.len();
+                for i in (0..advances.len()).rev() {
+                    if acc + advances[i] > budget {
+                        break;
+                    }
+                    acc += advances[i];
+                    start = i;
+                }
+                let mut out = vec![0x2026u16];
+                out.extend_from_slice(&text[start..]);
+                out
+            }
+            crate::render_node::EllipsizeMode::Middle => {
+                let mut pre_n = 0usize;
+                let mut pre = 0.0f32;
+                while pre_n < text.len() {
+                    let a = advances[pre_n];
+                    if pre + a > budget * 0.5 {
+                        break;
+                    }
+                    pre += a;
+                    pre_n += 1;
+                }
+                let mut suf_n = 0usize;
+                let mut suf = 0.0f32;
+                while pre_n + suf_n < text.len() {
+                    let i = text.len() - 1 - suf_n;
+                    if pre + suf + advances[i] > budget {
+                        break;
+                    }
+                    suf += advances[i];
+                    suf_n += 1;
+                }
+                let mut out = text[..pre_n].to_vec();
+                out.push(0x2026);
+                out.extend_from_slice(&text[text.len() - suf_n..]);
+                out
+            }
+        };
+        if truncated.is_empty() {
+            return Ok(());
+        }
+        self.canvas_draw_text(surface, &truncated, x, y, paint)
+    }
+
     pub fn canvas_draw_bitmap(
         &mut self,
         surface: Handle,
@@ -2086,6 +2180,20 @@ impl RenderContext {
 
     pub fn render_node_set_elevation(&mut self, node: Handle, e: f32) -> RenderResult<()> {
         self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_elevation(e);
+        Ok(())
+    }
+
+    /// Override the ambient/spot shadow colours used by [`Self::draw_node_shadow`]
+    /// (`RenderNode.setAmbientShadowColor` / `setSpotShadowColor`).
+    pub fn render_node_set_shadow_colors(
+        &mut self,
+        node: Handle,
+        ambient: u32,
+        spot: u32,
+    ) -> RenderResult<()> {
+        let n = self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?;
+        n.ambient_shadow_color = ambient;
+        n.spot_shadow_color = spot;
         Ok(())
     }
 
@@ -2332,7 +2440,12 @@ impl RenderContext {
             self.execute_display_op(surface, op)?;
         }
 
-        children.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
+        // Siblings draw in insertion order (Android `ViewGroup` child index),
+        // except that elevation lifts a node above its lower siblings. The
+        // previous version-tuple tiebreak reordered siblings by how many ops
+        // they happened to record, which put a later-created scrim *under* an
+        // earlier high-op-count app bar and broke AlertDialog dimming.
+        children.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         for (_, _, child) in children {
             self.render_node_recursive(surface, child, depth + 1)?;
         }
@@ -2477,6 +2590,9 @@ impl RenderContext {
             }
             DisplayOp::DrawText(text, x, y, p) => {
                 self.canvas_draw_text(surface, text, *x, *y, *p)?;
+            }
+            DisplayOp::DrawTextEllipsized(text, x, y, p, max_width, mode) => {
+                self.canvas_draw_text_layout(surface, text, *x, *y, *p, *max_width, *mode)?;
             }
             DisplayOp::DrawRenderNode(child) => {
                 self.render_node_recursive(surface, *child, 0)?;

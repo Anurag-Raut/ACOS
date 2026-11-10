@@ -646,12 +646,12 @@
       "op": "roundRect",
       "rect": [
        42,
-       1060,
+       1062,
        1038,
-       1076
+       1072
       ],
-      "rx": 8,
-      "ry": 8,
+      "rx": 5,
+      "ry": 5,
       "paint": {
        "color": "#FFB2CCD8",
        "antiAlias": true
@@ -661,12 +661,12 @@
       "op": "roundRect",
       "rect": [
        42,
-       1060,
+       1062,
        639,
-       1076
+       1072
       ],
-      "rx": 8,
-      "ry": 8,
+      "rx": 5,
+      "ry": 5,
       "paint": {
        "color": "#FF00668B",
        "antiAlias": true
@@ -702,12 +702,14 @@
      },
      {
       "op": "text",
-      "text": "A very long line that must be truncated at the end of the av\u2026",
+      "text": "A very long line that must be truncated at the end of the available width",
       "x": 42,
-      "y": 1243,
+      "y": 1245,
+      "maxWidth": 996,
+      "ellipsize": "end",
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -719,10 +721,10 @@
       "op": "text",
       "text": "\u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645",
       "x": 1038,
-      "y": 1294,
+      "y": 1297,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -735,10 +737,10 @@
       "op": "text",
       "text": "bold",
       "x": 42,
-      "y": 1345,
+      "y": 1348,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -751,10 +753,10 @@
       "op": "text",
       "text": "italic",
       "x": 120,
-      "y": 1345,
+      "y": 1348,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -766,10 +768,10 @@
       "op": "text",
       "text": "normal",
       "x": 217,
-      "y": 1345,
+      "y": 1348,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
