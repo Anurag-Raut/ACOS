@@ -69,7 +69,7 @@ use acos_parcel::{Parcel, ParcelError, ParcelTable};
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
 use crate::heap::{ArrayData, ArrayObj, Handle, Object, NULL};
-use crate::vm::Vm;
+use crate::vm::{InvokeKind, Vm};
 
 // ---------------------------------------------------------------------------
 // Binder transport plug point
@@ -242,11 +242,28 @@ fn fd_of(vm: &Vm, h: Handle) -> Option<RawFd> {
         .filter(|&fd| fd >= 0)
 }
 
+/// Wrap a raw descriptor in a real `java.io.FileDescriptor`.
+///
+/// The object must be created by running `FileDescriptor.<init>()V`, not by a
+/// bare `alloc_instance`: the constructor initialises the `releaseLock` object
+/// that `FileDescriptor.release$()` synchronises on. A zero-filled instance has
+/// a null `releaseLock`, so the framework's `IoUtils.acquireRawFd`/`detachFd`
+/// path (`ParcelFileDescriptor`, `MemoryIntArray`) throws
+/// `NullPointerException: monitor-enter on null`. The descriptor field is then
+/// overwritten with the duplicate ACOS owns.
 fn make_file_descriptor(vm: &mut Vm, raw: RawFd) -> VmResult<Handle> {
     let cid = vm.load_class("Ljava/io/FileDescriptor;")?;
     let obj = vm.alloc_instance(cid)?;
-    vm.set_instance_field_by_name(obj, "descriptor", raw as u32);
-    vm.set_instance_field_by_name(obj, "fd", raw as u32);
+    vm.native_roots.push(obj);
+    let result = (|| -> VmResult<()> {
+        let ctor = vm.find_method(cid, "<init>", "()V", InvokeKind::Direct)?;
+        crate::interp::call_method(vm, ctor, obj, &[])?;
+        vm.set_instance_field_by_name(obj, "descriptor", raw as u32);
+        vm.set_instance_field_by_name(obj, "fd", raw as u32);
+        Ok(())
+    })();
+    vm.native_roots.pop();
+    result?;
     Ok(obj)
 }
 

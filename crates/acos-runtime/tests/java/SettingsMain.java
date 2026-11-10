@@ -46,6 +46,13 @@ public final class SettingsMain {
         int value = raw == null ? 1 : Integer.parseInt(raw);
         out("settings.animator_duration_scale", value);
         out("settings.generation.initial", b.getInt("generation_int"));
+        MemoryIntArray mia = b.getParcelable("generation", MemoryIntArray.class);
+        // Do not print the object identity (it embeds a VM handle); print the
+        // value the real `MemoryIntArray` exposes over its fd.
+        out("settings.generation.array.present", mia != null);
+        if (mia != null) {
+            out("settings.generation.array.value", mia.get(0));
+        }
 
         // A PUT bumps the generation the client observes.
         Bundle put = new Bundle();
@@ -55,6 +62,11 @@ public final class SettingsMain {
         Bundle after = call(provider, source, "GET_global", "animator_duration_scale", null);
         out("settings.animator_duration_scale.after_put", after.getString("value"));
         out("settings.generation.after_put", after.getInt("generation_int"));
+        // The PUT bumps the counter in the fd the client already holds, so the
+        // same `MemoryIntArray` must observe the new generation.
+        if (mia != null) {
+            out("settings.generation.array.after_put", mia.get(0));
+        }
 
         // Seeded `Settings.System` keys and an unset Secure key.
         Bundle sys = call(provider, source, "GET_system", "auto_caps", null);

@@ -1,5 +1,6 @@
 import android.os.Bundle;
 import android.os.Parcel;
+import android.os.ParcelFileDescriptor;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +31,7 @@ public final class ParcelMain {
         listCase();
         appendFromCase();
         marshallCase();
+        fileDescriptorCase();
         interfaceTokenCase();
         System.out.println("done");
     }
@@ -122,6 +124,39 @@ public final class ParcelMain {
         check(p.dataPosition() == size, "list position at end");
         p.recycle();
         System.out.println("list=1,two,true");
+    }
+
+    /**
+     * A file descriptor written to a parcel and read back must be a *fully
+     * constructed* {@code java.io.FileDescriptor}.
+     *
+     * <p>{@code ParcelFileDescriptor.detachFd()} calls
+     * {@code IoUtils.acquireRawFd(mFd)} which calls
+     * {@code mFd.release$()}. {@code release$()} synchronises on the private
+     * final {@code FileDescriptor.releaseLock} object initialised by
+     * {@code FileDescriptor.<init>()}. A descriptor materialised by the parcel
+     * native without running that constructor has a null {@code releaseLock},
+     * so the monitor-enter throws {@code NullPointerException: monitor-enter on
+     * null}. Regression guard for that path (T-27 Settings provider).
+     */
+    static void fileDescriptorCase() {
+        Parcel p = Parcel.obtain();
+        try {
+            // Writing a descriptor and reading it back makes the parcel native
+            // materialise a fresh java.io.FileDescriptor.
+            p.writeFileDescriptor(java.io.FileDescriptor.in);
+            int size = p.dataSize();
+            check(size > 0, "fd parcel non-empty");
+            p.setDataPosition(0);
+            ParcelFileDescriptor read = p.readFileDescriptor();
+            check(read != null, "readFileDescriptor");
+            // detachFd -> IoUtils.acquireRawFd -> FileDescriptor.release$().
+            int fd = read.detachFd();
+            check(fd >= 0, "detachFd returned a live descriptor");
+        } finally {
+            p.recycle();
+        }
+        System.out.println("fd=ok");
     }
 
     /** appendFrom copies a whole parcel's bytes onto another. */

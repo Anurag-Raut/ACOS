@@ -121,12 +121,20 @@ pub struct MemfdGeneration {
 
 impl MemfdGeneration {
     /// Create a 12-byte memfd-backed counter.
+    ///
+    /// The memfd is sized immediately: the client's `MemoryIntArray.size()`
+    /// calls `nativeSize`, which reports the backing file length, and it reads
+    /// the array before the first `PUT` (which is what would otherwise extend
+    /// the file via [`Self::sync`]). An unsized memfd reports length 0 and the
+    /// first `MemoryIntArray.get(0)` throws `IndexOutOfBoundsException`.
     #[must_use]
     pub fn new() -> Self {
-        Self {
+        let state = Self {
             counters: [0; 3],
             fd: ParcelFd::memfd("acos-settings-generation").ok(),
-        }
+        };
+        state.sync();
+        state
     }
 
     fn sync(&self) {

@@ -142,6 +142,7 @@ fn parcel_round_trips_on_the_real_framework() {
         "list=1,two,true",
         "append=111,one",
         "marshall=ok",
+        "fd=ok",
         "token-header=0x53595354",
     ] {
         assert!(
