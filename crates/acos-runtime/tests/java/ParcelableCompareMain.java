@@ -1,3 +1,6 @@
+import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.res.Configuration;
 import android.os.LocaleList;
 import android.os.Parcel;
@@ -183,11 +186,30 @@ public final class ParcelableCompareMain {
                         check(((PersistableBundle) got).getString("name").equals("helloviews"),
                                 "bundle name");
                         break;
+                    case "application_info":
+                        got = ApplicationInfo.CREATOR.createFromParcel(p);
+                        break;
+                    case "activity_info":
+                        got = ActivityInfo.CREATOR.createFromParcel(p);
+                        break;
+                    case "package_info":
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        break;
                     default:
                         throw new AssertionError("unknown case " + name);
                 }
                 p.enforceNoDataAvail();
                 System.out.println("read." + name + "=ok");
+                // Differential: re-emit through the real writer. The bytes must
+                // match the Rust encoder's byte-for-byte when the object is a
+                // pure function of the parsed fields (no hidden defaults).
+                Parcel rewritten = Parcel.obtain();
+                try {
+                    got.writeToParcel(rewritten, 0);
+                    System.out.println("roundtrip." + name + "=" + hex(rewritten.marshall()));
+                } finally {
+                    rewritten.recycle();
+                }
             } finally {
                 p.recycle();
             }

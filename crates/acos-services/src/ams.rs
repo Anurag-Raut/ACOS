@@ -1418,25 +1418,19 @@ fn component_name_parcelable(package: &str, class: &str) -> Parcelable {
 }
 
 fn provider_holder_parcelable(provider: &ProviderRecord) -> Parcelable {
-    let info = Parcelable::ordered(
-        "android.content.pm.ProviderInfo",
-        vec![
-            Value::Str8(Some(provider.class.clone())),
-            Value::Str8(Some(provider.package.clone())),
-            Value::Int(0),
-            Value::Str(None),
-            Value::Int(0),
-            Value::Int(0),
-            Value::Bundle(None),
-            Value::Str8(Some(provider.authority.clone())),
-            Value::Str8(None),
-            Value::Str8(None),
-            Value::Bool(false),
-            Value::Bool(false),
-            Value::Int(0),
-            Value::Str8(Some(provider.package.clone())),
-        ],
-    );
+    let app = crate::pms::AppInfo::hello_views_fallback(std::path::Path::new("provider.apk"));
+    let info = crate::pms::ProviderInfo {
+        name: provider.class.clone(),
+        package_name: provider.package.clone(),
+        authority: provider.authority.clone(),
+        process_name: provider.package.clone(),
+        read_permission: String::new(),
+        write_permission: String::new(),
+        exported: false,
+        grant_uri_permissions: false,
+        init_order: 0,
+    }
+    .to_parcelable(&app);
     Parcelable::ordered(
         "android.app.ContentProviderHolder",
         vec![
@@ -1457,7 +1451,7 @@ fn provider_from_holder(holder: &Parcelable) -> Option<ProviderRecord> {
     Some(ProviderRecord {
         class: info.field(0)?.as_str()?.to_string(),
         package: info.field(1)?.as_str()?.to_string(),
-        authority: info.field(7)?.as_str()?.to_string(),
+        authority: info.field(17)?.as_str()?.to_string(),
         binder: holder
             .field(1)?
             .as_parcelable()?

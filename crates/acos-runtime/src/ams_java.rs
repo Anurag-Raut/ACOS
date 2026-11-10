@@ -501,6 +501,10 @@ fn provider_application_info(
         process_name: process_name.to_string(),
         theme: 0,
         label_res: 0,
+        icon: 0,
+        resource_dirs: Vec::new(),
+        split_names: Vec::new(),
+        shared_library_files: Vec::new(),
         target_sandbox_version: 2,
     };
     crate::pms_java::application_info(vm, &app)

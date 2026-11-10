@@ -128,6 +128,14 @@ pub struct AppInfo {
     pub theme: i32,
     /// label resource id.
     pub label_res: i32,
+    /// `PackageItemInfo.icon` resource id.
+    pub icon: i32,
+    /// `ApplicationInfo.resourceDirs`.
+    pub resource_dirs: Vec<String>,
+    /// `ApplicationInfo.splitNames`.
+    pub split_names: Vec<String>,
+    /// `ApplicationInfo.sharedLibraryFiles`.
+    pub shared_library_files: Vec<String>,
     /// `targetSandboxVersion`.
     pub target_sandbox_version: i32,
 }
@@ -176,6 +184,10 @@ impl AppInfo {
             process_name,
             theme,
             label_res,
+            icon: 0,
+            resource_dirs: Vec::new(),
+            split_names: Vec::new(),
+            shared_library_files: Vec::new(),
             target_sandbox_version: 2,
         }
     }
@@ -202,11 +214,15 @@ impl AppInfo {
             process_name: "dev.acos.fixtures.helloviews".into(),
             theme: 0,
             label_res: 0,
+            icon: 0,
+            resource_dirs: Vec::new(),
+            split_names: Vec::new(),
+            shared_library_files: Vec::new(),
             target_sandbox_version: 2,
         }
     }
 
-    /// Encode in `ApplicationInfo.writeToParcel` order.
+    /// Encode in the full `ApplicationInfo.writeToParcel` order (78 fields).
     #[must_use]
     pub fn to_parcelable(&self) -> Parcelable {
         Parcelable::ordered(
@@ -215,36 +231,89 @@ impl AppInfo {
                 Value::Int(0), // maybeWriteSquashed marker: not squashed
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0), // banner
-                Value::Str(None), // label
-                Value::Int(0), // icon
+                Value::Int(0),    // banner
+                Value::Str(None), // label (TextUtils.writeToParcel)
+                Value::Int(self.icon),
                 Value::Int(self.label_res),
-                Value::Bundle(None),
-                Value::Int(0), // showUser
-                Value::Int(0), // showBadge
+                Value::Bundle(None), // metaData
+                Value::Int(0),       // showUser
+                Value::Int(0),       // showBadge / isArchived
+                Value::Str8(None),   // taskAffinity
+                Value::Str8(None),   // permission
+                Value::Str8(Some(self.process_name.clone())),
+                Value::Str8(opt(self.class_name.is_empty(), self.class_name.clone())),
+                Value::Int(self.theme),
+                Value::Int(self.flags),
+                Value::Int(self.private_flags),
+                Value::Int(0), // privateFlagsExt
+                Value::Int(0), // requiresSmallestWidthDp
+                Value::Int(0), // compatibleWidthLimitDp
+                Value::Int(0), // largestWidthLimitDp
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                }, // storageUuid
+                Value::Str8(None), // scanSourceDir
+                Value::Str8(None), // scanPublicSourceDir
                 Value::Str8(Some(self.source_dir.clone())),
                 Value::Str8(Some(self.public_source_dir.clone())),
+                Value::StringArray(strings(&self.split_names)),
+                Value::StringArray(None), // splitSourceDirs
+                Value::StringArray(None), // splitPublicSourceDirs
+                Value::Skipped,           // splitDependencies (SparseArray)
+                Value::Str8(Some(self.native_library_dir.clone())),
+                Value::Str8(None), // secondaryNativeLibraryDir
+                Value::Str8(None), // nativeLibraryRootDir
+                Value::Int(0),     // nativeLibraryRootRequiresIsa
+                Value::Str8(None), // primaryCpuAbi
+                Value::Str8(None), // secondaryCpuAbi
+                Value::StringArray(strings(&self.resource_dirs)),
+                Value::StringArray(None), // overlayPaths
+                Value::Str8(None),        // seInfo
+                Value::Str8(None),        // seInfoUser
+                Value::StringArray(strings(&self.shared_library_files)),
+                Value::List(None), // sharedLibraryInfos (TypedList)
                 Value::Str8(Some(self.data_dir.clone())),
                 Value::Str8(Some(self.device_protected_data_dir.clone())),
                 Value::Str8(Some(self.credential_protected_data_dir.clone())),
-                Value::Str8(Some(self.native_library_dir.clone())),
                 Value::Int(self.uid),
-                Value::Int(self.flags),
-                Value::Int(self.private_flags),
-                Value::Int(self.target_sdk),
                 Value::Int(self.min_sdk),
-                Value::Int(self.theme),
-                Value::Int(0),
-                Value::Str8(Some(self.process_name.clone())),
-                Value::Str8(Some(self.class_name.clone())),
+                Value::Int(self.target_sdk),
+                Value::Long(0), // longVersionCode
+                Value::Int(1),  // enabled
+                Value::Int(0),  // enabledSetting
+                Value::Int(0),  // installLocation
                 Value::Str8(None), // manageSpaceActivityName
                 Value::Str8(None), // backupAgentName
-                Value::StringArray(None),
-                Value::StringArray(None),
-                Value::StringArray(None),
+                Value::Int(0),  // descriptionRes
+                Value::Int(0),  // uiOptions
+                Value::Int(0),  // fullBackupContent
+                Value::Int(0),  // dataExtractionRulesRes
+                Value::Bool(false), // crossProfile
+                Value::Int(0),  // networkSecurityConfigRes
+                Value::Int(0),  // category
                 Value::Int(self.target_sandbox_version),
-                Value::Str8(None), // permission
-                Value::Str8(None), // taskAffinity
+                Value::Str8(None), // classLoaderName
+                Value::StringArray(None), // splitClassLoaderNames
+                Value::Int(0),  // compileSdkVersion
+                Value::Str8(None), // compileSdkVersionCodename
+                Value::Str8(None), // appComponentFactory
+                Value::Int(0),  // iconRes
+                Value::Int(0),  // roundIconRes
+                Value::Int(0),  // mHiddenApiPolicy
+                Value::Int(0),  // hiddenUntilInstalled
+                Value::Str8(None), // zygotePreloadName
+                Value::Int(0),  // gwpAsanMode
+                Value::Int(0),  // memtagMode
+                Value::Int(0),  // nativeHeapZeroInitialized
+                Value::Int(1),  // requestRawExternalStorageAccess (null -> 1)
+                Value::Long(0), // createTimestamp
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                }, // mAppClassNamesByProcess
+                Value::Int(0), // localeConfigRes
+                Value::Int(-1), // mKnownActivityEmbeddingCerts (null set -> -1)
             ],
         )
     }
@@ -256,22 +325,26 @@ impl AppInfo {
         Some(Self {
             name: f.get(1)?.as_str()?.to_string(),
             package_name: f.get(2)?.as_str()?.to_string(),
+            icon: f.get(5)?.as_int()?,
             label_res: f.get(6)?.as_int()?,
-            source_dir: f.get(10)?.as_str()?.to_string(),
-            public_source_dir: f.get(11)?.as_str()?.to_string(),
-            data_dir: f.get(12)?.as_str()?.to_string(),
-            device_protected_data_dir: f.get(13)?.as_str()?.to_string(),
-            credential_protected_data_dir: f.get(14)?.as_str()?.to_string(),
-            native_library_dir: f.get(15)?.as_str()?.to_string(),
-            uid: f.get(16)?.as_int()?,
-            flags: f.get(17)?.as_int()?,
-            private_flags: f.get(18)?.as_int()?,
-            target_sdk: f.get(19)?.as_int()?,
-            min_sdk: f.get(20)?.as_int()?,
-            theme: f.get(21)?.as_int()?,
-            process_name: f.get(23)?.as_str()?.to_string(),
-            class_name: f.get(24)?.as_str()?.to_string(),
-            target_sandbox_version: f.get(30)?.as_int()?,
+            process_name: f.get(12)?.as_str()?.to_string(),
+            class_name: f.get(13)?.as_str().unwrap_or_default().to_string(),
+            theme: f.get(14)?.as_int()?,
+            flags: f.get(15)?.as_int()?,
+            private_flags: f.get(16)?.as_int()?,
+            source_dir: f.get(24)?.as_str()?.to_string(),
+            public_source_dir: f.get(25)?.as_str()?.to_string(),
+            split_names: string_array(f.get(26)),
+            native_library_dir: f.get(30)?.as_str()?.to_string(),
+            resource_dirs: string_array(f.get(36)),
+            shared_library_files: string_array(f.get(40)),
+            data_dir: f.get(42)?.as_str()?.to_string(),
+            device_protected_data_dir: f.get(43)?.as_str()?.to_string(),
+            credential_protected_data_dir: f.get(44)?.as_str()?.to_string(),
+            uid: f.get(45)?.as_int()?,
+            min_sdk: f.get(46)?.as_int()?,
+            target_sdk: f.get(47)?.as_int()?,
+            target_sandbox_version: f.get(61)?.as_int()?,
         })
     }
 }
@@ -296,35 +369,62 @@ pub struct ActivityInfo {
 }
 
 impl ActivityInfo {
-    /// Encode in `ActivityInfo.writeToParcel` (prefix) order.
+    /// Encode in the full `ActivityInfo.writeToParcel` order (43 fields).
     #[must_use]
-    pub fn to_parcelable(&self) -> Parcelable {
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ActivityInfo",
             vec![
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0),
-                Value::Str(None),
-                Value::Int(0),
-                Value::Int(0),
+                Value::Int(0),    // banner
+                Value::Str(None), // label
+                Value::Int(0),    // icon
+                Value::Int(0),    // labelRes
                 Value::Bundle(None),
-                Value::Int(0),
-                Value::Int(0),
-                Value::Str8(None),
-                Value::Str8(None),
-                Value::StringArray(None),
-                Value::Int(0),
-                Value::Int(0),
+                Value::Int(0), // showUser
+                Value::Int(0), // showBadge
+                Value::Parcelable(app.to_parcelable()), // ComponentInfo.applicationInfo
+                Value::Str8(Some(self.package_name.clone())), // processName
+                Value::Str8(None), // splitName
+                Value::StringArray(None), // attributionTags
+                Value::Int(0), // descriptionRes
+                Value::Int(1), // enabled
+                Value::Int(i32::from(self.exported)),
+                Value::Int(0), // directBootAware
                 Value::Int(self.theme),
                 Value::Int(self.launch_mode),
+                Value::Int(0), // documentLaunchMode
+                Value::Str8(None), // permission
+                Value::Str8(None), // taskAffinity
+                Value::Str8(None), // targetActivity
+                Value::Str8(None), // launchToken
                 Value::Int(self.flags),
-                Value::Int(0),
-                Value::Int(0),
-                Value::Int(0),
-                Value::Str8(Some(self.parent_activity_name.clone())),
-                Value::Int(0),
-                Value::Int(0),
+                Value::Int(0), // privateFlags
+                Value::Int(0), // screenOrientation
+                Value::Int(0), // configChanges
+                Value::Int(0), // softInputMode
+                Value::Int(0), // uiOptions
+                Value::Str8(opt(
+                    self.parent_activity_name.is_empty(),
+                    self.parent_activity_name.clone(),
+                )),
+                Value::Int(0), // persistableMode
+                Value::Int(0), // maxRecents
+                Value::Int(0), // lockTaskLaunchMode
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                }, // windowLayout
+                Value::Int(0), // resizeMode
+                Value::Str8(None), // requestedVrComponent
+                Value::Int(0), // rotationAnimation
+                Value::Int(0), // colorMode
+                Value::Float(0.0), // mMaxAspectRatio
+                Value::Float(0.0), // mMinAspectRatio
+                Value::Bool(false), // supportsSizeChanges
+                Value::Int(-1), // mKnownActivityEmbeddingCerts (null set -> -1)
+                Value::Str8(None), // requiredDisplayCategory
             ],
         )
     }
@@ -354,26 +454,40 @@ pub struct ProviderInfo {
 }
 
 impl ProviderInfo {
-    /// Encode in the curated `ProviderInfo` prefix order (`parcelable.rs`).
+    /// Encode in the full `ProviderInfo.writeToParcel` order (28 fields).
     #[must_use]
-    pub fn to_parcelable(&self) -> Parcelable {
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ProviderInfo",
             vec![
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0),  // banner
+                Value::Int(0),    // banner
                 Value::Str(None), // label
-                Value::Int(0),  // icon
-                Value::Int(0),  // labelRes
+                Value::Int(0),    // icon
+                Value::Int(0),    // labelRes
                 Value::Bundle(None),
+                Value::Int(0), // showUser
+                Value::Int(0), // showBadge
+                Value::Parcelable(app.to_parcelable()), // ComponentInfo.applicationInfo
+                Value::Str8(Some(self.process_name.clone())),
+                Value::Str8(None), // splitName
+                Value::StringArray(None), // attributionTags
+                Value::Int(0), // descriptionRes
+                Value::Int(1), // enabled
+                Value::Int(i32::from(self.exported)),
+                Value::Int(0), // directBootAware
                 Value::Str8(Some(self.authority.clone())),
                 Value::Str8(opt(self.read_permission.is_empty(), self.read_permission.clone())),
                 Value::Str8(opt(self.write_permission.is_empty(), self.write_permission.clone())),
-                Value::Bool(self.exported),
-                Value::Bool(self.grant_uri_permissions),
+                Value::Int(i32::from(self.grant_uri_permissions)),
+                Value::Int(0), // forceUriPermissions
+                Value::List(None), // uriPermissionPatterns
+                Value::List(None), // pathPermissions
+                Value::Int(0), // multiprocess
                 Value::Int(self.init_order),
-                Value::Str8(Some(self.process_name.clone())),
+                Value::Int(0), // flags
+                Value::Int(1), // isSyncable
             ],
         )
     }
@@ -385,13 +499,13 @@ impl ProviderInfo {
         Some(Self {
             name: f.first()?.as_str()?.to_string(),
             package_name: f.get(1)?.as_str()?.to_string(),
-            authority: f.get(7)?.as_str()?.to_string(),
-            read_permission: f.get(8)?.as_str().unwrap_or_default().to_string(),
-            write_permission: f.get(9)?.as_str().unwrap_or_default().to_string(),
-            exported: f.get(10)?.as_bool()?,
-            grant_uri_permissions: f.get(11)?.as_bool()?,
-            init_order: f.get(12)?.as_int()?,
-            process_name: f.get(13)?.as_str()?.to_string(),
+            process_name: f.get(10)?.as_str()?.to_string(),
+            authority: f.get(17)?.as_str()?.to_string(),
+            read_permission: f.get(18)?.as_str().unwrap_or_default().to_string(),
+            write_permission: f.get(19)?.as_str().unwrap_or_default().to_string(),
+            exported: f.get(15)?.as_int()? != 0,
+            grant_uri_permissions: f.get(20)?.as_int()? != 0,
+            init_order: f.get(25)?.as_int()?,
         })
     }
 }
@@ -401,6 +515,21 @@ fn opt(empty: bool, value: String) -> Option<String> {
         None
     } else {
         Some(value)
+    }
+}
+
+fn strings(values: &[String]) -> Option<Vec<Option<String>>> {
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.iter().cloned().map(Some).collect())
+    }
+}
+
+fn string_array(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::StringArray(Some(items))) => items.iter().filter_map(Clone::clone).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -426,7 +555,7 @@ pub struct PackageInfo {
 }
 
 impl PackageInfo {
-    /// Encode in `PackageInfo.writeToParcel` (prefix) order.
+    /// Encode in the full `PackageInfo.writeToParcel` order (41 fields).
     #[must_use]
     pub fn to_parcelable(&self) -> Parcelable {
         Parcelable::ordered(
@@ -437,29 +566,54 @@ impl PackageInfo {
                 Value::Int(self.version_code),
                 Value::Int(0), // versionCodeMajor
                 Value::Str8(Some(self.version_name.clone())),
-                Value::Int(0),
-                Value::IntArray(None),
-                Value::Str8(None),
-                Value::Int(0),
-                Value::Int(0),
-                Value::Str8(Some(self.application.package_name.clone())),
-                Value::Int(0),
+                Value::Int(0),         // baseRevisionCode
+                Value::IntArray(None), // splitRevisionCodes
+                Value::Str8(None),     // sharedUserId
+                Value::Int(0),         // sharedUserLabel
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Parcelable(self.application.to_parcelable())],
+                }, // applicationInfo
                 Value::Long(self.first_install_time),
                 Value::Long(self.last_update_time),
-                Value::IntArray(None),
-                Value::StringArray(Some(
-                    self.activities.iter().map(|a| Some(a.name.clone())).collect(),
-                )),
-                Value::StringArray(None),
-                Value::StringArray(None),
-                Value::StringArray(None),
-                Value::Int(0),
+                Value::IntArray(None), // gids
+                Value::List(None),     // activities
+                Value::List(None),     // receivers
+                Value::List(None),     // services
+                Value::List(None),     // providers
+                Value::List(None),     // instrumentation
+                Value::List(None),     // permissions
                 Value::StringArray(Some(
                     self.requested_permissions
                         .iter()
-                        .map(|p| Some(p.clone()))
+                        .cloned()
+                        .map(Some)
                         .collect(),
                 )),
+                Value::IntArray(None), // requestedPermissionsFlags
+                Value::List(None),     // signatures
+                Value::List(None),     // configPreferences
+                Value::List(None),     // reqFeatures
+                Value::List(None),     // featureGroups
+                Value::List(None),     // attributions
+                Value::Int(0),         // installLocation
+                Value::Int(0),         // isStub
+                Value::Int(0),         // coreApp
+                Value::Int(0),         // requiredForAllUsers
+                Value::Str8(None),     // restrictedAccountType
+                Value::Str8(None),     // requiredAccountType
+                Value::Str8(None),     // overlayTarget
+                Value::Str8(None),     // overlayCategory
+                Value::Int(0),         // overlayPriority
+                Value::Bool(false),    // mOverlayIsStatic
+                Value::Int(0),         // compileSdkVersion
+                Value::Str8(None),     // compileSdkVersionCodename
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                }, // signingInfo
+                Value::Bool(false), // isApex
+                Value::Bool(false), // isActiveApex
             ],
         )
     }
@@ -809,7 +963,7 @@ impl ServiceObject for PmsService {
                     .cloned();
                 cache_activity_info(activity.clone());
                 vec![match activity {
-                    Some(a) => Value::TypedObject(a.to_parcelable()),
+                    Some(a) => Value::TypedObject(a.to_parcelable(&state.app)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -857,7 +1011,7 @@ impl ServiceObject for PmsService {
                 let provider = state.provider_for_authority(authority);
                 cache_provider_info(provider.clone());
                 vec![match provider {
-                    Some(p) => Value::TypedObject(p.to_parcelable()),
+                    Some(p) => Value::TypedObject(p.to_parcelable(&state.app)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -911,7 +1065,9 @@ mod tests {
     #[test]
     fn provider_round_trips_through_the_prefix_codec() {
         let provider = sample_provider();
-        let decoded = ProviderInfo::from_parcelable(&provider.to_parcelable()).expect("decoded");
+        let app = AppInfo::hello_views_fallback(Path::new("hello-views.apk"));
+        let decoded =
+            ProviderInfo::from_parcelable(&provider.to_parcelable(&app)).expect("decoded");
         assert_eq!(decoded, provider);
     }
 

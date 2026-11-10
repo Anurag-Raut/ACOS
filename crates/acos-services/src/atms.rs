@@ -674,25 +674,20 @@ impl AtmsService {
         if authority != "settings" {
             return None;
         }
-        let provider_info = Parcelable::ordered(
-            "android.content.pm.ProviderInfo",
-            vec![
-                Value::Str8(Some("SettingsProvider".into())),
-                Value::Str8(Some("com.android.providers.settings".into())),
-                Value::Int(0),
-                Value::Str(None),
-                Value::Int(0),
-                Value::Int(0),
-                Value::Bundle(None),
-                Value::Str8(Some("settings".into())),
-                Value::Str8(Some("android.permission.READ_SETTINGS".into())),
-                Value::Str8(Some("android.permission.WRITE_SETTINGS".into())),
-                Value::Bool(false),
-                Value::Bool(false),
-                Value::Int(0),
-                Value::Str8(Some("android.process.settings".into())),
-            ],
-        );
+        let app =
+            crate::pms::AppInfo::hello_views_fallback(std::path::Path::new("settings.apk"));
+        let provider_info = crate::pms::ProviderInfo {
+            name: "SettingsProvider".into(),
+            package_name: "com.android.providers.settings".into(),
+            authority: "settings".into(),
+            process_name: "android.process.settings".into(),
+            read_permission: "android.permission.READ_SETTINGS".into(),
+            write_permission: "android.permission.WRITE_SETTINGS".into(),
+            exported: false,
+            grant_uri_permissions: false,
+            init_order: 0,
+        }
+        .to_parcelable(&app);
         Some(Parcelable::ordered(
             "android.app.ContentProviderHolder",
             vec![

@@ -167,10 +167,42 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         hex(&bundle_bytes)
     );
 
-    // Reverse: feed the Rust bytes to the real createFromParcel.
+    // Differential parcelables built from the parsed manifest/APK values.
+    use acos_services::pms::{
+        ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo as PmsPackageInfo,
+    };
+    let app = AppInfo::hello_views_fallback(std::path::Path::new("hello-views.apk"));
+    let app_bytes = encoded(&app.to_parcelable());
+    let act = PmsActivityInfo {
+        name: "dev.acos.fixtures.helloviews.MainActivity".into(),
+        package_name: "dev.acos.fixtures.helloviews".into(),
+        launch_mode: 0,
+        flags: 0,
+        theme: 0,
+        exported: true,
+        parent_activity_name: String::new(),
+    };
+    let act_bytes = encoded(&act.to_parcelable(&app));
+    let pkg = PmsPackageInfo {
+        package_name: app.package_name.clone(),
+        version_code: 1,
+        version_name: "1.0".into(),
+        application: app.clone(),
+        activities: vec![act.clone()],
+        requested_permissions: Vec::new(),
+        first_install_time: 0,
+        last_update_time: 0,
+    };
+    let pkg_bytes = encoded(&pkg.to_parcelable());
+
+    // Reverse: feed the Rust bytes to the real createFromParcel, then compare
+    // the real `writeToParcel` re-emission byte-for-byte.
     let args = vec![
         format!("configuration={}", hex(&config_bytes)),
         format!("persistable_bundle={}", hex(&bundle_bytes)),
+        format!("application_info={}", hex(&app_bytes)),
+        format!("activity_info={}", hex(&act_bytes)),
+        format!("package_info={}", hex(&pkg_bytes)),
     ];
     let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
     assert!(
@@ -180,14 +212,44 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         outcome.stdout,
         outcome.stderr
     );
-    assert!(
-        outcome.stdout.contains("read.configuration=ok"),
-        "real Configuration.createFromParcel rejected the Rust bytes:\n{}",
-        outcome.stdout
-    );
-    assert!(
-        outcome.stdout.contains("read.persistable_bundle=ok"),
-        "real PersistableBundle.createFromParcel rejected the Rust bytes:\n{}",
-        outcome.stdout
-    );
+    for name in [
+        "configuration",
+        "persistable_bundle",
+        "application_info",
+        "activity_info",
+        "package_info",
+    ] {
+        assert!(
+            outcome.stdout.contains(&format!("read.{name}=ok")),
+            "real {name}.createFromParcel rejected the Rust bytes:\n{}",
+            outcome.stdout
+        );
+    }
+    let roundtrips = parse_roundtrips(&outcome.stdout);
+    for (name, bytes) in [
+        ("configuration", &config_bytes),
+        ("persistable_bundle", &bundle_bytes),
+        ("application_info", &app_bytes),
+        ("activity_info", &act_bytes),
+        ("package_info", &pkg_bytes),
+    ] {
+        assert_eq!(
+            roundtrips.get(name).map(String::as_str),
+            Some(hex(bytes).as_str()),
+            "{name}: real writeToParcel differs from the Rust codec\njava={:?}\nrust={}",
+            roundtrips.get(name),
+            hex(bytes)
+        );
+    }
+}
+
+fn parse_roundtrips(stdout: &str) -> HashMap<String, String> {
+    stdout
+        .lines()
+        .filter_map(|l| {
+            let rest = l.strip_prefix("roundtrip.")?;
+            let (name, hex) = rest.split_once('=')?;
+            Some((name.to_string(), hex.to_string()))
+        })
+        .collect()
 }

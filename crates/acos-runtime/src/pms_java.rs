@@ -114,6 +114,16 @@ pub(crate) fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
     set_int(vm, h, "minSdkVersion", app.min_sdk)?;
     set_int(vm, h, "theme", app.theme)?;
     set_int(vm, h, "labelRes", app.label_res)?;
+    set_int(vm, h, "icon", app.icon)?;
+    let resource_dirs = string_array(vm, &app.resource_dirs)?;
+    vm.set_field(h, "resourceDirs", JavaValue::Object(resource_dirs))
+        .map_err(err)?;
+    let split_names = string_array(vm, &app.split_names)?;
+    vm.set_field(h, "splitNames", JavaValue::Object(split_names))
+        .map_err(err)?;
+    let shared_library_files = string_array(vm, &app.shared_library_files)?;
+    vm.set_field(h, "sharedLibraryFiles", JavaValue::Object(shared_library_files))
+        .map_err(err)?;
     set_int(vm, h, "targetSandboxVersion", app.target_sandbox_version)?;
     Ok(h)
 }
