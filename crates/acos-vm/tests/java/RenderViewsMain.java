@@ -37,6 +37,18 @@ public class RenderViewsMain {
     static Resources.Theme sTheme;
     static String sPkg;
 
+    /**
+     * Platform theme when the app manifest declares no {@code android:theme}.
+     * The ART oracle was captured with {@code dark_light: no} (light mode), so
+     * the effective device default is the light theme with a dark action bar.
+     * (The framework's dark {@code Theme.DeviceDefault} is the night-mode
+     * variant; a device with a light UI mode applies the light device
+     * default.)
+     */
+    static int deviceDefaultTheme() {
+        return android.R.style.Theme_DeviceDefault_Light_DarkActionBar;
+    }
+
     static class TestContext extends android.test.mock.MockContext {
         LayoutInflater inflater;
 
@@ -49,7 +61,7 @@ public class RenderViewsMain {
         public Resources.Theme getTheme() {
             if (sTheme == null) {
                 sTheme = sRes.newTheme();
-                sTheme.applyStyle(android.R.style.Theme_DeviceDefault, false);
+                sTheme.applyStyle(deviceDefaultTheme(), false);
             }
             return sTheme;
         }
@@ -159,7 +171,7 @@ public class RenderViewsMain {
         sRes = new Resources(am, metrics, config);
         seedViewConfiguration(metrics);
         sTheme = sRes.newTheme();
-        sTheme.applyStyle(android.R.style.Theme_DeviceDefault, false);
+        sTheme.applyStyle(deviceDefaultTheme(), false);
 
         TestContext ctx = new TestContext();
         LayoutInflater inflater =
@@ -207,6 +219,7 @@ public class RenderViewsMain {
         // `Choreographer.getRefreshRate`. The reference frame is static, so
         // stop those animations before recording (a real frame would run them).
         quiesceRippleAnimations(root);
+        dumpViews(root, 0);
         RecordingCanvas canvas = node.beginRecording();
         // A device composites the activity window's `windowBackground` behind
         // the content view (`DecorView.draw`). This VM-level harness inflates
@@ -227,6 +240,33 @@ public class RenderViewsMain {
         System.out.println("sync=" + rc);
         System.out.println("views=" + countViews(root));
         System.out.println("done");
+    }
+
+    static void dumpViews(View v, int depth) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < depth; i++) sb.append("  ");
+        sb.append(v.getClass().getName())
+          .append(' ').append(v.getLeft()).append(',').append(v.getTop())
+          .append(',').append(v.getRight()).append(',').append(v.getBottom())
+          .append(" alpha=").append(v.getAlpha())
+          .append(" vis=").append(v.getVisibility());
+        android.graphics.drawable.Drawable bg = v.getBackground();
+        if (bg != null) {
+            sb.append(" bg=").append(bg.getClass().getName())
+              .append(bg.getBounds());
+        }
+        if (v instanceof android.widget.TextView) {
+            android.widget.TextView tv = (android.widget.TextView) v;
+            sb.append(" text=").append(tv.getText())
+              .append(" color=").append(Integer.toHexString(tv.getCurrentTextColor()));
+        }
+        System.out.println("VIEW " + sb);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                dumpViews(g.getChildAt(i), depth + 1);
+            }
+        }
     }
 
     /** Draw the theme's `windowBackground` behind the content, as `DecorView` does. */

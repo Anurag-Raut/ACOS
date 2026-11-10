@@ -3,6 +3,8 @@
 Originally a clean git worktree of HEAD `9c70fa4` (`.cache/wt-w101a`),
 `CARGO_TARGET_DIR=.cache/target-w101a`, `CARGO_PROFILE_DEV_DEBUG=0`; refreshed for
 W104-A on HEAD `71cec4e` (`.cache/wt-w104a`, `CARGO_TARGET_DIR=.cache/target-w104a`).
+Refreshed for W122-A on HEAD `2398fa9` (`.cache/wt-w122a`,
+`CARGO_TARGET_DIR=.cache/target-w122a`).
 
 **Motivation (W94-A finding 12 / honesty #11).** The W66/W82/W90 corpus scenes
 are hand-authored reconstructions of the ART reference UI dumps, so their SSIM
@@ -69,6 +71,38 @@ the real drawable (raising counter 0.0276 → 0.2964 and canvas-shapes
 0.8203 → 0.8631), but the remaining gap is window/`DecorView` composition, not
 natives.
 
+### W122-A update (HEAD `2398fa9` worktree, `.cache/target-w122a`)
+
+| app | pipeline status | pipeline SSIM | masked SSIM | hand-authored SSIM | provenance |
+|---|---|---:|---:|---:|---|
+| canvas-shapes | frame produced | 0.8305 | **0.8949** | 0.9953 | pipeline-generated |
+| counter | frame produced | **0.8783** (was 0.2964) | **0.9425** (was 0.3214) | 0.9944 | pipeline-generated |
+| form-validation | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9924 | hand-authored |
+| text-input | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9906 | hand-authored |
+| widget-gallery | inflation failed at line #19 (`StateListAnimator` → `Choreographer`, no display service) | — | — | 0.9700 | hand-authored |
+
+Two principled framework/harness fixes drove the counter jump:
+
+| Fix | File | Effect |
+|---|---|---|
+| The harness applied the **dark** `Theme.DeviceDefault`, but the ART oracle was captured in light UI mode (`device-config.json`: `"dark_light": "no"`), so every frame's window background was `#191C1E` instead of the light device default. When the manifest declares no `android:theme`, `deviceDefaultTheme()` now applies `Theme.DeviceDefault_Light_DarkActionBar`. | `crates/acos-vm/tests/java/RenderViewsMain.java` | counter window background now matches the reference exactly (`#F0F0F3`); mean SSIM 0.2964 → **0.8783**. |
+| Registered `Canvas.nDrawTextRun` (both API-34 signatures: `(JLjava/lang/String;IIIIFFZJ)V` and `(J[CIIIIFFZJJ)V`). `Layout`/`TextLine` reach the canvas through this entry point, which had no native at all. | `crates/acos-vm/src/natives/gfx_canvas.rs` | latent gap closed; not yet exercised by the counter/TextView path below. |
+
+`canvas-shapes` dips 0.8631 → 0.8305 because its ART reference also has a dark
+status/action bar, and the light theme (correct for the light-content frame) now
+shows there. Its SystemUI-masked SSIM is unchanged at **0.8949**. The remaining
+counter delta is the `DecorView` composition: the harness inflates the layout
+alone, so the status bar and the 147 px action bar (title `Counter`) are still
+not drawn, and the content is not offset by the 275 px decor height. That is a
+real gap (build the `DecorView`/`PhoneWindow` and draw its children), not a
+native bug, and deliberately not hand-painted so the frame stays honest.
+
+Text draw gap found while diffing counter: its `TextView`/`Button` widgets emit
+**no** `DrawText` op (`RecordingCanvas.finishRecording` ops=38, text=0) even
+though `getText()` and `textColor` are set and the equal-geometry
+`canvas-shapes` status `TextView` does emit `nDrawText`. This is the dominant
+residual for counter and is unsolved.
+
 ## 4. W104-A framework-side fixes
 
 | Fix | File | Effect |
@@ -88,11 +122,13 @@ natives.
 3. **`BitmapFactory` natives still missing**: `nativeDecodeAsset`, `nativeDecodeFileDescriptor`, `nativeIsSeekable`, `nativeColorSpace`, `nativeInBitmap`, and the `BitmapRegionDecoder` surface. The `ImageDecoder` `FileDescriptor`/`ByteBuffer`/`J`-ptr `nCreate` overloads return `null`; only stream + `byte[]` decode today.
 4. **`invoke-polymorphic`/`invoke-custom` (`0xfa..=0xfd`)** remain unimplemented in `interp.rs`; worked around for `AtomicInteger`/`AtomicLong`/`AtomicBoolean` only.
 5. **`acos launch` next blocker** (`counter.apk`, `ACOS_BOOT_DIR=.cache/boot/android-34`): `java.lang.IllegalStateException: Main thread not allowed to quit` at `MessageQueue.next` ← `Looper.loop`, blocking `on_resume`/`first_frame`.
+6. **`DecorView`/status/action bar are not composed** in the VM-level harness (W122-A). The layout is measured at the full 2400 px instead of the 275 px decor offset, and the status bar + action bar are absent from every pipeline frame. Fix: instantiate the real `com.android.internal.policy.PhoneWindow` (with a `Window.Callback` stub) and draw `getDecorView()`, or add a VM-level harness mode that does. Owner: `render_views.rs` / `RenderViewsMain.java`.
+7. **`TextView`/`Button` text emits no op on the `counter`/`widget` path** (W122-A). `counter`'s three text widgets record zero `DrawText` ops while `canvas-shapes`' `TextView` records one; the trigger is unconfirmed. Likely a `Layout`/`TextLine`/`BoringLayout` path that does not reach `nDrawText`/`nDrawTextRun`. Owner: `gfx_canvas.rs` + harness.
 
 ## 6. Acceptance (W104-A worktree, measured)
 
 ```
-cargo test -p acos-vm --test render_views                       -> ok (1 passed; canvas-shapes 0.8631, counter 0.2964)
+cargo test -p acos-vm --test render_views                       -> ok (1 passed; canvas-shapes 0.8305, counter 0.8783)
 cargo test -p acos-framework-natives --test theme_resolution    -> ok (5 passed)
 cargo clippy -p acos-vm -p acos-render -p acos-framework-natives --all-targets --no-deps -- -D warnings -> 0 warnings
 cargo check --workspace --all-targets                           -> clean

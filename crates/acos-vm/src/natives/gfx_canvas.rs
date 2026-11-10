@@ -246,6 +246,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(class, "nDrawPaint", "(JJ)V", d_paint);
         vm.register_native(class, "nDrawText", "(JLjava/lang/String;IIFFIJ)V", d_text_string);
         vm.register_native(class, "nDrawText", "(J[CIIFFIJ)V", d_text_chars);
+        vm.register_native(class, "nDrawTextRun", "(JLjava/lang/String;IIIIFFZJ)V", d_text_run);
+        vm.register_native(class, "nDrawTextRun", "(J[CIIIIFFZJJ)V", d_text_run);
         vm.register_native(class, "nDrawBitmap", "(JJFFJIII)V", d_bitmap_xy);
         vm.register_native(class, "nDrawBitmap", "(JJFFFFFFFFJII)V", d_bitmap_rects);
         vm.register_native(class, "nDrawNinePatch", "(JJJFFFFJII)V", d_nine_patch);
@@ -890,6 +892,35 @@ fn d_text_chars(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let text = if a <= b && b <= all.len() { all[a..b].to_vec() } else { all };
     let (x, y) = (vm.arg_f32(ctx, 4), vm.arg_f32(ctx, 5));
     let p = snap(vm.arg_i64(ctx, 7))?;
+    push(h, DisplayOp::DrawText(text, x, y, p))
+}
+
+/// `Canvas.nDrawTextRun` (both overloads). `Layout`/`TextLine` — every
+/// `TextView` and `Button` label — reach the canvas through this entry point,
+/// not `drawText`, so without it those labels never reach the display list.
+/// The overloads differ only in the text carrier (`String` vs `char[]`) and an
+/// extra trailing `precomputedText` handle on the `char[]` form; the geometry
+/// args (`start`,`end`,`context*`,`x`,`y`,`isRtl`) and the paint are identical.
+fn d_text_run(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = canvas_handle(vm, ctx)?;
+    let (start, end) = (vm.arg_i32(ctx, 2), vm.arg_i32(ctx, 3));
+    let carrier = vm.arg_ref(ctx, 1);
+    let all: Vec<u16> = if let Some(s) = vm.string_to_rust(carrier) {
+        s.encode_utf16().collect()
+    } else {
+        match vm.heap.get(carrier) {
+            Some(crate::heap::Object::Array(a)) => match &a.data {
+                crate::heap::ArrayData::Char(v) => v.clone(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        }
+    };
+    let a = start.max(0) as usize;
+    let b = end.max(0) as usize;
+    let text = if a <= b && b <= all.len() { all[a..b].to_vec() } else { all };
+    let (x, y) = (vm.arg_f32(ctx, 6), vm.arg_f32(ctx, 7));
+    let p = snap(vm.arg_i64(ctx, 9))?;
     push(h, DisplayOp::DrawText(text, x, y, p))
 }
 
