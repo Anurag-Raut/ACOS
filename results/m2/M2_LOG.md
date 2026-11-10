@@ -1393,3 +1393,277 @@ tools/diff-dexprogs.sh --corelib real                            # 27 pass / 0 f
   updated. No `res` consumer relied on the old layout.
 * `results/m2/M2_LOG.md` is the only artifact touched; no benchmark or
   `results/vm/*.json` file is claimed by this session.
+
+# W51-A session — content-provider holder binder, Settings reads, Path.approximate
+
+Base: clean worktree of HEAD `ad2ba9b` (includes W52-A `runtime/src/ams_java.rs`,
+W43-A resources, W49-A sqlite) at `~/Projects/acos/.cache/wt-w51a`, with
+`CARGO_TARGET_DIR=.cache/target-w51a`, `CARGO_PROFILE_DEV_DEBUG=0`, via
+`tools/guarded.sh`. W52-A had already materialised `ProviderInfo` /
+`ContentProviderHolder` through the Java bridge, so the W40-A "Bundle length is
+not aligned by 4" parser failure was gone; this session fixed the *semantic*
+holes left in that path and drove the first real `Activity.onCreate`.
+
+## What changed
+
+### Fix 1 — `getContentProvider` authority is arg 2, not arg 1
+
+W52-A's `ams_java` read `args.get(1)` as the authority. The AIDL signature is
+`getContentProvider(IApplicationThread caller, String callingPackage, String
+name, int userId, boolean stable)`, so arg 1 is the **calling package** and arg
+2 is the requested authority. `Settings` therefore asked for
+`dev.acos.fixtures.counter`, got `null`, and threw a `NullPointerException` in
+`Settings$NameValueCache.getStringForUser`. Now reads arg 2 (the same correction
+W40-A made in `acos-services::atms`).
+
+### Fix 2 — the `settings` provider binder is real
+
+`AmsState::get_content_provider("settings")` returns a hardcoded record with
+`binder: 0` (the provider is not published by an app). The reply therefore
+carried `provider = null`, and `Settings$ContentProviderHolder.getProvider`
+returned null. `registry::install` now records the binder it registered for the
+`android.content.IContentProvider` service
+(`provider::set_settings_provider_binder`), and `ams_java` substitutes it when
+the record has no binder. The reply now carries the real binder id.
+
+### Fix 3 — a real `ProviderInfo` and a real `IContentProvider`
+
+`ProviderInfo.writeToParcel` splices `ComponentInfo` -> `PackageItemInfo` and
+dereferences `applicationInfo` unconditionally, so the W52-A minimal object
+(4 fields) could not be marshalled. The bridge now sets the full API-34 field
+set and a real `ApplicationInfo` (`pms_java::application_info`). It also wraps
+the provider binder in the framework's own
+`android.content.ContentProviderProxy` instead of a bare `BinderProxy`, so
+`ContentProviderHolder.writeToParcel`'s `provider.asBinder()` resolves and the
+app receives a usable `IContentProvider`.
+
+### Fix 4 — no transport re-entrancy while writing the reply
+
+Materialising the holder runs inside `ServiceTransport::transact` (the
+`TRANSPORT` `RefCell` is already borrowed). `writeStrongBinder` re-entered
+`with_transport` and panicked with `RefCell already borrowed`.
+`natives::binder::binder_id_of` now reads a `BinderProxy`'s `mNativeData`
+directly (exactly what the transport did) before consulting the transport.
+
+### Fix 5 — `Path.approximate` returns `(fraction, x, y)` triples
+
+`DecorView` loads the window interpolator through `PathInterpolator.initPath`,
+which requires `Path.approximate` to return interleaved
+`(fraction, x, y)` triples whose first point is `(0,0)` and last is `(1,1)`.
+`gfx_path::path_approximate` returned `(x, y)` pairs only, so every launch threw
+`IllegalArgumentException: The Path must start at (0,0) and end at (1,1)`.
+It now computes the cumulative distance fraction and emits triples.
+
+## Evidence
+
+`acos launch fixtures/build/apps/counter.apk` (release, W51-A tree):
+
+```
+reached client_transaction (classes=1918, wall=761ms)
+  [ok] apk_parsed  [ok] process_booted  [ok] bind_application
+  [ok] application_on_create  [ok] client_transaction
+  [blocked] activity_on_create
+      Resources$NotFoundException: File res/color/system_bar_background_semi_transparent.xml
+      from ComplexColor resource ID #0x1060309
+      caused by UnsupportedOperationException: Can't convert value at index 0 to color: type=0x1
+      at android.content.res.Resources.getColor(1083)
+      at com.android.internal.policy.DecorView.<init>(309)
+      ...
+      at dev.acos.fixtures.counter.MainActivity.onCreate(41)
+  [not-reached] on_resume  [not-reached] first_frame
+```
+
+The `Settings.Global` reads now complete: the transport log shows two
+`android.content.IContentProvider` transactions (code 21 = `call`) after the
+`getContentProvider` reply, and execution reaches `MainActivity.onCreate`
+itself (`setContentView`). Before this session it stopped inside
+`Settings$NameValueCache.getStringForUser`.
+
+## Tests
+
+* `crates/acos-runtime/tests/ams_java.rs` — 5 pass:
+  `get_content_provider_reads_the_authority_and_carries_the_provider` (regression
+  for fixes 1-3: authority is arg 2 and `holder.provider` is non-null) and
+  `get_content_provider_does_not_treat_the_calling_package_as_the_authority`.
+* `crates/acos-vm/src/natives/gfx_path.rs` —
+  `approximation_is_fraction_x_y_triples_from_origin_to_unit` passes (fix 5).
+* `crates/acos-runtime/tests/m2.rs` — the two non-ignored tests still pass; the
+  gate remains `#[ignore]`d with the updated (real) blocker reason.
+
+## Blocker table (furthest stage reached)
+
+| Stage | Status | Blocker |
+|---|---|---|
+| bind_application | ok | — |
+| application_on_create | ok | — |
+| client_transaction | ok | — |
+| activity_on_create | blocked | `Resources.getColor(@android:color/system_bar_background_semi_transparent)` (ComplexColor XML) raises `UnsupportedOperationException: Can't convert value at index 0 to color: type=0x1`; owned by W43-A resources (`Resources`/`ComplexColor`/`ColorStateList` XML inflation). |
+| on_resume | not reached | after the color XML; the next blocker will be observable once it lands. |
+| first_frame | not reached | — |
+
+## Handoff
+
+* **Next blocker is W43-A's.** `DecorView.<init>` reads framework
+  `@android:color/system_bar_background_semi_transparent`; `Resources.getColor`
+  -> `ComplexColor` cannot convert the `<color>` XML value (`type=0x1`, i.e.
+  `TYPE_REFERENCE`) at index 0. That is the `android.content.res` XML/typed-value
+  path, not the AMS/content-provider path.
+* **`publishContentProviders` is still unimplemented.** W52-A explicitly left
+  it for W51-A (`ams_java::transact` returns a structured error). It is not on
+  the `counter` launch path (that app declares no providers), but an app with
+  its own provider needs the inbound `List<ContentProviderHolder>` decoded with
+  each holder's own `CREATOR` before it can be recorded. This is the remaining
+  provider-parcel item from the W51-A brief.
+* **`IContentProvider.query/insert/update/delete`** remain structured
+  `UNSUPPORTED_ANDROID_API` (W52-A): they need a real `CursorWindow` /
+  `BulkCursorDescriptor` marshaller. `call` is implemented and now exercised by
+  `Settings`; `getType` returns null.
+* **Coordination:** this session edited W47-A's
+  `crates/acos-vm/src/natives/gfx_path.rs` (fix 5) and W48-A-adjacent
+  `crates/acos-vm/src/natives/binder.rs` (fix 4). Both are small and isolated;
+  they should be merged before those workstreams change the same functions.
+
+## Caveats
+
+* `cargo check --workspace --all-targets` and `tools/diff-dexprogs.sh --corelib
+  real` were run in the W51-A worktree (results in the session report).
+* The `m2` gate is not un-ignored: `onResume` is not reached yet.
+
+# W60-A session — `nativeRetrieveAttributes` chases `@resid` (framework ComplexColor XML)
+
+Base: clean git worktree of HEAD `ad9c978` at `.cache/wt-w60a`, with
+`CARGO_TARGET_DIR=.cache/target-w60a`, `CARGO_PROFILE_DEV_DEBUG=0`, via
+`tools/guarded.sh`. The W51-A blocker was root-caused to the **wrong native**:
+`Resources.obtainAttributes` with a null theme (exactly what
+`ColorStateList.inflate` uses) calls `AssetManager.retrieveAttributes`
+(`nativeRetrieveAttributes`), **not** `applyStyle`, and that native returned the
+raw `TYPE_REFERENCE` instead of the referenced resource.
+
+## What changed
+
+### Fix 1 — `nativeRetrieveAttributes` resolves `@resid` like `applyStyle`
+
+`crates/acos-framework-natives/src/res/theme.rs::retrieve_attributes` copied the
+XML `Res_value` verbatim, so `android:color="@0x01060035"` came back as
+`type=0x1` (`TYPE_REFERENCE`). API-34 `ColorStateList.inflate` calls
+`TypedArray.getColor` on that slot, which only accepts a concrete int type and
+throws:
+
+```
+java.lang.UnsupportedOperationException: Can't convert value at index 0 to color: type=0x1, theme=null
+    at android.content.res.TypedArray.getColor(535)
+    at android.content.res.ColorStateList.inflate(366)
+    at android.content.res.ColorStateList.createFromXmlInner(296)
+    at android.content.res.ComplexColor.createFromXml(...)
+    at android.content.res.Resources.getColor(1083)
+    at com.android.internal.policy.DecorView.<init>(309)
+```
+
+The fix mirrors `fill_outputs` (the `applyStyle` path): when a retrieved XML
+attribute is `TYPE_REFERENCE`/`TYPE_DYNAMIC_REFERENCE`, chase it with
+`AssetManager::resolve_references(.., true)` and materialise the concrete
+`TypedValueOut` with `build_typed_value` (which also sets the right asset cookie
+so a resolved string reads the ARSC pool instead of the XML pool). Non-reference
+values keep the exact previous raw layout.
+
+`Resources.obtainAttributes` (theme == null) is also used by every
+`<declare-styleable>` read from a raw XML element, so this was a general hole in
+the retrieve path, not a color-specific one.
+
+## Evidence
+
+Before (HEAD `ad9c978`, same `acos launch`):
+
+```
+[    blocked] activity_on_create
+    UNSUPPORTED_JAVA_API: ... Resources$NotFoundException: File res/color/system_bar_background_semi_transparent.xml
+    ... caused by UnsupportedOperationException: Can't convert value at index 0 to color: type=0x1
+    at android.content.res.TypedArray.getColor(535)
+    at android.content.res.ColorStateList.inflate(366)
+```
+
+After (W60-A tree, `acos launch fixtures/build/apps/counter.apk`):
+
+```
+launch: reached client_transaction (classes=1929, wall=4999ms)
+  [ok] apk_parsed  [ok] process_booted  [ok] bind_application
+  [ok] application_on_create  [ok] client_transaction
+  [blocked] activity_on_create
+      JAVA_EXCEPTION: ... IllegalArgumentException: bad request for
+      android.app.IActivityClientController::setTaskDescription: arg 1
+      (TypedObject(android.app.ActivityManager$TaskDescription, nullable=true)):
+      bad string: String16 is not NUL terminated
+  [not-reached] on_resume  [not-reached] first_frame
+```
+
+So `MainActivity.onCreate -> setContentView -> PhoneWindow.installDecor ->
+DecorView.<init>` (the ComplexColor read) now completes; execution proceeds into
+`PhoneWindow.generateLayout`.
+
+## Tests
+
+* `crates/acos-framework-natives/tests/xmlblock_diff.rs` —
+  `retrieve_attributes_resolves_framework_color_reference` (new): opens
+  `framework-res.apk:res/color/system_bar_background_semi_transparent.xml`,
+  retrieves `android:color`/`android:alpha`, and asserts the reference
+  `@0x01060035` resolves to `type=0x1d` (RGB8) `data=0xff161c20` while
+  `STYLE_RESOURCE_ID` stays `0x01060035`. `retrieve_attributes_through_manager`
+  still passes (raw XML values are unchanged).
+* `cargo check --workspace --all-targets` and
+  `tools/diff-dexprogs.sh --corelib real` were run in the W60-A worktree.
+
+## Blocker table (furthest stage reached)
+
+| Stage | Status | Blocker |
+|---|---|---|
+| bind_application | ok | — |
+| application_on_create | ok | — |
+| client_transaction | ok | — |
+| activity_on_create | blocked | `IActivityClientController.setTaskDescription` can't unmarshall `ActivityManager$TaskDescription`; see below. |
+| on_resume | not reached | after `generateLayout`. |
+| first_frame | not reached | — |
+
+### Next blocker root cause (API-34 `TaskDescription.writeToParcel`)
+
+`DecorView`'s status-bar colour update path is
+`Activity$1.updateStatusBarColor` -> `Activity.setTaskDescription` ->
+`ActivityClient.setTaskDescription` -> `IActivityClientController.setTaskDescription`.
+The real API-34 `ActivityManager$TaskDescription.writeToParcel` (disassembled
+from `dex/framework/classes.dex`) is **conditional**, which the current curated
+6-field spec cannot express:
+
+```
+writeInt(mLabel != null ? 1 : 0); if present writeString(mLabel)
+if (mIcon == null || (inMemoryIcon != null && inMemoryIcon.isRecycled()))
+    writeInt(0)
+else { writeInt(1); mIcon.writeToParcel(dest, 0); }   // raw Icon, no marker
+writeInt(mColorPrimary); writeInt(mColorBackground)
+writeInt(mStatusBarColor); writeInt(mNavigationBarColor)
+writeBoolean(mEnsureStatusBarContrastWhenTransparent)
+writeBoolean(mEnsureNavigationBarContrastWhenTransparent)
+writeInt(mResizeMode); writeInt(mMinWidth); writeInt(mMinHeight)
+writeInt(mIconFilename != null ? 1 : 0); if present writeString(mIconFilename)
+writeInt(mColorBackgroundFloating)
+```
+
+`crates/acos-services/src/parcelable.rs` declares
+`iconRes, colorPrimary, colorBackground, colorSecondary, label, iconFilename`
+(an old/lossy layout), so the first `Str16` read lands on a length word and the
+parcel is rejected. Fixing this needs a conditional-aware parcelable (or a
+custom `TaskDescription` reader) plus an `Icon` payload model; the current
+linear `FieldOp` list cannot represent the three presence branches. It is a
+`acos-services` parcelable/codec task, not a `res` task.
+
+## Handoff
+
+* The `res` copy of the ComplexColor blocker is closed. The next blocker is the
+  `acos-services` `TaskDescription` codec above.
+* `crates/acos-vm/src/natives/fwk_res.rs` (`nativeRetrieveAttributes`) needed no
+  change: the entire fix is in `acos-framework-natives/src/res/theme.rs`.
+
+## Caveats
+
+* `m2` remains `#[ignore]`d with the updated (real) blocker reason; `onResume`
+  is still not reached.
+* `cargo check --workspace --all-targets` and `diff-dexprogs` were run in the
+  W60-A worktree and are reported in the session report.

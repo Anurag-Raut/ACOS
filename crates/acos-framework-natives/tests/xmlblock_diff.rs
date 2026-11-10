@@ -347,3 +347,52 @@ fn retrieve_attributes_through_manager() {
     assert_eq!(out_indices, vec![4, 0, 1, 2, 3]);
     eprintln!("retrieveAttributes: orientation=1 padding=16dp layout_width=-1");
 }
+
+/// Regression: `nativeRetrieveAttributes` must resolve a raw `@resid` XML
+/// attribute to its concrete resource, exactly like `applyStyle`.
+/// `Resources.obtainAttributes` (theme == null) uses this native, and API-34
+/// `ColorStateList.inflate` -> `TypedArray.getColor` raises
+/// `Can't convert value at index 0 to color: type=0x1` on a raw
+/// `TYPE_REFERENCE`. The framework's
+/// `res/color/system_bar_background_semi_transparent.xml` has
+/// `android:color="@0x01060035"` (`#ff161c20`).
+#[test]
+fn retrieve_attributes_resolves_framework_color_reference() {
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    if !apk_path.exists() {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let mut mgr = acos_framework_natives::res::AssetManager::new();
+    mgr.add_apk_assets(ApkAssets::open(&apk_path).unwrap());
+    let bytes = mgr.sources()[0]
+        .read_entry("res/color/system_bar_background_semi_transparent.xml")
+        .expect("color xml");
+    let block = mgr.create_xml_block(XmlBlock::from_bytes(&bytes, 0, bytes.len()).unwrap());
+    let state = mgr.create_parse_state(block, 0x0106_0309).unwrap();
+    // Advance to the `<item>` START_TAG (the first START_TAG is `<selector>`).
+    let mut seen = 0;
+    loop {
+        let ev = mgr.parse_next(state).unwrap();
+        assert_ne!(ev, END_DOCUMENT);
+        if ev == acos_framework_natives::res::START_TAG {
+            seen += 1;
+            if seen == 2 {
+                break;
+            }
+        }
+    }
+    // android:color (0x010101a5) and android:alpha (0x0101031f).
+    let attrs = [0x0101_01a5i32, 0x0101_031f];
+    let mut out_values = vec![0i32; attrs.len() * 7];
+    let mut out_indices = vec![-1i32; attrs.len() + 1];
+    assert!(mgr.retrieve_attributes(state, &attrs, &mut out_values, &mut out_indices));
+    // android:color is resolved from @0x01060035 to #ff161c20 (RGB8; the
+    // high byte is still 0xff, so `TypedArray.getColor` returns it verbatim).
+    assert_eq!(out_values[0], 0x1d, "type should be TYPE_INT_COLOR_RGB8");
+    assert_eq!(out_values[1] as u32, 0xff16_1c20);
+    // `TypedArray.getResourceId` still reports the referenced resource.
+    assert_eq!(out_values[3] as u32, 0x0106_0035);
+    assert_eq!(out_indices, vec![2, 0, 1]);
+    eprintln!("retrieveAttributes resolved @0x01060035 -> #ff161c20");
+}

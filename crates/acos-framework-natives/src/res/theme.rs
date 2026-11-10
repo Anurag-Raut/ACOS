@@ -10,7 +10,10 @@ use std::collections::HashMap;
 
 use crate::res::config::ResConfig;
 use crate::res::manager::{AssetManager, MAX_REFERENCE_DEPTH};
-use crate::res::value::{ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE};
+use crate::res::value::{
+    ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE, TYPE_DYNAMIC_REFERENCE,
+    TYPE_REFERENCE,
+};
 use crate::res::xmlblock::{XmlEvent, XmlParserState};
 
 /// A resolved theme: attribute id -> value, plus the ordered list of applied
@@ -194,19 +197,40 @@ impl AssetManager {
             let attr = attrs[i] as u32;
             match map.get(&attr) {
                 Some((value, _idx)) => {
-                    let tv = TypedValueOut {
-                        data_type: value.data_type,
-                        data: value.data,
-                        asset_cookie: -1,
-                        // A `@resid` carries its target in `STYLE_RESOURCE_ID`
-                        // so `TypedArray.getResourceId` returns the referenced
-                        // resource, not the attribute id.
-                        resource_id: if value.is_reference() { value.data } else { attr },
-                        changing_configurations: 0,
-                        density: 0,
-                        source_resource_id: attr,
-                        flags: 0,
-                        string: None,
+                    // `nativeRetrieveAttributes` must chase a raw `@resid`
+                    // attribute value to its concrete resource, exactly like
+                    // `applyStyle` does. `Resources.obtainAttributes` with a
+                    // null theme (what `ColorStateList.inflate` uses) routes
+                    // here, and `TypedArray.getColor` raises `Can't convert
+                    // value at index N to color: type=0x1` on a raw
+                    // `TYPE_REFERENCE` (framework `res/color/*.xml`).
+                    // `build_typed_value` also decodes a resolved string into
+                    // the right asset cookie, so `TypedArray.getValueAt` reads
+                    // the ARSC pool instead of the XML pool.
+                    let built = match value.data_type {
+                        TYPE_REFERENCE | TYPE_DYNAMIC_REFERENCE if value.data != 0 => self
+                            .resolve_references(value.data, true)
+                            .and_then(|(si, entry, fid)| {
+                                self.build_typed_value(si, &entry, attr, fid, 0)
+                            }),
+                        _ => None,
+                    };
+                    let tv = match built {
+                        Some((_cookie, tv)) => tv,
+                        None => TypedValueOut {
+                            data_type: value.data_type,
+                            data: value.data,
+                            asset_cookie: -1,
+                            // A `@resid` carries its target in `STYLE_RESOURCE_ID`
+                            // so `TypedArray.getResourceId` returns the referenced
+                            // resource, not the attribute id.
+                            resource_id: if value.is_reference() { value.data } else { attr },
+                            changing_configurations: 0,
+                            density: 0,
+                            source_resource_id: attr,
+                            flags: 0,
+                            string: None,
+                        },
                     };
                     tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
                     let slot = count as usize + 1;
