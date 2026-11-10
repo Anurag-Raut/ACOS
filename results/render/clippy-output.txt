@@ -1,0 +1,2 @@
+    Checking acos-render v0.1.0 (/home/Qui/Projects/acos/crates/acos-render)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.52s

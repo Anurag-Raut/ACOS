@@ -1,0 +1,125 @@
+{
+  "width": 1080,
+  "height": 2400,
+  "density": 2.625,
+  "background": "#FFF5F5F5",
+  "root": {
+    "name": "root",
+    "bounds": [0, 0, 1080, 2400],
+    "children": [
+      {
+        "name": "status-bar",
+        "bounds": [0, 0, 1080, 128],
+        "ops": [{ "op": "rect", "rect": [0, 0, 1080, 128], "paint": { "color": "#FF000000" } }]
+      },
+      {
+        "name": "action-bar",
+        "bounds": [0, 128, 1080, 275],
+        "ops": [
+          { "op": "rect", "rect": [0, 0, 1080, 147], "paint": { "color": "#FF1A1A1A" } },
+          {
+            "op": "text",
+            "text": "Hello Views",
+            "x": 42,
+            "y": 94,
+            "paint": {
+              "color": "#FFFFFFFF",
+              "textSize": 52,
+              "typeface": { "family": "sans-serif", "weight": 500, "italic": false }
+            }
+          }
+        ]
+      },
+      {
+        "name": "title",
+        "bounds": [42, 317, 1038, 368],
+        "ops": [
+          {
+            "op": "text",
+            "text": "Hello ACOS",
+            "x": 0,
+            "y": 40,
+            "paint": {
+              "color": "#FF757575",
+              "textSize": 36.75,
+              "typeface": { "family": "sans-serif", "weight": 400, "italic": false }
+            }
+          }
+        ]
+      },
+      {
+        "name": "input",
+        "bounds": [42, 368, 1038, 486],
+        "ops": [
+          {
+            "op": "line",
+            "x0": 0,
+            "y0": 117,
+            "x1": 996,
+            "y1": 117,
+            "paint": { "color": "#FF757575", "style": "stroke", "strokeWidth": 2 }
+          },
+          {
+            "op": "text",
+            "text": "Enter your name",
+            "x": 0,
+            "y": 65,
+            "paint": {
+              "color": "#FF757575",
+              "textSize": 42,
+              "typeface": { "family": "sans-serif", "weight": 400, "italic": false }
+            }
+          }
+        ]
+      },
+      {
+        "name": "greet-button",
+        "bounds": [42, 486, 273, 612],
+        "elevation": 4,
+        "ops": [
+          {
+            "op": "roundRect",
+            "rect": [0, 0, 231, 126],
+            "rx": 8,
+            "ry": 8,
+            "paint": { "color": "#FFDDDDDD", "antiAlias": true }
+          },
+          {
+            "op": "text",
+            "text": "Greet",
+            "x": 115.5,
+            "y": 78,
+            "paint": {
+              "color": "#FF000000",
+              "textSize": 36.75,
+              "align": "center",
+              "typeface": { "family": "sans-serif", "weight": 400, "italic": false }
+            }
+          }
+        ]
+      },
+      {
+        "name": "result",
+        "bounds": [42, 612, 1038, 663],
+        "ops": [
+          {
+            "op": "text",
+            "text": "clicks: 0",
+            "x": 0,
+            "y": 40,
+            "paint": {
+              "color": "#FF757575",
+              "textSize": 36.75,
+              "typeface": { "family": "sans-serif", "weight": 400, "italic": false }
+            }
+          }
+        ]
+      },
+      {
+        "name": "navigation-bar",
+        "bounds": [0, 2337, 1080, 2400],
+        "ops": [{ "op": "rect", "rect": [0, 0, 1080, 63], "paint": { "color": "#FF000000" } }]
+      }
+    ]
+  }
+}

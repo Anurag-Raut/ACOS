@@ -1,0 +1,47 @@
+[package]
+name = "acos-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS offscreen software 2D renderer: a Rust replacement for Android's HWUI/Skia/minikin stack (tiny-skia rasteriser, rustybuzz text shaping)."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Rasterisation: a Rust port of Skia's software rasteriser; keeps AA/blend
+# behaviour close to Android's software canvas.
+tiny-skia = "0.11"
+
+# Text: HarfBuzz port for shaping (kerning/GSUB/GPOS/ligatures/bidi runs),
+# ttf-parser for outlines + metrics (TrueType + CFF + variable fonts).
+rustybuzz = "0.20"
+ttf-parser = "0.25"
+unicode-bidi = "0.3"
+unicode-script = "0.5"
+
+# Android fonts.xml parsing (read-only DOM for a ~1000 line config file).
+roxmltree = "0.21"
+
+# Memory-map font files so a font is shared read-only across every surface and
+# context instead of being copied per session (Android mmaps /system/fonts too).
+memmap2 = "0.9"
+
+# Image decoding for BitmapFactory-style ingest.
+png = "0.17"
+jpeg-decoder = "0.3"
+image-webp = "0.2"
+
+# Fast non-crypto content hashing + optional sha256.
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+sha2 = "0.10"
+
+[[example]]
+name = "render_scene"
+path = "examples/render_scene.rs"
+
+[[example]]
+name = "bench_render"
+path = "examples/bench_render.rs"

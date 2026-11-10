@@ -1,0 +1,138 @@
+{
+  "concurrentSurfaces": {
+    "count": 20,
+    "height": 2400,
+    "rssGrowthKb": 6544,
+    "rssKbAfter": 94112,
+    "rssKbBefore": 87568,
+    "rssPerSurfaceKb": 327.2,
+    "width": 1080
+  },
+  "encoding": {
+    "Best": {
+      "bytes": 19459,
+      "ms": {
+        "max": 21.061343,
+        "mean": 20.793699,
+        "min": 20.697963,
+        "p50": 20.747567,
+        "p95": 20.951835
+      }
+    },
+    "Default": {
+      "bytes": 19549,
+      "ms": {
+        "max": 18.654539,
+        "mean": 18.40502225,
+        "min": 18.258035999999997,
+        "p50": 18.353016,
+        "p95": 18.621817
+      }
+    },
+    "Fast": {
+      "bytes": 8439811,
+      "ms": {
+        "max": 14.100033999999999,
+        "mean": 12.663840249999998,
+        "min": 12.273584000000001,
+        "p50": 12.570027,
+        "p95": 13.094583
+      }
+    },
+    "FastFiltered": {
+      "bytes": 90022,
+      "ms": {
+        "max": 7.644547,
+        "mean": 7.338044499999998,
+        "min": 7.226472,
+        "p50": 7.329859,
+        "p95": 7.4683720000000005
+      }
+    },
+    "Qoi": {
+      "bytes": 57554,
+      "ms": {
+        "max": 10.150108,
+        "mean": 9.873127499999999,
+        "min": 9.817737,
+        "p50": 9.862682,
+        "p95": 9.908729999999998
+      }
+    },
+    "RawRgba8Copy": {
+      "bytes": 10368000,
+      "ms": {
+        "max": 0.210099,
+        "mean": 0.12778516666666667,
+        "min": 0.12177099999999999,
+        "p50": 0.122533,
+        "p95": 0.14013599999999998
+      }
+    }
+  },
+  "fontDeltaKb": 26628,
+  "hasFonts": true,
+  "heavyScene": {
+    "bitmaps": 20,
+    "cards": 50,
+    "coldMs": 31.393107000000004,
+    "textRows": 200,
+    "warmMs": {
+      "max": 24.466715,
+      "mean": 24.03070226666666,
+      "min": 23.766133,
+      "p50": 24.028512,
+      "p95": 24.381883
+    }
+  },
+  "helloCachedRenderMs": {
+    "max": 0.0006209999999999999,
+    "mean": 0.00013286666666666665,
+    "min": 0.00009999999999999999,
+    "p50": 0.00011999999999999999,
+    "p95": 0.00016
+  },
+  "helloCaptureMs": {
+    "max": 0.000161,
+    "mean": 0.00003521666666666669,
+    "min": 0.000029999999999999997,
+    "p50": 0.000029999999999999997,
+    "p95": 0.00004
+  },
+  "helloColdMs": 5.098249,
+  "helloContentHash": "8b30e01cef711e901e9f28886ec2e61c",
+  "helloFrameSeq": 121,
+  "helloNodeCount": 8,
+  "helloWarmMs": {
+    "max": 4.602536,
+    "mean": 4.008036949999999,
+    "min": 3.922945,
+    "p50": 3.972919,
+    "p95": 4.146309
+  },
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "logicalCpus": 32,
+    "memTotalKb": 63394516,
+    "threadsUsed": 1
+  },
+  "hwmKbAfterHeavy": 90728,
+  "hwmKbBefore": 3628,
+  "iterations": 60,
+  "rssKbAfterFirstFrame": 52396,
+  "rssKbAfterFonts": 30256,
+  "rssKbAfterHeavy": 87568,
+  "rssKbBefore": 3628,
+  "textMeasure": {
+    "coldMisses": 1000,
+    "coldMs": 23.645724,
+    "coldStringsPerSec": 42290.94444306294,
+    "strings": 1000,
+    "warmHitRate": 1.0,
+    "warmHits": 1000,
+    "warmMisses": 0,
+    "warmMs": 0.149174,
+    "warmStringsPerSec": 6703581.052998512
+  },
+  "version": "0.1.0"
+}

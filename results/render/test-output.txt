@@ -1,0 +1,112 @@
+   Compiling acos-render v0.1.0 (/home/Qui/Projects/acos/crates/acos-render)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.46s
+     Running unittests src/lib.rs (target/debug/deps/acos_render-0ef605b59e86d330)
+
+running 63 tests
+test bitmap::tests::alpha8_stores_alpha ... ok
+test bitmap::tests::erase_and_get_pixel_round_trip ... ok
+test bitmap::tests::copy_preserves_pixels ... ok
+test bitmap::tests::pixmap_round_trip ... ok
+test bitmap::tests::set_pixel_bounds_are_safe ... ok
+test bitmap::tests::rgb565_quantises_channels ... ok
+test color::tests::argb_round_trip ... ok
+test color::tests::porter_duff_src_over_reference ... ok
+test color::tests::premultiply_round_trip_opaque ... ok
+test color::tests::premultiply_round_trip_translucent ... ok
+test geom::tests::round_out_covers_fractional_rect ... ok
+test geom::tests::intersect_empty ... ok
+test color::tests::blend_ordinals_unique ... ok
+test handle::tests::null_handle_never_resolves ... ok
+test handle::tests::stale_handle_is_rejected ... ok
+test hash::tests::hash_is_stable_and_distinguishes ... ok
+test image::tests::sniff_formats ... ok
+test matrix::tests::affine_rejects_perspective ... ok
+test matrix::tests::identity_is_identity ... ok
+test hash::tests::sha256_matches_known_vector ... ok
+test matrix::tests::invert_round_trip ... ok
+test matrix::tests::poly_to_poly_affine ... ok
+test matrix::tests::post_translate_then_map ... ok
+test matrix::tests::pre_translate_then_map ... ok
+test matrix::tests::rect_to_rect_center ... ok
+test matrix::tests::rotate_90 ... ok
+test image::tests::decode_a_tiny_png_round_trips ... ok
+test paint::tests::alpha_modulates_colour ... ok
+test paint::tests::default_paint_is_opaque_black_fill ... ok
+test paint::tests::ordinals_round_trip ... ok
+test path::tests::conic_weight_one_matches_quad ... ok
+test path::tests::arc_to_quarter_circle_hits_endpoint ... ok
+test path::tests::path_measure_length_of_square ... ok
+test path::tests::path_op_is_explicitly_unsupported ... ok
+test path::tests::rect_bounds_and_is_rect ... ok
+test path::tests::transform_moves_points ... ok
+test region::tests::difference_carves_hole ... ok
+test region::tests::quick_reject ... ok
+test region::tests::intersect_disjoint_is_empty ... ok
+test render_node::tests::local_matrix_translates_by_bounds ... ok
+test region::tests::union_of_two_rects ... ok
+test render_node::tests::version_bumps_on_mutation ... ok
+test render_node::tests::subtree_version_changes_when_child_changes ... ok
+test region::tests::set_path_from_rect ... ok
+test scene::tests::parse_colours ... ok
+test surface::tests::content_hash_changes_with_pixels ... ok
+test surface::tests::frame_sequence_and_freshness ... ok
+test text::layout::tests::greedy_breaks_at_words ... ok
+test text::layout::tests::hard_newline_forces_break ... ok
+test surface::tests::png_and_qoi_headers ... ok
+test text::layout::tests::high_quality_is_unsupported ... ok
+test surface::tests::blank_vs_content_classification ... ok
+test surface::tests::png_settings_all_produce_valid_images ... ok
+test scene::tests::minimal_scene_renders_content ... ok
+test text::fonts::tests::resolve_weight_picks_bold_entry ... ok
+test text::tests::empty_text_is_zero_width ... ok
+test text::tests::shaping_cache_reports_hit_rate ... ok
+test text::tests::text_path_is_non_empty ... ok
+test text::tests::font_metrics_have_positive_descent ... ok
+test text::tests::advances_sum_equals_measure_text ... ok
+test text::fonts::tests::parses_the_real_fonts_xml_if_available ... ok
+test text::tests::kerning_is_applied_for_av ... ok
+test text::tests::non_ascii_text_shapes_without_panic ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/contract.rs (target/debug/deps/contract-a6cf6aeafb44f94c)
+
+running 14 tests
+test render_error_codes_are_stable ... ok
+test bad_handle_reports_stable_code ... ok
+test strict_mode_escalates_unsupported ... ok
+test bitmap_pixel_round_trip_through_context ... ok
+test unsupported_ops_are_recorded_not_skipped ... ok
+test capture_fresh_semantics ... ok
+test save_layer_alpha_composites ... ok
+test draw_lines_points_and_paint ... ok
+test clip_rect_difference_clips_drawing ... ok
+test frame_freshness_contract ... ok
+test nine_patch_scales_source_into_destination ... ok
+test damage_tracking_skips_raster_when_unchanged ... ok
+test png_encoding_round_trips ... ok
+test fuzz_random_op_sequences_never_panic ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/golden.rs (target/debug/deps/golden-fc60866cf65cc04e)
+
+running 2 tests
+test golden_primitives_match ... ok
+test hello_views_scene_renders ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/hello_views_metrics.rs (target/debug/deps/hello_views_metrics-16190e154d580089)
+
+running 1 test
+test hello_views_text_metrics_vs_art ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests acos_render
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
