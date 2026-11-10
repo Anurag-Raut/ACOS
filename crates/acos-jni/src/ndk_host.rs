@@ -267,12 +267,88 @@ pub fn install() {
         return;
     }
     install_ndk_host(Arc::new(ProductionNdkHost));
+    // The software GLES substrate (ADR-0023) replaces the loader's EGL/GLES
+    // traps and connects `eglSwapBuffers` to the same compositor sink the NDK
+    // window path uses. This runs only on the native load path, i.e. only when
+    // `--native` (or `ACOS_NATIVE=1`) enabled native code.
+    crate::gles_host::install();
 }
 
 /// Re-install unconditionally (test helper: overrides a previous install).
 pub fn install_forced() {
     INSTALLED.store(true, Ordering::SeqCst);
     install_ndk_host(Arc::new(ProductionNdkHost));
+    crate::gles_host::install();
+}
+
+/// Geometry of a live `ANativeWindow` (used by the EGL window-surface host).
+#[must_use]
+pub fn window_geometry(window: u64) -> Option<(u32, u32)> {
+    WINDOWS.with(|w| {
+        let g = w.borrow();
+        let rec = g.get(&window)?;
+        if rec.width <= 0 || rec.height <= 0 {
+            return None;
+        }
+        Some((rec.width as u32, rec.height as u32))
+    })
+}
+
+/// Publish `rgba` as the window's new contents, exactly like
+/// `ANativeWindow_unlockAndPost`: copy into the window's software buffer, then
+/// submit it to the compositor sink. Returns the compositor frame id (0 when
+/// the submission was rejected or the window is unknown).
+pub fn window_present(window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 {
+    let layer = WINDOWS.with(|w| {
+        let mut g = w.borrow_mut();
+        let rec = g.get_mut(&window)?;
+        let len = checked_buffer_len(width as i32, height as i32, width as i32).ok()?;
+        if rgba.len() < len {
+            return None;
+        }
+        rec.width = width as i32;
+        rec.height = height as i32;
+        rec.stride = width as i32;
+        rec.buffer.clear();
+        rec.buffer.extend_from_slice(&rgba[..len]);
+        Some(rec.layer)
+    });
+    let Some(layer) = layer else {
+        eprintln!(
+            "UNSUPPORTED_GLES call=eglSwapBuffers reason=unknown or unallocatable ANativeWindow \
+             {window:#x}"
+        );
+        return 0;
+    };
+    let pixels = WINDOWS.with(|w| w.borrow().get(&window).map(|r| r.buffer.clone()));
+    let Some(pixels) = pixels else { return 0 };
+    substrate::submit_frame(layer, width, height, &pixels, 0)
+}
+
+/// Register a native window without a Java `Surface` (integration tests).
+///
+/// The production path is `ANativeWindow_fromSurface`, which resolves a live
+/// `SurfaceControl` layer; this helper lets a test drive the EGL swap → frame
+/// sink path with an explicit layer handle. Returns the window id.
+#[doc(hidden)]
+pub fn register_native_window(width: i32, height: i32, layer: u64, surface: u64) -> u64 {
+    let id = alloc_window_id();
+    WINDOWS.with(|w| {
+        w.borrow_mut().insert(
+            id,
+            Window {
+                surface,
+                layer,
+                width,
+                height,
+                format: WINDOW_FORMAT_RGBA_8888,
+                stride: width.max(0),
+                buffer: vec![0u8; (width.max(0) * height.max(0) * 4) as usize],
+                locked: false,
+            },
+        );
+    });
+    id
 }
 
 impl NdkHost for ProductionNdkHost {

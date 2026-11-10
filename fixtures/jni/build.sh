@@ -32,3 +32,11 @@ CLANG29="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-c
     "$ROOT/crates/acos-native-loader/tests/data/libacosndk.so" \
     "$ROOT/fixtures/jni/acos_ndk_surface.c" -llog -landroid -ljnigraphics -lEGL -lGLESv2
 echo "build-jni-fixture: wrote crates/acos-native-loader/tests/data/libacosndk.so"
+
+# Software GLES2 substrate fixture (W86-A). Loaded by `acos-jni`'s
+# `tests/gles_fixture.rs`; it clears and draws a triangle through EGL and is
+# run inside the ADR-0022 confinement.
+"$CLANG29" -shared -fPIC -O2 -Wall -o \
+    "$ROOT/crates/acos-jni/tests/data/libacosgles.so" \
+    "$ROOT/fixtures/jni/acos_gles_surface.c" -lEGL -lGLESv2
+echo "build-jni-fixture: wrote crates/acos-jni/tests/data/libacosgles.so"

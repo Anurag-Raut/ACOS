@@ -48,6 +48,7 @@ pub mod dispatch;
 pub mod error;
 pub mod jni;
 pub mod load;
+pub mod gles_host;
 pub mod ndk_host;
 pub mod refs;
 pub mod state;

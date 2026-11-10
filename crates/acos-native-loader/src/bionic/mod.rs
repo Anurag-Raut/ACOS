@@ -17,6 +17,7 @@ use std::os::raw::c_void;
 use std::sync::OnceLock;
 
 pub mod dl;
+pub mod gles;
 pub mod ndk;
 pub mod pthread;
 pub mod shims;
@@ -483,6 +484,13 @@ pub fn table() -> &'static HashMap<&'static str, Shim> {
 
 /// Look up a bionic-provided symbol.
 pub fn resolve(name: &str) -> Option<Shim> {
+    // A installed GL substrate (the `--native` path installs one) wins over the
+    // static EGL/GLES traps: the guest then reaches the real software renderer
+    // instead of a reported `GL_INVALID_OPERATION`. Without an install the traps
+    // in the table below remain, so the loader still fails closed.
+    if let Some(shim) = gles::shim(name) {
+        return Some(shim);
+    }
     table().get(name).copied()
 }
 

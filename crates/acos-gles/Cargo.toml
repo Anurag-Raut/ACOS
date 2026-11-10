@@ -1,0 +1,10 @@
+[package]
+name = "acos-gles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS software GLES2/EGL substrate: GLSL ES 1.00 interpreter + scanline triangle rasteriser behind an EGL surface (ADR-0023)."
+
+[dependencies]
+acos-native-loader = { path = "../acos-native-loader" }

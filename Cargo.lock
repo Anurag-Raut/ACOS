@@ -67,10 +67,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-gles"
+version = "0.1.0"
+dependencies = [
+ "acos-native-loader",
+]
+
+[[package]]
 name = "acos-jni"
 version = "0.1.0"
 dependencies = [
  "acos-dex",
+ "acos-gles",
  "acos-native-loader",
  "acos-sandbox",
  "acos-test-support",
@@ -161,7 +169,9 @@ dependencies = [
  "acos-aidl",
  "acos-apk",
  "acos-dex",
+ "acos-gles",
  "acos-jni",
+ "acos-native-loader",
  "acos-parcel",
  "acos-render",
  "acos-services",
