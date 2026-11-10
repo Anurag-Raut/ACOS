@@ -2119,7 +2119,7 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                                     None => {
                                         let mut vc = VirtualCache::new();
                                         vc.put(rc, m);
-                                        *slot = Some(vc);
+                                        *slot = Some(Box::new(vc));
                                     }
                                 }
                             }

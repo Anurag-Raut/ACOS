@@ -32,7 +32,13 @@ pub struct DexCtx {
     /// one of four entries. Replacement is round-robin. The mapping is a pure
     /// function of (declared signature, receiver class), so it never needs
     /// invalidation.
-    pub virtual_cache: Vec<Option<VirtualCache>>,
+    ///
+    /// Stored boxed: one `VirtualCache` is 40 bytes, and the vector is sized to
+    /// the whole DEX `method_ids` table even though only executed call sites
+    /// ever populate an entry. The boxed slot keeps the dense O(1) index the
+    /// interpreter's fast path relies on while paying 8 bytes of pointer per
+    /// unused slot instead of 40 (W146-A).
+    pub virtual_cache: Vec<Option<Box<VirtualCache>>>,
     /// Absolute path the provider was parsed from, when it came from the boot
     /// classpath. Captured into the serialized boot image so a cold process can
     /// re-open the identical provider list (index order is part of the

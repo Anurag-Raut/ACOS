@@ -701,14 +701,35 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     note_census("vm_out_buffers", (vm.out_buf.capacity() + vm.err_buf.capacity()) as u64, "stdout+stderr");
 
     // --- per-VM DEX handle caches ---
-    let mut dex_cache_bytes: u64 = 0;
+    let mut cache_parts = [0u64; 5];
     for d in &vm.dexs {
-        dex_cache_bytes += sz(d.string_cache.capacity(), size_of::<Option<crate::heap::Handle>>())
-            + sz(d.field_cache.capacity(), size_of::<Option<crate::class::ResolvedField>>())
-            + sz(d.method_cache.capacity(), size_of::<Option<crate::class::MethodId>>())
-            + sz(d.class_cache.capacity(), size_of::<Option<crate::class::ClassId>>())
-            + sz(d.virtual_cache.capacity(), size_of::<Option<crate::vm::VirtualCache>>());
+        cache_parts[0] += sz(d.string_cache.capacity(), size_of::<Option<crate::heap::Handle>>());
+        cache_parts[1] += sz(d.field_cache.capacity(), size_of::<Option<crate::class::ResolvedField>>());
+        cache_parts[2] += sz(d.method_cache.capacity(), size_of::<Option<crate::class::MethodId>>());
+        cache_parts[3] += sz(d.class_cache.capacity(), size_of::<Option<crate::class::ClassId>>());
+        cache_parts[4] += sz(
+            d.virtual_cache.capacity(),
+            size_of::<Option<Box<crate::vm::VirtualCache>>>(),
+        ) + sz(
+            d.virtual_cache.iter().filter(|v| v.is_some()).count(),
+            size_of::<crate::vm::VirtualCache>(),
+        );
     }
+    let dex_cache_bytes: u64 = cache_parts.iter().sum();
+    note_census(
+        "vm_dex_handle_caches_breakdown",
+        dex_cache_bytes,
+        &format!(
+            "string={:.2} field={:.2} method={:.2} class={:.2} virtual={:.2} vc_value={}B vc_slot={}B",
+            cache_parts[0] as f64 / 1048576.0,
+            cache_parts[1] as f64 / 1048576.0,
+            cache_parts[2] as f64 / 1048576.0,
+            cache_parts[3] as f64 / 1048576.0,
+            cache_parts[4] as f64 / 1048576.0,
+            size_of::<crate::vm::VirtualCache>(),
+            size_of::<Option<Box<crate::vm::VirtualCache>>>(),
+        ),
+    );
     note_census("vm_dex_handle_caches", dex_cache_bytes, &format!("files={}", vm.dexs.len()));
 
     // --- DEX raw + parsed tables (deduped across the VM's Arc<DexFile>) ---
@@ -769,6 +790,8 @@ fn note_rss_by_mapping() {
     let mut code: u64 = 0;
     let mut other: u64 = 0;
     let mut current = MappingKind::Other;
+    let mut current_header = String::new();
+    let mut anon_maps: Vec<(u64, String)> = Vec::new();
     for line in text.lines() {
         // A mapping header starts with `start-end` (both hex, 8+ digits).
         let is_header = line.split_whitespace().next().is_some_and(|range| {
@@ -783,6 +806,10 @@ fn note_rss_by_mapping() {
         });
         if is_header {
             current = classify_mapping(line);
+            current_header.clear();
+            if matches!(current, MappingKind::Anon) {
+                current_header.push_str(line);
+            }
             continue;
         }
         let Some(rest) = line.strip_prefix("Rss:") else {
@@ -798,10 +825,26 @@ fn note_rss_by_mapping() {
             MappingKind::Fonts => fonts += bytes,
             MappingKind::Apk => apk += bytes,
             MappingKind::DexJar => dex_jar += bytes,
-            MappingKind::Anon => anon += bytes,
+            MappingKind::Anon => {
+                anon += bytes;
+                if bytes > 0 {
+                    anon_maps.push((bytes, current_header.clone()));
+                }
+            }
             MappingKind::Code => code += bytes,
             MappingKind::Other => other += bytes,
         }
+    }
+    // Name the largest anonymous mappings (address range + perms) so the
+    // residual is attributable by size. `Pss`/`Private_Dirty` are not parsed:
+    // each row is the mapping's resident `Rss`, same metric as the rollup.
+    anon_maps.sort_by(|a, b| b.0.cmp(&a.0));
+    for (i, (bytes, header)) in anon_maps.iter().take(20).enumerate() {
+        note_census(
+            &format!("smaps_anon_{i:02}"),
+            *bytes,
+            header.split_whitespace().take(2).collect::<Vec<_>>().join(" ").as_str(),
+        );
     }
     set_note("rss_fonts_bytes", fonts);
     set_note("rss_apk_bytes", apk);
