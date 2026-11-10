@@ -1885,13 +1885,15 @@ fn build_frame(
     frame.advance_on_return = true;
     {
         let caller_regs = &vm.threads[t].frames.last().unwrap().regs;
-        for i in 0..n {
-            let r = if range {
-                base.wrapping_add(i as u16)
-            } else {
-                list[i]
-            };
-            frame.regs[base_slot + i] = caller_regs[r as usize];
+        if range {
+            for i in 0..n {
+                let r = base.wrapping_add(i as u16);
+                frame.regs[base_slot + i] = caller_regs[r as usize];
+            }
+        } else {
+            for (i, &r) in list.iter().take(n).enumerate() {
+                frame.regs[base_slot + i] = caller_regs[r as usize];
+            }
         }
     }
     // Reference map for incoming slots (used by the GC).

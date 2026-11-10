@@ -97,12 +97,12 @@ fn fast_op(
             f.set_reg(r0, v);
             advance(pc, ii, size);
         }
-        0x04 | 0x05 | 0x06 => {
+        0x04..=0x06 => {
             let v = f.reg_wide(r1);
             f.set_reg_wide(r0, v);
             advance(pc, ii, size);
         }
-        0x07 | 0x08 | 0x09 => {
+        0x07..=0x09 => {
             let v = f.reg(r1);
             f.set_reg_ref(r0, v);
             advance(pc, ii, size);
