@@ -33,6 +33,15 @@ use crate::heap::{Handle, Object, NULL};
 use crate::interp;
 use crate::vm::{InvokeKind, ThreadRT, Vm};
 
+/// Maximum number of bridge roots one VM will pin (see `Vm::bridge_root`).
+///
+/// `native_roots` is a deduplicated set, so this only bounds the number of
+/// *distinct* live handles the host keeps rooted; a guest that creates an
+/// unbounded number of local binders hits it and the registration is refused
+/// with a structured `RESOURCE_LIMIT` diagnostic instead of pinning the heap
+/// forever (W94-A #10).
+pub const MAX_NATIVE_ROOTS: usize = 1 << 20;
+
 /// A value crossing the Rust ↔ Java boundary.
 ///
 /// Reference values are heap [`Handle`]s. `Null` is the Java `null` reference;
@@ -515,10 +524,26 @@ impl Vm {
 
     // ---- internals -------------------------------------------------------
 
+    /// Register a bridge root, once per handle.
+    ///
+    /// The binder transport calls `root_handle` for every `writeStrongBinder`
+    /// (i.e. on every map of the same object). Pushing unconditionally made
+    /// `native_roots` grow without bound in a long-lived session (W94-A #10).
+    /// The vector is now a *set*: a handle is registered at most once and is
+    /// released by [`Vm::release_bridge_root`].
     fn bridge_root(&mut self, h: Handle) {
-        if h != NULL {
-            self.native_roots.push(h);
+        if h == NULL || self.native_roots.contains(&h) {
+            return;
         }
+        if self.native_roots.len() >= MAX_NATIVE_ROOTS {
+            // Hard ceiling: a guest that creates an unbounded number of distinct
+            // local binders must fail structurally instead of pinning the heap.
+            eprintln!(
+                "RESOURCE_LIMIT resource=native_roots limit={MAX_NATIVE_ROOTS}                  action=root-not-registered"
+            );
+            return;
+        }
+        self.native_roots.push(h);
     }
 
     /// Make sure the host has a thread and a sentinel base frame so
@@ -1029,5 +1054,24 @@ mod tests {
         assert_eq!(JavaValue::Null.kind(), "null");
         assert_eq!(JavaValue::Object(3).as_handle(), Some(3));
         assert_eq!(JavaValue::Boolean(true).as_handle(), None);
+    }
+
+    #[test]
+    fn bridge_roots_are_deduplicated() {
+        // W94-A #10: the binder transport calls `root_handle` on every map of
+        // the same object; rooting must be idempotent or `native_roots` grows
+        // without bound in a long-lived session.
+        let mut vm = Vm::new(crate::VmOptions::default()).expect("vm");
+        vm.native_roots.clear();
+        vm.root_handle(42);
+        vm.root_handle(42);
+        vm.root_handle(42);
+        assert_eq!(vm.native_roots, vec![42]);
+        vm.root_handle(43);
+        assert_eq!(vm.native_roots, vec![42, 43]);
+        assert!(vm.release_bridge_root(42));
+        assert_eq!(vm.native_roots, vec![43]);
+        // Releasing an unrooted handle is a no-op, never a panic.
+        assert!(!vm.release_bridge_root(999));
     }
 }

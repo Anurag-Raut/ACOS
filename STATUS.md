@@ -1,7 +1,9 @@
 # ACOS — Status
 
-**As of 2026-11-11, HEAD `9ad95e7`** (87 commits; the W67-A audit baseline was
-`9426b5b`, and the W71-A security/test-honesty fixes land on top of `9ad95e7`).
+**As of 2026-11-11.** The audit tip this snapshot was reconciled against is
+`a3141ed` (W67-A baseline `9426b5b`); W94-A audited `c62b19c..a3141ed` and later
+W-wave commits land on top of it, so `git log` is authoritative for the exact
+HEAD. The date and the evidence links below are the stable part of this header.
 Honest, dated snapshot. `TASKS.md` is the plan;
 `docs/V1.md` is the V1 definition; `docs/FINDINGS.md` is the append-only
 findings log; `EXPERIMENTS.md` is the history; `BENCHMARKS.md` §8 and
@@ -46,7 +48,7 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 | **Sandbox** | seccomp/Landlock/rlimits/namespaces confinement, fail-closed, loader requires confinement; hostile-process harness (`83d814d`) + W67-A hardening (extended seccomp posture, ABI-6 signal/abstract-socket scopes, hygiene-gated `confinement_active`) | `crates/acos-sandbox/tests/confine.rs`, `crates/acos-sandbox/src/linux/*` |
 | **NDK** | `libandroid` surface: assets, bitmap, `ANativeWindow`, `ALooper`, `AChoreographer`, `AConfiguration`; GL traps (`a62c009`) | `crates/acos-jni/src/ndk_host.rs` (working tree), `fixtures/jni` |
 | **JNI broker** | 227/233 `JNINativeInterface` slots with documented reasons; `CallNonvirtual*`, native OS-thread attach/detach (`b4d8a7b`) | `results/jni/JNI_COVERAGE.md`, `crates/acos-jni/tests/` |
-| **Render corpus** | 5 fixture scenes vs ART API-34 (SSIM 0.989-0.995), per-scene thresholds; raster canvas/line breaking (`00a429b`, `f7f7d93`) | `results/render/W66A_CORPUS.md`, `results/render/corpus/` |
+| **Render corpus** | 12 hand-authored DisplayList/Canvas scene reconstructions vs ART API-34 captures (SSIM 0.948-0.995 on the widget corpus); geometry/colours were **measured off the reference** and per-scene thresholds are **calibrated post-hoc**, so this validates the rasteriser, not a VM-drawn frame (W94-A #12) | `results/render/W66A_CORPUS.md`, `results/render/W82A_CORPUS.md`, `results/render/corpus/` |
 | **dexprogs** | 27/27 vs real ART (`--corelib real`, normal) | `results/vm/dexprogs-w45a-real.json`, `results/vm/dexprogs-real-normal.json` |
 
 ## What is verified vs claimed (tier labels)

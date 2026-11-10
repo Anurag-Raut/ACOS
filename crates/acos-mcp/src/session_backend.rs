@@ -17,7 +17,7 @@
 //! new one. This mirrors the CLI's process-local session.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -247,7 +247,17 @@ impl SessionBackend {
         let _ = self.remove_native_child(id);
         let _ = self.remove_session(id);
 
-        let root = native_session_root(self.next_child.fetch_add(1, Ordering::SeqCst));
+        let root = match native_session_root(self.next_child.fetch_add(1, Ordering::SeqCst)) {
+            Ok(root) => root,
+            Err(e) => {
+                return native_child_error(
+                    request_id,
+                    id,
+                    "CONFINEMENT_UNAVAILABLE",
+                    &format!("cannot create a private native session root: {e}"),
+                );
+            }
+        };
         if let Err(e) = std::fs::create_dir_all(root.join("data/user/0")) {
             return native_child_error(
                 request_id,
@@ -1039,15 +1049,29 @@ impl ConfinedChild {
             .flush()
             .map_err(|e| format!("flush confined child: {e}"))?;
         loop {
-            let mut line = String::new();
+            // The child runs arbitrary guest native code and owns fd 1, so a
+            // hostile library can emit an unbounded line. `read_line` into a
+            // `String` would let it OOM the *parent* (every session); cap the
+            // frame instead (W94-A #6).
+            let mut line = Vec::new();
             let n = self
                 .stdout
-                .read_line(&mut line)
+                .by_ref()
+                .take(MAX_CHILD_FRAME + 1)
+                .read_until(b'\n', &mut line)
                 .map_err(|e| format!("read from confined child: {e}"))?;
             if n == 0 {
                 return Err("confined child closed stdout".to_string());
             }
-            let value: Value = serde_json::from_str(&line)
+            if n as u64 > MAX_CHILD_FRAME {
+                return Err(format!(
+                    "confined child sent a frame larger than {MAX_CHILD_FRAME} bytes; \
+                     refusing to buffer it in the MCP parent"
+                ));
+            }
+            let text = std::str::from_utf8(&line)
+                .map_err(|e| format!("confined child sent non-UTF-8: {e}"))?;
+            let value: Value = serde_json::from_str(text)
                 .map_err(|e| format!("confined child sent invalid JSON: {e}"))?;
             if value.get("id").and_then(Value::as_i64) == Some(id) {
                 return Ok(value);
@@ -1091,7 +1115,7 @@ impl ConfinedChild {
     fn shutdown(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.root);
+        remove_private_dir(&self.root);
     }
 }
 
@@ -1117,13 +1141,90 @@ fn native_child_error(
     .with_session_id(session_id.to_string())
 }
 
-/// The VFS root for one native child. `ACOS_SESSION_ROOT` wins so a caller can
-/// pin it; otherwise a deterministic per-child path is used.
-fn native_session_root(seq: u64) -> PathBuf {
+/// Largest framed JSON message the parent will buffer from a confined child.
+const MAX_CHILD_FRAME: u64 = 8 * 1024 * 1024;
+
+/// The VFS root for one native child (W94-A #5).
+///
+/// `ACOS_SESSION_ROOT` wins so a caller can pin it. Otherwise a `mkdtemp`-style
+/// directory is created: an unpredictable name (kernel `getrandom`), created
+/// atomically with `O_EXCL` semantics via `create_dir` so a pre-created symlink
+/// or directory makes creation fail instead of being followed, and mode `0700`
+/// so no other user can read or swap the app data underneath the session.
+fn native_session_root(seq: u64) -> std::io::Result<PathBuf> {
     if let Some(root) = std::env::var_os("ACOS_SESSION_ROOT") {
-        return PathBuf::from(root);
+        let root = PathBuf::from(root);
+        create_private_dir(&root)?;
+        return Ok(root);
     }
-    std::env::temp_dir().join(format!("acos-mcp-native-{}-{seq}", std::process::id()))
+    let base = std::env::temp_dir();
+    let mut last =
+        std::io::Error::other("could not create a private native session root");
+    for attempt in 0..64u32 {
+        let name = format!(
+            "acos-mcp-native-{}-{seq}-{:016x}",
+            std::process::id(),
+            child_random_u64() ^ u64::from(attempt).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        );
+        let path = base.join(name);
+        match create_private_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = e,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last)
+}
+
+/// Create `path` as a fresh private directory (`0700`).
+///
+/// `create_dir` (not `create_dir_all`) is deliberate: if `path` already exists —
+/// including as a symlink an attacker planted — the call fails with
+/// `AlreadyExists` rather than following it. `symlink_metadata` then re-checks
+/// the result is a real directory, never a link.
+fn create_private_dir(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    if path.exists() {
+        let meta = std::fs::symlink_metadata(path)?;
+        if !meta.is_dir() || meta.file_type().is_symlink() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{} exists and is not a real directory", path.display()),
+            ));
+        }
+        std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+        return Ok(());
+    }
+    std::fs::DirBuilder::new().mode(0o700).create(path)
+}
+
+/// Remove a session root without ever following a symlink.
+fn remove_private_dir(path: &std::path::Path) {
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.is_dir() && !meta.file_type().is_symlink() {
+            let _ = std::fs::remove_dir_all(path);
+        } else {
+            // A link/file where our root should be: remove the link itself, not
+            // its target.
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// 64 unpredictable bits from the kernel CSPRNG, with a time/pid fallback.
+fn child_random_u64() -> u64 {
+    let mut buf = [0u8; 8];
+    // SAFETY: `buf` is 8 writable bytes and `getrandom` writes at most that.
+    let n = unsafe { libc::getrandom(buf.as_mut_ptr().cast(), buf.len(), 0) };
+    if n == buf.len() as isize {
+        return u64::from_le_bytes(buf);
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64);
+    nanos
+        ^ u64::from(std::process::id()).rotate_left(32)
+        ^ (&buf as *const _ as u64)
 }
 
 /// The boot-classpath cache directory (`ACOS_BOOT_DIR`, then walking up from
@@ -1199,5 +1300,72 @@ mod tests {
         assert_eq!(result["launched"], false);
         assert_eq!(result["stage_reached"], "none");
         assert!(result["note"].as_str().unwrap().contains("onCreate"));
+    }
+
+    #[test]
+    fn session_root_is_private_unpredictable_and_symlink_safe() {
+        use std::os::unix::fs::PermissionsExt;
+        let a = native_session_root(1).expect("root a");
+        let b = native_session_root(2).expect("root b");
+        assert_ne!(a, b, "each session must get a fresh root");
+        for p in [&a, &b] {
+            let meta = std::fs::metadata(p).expect("root metadata");
+            assert_eq!(
+                meta.permissions().mode() & 0o777,
+                0o700,
+                "the session root must not be world-traversable"
+            );
+        }
+        remove_private_dir(&a);
+        remove_private_dir(&b);
+        assert!(!a.exists() && !b.exists());
+
+        // A pre-planted symlink must make creation fail, not be followed.
+        let base = std::env::temp_dir().join(format!(
+            "acos-mcp-w97a-{}-{:x}",
+            std::process::id(),
+            child_random_u64()
+        ));
+        std::fs::create_dir_all(&base).expect("base");
+        let target = base.join("target");
+        std::fs::create_dir(&target).expect("target");
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+        let err = create_private_dir(&link).expect_err("symlink must be refused");
+        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        remove_private_dir(&link);
+        assert!(target.is_dir(), "removal must not follow the symlink");
+        assert!(!link.exists(), "the link itself is removed");
+        remove_private_dir(&base);
+    }
+
+    #[test]
+    fn oversized_child_frame_is_rejected_by_the_parent() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("head -c 9000000 /dev/zero | tr '\\0' 'a'")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn oversized writer");
+        let stdin = child.stdin.take().expect("stdin");
+        let stdout = BufReader::new(child.stdout.take().expect("stdout"));
+        let mut confined = ConfinedChild {
+            child,
+            stdin,
+            stdout,
+            next_id: 0,
+            root: PathBuf::new(),
+        };
+        let err = confined
+            .request("tools/call", json!({}))
+            .expect_err("an unbounded child line must be rejected");
+        assert!(
+            err.contains("larger than"),
+            "expected the frame-size rejection, got {err}"
+        );
+        let _ = confined.child.kill();
+        let _ = confined.child.wait();
     }
 }

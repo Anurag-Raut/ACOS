@@ -33,15 +33,22 @@ fn repo_root() -> PathBuf {
 }
 
 fn service_provider_apk() -> Option<PathBuf> {
-    [
-        repo_root().join("fixtures/build/apps/service-provider.apk"),
-        repo_root().join("fixtures/apps/service-provider/service-provider.apk"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
+    for rel in [
+        "fixtures/build/apps/service-provider.apk",
+        "fixtures/apps/service-provider/service-provider.apk",
+    ] {
+        let path = repo_root().join(rel);
+        if acos_test_support::have_fixture(rel) {
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn new_runtime() -> Option<Runtime> {
+    // `Runtime::standard_with` reports a missing cache as `BootClasspathMissing`;
+    // gate that the same way so `ACOS_REQUIRE_FIXTURES` fails instead of skipping.
+    let _ = acos_test_support::have_fixture(".cache/boot/android-34/BOOTCLASSPATH");
     match Runtime::standard_with(VmOptions {
         corelib: CoreLib::Real,
         ..VmOptions::default()
@@ -90,21 +97,29 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         .expect("manifest");
     let mut app = AppInfo::from_manifest(&manifest, &apk_path, FIXTURE_UID);
     apk_loader::stage(rt.vm(), &apk_path, &mut app).expect("stage APK");
-    let providers: Vec<(String, String)> = manifest
+    let providers: Vec<bind_app::ProviderSpec> = manifest
         .providers
         .iter()
-        .filter_map(|c| {
-            Some((
-                acos_apk::manifest::fq_name(&manifest.package, &c.name),
-                c.authorities.first()?.clone(),
-            ))
+        .flat_map(|c| {
+            let shared = c.permission.clone().unwrap_or_default();
+            let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
+            let exported = c.exported.unwrap_or(false);
+            c.authorities.iter().map(move |authority| bind_app::ProviderSpec {
+                class: class.clone(),
+                authority: authority.clone(),
+                read_permission: shared.clone(),
+                write_permission: shared.clone(),
+                exported,
+            })
         })
         .collect();
     assert_eq!(
-        providers,
-        vec![(PROVIDER_CLASS.to_string(), AUTHORITY.to_string())],
+        providers.len(),
+        1,
         "fixture declares exactly its EchoProvider"
     );
+    assert_eq!(providers[0].class, PROVIDER_CLASS);
+    assert_eq!(providers[0].authority, AUTHORITY);
 
     rt.vm_mut()
         .push_static_call("android.os.Looper", "loop", "()V", &[])

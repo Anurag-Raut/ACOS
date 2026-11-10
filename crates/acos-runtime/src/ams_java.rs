@@ -564,22 +564,34 @@ fn provider_info(
 /// A `ProviderInfo` for an app-declared provider (bind-time install).
 ///
 /// The shared [`provider_info`] builder targets the `settings` provider and
-/// therefore carries the settings read/write permissions. An app provider's
-/// manifest declares none, so clear them: `ContentProvider.Transport` calls
-/// `enforceReadPermission`/`enforceWritePermission` for every CRUD call, and a
-/// leaked `READ_SETTINGS` would make the app fail its own provider access.
+/// therefore carries the settings read/write permissions; those are replaced by
+/// the **manifest's** `<provider android:exported>`, `android:permission` (or
+/// `android:readPermission`/`writePermission`) values (W94-A #9). Hard-coding
+/// `exported = true` with no permissions let the binder policy be bypassed for
+/// a provider the app declared private.
+///
+/// `ContentProvider.Transport` calls `enforceReadPermission`/
+/// `enforceWritePermission` for every CRUD call, so a leaked `READ_SETTINGS`
+/// would also make the app fail its own provider access; a manifest without a
+/// permission therefore yields null permissions.
 pub(crate) fn app_provider_info(
     vm: &mut Vm,
     package: &str,
-    class: &str,
-    authority: &str,
+    spec: &crate::bind_app::ProviderSpec,
 ) -> JResult<Handle> {
-    let h = provider_info(vm, package, class, authority)?;
-    vm.set_field(h, "readPermission", JavaValue::Null)
-        .map_err(err)?;
-    vm.set_field(h, "writePermission", JavaValue::Null)
-        .map_err(err)?;
-    vm.set_field(h, "exported", JavaValue::Boolean(true))
+    let h = provider_info(vm, package, &spec.class, &spec.authority)?;
+    for (field, value) in [
+        ("readPermission", &spec.read_permission),
+        ("writePermission", &spec.write_permission),
+    ] {
+        if value.is_empty() {
+            vm.set_field(h, field, JavaValue::Null).map_err(err)?;
+        } else {
+            let s = vm.new_string_rooted(value).map_err(err)?;
+            vm.set_field(h, field, JavaValue::Object(s)).map_err(err)?;
+        }
+    }
+    vm.set_field(h, "exported", JavaValue::Boolean(spec.exported))
         .map_err(err)?;
     Ok(h)
 }

@@ -901,3 +901,32 @@ arena remains the next lever.
 `unsafe` (crate still `#![forbid(unsafe_code)]`). `cargo test -p acos-vm`,
 clippy `-D warnings --no-deps`, `cargo check --workspace --all-targets`, and
 `tools/diff-dexprogs.sh --corelib real` 27/27 normal + `--gc-stress` are green.
+
+## ADR-0025 — Software GLES2/EGL substrate inside the guest (`acos-gles`)
+
+**Context.** Third-party native libraries (Flutter's legacy GL backend, React
+Native GL modules, any NDK app that links `libGLESv2.so`) call the real EGL/GLES
+entry points. Running them against the host driver would leave the host GPU and
+the guest's memory model in the same address space, and every pixel would come
+from a driver we cannot audit.
+
+**Decision.** Provide a Rust implementation of the GLES2 subset those engines
+actually use, installed into the confined guest process by the native loader
+(`acos-jni::ndk_host`, `gles_host`) and linked as `libEGL.so`/`libGLESv2.so`.
+It is also usable in-process by the renderer tests. Rules:
+
+* A GLSL ES 1.00 interpreter parses and evaluates shader source per vertex /
+  per fragment; there is no JIT and no raw guest memory access.
+* Constructs outside the implemented subset are a **structured rejection**
+  (`UNSUPPORTED_GLES` + `GL_FALSE` from `glGetShaderiv(GL_COMPILE_STATUS)`), and
+  no entry point is a silent no-op. Resource limits (GPU bytes, mip level,
+  per-invocation shader instruction budget) are rejected with a structured
+  `GLES_RESOURCE_LIMIT` + `GL_OUT_OF_MEMORY`, never an abort (W94-A #2–#4).
+* Guest-controlled sizes are bounded by `MAX_DIM` before any allocation.
+* The substrate requires confinement to be installed (`require_confinement`);
+  the fail-closed rules of ADR-0022/ADR-0018 apply.
+
+**Consequences.** Earlier documents (W86-A, W92-A) cited "ADR-0023" for this
+substrate; ADR-0023 is the typed-IR trampoline and ADR-0024 is the IR fusion
+work, so those references mean ADR-0025. The renderer is validated against
+ART reference captures (`results/render/`), not against a device GPU.

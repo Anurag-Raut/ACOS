@@ -1,4 +1,4 @@
-//! The `ANativeWindow` seam for the software GLES substrate (ADR-0023).
+//! The `ANativeWindow` seam for the software GLES substrate (ADR-0025).
 //!
 //! `acos-gles` owns the pixels; this host is what makes an `eglCreateWindowSurface`
 //! on a real `ANativeWindow` hand its swapped colour buffer to the ACOS

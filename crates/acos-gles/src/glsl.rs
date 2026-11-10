@@ -1,4 +1,4 @@
-//! A small GLSL ES 1.00 interpreter (ADR-0023).
+//! A small GLSL ES 1.00 interpreter (ADR-0025).
 //!
 //! The substrate never JITs guest shader source and never executes guest
 //! memory: a shader is tokenised, parsed into an AST and evaluated per vertex /
@@ -10,15 +10,22 @@
 //! * scalar/vector/matrix types, constructors, swizzles, indexing;
 //! * arithmetic, comparison and logical operators with GLSL precedence;
 //! * `if`/`else`, `return`, `discard`, local declarations and assignments;
+//! * **bounded `for` loops** (`for (init; cond; step) body`), including nested
+//!   loops: a per-loop cap plus a per-invocation aggregate evaluation budget
+//!   ([`SHADER_STEP_BUDGET`]) keep the work constant-bounded, and exceeding
+//!   either is a structured runtime error (never a hang);
+//! * user-defined functions (called by name/arity, with parameter scoping and
+//!   `return`, recursing only within the instruction budget);
 //! * the builtins `texture2D`, `abs/floor/ceil/fract/mod/min/max/clamp/mix/
 //!   step/smoothstep/pow/exp/log/sqrt/inversesqrt/sin/cos/tan/atan/sign/
-//!   length/distance/dot/cross/normalize`.
+//!   length/distance/dot/cross/normalize/matrixCompMult`.
 //!
-//! Anything outside the subset (`for`/`while` loops, arrays, structs, the
+//! Anything outside the subset (`while`/`do` loops, arrays, structs, the
 //! preprocessor with conditional branches) is a **structured rejection**: the
 //! compiler returns `accepted = false` plus a positioned reason, and the GL
 //! entry point reports `GL_FALSE` from `glGetShaderiv(GL_COMPILE_STATUS)` and
-//! logs `UNSUPPORTED_GLES`. A shader is never silently replaced by a default.
+//! logs `UNSUPPORTED_GLES`. A shader is never silently replaced by a default,
+//! and no accepted construct returns a placeholder value.
 
 /// Shader stage.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -189,6 +196,23 @@ type EvalResult<T> = Result<T, EvalError>;
 
 /// Hard cap on `for`-loop iterations (a non-constant bound is an error).
 const FOR_ITERATION_CAP: u32 = 4096;
+
+/// Aggregate AST-evaluation budget for one shader invocation (one vertex or
+/// one fragment).
+///
+/// `FOR_ITERATION_CAP` is *per loop*, so N nested `for` loops can execute
+/// `4096^N` iterations; because a fragment shader runs per pixel that is an
+/// unbounded CPU DoS from a tiny shader (W94-A #4). This budget is shared by
+/// every statement/expression the invocation evaluates, so any loop nest is
+/// bounded by a constant amount of work. A shader that exhausts it fails the
+/// draw with a structured [`EvalError`] instead of hanging.
+const SHADER_STEP_BUDGET: u32 = 1 << 16;
+
+/// Maximum user-function call depth. The step budget alone bounds recursion in
+/// *evaluations*, but each call still consumes Rust stack, so a self-recursive
+/// shader could abort the process before the budget runs out. Exceeding this is
+/// a structured error, like any other unsupported construct.
+const MAX_CALL_DEPTH: u32 = 32;
 
 fn err<T>(msg: impl Into<String>) -> EvalResult<T> {
     Err(EvalError(msg.into()))
@@ -1033,14 +1057,36 @@ enum Flow {
 }
 
 struct Interpreter<'a> {
+    /// The translation unit, so user-defined calls can be dispatched.
+    unit: &'a Unit,
     /// Texture units visible to `texture2D`.
     textures: &'a dyn TextureLookup,
     /// LOD hint forwarded to mipmapped texture lookups.
     lod: f32,
+    /// Remaining AST evaluations for this invocation (see
+    /// [`SHADER_STEP_BUDGET`]). Shared across the whole `run_body`/`run_stmt`
+    /// recursion, which is what makes nested loops non-exponential.
+    budget: std::cell::Cell<u32>,
+    /// Current user-function call depth (see [`MAX_CALL_DEPTH`]).
+    depth: std::cell::Cell<u32>,
 }
 
 impl<'a> Interpreter<'a> {
+    /// Consume one unit of the per-invocation instruction budget.
+    fn step(&self) -> EvalResult<()> {
+        let left = self.budget.get();
+        if left == 0 {
+            return err(format!(
+                "shader exceeded the {SHADER_STEP_BUDGET}-evaluation instruction budget; \
+                 loops must be bounded (nested/unbounded loops are rejected at draw time)"
+            ));
+        }
+        self.budget.set(left - 1);
+        Ok(())
+    }
+
     fn eval(&self, e: &Expr, env: &mut Env) -> EvalResult<Value> {
+        self.step()?;
         match e {
             Expr::Float(v) => Ok(Value::F(*v)),
             Expr::Int(v) => Ok(Value::I(*v)),
@@ -1205,6 +1251,36 @@ impl<'a> Interpreter<'a> {
         for a in args {
             vals.push(self.eval(a, env)?);
         }
+        // A user-defined function with this name/arity shadows a builtin of the
+        // same signature. Parameters get their own scope; assignments to
+        // globals still reach the enclosing scopes (GLSL globals are mutable).
+        if let Some(f) = self
+            .unit
+            .functions
+            .iter()
+            .find(|f| f.name == name && f.params.len() == vals.len())
+        {
+            let depth = self.depth.get();
+            if depth >= MAX_CALL_DEPTH {
+                return err(format!(
+                    "shader exceeded the maximum function call depth ({MAX_CALL_DEPTH}); \
+                     recursion is not supported"
+                ));
+            }
+            self.depth.set(depth + 1);
+            env.push();
+            for ((_, pname), v) in f.params.iter().zip(vals) {
+                env.declare(pname, v);
+            }
+            let flow = self.run_body(&f.body, env);
+            env.pop();
+            self.depth.set(depth);
+            return match flow? {
+                Flow::Return(Some(v)) => Ok(v),
+                Flow::Return(None) | Flow::Normal => Ok(zero_of(f.ret)),
+                Flow::Discard => err("`discard` is only legal in main()"),
+            };
+        }
         builtin(name, &vals, self.textures, self.lod)
     }
 
@@ -1219,6 +1295,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn run_stmt(&self, s: &Stmt, env: &mut Env) -> EvalResult<Flow> {
+        self.step()?;
         match s {
             Stmt::Empty => Ok(Flow::Normal),
             Stmt::Decl(decls) => {
@@ -1633,7 +1710,16 @@ fn builtin(
         "any" => Value::B(a(0).to_vec4().iter().any(|x| *x != 0.0)),
         "all" => Value::B(a(0).to_vec4().iter().all(|x| *x != 0.0)),
         "not" => Value::B(!a(0).truthy()),
-        "matrixCompMult" => Value::F(0.0),
+        "matrixCompMult" => match (a(0), a(1)) {
+            (Value::M(x, n), Value::M(y, m)) if n == m => {
+                let mut out = [0.0f32; 16];
+                for i in 0..n * n {
+                    out[i] = x[i] * y[i];
+                }
+                Value::M(out, n)
+            }
+            _ => return err("matrixCompMult requires two equal-sized matrices"),
+        },
         other => {
             return err(format!(
                 "builtin `{other}` is outside the interpreted GLSL subset"
@@ -1664,8 +1750,11 @@ pub fn run_vertex(
     env.declare("gl_Position", Value::vec4(0.0, 0.0, 0.0, 1.0));
     env.declare("gl_PointSize", Value::F(1.0));
     let interp = Interpreter {
+        unit,
         textures: &NoTextures,
         lod: 0.0,
+        budget: std::cell::Cell::new(SHADER_STEP_BUDGET),
+        depth: std::cell::Cell::new(0),
     };
     let main = unit
         .functions
@@ -1742,7 +1831,13 @@ pub fn run_fragment_lod(
     env.declare("gl_FrontFacing", Value::B(true));
     env.declare("gl_FragColor", Value::vec4(0.0, 0.0, 0.0, 1.0));
     env.declare("gl_FragData", Value::vec4(0.0, 0.0, 0.0, 1.0));
-    let interp = Interpreter { textures, lod };
+    let interp = Interpreter {
+        unit,
+        textures,
+        lod,
+        budget: std::cell::Cell::new(SHADER_STEP_BUDGET),
+        depth: std::cell::Cell::new(0),
+    };
     let main = unit
         .functions
         .iter()
@@ -1894,5 +1989,77 @@ mod tests {
         )
         .unwrap();
         assert!(out.is_none(), "the fragment must be discarded");
+    }
+
+    #[test]
+    fn nested_for_loops_are_bounded_by_the_global_budget() {
+        // W94-A #4: the per-loop cap alone allows 4096^4 iterations here.
+        // The per-invocation budget must stop it promptly with a structured
+        // error instead of hanging the draw.
+        let src = "precision mediump float; void main() { float s = 0.0; \
+                   for (int a = 0; a < 4096; a++) \
+                   for (int b = 0; b < 4096; b++) \
+                   for (int c = 0; c < 4096; c++) \
+                   for (int d = 0; d < 4096; d++) s += 0.0; \
+                   gl_FragColor = vec4(s); }";
+        let unit = parse(src, Stage::Fragment).expect("loops parse");
+        let start = std::time::Instant::now();
+        let err = run_fragment(&unit, &[], &[], &[], [0.0; 4], &NoTextures)
+            .expect_err("hostile nested loops must be rejected");
+        assert!(
+            err.0.contains("instruction budget"),
+            "expected the instruction-budget rejection, got {err}"
+        );
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "the budget must bound work, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn matrix_comp_mult_is_component_wise() {
+        let a = Value::M(
+            [
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0,
+            ],
+            2,
+        );
+        let b = Value::M([2.0; 16], 2);
+        let got = builtin("matrixCompMult", &[a, b], &NoTextures, 0.0).expect("comp mult");
+        match got {
+            Value::M(m, 2) => {
+                assert_eq!(&m[..4], &[2.0, 4.0, 6.0, 8.0]);
+            }
+            other => panic!("expected a mat2, got {other:?}"),
+        }
+        // A non-matrix argument is rejected, never a silent placeholder.
+        let e = builtin("matrixCompMult", &[Value::F(1.0), Value::F(2.0)], &NoTextures, 0.0)
+            .expect_err("scalars must be rejected");
+        assert!(e.0.contains("matrixCompMult"), "{e}");
+    }
+
+    #[test]
+    fn user_defined_functions_are_dispatched() {
+        let src = "precision mediump float; \
+                   float twice(float x) { return x * 2.0; } \
+                   float add(float a, float b) { return a + b; } \
+                   void main() { gl_FragColor = vec4(add(twice(0.25), 0.5)); }";
+        let unit = parse(src, Stage::Fragment).unwrap();
+        let out = run_fragment(&unit, &[], &[], &[], [0.0; 4], &NoTextures)
+            .unwrap()
+            .expect("not discarded");
+        assert!((out[0] - 1.0).abs() < 1e-6, "{out:?}");
+    }
+
+    #[test]
+    fn runaway_recursion_hits_the_instruction_budget() {
+        let src = "precision mediump float; float f(float x) { return f(x); } \
+                   void main() { gl_FragColor = vec4(f(1.0)); }";
+        let unit = parse(src, Stage::Fragment).unwrap();
+        let e = run_fragment(&unit, &[], &[], &[], [0.0; 4], &NoTextures)
+            .expect_err("unbounded recursion must be rejected");
+        assert!(e.0.contains("call depth"), "{e}");
     }
 }

@@ -132,11 +132,15 @@ fn rn_hermes_child_worker() {
     // Hermes' `std::random_device` opens `/dev/urandom` while constructing the
     // runtime (via libc++); without a read rule Landlock fails the open and
     // `makeHermesRuntime` throws `random_device failed to open /dev/urandom`.
-    // Landlock only accepts directory and (regular) file targets, not character
-    // devices, so grant read-only access to `/dev` as a whole (it grants
-    // `READ_FILE` only; no write/execute).
-    if Path::new("/dev").is_dir() {
-        profile = profile.with_read_only("/dev");
+    // Grant **only** the two device nodes that are needed (W94-A #8) — a
+    // directory rule on all of `/dev` would also expose `/dev/kmsg`,
+    // `/dev/input/*`, `/dev/dri/*`, ... to the guest wherever the uid permits.
+    // This is test-harness-only; the production `native_launch` profile does not
+    // grant `/dev` at all.
+    for dev in ["/dev/urandom", "/dev/null"] {
+        if Path::new(dev).exists() {
+            profile = profile.with_read_only(dev);
+        }
     }
     profile = profile.with_read_write(&scratch);
     if boot_dir.join("BOOTCLASSPATH").is_file() {

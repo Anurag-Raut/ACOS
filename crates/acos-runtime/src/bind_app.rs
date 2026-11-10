@@ -72,6 +72,26 @@ fn infostr(vm: &mut Vm, s: &str) -> Result<Handle, BindAppError> {
     Ok(vm.new_string_rooted(s)?)
 }
 
+/// Manifest-declared policy for one app provider, carried into the bind-time
+/// `ProviderInfo` (W94-A #9).
+///
+/// Parsed from the APK manifest by [`crate::lifecycle::provider_specs`]; the
+/// bind path must not invent `exported`/permissions the manifest does not
+/// declare.
+#[derive(Clone, Debug, Default)]
+pub struct ProviderSpec {
+    /// Fully-qualified provider class name.
+    pub class: String,
+    /// The `android:authorities` entry this spec is for.
+    pub authority: String,
+    /// `android:readPermission` (or the shared `android:permission`).
+    pub read_permission: String,
+    /// `android:writePermission` (or the shared `android:permission`).
+    pub write_permission: String,
+    /// `android:exported`.
+    pub exported: bool,
+}
+
 /// Build and deliver one `bindApplication` call to `activity_thread`.
 ///
 /// The arguments follow the real framework path for the hello-views fixture:
@@ -83,7 +103,7 @@ pub fn deliver_bind_application(
     vm: &mut Vm,
     activity_thread: Handle,
     app: &AppInfo,
-    providers: &[(String, String)],
+    providers: &[ProviderSpec],
 ) -> Result<Handle, BindAppError> {
     let thread = app_thread(vm, activity_thread)?;
 
@@ -96,8 +116,8 @@ pub fn deliver_bind_application(
     // `ActivityThread.installContentProviders` then instantiates the provider
     // class and reports it through `AMS.publishContentProviders`.
     let providers_list = vm.new_instance_ctor("java.util.ArrayList", "()V", &[])?;
-    for (class, authority) in providers {
-        let provider = crate::ams_java::app_provider_info(vm, &app.package_name, class, authority)
+    for spec in providers {
+        let provider = crate::ams_java::app_provider_info(vm, &app.package_name, spec)
             .map_err(BindAppError::Materialize)?;
         vm.call_method(
             providers_list,

@@ -166,10 +166,22 @@ fn exit_transaction() {
     TRANSACTION_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
 }
 
+/// Upper bound on the re-entrancy mirror. It is a *cache*: entry removal just
+/// makes `binder_object` fall through to the installed transport, so a bound
+/// is safe and keeps a long-lived session's memory flat (W94-A #10).
+const MAX_LOCAL_OBJECTS: usize = 4096;
+
 /// Record a local binder handle so a re-entrant `binder_object` can resolve it.
 pub fn register_local_object(id: u64, handle: Handle) {
     LOCAL_OBJECTS.with(|m| {
-        m.borrow_mut().insert(id, handle);
+        let mut m = m.borrow_mut();
+        if m.len() >= MAX_LOCAL_OBJECTS && !m.contains_key(&id) {
+            // The authoritative map is the transport's `locals`; clearing the
+            // mirror is cheaper than tracking eviction order and cannot lose
+            // a binding (lookups fall through).
+            m.clear();
+        }
+        m.insert(id, handle);
     });
 }
 

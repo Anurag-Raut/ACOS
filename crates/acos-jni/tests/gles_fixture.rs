@@ -69,6 +69,9 @@ fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/libacosgles.so")
 }
 
+/// Workspace-relative path of the NDK fixture (for the fixture gate).
+const FIXTURE_REL: &str = "crates/acos-jni/tests/data/libacosgles.so";
+
 /// The child: confine, wire the substrate, load the fixture, run it.
 #[test]
 fn gles_child_worker() {
@@ -157,7 +160,7 @@ fn gles_child_worker() {
 /// Parent: run the child, require confinement, a clean fixture and a frame.
 #[test]
 fn gles_fixture_draws_a_triangle_under_confinement() {
-    if !fixture().is_file() {
+    if !acos_test_support::have_fixture(FIXTURE_REL) {
         eprintln!(
             "SKIP gles_fixture_draws_a_triangle_under_confinement: {} is absent; run \
              fixtures/jni/build.sh",

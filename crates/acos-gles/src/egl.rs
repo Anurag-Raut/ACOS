@@ -6,7 +6,7 @@
 //! `FrameStore`). An EGL **pbuffer** surface is the off-screen equivalent and
 //! never publishes a frame.
 //!
-//! Fail-closed rules (ADR-0023 / ADR-0018):
+//! Fail-closed rules (ADR-0025 / ADR-0018):
 //!
 //! * `eglCreateWindowSurface` on a native window the host cannot resolve is
 //!   `EGL_BAD_NATIVE_WINDOW` — never a black surface.

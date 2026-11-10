@@ -21,12 +21,13 @@ use common::{envelope_of, repo_root, McpClient};
 use serde_json::json;
 
 fn boot_available() -> bool {
-    repo_root().join(".cache/boot/android-34/BOOTCLASSPATH").is_file()
+    acos_test_support::have_fixture(".cache/boot/android-34/BOOTCLASSPATH")
 }
 
 fn native_fixture() -> Option<PathBuf> {
-    let apk = repo_root().join("fixtures/build/apps/native-hello.apk");
-    if apk.is_file() {
+    let rel = "fixtures/build/apps/native-hello.apk";
+    let apk = repo_root().join(rel);
+    if acos_test_support::have_fixture(rel) {
         Some(apk)
     } else {
         eprintln!("SKIP native_session: missing {}", apk.display());

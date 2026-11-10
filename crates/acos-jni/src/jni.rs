@@ -2453,7 +2453,9 @@ pub unsafe extern "C" fn vm_GetEnv(_vm: usize, out: *mut usize, version: i32) ->
     let v = version as u32;
     let major = (v >> 16) & 0xffff;
     let minor = v & 0xffff;
-    if major != 1 || minor > JNI_VERSION_1_6 as u32 {
+    // `minor` is the low 16 bits; compare it against the *minor* of 1.6, not
+    // the whole packed constant (0x0001_0006), which would accept any 1.x.
+    if major != 1 || minor > (JNI_VERSION_1_6 as u32 & 0xffff) {
         return crate::state::JNI_EVERSION;
     }
     if out.is_null() {

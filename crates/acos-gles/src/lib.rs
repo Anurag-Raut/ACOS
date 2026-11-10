@@ -1,4 +1,4 @@
-//! # acos-gles — software GLES2 + EGL substrate (ADR-0023)
+//! # acos-gles — software GLES2 + EGL substrate (ADR-0025)
 //!
 //! Flutter draws its whole UI through GLES2, and several React Native modules
 //! (`react-native-svg` on the new architecture, `@shopify/react-native-skia`,

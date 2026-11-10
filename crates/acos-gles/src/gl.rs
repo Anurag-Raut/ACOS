@@ -1,4 +1,4 @@
-//! The GLES2 object model + state machine (ADR-0023).
+//! The GLES2 object model + state machine (ADR-0025).
 //!
 //! Everything here is safe Rust over plain data: buffers, textures, shader/
 //! program objects, framebuffer attachments and the fixed-function state block.
@@ -8,7 +8,7 @@
 //! Entry points outside the implemented subset do not exist as methods at all;
 //! the FFI layer routes them to [`crate::error::unsupported`] and sets
 //! `GL_INVALID_OPERATION`, so an unknown call can never be mistaken for a
-//! success (ADR-0023 "no silent no-ops").
+//! success (ADR-0025 "no silent no-ops").
 
 use std::collections::HashMap;
 
@@ -18,6 +18,19 @@ use crate::raster::{
     project, Blend, BlendFactor, Cull, DepthFunc, Framebuffer, RasterState, StencilFace,
     StencilOp,
 };
+
+/// Highest mip level the substrate will allocate. GLES2's maximum texture size
+/// is `MAX_DIM` (4096), i.e. 13 levels; 31 is a structural cap that still
+/// rejects a guest-supplied `level` before it can drive an enormous `mips`
+/// resize (a `level` near `i32::MAX` resized the `Vec` to ~64 GiB and aborted
+/// the confined process).
+const MAX_MIP_LEVEL: i32 = 31;
+
+/// Total host bytes the substrate will hold on the guest's behalf across
+/// texture levels, buffers and renderbuffers. Once exceeded, allocations are
+/// rejected with a structured `GL_OUT_OF_MEMORY` instead of aborting the
+/// confined process (W94-A #2/#3).
+const MAX_GPU_BYTES: usize = 256 * 1024 * 1024;
 
 /// One shader object's compile result.
 #[derive(Clone, Debug)]
@@ -235,6 +248,9 @@ pub struct Gl {
     /// attribute slot. Populated from the FFI layer (checked guest reads);
     /// never a raw guest pointer inside this module.
     pub client_arrays: HashMap<u32, Vec<u8>>,
+    /// Guest-visible GPU bytes currently charged (textures + mip levels,
+    /// buffers, renderbuffers). Never allowed past [`MAX_GPU_BYTES`].
+    pub gpu_bytes: usize,
     pub error: u32,
 }
 
@@ -292,8 +308,41 @@ impl Gl {
             stencil_back: StencilFace::always(),
             clear_stencil: 0,
             client_arrays: HashMap::new(),
+            gpu_bytes: 0,
             error: c::NO_ERROR,
         }
+    }
+
+    /// Bytes one RGBA8888 level occupies.
+    fn level_bytes(width: u32, height: u32) -> usize {
+        width as usize * height as usize * 4
+    }
+
+    /// Bytes a texture currently holds across every level.
+    fn texture_bytes(t: &Texture) -> usize {
+        t.rgba.len() + t.mips.iter().map(|(_, _, d)| d.len()).sum::<usize>()
+    }
+
+    /// Charge `new` bytes in place of `old` against the global GPU budget.
+    ///
+    /// On overflow this records a structured resource-limit event plus
+    /// `GL_OUT_OF_MEMORY` and returns `false`; the caller must leave its state
+    /// unchanged (so a failing allocation never half-applies).
+    fn charge_gpu(&mut self, call: &str, old: usize, new: usize) -> bool {
+        let used = self.gpu_bytes.saturating_sub(old).saturating_add(new);
+        if used > MAX_GPU_BYTES {
+            crate::error::resource_limit(
+                call,
+                format!(
+                    "gpu budget exceeded: {} charged, replacing {} with {}, cap {}",
+                    self.gpu_bytes, old, new, MAX_GPU_BYTES
+                ),
+            );
+            self.set_error(c::OUT_OF_MEMORY);
+            return false;
+        }
+        self.gpu_bytes = used;
+        true
     }
 
     fn id(&mut self) -> u32 {
@@ -328,7 +377,9 @@ impl Gl {
     /// `glDeleteBuffers`.
     pub fn delete_buffers(&mut self, ids: &[u32]) {
         for id in ids {
-            self.buffers.remove(id);
+            if let Some(buf) = self.buffers.remove(id) {
+                self.gpu_bytes = self.gpu_bytes.saturating_sub(buf.len());
+            }
         }
     }
 
@@ -364,12 +415,16 @@ impl Gl {
                 return;
             }
         };
-        match self.buffers.get_mut(&id) {
-            Some(buf) => {
-                buf.clear();
-                buf.extend_from_slice(data);
-            }
-            None => self.set_error(c::INVALID_OPERATION),
+        let Some(old) = self.buffers.get(&id).map(Vec::len) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        if !self.charge_gpu("glBufferData", old, data.len()) {
+            return;
+        }
+        if let Some(buf) = self.buffers.get_mut(&id) {
+            buf.clear();
+            buf.extend_from_slice(data);
         }
     }
 
@@ -926,7 +981,9 @@ impl Gl {
     /// `glDeleteTextures`.
     pub fn delete_textures(&mut self, ids: &[u32]) {
         for id in ids {
-            self.textures.remove(id);
+            if let Some(t) = self.textures.remove(id) {
+                self.gpu_bytes = self.gpu_bytes.saturating_sub(Self::texture_bytes(&t));
+            }
             for slot in self.bound_textures.iter_mut() {
                 if *slot == *id {
                     *slot = 0;
@@ -1023,7 +1080,7 @@ impl Gl {
             self.set_error(c::INVALID_ENUM);
             return;
         }
-        if level < 0 {
+        if !(0..=MAX_MIP_LEVEL).contains(&level) {
             self.set_error(c::INVALID_VALUE);
             return;
         }
@@ -1040,13 +1097,38 @@ impl Gl {
             self.set_error(c::INVALID_VALUE);
             return;
         }
+        let id = self.bound_textures[self.active_texture];
+        let Some(t) = self.textures.get(&id) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        // Charging target: level 0 replaces the whole mip chain, level > 0
+        // replaces just that level. `MAX_MIP_LEVEL` keeps the index small.
+        let old = if level == 0 {
+            Self::texture_bytes(t)
+        } else {
+            t.mips
+                .get((level - 1) as usize)
+                .map_or(0, |(_, _, d)| d.len())
+        };
+        let new = if level == 0 {
+            Self::level_bytes(width as u32, height as u32)
+        } else {
+            old
+        };
+        if level == 0 && !self.charge_gpu("glTexImage2D", old, new) {
+            return;
+        }
         let Some(rgba) = convert_pixels(format, width as u32, height as u32, pixels, self.unpack_alignment)
         else {
+            // Undo the provisional charge; the call is rejected below.
+            if level == 0 {
+                self.gpu_bytes = self.gpu_bytes.saturating_sub(new).saturating_add(old);
+            }
             unsupported("glTexImage2D", format!("pixel format {format:#x}"));
             self.set_error(c::INVALID_ENUM);
             return;
         };
-        let id = self.bound_textures[self.active_texture];
         let Some(t) = self.textures.get_mut(&id) else {
             self.set_error(c::INVALID_OPERATION);
             return;
@@ -1060,6 +1142,13 @@ impl Gl {
             t.mips.clear();
         } else {
             let idx = (level - 1) as usize;
+            let old = t.mips.get(idx).map_or(0, |(_, _, d)| d.len());
+            if !self.charge_gpu("glTexImage2D", old, rgba.len()) {
+                return;
+            }
+            let Some(t) = self.textures.get_mut(&id) else {
+                return;
+            };
             if t.mips.len() <= idx {
                 t.mips.resize_with(idx + 1, || (0, 0, Vec::new()));
             }
@@ -1125,7 +1214,7 @@ impl Gl {
             return;
         }
         let id = self.bound_textures[self.active_texture];
-        let Some(t) = self.textures.get_mut(&id) else {
+        let Some(t) = self.textures.get(&id) else {
             self.set_error(c::INVALID_OPERATION);
             return;
         };
@@ -1133,17 +1222,31 @@ impl Gl {
             self.set_error(c::INVALID_OPERATION);
             return;
         }
-        t.mips.clear();
         let (mut w, mut h) = (t.width, t.height);
         let mut src = t.rgba.clone();
+        let old = t.mips.iter().map(|(_, _, d)| d.len()).sum::<usize>();
+        let mut chain: Vec<(u32, u32, Vec<u8>)> = Vec::new();
+        let mut added = 0usize;
         while w > 1 || h > 1 {
             let nw = (w / 2).max(1);
             let nh = (h / 2).max(1);
             let dst = downsample_rgba(&src, w, h, nw, nh);
-            t.mips.push((nw, nh, dst.clone()));
+            added += dst.len();
+            chain.push((nw, nh, dst.clone()));
             src = dst;
             w = nw;
             h = nh;
+            if added > MAX_GPU_BYTES {
+                break;
+            }
+        }
+        // Charge the whole new chain before mutating the texture, so a rejected
+        // generation leaves the previous levels intact.
+        if !self.charge_gpu("glGenerateMipmap", old, added) {
+            return;
+        }
+        if let Some(t) = self.textures.get_mut(&id) {
+            t.mips = chain;
         }
     }
 
@@ -1161,7 +1264,7 @@ impl Gl {
         height: i32,
         border: i32,
     ) {
-        if target != c::TEXTURE_2D || level < 0 {
+        if target != c::TEXTURE_2D || !(0..=MAX_MIP_LEVEL).contains(&level) {
             self.set_error(c::INVALID_ENUM);
             return;
         }
@@ -1169,12 +1272,36 @@ impl Gl {
             self.set_error(c::INVALID_VALUE);
             return;
         }
-        let Some(rgba) = self.copy_region(surface, x, y, width, height) else {
+        // `copy_region` sizes a `width * height * 4` allocation from guest
+        // arguments; bound it to the advertised `MAX_DIM` so a hostile
+        // `glCopyTexImage2D` cannot request an exabyte-scale buffer.
+        if width as u32 > c::MAX_DIM || height as u32 > c::MAX_DIM {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
+        let id = self.bound_textures[self.active_texture];
+        let Some(t) = self.textures.get(&id) else {
             self.set_error(c::INVALID_OPERATION);
             return;
         };
-        let id = self.bound_textures[self.active_texture];
+        let old = if level == 0 {
+            Self::texture_bytes(t)
+        } else {
+            t.mips
+                .get((level - 1) as usize)
+                .map_or(0, |(_, _, d)| d.len())
+        };
+        let new = Self::level_bytes(width as u32, height as u32);
+        if !self.charge_gpu("glCopyTexImage2D", old, new) {
+            return;
+        }
+        let Some(rgba) = self.copy_region(surface, x, y, width, height) else {
+            self.gpu_bytes = self.gpu_bytes.saturating_sub(new).saturating_add(old);
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
         let Some(t) = self.textures.get_mut(&id) else {
+            self.gpu_bytes = self.gpu_bytes.saturating_sub(new).saturating_add(old);
             self.set_error(c::INVALID_OPERATION);
             return;
         };
@@ -1484,7 +1611,11 @@ impl Gl {
     /// `glDeleteRenderbuffers`.
     pub fn delete_renderbuffers(&mut self, ids: &[u32]) {
         for id in ids {
-            self.renderbuffers.remove(id);
+            if let Some(rb) = self.renderbuffers.remove(id) {
+                self.gpu_bytes = self
+                    .gpu_bytes
+                    .saturating_sub(Self::level_bytes(rb.width, rb.height));
+            }
             for (fbo, rb) in self.fbo_depth_rb.clone() {
                 if rb == *id {
                     self.fbo_depth_rb.remove(&fbo);
@@ -1512,17 +1643,26 @@ impl Gl {
 
     /// `glRenderbufferStorage`.
     pub fn renderbuffer_storage(&mut self, target: u32, _format: u32, width: i32, height: i32) {
-        if target != c::RENDERBUFFER || width < 0 || height < 0 {
+        if target != c::RENDERBUFFER {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
+        if width < 0 || height < 0 || width as u32 > c::MAX_DIM || height as u32 > c::MAX_DIM {
             self.set_error(c::INVALID_VALUE);
             return;
         }
         let id = self.renderbuffer;
-        match self.renderbuffers.get_mut(&id) {
-            Some(rb) => {
-                rb.width = width as u32;
-                rb.height = height as u32;
-            }
-            None => self.set_error(c::INVALID_OPERATION),
+        let Some(rb) = self.renderbuffers.get(&id) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        let old = Self::level_bytes(rb.width, rb.height);
+        if !self.charge_gpu("glRenderbufferStorage", old, Self::level_bytes(width as u32, height as u32)) {
+            return;
+        }
+        if let Some(rb) = self.renderbuffers.get_mut(&id) {
+            rb.width = width as u32;
+            rb.height = height as u32;
         }
     }
 
@@ -1925,6 +2065,11 @@ impl Gl {
             return Vec::new();
         }
         if width <= 0 || height <= 0 {
+            self.set_error(c::INVALID_VALUE);
+            return Vec::new();
+        }
+        // `width * height * 4` is guest-controlled; bound it before allocating.
+        if width as u32 > c::MAX_DIM || height as u32 > c::MAX_DIM {
             self.set_error(c::INVALID_VALUE);
             return Vec::new();
         }
@@ -2767,5 +2912,170 @@ fn component_size(ty: u32) -> usize {
         c::BYTE | c::UNSIGNED_BYTE => 1,
         c::SHORT | c::UNSIGNED_SHORT => 2,
         _ => 4,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bind a fresh texture and return `(gl, texture id)`.
+    fn gl_with_texture() -> (Gl, u32) {
+        let mut gl = Gl::new();
+        let id = gl.gen_textures(1)[0];
+        gl.bind_texture(c::TEXTURE_2D, id);
+        (gl, id)
+    }
+
+    #[test]
+    fn tex_image_rejects_out_of_range_mip_level_without_allocating() {
+        let (mut gl, _) = gl_with_texture();
+        // A level near `i32::MAX` used to resize the mip Vec to ~64 GiB and
+        // abort the confined process (W94-A #2).
+        gl.tex_image_2d(
+            c::TEXTURE_2D,
+            i32::MAX,
+            c::RGBA as i32,
+            4,
+            4,
+            0,
+            c::RGBA,
+            c::UNSIGNED_BYTE,
+            &[0; 4 * 4 * 4],
+        );
+        assert_eq!(gl.take_error(), c::INVALID_VALUE);
+        assert_eq!(gl.gpu_bytes, 0);
+    }
+
+    #[test]
+    fn copy_tex_image_rejects_out_of_range_mip_level() {
+        let (mut gl, _) = gl_with_texture();
+        let surface = Framebuffer::new(8, 8);
+        gl.copy_tex_image_2d(&surface, c::TEXTURE_2D, i32::MAX, c::RGBA as i32, 0, 0, 4, 4, 0);
+        assert_eq!(gl.take_error(), c::INVALID_ENUM);
+        assert_eq!(gl.gpu_bytes, 0);
+    }
+
+    #[test]
+    fn read_pixels_rejects_guest_sizes_above_max_dim() {
+        let (mut gl, _) = gl_with_texture();
+        let surface = Framebuffer::new(8, 8);
+        let out = gl.read_pixels(&surface, 0, 0, 100_000, 100_000, c::RGBA, c::UNSIGNED_BYTE);
+        assert!(out.is_empty());
+        assert_eq!(gl.take_error(), c::INVALID_VALUE);
+    }
+
+    #[test]
+    fn copy_tex_image_rejects_guest_sizes_above_max_dim() {
+        let (mut gl, _) = gl_with_texture();
+        let surface = Framebuffer::new(8, 8);
+        gl.copy_tex_image_2d(
+            &surface,
+            c::TEXTURE_2D,
+            0,
+            c::RGBA as i32,
+            0,
+            0,
+            c::MAX_DIM as i32 + 1,
+            4,
+            0,
+        );
+        assert_eq!(gl.take_error(), c::INVALID_VALUE);
+    }
+
+    /// Charge the whole budget with renderbuffers (which count bytes without
+    /// allocating backing storage), so the remaining tests can probe rejection
+    /// cheaply.
+    fn fill_gpu_budget(gl: &mut Gl) {
+        let ids = gl.gen_renderbuffers(4);
+        for id in ids {
+            gl.bind_renderbuffer(c::RENDERBUFFER, id);
+            gl.renderbuffer_storage(
+                c::RENDERBUFFER,
+                c::RGBA,
+                c::MAX_DIM as i32,
+                c::MAX_DIM as i32,
+            );
+        }
+        assert_eq!(gl.take_error(), c::NO_ERROR);
+        assert_eq!(gl.gpu_bytes, MAX_GPU_BYTES);
+    }
+
+    #[test]
+    fn gpu_byte_budget_is_global_and_reports_out_of_memory() {
+        let (mut gl, _) = gl_with_texture();
+        fill_gpu_budget(&mut gl);
+        // Any further texture allocation, even a 4x4 level, exceeds the global
+        // budget and must fail structurally rather than OOM-aborting.
+        gl.tex_image_2d(
+            c::TEXTURE_2D,
+            0,
+            c::RGBA as i32,
+            4,
+            4,
+            0,
+            c::RGBA,
+            c::UNSIGNED_BYTE,
+            &[0u8; 4 * 4 * 4],
+        );
+        assert_eq!(gl.take_error(), c::OUT_OF_MEMORY);
+        assert_eq!(gl.gpu_bytes, MAX_GPU_BYTES);
+        // Deleting objects releases the charge, so a later allocation succeeds.
+        let rb_ids: Vec<u32> = gl.renderbuffers.keys().copied().collect();
+        gl.delete_renderbuffers(&rb_ids);
+        assert_eq!(gl.gpu_bytes, 0);
+        gl.tex_image_2d(
+            c::TEXTURE_2D,
+            0,
+            c::RGBA as i32,
+            4,
+            4,
+            0,
+            c::RGBA,
+            c::UNSIGNED_BYTE,
+            &[0u8; 4 * 4 * 4],
+        );
+        assert_eq!(gl.take_error(), c::NO_ERROR);
+    }
+
+    #[test]
+    fn gpu_byte_budget_covers_buffers_and_renderbuffers() {
+        let mut gl = Gl::new();
+        let id = gl.gen_buffers(1)[0];
+        gl.bind_buffer(c::ARRAY_BUFFER, id);
+        fill_gpu_budget(&mut gl);
+        // A buffer that does not fit the remaining global budget is rejected
+        // and leaves the existing (empty) buffer untouched.
+        gl.buffer_data(c::ARRAY_BUFFER, &[1, 2, 3, 4], c::STATIC_DRAW);
+        assert_eq!(gl.take_error(), c::OUT_OF_MEMORY);
+        assert!(gl.buffers.get(&id).is_some_and(Vec::is_empty));
+        // With room again, a small buffer fits and deleting it releases bytes.
+        let rb_ids: Vec<u32> = gl.renderbuffers.keys().copied().collect();
+        gl.delete_renderbuffers(&rb_ids);
+        gl.buffer_data(c::ARRAY_BUFFER, &[1, 2, 3, 4], c::STATIC_DRAW);
+        assert_eq!(gl.take_error(), c::NO_ERROR);
+        assert_eq!(gl.gpu_bytes, 4);
+        gl.delete_buffers(&[id]);
+        assert_eq!(gl.gpu_bytes, 0);
+    }
+
+    #[test]
+    fn mip_level_cap_limits_the_allocated_chain() {
+        // MAX_DIM=4096 needs 13 levels; the cap is a structural bound.
+        const _: () = assert!(MAX_MIP_LEVEL >= 13);
+        let (mut gl, id) = gl_with_texture();
+        gl.tex_image_2d(
+            c::TEXTURE_2D,
+            MAX_MIP_LEVEL,
+            c::RGBA as i32,
+            1,
+            1,
+            0,
+            c::RGBA,
+            c::UNSIGNED_BYTE,
+            &[0; 4],
+        );
+        assert_eq!(gl.take_error(), c::NO_ERROR);
+        assert_eq!(gl.textures[&id].mips.len(), MAX_MIP_LEVEL as usize);
     }
 }

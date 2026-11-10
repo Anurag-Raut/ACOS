@@ -1,5 +1,5 @@
 //! RGBA8888 framebuffer + scanline triangle rasteriser with the fixed-function
-//! pipeline semantics GLES2 guarantees (ADR-0023).
+//! pipeline semantics GLES2 guarantees (ADR-0025).
 //!
 //! The rasteriser is the only place pixels are produced. It owns no GL state:
 //! the caller passes a [`RasterState`] snapshot and a fragment closure, so the

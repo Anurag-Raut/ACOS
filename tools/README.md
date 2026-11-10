@@ -12,6 +12,7 @@ intentionally checked-in `fixtures/expected/`.
 | `build-fixtures.sh` | Compiles every `fixtures/dexprogs/<name>/` with `javac --release 11`, runs it on the host JVM to capture `fixtures/expected/dexprogs/<name>.{stdout,exit[,stderr]}`, then converts it to DEX with `d8` into `fixtures/build/dexprogs/<name>/classes.dex`. |
 | `build-apps.sh` | Builds `fixtures/apps/hello-views` and `fixtures/apps/hello-jni` into signed, zipaligned APKs under `fixtures/build/apps/` using `aapt2 + javac + d8 + zipalign + apksigner` (and NDK clang for the JNI libs). Verifies each with `apksigner verify` and `aapt2 dump badging`. |
 | `apk_append.py` | Helper used by `build-apps.sh` to add `classes.dex` / `lib/**` to an `aapt2`-linked APK without a synthetic `META-INF/MANIFEST.MF`. |
+| `verify-all.sh` | CI-style honesty gate (HONESTY_AUDIT #11 / W94-A #1): builds the DEX/apps/NDK fixtures, exports `ACOS_REQUIRE_FIXTURES=1`, then runs the fixture gate test plus every fixture-dependent differential/e2e test. A missing fixture is a failure, never a `SKIP`. `--no-build` reuses a warm cache. |
 
 Expectations under `fixtures/expected/` are labelled **jvm-reference** (host
 OpenJDK 17), not Android/ART-verified. See `fixtures/README.md`.
@@ -53,6 +54,7 @@ tools/guarded.sh --mem 6G --time 3600 -- tools/bench-vm.sh
 tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-vm
 tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
 tools/guarded.sh --mem 2G --time 300 -- tools/diff-dexprogs.sh --corelib real
+tools/guarded.sh --mem 6G --time 3600 -- tools/verify-all.sh
 ```
 
 `tools/diff-dexprogs.sh`, `tools/bench-vm.sh` and the build scripts invoke

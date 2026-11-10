@@ -57,6 +57,22 @@ impl core::fmt::Debug for ServiceTransport {
     }
 }
 
+/// Maximum entries in the identity caches below. They exist so binder identity
+/// round-trips; on overflow one entry is evicted, and `binder_object` then
+/// re-materialises a `BinderProxy` for the id (transactions still route by id),
+/// so a long-lived session cannot grow them without bound (W94-A #10).
+const MAX_BINDER_IDENTITIES: usize = 8192;
+
+/// Insert into `map`, evicting one arbitrary entry first when it is at `cap`.
+fn insert_bounded(map: &mut HashMap<u64, u32>, id: u64, handle: u32, cap: usize) {
+    if map.len() >= cap && !map.contains_key(&id) {
+        if let Some(victim) = map.keys().next().copied() {
+            map.remove(&victim);
+        }
+    }
+    map.insert(id, handle);
+}
+
 impl ServiceTransport {
     /// Build a transport around `host`; `context` is the `IServiceManager`
     /// binder id (`0` disables `getContextObject`).
@@ -99,7 +115,7 @@ impl BinderTransport for ServiceTransport {
         // A local `Binder` carries its `BBinder` id in `mObject`.
         if let Ok(JavaValue::Long(v)) = vm.get_field(obj, "mObject") {
             let id = BinderId(v as u64);
-            self.locals.borrow_mut().insert(id.0, obj);
+            insert_bounded(&mut self.locals.borrow_mut(), id.0, obj, MAX_BINDER_IDENTITIES);
             vm.root_handle(obj);
             // Keep a re-entrancy-safe mirror for reply parcelables read while
             // this transport is already borrowed (e.g. a published provider
@@ -130,7 +146,7 @@ impl BinderTransport for ServiceTransport {
                 &[JavaValue::Long(id.0 as i64)],
             )
             .ok()?;
-        self.proxies.borrow_mut().insert(id.0, proxy);
+        insert_bounded(&mut self.proxies.borrow_mut(), id.0, proxy, MAX_BINDER_IDENTITIES);
         Some(proxy)
     }
 
@@ -324,4 +340,26 @@ fn code_owns_method(
     descriptor
         .and_then(|d| acos_aidl::lookup(d, code))
         .is_some_and(|m| owns_method(&m.name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binder_identity_caches_are_bounded() {
+        let mut map = HashMap::new();
+        let n = MAX_BINDER_IDENTITIES as u64 + 500;
+        for id in 0..n {
+            insert_bounded(&mut map, id, id as u32, MAX_BINDER_IDENTITIES);
+        }
+        assert!(
+            map.len() <= MAX_BINDER_IDENTITIES,
+            "cache grew to {} (cap {})",
+            map.len(),
+            MAX_BINDER_IDENTITIES
+        );
+        // The most recent insert is always retained.
+        assert_eq!(map.get(&(n - 1)), Some(&((n - 1) as u32)));
+    }
 }

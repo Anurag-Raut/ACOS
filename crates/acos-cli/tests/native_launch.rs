@@ -15,14 +15,13 @@ fn repo_root() -> PathBuf {
 }
 
 fn boot_available() -> bool {
-    repo_root()
-        .join(".cache/boot/android-34/BOOTCLASSPATH")
-        .is_file()
+    acos_test_support::have_fixture(".cache/boot/android-34/BOOTCLASSPATH")
 }
 
 fn fixture(name: &str) -> Option<PathBuf> {
-    let apk = repo_root().join("fixtures/build/apps").join(name);
-    if apk.is_file() {
+    let rel = format!("fixtures/build/apps/{name}");
+    let apk = repo_root().join(&rel);
+    if acos_test_support::have_fixture(&rel) {
         Some(apk)
     } else {
         eprintln!("SKIP native_launch: missing {}", apk.display());

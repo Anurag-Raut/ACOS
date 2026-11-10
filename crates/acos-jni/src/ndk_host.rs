@@ -267,7 +267,7 @@ pub fn install() {
         return;
     }
     install_ndk_host(Arc::new(ProductionNdkHost));
-    // The software GLES substrate (ADR-0023) replaces the loader's EGL/GLES
+    // The software GLES substrate (ADR-0025) replaces the loader's EGL/GLES
     // traps and connects `eglSwapBuffers` to the same compositor sink the NDK
     // window path uses. This runs only on the native load path, i.e. only when
     // `--native` (or `ACOS_NATIVE=1`) enabled native code.

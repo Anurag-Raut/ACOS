@@ -143,7 +143,9 @@ fn fixture_scenes_match_art_reference() {
     let mut rows = Vec::new();
     for case in CASES {
         let ref_path = repo_root().join(case.reference);
-        if !ref_path.exists() {
+        // HONESTY_AUDIT #11 / W94-A #1: under `ACOS_REQUIRE_FIXTURES` a missing
+        // reference is a hard failure, never a silent coverage drop.
+        if !acos_test_support::have_fixture(case.reference) {
             eprintln!(
                 "SKIP {}: missing reference {} (capture with tools/oracle/)",
                 case.app,

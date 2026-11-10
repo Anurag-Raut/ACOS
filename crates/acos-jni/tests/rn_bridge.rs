@@ -123,8 +123,13 @@ fn rn_bridge_child_worker() {
             profile = profile.with_read_only(d);
         }
     }
-    if Path::new("/dev").is_dir() {
-        profile = profile.with_read_only("/dev");
+    // Hermes' `std::random_device` opens `/dev/urandom`. Grant only the device
+    // nodes that are needed (W94-A #8) instead of all of `/dev`; this harness is
+    // test-only and the production profile grants no `/dev` path.
+    for dev in ["/dev/urandom", "/dev/null"] {
+        if Path::new(dev).exists() {
+            profile = profile.with_read_only(dev);
+        }
     }
     profile = profile.with_read_write(&scratch);
     if boot_dir.join("BOOTCLASSPATH").is_file() {

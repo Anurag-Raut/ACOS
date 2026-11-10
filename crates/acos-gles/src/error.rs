@@ -1,6 +1,6 @@
 //! Structured GLES errors and the `UNSUPPORTED_GLES` diagnostic channel.
 //!
-//! ADR-0023 fixes the honesty rule for this substrate: an entry point the
+//! ADR-0025 fixes the honesty rule for this substrate: an entry point the
 //! interpreter/rasteriser cannot honour must (a) set the GL error state, and
 //! (b) emit exactly one structured line naming the call and the reason. It must
 //! never render a plausible-looking frame for a call it ignored.
@@ -54,6 +54,23 @@ pub fn unsupported(call: &str, reason: impl Into<String>) {
     if let Ok(mut g) = events().lock() {
         g.push(Event {
             kind: "UNSUPPORTED_GLES",
+            call: call.to_string(),
+            reason,
+        });
+    }
+}
+
+/// Record + print a structured resource-limit rejection (`GL_OUT_OF_MEMORY`).
+///
+/// Distinct from [`unsupported`]: the call is understood, but honouring it
+/// would exceed a hard substrate budget (GPU bytes, GLSL instruction budget),
+/// so the caller sets `GL_OUT_OF_MEMORY` and leaves its state unchanged.
+pub fn resource_limit(call: &str, reason: impl Into<String>) {
+    let reason = reason.into();
+    eprintln!("GLES_RESOURCE_LIMIT call={call} reason={reason}");
+    if let Ok(mut g) = events().lock() {
+        g.push(Event {
+            kind: "GLES_RESOURCE_LIMIT",
             call: call.to_string(),
             reason,
         });

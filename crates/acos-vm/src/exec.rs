@@ -234,6 +234,14 @@ pub struct Program {
 /// so it can never be reused by a different body while the entry is resident.
 type CacheEntry = (Arc<MethodCode>, Arc<Program>);
 
+/// Maximum resident lowered programs in the process-wide IR cache.
+///
+/// The key is the `Arc<MethodCode>` address and each entry pins its body, so an
+/// unbounded map keeps every method body of a long-lived MCP session alive
+/// forever (W94-A #10). At the cap one arbitrary entry is evicted; it is simply
+/// re-lowered (and re-cached) on the next call, so eviction is transparent.
+const MAX_IR_CACHE: usize = 4096;
+
 static CACHE: OnceLock<Mutex<HashMap<usize, CacheEntry>>> = OnceLock::new();
 
 fn cache() -> &'static Mutex<HashMap<usize, CacheEntry>> {
@@ -254,11 +262,17 @@ pub(crate) fn get_or_lower(code: &Arc<MethodCode>) -> Arc<Program> {
     }
     let program = Arc::new(lower(code));
     let mut map = cache().lock().unwrap_or_else(|e| e.into_inner());
+    if map.len() >= MAX_IR_CACHE && !map.contains_key(&key) {
+        if let Some(victim) = map.keys().next().copied() {
+            map.remove(&victim);
+        }
+    }
     map.entry(key)
         .or_insert_with(|| (code.clone(), program))
         .1
         .clone()
 }
+
 
 // ---------------------------------------------------------------------------
 // Lowering

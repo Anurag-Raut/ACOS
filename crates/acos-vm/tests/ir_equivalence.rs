@@ -60,6 +60,9 @@ fn run(name: &str, gc_stress: bool, general: bool) -> (i32, String) {
 fn check(gc_stress: bool) {
     let names = fixture_names();
     if names.is_empty() {
+        // The only differential guard for the IR trampoline (ADR-0023/0024);
+        // under `ACOS_REQUIRE_FIXTURES` a missing corpus must fail, not skip.
+        acos_test_support::have_fixture("fixtures/build/dexprogs");
         eprintln!("SKIP ir_equals_general_path: fixtures/build/dexprogs is absent");
         return;
     }

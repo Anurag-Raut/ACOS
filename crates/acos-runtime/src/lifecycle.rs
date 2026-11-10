@@ -219,7 +219,7 @@ fn app_info_for(apk_path: &Path) -> Result<AppInfo, LifecycleError> {
 /// `bindApplication`'s `ProviderInfoList` is what makes the real
 /// `ActivityThread.installContentProviders` instantiate them; without it no
 /// provider ever exists in the app process.
-fn provider_specs(apk_path: &Path) -> Result<Vec<(String, String)>, LifecycleError> {
+fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, LifecycleError> {
     let apk = Apk::open(apk_path).map_err(|e| LifecycleError::Boot(BootError::Apk(e)))?;
     let manifest = apk
         .manifest()
@@ -227,12 +227,19 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<(String, String)>, LifecycleErr
     Ok(manifest
         .providers
         .iter()
-        .filter_map(|c| {
-            let authority = c.authorities.first()?.clone();
-            Some((
-                acos_apk::manifest::fq_name(&manifest.package, &c.name),
-                authority,
-            ))
+        .flat_map(|c| {
+            // The manifest's `android:permission` is the default for both read
+            // and write (the APK model has no separate read/write attributes).
+            let shared = c.permission.clone().unwrap_or_default();
+            let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
+            let exported = c.exported.unwrap_or(false);
+            c.authorities.iter().map(move |authority| bind_app::ProviderSpec {
+                class: class.clone(),
+                authority: authority.clone(),
+                read_permission: shared.clone(),
+                write_permission: shared.clone(),
+                exported,
+            })
         })
         .collect())
 }
@@ -298,7 +305,7 @@ fn native_tail(vm: &Vm) -> String {
     let Some(tr) = vm.native_trace.as_ref() else {
         return "(trace disabled)".to_string();
     };
-    let start = tr.hits.len().saturating_sub(15);
+    let start = 0; // DEBUG: full native trace
     let lines: Vec<String> = tr.hits[start..]
         .iter()
         .map(|hit| format!("{}->{}{}", hit.class, hit.method, hit.signature))

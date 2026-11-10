@@ -1,7 +1,7 @@
 //! Rasteriser frame-budget bench (W92-A).
 //!
 //! Renders a 1080x2400 frame of simple geometry through the software
-//! rasteriser and asserts the ADR-0023 performance target: a full phone-sized
+//! rasteriser and asserts the ADR-0025 performance target: a full phone-sized
 //! frame of flat geometry well under 100 ms in a release build.
 //!
 //! Run with `cargo bench -p acos-gles`. `harness = false`, so `main` runs the
