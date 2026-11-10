@@ -16,7 +16,7 @@ use acos_render::BitmapConfig;
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
-use crate::heap::{ArrayData, Object};
+use crate::heap::{ArrayData, ArrayObj, Object};
 use crate::javabridge::JavaValue;
 use crate::natives::gfx_state::{gj, render_err, rh, stale, with_ctx};
 use crate::vm::Vm;
@@ -463,7 +463,11 @@ fn bridge(e: crate::javabridge::BridgeError) -> VmError {
 }
 
 /// Wrap an `acos-render` bitmap handle in an `android.graphics.Bitmap` object.
-fn wrap_bitmap(vm: &mut Vm, h: acos_render::Handle) -> VmResult<u32> {
+fn wrap_bitmap(
+    vm: &mut Vm,
+    h: acos_render::Handle,
+    nine_patch: Option<&[u8]>,
+) -> VmResult<u32> {
     let (w, ht) = with_ctx(|c| {
         c.bitmaps
             .get(h)
@@ -475,7 +479,53 @@ fn wrap_bitmap(vm: &mut Vm, h: acos_render::Handle) -> VmResult<u32> {
     let _ = vm.set_field(obj, "mWidth", JavaValue::Int(w));
     let _ = vm.set_field(obj, "mHeight", JavaValue::Int(ht));
     let _ = vm.set_field(obj, "mDensity", JavaValue::Int(0));
+    if let Some(chunk) = nine_patch {
+        let arr = vm.alloc(Object::Array(ArrayObj {
+            elem_desc: "B".to_string(),
+            data: ArrayData::Byte(chunk.iter().map(|&b| b as i8).collect()),
+        }))?;
+        let _ = vm.set_field(obj, "mNinePatchChunk", JavaValue::Object(arr));
+    }
     Ok(obj)
+}
+
+/// Extract the `npTc` (nine-patch) payload from a PNG byte stream.
+///
+/// aapt/aapt2 store the serialized `Res_png_9patch` in a PNG ancillary chunk
+/// named `npTc`. `BitmapFactory`'s native decoder copies that payload into
+/// `Bitmap.mNinePatchChunk`, and `Drawable.createFromResourceStream` uses it to
+/// build a `NinePatchDrawable`. Without it an XML `<nine-patch>` drawable
+/// throws `<nine-patch> requires a valid 9-patch source image`.
+fn png_nine_patch_chunk(bytes: &[u8]) -> Option<Vec<u8>> {
+    const SIG: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if bytes.len() < 8 || bytes[..8] != SIG {
+        return None;
+    }
+    let mut pos = 8usize;
+    while pos + 8 <= bytes.len() {
+        let len = u32::from_be_bytes([
+            bytes[pos],
+            bytes[pos + 1],
+            bytes[pos + 2],
+            bytes[pos + 3],
+        ]) as usize;
+        let ty = &bytes[pos + 4..pos + 8];
+        let data_start = pos + 8;
+        let Some(data_end) = data_start.checked_add(len) else {
+            break;
+        };
+        if data_end + 4 > bytes.len() {
+            break;
+        }
+        if ty == b"npTc" {
+            return Some(bytes[data_start..data_end].to_vec());
+        }
+        if ty == b"IEND" {
+            break;
+        }
+        pos = data_end + 4;
+    }
+    None
 }
 
 fn byte_array_prefix(vm: &Vm, h: u32, n: usize) -> Vec<u8> {
@@ -619,7 +669,8 @@ fn id_decode_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     })?;
     let h = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
         .map_err(|e| render_err("ImageDecoder.decodeBitmap", e))?;
-    let obj = wrap_bitmap(vm, h)?;
+    let chunk = png_nine_patch_chunk(&bytes);
+    let obj = wrap_bitmap(vm, h, chunk.as_deref())?;
     vm.ret_ref(ctx, obj);
     Ok(())
 }
@@ -703,7 +754,8 @@ fn bf_decode_bytes(vm: &mut Vm, ctx: NativeCtx, bytes: Vec<u8>) -> VmResult<()> 
     }
     let hnd = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
         .map_err(|e| render_err("BitmapFactory.decode", e))?;
-    let obj = wrap_bitmap(vm, hnd)?;
+    let chunk = png_nine_patch_chunk(&bytes);
+    let obj = wrap_bitmap(vm, hnd, chunk.as_deref())?;
     vm.ret_ref(ctx, obj);
     Ok(())
 }

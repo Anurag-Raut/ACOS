@@ -2473,3 +2473,58 @@ button. (The app still needs a published frame for the click to land —
   the tap round trip cannot complete yet.
 * No fake: every rung above is a real framework method running the real boot
   DEX; the only ACOS-side values are the WMS reply fields.
+
+---
+
+# W134-A session — SettingsProvider `LIST_config` + nine-patch chunk; theme-bag attempt
+
+Worktree: clean `HEAD` `1041c21`, `CARGO_TARGET_DIR=.cache/target-w134a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_BOOT_DIR=.cache/boot/android-34`. No commits.
+
+## What landed
+
+1. **`LIST_config` is answered.** `android.widget.EditText`/`ListView` inflation
+   reaches `Settings$Config.getStrings` → `NameValueCache.getStringsForPrefix`,
+   which calls `IContentProvider.call("LIST_config", …)` and reads the reply's
+   `value` key as a Java `HashMap` (`Parcel.writeValue` writes it as `VAL_MAP`).
+   `acos-services::provider::SettingsState` now answers `LIST_config` (and
+   `GET_config`) with a well-formed empty DeviceConfig map — the reference
+   API-34 image has no DeviceConfig entries — and `acos-services::parcelable`
+   gained `VAL_MAP` read/write. The live launch no longer reports
+   `IContentProvider LIST_config unsupported`.
+2. **PNG `npTc` nine-patch chunk extraction.** `BitmapFactory.nativeDecodeStream`
+   / `ImageDecoder.nDecodeBitmap` now copy the `npTc` payload into
+   `Bitmap.mNinePatchChunk`, so `NinePatchDrawable.createFromXmlInner` builds a
+   real `NinePatchDrawable` instead of throwing
+   `<nine-patch> requires a valid 9-patch source image`.
+
+## New blocker
+
+With both fixes the live `hello-views` launch gets past `LIST_config` and the
+nine-patch inflate and now fails with a bare `java.lang.NullPointerException`
+in the `android.widget.EditText` constructor
+(`LayoutInflater.createView` → `PhoneLayoutInflater.onCreateView`). The VM
+does not record a Java stack for the NPE, so the exact frame is not yet
+localised. The M2 gate therefore stays `#[ignore]`d.
+
+## Theme bag fix — implemented, not landed
+
+The `?attr/textAppearance*` → style-bag resolution (`resolve_references` must
+keep a `TYPE_REFERENCE` to a bag, AOSP `ResolveReference`) was implemented and
+its differential tests passed, but landing it reintroduces the W129-A
+`ColorStateList` break (`Can't convert value at index 0 to color: type=0x1`
+for `res/color/highlighted_text_material.xml`) and, in the VM render harness,
+exposes an `android.app.AppOpsManager.<clinit>` `NullPointerException`. It was
+reverted rather than landed half-working; the W101-A harness still needs the
+`Application`/`ContentResolver` stub before the theme fix can be re-applied.
+
+## Gates
+
+| Item | Result |
+|---|---|
+| `cargo test -p acos-services -p acos-framework-natives` | pass |
+| `cargo test -p acos-vm --test render_views` | pass (canvas-shapes 0.8305, counter 0.8782) |
+| `cargo clippy -p acos-services -p acos-vm -p acos-framework-natives --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | clean |
+| `tools/diff-dexprogs.sh --corelib real` | 27 pass / 0 fail |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | 27 pass / 0 fail |

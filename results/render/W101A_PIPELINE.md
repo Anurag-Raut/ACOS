@@ -182,3 +182,54 @@ composition, (c) `EditText` `Application`, and (d) `IDisplayManager` reply for
 `widget-gallery` were **not** landed in this wave.
 
 Nothing committed.
+
+## 7. W134-A update (HEAD `1041c21`, `.cache/wt-w134a`)
+
+W134-A landed the SettingsProvider side of the `EditText` blocker and a
+supporting image fix, but **did not** land the theme-bag fix, so the
+pipeline-generated table is unchanged from W129-A:
+
+| app | pipeline status | pipeline SSIM | masked SSIM | hand-authored SSIM | provenance |
+|---|---|---:|---:|---:|---|
+| canvas-shapes | frame produced | 0.8305 | 0.8949 | 0.9953 | pipeline-generated |
+| counter | frame produced | 0.8782 | 0.9424 | 0.9944 | pipeline-generated |
+| form-validation | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9924 | hand-authored |
+| text-input | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9906 | hand-authored |
+| widget-gallery | inflation failed at line #19 (`StateListAnimator` → `Choreographer`, no display service) | — | — | 0.9700 | hand-authored |
+
+What W134-A changed:
+
+1. **`IContentProvider` `LIST_config` is answered** by
+   `acos-services::provider::SettingsState` (empty DeviceConfig `HashMap`; the
+   reference API-34 image has no DeviceConfig entries). `acos-services::parcelable`
+   gained the `VAL_MAP` (`Parcel.writeValue` for a `HashMap`) read/write. The
+   live `hello-views`/`ListView` launch no longer reports
+   `android.content.IContentProvider LIST_config unsupported`.
+2. **PNG `npTc` nine-patch chunk extraction** in
+   `BitmapFactory.nativeDecodeStream`/`ImageDecoder.nDecodeBitmap`; an XML
+   `<nine-patch>` drawable now inflates instead of throwing
+   `<nine-patch> requires a valid 9-patch source image`.
+
+Not landed / still open:
+
+* The **theme style-bag resolution** (`?attr/textAppearance*` →
+   `TYPE_REFERENCE` to the bag, AOSP `ResolveReference`) was implemented and its
+   differential tests passed, but it reintroduces the W129-A `ColorStateList`
+   break (`Can't convert value at index 0 to color: type=0x1`) and exposes an
+   `android.app.AppOpsManager.<clinit>` NPE in the VM harness. It was reverted.
+   The harness still needs the `Application`/`ContentResolver` stub (W101-A
+   blocker #1) before it can be re-applied.
+* `DecorView`/status/action bar composition (blocker #6) and the
+   `IDisplayManager` reply for `widget-gallery` (blocker #2) remain open.
+
+Gates (this worktree):
+
+```
+cargo test -p acos-vm --test render_views                       -> ok (canvas-shapes 0.8305, counter 0.8782)
+cargo clippy -p acos-services -p acos-vm -p acos-framework-natives --all-targets --no-deps -- -D warnings -> 0 warnings
+cargo check --workspace --all-targets                           -> clean
+tools/diff-dexprogs.sh --corelib real                           -> 27 pass / 0 fail
+tools/diff-dexprogs.sh --gc-stress --corelib real               -> 27 pass / 0 fail
+```
+
+Nothing committed.

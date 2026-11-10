@@ -1542,6 +1542,8 @@ pub mod val {
     pub const INTARRAY: i32 = 18;
     /// `VAL_STRINGARRAY`.
     pub const STRINGARRAY: i32 = 14;
+    /// `VAL_MAP`.
+    pub const MAP: i32 = 2;
     /// `VAL_BUNDLE`.
     pub const BUNDLE: i32 = 3;
     /// `VAL_IBINDER`.
@@ -1666,6 +1668,8 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
         Value::RawFd(None) => D::Null,
         Value::Bundle(Some(b)) => D::Parcelable(b.parcelable()),
         Value::Bundle(None) => D::Null,
+        Value::Map(Some(entries)) => D::Map(entries.clone()),
+        Value::Map(None) => D::Null,
         Value::Skipped | Value::Unit => D::Null,
         other => return Err(bad(format!("bundle value not dynamic: {other:?}"))),
     })
@@ -1699,6 +1703,23 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
                 detail: "VAL_PARCELABLE with a null class name".into(),
             })?;
             D::Parcelable(read_payload(&class, parcel)?)
+        }
+        val::MAP => {
+            // `Parcel.readHashMap`: a size (-1 for null) then alternating
+            // key/value `writeValue` payloads. `Settings$NameValueCache`
+            // reads the `LIST_config` reply's `value` key this way.
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                D::Null
+            } else {
+                let mut entries = Vec::with_capacity(size as usize);
+                for _ in 0..size {
+                    let k = read_dynamic(parcel)?;
+                    let v = read_dynamic(parcel)?;
+                    entries.push((k, v));
+                }
+                D::Map(entries)
+            }
         }
         val::BUNDLE => {
             let b = read_bundle(parcel)?;
@@ -1818,8 +1839,16 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
             parcel.write_int32(i32::try_from(len).map_err(|_| bad("parcelable too large"))?);
             parcel.set_data_position(end);
         }
-        D::Map(_) => {
-            return Err(bad("nested VAL_MAP is not modelled"));
+        D::Map(entries) => {
+            // `Parcel.writeMap`: size then alternating `writeValue` pairs. A
+            // `HashMap` is written as `VAL_MAP` (it is a `Map`, so
+            // `writeValue` never reaches the `Serializable` branch).
+            parcel.write_int32(val::MAP);
+            parcel.write_int32(i32::try_from(entries.len()).map_err(|_| bad("map too large"))?);
+            for (k, v) in entries {
+                write_dynamic(parcel, k)?;
+                write_dynamic(parcel, v)?;
+            }
         }
         D::Skipped { tag } => {
             return Err(bad(format!("cannot re-write skipped VAL_* tag {tag}")));

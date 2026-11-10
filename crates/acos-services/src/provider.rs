@@ -21,7 +21,7 @@ use acos_parcel::ParcelFd;
 
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
-use crate::value::{Bundle, Parcelable, RawFdValue, Value};
+use crate::value::{Bundle, DynamicValue, Parcelable, RawFdValue, Value};
 
 thread_local! {
     /// The binder the `settings` `IContentProvider` was registered under.
@@ -209,6 +209,13 @@ pub struct SettingsState {
     pub secure: BTreeMap<String, String>,
     /// `Settings.System`.
     pub system: BTreeMap<String, String>,
+    /// `Settings.Config` (DeviceConfig): composite `namespace/name` -> value.
+    ///
+    /// The reference API-34 emulator has no DeviceConfig entries set, so this
+    /// is empty; `LIST_config` must still answer with a well-formed empty
+    /// `HashMap` (`DeviceConfig.getProperties` reads the reply through
+    /// `Bundle.getSerializable`).
+    pub config: BTreeMap<String, String>,
     /// The generation counter backing.
     pub generation: Box<dyn GenerationBacking>,
     /// The namespaces whose generation fd has already been handed out.
@@ -227,13 +234,20 @@ impl SettingsState {
             global: BTreeMap::new(),
             secure: BTreeMap::new(),
             system: BTreeMap::new(),
+            config: BTreeMap::new(),
             generation: Box::new(MemfdGeneration::new()),
             generation_sent: [false; 3],
             observers: Vec::new(),
             changes: Vec::new(),
         };
-        // `settings_keys.tsv`: the four `System.*` keys have caller defaults of
-        // `1`; the three `Global.*` keys are unset on the reference image.
+        // Stock Android 14 (API-34) emulator defaults for the keys the
+        // framework reads while inflating a themed `EditText`/`ListView`.
+        // `settings_keys.tsv` (captured from the reference ART run) records
+        // the four `System.*` text-keyboard preferences as set to `1`; the
+        // `Global.*` keys the launch reads (`force_resizable_activities`,
+        // `render_shadows_in_compositor`, `show_angle_in_use_dialog_box`) are
+        // unset on the reference, so they stay absent and `Settings.getInt`
+        // falls back to the caller's default exactly as on device.
         state.system.insert("auto_caps".into(), "1".into());
         state.system.insert("auto_punctuate".into(), "1".into());
         state.system.insert("auto_replace".into(), "1".into());
@@ -289,6 +303,12 @@ impl SettingsState {
 
     /// Handle `IContentProvider.call`.
     pub fn call(&mut self, method: &str, arg: &str, extras: Option<&Bundle>) -> Result<Bundle> {
+        if method == "LIST_config" {
+            return self.list_config(extras);
+        }
+        if method == "GET_config" {
+            return self.get_config(arg);
+        }
         let Some((is_put, namespace)) = Namespace::from_method(method) else {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: "android.content.IContentProvider".into(),
@@ -333,6 +353,45 @@ impl SettingsState {
                     self.generation_sent[namespace.index()] = true;
                 }
             }
+        }
+        Ok(bundle)
+    }
+
+    /// `Settings$Config.CALL_METHOD_LIST_CONFIG`.
+    ///
+    /// The client (`Settings$NameValueCache.getStringsForPrefix`) sends the
+    /// namespace prefix in the `_prefix` extra and expects a `Bundle` whose
+    /// `value` key is a `HashMap<String, String>` of composite
+    /// (`namespace/name`) keys. `DeviceConfig.getProperties` turns that into a
+    /// `Properties`; an empty map is the honest answer when no DeviceConfig
+    /// entry is set (the reference image has none).
+    fn list_config(&self, extras: Option<&Bundle>) -> Result<Bundle> {
+        let prefix = extras
+            .and_then(|b| b.get("_prefix"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let entries: Vec<(DynamicValue, DynamicValue)> = self
+            .config
+            .iter()
+            .filter(|(k, _)| k.starts_with(prefix))
+            .map(|(k, v)| {
+                (
+                    DynamicValue::String(Some(k.clone())),
+                    DynamicValue::String(Some(v.clone())),
+                )
+            })
+            .collect();
+        let mut bundle = Bundle::new();
+        bundle.put("value", Value::Map(Some(entries)));
+        Ok(bundle)
+    }
+
+    /// `Settings$Config.CALL_METHOD_GET_CONFIG`.
+    fn get_config(&self, composite_name: &str) -> Result<Bundle> {
+        let mut bundle = Bundle::new();
+        match self.config.get(composite_name) {
+            Some(value) => bundle.put("value", Value::Str(Some(value.clone()))),
+            None => bundle.put("value", Value::Skipped),
         }
         Ok(bundle)
     }
@@ -497,6 +556,44 @@ pub fn uri(s: impl Into<String>) -> Parcelable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_config_returns_an_empty_hash_map_bundle() {
+        // W134-A: `Settings$NameValueCache.getStringsForPrefix` reads the
+        // `LIST_config` reply's `value` key as a `HashMap` (parcel `VAL_MAP`).
+        // The reference API-34 image has no DeviceConfig entries, so the
+        // honest answer is a well-formed empty map; `DeviceConfig.getProperties`
+        // then yields an empty `Properties` instead of failing the inflate.
+        let mut state = SettingsState::new();
+        let mut extras = Bundle::new();
+        extras.put("_prefix", Value::Str(Some("textclassifier/".into())));
+        let bundle = state.call("LIST_config", "", Some(&extras)).unwrap();
+        let value = bundle.get("value").expect("value key");
+        match value {
+            Value::Map(Some(entries)) => assert!(entries.is_empty()),
+            other => panic!("expected an empty map, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn list_config_filters_by_prefix() {
+        let mut state = SettingsState::new();
+        state
+            .config
+            .insert("textclassifier/foo".into(), "bar".into());
+        state.config.insert("other/baz".into(), "qux".into());
+        let mut extras = Bundle::new();
+        extras.put("_prefix", Value::Str(Some("textclassifier/".into())));
+        let bundle = state.call("LIST_config", "", Some(&extras)).unwrap();
+        let Value::Map(Some(entries)) = bundle.get("value").unwrap() else {
+            panic!("expected map");
+        };
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].0,
+            crate::value::DynamicValue::String(Some("textclassifier/foo".into()))
+        );
+    }
 
     #[test]
     fn seeded_keys_match_settings_keys_tsv() {
