@@ -24,14 +24,17 @@ fn codec_field_orders_match_the_framework_dex() {
             // boot classpath; that is expected.
             continue;
         };
-        let (matched, real_len) = parcelable::verify_prefix(spec, &scanned);
+        let result = parcelable::verify(spec, &scanned);
+        let matched = result.matched_calls;
+        let real_len = result.real_calls;
         match spec.verification {
             Verification::Full => {
-                if matched != spec.fields.len() || matched != real_len {
+                if !result.is_full() {
                     failures.push(format!(
-                        "{}: matched {matched}/{real_len}, spec {}",
+                        "{}: consumed {matched}/{real_len} calls, spec {} fields, all_fields={}",
                         spec.class,
-                        spec.fields.len()
+                        spec.fields.len(),
+                        result.all_fields
                     ));
                 } else {
                     full += 1;
@@ -386,6 +389,121 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             vec![
                 Value::Int(3), // HierarchicalUri
                 Value::Str8(Some("content://settings/system".into())),
+            ],
+        ),
+        "android.app.ResultInfo" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Str(None),
+                Value::Int(1),
+                Value::Int(-1),
+                Value::Cond { present: false, values: vec![] },
+            ],
+        ),
+        "android.os.PersistableBundle" => {
+            let mut b = Bundle::new();
+            b.put("value", Value::Str(Some("hello".into())));
+            Parcelable::ordered(class, vec![Value::Bundle(Some(b))])
+        }
+        "android.app.servertransaction.ResumeActivityItem" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(10),
+                Value::Bool(true),
+                Value::Bool(false),
+                Value::Bool(true),
+            ],
+        ),
+        "android.app.servertransaction.ActivityRelaunchItem" => Parcelable::ordered(
+            class,
+            vec![
+                Value::List(None),
+                Value::List(None),
+                Value::Int(0),
+                Value::TypedObject(Parcelable::Null),
+                Value::Bool(false),
+            ],
+        ),
+        "android.window.ClientWindowFrames" => {
+            let rect = || {
+                Value::Parcelable(Parcelable::ordered(
+                    "android.graphics.Rect",
+                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                ))
+            };
+            Parcelable::ordered(
+                class,
+                vec![
+                    rect(),
+                    rect(),
+                    rect(),
+                    Value::TypedObject(Parcelable::ordered(
+                        "android.graphics.Rect",
+                        vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                    )),
+                    Value::Bool(false),
+                    Value::Float(1.0),
+                ],
+            )
+        }
+        "android.graphics.Insets" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(0),
+                Value::Int(128),
+                Value::Int(0),
+                Value::Int(63),
+            ],
+        ),
+        "android.view.InsetsSource" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(1),
+                Value::Int(0),
+                Value::Parcelable(Parcelable::ordered(
+                    "android.graphics.Rect",
+                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(128)],
+                )),
+                Value::Cond { present: false, values: vec![] },
+                Value::Bool(true),
+                Value::Int(0),
+                Value::Bool(false),
+            ],
+        ),
+        "android.view.InsetsSourceControl" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(1),
+                Value::Int(0),
+                Value::TypedObject(Parcelable::Null),
+                Value::Bool(true),
+                Value::TypedObject(Parcelable::Null),
+                Value::TypedObject(Parcelable::Null),
+                Value::Bool(false),
+            ],
+        ),
+        "android.view.InsetsSourceControl$Array" => Parcelable::ordered(
+            class,
+            vec![Value::List(None)],
+        ),
+        "android.view.RoundedCorners" => {
+            Parcelable::ordered(class, vec![Value::Cond { present: false, values: vec![] }])
+        }
+        "android.view.PrivacyIndicatorBounds" => Parcelable::ordered(
+            class,
+            vec![Value::List(None), Value::Int(0)],
+        ),
+        "android.view.DisplayShape" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Str8(Some("M0,0".into())),
+                Value::Int(1080),
+                Value::Int(2400),
+                Value::Float(1.0),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Float(1.0),
             ],
         ),
         _ => return None,

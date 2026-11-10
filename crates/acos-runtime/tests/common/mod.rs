@@ -207,10 +207,15 @@ pub fn new_runtime() -> Option<Runtime> {
 }
 
 pub fn run_case(dex: &Path, main: &str) -> (Runtime, acos_vm::RunOutcome) {
+    run_case_args(dex, main, &[])
+}
+
+/// Like [`run_case`] but passes `args` to the Java `main(String[])`.
+pub fn run_case_args(dex: &Path, main: &str, args: &[String]) -> (Runtime, acos_vm::RunOutcome) {
     let mut rt = new_runtime().expect("runtime");
     rt.vm_mut()
         .add_dex(DexFile::parse(std::fs::read(dex).unwrap()).unwrap());
-    let outcome = rt.run(main, &[]);
+    let outcome = rt.run(main, args);
     (rt, outcome)
 }
 

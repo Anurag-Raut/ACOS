@@ -86,6 +86,17 @@ pub enum FieldOp {
     /// label, icon and icon filename this way). The nested list must be empty
     /// for an absent field.
     Cond(&'static [FieldOp]),
+    /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
+    /// (an int length, `-1` for null, then the `BaseBundle` map).
+    PersistableBundle,
+    /// `Parcel.writeTypedList`: an int count (`-1` for null) then each element's
+    /// `writeTypedObject` presence marker + payload.
+    TypedList(&'static str),
+    /// `Parcel.writeStrongInterface`: a strong binder (`null` is allowed).
+    Interface,
+    /// A `writeInt` count followed by that many `writeTypedObject` elements
+    /// (the API-34 `InsetsState.mSources` loop).
+    CountedTyped(&'static str),
     /// A payload ACOS cannot model. Reading or writing it raises a structured
     /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
     Unsupported(&'static str),
@@ -195,20 +206,27 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str8, // PackageItemInfo.name
             FieldOp::Str8, // PackageItemInfo.packageName
             FieldOp::Int,  // banner
-            FieldOp::Str16,
-            FieldOp::Int,
-            FieldOp::Int,
+            FieldOp::Str16, // label
+            FieldOp::Int,  // icon
+            FieldOp::Int,  // labelRes
             FieldOp::Bundle,
-            FieldOp::Int,
-            FieldOp::Int,
-            FieldOp::Str8, // applicationInfo (embedded)
-            FieldOp::Str8, // processName
-            FieldOp::StringArray,
-            FieldOp::Int,
-            FieldOp::Int,
+            FieldOp::Int,  // showUser
+            FieldOp::Int,  // showBadge
+            FieldOp::Nested("android.content.pm.ApplicationInfo"),
+            FieldOp::Str8,        // processName
+            FieldOp::Str8,        // splitName
+            FieldOp::StringArray, // attributionTags
+            FieldOp::Int,         // descriptionRes
+            FieldOp::Int,         // enabled
+            FieldOp::Int,         // exported
+            FieldOp::Int,         // directBootAware
         ],
-        verification: Verification::Prefix,
+        verification: Verification::Full,
     },
+    // `android.content.pm.ActivityInfo.writeToParcel` (API 34): the
+    // `ComponentInfo` prefix, then the `ActivityInfo` fields including the
+    // conditional `windowLayout`. The `sForStringSet.parcel` helper is invisible
+    // to a `Parcel.write*` scanner (it is not a `Parcel` method).
     ParcelableSpec {
         class: "android.content.pm.ActivityInfo",
         fields: &[
@@ -222,23 +240,43 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Bundle,
             FieldOp::Int,
             FieldOp::Int,
+            FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,
             FieldOp::Str8,
             FieldOp::StringArray,
             FieldOp::Int,
             FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
             // ActivityInfo
             FieldOp::Int,  // theme
             FieldOp::Int,  // launchMode
+            FieldOp::Int,  // documentLaunchMode
+            FieldOp::Str8, // permission
+            FieldOp::Str8, // taskAffinity
+            FieldOp::Str8, // targetActivity
+            FieldOp::Str8, // launchToken
             FieldOp::Int,  // flags
+            FieldOp::Int,  // privateFlags
             FieldOp::Int,  // screenOrientation
             FieldOp::Int,  // configChanges
             FieldOp::Int,  // softInputMode
-            FieldOp::Str8, // parentActivityName
             FieldOp::Int,  // uiOptions
+            FieldOp::Str8, // parentActivityName
+            FieldOp::Int,  // persistableMode
+            FieldOp::Int,  // maxRecents
+            FieldOp::Int,  // lockTaskLaunchMode
+            FieldOp::Cond(&[FieldOp::Nested("android.content.pm.ActivityInfo$WindowLayout")]),
+            FieldOp::Int,  // resizeMode
+            FieldOp::Str8, // requestedVrComponent
+            FieldOp::Int,  // rotationAnimation
             FieldOp::Int,  // colorMode
+            FieldOp::Float, // mMaxAspectRatio
+            FieldOp::Float, // mMinAspectRatio
+            FieldOp::Bool, // supportsSizeChanges
+            FieldOp::Str8, // requiredDisplayCategory
         ],
-        verification: Verification::Prefix,
+        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.content.pm.PackageInfo",
@@ -356,7 +394,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int, // displayWindowingMode
             FieldOp::Int, // displayRotation
         ],
-        verification: Verification::Prefix,
+        verification: Verification::Full,
     },
     // `android.content.res.Configuration.writeToParcel` (API 34), transcribed
     // from `classes.dex:Landroid/content/res/Configuration;->writeToParcel`:
@@ -403,7 +441,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,                              // fontWeightAdjustment
             FieldOp::Int,                              // mGrammaticalGender
         ],
-        verification: Verification::Prefix,
+        verification: Verification::Full,
     },
     // Transcribed from API-34
     // `classes.dex:Landroid/app/ActivityManager$TaskDescription;->writeToParcel`:
@@ -623,10 +661,9 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,
             FieldOp::Str16,
             FieldOp::Bool,
-            FieldOp::Int,
-            FieldOp::Int,
+            FieldOp::Int, // clockType
         ],
-        verification: Verification::Prefix,
+        verification: Verification::Full,
     },
     // `android.content.res.CompatibilityInfo.writeToParcel` (API 34):
     //   writeInt(mCompatibilityFlags); writeInt(applicationDensity);
@@ -669,6 +706,213 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.view.inputmethod.ImeTracker$Token",
         fields: &[FieldOp::Int, FieldOp::Str16],
+        verification: Verification::Curated,
+    },
+    // `android.app.ResultInfo.writeToParcel` (API 34):
+    //   writeString(mResultWho); writeInt(mRequestCode); writeInt(mResultCode);
+    //   if (mData != null) { writeInt(1); mData.writeToParcel(dest, flags); }
+    //   else writeInt(0);
+    ParcelableSpec {
+        class: "android.app.ResultInfo",
+        fields: &[
+            FieldOp::Str16,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Cond(&[FieldOp::Nested("android.content.Intent")]),
+        ],
+        verification: Verification::Full,
+    },
+    // `android.os.PersistableBundle` is a `BaseBundle`: its wire payload is the
+    // same `[length][magic][size][entries]` map as a `Bundle`, so the codec
+    // reuses [`read_bundle`]/[`write_bundle`]. `Parcel.writePersistableBundle`
+    // adds no marker (it writes the inner length directly, `-1` for null), so
+    // the map layout is exactly the payload.
+    ParcelableSpec {
+        class: "android.os.PersistableBundle",
+        fields: &[FieldOp::PersistableBundle],
+        verification: Verification::Curated,
+    },
+    // `android.app.servertransaction.LaunchActivityItem.writeToParcel` (API 34).
+    ParcelableSpec {
+        class: "android.app.servertransaction.LaunchActivityItem",
+        fields: &[
+            FieldOp::Typed("android.content.Intent"),
+            FieldOp::Int, // mIdent
+            FieldOp::Typed("android.content.pm.ActivityInfo"),
+            FieldOp::Typed("android.content.res.Configuration"),
+            FieldOp::Typed("android.content.res.Configuration"),
+            FieldOp::Int,  // mDeviceId
+            FieldOp::Str16, // mReferrer
+            FieldOp::Interface, // mVoiceInteractor
+            FieldOp::Int,  // mProcState
+            FieldOp::Bundle, // mState
+            FieldOp::PersistableBundle, // mPersistentState
+            FieldOp::TypedList("android.app.ResultInfo"), // mPendingResults
+            FieldOp::TypedList("android.content.Intent"), // mPendingNewIntents
+            FieldOp::Bundle, // mActivityOptions
+            FieldOp::Bool, // mIsForward
+            FieldOp::Typed("android.app.ProfilerInfo"),
+            FieldOp::Binder, // mAssistToken
+            FieldOp::Interface, // mActivityClientController
+            FieldOp::Binder, // mShareableActivityToken
+            FieldOp::Bool, // mLaunchedFromBubble
+            FieldOp::Binder, // mTaskFragmentToken
+        ],
+        verification: Verification::Full,
+    },
+    // `ResumeActivityItem.writeToParcel`: mProcState, mUpdateProcState,
+    // mIsForward, mShouldSendCompatFakeFocus.
+    ParcelableSpec {
+        class: "android.app.servertransaction.ResumeActivityItem",
+        fields: &[FieldOp::Int, FieldOp::Bool, FieldOp::Bool, FieldOp::Bool],
+        verification: Verification::Full,
+    },
+    // `ActivityRelaunchItem.writeToParcel`: pending results/new intents,
+    // configChanges, `MergedConfiguration`, preserveWindow.
+    ParcelableSpec {
+        class: "android.app.servertransaction.ActivityRelaunchItem",
+        fields: &[
+            FieldOp::TypedList("android.app.ResultInfo"),
+            FieldOp::TypedList("android.content.Intent"),
+            FieldOp::Int, // mConfigChanges
+            FieldOp::Typed("android.util.MergedConfiguration"),
+            FieldOp::Bool, // mPreserveWindow
+        ],
+        verification: Verification::Full,
+    },
+    // `android.window.ClientWindowFrames.writeToParcel`.
+    ParcelableSpec {
+        class: "android.window.ClientWindowFrames",
+        fields: &[
+            FieldOp::Nested("android.graphics.Rect"), // frame
+            FieldOp::Nested("android.graphics.Rect"), // displayFrame
+            FieldOp::Nested("android.graphics.Rect"), // parentFrame
+            FieldOp::Typed("android.graphics.Rect"),  // attachedFrame
+            FieldOp::Bool, // isParentFrameClippedByDisplayCutout
+            FieldOp::Float, // compatScale
+        ],
+        verification: Verification::Full,
+    },
+    // `android.util.MergedConfiguration.writeToParcel`: three bare
+    // `Configuration.writeToParcel` payloads.
+    ParcelableSpec {
+        class: "android.util.MergedConfiguration",
+        fields: &[
+            FieldOp::Nested("android.content.res.Configuration"),
+            FieldOp::Nested("android.content.res.Configuration"),
+            FieldOp::Nested("android.content.res.Configuration"),
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.graphics.Insets",
+        fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // `android.view.InsetsSource.writeToParcel`.
+    ParcelableSpec {
+        class: "android.view.InsetsSource",
+        fields: &[
+            FieldOp::Int, // mId
+            FieldOp::Int, // mType
+            FieldOp::Nested("android.graphics.Rect"), // mFrame
+            FieldOp::Cond(&[FieldOp::Nested("android.graphics.Rect")]), // mVisibleFrame
+            FieldOp::Bool, // mVisible
+            FieldOp::Int,  // mFlags
+            FieldOp::Bool, // mInsetsRoundedCornerFrame
+        ],
+        verification: Verification::Full,
+    },
+    // `android.view.InsetsSourceControl.writeToParcel`.
+    ParcelableSpec {
+        class: "android.view.InsetsSourceControl",
+        fields: &[
+            FieldOp::Int,  // mId
+            FieldOp::Int,  // mType
+            FieldOp::Typed("android.view.SurfaceControl"), // mLeash
+            FieldOp::Bool, // mInitiallyVisible
+            FieldOp::Typed("android.graphics.Point"), // mSurfacePosition
+            FieldOp::Typed("android.graphics.Insets"), // mInsetsHint
+            FieldOp::Bool, // mSkipAnimationOnce
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.view.InsetsSourceControl$Array",
+        fields: &[FieldOp::TypedArray("android.view.InsetsSourceControl")],
+        verification: Verification::Full,
+    },
+    // `android.view.InsetsState.writeToParcel`: display frame, cutout wrapper,
+    // rounded corners, privacy indicator bounds, display shape, then the
+    // `mSources` sparse array as a count + `writeTypedObject` loop.
+    ParcelableSpec {
+        class: "android.view.InsetsState",
+        fields: &[
+            FieldOp::Nested("android.graphics.Rect"),
+            FieldOp::Nested("android.view.DisplayCutout$ParcelableWrapper"),
+            FieldOp::Typed("android.view.RoundedCorners"),
+            FieldOp::Nested("android.graphics.Rect"),
+            FieldOp::Typed("android.view.PrivacyIndicatorBounds"),
+            FieldOp::Typed("android.view.DisplayShape"),
+            FieldOp::CountedTyped("android.view.InsetsSource"),
+        ],
+        verification: Verification::Full,
+    },
+    // `RoundedCorners.writeToParcel`: an int marker, then (only when not
+    // `NO_ROUNDED_CORNERS`) a `writeTypedArray` of corners.
+    ParcelableSpec {
+        class: "android.view.RoundedCorners",
+        fields: &[FieldOp::Cond(&[FieldOp::TypedArray("android.view.RoundedCorner")])],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.view.PrivacyIndicatorBounds",
+        fields: &[FieldOp::TypedArray("android.graphics.Rect"), FieldOp::Int],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.view.DisplayShape",
+        fields: &[
+            FieldOp::Str8,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Float,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Float,
+        ],
+        verification: Verification::Full,
+    },
+    // `DisplayCutout$ParcelableWrapper.writeToParcel` delegates to the static
+    // `writeCutoutToParcel`, which the scanner records as one nested write.
+    ParcelableSpec {
+        class: "android.view.DisplayCutout$ParcelableWrapper",
+        fields: &[FieldOp::Nested("android.view.DisplayCutout")],
+        verification: Verification::Full,
+    },
+    // `writeCutoutToParcel` (`DisplayCutout$ParcelableWrapper`) writes `-1` for
+    // null, `0` for `NO_CUTOUT`, otherwise `1` followed by the safe insets, the
+    // bounding rects, the waterfall insets and the path-parser info. The
+    // private static helper is not a `writeToParcel` method, so the DEX
+    // scanner cannot verify this table; the layout is transcribed from
+    // `classes4.dex:Landroid/view/DisplayCutout$ParcelableWrapper;`.
+    ParcelableSpec {
+        class: "android.view.DisplayCutout",
+        fields: &[FieldOp::Cond(&[
+            FieldOp::Typed("android.graphics.Rect"),     // mSafeInsets
+            FieldOp::TypedArray("android.graphics.Rect"), // mBounds rects
+            FieldOp::Typed("android.graphics.Insets"),   // mWaterfallInsets
+            FieldOp::Int,   // displayWidth
+            FieldOp::Int,   // displayHeight
+            FieldOp::Int,   // physicalDisplayWidth
+            FieldOp::Int,   // physicalDisplayHeight
+            FieldOp::Float, // density
+            FieldOp::Str16, // cutoutSpec
+            FieldOp::Int,   // rotation
+            FieldOp::Float, // scale
+            FieldOp::Float, // physicalPixelDisplaySizeRatio
+        ])],
         verification: Verification::Curated,
     },
 ];
@@ -821,6 +1065,56 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
             Value::Cond { present, values }
         }
+        FieldOp::PersistableBundle => Value::Bundle(read_bundle(parcel)?),
+        FieldOp::TypedList(class) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    if parcel.read_int32()? == 0 {
+                        out.push(Value::Parcelable(Parcelable::Null));
+                    } else {
+                        out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    }
+                }
+                Value::List(Some(out))
+            }
+        }
+        FieldOp::Interface => Value::Binder(parcel.read_strong_binder()?),
+        FieldOp::CountedTyped(class) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    if parcel.read_int32()? == 0 {
+                        out.push(Value::Parcelable(Parcelable::Null));
+                    } else {
+                        out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    }
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Named(class) | FieldOp::IgnoredNamed(class) => {
             let name = parcel.read_string16()?;
@@ -932,6 +1226,49 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 }
             }
         }
+        FieldOp::PersistableBundle => write_bundle(parcel, expect_bundle(value)?)?,
+        FieldOp::TypedList(class) => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("typed list too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    match p {
+                        Parcelable::Null => parcel.write_int32(0),
+                        Parcelable::Ordered { .. } => {
+                            parcel.write_int32(1);
+                            let _ = class;
+                            write_payload(parcel, p)?;
+                        }
+                        Parcelable::Fd(_) => return Err(bad("typed list element is an fd")),
+                    }
+                }
+            }
+            _ => return Err(bad(format!("expected typed list, got {value:?}"))),
+        },
+        FieldOp::Interface => parcel.write_strong_binder_opt(value.as_binder()),
+        FieldOp::CountedTyped(_class) => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("counted typed list too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    match p {
+                        Parcelable::Null => parcel.write_int32(0),
+                        Parcelable::Ordered { .. } => {
+                            parcel.write_int32(1);
+                            write_payload(parcel, p)?;
+                        }
+                        Parcelable::Fd(_) => return Err(bad("counted typed element is an fd")),
+                    }
+                }
+            }
+            _ => return Err(bad(format!("expected counted typed list, got {value:?}"))),
+        },
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
@@ -1467,15 +1804,8 @@ pub fn boot_dex() -> Option<&'static [acos_dex::DexFile]> {
 /// Returns `(matched, real_len)`.
 #[must_use]
 pub fn verify_prefix(spec: &ParcelableSpec, scanned: &ScannedWrite) -> (usize, usize) {
-    let mut matched = 0;
-    for (field, call) in spec.fields.iter().zip(&scanned.calls) {
-        if field_matches(*field, call) {
-            matched += 1;
-        } else {
-            break;
-        }
-    }
-    (matched, scanned.calls.len())
+    let v = verify(spec, scanned);
+    (v.matched_calls, v.real_calls)
 }
 
 fn field_matches(field: FieldOp, call: &str) -> bool {
@@ -1503,10 +1833,86 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Nested(_) => call == "writeParcelable",
         FieldOp::ParcelableList(_) => call == "writeParcelableList",
         FieldOp::Dynamic => call == "writeValue",
+        FieldOp::PersistableBundle => call == "writePersistableBundle",
+        FieldOp::TypedList(_) => call == "writeTypedList",
+        FieldOp::Interface => call == "writeStrongInterface",
         // The presence marker is a `writeInt`; the branch body is invisible to a
         // linear scanner, so only the marker can be verified.
         FieldOp::Cond(_) => call == "writeInt",
+        FieldOp::CountedTyped(_) => call == "writeInt",
         FieldOp::Unsupported(_) => false,
+    }
+}
+
+/// Outcome of verifying a spec against a scanned `writeToParcel`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Verify {
+    /// Number of real `Parcel.write*` calls the spec consumed.
+    pub matched_calls: usize,
+    /// Number of real calls in the scanned method (after branch collapse).
+    pub real_calls: usize,
+    /// True when every spec field was consumed (no unconsumed field).
+    pub all_fields: bool,
+}
+
+impl Verify {
+    /// True when the spec accounts for every real call and has no spare field.
+    #[must_use]
+    pub fn is_full(&self) -> bool {
+        self.all_fields && self.matched_calls == self.real_calls
+    }
+}
+
+/// Number of calls `field` consumes from `calls` (0 when it does not match).
+fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
+    let Some(first) = calls.first() else {
+        return 0;
+    };
+    match field {
+        FieldOp::Cond(inner) => {
+            if first != "writeInt" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
+        FieldOp::CountedTyped(_) => {
+            if first != "writeInt" {
+                return 0;
+            }
+            match calls.get(1).map(String::as_str) {
+                Some("writeTypedObject") => 2,
+                _ => 1,
+            }
+        }
+        _ => usize::from(field_matches(field, first)),
+    }
+}
+
+/// Verify a spec against a scanned `writeToParcel`.
+#[must_use]
+pub fn verify(spec: &ParcelableSpec, scanned: &ScannedWrite) -> Verify {
+    let mut matched_calls = 0;
+    let mut all_fields = true;
+    for field in spec.fields {
+        let consumed = field_consumes(*field, &scanned.calls[matched_calls..]);
+        if consumed == 0 {
+            all_fields = false;
+            break;
+        }
+        matched_calls += consumed;
+    }
+    Verify {
+        matched_calls,
+        real_calls: scanned.calls.len(),
+        all_fields,
     }
 }
 
@@ -1558,6 +1964,15 @@ pub mod scan {
         Err(format!("class not found: {class}"))
     }
 
+    /// Control-flow terminator of a scanned region.
+    #[derive(Clone, Copy)]
+    enum Term {
+        /// The region fell through to its `stop` (or the end of the method).
+        Fall,
+        /// The region ended in an unconditional `goto` to this target.
+        Goto(usize),
+    }
+
     fn scan_class(dex: &DexFile, def: &ClassDef) -> Result<ScannedWrite, String> {
         let mut out = ScannedWrite::default();
         let desc = dex
@@ -1565,83 +1980,170 @@ pub mod scan {
             .map_err(|e| e.to_string())?
             .to_string();
         let mut visited = std::collections::HashSet::new();
-        flatten(dex, &desc, &mut visited, &mut out)?;
+        scan_method(dex, &desc, "writeToParcel", &mut visited, &mut out)?;
         if out.calls.is_empty() {
             return Err("no writeToParcel".into());
         }
         Ok(out)
     }
 
-    /// Walk `class_desc`'s `writeToParcel`, splicing `invoke-super` calls so the
-    /// op list is the full inherited field order.
-    fn flatten(
+    /// Scan `class_desc`'s `method`, appending the `Parcel.write*` calls in
+    /// execution order. `invoke-super` and direct nested `writeToParcel` calls
+    /// are spliced in so the op list is the full inherited field order.
+    fn scan_method(
         dex: &DexFile,
         class_desc: &str,
+        method: &str,
         visited: &mut std::collections::HashSet<String>,
         out: &mut ScannedWrite,
     ) -> Result<(), String> {
-        if !visited.insert(class_desc.to_string()) {
+        let key = format!("{class_desc}->{method}");
+        if !visited.insert(key) {
             return Ok(());
         }
         let Some(def) = dex.find_class(class_desc) else {
             return Ok(());
         };
-        let cd = dex
-            .class_data(def)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "no class data".to_string())?;
+        let Some(cd) = dex.class_data(def).map_err(|e| e.to_string())? else {
+            return Ok(());
+        };
         for m in cd.direct_methods.iter().chain(cd.virtual_methods.iter()) {
             let Ok(r) = dex.method_ref(m.method_idx) else {
                 continue;
             };
-            if r.name != "writeToParcel" || m.code_off == 0 {
+            if r.name != method || m.code_off == 0 {
                 continue;
             }
             let code = dex.code_item(m.code_off).map_err(|e| e.to_string())?;
-            let mut pc = 0usize;
-            let mut guard = 0;
-            while pc < code.insns.len() && guard < 20_000 {
-                guard += 1;
-                if payload_kind(&code.insns, pc).is_some() {
-                    pc += payload_len(&code.insns, pc).unwrap_or(1);
-                    continue;
+            scan_region(dex, &code.insns, 0, None, visited, out)?;
+            return Ok(());
+        }
+        Ok(())
+    }
+
+    /// Walk the instructions of one region in execution order. Conditional
+    /// branches (if/else and if-then) are collapsed to a single canonical arm:
+    /// the longer `if`/`else` arm is preferred, and loops contribute their body
+    /// once before the exit edge. This mirrors what the runtime actually writes
+    /// and is what makes `Configuration.userSetLocale` (a `writeInt` in both
+    /// arms) and `ProfilerInfo.profileFd` (a presence marker + nested write)
+    /// verifiable.
+    fn scan_region(
+        dex: &DexFile,
+        insns: &[u16],
+        mut pc: usize,
+        stop: Option<usize>,
+        visited: &mut std::collections::HashSet<String>,
+        out: &mut ScannedWrite,
+    ) -> Result<Term, String> {
+        let mut guard = 0usize;
+        while pc < insns.len() {
+            guard += 1;
+            if guard > 20_000 {
+                break;
+            }
+            if let Some(s) = stop {
+                if pc == s {
+                    return Ok(Term::Fall);
                 }
-                let Ok(insn) = decode(&code.insns, pc) else {
-                    pc += 1;
-                    continue;
-                };
-                if insn.opcode.is_invoke() {
-                    if let Ok(m) = dex.method_ref(insn.index) {
-                        if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
-                            if m.name != "writeInterfaceToken"
-                                && m.name != "writeNoException"
-                                && m.name != "writeStackTrace"
-                                && m.name != "writeException"
-                            {
-                                out.calls.push(m.name.to_string());
-                            }
-                        } else if m.class == "Landroid/os/Parcel;" && m.name == "maybeWriteSquashed"
-                        {
-                            out.calls.push("writeInt".to_string());
-                        } else if m.class == "Landroid/text/TextUtils;" && m.name == "writeToParcel"
-                        {
-                            out.calls.push("writeString".to_string());
-                        } else if m.name == "writeToParcel" && insn.opcode.byte() == 0x6f {
-                            // `invoke-super`: inline the inherited field order.
-                            flatten(dex, m.class, visited, out)?;
-                        } else if m.name == "writeToParcel" {
-                            // A nested Parcelable written through its own
-                            // `writeToParcel` (not `Parcel.writeParcelable`).
-                            // Record it as a `writeParcelable` op so a spec's
-                            // `FieldOp::Nested` can verify the position.
-                            out.calls.push("writeParcelable".to_string());
-                            out.delegates.push(m.class.to_string());
+            }
+            if payload_kind(insns, pc).is_some() {
+                pc += payload_len(insns, pc).unwrap_or(1);
+                continue;
+            }
+            let Ok(insn) = decode(insns, pc) else {
+                pc += 1;
+                continue;
+            };
+            if insn.opcode.is_goto() {
+                let target = (pc as i64 + i64::from(insn.target)) as usize;
+                if stop.is_some() {
+                    // An unconditional arm end; its target is the join point.
+                    return Ok(Term::Goto(target));
+                }
+                if target <= pc {
+                    // A backward `goto` at the top level is a loop tail.
+                    return Ok(Term::Fall);
+                }
+                pc = target;
+                continue;
+            }
+            if insn.opcode.is_branch() {
+                let fall = pc + insn.size as usize;
+                let take = (pc as i64 + i64::from(insn.target)) as usize;
+                let mut fall_out = ScannedWrite::default();
+                let fall_term = scan_region(dex, insns, fall, Some(take), visited, &mut fall_out)?;
+                match fall_term {
+                    Term::Fall => {
+                        // if-then: the fall arm is the conditional body.
+                        out.calls.extend(fall_out.calls);
+                        out.delegates.extend(fall_out.delegates);
+                        pc = take;
+                    }
+                    Term::Goto(join) => {
+                        if join <= pc {
+                            // Loop: one body pass, then the loop exit edge.
+                            out.calls.extend(fall_out.calls);
+                            out.delegates.extend(fall_out.delegates);
+                            pc = take;
+                            continue;
                         }
+                        let mut take_out = ScannedWrite::default();
+                        let _ = scan_region(dex, insns, take, Some(join), visited, &mut take_out)?;
+                        if take_out.calls.len() > fall_out.calls.len() {
+                            out.calls.extend(take_out.calls);
+                            out.delegates.extend(take_out.delegates);
+                        } else {
+                            out.calls.extend(fall_out.calls);
+                            out.delegates.extend(fall_out.delegates);
+                        }
+                        pc = join;
                     }
                 }
-                pc += insn.size as usize;
+                continue;
             }
+            if insn.opcode.is_terminator() {
+                return Ok(Term::Fall);
+            }
+            if insn.opcode.is_invoke() {
+                record_invoke(dex, insn.index, insn.opcode.byte(), visited, out)?;
+            }
+            pc += insn.size as usize;
+        }
+        Ok(Term::Fall)
+    }
+
+    fn record_invoke(
+        dex: &DexFile,
+        index: u32,
+        opcode: u8,
+        visited: &mut std::collections::HashSet<String>,
+        out: &mut ScannedWrite,
+    ) -> Result<(), String> {
+        let Ok(m) = dex.method_ref(index) else {
             return Ok(());
+        };
+        if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
+            if m.name != "writeInterfaceToken"
+                && m.name != "writeNoException"
+                && m.name != "writeStackTrace"
+                && m.name != "writeException"
+            {
+                out.calls.push(m.name.to_string());
+            }
+        } else if m.class == "Landroid/os/Parcel;" && m.name == "maybeWriteSquashed" {
+            out.calls.push("writeInt".to_string());
+        } else if m.class == "Landroid/text/TextUtils;" && m.name == "writeToParcel" {
+            out.calls.push("writeString".to_string());
+        } else if m.name == "writeToParcel" && opcode == 0x6f {
+            // `invoke-super`: inline the inherited field order.
+            scan_method(dex, m.class, "writeToParcel", visited, out)?;
+        } else if m.name == "writeToParcel" || m.name == "writeCutoutToParcel" {
+            // A nested Parcelable written through its own `writeToParcel`
+            // (not `Parcel.writeParcelable`). Record it as a `writeParcelable`
+            // op so a spec's `FieldOp::Nested` can verify the position.
+            out.calls.push("writeParcelable".to_string());
+            out.delegates.push(m.class.to_string());
         }
         Ok(())
     }
