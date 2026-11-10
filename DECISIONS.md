@@ -765,6 +765,20 @@ layer; product wiring is still pending).
   session process: seccomp is installed with `TSYNC`, so `confine` must be
   called before the runtime spawns coordinator threads, or the call fails
   closed. The session-lifecycle workstream (W51-A) owns that call site.
+- **W93-A note (Flutter engine, 2026-11-11).** The Dart AOT runtime reserves a
+  large, lightly committed compressed-pointer heap region at VM startup
+  (`dart_vm`'s `virtual_memory_compressed.cc` mmaps it
+  `MAP_NORESERVE|MAP_ANONYMOUS` and fails with `ENOMEM` if `RLIMIT_AS` is too
+  small). The default `RLIMIT_AS = 4 GiB` is exactly exhausted by the 166 MiB
+  `libflutter.so` mapping plus the loader's relocation tables, so the VM died
+  before `main()`. The W93-A harness runs with a bounded 12 GiB
+  `address_space_bytes`; this stays a DoS guard, not a capability, so the
+  residual risk is only that a guest can reserve more address space before
+  `ENOMEM`. Recommendation for the product profile: keep a finite bound but
+  size it for the native-engine reservation (8-16 GiB) rather than 4 GiB, or
+  give `acos-jni` an engine-aware `ConfineProfile`. W93-A did **not** change
+  the product default (other workstreams depend on it); the per-run override is
+  recorded here.
 
 ## ADR-0023 — Typed-IR slow-op trampoline; IR tier on by default (W73-A)
 

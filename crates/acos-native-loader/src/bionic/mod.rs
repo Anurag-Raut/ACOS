@@ -17,6 +17,7 @@ use std::os::raw::c_void;
 use std::sync::OnceLock;
 
 pub mod dl;
+pub mod engine_gaps;
 pub mod gles;
 pub mod ndk;
 pub mod pthread;
@@ -462,6 +463,7 @@ fn build_table() -> HashMap<&'static str, Shim> {
     }
 
     m.extend(shims::log_extra_table());
+    m.extend(engine_gaps::table());
     m.extend(shims::fortify_table());
     m.extend(shims::android_extra_table());
     m.extend(shims::stat_table());
