@@ -100,22 +100,10 @@ pub fn read_op(parcel: &mut Parcel, op: &WireOp) -> Result<Value> {
             Value::List(Some(out.into_iter().map(Value::Binder).collect()))
         }
         WireOp::Parcelable { class } => {
-            let name = parcel.read_string16()?;
-            match name {
-                None => Value::NamedParcelable(Parcelable::Null),
-                Some(actual) => {
-                    // The class name is on the wire; the decoded `class` is the
-                    // static type. They must agree or the layout drifted.
-                    if &actual != class {
-                        return Err(ServiceError::BadRequest {
-                            interface: "parcelable".into(),
-                            method: class.clone(),
-                            detail: format!("wire class {actual:?} does not match decoded {class:?}"),
-                        });
-                    }
-                    Value::NamedParcelable(parcelable::read_payload(class, parcel)?)
-                }
-            }
+            // AIDL parcelable arguments are written with the object's own
+            // `writeToParcel` (no class-name wire prefix, unlike
+            // `Parcel.writeParcelable`).
+            Value::Parcelable(parcelable::read_payload(class, parcel)?)
         }
         WireOp::TypedObject { class, .. } => {
             let present = parcel.read_int32()?;
@@ -223,30 +211,20 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
                 parcel.write_strong_binder_opt(v.as_binder());
             }
         }
-        WireOp::Parcelable { class } => {
-            let fallback;
+        WireOp::Parcelable { class: _ } => {
             let p: &Parcelable = match value {
                 Value::Parcelable(p) | Value::TypedObject(p) | Value::NamedParcelable(p) => p,
-                Value::Bundle(b) => {
-                    fallback = b
-                        .as_ref()
-                        .map(Bundle::parcelable)
-                        .unwrap_or(Parcelable::Null);
-                    &fallback
-                }
                 Value::Skipped | Value::Unit => {
-                    fallback = Parcelable::Null;
-                    &fallback
+                    return Err(bad("null is not representable for a direct writeToParcel argument"))
                 }
                 other => return Err(bad(format!("expected parcelable, got {other:?}"))),
             };
             match p {
-                Parcelable::Null => parcel.write_string16_opt(None)?,
-                Parcelable::Ordered { .. } => {
-                    parcel.write_string16(class)?;
-                    parcelable::write_payload(parcel, p)?;
+                Parcelable::Null => {
+                    return Err(bad("null is not representable for a direct writeToParcel argument"))
                 }
-                Parcelable::Fd(_) => return Err(bad("fd is not a named parcelable")),
+                Parcelable::Ordered { .. } => parcelable::write_payload(parcel, p)?,
+                Parcelable::Fd(_) => return Err(bad("fd is not a parcelable argument")),
             }
         }
         WireOp::TypedObject { class, .. } => {

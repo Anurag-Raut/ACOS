@@ -90,6 +90,143 @@ fn atomic_integer(vm: &mut Vm) {
     vm.register_native(c, "setOpaque", "(I)V", ai_set);
     vm.register_native(c, "getAcquire", "()I", ai_get);
     vm.register_native(c, "setRelease", "(I)V", ai_set);
+
+    atomic_long(vm);
+}
+
+/// `java.util.concurrent.atomic.AtomicLong`.
+///
+/// Same trick as `AtomicInteger`: the real `<clinit>` builds a `VarHandle`, so
+/// ACOS implements the class's `long` storage directly. Needed because
+/// `MemoryIntArray`/`CloseGuard` pulls `AtomicLong` in through `UUID`.
+fn atomic_long(vm: &mut Vm) {
+    let c = "Ljava/util/concurrent/atomic/AtomicLong;";
+    vm.register_native(c, "<clinit>", "()V", ai_noop);
+    vm.register_native(c, "VMSupportsCS8", "()Z", vm_supports_cs8);
+    vm.register_native(c, "get", "()J", al_get);
+    vm.register_native(c, "set", "(J)V", al_set);
+    vm.register_native(c, "lazySet", "(J)V", al_set);
+    vm.register_native(c, "getAndSet", "(J)J", al_get_and_set);
+    vm.register_native(c, "compareAndSet", "(JJ)Z", al_cas);
+    vm.register_native(c, "weakCompareAndSet", "(JJ)Z", al_cas);
+    vm.register_native(c, "weakCompareAndSetPlain", "(JJ)Z", al_cas);
+    vm.register_native(c, "weakCompareAndSetVolatile", "(JJ)Z", al_cas);
+    vm.register_native(c, "weakCompareAndSetAcquire", "(JJ)Z", al_cas);
+    vm.register_native(c, "weakCompareAndSetRelease", "(JJ)Z", al_cas);
+    vm.register_native(c, "getAndAdd", "(J)J", al_get_and_add);
+    vm.register_native(c, "addAndGet", "(J)J", al_add_and_get);
+    vm.register_native(c, "getAndIncrement", "()J", al_get_and_inc);
+    vm.register_native(c, "getAndDecrement", "()J", al_get_and_dec);
+    vm.register_native(c, "incrementAndGet", "()J", al_inc_and_get);
+    vm.register_native(c, "decrementAndGet", "()J", al_dec_and_get);
+    vm.register_native(c, "getPlain", "()J", al_get);
+    vm.register_native(c, "setPlain", "(J)V", al_set);
+    vm.register_native(c, "getOpaque", "()J", al_get);
+    vm.register_native(c, "setOpaque", "(J)V", al_set);
+    vm.register_native(c, "getAcquire", "()J", al_get);
+    vm.register_native(c, "setRelease", "(J)V", al_set);
+}
+
+fn vm_supports_cs8(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_bool(ctx, true);
+    Ok(())
+}
+
+fn al_value(vm: &mut Vm, this: crate::heap::Handle) -> i64 {
+    match vm.get_field(this, "value") {
+        Ok(crate::javabridge::JavaValue::Long(v)) => v,
+        _ => 0,
+    }
+}
+
+fn al_store(vm: &mut Vm, this: crate::heap::Handle, v: i64) {
+    let _ = vm.set_field(this, "value", crate::javabridge::JavaValue::Long(v));
+}
+
+fn al_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let v = al_value(vm, this);
+    vm.ret_i64(ctx, v);
+    Ok(())
+}
+
+fn al_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let v = vm.arg_i64(ctx, 0);
+    al_store(vm, this, v);
+    Ok(())
+}
+
+fn al_get_and_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let nv = vm.arg_i64(ctx, 0);
+    let old = al_value(vm, this);
+    al_store(vm, this, nv);
+    vm.ret_i64(ctx, old);
+    Ok(())
+}
+
+fn al_cas(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let expect = vm.arg_i64(ctx, 0);
+    let update = vm.arg_i64(ctx, 1);
+    let old = al_value(vm, this);
+    let ok = old == expect;
+    if ok {
+        al_store(vm, this, update);
+    }
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+fn al_get_and_add(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let delta = vm.arg_i64(ctx, 0);
+    let old = al_value(vm, this);
+    al_store(vm, this, old.wrapping_add(delta));
+    vm.ret_i64(ctx, old);
+    Ok(())
+}
+
+fn al_add_and_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let delta = vm.arg_i64(ctx, 0);
+    let nv = al_value(vm, this).wrapping_add(delta);
+    al_store(vm, this, nv);
+    vm.ret_i64(ctx, nv);
+    Ok(())
+}
+
+fn al_get_and_inc(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let old = al_value(vm, this);
+    al_store(vm, this, old.wrapping_add(1));
+    vm.ret_i64(ctx, old);
+    Ok(())
+}
+
+fn al_get_and_dec(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let old = al_value(vm, this);
+    al_store(vm, this, old.wrapping_sub(1));
+    vm.ret_i64(ctx, old);
+    Ok(())
+}
+
+fn al_inc_and_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let nv = al_value(vm, this).wrapping_add(1);
+    al_store(vm, this, nv);
+    vm.ret_i64(ctx, nv);
+    Ok(())
+}
+
+fn al_dec_and_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let nv = al_value(vm, this).wrapping_sub(1);
+    al_store(vm, this, nv);
+    vm.ret_i64(ctx, nv);
+    Ok(())
 }
 
 fn ai_value(vm: &Vm, this: crate::heap::Handle) -> i32 {

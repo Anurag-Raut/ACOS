@@ -61,6 +61,10 @@ pub enum FieldOp {
     Bundle,
     /// A raw file descriptor (`writeFileDescriptor`).
     Fd,
+    /// A strong binder (`writeStrongBinder`) with no presence marker.
+    Binder,
+    /// `writeTypedArray` (an int count then each element's payload).
+    TypedArray(&'static str),
     /// A field ACOS does not model; reads/writes a `null` of the given kind.
     IgnoredNamed(&'static str),
     /// A field ACOS does not model; reads/writes a `false` presence marker.
@@ -399,6 +403,14 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Bundle],
         verification: Verification::Curated,
     },
+    // `MemoryIntArray.writeToParcel` writes a single `ParcelFileDescriptor`;
+    // the Settings provider hands the framework a generation counter in this
+    // shape (REPORT §3.7). The Java reader is `MemoryIntArray.CREATOR`.
+    ParcelableSpec {
+        class: "android.util.MemoryIntArray",
+        fields: &[FieldOp::Named("android.os.ParcelFileDescriptor")],
+        verification: Verification::Curated,
+    },
     ParcelableSpec {
         class: "android.os.IBinder",
         fields: &[FieldOp::Int],
@@ -428,7 +440,34 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     ParcelableSpec {
         class: "android.content.AttributionSource",
-        fields: &[FieldOp::Int, FieldOp::Str16, FieldOp::Str16],
+        // `AttributionSource.writeToParcel` delegates to
+        // `AttributionSourceState.writeToParcel`: a backpatched size int, then
+        // pid, uid, packageName, attributionTag, a token binder,
+        // renouncedPermissions and the `next` chain.
+        fields: &[
+            FieldOp::Int,   // size (backpatched)
+            FieldOp::Int,   // pid
+            FieldOp::Int,   // uid
+            FieldOp::Str16, // packageName
+            FieldOp::Str16, // attributionTag
+            FieldOp::Binder,
+            FieldOp::StringArray,
+            FieldOp::TypedArray("android.content.AttributionSourceState"),
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.content.AttributionSourceState",
+        fields: &[
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Str16,
+            FieldOp::Binder,
+            FieldOp::StringArray,
+            FieldOp::TypedArray("android.content.AttributionSourceState"),
+        ],
         verification: Verification::Curated,
     },
     ParcelableSpec {
@@ -583,6 +622,19 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         FieldOp::ByteArray => Value::ByteArray(parcel.read_byte_array()?),
         FieldOp::Bundle => Value::Bundle(read_bundle(parcel)?),
         FieldOp::Fd => Value::RawFd(read_fd(parcel)?.map(RawFdValue)),
+        FieldOp::Binder => Value::Binder(parcel.read_strong_binder()?),
+        FieldOp::TypedArray(class) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let mut out = Vec::with_capacity(n as usize);
+                for _ in 0..n {
+                    out.push(Value::Parcelable(read_payload(class, parcel)?));
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::Dynamic => Value::Dynamic(read_dynamic(parcel)?),
         FieldOp::Named(class) | FieldOp::IgnoredNamed(class) => {
             let name = parcel.read_string16()?;
@@ -635,6 +687,19 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::ByteArray => parcel.write_byte_array(expect_byte_array(value)?)?,
         FieldOp::Bundle => write_bundle(parcel, expect_bundle(value)?)?,
         FieldOp::Fd => write_fd(parcel, value)?,
+        FieldOp::Binder => parcel.write_strong_binder_opt(value.as_binder()),
+        FieldOp::TypedArray(_class) => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("typed array too large"))?,
+                );
+                for item in items {
+                    write_payload(parcel, expect_parcelable(item)?)?;
+                }
+            }
+            _ => return Err(bad(format!("expected typed array, got {value:?}"))),
+        },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
@@ -799,7 +864,24 @@ pub mod val {
 }
 
 /// Read a `writeBundle` payload.
+///
+/// Android's `BaseBundle.writeToParcelInner` writes a 4-byte-aligned byte
+/// length, then the `ArrayMap` size and entries (`Bundle.readBundle` checks the
+/// alignment). ACOS models exactly that layout so the real framework reads it.
 pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
+    let length = parcel.read_int32()?;
+    if length < 0 {
+        return Ok(None);
+    }
+    // Android 14 `BaseBundle` writes a `BUNDLE_MAGIC` header after the length.
+    let magic = parcel.read_int32()?;
+    if magic as u32 != BUNDLE_MAGIC {
+        return Err(ServiceError::BadRequest {
+            interface: "bundle".into(),
+            method: "readBundle".into(),
+            detail: format!("bad Bundle magic {magic:#x}"),
+        });
+    }
     let size = parcel.read_int32()?;
     if size < 0 {
         return Ok(None);
@@ -816,19 +898,38 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
     Ok(Some(bundle))
 }
 
-/// Write a `writeBundle` payload.
+/// The Android 14 `BaseBundle` magic header (`"BNDL"`).
+pub const BUNDLE_MAGIC: u32 = 0x4c44_4e42;
+
+/// Write a `writeBundle` payload in the real `BaseBundle` layout.
 pub fn write_bundle(parcel: &mut Parcel, bundle: Option<&Bundle>) -> Result<()> {
     match bundle {
-        None => parcel.write_int32(-1),
+        None => {
+            parcel.write_int32(-1);
+            Ok(())
+        }
         Some(b) => {
+            // Write `[length][magic][size][entries]` directly so file
+            // descriptors in the map stay in this parcel's object table (an
+            // `appendFrom` of a scratch parcel would lose them). The length is
+            // backpatched, exactly like `BaseBundle.writeToParcelInner`.
+            let start = parcel.data_size();
+            parcel.write_int32(0);
+            parcel.write_int32(BUNDLE_MAGIC as i32);
+            let payload_start = parcel.data_size();
             parcel.write_int32(i32::try_from(b.len()).map_err(|_| bad("bundle too large"))?);
             for (key, value) in &b.entries {
                 parcel.write_string16(key)?;
                 write_dynamic(parcel, &value_to_dynamic(value)?)?;
             }
+            let payload_end = parcel.data_size();
+            let len = payload_end - payload_start;
+            parcel.set_data_position(start);
+            parcel.write_int32(i32::try_from(len).map_err(|_| bad("bundle too large"))?);
+            parcel.set_data_position(payload_end);
+            Ok(())
         }
     }
-    Ok(())
 }
 
 fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
@@ -903,6 +1004,8 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         }
         val::IBINDER => D::Binder(parcel.read_strong_binder()?),
         val::PARCELABLE => {
+            // `Parcel.writeValue` length-prefixes `VAL_PARCELABLE`.
+            let _len = parcel.read_int32()?;
             let class = parcel.read_string16()?.ok_or_else(|| ServiceError::BadRequest {
                 interface: "bundle".into(),
                 method: "readValue".into(),
@@ -997,6 +1100,10 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
         }
         D::Parcelable(p) => {
             parcel.write_int32(val::PARCELABLE);
+            // `Parcel.writeValue` length-prefixes `VAL_PARCELABLE`; backpatch it.
+            let start = parcel.data_size();
+            parcel.write_int32(0);
+            let payload_start = parcel.data_size();
             match p {
                 Parcelable::Null => parcel.write_string16_opt(None)?,
                 Parcelable::Ordered { class, .. } => {
@@ -1018,6 +1125,11 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                     )?;
                 }
             }
+            let end = parcel.data_size();
+            let len = end - payload_start;
+            parcel.set_data_position(start);
+            parcel.write_int32(i32::try_from(len).map_err(|_| bad("parcelable too large"))?);
+            parcel.set_data_position(end);
         }
         D::Map(_) => {
             return Err(bad("nested VAL_MAP is not modelled"));
@@ -1154,6 +1266,8 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Typed(_) | FieldOp::IgnoredTyped(_) => call == "writeTypedObject",
         FieldOp::Bundle => call == "writeBundle",
         FieldOp::Fd => call == "writeFileDescriptor",
+        FieldOp::Binder => call == "writeStrongBinder",
+        FieldOp::TypedArray(_) => call == "writeTypedArray",
         FieldOp::Dynamic => call == "writeValue",
     }
 }

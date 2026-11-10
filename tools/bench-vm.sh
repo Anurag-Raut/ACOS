@@ -17,7 +17,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPS="${ACOS_BENCH_REPS:-20}"
 export ACOS_BENCH_REPS="$REPS"
 
-python3 - "$ROOT" "$REPS" <<'PY'
+# Whole bench (including every spawned acos/java) runs in one bounded scope.
+"$ROOT/tools/guarded.sh" --mem 6G --time "${ACOS_BENCH_TIME:-3600}" -- \
+    python3 - "$ROOT" "$REPS" <<'PY'
 import json, os, resource, statistics, subprocess, sys, time, datetime, shutil
 
 root, reps = sys.argv[1], int(sys.argv[2])
@@ -184,4 +186,6 @@ print()
 print(f"bench-vm: wrote {path}")
 print("bench-vm: NOTE: comparison target is the HOST JVM (OpenJDK 17), not Android ART;")
 print("bench-vm:       these numbers are not Android-verified.")
+# Scratch cleanup (ADR-0018): target/tmp/acos-bench is transient build output.
+shutil.rmtree(tmp, ignore_errors=True)
 PY

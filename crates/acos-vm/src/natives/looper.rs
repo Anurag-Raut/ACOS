@@ -219,7 +219,10 @@ impl Proc {
 /// thread left. Blocks the host on the process `epoll` set until a parked
 /// looper is woken or its deadline expires. Returns `true` if it made
 /// progress (so [`crate::vm::Vm::run_inner`] should re-enter the scheduler).
-pub(crate) fn pump(vm: &mut Vm) -> bool {
+pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
+    // A run whose only thread is parked here must still obey the host
+    // watchdog; check before blocking and again when the wait returns.
+    vm.host.check()?;
     let now = Instant::now();
     let mut expired: Vec<usize> = Vec::new();
     let mut next_deadline: Option<Instant> = None;
@@ -256,7 +259,7 @@ pub(crate) fn pump(vm: &mut Vm) -> bool {
                 }
             }
         });
-        return true;
+        return Ok(true);
     }
 
     let epoll_fd = PROC.with(|p| {
@@ -267,10 +270,19 @@ pub(crate) fn pump(vm: &mut Vm) -> bool {
         p.epoll.clone()
     });
     let Some(epoll_fd) = epoll_fd else {
-        return false;
+        return Ok(false);
     };
 
-    let timeout = next_deadline.and_then(|d| d.checked_duration_since(Instant::now()));
+    // Block no longer than the earliest parked deadline *or* the remaining
+    // wall-clock budget, so a permanently parked looper cannot hang the run
+    // past `ACOS_WALL_MAX_SECS`.
+    let deadline_wait = next_deadline.and_then(|d| d.checked_duration_since(Instant::now()));
+    let timeout = match (deadline_wait, vm.host.remaining_wall()) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
     let mut events = empty_events();
     let ts = timeout.map(timespec);
     let n = wait_epoll(&epoll_fd, &mut events, ts.as_ref());
@@ -309,8 +321,9 @@ pub(crate) fn pump(vm: &mut Vm) -> bool {
             }
         });
     }
+    vm.host.check()?;
     // Even on a pure timeout (`n == 0`) loop again so the deadline check runs.
-    true
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------

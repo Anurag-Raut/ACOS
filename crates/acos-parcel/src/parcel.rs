@@ -80,16 +80,37 @@ impl Default for Parcel {
 
 impl Clone for Parcel {
     /// Clone the bytes and object table; every owned descriptor is duplicated.
+    ///
+    /// The flat-object records store a descriptor **number**, so a clone must
+    /// rewrite each `BINDER_TYPE_FD` id to the number of its duplicated
+    /// descriptor; otherwise `appendFrom` (which resolves the id against the
+    /// clone's `fds`) cannot find it. This happens on Android's read/write-helper
+    /// path (`Parcel.appendFrom` for a Bundle with a helper set).
     fn clone(&self) -> Self {
+        let mut data = self.data.clone();
+        let objects = self.objects.clone();
+        let mut fds = Vec::with_capacity(self.fds.len());
+        let mut fd_iter = self.fds.iter();
+        for &o in &objects {
+            if o + 16 > data.len() {
+                continue;
+            }
+            let ty = u32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]);
+            if ty != BINDER_TYPE_FD {
+                continue;
+            }
+            let Some(src) = fd_iter.next() else { continue };
+            if let Ok(dup) = src.try_clone() {
+                let raw = dup.as_raw_fd() as u64;
+                data[o + 8..o + 16].copy_from_slice(&raw.to_le_bytes());
+                fds.push(dup);
+            }
+        }
         Self {
-            data: self.data.clone(),
+            data,
             pos: self.pos,
-            objects: self.objects.clone(),
-            fds: self
-                .fds
-                .iter()
-                .filter_map(|fd| fd.try_clone().ok())
-                .collect(),
+            objects,
+            fds,
             allow_fds: self.allow_fds,
             marked: self.marked.clone(),
             token_header: self.token_header,

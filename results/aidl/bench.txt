@@ -1,8 +1,8 @@
-default_scan_ms=513.1
-default_render_ms=1.8
+default_scan_ms=474.0
+default_render_ms=1.5
 default_bytes=869582
-all_scan_ms=799.9
-all_render_ms=44.9
+all_scan_ms=775.4
+all_render_ms=43.4
 all_interfaces=1099
 all_methods=10122
 all_bytes=4250450

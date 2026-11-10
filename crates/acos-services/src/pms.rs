@@ -9,6 +9,7 @@
 //! `hasSystemFeature`, `getPackagesForUid`, `notifyDexLoad`, plus
 //! `checkPermission`/`getPackageUid`.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +19,48 @@ use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
 use crate::parcelable;
 use crate::value::{Parcelable, Value};
+
+/// The typed PMS description most recently produced by the service.
+///
+/// `acos-services` cannot see the VM, so the runtime-side materialiser needs a
+/// way to obtain the *typed* values (not the prefix wire form) when it builds a
+/// real `ApplicationInfo`/`PackageInfo` through the Java bridge. The dispatcher
+/// is synchronous and single threaded, so the service stashes the description
+/// it just served and `acos-runtime::pms_java` reads it back immediately.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PmsDescription {
+    /// The installed application.
+    pub app: AppInfo,
+    /// The package record (activities, version, ...).
+    pub package: PackageInfo,
+}
+
+thread_local! {
+    static LAST_DESCRIPTION: RefCell<Option<PmsDescription>> = const { RefCell::new(None) };
+    static LAST_ACTIVITY: RefCell<Option<ActivityInfo>> = const { RefCell::new(None) };
+}
+
+/// Record the description a handler just served.
+pub fn cache_description(desc: PmsDescription) {
+    LAST_DESCRIPTION.with(|slot| *slot.borrow_mut() = Some(desc));
+}
+
+/// The description recorded by the last PMS handler call, if any.
+#[must_use]
+pub fn cached_description() -> Option<PmsDescription> {
+    LAST_DESCRIPTION.with(|slot| slot.borrow().clone())
+}
+
+/// Record the activity a `getActivityInfo` call resolved (or `None`).
+pub fn cache_activity_info(activity: Option<ActivityInfo>) {
+    LAST_ACTIVITY.with(|slot| *slot.borrow_mut() = activity);
+}
+
+/// The activity recorded by the last `getActivityInfo` call.
+#[must_use]
+pub fn cached_activity_info() -> Option<ActivityInfo> {
+    LAST_ACTIVITY.with(|slot| slot.borrow().clone())
+}
 
 /// ACOS fixture uid (MEASURED `display.txt`: `A=10192`).
 pub const FIXTURE_UID: i32 = 10192;
@@ -573,6 +616,10 @@ impl ServiceObject for PmsService {
             });
         }
         let mut state = self.state.lock().unwrap();
+        cache_description(PmsDescription {
+            app: state.app.clone(),
+            package: state.package.clone(),
+        });
         let reply = match method.name.as_str() {
             "getApplicationInfo" => {
                 let package = args.first().and_then(Value::as_str);
@@ -586,6 +633,7 @@ impl ServiceObject for PmsService {
             }
             "getActivityInfo" => {
                 let component = args.first().and_then(Value::as_parcelable);
+                // `ComponentName.writeToParcel` writes `mPackage` then `mClass`.
                 let name = component
                     .and_then(|p| p.field(1))
                     .and_then(Value::as_str)
@@ -596,6 +644,7 @@ impl ServiceObject for PmsService {
                     .iter()
                     .find(|a| a.name == name)
                     .cloned();
+                cache_activity_info(activity.clone());
                 vec![match activity {
                     Some(a) => Value::TypedObject(a.to_parcelable()),
                     None => Value::TypedObject(Parcelable::Null),

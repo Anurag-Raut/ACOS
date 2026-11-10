@@ -349,6 +349,33 @@ impl Vm {
         self.invoke(mid, obj, args, &class, name, sig)
     }
 
+    /// Call an instance method with **direct** (non-virtual) dispatch.
+    ///
+    /// Framework entry points such as the private
+    /// `android.app.ActivityThread.attach(ZJ)V` are not in any vtable, so
+    /// [`Vm::call_method`] (virtual dispatch) cannot reach them. This resolves
+    /// the method on the object's exact class, like `invoke-direct`.
+    pub fn call_method_direct(
+        &mut self,
+        obj: Handle,
+        name: &str,
+        sig: &str,
+        args: &[JavaValue],
+    ) -> BridgeResult<JavaValue> {
+        if obj == NULL {
+            return Err(BridgeError::DeadHandle(NULL));
+        }
+        if self.heap.get(obj).is_none() {
+            return Err(BridgeError::DeadHandle(obj));
+        }
+        let class = self.class_name_of(obj);
+        let cid = self
+            .class_of_object(obj)
+            .ok_or(BridgeError::DeadHandle(obj))?;
+        let mid = self.resolve_method(cid, &class, name, sig, InvokeKind::Direct)?;
+        self.invoke(mid, obj, args, &class, name, sig)
+    }
+
     /// Call a static method on `class`.
     pub fn call_static(
         &mut self,

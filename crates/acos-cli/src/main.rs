@@ -472,7 +472,12 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
     });
 
     if outcome.exit_code == 70 && outcome.uncaught.is_none() {
-        let (code, message) = parse_vm_error(&outcome.stderr);
+        // Prefer the typed error so host ceilings and future codes surface
+        // verbatim (`HOST_MEMORY_LIMIT`, `TIMEOUT`) instead of `VM_INTERNAL`.
+        let (code, message) = match &outcome.vm_error {
+            Some(e) => (e.code().to_string(), e.to_string()),
+            None => parse_vm_error(&outcome.stderr),
+        };
         let details = outcome.vm_error.as_ref().and_then(vm_error_details);
         return run_error(&request_id, true, &code, &message, details, started);
     }

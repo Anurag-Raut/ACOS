@@ -24,6 +24,13 @@ ANDROID_JAR="$SDK/platforms/android-34/android.jar"
 D8="$BUILD_TOOLS/d8"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Run the whole build under the host memory/time guard (ADR-0018).
+if [ -z "${ACOS_GUARDED:-}" ]; then
+    exec "$ROOT/tools/guarded.sh" --mem 6G --time 1800 -- \
+        env ACOS_GUARDED=1 "$0" "$@"
+fi
+
 SRC_DIR="$ROOT/fixtures/dexprogs"
 BUILD_DIR="$ROOT/fixtures/build/dexprogs"
 EXPECTED_DIR="$ROOT/fixtures/expected/dexprogs"

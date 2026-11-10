@@ -24,6 +24,13 @@ NDK="${ANDROID_NDK_HOME:-$SDK/ndk/27.1.12297006}"
 NDK_BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Run the whole build under the host memory/time guard (ADR-0018).
+if [ -z "${ACOS_GUARDED:-}" ]; then
+    exec "$ROOT/tools/guarded.sh" --mem 6G --time 1800 -- \
+        env ACOS_GUARDED=1 "$0" "$@"
+fi
+
 APPS_DIR="$ROOT/fixtures/apps"
 BUILD_DIR="$ROOT/fixtures/build/apps"
 APPEND_PY="$ROOT/tools/apk_append.py"

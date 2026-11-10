@@ -199,9 +199,14 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         "android.content.AttributionSource" => Parcelable::ordered(
             class,
             vec![
+                Value::Int(0),
+                Value::Int(4242),
                 Value::Int(10192),
                 Value::Str(Some("dev.acos.fixtures.helloviews".into())),
                 Value::Str(None),
+                Value::Binder(None),
+                Value::StringArray(None),
+                Value::List(None),
             ],
         ),
         "android.net.Uri" => Parcelable::ordered(class, vec![Value::Str(Some("content://settings/system".into()))]),

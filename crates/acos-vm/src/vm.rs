@@ -15,6 +15,7 @@ use crate::class::{
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
 use crate::heap::{new_array_data, ArrayObj, BuiltinData, Handle, Heap, Object, NULL};
+use crate::limits::HostGuard;
 
 /// Per-DEX lazy caches. Indices are the DEX's own id indices.
 #[derive(Debug)]
@@ -344,6 +345,9 @@ pub struct Vm {
     pub count_opcodes: bool,
     /// Maximum Java frames per thread before `StackOverflowError`.
     pub max_frames: usize,
+    /// Hard host-side RSS and wall-clock ceilings (`ACOS_HOST_RSS_MAX` /
+    /// `ACOS_WALL_MAX_SECS`), independent of the guest heap limit.
+    pub host: HostGuard,
 }
 
 impl Vm {
@@ -408,6 +412,7 @@ impl Vm {
             opcode_counts: [0; 256],
             count_opcodes: false,
             max_frames: 2048,
+            host: HostGuard::from_env(),
         };
         match options.corelib {
             CoreLib::Bootstrap => {
@@ -1242,6 +1247,9 @@ impl Vm {
     /// Allocate an object, running GC when required and throwing a Java
     /// `OutOfMemoryError` if the heap cannot be satisfied.
     pub fn alloc(&mut self, obj: Object) -> VmResult<Handle> {
+        // Host ceiling: independent of the guest heap, checked on every
+        // allocation (throttled internally).
+        self.host.check()?;
         if let Object::Array(a) = &obj {
             let desc = format!("[{}", a.elem_desc);
             if !self.class_by_desc.contains_key(&desc) {
@@ -1284,6 +1292,7 @@ impl Vm {
     }
 
     fn alloc_raw_no_gc(&mut self, obj: Object) -> VmResult<Handle> {
+        self.host.check()?;
         if self.heap.live_bytes > self.heap.max_bytes {
             return Err(VmError::JavaException(self.oom_object));
         }
@@ -1829,6 +1838,9 @@ impl Vm {
     }
 
     fn run_inner(&mut self, main_class: &str, args: &[String]) -> VmResult<RunOutcome> {
+        // Arm the watchdog for the actual run (boot parsing happens in
+        // `Vm::new`); the host RSS ceiling is already live.
+        self.host.arm_wall();
         let desc = format!("L{};", main_class.replace('.', "/"));
         let cid = self.load_class(&desc)?;
         let main_sig = "([Ljava/lang/String;)V";
@@ -1870,7 +1882,8 @@ impl Vm {
             if self.pending_exception != NULL || self.exit_request.is_some() {
                 break;
             }
-            if !crate::natives::looper::pump(self) {
+            self.host.check()?;
+            if !crate::natives::looper::pump(self)? {
                 break;
             }
         }

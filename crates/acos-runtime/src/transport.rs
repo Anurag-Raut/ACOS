@@ -128,7 +128,7 @@ impl BinderTransport for ServiceTransport {
 
     fn transact(
         &mut self,
-        _vm: &mut Vm,
+        vm: &mut Vm,
         binder: BinderId,
         code: u32,
         data: &mut Parcel,
@@ -138,6 +138,9 @@ impl BinderTransport for ServiceTransport {
         // The framework asks `Binder.getCallingUid/Pid` from inside `onTransact`;
         // report the app as the caller for the duration of the dispatch.
         push_calling_identity(self.uid, self.pid);
+        // The interface token is needed after the handler runs, to choose the
+        // reply encoder; grab it before the dispatcher consumes it.
+        let descriptor = data.peek_interface_token().ok().flatten();
         let mut host = self.host.borrow_mut();
         let result = host
             .transact(binder, code, data, reply, flags)
@@ -145,6 +148,28 @@ impl BinderTransport for ServiceTransport {
         let pending = host.take_deliveries();
         drop(host);
         pop_calling_identity();
+
+        // PMS replies are real framework Java objects: the framework marshals
+        // its own `ApplicationInfo`/`PackageInfo`/`ActivityInfo` through the
+        // Java bridge, overriding the generic prefix codec.
+        if result.is_ok() && flags & 1 == 0 {
+            if let Some(descriptor) = descriptor.as_deref() {
+                if descriptor == "android.content.IContentProvider" {
+                    // The framework instantiates the generation `MemoryIntArray`
+                    // through its static `CREATOR`; make sure `<clinit>` ran.
+                    crate::settings_java::prepare_settings_reply(vm)
+                        .map_err(|e| format!("settings_java: {e}"))?;
+                }
+                if descriptor == "android.content.pm.IPackageManager" {
+                    if let Some(method) = acos_aidl::lookup(descriptor, code) {
+                        if crate::pms_java::owns_method(&method.name) {
+                            crate::pms_java::rewrite_reply(vm, &method.name, reply)
+                                .map_err(|e| format!("pms_java: {e}"))?;
+                        }
+                    }
+                }
+            }
+        }
 
         let deliveries = pending
             .into_iter()

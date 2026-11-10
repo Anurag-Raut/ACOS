@@ -47,9 +47,15 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(c, "getReference", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
         vm.register_native(c, "getObject", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
         vm.register_native(c, "getObjectVolatile", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
+        vm.register_native(c, "getReferenceVolatile", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
+        vm.register_native(c, "getReferenceAcquire", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
+        vm.register_native(c, "getReferenceOpaque", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
         vm.register_native(c, "putReference", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
         vm.register_native(c, "putObject", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
         vm.register_native(c, "putObjectVolatile", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
+        vm.register_native(c, "putReferenceVolatile", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
+        vm.register_native(c, "putReferenceRelease", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
+        vm.register_native(c, "putReferenceOpaque", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
         vm.register_native(c, "compareAndSetInt", "(Ljava/lang/Object;JII)Z", cas_int);
         vm.register_native(c, "compareAndSetLong", "(Ljava/lang/Object;JJJ)Z", cas_long);
         vm.register_native(c, "compareAndSetReference", "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z", cas_object);
@@ -128,23 +134,31 @@ fn object_field_offset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-/// Decode an unsafe offset into `(is_array, index_slot)`.
-fn offset_slots(offset: i64) -> usize {
-    if offset >= ARRAY_BASE as i64 {
-        ((offset - ARRAY_BASE as i64) / 4) as usize
-    } else {
-        ((offset - INSTANCE_BASE as i64) / 4).max(0) as usize
-    }
+/// Decode an **array** offset into a 4-byte element index.
+///
+/// Only valid for arrays: the array data base is [`ARRAY_BASE`]. Instance
+/// offsets are decoded with [`instance_slot`] because an instance field offset
+/// can also be `>= ARRAY_BASE` (slot 2 and beyond), and the old
+/// `offset >= ARRAY_BASE` heuristic then read/wrote the wrong slot. That broke
+/// `ConcurrentHashMap`'s `sizeCtl` CAS (`initTable` spun forever) during the
+/// framework boot.
+fn array_slot(offset: i64) -> usize {
+    ((offset - ARRAY_BASE as i64) / 4).max(0) as usize
+}
+
+/// Decode an **instance** field offset into a 4-byte slot index.
+fn instance_slot(offset: i64) -> usize {
+    ((offset - INSTANCE_BASE as i64) / 4).max(0) as usize
 }
 
 fn get_slot(vm: &Vm, obj: crate::heap::Handle, offset: i64) -> u32 {
     match vm.heap.get(obj) {
         Some(Object::Instance { fields, .. }) => {
-            fields.get(offset_slots(offset)).copied().unwrap_or(0)
+            fields.get(instance_slot(offset)).copied().unwrap_or(0)
         }
         Some(Object::Array(a)) => array_slot_u32(a, offset),
         Some(Object::String(u)) => {
-            let i = offset_slots(offset);
+            let i = instance_slot(offset);
             u.get(i).copied().unwrap_or(0) as u32
         }
         _ => 0,
@@ -154,7 +168,7 @@ fn get_slot(vm: &Vm, obj: crate::heap::Handle, offset: i64) -> u32 {
 fn set_slot(vm: &mut Vm, obj: crate::heap::Handle, offset: i64, v: u32) {
     match vm.heap.get_mut(obj) {
         Some(Object::Instance { fields, .. }) => {
-            let i = offset_slots(offset);
+            let i = instance_slot(offset);
             if i < fields.len() {
                 fields[i] = v;
             }
@@ -165,7 +179,7 @@ fn set_slot(vm: &mut Vm, obj: crate::heap::Handle, offset: i64, v: u32) {
 }
 
 fn array_slot_u32(a: &ArrayObj, offset: i64) -> u32 {
-    let i = offset_slots(offset);
+    let i = array_slot(offset);
     match &a.data {
         ArrayData::Int(v) => v.get(i).copied().unwrap_or(0) as u32,
         ArrayData::Long(v) => v.get(i / 2).map(|x| *x as u32).unwrap_or(0),
@@ -180,7 +194,7 @@ fn array_slot_u32(a: &ArrayObj, offset: i64) -> u32 {
 }
 
 fn set_array_slot_u32(a: &mut ArrayObj, offset: i64, v: u32) {
-    let i = offset_slots(offset);
+    let i = array_slot(offset);
     match &mut a.data {
         ArrayData::Int(x) => {
             if i < x.len() {

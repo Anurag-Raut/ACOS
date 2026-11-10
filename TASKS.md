@@ -92,8 +92,18 @@ slice of P1–P5.
   every speed claim.
 - **No fake success:** unimplemented behaviour is `unsupported`/`escalated`.
 - **Fidelity label** on every result; JVM match ≠ Android-verified.
-- **Host safety:** 85 % RAM guard; the ART oracle emulator is ≤2 GiB, one
-  instance, always shut down (ADR-0015); no privileged containers; no `sudo`; no
-  >2 GB downloads without authorisation; legacy repo read-only.
+- **Host safety (ADR-0018):** host RAM must never exceed 90% (internal target
+  85%). **Every** `cargo test`, `acos run-dex`, benchmark, build script and
+  ad-hoc command runs through `tools/guarded.sh`:
+  `tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-vm`.
+  `tools/build-*.sh`, `tools/diff-dexprogs.sh` and `tools/bench-vm.sh` already
+  re-invoke it. `tools/ramguard.sh` runs during parallel waves and kills ACOS
+  processes once `MemAvailable < 9 GiB` or a single process exceeds 8 GiB RSS.
+  The VM enforces `ACOS_HOST_RSS_MAX` (default 2 GiB, `HOST_MEMORY_LIMIT`) and
+  `ACOS_WALL_MAX_SECS` (default 600, `TIMEOUT`) independently of the guest heap.
+  Free processes, fds, temp dirs and scratch as soon as they are done; the ART
+  oracle emulator is ≤2 GiB, one instance, always shut down (ADR-0015); no
+  privileged containers; no `sudo`; no >2 GB downloads without authorisation;
+  legacy repo read-only.
 - **Measurement:** no fixed sleeps; state the metric type; ≥20 reps p50/p95;
   interleaved A/B; artifacts under `results/` (`BENCHMARKS.md`).

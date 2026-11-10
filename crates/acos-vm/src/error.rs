@@ -27,6 +27,13 @@ pub enum VmError {
     Load(String),
     /// The real boot classpath cache is missing or incomplete.
     BootClasspathMissing(String),
+    /// The host process RSS crossed `ACOS_HOST_RSS_MAX`.
+    HostMemoryLimit {
+        rss_bytes: usize,
+        limit_bytes: usize,
+    },
+    /// The run crossed `ACOS_WALL_MAX_SECS`.
+    Timeout { elapsed_secs: u64, limit_secs: u64 },
 }
 
 impl VmError {
@@ -39,6 +46,8 @@ impl VmError {
             VmError::Internal(_) => "VM_INTERNAL",
             VmError::Load(_) => "DEX_LOAD_ERROR",
             VmError::BootClasspathMissing(_) => "BOOT_CLASSPATH_MISSING",
+            VmError::HostMemoryLimit { .. } => "HOST_MEMORY_LIMIT",
+            VmError::Timeout { .. } => "TIMEOUT",
         }
     }
 
@@ -70,6 +79,23 @@ impl fmt::Display for VmError {
             VmError::Internal(m) => write!(f, "internal VM error: {m}"),
             VmError::Load(m) => write!(f, "class loading error: {m}"),
             VmError::BootClasspathMissing(m) => write!(f, "{m}"),
+            VmError::HostMemoryLimit {
+                rss_bytes,
+                limit_bytes,
+            } => write!(
+                f,
+                "host RSS limit exceeded: {} MiB > {} MiB (ACOS_HOST_RSS_MAX)",
+                rss_bytes / (1024 * 1024),
+                limit_bytes / (1024 * 1024)
+            ),
+            VmError::Timeout {
+                elapsed_secs,
+                limit_secs,
+            } => write!(
+                f,
+                "wall-clock limit exceeded: {}s > {}s (ACOS_WALL_MAX_SECS)",
+                elapsed_secs, limit_secs
+            ),
         }
     }
 }

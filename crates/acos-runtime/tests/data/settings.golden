@@ -1,0 +1,7 @@
+settings.animator_duration_scale=1
+settings.generation.initial=0
+settings.animator_duration_scale.after_put=0
+settings.generation.after_put=1
+settings.auto_caps=1
+settings.secure_unset=<null>
+settings=ok

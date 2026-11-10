@@ -82,6 +82,12 @@ pub const NAMES: &[(&str, &str)] = &[
         "com.android.internal.app.IVoiceInteractionManagerService",
     ),
     ("content", "android.content.IContentService"),
+    // Test seam: the Settings provider has no `ServiceManager` name on a real
+    // device (it is reached through `IActivityManager.getContentProvider`), but
+    // exposing it here lets the T-27 Java test drive the real hand-written
+    // `ContentProviderProxy` directly without reimplementing the provider
+    // acquisition path (which is T-23/T-24 work).
+    ("settings", "android.content.IContentProvider"),
     ("input", "android.hardware.input.IInputManager"),
     (
         "androidfuture",
@@ -280,7 +286,7 @@ pub fn install(host: &mut ServiceHost) {
     // handle the dispatcher routes.
     let settings_provider = Arc::clone(&settings);
     host.register(
-        "settings_provider",
+        "settings",
         "android.content.IContentProvider",
         move |_w| {
             Box::new(crate::provider::ProviderService::new(Arc::clone(

@@ -14,11 +14,14 @@
 
 pub mod binder;
 mod character;
+mod fwk_debug;
+mod fwk_reflect;
 mod icu;
 mod io;
 mod lang;
 pub mod looper;
 mod math;
+mod memintarray;
 mod os_clock;
 mod parcel;
 pub mod os_log;
@@ -41,6 +44,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vmrt::install(vm)?;
     math::install(vm)?;
     reflect::install(vm)?;
+    fwk_reflect::install(vm)?;
+    fwk_debug::install(vm)?;
     parcel::install(vm)?;
     unsafe_natives::install(vm)?;
     looper::install(vm)?;
@@ -51,5 +56,6 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     os_clock::install(vm);
     os_log::install(vm);
     os_misc::install(vm);
+    memintarray::install(vm);
     Ok(())
 }

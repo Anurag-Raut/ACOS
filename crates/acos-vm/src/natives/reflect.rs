@@ -13,6 +13,7 @@ use crate::vm::{descriptor_to_dotted, InvokeKind, Vm};
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let c = "Ljava/lang/Class;";
     vm.register_native(c, "getNameNative", "()Ljava/lang/String;", cl_get_name);
+    vm.register_native(c, "isAssignableFrom", "(Ljava/lang/Class;)Z", cl_is_assignable_from);
     vm.register_native(c, "getPrimitiveClass", "(Ljava/lang/String;)Ljava/lang/Class;", cl_get_primitive);
     vm.register_native(c, "classForName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", cl_for_name);
     vm.register_native(c, "newInstance", "()Ljava/lang/Object;", cl_new_instance);
@@ -73,6 +74,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     let v = "Ljava/lang/VMClassLoader;";
     vm.register_native(v, "findLoadedClass", "(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;", cl_for_name_loader);
+    vm.register_native(
+        v,
+        "getBootClassPathEntries",
+        "()[Ljava/lang/String;",
+        vm_boot_classpath_entries,
+    );
 
     vm.register_native(
         "Ljava/lang/Enum;",
@@ -175,7 +182,14 @@ fn cl_get_primitive(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn cl_for_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let name_h = vm.arg_ref(ctx, 0);
     let name = vm.string_to_rust(name_h).unwrap_or_default();
+    let initialize = vm.arg_bool(ctx, 1);
     if let Some(cid) = resolve_class_name(vm, &name)? {
+        // `Class.forName(name, initialize, loader)`: the boolean is meaningful,
+        // so run `<clinit>` (ART does this before `readParcelableCreator`
+        // reads a hidden class's `CREATOR`).
+        if initialize {
+            vm.initialize_class(cid)?;
+        }
         let obj = vm.class_object(cid)?;
         vm.ret_ref(ctx, obj);
         Ok(())
@@ -185,6 +199,24 @@ fn cl_for_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             Some(&name),
         ))
     }
+}
+
+/// `Class.isAssignableFrom(Class)`.
+///
+/// Needed by `Parcel.readParcelableCreator`, which rejects a `Parcelable`
+/// whose class does not report itself as implementing `Parcelable` (the real
+/// method is native in ART).
+fn cl_is_assignable_from(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let other = vm.arg_ref(ctx, 0);
+    let to = vm.class_id_of_class_object(this);
+    let from = vm.class_id_of_class_object(other);
+    let ok = match (from, to) {
+        (Some(f), Some(t)) => vm.is_assignable(f, t)?,
+        _ => false,
+    };
+    vm.ret_bool(ctx, ok);
+    Ok(())
 }
 
 fn cl_for_name_loader(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -197,6 +229,20 @@ fn cl_for_name_loader(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
         None => vm.ret_ref(ctx, NULL),
     }
+    Ok(())
+}
+
+/// `VMClassLoader.getBootClassPathEntries()`.
+///
+/// `java.lang.BootClassLoader.loadClass` iterates the returned entries looking
+/// for the class file. ACOS resolves boot classes through the VM's own loader,
+/// so an empty list is correct: `loadClass` then falls back to the
+/// `VMClassLoader.findLoadedClass` native, which searches the boot images.
+fn vm_boot_classpath_entries(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = vm
+        .new_array_empty("java.lang.String", 0)
+        .map_err(|e| crate::error::VmError::Internal(format!("boot classpath entries: {e}")))?;
+    vm.ret_ref(ctx, h);
     Ok(())
 }
 

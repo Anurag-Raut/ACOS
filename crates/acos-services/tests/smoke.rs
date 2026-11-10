@@ -98,18 +98,24 @@ fn settings_read_and_generation() {
     let mut host = ServiceHost::standard();
     let provider = host.aux("android.content.IContentProvider").expect("provider");
     let args = |method: &str, arg: &str| {
+        // `ContentProviderProxy.call(AttributionSource, authority, method, arg, extras)`.
         vec![
             Value::Parcelable(Parcelable::ordered(
                 "android.content.AttributionSource",
                 vec![
+                    Value::Int(0),
+                    Value::Int(4242),
                     Value::Int(10192),
                     Value::Str(Some("dev.acos.fixtures.helloviews".into())),
                     Value::Str(None),
+                    Value::Binder(None),
+                    Value::StringArray(None),
+                    Value::List(None),
                 ],
             )),
+            Value::Str(Some("settings".into())),
             Value::Str(Some(method.into())),
             Value::Str(Some(arg.into())),
-            Value::Str(Some("settings".into())),
             Value::Bundle(None),
         ]
     };

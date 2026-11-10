@@ -53,10 +53,13 @@ if [ ! -d "$FIX" ]; then
 fi
 if [ ! -x "$BIN" ]; then
     echo "diff-dexprogs: building acos (release)..." >&2
-    (cd "$ROOT" && cargo build --release -p acos-cli) || exit 2
+    (cd "$ROOT" && "$ROOT/tools/guarded.sh" --mem 6G --time 1200 -- \
+        cargo build --release -p acos-cli) || exit 2
 fi
 
-TMP="$(mktemp -d)"
+# Scratch is kept under target/tmp and removed on exit (ADR-0018).
+mkdir -p "$ROOT/target/tmp"
+TMP="$(mktemp -d "$ROOT/target/tmp/diff-dexprogs.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "diff-dexprogs: mode=$MODE corelib=$CORELIB expected=$EXPECTED_KIND"
@@ -68,10 +71,12 @@ for dir in "$FIX"/*/; do
     exp_stdout="$EXPECTED/$name.stdout"
     exp_exit="$(cat "$EXPECTED/$name.exit" 2>/dev/null || echo 0)"
     if [ "$STRESS" = "1" ]; then
-        ACOS_GC_STRESS=1 "$BIN" run-dex "$dir/classes.dex" --main Main \
+        ACOS_GC_STRESS=1 "$ROOT/tools/guarded.sh" --mem 2G --time 60 -- \
+            "$BIN" run-dex "$dir/classes.dex" --main Main \
             --corelib "$CORELIB" --json >"$TMP/$name.json" 2>"$TMP/$name.err"
     else
-        "$BIN" run-dex "$dir/classes.dex" --main Main \
+        "$ROOT/tools/guarded.sh" --mem 2G --time 60 -- \
+            "$BIN" run-dex "$dir/classes.dex" --main Main \
             --corelib "$CORELIB" --json >"$TMP/$name.json" 2>"$TMP/$name.err"
     fi
     exp_stderr="$EXPECTED/$name.stderr"

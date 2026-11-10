@@ -765,6 +765,13 @@ fn system(vm: &mut Vm) {
     vm.register_native(c, "setIn0", "(Ljava/io/InputStream;)V", sys_set_in);
     vm.register_native(c, "specialProperties", "()[Ljava/lang/String;", sys_special_properties);
     vm.register_native(c, "mapLibraryName", "(Ljava/lang/String;)Ljava/lang/String;", sys_map_library_name);
+    // `System.log` is the core-library warning sink; ACOS has no log sink here.
+    vm.register_native(c, "log", "(CLjava/lang/String;Ljava/lang/Throwable;)V", sys_log);
+    vm.register_native(c, "log", "(CLjava/lang/String;)V", sys_log);
+}
+
+fn sys_log(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    Ok(())
 }
 
 fn sys_arraycopy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

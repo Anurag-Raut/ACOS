@@ -1071,3 +1071,33 @@ It is already compatible (subset). Recommended improvements, in priority order:
    `fidelity: native-runtime`; never silently upgrade the inspect fidelity.
 10. **Keep `error: null` on pass** (current behaviour) for compatibility; the
     protocol's `Envelope` omits it when absent, which also deserializes fine.
+
+---
+
+## 16. Host resource ceilings (`run-dex` / `acos-vm`)
+
+`acos-vm` enforces two hard ceilings on the **host process**, independent of the
+guest heap (`ACOS_HEAP_MAX`, which only bounds managed bytes and produces a Java
+`OutOfMemoryError`). They exist because a VM bug or an unpruned host-side table
+can otherwise drive the host to tens of gigabytes (host-safety incident
+2026-11-10). See ADR-0018 and `docs/FINDINGS.md`.
+
+| Env | Default | Effect on breach |
+|---|---|---|
+| `ACOS_HOST_RSS_MAX` | `2G` (2 GiB) | Aborts with structured code `HOST_MEMORY_LIMIT`. Accepts `K`/`M`/`G` suffixes; `0` disables. |
+| `ACOS_WALL_MAX_SECS` | `600` (10 min) | Aborts with structured code `TIMEOUT`. `0` disables. |
+
+* The RSS ceiling is sampled from `/proc/self/status:VmRSS` at most every
+  100 ms, on every allocation/GC threshold and once per scheduler turn, so the
+  hot paths stay cheap.
+* The wall watchdog is checked on the same points and also bounds the blocking
+  `Looper` pump, so a permanently parked thread cannot hang a run past the
+  deadline.
+* On breach, `Vm::run` returns a `RunOutcome` with `exit_code: 70`, a
+  `stderr` line `acos-vm error: HOST_MEMORY_LIMIT: ...` (or `TIMEOUT`) and the
+  typed `vm_error`. In the `--json` envelope the same code/message is reported
+  in `error`.
+* Every wrapped run (`tools/guarded.sh`) exports both variables so the wrapper's
+  bound and the VM's bound agree. `tools/ramguard.sh` is the out-of-process
+  backstop: it kills `target/*/acos*` processes when `MemAvailable < 9 GiB`
+  (≈85% used on the 62 GiB host) or a single process exceeds 8 GiB RSS.

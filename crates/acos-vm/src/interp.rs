@@ -95,6 +95,10 @@ fn release_frame(vm: &mut Vm, t: usize, f: Frame) {
 pub fn run(vm: &mut Vm) -> VmResult<()> {
     let mut next_yield: u64 = 8192;
     loop {
+        // Host RSS / watchdog check once per scheduler turn (cheap; the RSS
+        // read is throttled). This bounds a stuck green thread even when it
+        // never reaches an allocation.
+        vm.host.check()?;
         if vm.pending_exception != NULL {
             break;
         }
@@ -119,7 +123,14 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
         let n = run_batch(vm, t, 0, true)?;
         vm.metrics.instructions += n;
         if vm.threads.len() > 1 && vm.metrics.instructions >= next_yield {
-            vm.threads[t].status = ThreadStatus::Runnable;
+            // Pre-empt the running thread for scheduling fairness, but never
+            // resurrect a thread that blocked/parked during the batch. Race:
+            // resetting a `Parked` looper thread to `Runnable` here made the
+            // scheduler re-run it forever, so `pump` was never reached and the
+            // host burned 100% CPU (vm-perf merge regression, W12).
+            if vm.threads[t].status == ThreadStatus::Running {
+                vm.threads[t].status = ThreadStatus::Runnable;
+            }
             let _ = pick_runnable(vm);
             next_yield = vm.metrics.instructions + 8192;
         }
@@ -160,6 +171,7 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                 ThreadStatus::Sleeping
                     | ThreadStatus::Waiting
                     | ThreadStatus::BlockedMonitor(_)
+                    | ThreadStatus::Parked
                     | ThreadStatus::Finished
             )
         {

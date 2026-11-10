@@ -281,12 +281,26 @@ impl SettingsState {
                 Some(value) => bundle.put("value", Value::Str(Some(value))),
                 None => bundle.put("value", Value::Skipped),
             }
-            // The first read per namespace hands back the fd-backed generation
-            // counter; later reads share it (Settings$GenerationTracker polls
-            // the same MemoryIntArray).
+            // The generation counter is observable as a plain int (test /
+            // evidence) and, on the first read per namespace, as the real
+            // fd-backed `MemoryIntArray` `Settings$GenerationTracker` uses.
+            bundle.put(
+                "generation_int",
+                Value::Int(self.generation.generation(namespace)),
+            );
             if !self.generation_sent[namespace.index()] {
                 if let Some(fd) = self.generation.file_descriptor() {
-                    bundle.put("generation", Value::RawFd(Some(RawFdValue(fd))));
+                    let pfd = Parcelable::ordered(
+                        "android.os.ParcelFileDescriptor",
+                        vec![Value::Int(0), Value::RawFd(Some(RawFdValue(fd)))],
+                    );
+                    bundle.put(
+                        "generation",
+                        Value::Parcelable(Parcelable::ordered(
+                            "android.util.MemoryIntArray",
+                            vec![Value::NamedParcelable(pfd)],
+                        )),
+                    );
                     self.generation_sent[namespace.index()] = true;
                 }
             }
@@ -343,8 +357,9 @@ impl ServiceObject for ProviderService {
         }
         let reply = match method.name.as_str() {
             "call" => {
-                let provider_method = args.get(1).and_then(Value::as_str).unwrap_or_default();
-                let arg = args.get(2).and_then(Value::as_str).unwrap_or_default();
+                // `ContentProviderProxy.call(AttributionSource, authority, method, arg, extras)`.
+                let provider_method = args.get(2).and_then(Value::as_str).unwrap_or_default();
+                let arg = args.get(3).and_then(Value::as_str).unwrap_or_default();
                 let extras = args.get(4).and_then(Value::as_bundle);
                 let mut state = self.state.lock().unwrap();
                 let bundle = state.call(provider_method, arg, extras)?;
@@ -464,11 +479,15 @@ mod tests {
     }
 
     #[test]
-    fn get_returns_value_bundle_and_generation_fd() {
+    fn get_returns_value_bundle_and_generation_memintarray() {
         let mut state = SettingsState::new();
         let bundle = state.call("GET_system", "auto_caps", None).unwrap();
         assert_eq!(bundle.get("value").and_then(Value::as_str), Some("1"));
-        assert!(matches!(bundle.get("generation"), Some(Value::RawFd(Some(_)))));
+        let generation = bundle
+            .get("generation")
+            .and_then(Value::as_parcelable)
+            .expect("generation parcelable");
+        assert_eq!(generation.class(), Some("android.util.MemoryIntArray"));
         // The fd is handed out once per namespace.
         let again = state.call("GET_system", "auto_caps", None).unwrap();
         assert!(again.get("generation").is_none());
@@ -487,6 +506,25 @@ mod tests {
         let bundle = state.call("GET_global", "answer", None).unwrap();
         assert_eq!(bundle.get("value").and_then(Value::as_str), Some("42"));
         assert!(bundle.get("generation").is_some());
+    }
+
+    #[test]
+    fn change_count_is_exactly_one_per_real_change() {
+        // "observer fires once per change, never spuriously" at the state
+        // machine level: a GET never records a change, a PUT records exactly
+        // one, and a failed/unknown method records none.
+        let mut state = SettingsState::new();
+        assert!(state.changes.is_empty());
+        state.call("GET_global", "animator_duration_scale", None).unwrap();
+        assert!(state.changes.is_empty(), "a read is not a change");
+        let mut extras = Bundle::new();
+        extras.put("value", Value::Str(Some("1".into())));
+        state.call("PUT_global", "k", Some(&extras)).unwrap();
+        assert_eq!(state.changes.len(), 1, "one PUT is one change");
+        state.call("GET_global", "k", None).unwrap();
+        assert_eq!(state.changes.len(), 1, "a read after a change adds none");
+        state.call("PUT_global", "k", Some(&extras)).unwrap();
+        assert_eq!(state.changes.len(), 2, "a second PUT is a second change");
     }
 
     #[test]

@@ -126,6 +126,7 @@ name = "acos-runtime"
 version = "0.1.0"
 dependencies = [
  "acos-aidl",
+ "acos-apk",
  "acos-dex",
  "acos-parcel",
  "acos-services",

@@ -26,6 +26,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
 
+pub mod atms_boot;
+pub mod boot;
+pub mod pms_java;
+pub mod settings_java;
 pub mod transport;
 
 use std::cell::RefCell;
@@ -43,6 +47,9 @@ use crate::transport::ServiceTransport;
 pub const FIXTURE_UID: u32 = 10192;
 /// Synthetic pid for the app process (ACOS is in-process).
 pub const FIXTURE_PID: i32 = 1000;
+
+pub use atms_boot::{AttachLog, AttachRecord};
+pub use boot::{BootError, BootReport};
 
 /// A booted ACOS runtime: VM + service host + Binder transport.
 pub struct Runtime {

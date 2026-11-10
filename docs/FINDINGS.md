@@ -240,3 +240,31 @@ All 20 console programs run on the real core-oj/core-libart/core-icu4j bytecode 
 ## 2026-11-10 — Runaway acos process reached 45 GB RSS (host-safety incident)
 
 During the parallel W9/W10 waves a debug `acos run-dex .../01_hello/classes.dex --main Main` was found after ~2.8 h with 45 GB RSS (host 62 GB, no swap, ~91% used). It was killed manually; no crash. There was no host-side memory or time ceiling in the VM (only the guest ACOS_HEAP_MAX). Actions: temporary watchdog (kills acos processes >8 GB or when MemAvailable <9 GB, log in /tmp/acos-ramguard.log), W12 to find the root cause and add VM-side limits and tools/guarded.sh. Policy recorded in DECISIONS.md ADR-0018.
+
+**Root cause (W12, 2026-11-10).** A semantic regression from the vm-perf merge
+(`2563a86`). The rewrite of `crates/acos-vm/src/interp.rs::run_batch` omitted
+`ThreadStatus::Parked` from its scheduler-yield condition, and `interp::run`
+unconditionally set the current thread back to `Runnable` on its periodic
+pre-emption (`next_yield`). A looper thread parked in
+`MessageQueue.nativePollOnce(-1)` was therefore picked up again every 8192
+instructions and never reached the blocking `pump` in `vm::run_inner` — a 100%
+host-CPU spin with unbounded execution. It only manifests when the VM holds more
+than one thread (`vm.threads.len() > 1`); `LooperBlockMain` (one thread) blocks
+correctly, which is why the existing `looper_cpu` test was green. Because the VM
+had no host-side ceiling, the spin's execution (plus any guest/heap work) could
+grow the host process far past the 256 MiB guest heap without ever tripping
+anything.
+
+**Evidence.** Before the fix, `target/debug/acos run-dex LooperBlockMT
+--corelib real` consumed 997 cs of CPU in 10 s (100% of a core) with flat RSS;
+the regression test `crates/acos-vm/tests/looper_cpu_mt.rs` fails `308 -> 808`
+CPU ticks when the original `run_batch`/`run` code is restored and passes after
+the fix. `01_hello` itself exits normally, so the reported command alone does
+not reproduce; a stuck W10 agent/test process that parked a looper was the
+unbounded one.
+
+**Fix.** Yield on `Parked` in `run_batch`; only reset the current thread to
+`Runnable` when it is still `Running`. Product-side `limits::HostGuard` now
+enforces `ACOS_HOST_RSS_MAX` (`HOST_MEMORY_LIMIT`) and `ACOS_WALL_MAX_SECS`
+(`TIMEOUT`) independently of the guest heap (ADR-0018, `docs/AGENT_API.md`
+§16), and `tools/guarded.sh` / `tools/ramguard.sh` bound and watch every run.
