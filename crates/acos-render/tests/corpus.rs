@@ -69,6 +69,59 @@ const CASES: &[Case] = &[
         min_mean_ssim: 0.980,
         max_differing: 4.0,
     },
+    // W82-A widget corpus (ListView/EditText/Button/CheckBox/Switch/RadioButton/
+    // ProgressBar/AlertDialog/Toast/ellipsize/RTL). Thresholds are measured
+    // (results/render/W82A_CORPUS.md) with headroom; the residual is documented
+    // there (SystemUI chrome + vector-widget + ellipsize parity).
+    Case {
+        app: "form-validation",
+        reference: "fixtures/reference/form-validation/art-api34-x86_64/screenshot_initial.png",
+        max_mae: 1.3,
+        min_mean_ssim: 0.983,
+        max_differing: 3.0,
+    },
+    Case {
+        app: "form-validation-error",
+        reference: "fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_empty.png",
+        max_mae: 3.0,
+        min_mean_ssim: 0.968,
+        max_differing: 8.0,
+    },
+    Case {
+        app: "list-scroll",
+        reference: "fixtures/reference/list-scroll/art-api34-x86_64/screenshot_initial.png",
+        max_mae: 4.0,
+        min_mean_ssim: 0.950,
+        max_differing: 5.5,
+    },
+    Case {
+        app: "list-scroll-scrolled",
+        reference: "fixtures/reference/list-scroll/art-api34-x86_64/screenshot_scrolled.png",
+        max_mae: 5.0,
+        min_mean_ssim: 0.908,
+        max_differing: 8.0,
+    },
+    Case {
+        app: "text-input",
+        reference: "fixtures/reference/text-input/art-api34-x86_64/screenshot_typed.png",
+        max_mae: 5.5,
+        min_mean_ssim: 0.930,
+        max_differing: 7.0,
+    },
+    Case {
+        app: "dialog-menu-dialog",
+        reference: "fixtures/reference/dialog-menu/art-api34-x86_64/screenshot_dialog.png",
+        max_mae: 9.0,
+        min_mean_ssim: 0.930,
+        max_differing: 35.0,
+    },
+    Case {
+        app: "widget-gallery",
+        reference: "fixtures/reference/widget-gallery/art-api34-x86_64/screenshot_initial.png",
+        max_mae: 5.5,
+        min_mean_ssim: 0.935,
+        max_differing: 7.5,
+    },
 ];
 
 fn repo_root() -> PathBuf {
