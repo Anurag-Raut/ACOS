@@ -285,6 +285,46 @@ pub(crate) fn write_bytes(addr: i64, bytes: &[u8]) -> Result<(), MemError> {
     with_bytes_mut(addr, bytes.len(), |dst| dst.copy_from_slice(bytes))
 }
 
+/// The real host address of a byte-contiguous window of a **synthetic**
+/// address, or `None` when the address does not name one.
+///
+/// ACOS normally keeps every pointer synthetic (`region<<32|offset` or an
+/// `addressOf` array alias) so the VM never hands a host pointer to guest code.
+/// Native code that dereferences `GetDirectBufferAddress` directly — the
+/// Flutter engine's `flutter::DispatchPointerDataPacket` does a `memcpy` out of
+/// it — cannot use such an address. This is the one deliberate escape hatch:
+/// it resolves the backing `Vec<u8>`/`byte[]` to its host buffer for immediate
+/// use. The pointer is valid only until the region is resized/freed or the
+/// array is mutated; callers must copy before returning to Java.
+///
+/// Returns `None` for a non-synthetic address, a null/already freed one, a
+/// `byte[]`-longer-than-requested window, or a non-byte-contiguous array.
+pub(crate) fn host_pointer(vm: &Vm, addr: i64, len: usize) -> Option<usize> {
+    if let Some((handle, off)) = array_parts(addr) {
+        if handle == 0 {
+            return None;
+        }
+        let Object::Array(a) = vm.heap.get(handle)? else {
+            return None;
+        };
+        let ArrayData::Byte(v) = &a.data else {
+            return None;
+        };
+        let end = off.checked_add(len)?;
+        return Some(v.get(off..end)?.as_ptr() as usize);
+    }
+    let (id, off) = split(addr).ok()?;
+    MEM.with(|m| {
+        let m = m.borrow();
+        let region = m.regions.get(&id)?;
+        let end = off.checked_add(len)?;
+        if end > region.data.len() {
+            return None;
+        }
+        Some(region.data[off..end].as_ptr() as usize)
+    })
+}
+
 /// `memmove` between two (possibly overlapping) native regions.
 #[allow(dead_code)]
 pub(crate) fn copy_within(src: i64, dst: i64, len: usize) -> Result<(), MemError> {

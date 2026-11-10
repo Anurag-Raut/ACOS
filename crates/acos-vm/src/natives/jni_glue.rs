@@ -356,6 +356,16 @@ pub fn native_mem_read(addr: i64, len: usize) -> Result<Vec<u8>, String> {
     super::native_mem::read_bytes(addr, len).map_err(|e| format!("{e:?}"))
 }
 
+/// Real host address backing a synthetic `DirectByteBuffer`/`addressOf` alias.
+///
+/// Unlike the rest of this surface this deliberately exposes a host pointer, but
+/// only to native code that dereferences `GetDirectBufferAddress` (the JNI
+/// carrier in `acos-jni`). It is derived safely from the backing slice; the
+/// caller must use it immediately and may not retain it across a Java call.
+pub fn native_mem_host_pointer(vm: &crate::vm::Vm, addr: i64, len: usize) -> Option<usize> {
+    super::native_mem::host_pointer(vm, addr, len)
+}
+
 /// Write `bytes` into a synthetic native region.
 pub fn native_mem_write(addr: i64, bytes: &[u8]) -> Result<(), String> {
     super::native_mem::write_bytes(addr, bytes).map_err(|e| format!("{e:?}"))

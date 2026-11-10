@@ -1,0 +1,352 @@
+ENGINE_BASE 0x7ffff60b2000 (from timerfd_settime return)
+SITE +0x559bb0 WAKEUP bytes=4883ec28
+SITE +0x555582 REG bytes=55415741
+SITE +0x554d92 POST bytes=8a472084
+SITE +0x554db4 RUNEXP bytes=55415741
+SITE +0x554e66 CMP bytes=49394540
+SITE +0x555121 PRIMARY bytes=e8c2dcff
+SITE +0x55518c SUB bytes=488b7b20
+SITE +0x9d0010 FIRECB bytes=55415741
+SITE +0x9d04de FRAMETASK bytes=55415741
+SITE +0x9cfb88 SECCB bytes=55415741
+SITE +0x5387d6 AWAIT bytes=55415741
+SITE +0x9acdaa REQFRAME bytes=41574156
+SITE +0x9ad1c6 AWCB bytes=55415741
+SITE +0x9c3522 ONANIMBEGIN bytes=41574156
+SITE +0x52fabf SURFJNI bytes=55415741
+SITE +0x52fe6b SURFWIN bytes=55415741
+SITE +0x52b2d2 NOTIFYCR bytes=41565350
+SITE +0x52b5e0 NSWC bytes=41565350
+SITE +0x52aee4 CREATEREND bytes=41565350
+SITE +0x529936 SURFFACT bytes=55415741
+SITE +0x5299b1 RAPI bytes=83f8040f
+SITE +0x539a10 SW_SETWIN bytes=534889fb
+SITE +0x5397c0 GL_SETWIN bytes=41574156
+SITE +0x539a60 SW_ACQ bytes=55415741
+SITE +0x539b36 SW_PRES bytes=55415741
+SITE +0x9b6426 RDRAW bytes=55415741
+SITE +0x9c384a ONADRAW bytes=41574156
+SITE +0x9db026 RENDER bytes=41565348
+SITE +0x9fae5c ADDVIEW bytes=55415741
+SITE +0x530571 PTRJNI bytes=55415741
+SITE +0x530592 PTRBUF bytes=6a185fe8
+SITE +0x9c1f98 PTRSHELL bytes=55415741
+SITE +0x9b3a5a DPD_DISPATCH bytes=41574156
+SITE +0x9af204 DODISPATCH bytes=55415741
+SITE +0x9b0237 PTROUTSIZE bytes=483d2001
+SITE +0x9b02ca PTRDARTINVOKE bytes=e8894502
+SITE +0x9d482d DARTINVOKEFIELD bytes=41574156
+SITE +0x5301b2 SVJNI bytes=55415741
+SITE +0x9c1764 SVSHELL bytes=55415741
+SITE +0x9b64d2 RDTRYWAIT bytes=84c00f84
+SITE +0x9b686f RDDROP bytes=488d5c24
+SITE +0x9b556e DTS_UNSAFE bytes=55415741
+SITE +0x9b5326 DTS bytes=55415741
+SITE +0x5399ae SW_GPUSURF bytes=41574156
+SITE +0x5515fc SW_ACQFRAME bytes=41574156
+SITE +0x872e74 SF_SUBMIT bytes=55535048
+SITE +0x9b5609 SURFV bytes=ff503884
+INSTALLED 47 sites
+SURFFACT 1 tid=2
+RUNEXP 1 tid=3
+RAPI 1 tid=2 rendering_api=0
+POST 1 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985119459970 vt=+0xc6cb20
+WAKEUP 1 tid=3 time=40985118374936
+REG 1 tid=2 queue=1 target=40985119459970 grade=2 vt=+0xc6cb20
+CMP 1 tid=3 target=40985118374936 now=40985119469148 delta_us=-1095
+WAKEUP 2 tid=2 time=40985119459970
+PRIMARY 1 tid=3 obj=0x7fffbc001280 vt=+0xc6cd88
+WAKEUP 3 tid=3 time=40985119459970
+CMP 2 tid=3 target=40985119459970 now=40985119469148 delta_us=-10
+POST 2 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985119916023 vt=+0xc6cb98
+PRIMARY 2 tid=3 obj=0x7fffbc000e40 vt=+0xc6cb20
+REG 2 tid=2 queue=1 target=40985119916023 grade=2 vt=+0xc6cb98
+RUNEXP 2 tid=3
+WAKEUP 4 tid=2 time=40985119916023
+RUNEXP 3 tid=3
+POST 3 tid=2 impl=0x7fffb4000ca0 qid=2 terminated=0 target=40985120132994 vt=+0xc6cc10
+REG 3 tid=2 queue=2 target=40985120132994 grade=2 vt=+0xc6cc10
+WAKEUP 5 tid=3 time=40985119916023
+CMP 3 tid=3 target=40985119916023 now=40985120196334 delta_us=-281
+WAKEUP 6 tid=2 time=40985120132994
+PRIMARY 3 tid=3 obj=0x7fffbc0012f0 vt=+0xc6cb98
+RUNEXP 4 tid=4
+RUNEXP 5 tid=3
+WAKEUP 7 tid=4 time=40985120132994
+CMP 4 tid=4 target=40985120132994 now=40985120482075 delta_us=-350
+PRIMARY 4 tid=4 obj=0x7fffb4000f90 vt=+0xc6cc10
+RUNEXP 6 tid=4
+POST 4 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985120679428 vt=+0xc6d0e8
+REG 4 tid=2 queue=0 target=40985120679428 grade=2 vt=+0xc6d0e8
+WAKEUP 8 tid=2 time=40985120679428
+REQFRAME 1 tid=2
+POST 5 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985125703869 vt=+0xc6bce0
+REG 5 tid=2 queue=0 target=40985125703869 grade=2 vt=+0xc6bce0
+WAKEUP 9 tid=2 time=40985120679428
+POST 6 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985130707690 vt=+0xc72a38
+REG 6 tid=2 queue=1 target=40985130707690 grade=2 vt=+0xc72a38
+WAKEUP 10 tid=2 time=40985130707690
+POST 7 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985130957944 vt=+0xc72a38
+RUNEXP 7 tid=3
+REG 7 tid=2 queue=0 target=40985130957944 grade=2 vt=+0xc72a38
+WAKEUP 11 tid=2 time=40985120679428
+POST 8 tid=2 impl=0x7fffb4000ca0 qid=2 terminated=0 target=40985131130621 vt=+0xc72a38
+WAKEUP 12 tid=3 time=40985130707690
+REG 8 tid=2 queue=2 target=40985131130621 grade=2 vt=+0xc72a38
+CMP 5 tid=3 target=40985130707690 now=40985131072902 delta_us=-366
+PRIMARY 5 tid=3 obj=0x7fffe23db0a0 vt=+0xc72a38
+WAKEUP 13 tid=2 time=40985131130621
+RUNEXP 8 tid=4
+RUNEXP 9 tid=3
+POST 9 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985131427152 vt=+0xc72a38
+WAKEUP 14 tid=4 time=40985131130621
+REG 9 tid=2 queue=0 target=40985131427152 grade=2 vt=+0xc72a38
+CMP 6 tid=4 target=40985131130621 now=40985131510199 delta_us=-380
+PRIMARY 6 tid=4 obj=0x7fffe23dae50 vt=+0xc72a38
+WAKEUP 15 tid=2 time=40985120679428
+RUNEXP 10 tid=4
+DARTINVOKEFIELD 1 tid=2 obj=0x7fffe23e4870
+DARTINVOKEFIELD 2 tid=2 obj=0x7fffe23e4890
+REG 10 tid=2 queue=0 target=40985131986531 grade=1 vt=+0xc729a8
+WAKEUP 16 tid=2 time=40985120679428
+ADDVIEW 1 tid=2 view_id=0 metrics=0x7fffe23de768
+POST 10 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985132228429 vt=+0xc6d7f0
+REG 11 tid=2 queue=0 target=40985132228429 grade=2 vt=+0xc6d7f0
+WAKEUP 17 tid=2 time=40985120679428
+SURFJNI 1 tid=2 jni_env=0x7ffff1694850 shell=0x7fffe23d2830 surface=0x4dd0
+POST 11 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985148100762 vt=+0xc6d640
+REG 12 tid=2 queue=1 target=40985148100762 grade=2 vt=+0xc6d640
+WAKEUP 18 tid=2 time=40985148100762
+POST 12 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985148375903 vt=+0xc2d6c0
+RUNEXP 11 tid=3
+REG 13 tid=2 queue=1 target=40985148375903 grade=2 vt=+0xc2d6c0
+WAKEUP 19 tid=3 time=40985148100762
+CMP 7 tid=3 target=40985148100762 now=40985148561294 delta_us=-461
+WAKEUP 20 tid=2 time=40985148375903
+PRIMARY 7 tid=3 obj=0x7fffbc002040 vt=+0xc6d640
+WAKEUP 21 tid=3 time=40985148375903
+CMP 8 tid=3 target=40985148375903 now=40985148561294 delta_us=-186
+PRIMARY 8 tid=3 obj=0x7fffbc001ee0 vt=+0xc2d6c0
+NOTIFYCR 1 tid=3 self=0x7fffbc001ee0 arg=0x4ecba5cdad063cef
+SW_SETWIN 1 tid=3 self=0x7fffe23d83c0 window=0x7ffff77fc810
+POST 13 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985149371167 vt=+0xc6c058
+RUNEXP 12 tid=3
+REG 14 tid=2 queue=1 target=40985149371167 grade=2 vt=+0xc6c058
+WAKEUP 22 tid=2 time=40985149371167
+RUNEXP 13 tid=3
+WAKEUP 23 tid=3 time=40985149371167
+CMP 9 tid=3 target=40985149371167 now=40985150165350 delta_us=-795
+PRIMARY 9 tid=3 obj=0x7ffff77fc8c0 vt=+0xc6c058
+CREATEREND 1 tid=3 self=0x7ffff77fc810 arg=0x7fffe23d16f0
+SW_GPUSURF 1 tid=3
+POST 14 tid=2 impl=0x7fffb4000ca0 qid=2 terminated=0 target=40985150615883 vt=+0xc6d178
+RUNEXP 14 tid=3
+REG 15 tid=2 queue=2 target=40985150615883 grade=2 vt=+0xc6d178
+WAKEUP 24 tid=2 time=40985150615883
+RUNEXP 15 tid=4
+WAKEUP 25 tid=4 time=40985150615883
+CMP 10 tid=4 target=40985150615883 now=40985151017033 delta_us=-402
+PRIMARY 10 tid=4 obj=0x7fffb4000f90 vt=+0xc6d178
+POST 15 tid=4 impl=0x7fffe2506170 qid=0 terminated=0 target=40985151181704 vt=+0xc6d1c0
+REG 16 tid=4 queue=0 target=40985151181704 grade=2 vt=+0xc6d1c0
+WAKEUP 26 tid=4 time=40985120679428
+POST 16 tid=4 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985151334764 vt=+0xc6d208
+REG 17 tid=4 queue=1 target=40985151334764 grade=2 vt=+0xc6d208
+WAKEUP 27 tid=4 time=40985151334764
+RUNEXP 16 tid=4
+RUNEXP 17 tid=3
+WAKEUP 28 tid=3 time=40985151334764
+CMP 11 tid=3 target=40985151334764 now=40985151554420 delta_us=-220
+PRIMARY 11 tid=3 obj=0x7fffbc0020d0 vt=+0xc6d208
+RUNEXP 18 tid=3
+SVJNI 1 tid=2 view_or_shell=0x7fffe23d2830 dpr=0
+SVSHELL 1 tid=2 view_id=0 metrics=0x7ffff79ee708 d=[2.5, 1080.0, 2400.0, 0.0, 1080.0, 0.0, 2400.0, 108.0]
+POST 17 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985152039578 vt=+0xc6d328
+REG 18 tid=2 queue=1 target=40985152039578 grade=2 vt=+0xc6d328
+WAKEUP 29 tid=2 time=40985152039578
+RUNEXP 19 tid=3
+REQFRAME 2 tid=2
+WAKEUP 30 tid=3 time=40985152039578
+POST 18 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985152321772 vt=+0xc30e30
+CMP 12 tid=3 target=40985152039578 now=40985152263312 delta_us=-224
+REG 19 tid=2 queue=0 target=40985152321772 grade=2 vt=+0xc30e30
+WAKEUP 31 tid=2 time=40985120679428
+PRIMARY 12 tid=3 obj=0x7fffe23db0a0 vt=+0xc6d328
+RUNEXP 20 tid=3
+REQFRAME 3 tid=2
+PTRJNI 1 tid=2 shell=0x7fffe23d2830 packet=0x4e08 count=576
+PTRBUF 1 tid=2 buf=0x7fffe23e69f0 len=576
+PTRSHELL 1 tid=2
+POST 19 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985155160866 vt=+0xc6d400
+REG 20 tid=2 queue=0 target=40985155160866 grade=2 vt=+0xc6d400
+WAKEUP 32 tid=2 time=40985120679428
+REQFRAME 4 tid=2
+RUNEXP 21 tid=2
+WAKEUP 33 tid=2 time=40985120679428
+CMP 13 tid=2 target=40985120679428 now=40985156131213 delta_us=-35452
+PRIMARY 13 tid=2 obj=0x7fffe6e4eed0 vt=+0xc6d0e8
+SUB 1 tid=2 obj=0x7fffe240fd40 vt=+0xc70868
+WAKEUP 34 tid=2 time=40985125703869
+CMP 14 tid=2 target=40985125703869 now=40985156131213 delta_us=-30428
+PRIMARY 14 tid=2 obj=0x7fffe246e0e0 vt=+0xc6bce0
+AWAIT 1 tid=2
+SUB 2 tid=2 obj=0x7fffe240fd40 vt=+0xc70868
+WAKEUP 35 tid=2 time=40985130957944
+CMP 15 tid=2 target=40985130957944 now=40985156131213 delta_us=-25174
+PRIMARY 15 tid=2 obj=0x7fffe6e4eed0 vt=+0xc72a38
+SUB 3 tid=2 obj=0x7fffe240fd40 vt=+0xc70868
+WAKEUP 36 tid=2 time=40985131427152
+CMP 16 tid=2 target=40985131427152 now=40985156131213 delta_us=-24705
+PRIMARY 16 tid=2 obj=0x7fffe246e0e0 vt=+0xc72a38
+SUB 4 tid=2 obj=0x7fffe240fd40 vt=+0xc70868
+WAKEUP 37 tid=2 time=40985131986531
+CMP 17 tid=2 target=40985131986531 now=40985156131213 delta_us=-24145
+PRIMARY 17 tid=2 obj=0x7fffe6e637d0 vt=+0xc729a8
+REQFRAME 5 tid=2
+SUB 5 tid=2 obj=0x7fffe2414890 vt=+0xc70868
+WAKEUP 38 tid=2 time=40985132228429
+CMP 18 tid=2 target=40985132228429 now=40985156131213 delta_us=-23903
+PRIMARY 18 tid=2 obj=0x7fffe6e5b370 vt=+0xc6d7f0
+POST 20 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985158044865 vt=+0xc6d838
+REG 21 tid=2 queue=0 target=40985158044865 grade=2 vt=+0xc6d838
+WAKEUP 39 tid=2 time=40985151181704
+SUB 6 tid=2 obj=0x7fffe2414890 vt=+0xc70868
+WAKEUP 40 tid=2 time=40985151181704
+CMP 19 tid=2 target=40985151181704 now=40985156131213 delta_us=-4950
+PRIMARY 19 tid=2 obj=0x7fffe6e4eed0 vt=+0xc6d1c0
+REQFRAME 6 tid=2
+SUB 7 tid=2 obj=0x7fffe2414890 vt=+0xc70868
+CMP 20 tid=2 target=40985152321772 now=40985156131213 delta_us=-3810
+PRIMARY 20 tid=2 obj=0x7ffff79f22f0 vt=+0xc30e30
+SUB 8 tid=2 obj=0x7fffe2414890 vt=+0xc70868
+CMP 21 tid=2 target=40985155160866 now=40985156131213 delta_us=-971
+PRIMARY 21 tid=2 obj=0x7fffe6e5b110 vt=+0xc6d400
+DPD_DISPATCH 1 tid=2 this=0x7fffe23dd560 ts=0
+DODISPATCH 1 tid=2 packet=0x7fffe6e5b600 begin=0x7fffe23f5d50 end=0x7fffe23f5f90
+SECCB 1 tid=2
+PTROUTSIZE 1 tid=2 bytes=864 records=3
+PTRDARTINVOKE 1 tid=2 closure=0x7fffe6e63b00
+SUB 9 tid=2 obj=0x7fffe2414890 vt=+0xc70868
+CMP 22 tid=2 target=40985158044865 now=40985156131213 delta_us=1913
+FIRECB 1 tid=2
+POST 21 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985159425889 vt=+0xc6ed40
+REG 22 tid=2 queue=0 target=40985159425889 grade=2 vt=+0xc6ed40
+POST 22 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985159600450 vt=+0xc6bd70
+REG 23 tid=2 queue=0 target=40985159600450 grade=2 vt=+0xc6bd70
+RUNEXP 22 tid=2
+CMP 23 tid=2 target=40985158044865 now=40985159815907 delta_us=-1772
+PRIMARY 22 tid=2 obj=0x7fffe6e5b5e0 vt=+0xc6d838
+SUB 10 tid=2 obj=0x7fffe243b410 vt=+0xc70868
+CMP 24 tid=2 target=40985159425889 now=40985159815907 delta_us=-391
+PRIMARY 23 tid=2 obj=0x7fffe6e31140 vt=+0xc6ed40
+FRAMETASK 1 tid=2
+AWCB 1 tid=2
+ONANIMBEGIN 1 tid=2
+RENDER 1 tid=2
+ONADRAW 1 tid=2
+POST 23 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985161001291 vt=+0xc6d688
+REG 24 tid=2 queue=1 target=40985161001291 grade=2 vt=+0xc6d688
+POST 24 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985212184007 vt=+0xc6bc98
+RUNEXP 23 tid=3
+REG 25 tid=2 queue=0 target=40985212184007 grade=2 vt=+0xc6bc98
+CMP 25 tid=3 target=40985161001291 now=40985161281902 delta_us=-281
+PRIMARY 24 tid=3 obj=0x7fffb4001760 vt=+0xc6d688
+RDRAW 1 tid=3
+RDTRYWAIT 1 tid=3 ok=1
+DTS 1 tid=3
+SUB 11 tid=2 obj=0x7fffe6ea63b0 vt=+0xc70868
+DTS_UNSAFE 1 tid=3
+SURFV 1 tid=3 this=0x7fffe23d8488 vt=+0xc6c8d8 slot38=+0x9c4f46
+CMP 26 tid=2 target=40985159600450 now=40985159815907 delta_us=-216
+POST 25 tid=3 impl=0x7fffe2506170 qid=0 terminated=0 target=40985161806926 vt=+0xc7d928
+PRIMARY 25 tid=2 obj=0x7fffe6ea3c00 vt=+0xc6bd70
+REG 26 tid=3 queue=0 target=40985161806926 grade=2 vt=+0xc7d928
+SUB 12 tid=2 obj=0x7fffe6ea63b0 vt=+0xc70868
+SW_ACQFRAME 1 tid=3
+SW_ACQ 1 tid=3 self=0x7ffff77fbe08 size=4140696496x32767
+CMP 27 tid=2 target=40985161806926 now=40985159815907 delta_us=1991
+RUNEXP 24 tid=2
+CMP 28 tid=2 target=40985161806926 now=40985162240296 delta_us=-434
+PRIMARY 26 tid=2 obj=0x7fffe6e5b5a0 vt=+0xc7d928
+SUB 13 tid=2 obj=0x7fffe6ea63b0 vt=+0xc70868
+CMP 29 tid=2 target=40985212184007 now=40985162240296 delta_us=49943
+SF_SUBMIT 1 tid=3
+SW_PRES 1 tid=3
+POST 26 tid=3 impl=0x7fffe2506170 qid=0 terminated=0 target=40985183148502 vt=+0xc2d9b0
+REG 27 tid=3 queue=0 target=40985183148502 grade=2 vt=+0xc2d9b0
+RUNEXP 25 tid=2
+RDDROP 1 tid=3
+CMP 30 tid=2 target=40985183148502 now=40985183671232 delta_us=-523
+RUNEXP 26 tid=3
+PRIMARY 27 tid=2 obj=0x7fffbc001f20 vt=+0xc2d9b0
+SUB 14 tid=2 obj=0x7fffe6ea63b0 vt=+0xc70868
+CMP 31 tid=2 target=40985212184007 now=40985183671232 delta_us=28512
+RUNEXP 27 tid=2
+CMP 32 tid=2 target=40985212184007 now=40985212302406 delta_us=-119
+PRIMARY 28 tid=2 obj=0x7fffbc001f20 vt=+0xc6bc98
+SUB 15 tid=2 obj=0x7fffe6ea63b0 vt=+0xc70868
+RUNEXP 28 tid=2
+PTRJNI 2 tid=2 shell=0x7fffe23d2830 packet=0x4e1d count=576
+PTRBUF 2 tid=2 buf=0x7fffe23fbe40 len=576
+PTRSHELL 2 tid=2
+POST 27 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985447453930 vt=+0xc6d400
+REG 28 tid=2 queue=0 target=40985447453930 grade=2 vt=+0xc6d400
+REQFRAME 7 tid=2
+POST 28 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985447821786 vt=+0xc6bce0
+REG 29 tid=2 queue=0 target=40985447821786 grade=2 vt=+0xc6bce0
+RUNEXP 29 tid=2
+CMP 33 tid=2 target=40985447453930 now=40985448356508 delta_us=-903
+PRIMARY 29 tid=2 obj=0x7fffe3631c30 vt=+0xc6d400
+DPD_DISPATCH 2 tid=2 this=0x7fffe23dd560 ts=1
+DODISPATCH 2 tid=2 packet=0x7fffbc0022b0 begin=0x7fffe2402300 end=0x7fffe2402540
+SECCB 2 tid=2
+AWAIT 2 tid=2
+PTROUTSIZE 2 tid=2 bytes=576 records=2
+PTRDARTINVOKE 2 tid=2 closure=0x7fffe6e63b00
+REQFRAME 8 tid=2
+SUB 16 tid=2 obj=0x7fffe6ea0980 vt=+0xc70868
+CMP 34 tid=2 target=40985447821786 now=40985448356508 delta_us=-535
+PRIMARY 30 tid=2 obj=0x7fffbc0022f0 vt=+0xc6bce0
+SUB 17 tid=2 obj=0x7fffe6ea1140 vt=+0xc70868
+FIRECB 2 tid=2
+POST 29 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985449356752 vt=+0xc6ed40
+REG 30 tid=2 queue=0 target=40985449356752 grade=2 vt=+0xc6ed40
+POST 30 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985449525531 vt=+0xc6bd70
+REG 31 tid=2 queue=0 target=40985449525531 grade=2 vt=+0xc6bd70
+RUNEXP 30 tid=2
+CMP 35 tid=2 target=40985449356752 now=40985449855516 delta_us=-499
+PRIMARY 31 tid=2 obj=0x7fffe6e31140 vt=+0xc6ed40
+FRAMETASK 2 tid=2
+AWCB 2 tid=2
+ONANIMBEGIN 2 tid=2
+RENDER 2 tid=2
+ONADRAW 2 tid=2
+POST 31 tid=2 impl=0x7fffbc000c30 qid=1 terminated=0 target=40985450404705 vt=+0xc6d688
+REG 32 tid=2 queue=1 target=40985450404705 grade=2 vt=+0xc6d688
+POST 32 tid=2 impl=0x7fffe2506170 qid=0 terminated=0 target=40985501583564 vt=+0xc6bc98
+RUNEXP 31 tid=3
+REG 33 tid=2 queue=0 target=40985501583564 grade=2 vt=+0xc6bc98
+CMP 36 tid=3 target=40985450404705 now=40985450683553 delta_us=-279
+PRIMARY 32 tid=3 obj=0x7fffb4001760 vt=+0xc6d688
+RDRAW 2 tid=3
+RDTRYWAIT 2 tid=3 ok=1
+DTS 2 tid=3
+SUB 18 tid=2 obj=0x7fffe6e65de0 vt=+0xc70868
+DTS_UNSAFE 2 tid=3
+SURFV 2 tid=3 this=0x7fffe23d8488 vt=+0xc6c8d8 slot38=+0x9c4f46
+SW_ACQFRAME 2 tid=3
+CMP 37 tid=2 target=40985449525531 now=40985449855516 delta_us=-330
+SW_ACQ 2 tid=3 self=0x7ffff77fbe08 size=4140696496x32767
+PRIMARY 33 tid=2 obj=0x7fffe3632090 vt=+0xc6bd70
+SUB 19 tid=2 obj=0x7fffe6e65de0 vt=+0xc70868
+CMP 38 tid=2 target=40985501583564 now=40985449855516 delta_us=51728
+SF_SUBMIT 2 tid=3
+SW_PRES 2 tid=3
+RDDROP 2 tid=3
+RUNEXP 32 tid=3
+RUNEXP 33 tid=2
+CMP 39 tid=2 target=40985501583564 now=40985501728473 delta_us=-145
+PRIMARY 34 tid=2 obj=0x7fffe3632090 vt=+0xc6bc98
+SUB 20 tid=2 obj=0x7fffe6e65f30 vt=+0xc70868
+RUNEXP 34 tid=2
+DONE base=140737321312256 sites=47

@@ -39,12 +39,14 @@ void _onDrawFrame() {
     // the engine log, not inferred. `views` is the engine-pushed view registry
     // and `physicalSize` comes from the viewport metrics.
     print(
-      'ACOS_DART_FRAME draw n=$_drawAttempts views=${_dispatcher.views.length} '
+      'ACOS_DART_FRAME draw n=$_drawAttempts counter=$_counter '
+      'views=${_dispatcher.views.length} '
       'implicit=${_dispatcher.implicitView?.viewId} '
-      'size=${_view?.physicalSize} dpr=${_view?.devicePixelRatio}',
+      'size=${_view?.physicalSize} dpr=${_view?.devicePixelRatio} '
+      'top=${_view?.padding.top}',
     );
   } else {
-    print("ACOS_DART_FRAME draw");
+    print("ACOS_DART_FRAME draw counter=$_counter");
   }
   final view = _view;
   if (view == null) {
@@ -125,6 +127,10 @@ void _onPointerDataPacket(ui.PointerDataPacket packet) {
       data.physicalX / dpr,
       data.physicalY / dpr,
     );
+    print(
+      'ACOS_DART_POINTER_EVENT change=${data.change} pos=$pos '
+      'rect=$_buttonRect down=$_buttonDown',
+    );
     switch (data.change) {
       case ui.PointerChange.down:
         _buttonDown = _buttonRect.contains(pos);
@@ -132,6 +138,9 @@ void _onPointerDataPacket(ui.PointerDataPacket packet) {
       case ui.PointerChange.up:
         if (_buttonDown && _buttonRect.contains(pos)) {
           _counter += 1;
+          // W130-A: the tap's effect must be visible in the engine log, not
+          // inferred from pixels alone.
+          print('ACOS_DART_COUNTER counter=$_counter at=$pos');
           _dispatcher.scheduleFrame();
         }
         _buttonDown = false;

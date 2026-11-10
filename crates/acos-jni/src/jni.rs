@@ -2440,6 +2440,22 @@ pub unsafe extern "C" fn jni_GetDirectBufferAddress(_env: usize, obj: usize) -> 
     if vm.heap.is_live(h) {
         if let Ok(acos_vm::JavaValue::Long(addr)) = vm.get_field(h, "address") {
             if addr != 0 {
+                // ACOS stores `VMRuntime.addressOf` — a synthetic array alias —
+                // in that field. Native callers dereference the value (the
+                // Flutter engine `memcpy`s the pointer packet straight out of
+                // it), so resolve the alias to its host backing store. Fall back
+                // to the raw value when it is not an ACOS synthetic address
+                // (e.g. a buffer over caller-owned memory, which is already a
+                // real pointer).
+                let capacity = match vm.get_field(h, "capacity") {
+                    Ok(acos_vm::JavaValue::Int(cap)) if cap >= 0 => cap as usize,
+                    _ => 0,
+                };
+                if let Some(ptr) =
+                    acos_vm::natives::jni_glue::native_mem_host_pointer(vm, addr, capacity)
+                {
+                    return ptr;
+                }
                 return addr as usize;
             }
         }

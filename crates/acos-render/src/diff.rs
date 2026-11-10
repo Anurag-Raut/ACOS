@@ -30,6 +30,9 @@ use crate::color::unpack_unpremul;
 use crate::error::{RenderError, RenderResult};
 use crate::image::DecodedImage;
 
+/// An exclusive `[x0, y0, x1, y1]` rectangle excluded from the comparison.
+pub type MaskRect = [u32; 4];
+
 /// Options for [`diff`].
 #[derive(Clone, Debug)]
 pub struct DiffOptions {
@@ -39,6 +42,11 @@ pub struct DiffOptions {
     pub ssim_window: u32,
     /// Coarse structural block side in pixels.
     pub block_size: u32,
+    /// Rectangles excluded from every metric. Used for the parts of a frame the
+    /// ACOS window cannot control (the Android status/navigation bars); masked
+    /// pixels contribute to no per-pixel statistic, no block, and no SSIM
+    /// window that intersects them.
+    pub mask: Vec<MaskRect>,
 }
 
 impl Default for DiffOptions {
@@ -47,6 +55,7 @@ impl Default for DiffOptions {
             pixel_threshold: 2,
             ssim_window: 11,
             block_size: 32,
+            mask: Vec::new(),
         }
     }
 }
@@ -114,6 +123,12 @@ pub struct DiffReport {
     /// The SSIM window side actually used.
     pub ssim_window: u32,
     pub blocks: BlockStats,
+    /// Pixels excluded by [`DiffOptions::mask`].
+    pub masked_pixels: u64,
+    /// Pixels actually compared (`pixel_count - masked_pixels`).
+    pub compared_pixels: u64,
+    /// The mask rectangles used, after clamping to the image.
+    pub mask: Vec<MaskRect>,
 }
 
 /// Compare two decoded images pixel-for-pixel and structurally.
@@ -146,6 +161,32 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
         });
     }
 
+    // Excluded regions (system UI). Build a per-pixel predicate and clamp the
+    // reported rectangles to the image.
+    let mut masked = vec![false; n];
+    let mut mask = Vec::with_capacity(opts.mask.len());
+    for &r in &opts.mask {
+        let x0 = (r[0] as usize).min(w);
+        let y0 = (r[1] as usize).min(h);
+        let x1 = (r[2] as usize).min(w);
+        let y1 = (r[3] as usize).min(h);
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        for y in y0..y1 {
+            let row = y * w;
+            masked[row + x0..row + x1].fill(true);
+        }
+        mask.push([x0 as u32, y0 as u32, x1 as u32, y1 as u32]);
+    }
+    let masked_pixels = masked.iter().filter(|m| **m).count() as u64;
+    let compared = n as u64 - masked_pixels;
+    if compared == 0 {
+        return Err(RenderError::InvalidArgument {
+            msg: "mask excludes every pixel".to_string(),
+        });
+    }
+
     // 0=red, 1=green, 2=blue, 3=alpha, 4=luma
     let mut abs_sum = [0f64; 5];
     let mut sq_sum = [0f64; 5];
@@ -158,22 +199,26 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
     let blocks_y = h.div_ceil(block_size);
     let mut block_sum = vec![0f64; blocks_x * blocks_y];
     let mut block_count = vec![0u32; blocks_x * blocks_y];
+    let mut compared_blocks = 0u64;
 
     let mut luma_a = Vec::with_capacity(n);
     let mut luma_b = Vec::with_capacity(n);
 
-    for i in 0..n {
+    for (i, &is_masked) in masked.iter().enumerate() {
         let (ar, ag, ab, aa) = unpack_unpremul(a.pixels[i]);
         let (br, bg, bb, ba) = unpack_unpremul(b.pixels[i]);
+        let la = luma(ar, ag, ab);
+        let lb = luma(br, bg, bb);
+        luma_a.push(la);
+        luma_b.push(lb);
+        if is_masked {
+            continue;
+        }
         let dr = ar.abs_diff(br);
         let dg = ag.abs_diff(bg);
         let db = ab.abs_diff(bb);
         let da = aa.abs_diff(ba);
-        let la = luma(ar, ag, ab);
-        let lb = luma(br, bg, bb);
         let dl = (la - lb).abs().round() as u8;
-        luma_a.push(la);
-        luma_b.push(lb);
 
         let ds = [dr, dg, db, da, dl];
         for (c, &d) in ds.iter().enumerate() {
@@ -203,13 +248,16 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
         let bx = (i % w) / block_size;
         let by = (i / w) / block_size;
         let bi = by * blocks_x + bx;
+        if block_count[bi] == 0 {
+            compared_blocks += 1;
+        }
         block_sum[bi] += (dr as f64 + dg as f64 + db as f64) / 3.0;
         block_count[bi] += 1;
     }
 
     let stats = |c: usize| ChannelStats {
-        mean_abs_error: abs_sum[c] / n as f64,
-        rmse: (sq_sum[c] / n as f64).sqrt(),
+        mean_abs_error: abs_sum[c] / compared as f64,
+        rmse: (sq_sum[c] / compared as f64).sqrt(),
         max_abs_error: max_abs[c],
     };
     let red = stats(0);
@@ -219,7 +267,7 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
     let luma_s = stats(4);
 
     let mean_abs_error = (red.mean_abs_error + green.mean_abs_error + blue.mean_abs_error) / 3.0;
-    let mse = (sq_sum[0] + sq_sum[1] + sq_sum[2]) / (3.0 * n as f64);
+    let mse = (sq_sum[0] + sq_sum[1] + sq_sum[2]) / (3.0 * compared as f64);
     let rmse = mse.sqrt();
     let max_abs_error = max_abs[0].max(max_abs[1]).max(max_abs[2]);
     let identical = max_abs[0].max(max_abs[1]).max(max_abs[2]).max(max_abs[3]) == 0;
@@ -242,19 +290,18 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
             changed_blocks += 1;
         }
     }
-    let total_blocks = (blocks_x * blocks_y) as u64;
     let blocks = BlockStats {
         block_size: block_size as u32,
         blocks_x: blocks_x as u32,
         blocks_y: blocks_y as u32,
         changed_blocks,
-        changed_fraction: changed_blocks as f64 / total_blocks as f64,
+        changed_fraction: changed_blocks as f64 / compared_blocks.max(1) as f64,
         max_block_mean_abs_error: max_block_mean,
     };
 
     let win = normalize_window(opts.ssim_window);
-    let (mean_ssim, min_ssim) = ssim_luma(&luma_a, &luma_b, w, h, win);
-    let global_ssim = global_ssim_luma(&luma_a, &luma_b);
+    let (mean_ssim, min_ssim) = ssim_luma_masked(&luma_a, &luma_b, w, h, win, &masked);
+    let global_ssim = global_ssim_luma_masked(&luma_a, &luma_b, &masked);
 
     Ok(DiffReport {
         width: a.width,
@@ -272,13 +319,16 @@ pub fn diff(a: &DecodedImage, b: &DecodedImage, opts: &DiffOptions) -> RenderRes
         luma: luma_s,
         pixel_threshold: opts.pixel_threshold,
         differing_pixels,
-        differing_fraction: differing_pixels as f64 / n as f64,
+        differing_fraction: differing_pixels as f64 / compared as f64,
         changed_bbox: bbox,
         mean_ssim,
         min_ssim,
         global_ssim,
         ssim_window: win as u32,
         blocks,
+        masked_pixels,
+        compared_pixels: compared,
+        mask,
     })
 }
 
@@ -344,10 +394,18 @@ fn gaussian_kernel(n: usize, sigma: f64) -> Vec<f64> {
     k.iter().map(|v| v / sum).collect()
 }
 
-/// Canonical windowed SSIM over luma. Returns `(mean, min)`.
-fn ssim_luma(a: &[f32], b: &[f32], w: usize, h: usize, win: usize) -> (f64, f64) {
+/// Canonical windowed SSIM over luma, skipping every window that intersects
+/// the mask. Returns `(mean, min)` over the remaining windows.
+fn ssim_luma_masked(
+    a: &[f32],
+    b: &[f32],
+    w: usize,
+    h: usize,
+    win: usize,
+    masked: &[bool],
+) -> (f64, f64) {
     if w < win || h < win {
-        let g = global_ssim_luma(a, b);
+        let g = global_ssim_luma_masked(a, b, masked);
         return (g, g);
     }
     let k = gaussian_kernel(win, 1.5);
@@ -366,38 +424,70 @@ fn ssim_luma(a: &[f32], b: &[f32], w: usize, h: usize, win: usize) -> (f64, f64)
     let (mu_bb, _, _) = blur_valid(&bb, w, h, &k);
     let (mu_ab, _, _) = blur_valid(&ab, w, h, &k);
 
+    // O(1) "does this window contain a masked pixel" via a summed-area table.
+    let mut prefix = vec![0u32; (h + 1) * (w + 1)];
+    for y in 0..h {
+        for x in 0..w {
+            let v = masked[y * w + x] as u32;
+            prefix[(y + 1) * (w + 1) + x + 1] = v
+                + prefix[y * (w + 1) + x + 1]
+                + prefix[(y + 1) * (w + 1) + x]
+                - prefix[y * (w + 1) + x];
+        }
+    }
+    // Compute in i64: the four terms are ordered only after the full
+    // inclusion-exclusion, so an intermediate u32 subtraction can underflow.
+    let window_masked = |x: usize, y: usize| -> i64 {
+        let a = prefix[(y + win) * (w + 1) + x + win] as i64;
+        let b = prefix[y * (w + 1) + x + win] as i64;
+        let c = prefix[(y + win) * (w + 1) + x] as i64;
+        let d = prefix[y * (w + 1) + x] as i64;
+        a - b - c + d
+    };
+
     // Standard SSIM stabilisers on the 0..255 luma scale.
     const C1: f64 = (0.01 * 255.0) * (0.01 * 255.0);
     const C2: f64 = (0.03 * 255.0) * (0.03 * 255.0);
-    let n = ow * oh;
     let mut sum = 0f64;
     let mut min = f64::INFINITY;
-    for i in 0..n {
-        let ma = mu_a[i];
-        let mb = mu_b[i];
-        let vaa = (mu_aa[i] - ma * ma).max(0.0);
-        let vbb = (mu_bb[i] - mb * mb).max(0.0);
-        let vab = mu_ab[i] - ma * mb;
-        let s = ((2.0 * ma * mb + C1) * (2.0 * vab + C2))
-            / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2));
-        sum += s;
-        min = min.min(s);
+    let mut count = 0u64;
+    for y in 0..oh {
+        for x in 0..ow {
+            if window_masked(x, y) != 0 {
+                continue;
+            }
+            let i = y * ow + x;
+            let ma = mu_a[i];
+            let mb = mu_b[i];
+            let vaa = (mu_aa[i] - ma * ma).max(0.0);
+            let vbb = (mu_bb[i] - mb * mb).max(0.0);
+            let vab = mu_ab[i] - ma * mb;
+            let s = ((2.0 * ma * mb + C1) * (2.0 * vab + C2))
+                / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2));
+            sum += s;
+            min = min.min(s);
+            count += 1;
+        }
     }
-    (sum / n as f64, min)
+    if count == 0 {
+        let g = global_ssim_luma_masked(a, b, masked);
+        return (g, g);
+    }
+    (sum / count as f64, min)
 }
 
-/// Single-window SSIM over the whole luma plane.
-fn global_ssim_luma(a: &[f32], b: &[f32]) -> f64 {
-    let n = a.len() as f64;
-    if n == 0.0 {
-        return 1.0;
-    }
+/// Single-window SSIM over the unmasked pixels of the luma planes.
+fn global_ssim_luma_masked(a: &[f32], b: &[f32], masked: &[bool]) -> f64 {
+    let mut n = 0f64;
     let mut sa = 0f64;
     let mut sb = 0f64;
     let mut saa = 0f64;
     let mut sbb = 0f64;
     let mut sab = 0f64;
-    for (x, y) in a.iter().zip(b) {
+    for (i, (x, y)) in a.iter().zip(b).enumerate() {
+        if masked[i] {
+            continue;
+        }
         let x = *x as f64;
         let y = *y as f64;
         sa += x;
@@ -405,6 +495,10 @@ fn global_ssim_luma(a: &[f32], b: &[f32]) -> f64 {
         saa += x * x;
         sbb += y * y;
         sab += x * y;
+        n += 1.0;
+    }
+    if n == 0.0 {
+        return 1.0;
     }
     let ma = sa / n;
     let mb = sb / n;
@@ -549,6 +643,36 @@ mod tests {
         let b = solid(4, 5, [0, 0, 0, 255]);
         let err = diff(&a, &b, &DiffOptions::default()).unwrap_err();
         assert_eq!(err.code(), "RENDER_INVALID_ARGUMENT");
+    }
+
+    #[test]
+    fn mask_excludes_pixels_from_every_metric() {
+        // Top four rows differ; bottom four are identical.
+        let a = solid(8, 8, [0, 0, 0, 255]);
+        let mut b = a.clone();
+        for y in 0..4 {
+            for x in 0..8 {
+                b.pixels[y * 8 + x] = crate::color::pack_premul(200, 200, 200, 255);
+            }
+        }
+        let unmasked = diff(&a, &b, &DiffOptions::default()).unwrap();
+        assert!(unmasked.mean_abs_error > 0.0);
+        assert_eq!(unmasked.differing_pixels, 32);
+
+        let opts = DiffOptions {
+            mask: vec![[0, 0, 8, 4]],
+            ..DiffOptions::default()
+        };
+        let masked = diff(&a, &b, &opts).unwrap();
+        assert_eq!(masked.masked_pixels, 32);
+        assert_eq!(masked.compared_pixels, 32);
+        assert_eq!(masked.mean_abs_error, 0.0, "masked pixels leave no error");
+        assert_eq!(masked.differing_pixels, 0);
+        assert_eq!(masked.changed_bbox, None);
+        assert!((masked.global_ssim - 1.0).abs() < 1e-9);
+        assert_eq!(masked.mask, vec![[0, 0, 8, 4]]);
+        // The unmasked half still carries the difference.
+        assert!(unmasked.global_ssim < 1.0);
     }
 
     #[test]

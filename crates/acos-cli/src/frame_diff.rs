@@ -43,6 +43,12 @@ pub struct FrameDiffArgs {
     #[arg(long, default_value_t = 32)]
     pub block: u32,
 
+    /// Exclude an `x0,y0,x1,y1` rectangle (exclusive) from every metric.
+    /// Repeatable; use for the Android status bar / navigation bar bands the
+    /// ACOS window does not own.
+    #[arg(long = "mask", value_parser = parse_mask, action = clap::ArgAction::Append)]
+    pub mask: Vec<[u32; 4]>,
+
     /// Write an RGBA heat map PNG of the differences.
     #[arg(long)]
     pub heatmap: Option<PathBuf>,
@@ -82,6 +88,7 @@ pub fn run(args: FrameDiffArgs) -> ExitCode {
         pixel_threshold: args.threshold,
         ssim_window: args.ssim_window,
         block_size: args.block,
+        mask: args.mask.clone(),
     };
     let report = match diff::diff(&reference, &candidate, &opts) {
         Ok(r) => r,
@@ -202,6 +209,25 @@ fn attach(
     }
 }
 
+/// Parse `--mask x0,y0,x1,y1` (exclusive rectangle).
+fn parse_mask(s: &str) -> Result<[u32; 4], String> {
+    let fields: Vec<&str> = s.split(',').collect();
+    if fields.len() != 4 {
+        return Err(format!("mask must be x0,y0,x1,y1 (got {s:?})"));
+    }
+    let mut rect = [0u32; 4];
+    for (i, field) in fields.iter().enumerate() {
+        rect[i] = field
+            .trim()
+            .parse()
+            .map_err(|e| format!("mask field {} of {s:?}: {e}", i))?;
+    }
+    if rect[0] >= rect[2] || rect[1] >= rect[3] {
+        return Err(format!("mask rectangle {s:?} is empty or inverted"));
+    }
+    Ok(rect)
+}
+
 fn load(path: &PathBuf) -> Result<image::DecodedImage, (ErrorCode, String)> {
     let bytes = std::fs::read(path)
         .map_err(|e| (ErrorCode::Internal, format!("reading {}: {e}", path.display())))?;
@@ -274,13 +300,27 @@ fn print_text(r: &diff::DiffReport) {
     println!(
         "  differing   {}/{} ({:.3}%) threshold>{} bbox={}",
         r.differing_pixels,
-        r.pixel_count,
+        r.compared_pixels,
         r.differing_fraction * 100.0,
         r.pixel_threshold,
         r.changed_bbox
             .map(|b| format!("[{},{},{},{}]", b[0], b[1], b[2], b[3]))
             .unwrap_or_else(|| "-".to_string()),
     );
+    if !r.mask.is_empty() {
+        let rects: Vec<String> = r
+            .mask
+            .iter()
+            .map(|m| format!("[{},{},{},{}]", m[0], m[1], m[2], m[3]))
+            .collect();
+        println!(
+            "  masked      {}/{} pixels ({}); excluded {}",
+            r.masked_pixels,
+            r.pixel_count,
+            r.masked_pixels as f64 / r.pixel_count as f64 * 100.0,
+            rects.join(" "),
+        );
+    }
     println!(
         "  structural  SSIM mean={:.4} min={:.4} global={:.4} (window {}); blocks {}/{} changed ({:.2}%), worst block MAE={:.3}",
         r.mean_ssim,

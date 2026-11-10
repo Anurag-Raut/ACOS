@@ -25,6 +25,7 @@ cc = "1"
 
 [dev-dependencies]
 acos-dex = { path = "../acos-dex" }
+acos-render = { path = "../acos-render" }
 serde_json = { workspace = true }
 acos-test-support = { path = "../acos-test-support" }
 acos-sandbox = { path = "../acos-sandbox" }

@@ -41,7 +41,15 @@ public final class FlutterProbe {
   private static final int WIDTH = 1080;
 
   private static final int HEIGHT = 2400;
-  private static final float DPR = 2.625f;
+
+  /**
+   * The reference device's density. {@code fixtures/reference-device/device.json}
+   * records the moto g35 5G at 400 dpi, i.e. {@code 400/160 = 2.5}. W128-A used
+   * 2.625 (420 dpi), which is the ART *emulator* density, not this phone: it
+   * made the fixture's {@code physicalSize / dpr} background 411 px wide instead
+   * of the reference's 432 and compounded the status-bar offset below.
+   */
+  private static final float DPR = 2.5f;
 
   /** Flutter's {@code PointerData} wire size (36 int64/float64 fields). */
   private static final int POINTER_FIELDS = 36;
@@ -51,8 +59,34 @@ public final class FlutterProbe {
   /** 60 Hz reference refresh, matching {@code fwk_vsync::DEFAULT_INTERVAL_NANOS}. */
   private static final long REFRESH_PERIOD_NANOS = 16_666_667L;
 
-  /** The reference device's status-bar height (48dp, Android 13 gesture nav). */
-  private static final int STATUS_BAR_DP = 48;
+  /**
+   * The reference device's status-bar height in physical pixels. Measured from
+   * {@code fixtures/reference-device/flutter-hello/screenshot_initial.png}: the
+   * opaque system band is rows {@code 0..107} (row 108 is already the app's
+   * {@code 0xFF1B1B1F} background). Modelled as the viewport's
+   * {@code physicalPaddingTop}; W128-A used 48dp * 2.625 = 126, 18 px too large.
+   */
+  private static final int STATUS_BAR_PX = 108;
+
+  /**
+   * Centre of the "counter: n" button in the Dart layout of {@code
+   * flutter_probe_main.dart}.
+   *
+   * <p>That probe is {@code dart:ui}-only and does not apply a
+   * {@code devicePixelRatio} transform, so its scene coordinates are the
+   * physical pixel grid: {@code view.padding.top} is physical
+   * ({@code STATUS_BAR_PX} = 108), the background is {@code physicalSize / dpr}
+   * pixels, and the button is a 220x64 rect at (40, padding + 100). The Dart
+   * pointer handler maps an incoming packet to {@code physical / dpr} before the
+   * hit test, so the packet must carry {@code scene * dpr}. The W128-A tap was at
+   * the screen centre (540, 132) logical, well outside the button — and even the
+   * closest guess at the button centre used {@code top = 48dp} while the
+   * rendered scene put it at 126px, so the up event missed every time.
+   */
+  private static final double BUTTON_CENTER_X = 40.0 + 220.0 / 2.0;
+
+  private static final double BUTTON_CENTER_Y =
+      STATUS_BAR_PX + 100.0 + 64.0 / 2.0;
 
   /**
    * The live engine handle. The engine's vsync path is native -> Java
@@ -148,7 +182,7 @@ public final class FlutterProbe {
           DPR,
           WIDTH,
           HEIGHT,
-          (int) (STATUS_BAR_DP * DPR), // physicalPaddingTop (48dp status bar)
+          STATUS_BAR_PX, // physicalPaddingTop (measured system status bar)
           0, // physicalPaddingRight
           0, // physicalPaddingBottom
           0, // physicalPaddingLeft
@@ -184,9 +218,14 @@ public final class FlutterProbe {
       // The task runner is the caller's ALooper (pumped by the Rust harness),
       // so everything above is queued in order; the tap below follows the
       // surface/viewport tasks.
-      ByteBuffer packet = buildTap(WIDTH * DPR / 2, (100 + 32) * DPR);
-      jni.dispatchPointerDataPacket(packet, 0);
-      System.out.println("ACOS_FLUTTER_PROBE phase=pointerDispatched bytes=" + packet.capacity());
+      ByteBuffer packet = buildTap(BUTTON_CENTER_X * DPR, BUTTON_CENTER_Y * DPR);
+      // `position` is the number of valid bytes, not an offset: the engine's
+      // `flutter::DispatchPointerDataPacket` copies `[address, address +
+      // position)` out of the direct buffer (`AndroidTouchProcessor` passes
+      // `packet.position()`). W128-A passed 0, so every packet arrived empty
+      // and `Engine::DoDispatchPacket` skipped the Dart invoke.
+      jni.dispatchPointerDataPacket(packet, packet.position());
+      System.out.println("ACOS_FLUTTER_PROBE phase=pointerDispatched bytes=" + packet.position());
       jni.scheduleFrame();
       System.out.println("ACOS_FLUTTER_PROBE phase=tapScheduled");
     } catch (Throwable t) {
@@ -244,8 +283,8 @@ public final class FlutterProbe {
   public static void tapIncrement() {
     FlutterJNI jni = sJni;
     if (jni != null) {
-      ByteBuffer packet = buildTap(WIDTH * DPR / 2, (100 + 32) * DPR);
-      jni.dispatchPointerDataPacket(packet, 0);
+      ByteBuffer packet = buildTap(BUTTON_CENTER_X * DPR, BUTTON_CENTER_Y * DPR);
+      jni.dispatchPointerDataPacket(packet, packet.position());
       jni.scheduleFrame();
     }
   }
@@ -283,7 +322,8 @@ public final class FlutterProbe {
     encodePointer(buffer, now, 4, x, y);
     // PointerChange.up = 6.
     encodePointer(buffer, now + 50_000L, 6, x, y);
-    buffer.position(0);
+    // Leave `position` at the end: it *is* the byte count the native side
+    // copies out of the buffer's direct address (see the call sites).
     return buffer;
   }
 

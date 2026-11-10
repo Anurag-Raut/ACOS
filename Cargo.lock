@@ -84,6 +84,7 @@ dependencies = [
  "acos-dex",
  "acos-gles",
  "acos-native-loader",
+ "acos-render",
  "acos-sandbox",
  "acos-test-support",
  "acos-vm",

@@ -730,7 +730,16 @@ fn flutter_child_worker() {
             hash ^= b as u64;
             hash = hash.wrapping_mul(0x100000001b3);
         }
-        let path = out_frames.join(format!("w128a-frame-{i}.png"));
+        // W130-A names: frame 0 is the pre-tap frame, the last frame is the
+        // one the tap produced (`ACOS_DART_FRAME draw n=2 counter=1`).
+        let name = if i == 0 {
+            "w130a-frame-0.png".to_string()
+        } else if i + 1 == frames.len() {
+            "w130a-frame-tap.png".to_string()
+        } else {
+            format!("w130a-frame-{i}.png")
+        };
+        let path = out_frames.join(name);
         let png = write_png(&path, frame.width, frame.height, &frame.rgba);
         written.push(serde_json::json!({
             "index": i,
@@ -918,6 +927,25 @@ fn flutter_hello_under_confinement() {
         );
     }
 
+    // W130-A: the pointer packet must reach
+    // `PlatformDispatcher.onPointerDataPacket` and increment the counter. W128-A
+    // reached the shell but sent an empty packet (a zero length argument) and
+    // tapped 90 px below the button, so Dart never saw either event.
+    assert!(
+        stderr.contains("ACOS_DART_POINTER n="),
+        "pointer packet never reached PlatformDispatcher.onPointerDataPacket: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_COUNTER counter=1"),
+        "the Increment tap did not change the counter: {stderr}"
+    );
+    if stdout.contains("\"source\":\"probe\"") {
+        assert!(
+            stderr.contains("ACOS_DART_FRAME draw n=2 counter=1"),
+            "the frame after the tap does not show counter: 1: {stderr}"
+        );
+    }
+
     let out_dir = repo_root().join("results/flutter");
     let _ = std::fs::create_dir_all(&out_dir);
     // Frames the confined child presented: written to its scratch (the only
@@ -937,6 +965,87 @@ fn flutter_hello_under_confinement() {
             }
         }
     }
+    // W130-A fixture-gated parity: score the published frames against the
+    // physical-device reference. The mask excludes the Android status bar (rows
+    // 0..108) and the bottom navigation bar band, which the ACOS window/1:1
+    // compositor does not own; the numbers and their meaning are written up in
+    // `results/flutter/FLUTTER_PARITY.md`.
+    let reference = repo_root().join(
+        "fixtures/reference-device/flutter-hello/screenshot_initial.png",
+    );
+    if reference.is_file() {
+        let opts = acos_render::diff::DiffOptions {
+            mask: vec![[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+            ..Default::default()
+        };
+        let reference_img = decode_image(&reference);
+        let mut parity = serde_json::Map::new();
+        for name in ["w130a-frame-0.png", "w130a-frame-tap.png"] {
+            let path = out_dir.join(name);
+            if !path.is_file() {
+                continue;
+            }
+            let candidate = decode_image(&path);
+            let report = acos_render::diff::diff(&reference_img, &candidate, &opts)
+                .unwrap_or_else(|e| panic!("frame-diff {name}: {e}"));
+            eprintln!(
+                "parity {name}: global_ssim={:.4} mean_ssim={:.4} min_ssim={:.4} psnr={:?} differing={:.4}",
+                report.global_ssim,
+                report.mean_ssim,
+                report.min_ssim,
+                report.psnr_db,
+                report.differing_fraction,
+            );
+            assert!(
+                report.global_ssim >= 0.98,
+                "{name}: masked global SSIM {:.4} < 0.98",
+                report.global_ssim
+            );
+            assert!(
+                report.mean_ssim >= 0.99,
+                "{name}: masked mean SSIM {:.4} < 0.99",
+                report.mean_ssim
+            );
+            parity.insert(
+                name.to_string(),
+                serde_json::json!({
+                    "global_ssim": report.global_ssim,
+                    "mean_ssim": report.mean_ssim,
+                    "min_ssim": report.min_ssim,
+                    "psnr_db": report.psnr_db,
+                    "differing_fraction": report.differing_fraction,
+                    "masked_pixels": report.masked_pixels,
+                }),
+            );
+        }
+        // The tap itself: the second frame must differ from the first
+        // (the button label goes from "counter: 0" to "counter: 1").
+        let first = out_dir.join("w130a-frame-0.png");
+        let tap = out_dir.join("w130a-frame-tap.png");
+        if first.is_file() && tap.is_file() {
+            let a = decode_image(&first);
+            let b = decode_image(&tap);
+            let delta = acos_render::diff::diff(&a, &b, &Default::default())
+                .expect("frame-0 vs frame-tap");
+            eprintln!(
+                "tap delta: differing={} bbox={:?} mean_abs_error={:.4}",
+                delta.differing_pixels, delta.changed_bbox, delta.mean_abs_error
+            );
+            assert!(
+                delta.differing_pixels > 0,
+                "the Increment tap produced no pixel change"
+            );
+        }
+        let _ = std::fs::write(
+            out_dir.join("w130a-parity.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "mask": [[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+                "reference": reference.display().to_string(),
+                "frames": parity,
+            }))
+            .unwrap_or_default(),
+        );
+    }
     let _ = std::fs::write(
         out_dir.join("w93a-first-run.json"),
         serde_json::to_string_pretty(&serde_json::json!({
@@ -947,4 +1056,11 @@ fn flutter_hello_under_confinement() {
         .unwrap_or_default(),
     );
     let _ = std::fs::remove_dir_all(&scratch);
+}
+
+/// Decode a PNG reference/candidate for the fixture-gated parity check.
+fn decode_image(path: &Path) -> acos_render::image::DecodedImage {
+    let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    acos_render::image::decode(&bytes)
+        .unwrap_or_else(|e| panic!("decode {}: {e}", path.display()))
 }

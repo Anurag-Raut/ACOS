@@ -78,7 +78,13 @@ SITES = [
     (0x9db026, "RENDER", 40),        # FfiDispatcher<PlatformConfigurationNativeApi::Render>::Call
     (0x9fae5c, "ADDVIEW", 8),        # PlatformConfiguration::AddView
     (0x530571, "PTRJNI", 8),         # flutter::DispatchPointerDataPacket(JNIEnv*,..)
+    (0x530592, "PTRBUF", 8),         # GetDirectBufferAddress returned: r15=buf, ebp=len
     (0x9c1f98, "PTRSHELL", 8),       # Shell::OnPlatformViewDispatchPointerDataPacket
+    (0x9b3a5a, "DPD_DISPATCH", 8),   # DefaultPointerDataDispatcher::DispatchPacket
+    (0x9af204, "DODISPATCH", 8),     # Engine::DoDispatchPacket
+    (0x9b0237, "PTROUTSIZE", 8),     # converted record bytes (cmp $0x120)
+    (0x9b02ca, "PTRDARTINVOKE", 8),  # tonic::DartInvoke(_dispatchPointerDataPacket)
+    (0x9d482d, "DARTINVOKEFIELD", 8),# tonic::DartInvokeField (Dart object field)
     (0x5301b2, "SVJNI", 8),          # flutter::SetViewportMetrics(JNIEnv*,..)
     (0x9c1764, "SVSHELL", 8),        # Shell::OnPlatformViewSetViewportMetrics
     (0x9b64d2, "RDTRYWAIT", 12),     # Rasterizer::Draw: Semaphore::TryWait result
@@ -196,6 +202,25 @@ class Site(gdb.Breakpoint):
                 self.n, tid, reg("rsi"), m, doubles))
         elif self.tag == "RAPI":
             log("RAPI %d tid=%d rendering_api=%d" % (self.n, tid, reg("eax")))
+        elif self.tag == "PTRBUF":
+            log("PTRBUF %d tid=%d buf=0x%x len=%d" % (
+                self.n, tid, reg("r15"), reg("ebp")))
+        elif self.tag == "DPD_DISPATCH":
+            log("DPD_DISPATCH %d tid=%d this=0x%x ts=%d" % (
+                self.n, tid, reg("rdi"), reg("rdx")))
+        elif self.tag == "DODISPATCH":
+            pkt = u64(reg("rsi"))
+            log("DODISPATCH %d tid=%d packet=0x%x begin=0x%x end=0x%x" % (
+                self.n, tid, pkt, u64(pkt), u64(pkt + 8)))
+        elif self.tag == "PTROUTSIZE":
+            log("PTROUTSIZE %d tid=%d bytes=%d records=%d" % (
+                self.n, tid, reg("rax"), reg("rax") // 0x120))
+        elif self.tag == "PTRDARTINVOKE":
+            log("PTRDARTINVOKE %d tid=%d closure=0x%x" % (
+                self.n, tid, reg("rdi")))
+        elif self.tag == "DARTINVOKEFIELD":
+            log("DARTINVOKEFIELD %d tid=%d obj=0x%x" % (
+                self.n, tid, reg("rdi")))
         elif self.tag in ("RDTRYWAIT",):
             log("%s %d tid=%d ok=%d" % (self.tag, self.n, tid, reg("al") & 0xFF))
         elif self.tag in ("SURFJNI", "SURFWIN", "NOTIFYCR", "NSWC",
