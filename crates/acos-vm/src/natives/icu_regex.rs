@@ -2141,6 +2141,9 @@ struct Registry {
     next: u64,
     patterns: HashMap<u64, Arc<Pattern>>,
     matchers: HashMap<u64, MatcherState>,
+    /// Pattern source + flags per handle, so a snapshot restore can recompile
+    /// the parsed pattern instead of carrying a stale native handle.
+    sources: HashMap<u64, (String, u32)>,
 }
 
 struct MatcherState {
@@ -2176,15 +2179,72 @@ impl MatcherState {
     }
 }
 
+static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
+/// A pattern table decoded from a snapshot but not yet recompiled. It is
+/// installed when the registry is first created in a cold process.
+static STAGED_REGEX: Mutex<Option<RegexState>> = Mutex::new(None);
+
+/// Serialisable regex registry state: the handle counter and every compiled
+/// pattern's source + flags. Matchers are transient (recreated by
+/// `Pattern.matcher`) and are not carried.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct RegexState {
+    pub next: u64,
+    pub patterns: Vec<(u64, String, u32)>,
+}
+
 fn registry() -> &'static Mutex<Registry> {
-    static R: OnceLock<Mutex<Registry>> = OnceLock::new();
-    R.get_or_init(|| {
-        Mutex::new(Registry {
+    REGISTRY.get_or_init(|| {
+        let mut reg = Registry {
             next: 1,
             patterns: HashMap::new(),
             matchers: HashMap::new(),
-        })
+            sources: HashMap::new(),
+        };
+        if let Some(state) = STAGED_REGEX.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            reg.next = state.next;
+            for (h, source, flags) in state.patterns {
+                if let Ok(p) = Parser::new(source.chars().collect()).parse(flags) {
+                    reg.patterns.insert(h, Arc::new(p));
+                    reg.sources.insert(h, (source, flags));
+                }
+            }
+        }
+        Mutex::new(reg)
     })
+}
+
+/// Stage a regex state decoded from a snapshot. Only a cold process (whose
+/// registry is not yet initialised) imports it; an in-process restore shares
+/// the live registry produced by the template boot.
+pub(crate) fn stage_regex_state(state: RegexState) {
+    if REGISTRY.get().is_some() || state.patterns.is_empty() {
+        return;
+    }
+    *STAGED_REGEX.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
+}
+
+/// The live regex registry state, or the staged state when the registry has not
+/// been initialised yet. `Vm::snapshot` serialises this.
+pub(crate) fn current_regex_state() -> RegexState {
+    if let Some(m) = REGISTRY.get() {
+        let reg = m.lock().unwrap_or_else(|e| e.into_inner());
+        let mut patterns: Vec<(u64, String, u32)> = reg
+            .sources
+            .iter()
+            .map(|(h, (s, f))| (*h, s.clone(), *f))
+            .collect();
+        patterns.sort_by_key(|(h, _, _)| *h);
+        return RegexState {
+            next: reg.next,
+            patterns,
+        };
+    }
+    STAGED_REGEX
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
 }
 
 fn next_handle(reg: &mut Registry) -> u64 {
@@ -2250,6 +2310,7 @@ fn compile_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             let mut reg = registry().lock().unwrap_or_else(|p| p.into_inner());
             let h = next_handle(&mut reg);
             reg.patterns.insert(h, Arc::new(p));
+            reg.sources.insert(h, (pattern_str, flags));
             drop(reg);
             vm.ret_i64(ctx, h as i64);
             Ok(())

@@ -1,0 +1,76 @@
+{
+  "corpus": "pipeline-generated",
+  "note": "candidate = real LayoutInflater + View.measure/layout/draw -> RecordingCanvas -> HardwareRenderer -> acos-render; reference = ART API-34 emulator",
+  "scenes": [
+    {
+      "app": "canvas-shapes",
+      "blocksChangedFraction": 0.3164705882352941,
+      "changedBbox": [
+        0,
+        23,
+        1080,
+        2400
+      ],
+      "differingFraction": 0.21819560185185186,
+      "globalSsim": 0.6080088708067519,
+      "height": 2400,
+      "maskedMae": 20.232109953703702,
+      "maskedMeanSsim": 0.8948979582560944,
+      "maxAbsError": 245,
+      "meanAbsError": 27.274203832304526,
+      "meanSsim": 0.8630844566221805,
+      "provenance": "pipeline-generated",
+      "psnrDb": 11.129012640265952,
+      "reference": "fixtures/reference/canvas-shapes/art-api34-x86_64/screenshot_initial.png",
+      "rmse": 70.80917727994554,
+      "status": "ok",
+      "width": 1080
+    },
+    {
+      "app": "counter",
+      "blocksChangedFraction": 0.9137254901960784,
+      "changedBbox": [
+        0,
+        47,
+        1080,
+        2400
+      ],
+      "differingFraction": 0.8945574845679012,
+      "globalSsim": -0.02299172877660536,
+      "height": 2400,
+      "maskedMae": 183.23264930555555,
+      "maskedMeanSsim": 0.32141583149880376,
+      "maxAbsError": 230,
+      "meanAbsError": 184.38098726851854,
+      "meanSsim": 0.29640283713068405,
+      "provenance": "pipeline-generated",
+      "psnrDb": 2.208614543901249,
+      "reference": "fixtures/reference/counter/art-api34-x86_64/screenshot_initial.png",
+      "rmse": 197.74679494594605,
+      "status": "ok",
+      "width": 1080
+    },
+    {
+      "app": "form-validation",
+      "error": "framework inflation failed:\nINFLATE-FAILED android.view.InflateException: Binary XML file line #8 in dev.acos.fixtures.formvalidation:layout/main: Binary XML file line #8 in dev.acos.fixtures.formvalidation:layout/main: Error inflating class android.widget.EditText\nCAUSE android.view.InflateException: Binary XML file line #8 in dev.acos.fixtures.formvalidation:layout/main: Error inflating class android.widget.EditText\n  msg Binary XML file line #8 in dev.acos.fixtures.formvalidation:layout/main: Error inflating class android.widget.EditText\nCAUSE java.lang.NullPointerException\ndone\n",
+      "provenance": "pipeline-generated",
+      "reference": "fixtures/reference/form-validation/art-api34-x86_64/screenshot_initial.png",
+      "status": "pipeline-failure"
+    },
+    {
+      "app": "text-input",
+      "error": "framework inflation failed:\nINFLATE-FAILED android.view.InflateException: Binary XML file line #8 in dev.acos.fixtures.textinput:layout/main: Binary XML file line #8 in dev.acos.fixtures.textinput:layout/main: Error inflating class android.widget.EditText\nCAUSE android.view.InflateException: Binary XML file line #8 in dev.acos.fixtures.textinput:layout/main: Error inflating class android.widget.EditText\n  msg Binary XML file line #8 in dev.acos.fixtures.textinput:layout/main: Error inflating class android.widget.EditText\nCAUSE java.lang.NullPointerException\ndone\n",
+      "provenance": "pipeline-generated",
+      "reference": "fixtures/reference/text-input/art-api34-x86_64/screenshot_initial.png",
+      "status": "pipeline-failure"
+    },
+    {
+      "app": "widget-gallery",
+      "error": "framework inflation failed:\nINFLATE-FAILED android.view.InflateException: Binary XML file line #19 in dev.acos.fixtures.widgetgallery:layout/main: Binary XML file line #19 in dev.acos.fixtures.widgetgallery:layout/main: Error inflating class <unknown>\nCAUSE android.view.InflateException: Binary XML file line #19 in dev.acos.fixtures.widgetgallery:layout/main: Error inflating class <unknown>\n  msg Binary XML file line #19 in dev.acos.fixtures.widgetgallery:layout/main: Error inflating class <unknown>\nCAUSE java.lang.NullPointerException\ndone\n",
+      "provenance": "pipeline-generated",
+      "reference": "fixtures/reference/widget-gallery/art-api34-x86_64/screenshot_initial.png",
+      "status": "pipeline-failure"
+    }
+  ],
+  "wave": "W101-A"
+}

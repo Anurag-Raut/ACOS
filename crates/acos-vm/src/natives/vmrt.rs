@@ -57,6 +57,70 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "newNonMovableArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", new_array_of);
     vm.register_native(c, "addressOf", "(Ljava/lang/Object;)J", address_of);
     atomic_integer(vm);
+    atomic_boolean(vm);
+    Ok(())
+}
+
+/// `java.util.concurrent.atomic.AtomicBoolean`.
+///
+/// Like `AtomicInteger`, the real `<clinit>` builds a `VarHandle` (and
+/// `compareAndSet` is a signature-polymorphic `VarHandle` call, opcode
+/// `invoke-polymorphic`). The VM implements the `int value` storage directly
+/// instead; `CloseGuard`/`ImageDecoder.close` otherwise abort on the
+/// unimplemented opcode.
+fn atomic_boolean(vm: &mut Vm) {
+    let c = "Ljava/util/concurrent/atomic/AtomicBoolean;";
+    vm.register_native(c, "<clinit>", "()V", ai_noop);
+    vm.register_native(c, "get", "()Z", ab_get);
+    vm.register_native(c, "set", "(Z)V", ab_set);
+    vm.register_native(c, "lazySet", "(Z)V", ab_set);
+    vm.register_native(c, "getAndSet", "(Z)Z", ab_get_and_set);
+    vm.register_native(c, "compareAndSet", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "weakCompareAndSet", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "weakCompareAndSetPlain", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "weakCompareAndSetVolatile", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "weakCompareAndSetAcquire", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "weakCompareAndSetRelease", "(ZZ)Z", ab_cas);
+    vm.register_native(c, "getPlain", "()Z", ab_get);
+    vm.register_native(c, "setPlain", "(Z)V", ab_set);
+    vm.register_native(c, "getOpaque", "()Z", ab_get);
+    vm.register_native(c, "setOpaque", "(Z)V", ab_set);
+    vm.register_native(c, "getAcquire", "()Z", ab_get);
+    vm.register_native(c, "setRelease", "(Z)V", ab_set);
+}
+
+fn ab_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    vm.ret_bool(ctx, ai_value(vm, this) != 0);
+    Ok(())
+}
+
+fn ab_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let v = vm.arg_bool(ctx, 0) as i32;
+    vm.set_instance_field_by_name(this, "value", v as u32);
+    Ok(())
+}
+
+fn ab_get_and_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let nv = vm.arg_bool(ctx, 0);
+    let old = ai_value(vm, this) != 0;
+    vm.set_instance_field_by_name(this, "value", nv as i32 as u32);
+    vm.ret_bool(ctx, old);
+    Ok(())
+}
+
+fn ab_cas(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let expect = vm.arg_bool(ctx, 0);
+    let update = vm.arg_bool(ctx, 1);
+    let old = ai_value(vm, this) != 0;
+    let ok = old == expect;
+    if ok {
+        vm.set_instance_field_by_name(this, "value", update as i32 as u32);
+    }
+    vm.ret_bool(ctx, ok);
     Ok(())
 }
 

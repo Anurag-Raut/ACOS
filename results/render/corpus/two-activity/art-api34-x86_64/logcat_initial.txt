@@ -1,0 +1,354 @@
+--------- beginning of main
+11-11 00:28:49.858   942   942 D CarrierSvcBindHelper: onHandleForceStop: [dev.acos.fixtures.twoactivity]
+11-11 00:28:49.858   942   942 D CarrierSvcBindHelper: No carrier app for: 0
+--------- beginning of system
+11-11 00:28:49.859   571   648 D CompatibilityChangeReporter: Compat change id reported: 218533173; UID 10200; state: ENABLED
+11-11 00:28:49.860   571   648 D CompatibilityChangeReporter: Compat change id reported: 262645982; UID 10200; state: ENABLED
+11-11 00:28:49.862   571   667 I InputReader: Reconfiguring input devices, changes=KEYBOARD_LAYOUTS
+11-11 00:28:49.867  1298  1312 I PermissionControllerServiceImpl: Updating user sensitive for uid 10200
+11-11 00:28:49.869   903   903 V MediaPlayerList: mPackageChangedBroadcastReceiver: action: android.intent.action.PACKAGE_CHANGED
+11-11 00:28:49.870   903   903 V MediaPlayerList: mPackageChangedBroadcastReceiver: action: android.intent.action.PACKAGE_CHANGED
+11-11 00:28:49.870   782   897 D StylusManager: Stylus InputDevice changed: 14 virtio_input_multi_touch_11
+11-11 00:28:49.870   782   897 D StylusManager: Stylus InputDevice changed: 13 virtio_input_multi_touch_10
+11-11 00:28:49.870   782   897 D StylusManager: Stylus InputDevice changed: 12 virtio_input_multi_touch_9
+11-11 00:28:49.870   782   897 D StylusManager: Stylus InputDevice changed: 7 virtio_input_multi_touch_4
+11-11 00:28:49.870   782   897 D StylusManager: Stylus InputDevice changed: 6 virtio_input_multi_touch_3
+11-11 00:28:49.871   782   897 D StylusManager: Stylus InputDevice changed: 5 virtio_input_multi_touch_2
+11-11 00:28:49.872   942   942 D CarrierSvcBindHelper: onPackageModified: dev.acos.fixtures.twoactivity
+11-11 00:28:49.872   782   897 D StylusManager: Stylus InputDevice changed: 4 virtio_input_multi_touch_1
+11-11 00:28:49.872   942   942 D CarrierSvcBindHelper: No carrier app for: 0
+11-11 00:28:49.872   782   897 D StylusManager: Stylus InputDevice changed: 10 virtio_input_multi_touch_7
+11-11 00:28:49.872   782   897 D StylusManager: Stylus InputDevice changed: 9 virtio_input_multi_touch_6
+11-11 00:28:49.872   571   768 D CompatibilityChangeReporter: Compat change id reported: 161252188; UID 10200; state: DISABLED
+11-11 00:28:49.872   782   897 D StylusManager: Stylus InputDevice changed: 11 virtio_input_multi_touch_8
+11-11 00:28:49.873   782   897 D StylusManager: Stylus InputDevice changed: 8 virtio_input_multi_touch_5
+11-11 00:28:49.873   571   768 W ActivityTaskManager: callingPackage for (uid=2000, pid=4501) has no WPC
+11-11 00:28:49.873   571   768 D CompatibilityChangeReporter: Compat change id reported: 265464455; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 265452344; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 266124927; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 265451093; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 265456536; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 255940284; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 236283604; UID 10200; state: DISABLED
+11-11 00:28:49.874   571   768 D CompatibilityChangeReporter: Compat change id reported: 263959004; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 264304459; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 264301586; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 254631730; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 273509367; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 263259275; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 174042980; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 174042936; UID 10200; state: DISABLED
+11-11 00:28:49.875   571   768 D CompatibilityChangeReporter: Compat change id reported: 181136395; UID 10200; state: DISABLED
+11-11 00:28:49.876   571   768 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:49.877   942  1208 D ImsResolver: maybeAddedImsService, packageName: dev.acos.fixtures.twoactivity
+11-11 00:28:49.878   571   768 D CompatibilityChangeReporter: Compat change id reported: 194480991; UID 10200; state: ENABLED
+11-11 00:28:49.883   571   601 W PackageManager: Failed registering loading progress callback. Package is fully loaded.
+11-11 00:28:49.886   571   768 D CompatibilityChangeReporter: Compat change id reported: 184838306; UID 10200; state: DISABLED
+11-11 00:28:49.886   571   768 D CompatibilityChangeReporter: Compat change id reported: 185004937; UID 10200; state: DISABLED
+11-11 00:28:49.887   571   768 D CompatibilityChangeReporter: Compat change id reported: 197654537; UID 10200; state: ENABLED
+11-11 00:28:49.888   571   768 V SplashScreenExceptionList: SplashScreen checking exception for package dev.acos.fixtures.twoactivity (target sdk:34) -> false
+11-11 00:28:49.888   571   768 D CompatibilityChangeReporter: Compat change id reported: 205907456; UID 10200; state: ENABLED
+11-11 00:28:49.889   782   839 V WindowManagerShell: Transition requested: android.os.BinderProxy@9ee32f8 TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=47 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=dev.acos.fixtures.twoactivity/.MainActivity } baseActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} topActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} origActivity=null realActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} numActivities=1 lastActiveTime=73369 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@1c373d1} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 128 - 0, 0) topActivityInfo=ActivityInfo{2282e36 dev.acos.fixtures.twoactivity.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+11-11 00:28:49.891   571   768 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=dev.acos.fixtures.twoactivity/.MainActivity} with LAUNCH_MULTIPLE from uid 2000 (BAL_ALLOW_PERMISSION) result code=0
+11-11 00:28:49.891   571   601 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-11 00:28:49.892   571   593 D CompatibilityChangeReporter: Compat change id reported: 135634846; UID 10200; state: DISABLED
+11-11 00:28:49.892   571   593 D CompatibilityChangeReporter: Compat change id reported: 177438394; UID 10200; state: DISABLED
+11-11 00:28:49.892   571   593 D CompatibilityChangeReporter: Compat change id reported: 135772972; UID 10200; state: DISABLED
+11-11 00:28:49.892   571   593 D CompatibilityChangeReporter: Compat change id reported: 135754954; UID 10200; state: ENABLED
+11-11 00:28:49.892   571   603 D CompatibilityChangeReporter: Compat change id reported: 143937733; UID 10200; state: ENABLED
+11-11 00:28:49.901  4392  4392 I AcosSqlite: onPause
+11-11 00:28:49.902   782   875 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:49.902   445   445 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-11 00:28:49.904  1470  1470 I AiAiEcho: AppFetcherImplV2 updateApps package:[dev.acos.fixtures.twoactivity], userId:[0], reason:[package is added.].
+11-11 00:28:49.906   383   383 D Zygote  : Forked child process 4504
+11-11 00:28:49.907   571   603 I ActivityManager: Start proc 4504:dev.acos.fixtures.twoactivity/u0a200 for next-top-activity {dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity}
+11-11 00:28:49.908  1470  1470 I AiAiEcho: AppFetcherImpl onPackageChanged dev.acos.fixtures.twoactivity.
+11-11 00:28:49.909   571   648 D CompatibilityChangeReporter: Compat change id reported: 265195908; UID 10200; state: ENABLED
+11-11 00:28:49.909   782   880 D SplashScreenView: Build android.window.SplashScreenView{3b85934 V.E...... ......ID 0,0-0,0}
+11-11 00:28:49.909   782   880 D SplashScreenView: Icon: view: android.widget.ImageView{2e4035d V.ED..... ......I. 0,0-0,0 #10204f0 android:id/splashscreen_icon_view} drawable: com.android.wm.shell.startingsurface.SplashscreenIconDrawableFactory$ImmobileIconDrawable@b09f4d2 size: 420
+11-11 00:28:49.909   782   880 D SplashScreenView: Branding: view: android.view.View{84169a3 G.ED..... ......I. 0,0-0,0 #10204ef android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+11-11 00:28:49.910  1470  2073 I AiAiEcho: AppIndexer Package:[dev.acos.fixtures.twoactivity] UserProfile:[0] Enabled:[true].
+11-11 00:28:49.910  1470  2073 I AiAiEcho: AppFetcherImplV2 updateApps package:[dev.acos.fixtures.twoactivity], userId:[0], reason:[package is updated.].
+11-11 00:28:49.911  1470  2073 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:49.920   571  1117 D CoreBackPreview: Window{16e07b u0 Splash Screen dev.acos.fixtures.twoactivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@95d412d, mPriority=0, mIsAnimationCallback=false}
+11-11 00:28:49.920  1062  1124 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:49.929   571   594 D CompatibilityChangeReporter: Compat change id reported: 197654537; UID 10199; state: ENABLED
+11-11 00:28:49.930  1470  1616 I AiAiEcho: EchoSearch: WidgetFetcherImpl is initialized with [30] widgets [reason=package added for userId: 0]
+11-11 00:28:49.933   782   839 V WindowManagerShell: onTransitionReady android.os.BinderProxy@9ee32f8: {id=8 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@345fb5c} m=OPEN f=NONE leash=Surface(name=Task=47)/@0xa740a9 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0},{WCT{android.window.IWindowContainerToken$Stub$Proxy@c8a3e65} m=TO_BACK f=NONE leash=Surface(name=Task=46)/@0x8a0362e sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0}]}
+11-11 00:28:49.933   782   839 V WindowManagerShell: Playing animation for (#8)android.os.BinderProxy@9ee32f8@0
+11-11 00:28:49.933   782   839 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultMixedHandler@ffd0d1f
+11-11 00:28:49.933   782   839 V WindowManagerShell:  try handler com.android.wm.shell.keyguard.KeyguardTransitionHandler@db8386c
+11-11 00:28:49.933   782   839 V WindowManagerShell:  try handler com.android.wm.shell.activityembedding.ActivityEmbeddingController@8291e35
+11-11 00:28:49.933   782   839 V WindowManagerShell:  try handler com.android.wm.shell.recents.RecentsTransitionHandler@2b432ca
+11-11 00:28:49.933   782   839 V ShellRecents: RecentsTransitionHandler.startAnimation: no controller found
+11-11 00:28:49.933   782   839 V WindowManagerShell:  try handler com.android.wm.shell.pip.PipTransition@6f5c3b
+11-11 00:28:49.934   782   839 V WindowManagerShell:  try handler com.android.wm.shell.splitscreen.StageCoordinator@e266f58
+11-11 00:28:49.934   782   839 V WindowManagerShell:  try handler com.android.wm.shell.transition.RemoteTransitionHandler@25a68b1
+11-11 00:28:49.934   782   839 V WindowManagerShell: Transition doesn't have explicit remote, search filters for match for {id=8 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@345fb5c} m=OPEN f=NONE leash=Surface(name=Task=47)/@0xa740a9 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0},{WCT{android.window.IWindowContainerToken$Stub$Proxy@c8a3e65} m=TO_BACK f=NONE leash=Surface(name=Task=46)/@0x8a0362e sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0}]}
+11-11 00:28:49.934   782   839 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=dream independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=ANY topActivity=null},{atype=home independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@d88bd06, appThread = android.app.IApplicationThread$Stub$Proxy@5747fc7, debugName = LauncherToDream }}
+11-11 00:28:49.934   782   839 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@c7339f4, appThread = android.app.IApplicationThread$Stub$Proxy@f70351d, debugName = QuickstepLaunchHome }}
+11-11 00:28:49.934   782   839 V WindowManagerShell:  Delegate animation for #8 to null
+11-11 00:28:49.934   782   839 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultTransitionHandler@cf85122
+11-11 00:28:49.934   782   839 V WindowManagerShell: start default transition animation, info = {id=8 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@345fb5c} m=OPEN f=NONE leash=Surface(name=Task=47)/@0xa740a9 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0},{WCT{android.window.IWindowContainerToken$Stub$Proxy@c8a3e65} m=TO_BACK f=NONE leash=Surface(name=Task=46)/@0x8a0362e sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0}]}
+11-11 00:28:49.935   782   839 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@1e57148 animAttr=0x9 type=OPEN isEntrance=false
+11-11 00:28:49.935   782   839 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@acdd06 animAttr=0x8 type=OPEN isEntrance=true
+11-11 00:28:49.936   782   839 V WindowManagerShell:  animated by com.android.wm.shell.transition.DefaultTransitionHandler@cf85122
+11-11 00:28:49.938   571   590 V WindowManager: Sent Transition #8 createdAt=11-11 00:28:49.878 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=47 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=dev.acos.fixtures.twoactivity/.MainActivity } baseActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} topActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} origActivity=null realActivity=ComponentInfo{dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity} numActivities=1 lastActiveTime=73369 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{ce4ae74 Task{fa62ea6 #47 type=standard A=10200:dev.acos.fixtures.twoactivity}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 128 - 0, 0) topActivityInfo=ActivityInfo{c3dcf9d dev.acos.fixtures.twoactivity.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+11-11 00:28:49.938   571   590 V WindowManager:     startWCT=WindowContainerTransaction { changes = {} hops = [] errorCallbackToken=null taskFragmentOrganizer=null }
+11-11 00:28:49.938   571   590 V WindowManager:     info={id=8 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{ce4ae74 Task{fa62ea6 #47 type=standard A=10200:dev.acos.fixtures.twoactivity}}} m=OPEN f=NONE leash=Surface(name=Task=47)/@0x8da9fba sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0},{WCT{RemoteToken{81cb864 Task{8f0555f #46 type=standard A=10199:dev.acos.fixtures.sqlitecrud}}} m=TO_BACK f=NONE leash=Surface(name=Task=46)/@0xe0c19f6 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0}]}
+11-11 00:28:49.946  4392  4412 D EGL_emulation: app_time_stats: avg=201.89ms min=12.17ms max=3171.58ms count=17
+11-11 00:28:49.958  4504  4504 I res.twoactivity: Late-enabling -Xcheck:jni
+11-11 00:28:49.974  4504  4504 I res.twoactivity: Using CollectorTypeCC GC.
+11-11 00:28:49.975  4504  4504 W res.twoactivity: Unexpected CPU variant for x86: x86_64.
+11-11 00:28:49.975  4504  4504 W res.twoactivity: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-11 00:28:49.976   782   900 D EGL_emulation: app_time_stats: avg=3933.55ms min=3933.55ms max=3933.55ms count=1
+11-11 00:28:49.996   460   477 I adbd    : jdwp connection from 4504
+11-11 00:28:50.006  4504  4504 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10200; state: ENABLED
+11-11 00:28:50.007  4504  4504 D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10200; state: ENABLED
+11-11 00:28:50.011   571  1117 D CompatibilityChangeReporter: Compat change id reported: 170503758; UID 10200; state: ENABLED
+11-11 00:28:50.013  4504  4504 W ziparchive: Unable to open '/data/app/~~QJNz8hiwWiXC3u3GdBl6gQ==/dev.acos.fixtures.twoactivity-vzrx-UCvETTKmmnaGkeAWw==/base.dm': No such file or directory
+11-11 00:28:50.013  4504  4504 W ziparchive: Unable to open '/data/app/~~QJNz8hiwWiXC3u3GdBl6gQ==/dev.acos.fixtures.twoactivity-vzrx-UCvETTKmmnaGkeAWw==/base.dm': No such file or directory
+11-11 00:28:50.014  4504  4504 D nativeloader: Configuring clns-6 for other apk /data/app/~~QJNz8hiwWiXC3u3GdBl6gQ==/dev.acos.fixtures.twoactivity-vzrx-UCvETTKmmnaGkeAWw==/base.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~QJNz8hiwWiXC3u3GdBl6gQ==/dev.acos.fixtures.twoactivity-vzrx-UCvETTKmmnaGkeAWw==/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/dev.acos.fixtures.twoactivity
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment: Currently set values for:
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.twoactivity: false
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment: dev.acos.fixtures.twoactivity is not listed in per-application setting
+11-11 00:28:50.018  4504  4504 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+11-11 00:28:50.022   571  1117 I ActivityManager: Flag disabled. Ignoring finishAttachApplication from uid: 10200. pid: 4504
+11-11 00:28:50.027  4504  4526 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+11-11 00:28:50.028  4504  4526 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+11-11 00:28:50.029  4504  4526 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+11-11 00:28:50.030  4504  4504 I AcosTwo : Main.onCreate
+11-11 00:28:50.048  4504  4504 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10200; state: ENABLED
+11-11 00:28:50.058  4504  4504 I AcosTwo : Main.onStart
+11-11 00:28:50.059  4504  4504 I AcosTwo : Main.onResume
+11-11 00:28:50.061  4504  4504 D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10200; state: DISABLED
+11-11 00:28:50.061  4504  4504 W OpenGLRenderer: Unknown dataspace 0
+11-11 00:28:50.072   571  1117 D CoreBackPreview: Window{5e076d4 u0 dev.acos.fixtures.twoactivity/dev.acos.fixtures.twoactivity.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@b7fdbc3, mPriority=0, mIsAnimationCallback=false}
+11-11 00:28:50.077   445   949 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10200 pid=0
+11-11 00:28:50.077   445   949 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10200 => denied (126 us)
+11-11 00:28:50.077   445   949 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10200 pid=0
+11-11 00:28:50.077   445   949 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10200 => denied (67 us)
+11-11 00:28:50.077   445   458 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10200 pid=4504
+11-11 00:28:50.077   445   458 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10200 => denied (73 us)
+11-11 00:28:50.077   445   949 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10200 pid=0
+11-11 00:28:50.077   445   458 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10200 pid=4504
+11-11 00:28:50.077   445   949 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10200 => denied (56 us)
+11-11 00:28:50.077   445   458 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10200 => denied (56 us)
+11-11 00:28:50.079  4504  4504 D AutofillManager: notifyViewEnteredForFillDialog:1073741824
+11-11 00:28:50.083  4504  4524 W OpenGLRenderer: Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-11 00:28:50.089   183   183 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device VINTF manifest.
+11-11 00:28:50.090  4504  4524 I Gralloc4: mapper 4.x is not supported
+--------- beginning of kernel
+11-11 00:28:50.155     0     0 I servicemanager: Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest.
+11-11 00:28:50.141   782   900 D EGL_emulation: app_time_stats: avg=1507.03ms min=28.66ms max=2985.39ms count=2
+11-11 00:28:50.224   571  1117 W BatteryExternalStatsWorker: error reading Bluetooth stats: 11
+11-11 00:28:50.334  1541  1541 I GsaVoiceInteractionSrv: O received Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 (has extras) }
+11-11 00:28:50.345   571  2351 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10200 pid=0
+11-11 00:28:50.345   571  2351 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10200 => denied (110 us)
+11-11 00:28:50.345   571  2351 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10200 pid=0
+11-11 00:28:50.345   571  2351 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10200 => denied (34 us)
+11-11 00:28:50.345   571  2351 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10200 pid=0
+11-11 00:28:50.345   571  2351 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10200 => denied (17 us)
+11-11 00:28:50.345   782   782 D ControlsListingControllerImpl: ServiceConfig reloaded, count: 0
+11-11 00:28:50.354   782   782 D ControlsListingControllerImpl: ServiceConfig reloaded, count: 0
+11-11 00:28:50.354   571   590 W ziparchive: Unable to open '/data/app/~~QJNz8hiwWiXC3u3GdBl6gQ==/dev.acos.fixtures.twoactivity-vzrx-UCvETTKmmnaGkeAWw==/base.dm': No such file or directory
+11-11 00:28:50.365   571   768 D CompatibilityChangeReporter: Compat change id reported: 214016041; UID 10200; state: ENABLED
+11-11 00:28:50.365   571   768 I ImeTracker: dev.acos.fixtures.twoactivity:52f0fbb: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_UNSPECIFIED_WINDOW
+11-11 00:28:50.365   571   768 I ImeTracker: dev.acos.fixtures.twoactivity:52f0fbb: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-11 00:28:50.366   571  2344 D CompatibilityChangeReporter: Compat change id reported: 161252188; UID 10200; state: DISABLED
+11-11 00:28:50.371  1621  2160 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:50.373  1403  1403 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():3227 
+11-11 00:28:50.374  1403  1403 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2087 repeatCheckTimes = 0, unlocked = true
+11-11 00:28:50.375  1403  1403 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1877 onStartInput(EditorInfo{inputType=0x0(NULL) imeOptions=0x0 privateImeOptions=null actionName=UNSPECIFIED actionLabel=null actionId=0 initialSelStart=-1 initialSelEnd=-1 initialCapsMode=0x0 hintText=null label=null packageName=dev.acos.fixtures.twoactivity fieldId=0 fieldName=null extras=null}, false)
+11-11 00:28:50.375  1403  1403 I GoogleInputMethodService: GoogleInputMethodService.shouldHideHeaderOnInitialState():4008 ShouldHideHeaderOnInitialState = false
+11-11 00:28:50.376  1403  1403 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2087 repeatCheckTimes = 2, unlocked = true
+11-11 00:28:50.379   571   590 I ActivityTaskManager: Displayed dev.acos.fixtures.twoactivity/.MainActivity for user 0: +478ms
+11-11 00:28:50.385  1269  4434 I Fitness : OnPackageChangedOperation got intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package: flg=0x5000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) } [CONTEXT service_id=17 ]
+11-11 00:28:50.403  1621  4535 I Auth    : [SupervisedAccountIntentOperation] onHandleIntent(): android.intent.action.PACKAGE_ADDED
+11-11 00:28:50.404  1621  4534 I BlockstoreStorage: Clearing Blockstore Data for package dev.acos.fixtures.twoactivity [CONTEXT service_id=258 ]
+11-11 00:28:50.405  1621  4534 I BlockstoreStorage: Keyless data not found or its IsLastInstallationData = false. [CONTEXT service_id=258 ]
+11-11 00:28:50.406  1621  4534 I Dck     : doesDeviceHaveSupportedWirelessCapabilities: wccSysProp:0, wccMendel:3, deviceWccOverride:false [CONTEXT service_id=289 ]
+11-11 00:28:50.406  1621  4534 I Dck     : isDckModuleEligible: isAtLeastR:true, hasWccSupport:false, downloadAllowed:false [CONTEXT service_id=289 ]
+11-11 00:28:50.406  1621  4534 W Dck     : Dck module not eligible for asynchronous downloading [CONTEXT service_id=289 ]
+11-11 00:28:50.409  1621  1621 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.common.BIND_SHARED_PREFS pkg=com.google.android.gms }
+11-11 00:28:50.409  1621  1621 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.common.BIND_SHARED_PREFS pkg=com.google.android.gms }
+11-11 00:28:50.412  1269  4541 I ProximityAuth: [RecentAppsMediator] Package added: (user=UserHandle{0}) dev.acos.fixtures.twoactivity
+11-11 00:28:50.424  1269  4541 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:50.430  1269  4537 I FontLog : Package dev.acos.fixtures.twoactivity has no metadata [CONTEXT service_id=132 ]
+11-11 00:28:50.430  1269  4537 W GCM     : Unexpected forwarded intent: Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) }
+11-11 00:28:50.432  1269  4537 W GCM     : Unexpected forwarded intent: Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) }
+11-11 00:28:50.432  1269  2014 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.438  1269  4540 I Fitness : OnPackageChangedOperation got intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package: flg=0x5000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) } [CONTEXT service_id=17 ]
+11-11 00:28:50.439  1269  4302 I Fitness : FitCleanupIntentOperation received Intent android.intent.action.PACKAGE_CHANGED [CONTEXT service_id=17 ]
+11-11 00:28:50.439  1269  2014 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.445  1269  4540 I Fitness : FitCleanupIntentOperation received Intent android.intent.action.PACKAGE_CHANGED [CONTEXT service_id=17 ]
+11-11 00:28:50.446  1621  1621 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.common.BIND_SHARED_PREFS pkg=com.google.android.gms }
+11-11 00:28:50.453   782   839 V WindowManagerShell: Transition animation finished (aborted=false), notifying core (#8)android.os.BinderProxy@9ee32f8@0
+11-11 00:28:50.454   571   590 V WindowManager: Finish Transition #8: created at 11-11 00:28:49.878 collect-started=0.036ms request-sent=10.749ms started=12.739ms ready=49.87ms sent=53.596ms finished=575.685ms
+11-11 00:28:50.462   782   839 V WindowManagerShell: Track 0 became idle
+11-11 00:28:50.462   782   839 V WindowManagerShell: All active transition animations finished
+11-11 00:28:50.466  1621  4325 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-11 00:28:50.467  1269  2014 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.467   571   648 D CompatibilityChangeReporter: Compat change id reported: 265195908; UID 10199; state: ENABLED
+11-11 00:28:50.468  1269  2014 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.477  1621  4325 I Icing   : Indexing done com.google.android.gms-apps
+11-11 00:28:50.479  1269  1375 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.480  1269  1375 W ChimeraUtils: Module com.google.android.gms.nearby_en missing resource null(0)
+11-11 00:28:50.485  4392  4392 I AcosSqlite: onStop
+11-11 00:28:50.486  4392  4392 I AcosSqlite: onSaveInstanceState draft=
+11-11 00:28:50.488  1621  4325 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-11 00:28:50.496  1621  4325 I Icing   : Indexing done com.google.android.gms-apps
+11-11 00:28:50.496  1621  4325 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-11 00:28:50.496  1621  4325 I Icing   : Indexing done com.google.android.gms-apps
+11-11 00:28:50.531  1621  4337 I cr_CronetUrlRequestContext: destroyNativeStreamLocked org.chromium.net.impl.CronetBidirectionalStream@db82d38
+11-11 00:28:50.562  1427  1483 I incfs-mounts: [incfs] Loaded incremental-fs mount info: 9 instances, 18 mount points
+11-11 00:28:50.723   782   875 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@b6e8c1e
+11-11 00:28:50.724   571   633 W InputManager-JNI: Input channel object '16e07b Splash Screen dev.acos.fixtures.twoactivity (client)' was disposed without first being removed with the input manager!
+11-11 00:28:50.724   571  1750 D CoreBackPreview: Window{16e07b u0 Splash Screen dev.acos.fixtures.twoactivity EXITING}: Setting back callback null
+11-11 00:28:50.780   571   615 I incfs-dataloaderconnector: Reported status back to IncrementalService. DataLoaderId=40, status=0
+11-11 00:28:51.155   782   900 D EGL_emulation: app_time_stats: avg=20.30ms min=1.33ms max=65.99ms count=49
+11-11 00:28:52.237   782   900 D EGL_emulation: app_time_stats: avg=25.17ms min=15.48ms max=99.60ms count=43
+11-11 00:28:52.434  4556  4556 W BpBinder: Linking to death on android.gui.ISurfaceComposer but there are no threads (yet?) listening to incoming transactions. See ProcessState::startThreadPool and ProcessState::setThreadPoolMaxThreadCount. Generally you should setup the binder threadpool before other initialization steps.
+11-11 00:28:52.434  4556  4556 W ProcessState: Extra binder thread started, but 0 threads requested. Do not use *startThreadPool when zero threads are requested.
+11-11 00:28:52.438   183   183 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device VINTF manifest.
+11-11 00:28:52.438  4556  4557 I Gralloc4: mapper 4.x is not supported
+11-11 00:28:52.504     0     0 I servicemanager: Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest.
+11-11 00:28:52.623  4558  4558 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+11-11 00:28:52.629  4558  4558 I AndroidRuntime: Using default boot image
+11-11 00:28:52.629  4558  4558 I AndroidRuntime: Leaving lock profiling enabled
+11-11 00:28:52.632  4558  4558 I app_process: Core platform API reporting enabled, enforcing=false
+11-11 00:28:52.632  4558  4558 I app_process: Using CollectorTypeCC GC.
+11-11 00:28:52.742  4558  4558 D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+11-11 00:28:52.752  4558  4558 D app_process: Time zone APEX ICU file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-11 00:28:52.752  4558  4558 D app_process: I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+11-11 00:28:52.759  4558  4558 W app_process: Unexpected CPU variant for x86: x86_64.
+11-11 00:28:52.759  4558  4558 W app_process: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-11 00:28:52.761  4558  4558 W app_process: ClassLoaderContext shared library size mismatch. Expected=2, found=0 (PCL[]{PCL[/system/framework/android.test.base.jar*836642756]#PCL[/system/framework/android.test.mock.jar*3186112116]} | PCL[])
+11-11 00:28:52.762  4558  4558 W app_process: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[]{PCL[/system/framework/android.test.runner.jar*4168958247]{PCL[/system/framework/android.test.base.jar*836642756]#PCL[/system/framework/android.test.mock.jar*3186112116]}#PCL[/system/framework/android.test.base.jar*836642756]} | PCL[/system/framework/android.test.runner.jar*4168958247])
+11-11 00:28:52.780  4558  4558 W libc    : Access denied finding property "ro.product.name_for_attestation"
+11-11 00:28:52.780  4558  4558 W libc    : Access denied finding property "ro.product.brand_for_attestation"
+11-11 00:28:52.780  4558  4558 W libc    : Access denied finding property "ro.product.model_for_attestation"
+11-11 00:28:52.780  4558  4558 W main    : type=1400 audit(0.0:79): avc:  denied  { read } for  name="u:object_r:build_attestation_prop:s0" dev="tmpfs" ino=86 scontext=u:r:shell:s0 tcontext=u:object_r:build_attestation_prop:s0 tclass=file permissive=0
+11-11 00:28:52.780  4558  4558 W main    : type=1400 audit(0.0:80): avc:  denied  { read } for  name="u:object_r:build_attestation_prop:s0" dev="tmpfs" ino=86 scontext=u:r:shell:s0 tcontext=u:object_r:build_attestation_prop:s0 tclass=file permissive=0
+11-11 00:28:52.780  4558  4558 W main    : type=1400 audit(0.0:81): avc:  denied  { read } for  name="u:object_r:build_attestation_prop:s0" dev="tmpfs" ino=86 scontext=u:r:shell:s0 tcontext=u:object_r:build_attestation_prop:s0 tclass=file permissive=0
+11-11 00:28:52.792  4558  4558 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+11-11 00:28:52.794   571   648 D ActivityManager: sync unfroze 1691 com.google.android.apps.youtube.music for 6
+11-11 00:28:52.799  4558  4558 D UiAutomationConnection: Created on user UserHandle{0}
+11-11 00:28:52.799  4558  4558 I UiAutomation: Initialized for user 0 on display 0
+11-11 00:28:52.799  4558  4558 W UiAutomation: Created with deprecatead constructor, assumes DEFAULT_DISPLAY
+11-11 00:28:52.801   571  1750 D AccessibilityManagerService: changeCurrentUserForTestAutomationIfNeededLocked(0): ignoring because device doesn't support visible background users
+11-11 00:28:52.801   571  1750 I UiAutomationManager: Registering UiTestAutomationService (id=com.android.server.accessibility/UiAutomation) when called by user 0
+11-11 00:28:52.806   571  1750 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-11 00:28:52.807  4558  4575 V UiAutomation: Init UiAutomation@faab663[id=6, displayId=0, flags=0]
+11-11 00:28:52.809  1470  1500 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+11-11 00:28:52.814   571   571 D BatterySaverPolicy: accessibility changed to true, updating policy.
+11-11 00:28:52.817   571  1750 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-11 00:28:52.817  1470  1500 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+11-11 00:28:52.818  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.818  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.818  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.818  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.820   571   768 D ConnectivityService: requestNetwork for uid/pid:10156/1691 activeRequest: null callbackRequest: 124 [NetworkRequest [ REQUEST id=125, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]] callback flags: 0 order: 2147483647
+11-11 00:28:52.822   571   700 D WifiNetworkFactory: got request NetworkRequest [ REQUEST id=125, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.822   571   768 D SafetySourceDataValidator: No cert check requested for package com.google.android.permissioncontroller
+11-11 00:28:52.822   571   700 D UntrustedWifiNetworkFactory: got request NetworkRequest [ REQUEST id=125, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.824   571   700 D OemPaidWifiNetworkFactory: got request NetworkRequest [ REQUEST id=125, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.824   571   700 D MultiInternetWifiNetworkFactory: got request NetworkRequest [ REQUEST id=125, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.824   571   707 D ConnectivityService: NetReassign [125 : null → 101] [c 1] [a 0] [i 3]
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:52.826  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:52.827  1724  2115 I A       : NGA disabled due to not being eligible.
+11-11 00:28:52.828  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-11 00:28:52.828  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+11-11 00:28:52.829  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-11 00:28:52.829  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-11 00:28:52.829  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+11-11 00:28:52.829  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-11 00:28:52.840   782   782 D SsMediaDataProvider: Forwarding Smartspace updates []
+11-11 00:28:52.840   782   782 D SsMediaDataProvider: Forwarding Smartspace updates []
+11-11 00:28:52.841   782   782 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-11 00:28:52.841   782   782 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-11 00:28:52.883   571  1750 D ConnectivityService: requestNetwork for uid/pid:10156/1691 activeRequest: null callbackRequest: 126 [NetworkRequest [ REQUEST id=127, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]] callback flags: 0 order: 2147483647
+11-11 00:28:52.884   571   700 D WifiNetworkFactory: got request NetworkRequest [ REQUEST id=127, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.884   571   700 D UntrustedWifiNetworkFactory: got request NetworkRequest [ REQUEST id=127, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.885   571   700 D OemPaidWifiNetworkFactory: got request NetworkRequest [ REQUEST id=127, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.885   571   700 D MultiInternetWifiNetworkFactory: got request NetworkRequest [ REQUEST id=127, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VCN_MANAGED Uid: 10156 RequestorUid: 10156 RequestorPkg: com.google.android.apps.youtube.music UnderlyingNetworks: Null] ]
+11-11 00:28:52.885   571   707 D ConnectivityService: NetReassign [127 : null → 101] [c 0] [a 1] [i 0]
+11-11 00:28:52.891   571  1556 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: Could not register for notifications with InnerTube: 
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: abqx: zvm: Precondition check failed.
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at abqn.apply(Unknown Source:4)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at yyi.r(PG:5)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at yyi.b(PG:2)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at abqp.d(PG:4)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at agsb.c(PG:63)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at agsb.j(PG:38)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at agsb.d(PG:3)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at agrz.run(Unknown Source:2)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:487)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.FutureTask.run(FutureTask.java:264)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at smg.run(PG:2)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.lang.Thread.run(Thread.java:1012)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at snu.run(PG:5)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: Caused by: zvm: Precondition check failed.
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at abpb.e(PG:5)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at zhp.f(PG:1)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at zhp.e(PG:1)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at zgl.run(PG:19)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at aosb.run(PG:3)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at snd.run(PG:1)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at smj.run(PG:2)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	... 2 more
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: Caused by: efc
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	at zgl.run(PG:13)
+11-11 00:28:52.905  1691  2463 W YouTubeMusic: 	... 7 more
+11-11 00:28:53.832  4558  4558 I AccessibilityNodeInfoDumper: Skipping invisible child: android.view.accessibility.AccessibilityNodeInfo@a18e; boundsInParent: Rect(0, 0 - 0, 147); boundsInScreen: Rect(1080, 128 - 1080, 275); boundsInWindow: Rect(1080, 128 - 1080, 275); packageName: dev.acos.fixtures.twoactivity; className: android.widget.LinearLayout; text: null; error: null; maxTextLength: -1; stateDescription: null; contentDescription: null; tooltipText: null; containerTitle: null; viewIdResName: null; uniqueId: null; checkable: false; checked: false; focusable: false; focused: false; selected: false; clickable: false; longClickable: false; contextClickable: false; enabled: true; password: false; scrollable: false; importantForAccessibility: false; visible: false; actions: [AccessibilityAction: ACTION_SELECT - null, AccessibilityAction: ACTION_CLEAR_SELECTION - null, AccessibilityAction: ACTION_ACCESSIBILITY_FOCUS - null, AccessibilityAction: ACTION_SHOW_ON_SCREEN - null]; isTextSelectable: false
+11-11 00:28:53.833  4558  4558 W AccessibilityNodeInfoDumper: Fetch time: 2ms
+11-11 00:28:53.834   571  1750 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-11 00:28:53.834   571  1750 D AccessibilityManagerService: restoreCurrentUserForTestAutomationIfNeededLocked(): ignoring because device doesn't support visible background users
+11-11 00:28:53.834  1470  1500 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+11-11 00:28:53.834  4558  4558 D AndroidRuntime: Shutting down VM
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:53.835  1724  2094 I A       : NGA disabled due to not being eligible.
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:53.835  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:53.836  1470  1613 I AiAiEcho: Predicting[0]: 
+11-11 00:28:53.836  1470  1613 I AiAiEcho: EchoTargets: 
+11-11 00:28:53.836  1470  1613 I AiAiEcho: Filtered by AiAi flag check: 
+11-11 00:28:53.836  1470  1613 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata: 
+11-11 00:28:53.836  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-11 00:28:53.836  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+11-11 00:28:53.836  1470  1613 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-11 00:28:53.838   782   782 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-11 00:28:53.840   571   571 D BatterySaverPolicy: accessibility changed to false, updating policy.
+11-11 00:28:53.856   782   782 D SsMediaDataProvider: Forwarding Smartspace updates []
+11-11 00:28:54.730     0     0 I logd    : logdr: UID=2000 GID=2000 PID=4583 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

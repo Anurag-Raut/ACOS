@@ -265,7 +265,14 @@ impl AssetManager {
                     if resolve_refs =>
                 {
                     if value.data == 0 {
-                        return Some((hit.source_index, hit.entry, cur));
+                        // A `@null` entry is materialised as `TYPE_NULL`.
+                        // Returning the raw `TYPE_REFERENCE` with `data=0`
+                        // made `ResourcesImpl.loadDrawableForCookie` throw
+                        // `NotFoundException: 108027e is not a Drawable`
+                        // (`config_scrollbarTrackVertical` = `@null`).
+                        let mut entry = hit.entry.clone();
+                        entry.value = ResValue::NULL;
+                        return Some((hit.source_index, entry, cur));
                     }
                     cur = value.data;
                 }
@@ -273,9 +280,23 @@ impl AssetManager {
                     if resolve_refs =>
                 {
                     // `?attr` resolves against the default theme when present.
+                    // The theme value may itself be a `@resid` (e.g.
+                    // `colorControlHighlight` -> `@color/ripple_material_light`),
+                    // so keep chasing the chain. Returning the raw reference
+                    // made the framework throw `Can't convert to ComplexColor:
+                    // type=0x1` while inflating `btn_default_material`.
                     if let Some(v) = self.theme_resolve_attr(self.default_theme, value.data) {
+                        if v.is_reference() && v.data != 0 {
+                            cur = v.data;
+                            continue;
+                        }
                         let mut entry = hit.entry.clone();
-                        entry.value = v;
+                        entry.value = if v.is_reference() {
+                            // A null reference is materialised as TYPE_NULL.
+                            ResValue::NULL
+                        } else {
+                            v
+                        };
                         return Some((hit.source_index, entry, cur));
                     }
                     return Some((hit.source_index, hit.entry, cur));

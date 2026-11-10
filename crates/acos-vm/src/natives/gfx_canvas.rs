@@ -499,12 +499,17 @@ fn c_save_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn c_save(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = canvas_handle(vm, ctx)?;
+    // `Canvas.save()` returns the value `restoreToCount` takes to undo it:
+    // Skia returns the *post-save* depth (before it was `len`, now `len+1`).
+    // Returning `len+1` here made `View.draw`'s `restoreToCount(saveCount)`
+    // no-op, so the child's clip leaked into every later op and the frame was
+    // clipped to the first child's bounds (canvas-shapes SSIM 0.02).
     let n = rec(h, |c| {
         c.stack.push((c.matrix, c.clip));
         c.ops.push(DisplayOp::Save);
-        c.stack.len() as i32 + 1
+        c.stack.len() as i32
     })
-    .unwrap_or(1);
+    .unwrap_or(0);
     vm.ret_i32(ctx, n);
     Ok(())
 }
@@ -717,9 +722,9 @@ fn c_save_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let n = rec(h, |c| {
         c.stack.push((c.matrix, c.clip));
         c.ops.push(DisplayOp::SaveLayerAlpha(Some(bounds), alpha));
-        c.stack.len() as i32 + 1
+        c.stack.len() as i32
     })
-    .unwrap_or(1);
+    .unwrap_or(0);
     vm.ret_i32(ctx, n);
     Ok(())
 }
@@ -736,9 +741,9 @@ fn c_save_layer_alpha(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let n = rec(h, |c| {
         c.stack.push((c.matrix, c.clip));
         c.ops.push(DisplayOp::SaveLayerAlpha(Some(bounds), alpha));
-        c.stack.len() as i32 + 1
+        c.stack.len() as i32
     })
-    .unwrap_or(1);
+    .unwrap_or(0);
     vm.ret_i32(ctx, n);
     Ok(())
 }

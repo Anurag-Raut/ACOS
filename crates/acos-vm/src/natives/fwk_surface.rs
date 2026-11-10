@@ -378,6 +378,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         ("nativeDisconnect", "(J)V", native_disconnect),
         ("nativeGetLayerId", "(J)I", native_get_layer_id),
         ("nativeGetHandle", "(J)J", native_get_handle),
+        ("nativeCopyFromSurfaceControl", "(J)J", native_copy_from_surface_control),
         ("nativeGetNativeSurfaceControlFinalizer", "()J", surface_control_finalizer),
         ("nativeGetNativeTransactionFinalizer", "()J", transaction_finalizer),
         ("nativeSetTrustedOverlay", "(JJZ)V", native_record_trusted_overlay),
@@ -1387,6 +1388,30 @@ fn native_get_handle(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
     vm.ret_i64(ctx, handle as i64);
     Ok(())
+}
+
+/// `SurfaceControl.nativeCopyFromSurfaceControl(J)J`: duplicate a layer handle.
+///
+/// `SurfaceControl.copyFrom(other, name)` wraps a child layer that aliases the
+/// same compositor layer. The engine models layers as records, so the copy is a
+/// fresh handle with the source's properties (and a distinct `id`).
+fn native_copy_from_surface_control(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let control = vm.arg_i64(ctx, 0) as u64;
+    let handle = with_state(|st| {
+        let rec = st.layers.get(&control).filter(|l| l.alive).cloned()?;
+        let handle = st.alloc();
+        let mut rec = rec;
+        rec.id = handle;
+        st.layers.insert(handle, rec);
+        Some(handle)
+    });
+    match handle {
+        Some(handle) => {
+            vm.ret_i64(ctx, handle as i64);
+            Ok(())
+        }
+        None => Err(stale_error(vm, control)),
+    }
 }
 
 /// `SurfaceControl` finalizer token handed to `NativeAllocationRegistry`.

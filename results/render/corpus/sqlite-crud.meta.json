@@ -1,0 +1,17 @@
+{
+  "causeId": 1,
+  "contentHash": "186a5aba46ed2b868238d88b0eb6151e",
+  "density": 2.625,
+  "frameClass": "Content",
+  "height": 2400,
+  "nodeCount": 8,
+  "output": "results/render/corpus/sqlite-crud.png",
+  "pngBytes": 101485,
+  "renderMs": 63.688673,
+  "scene": "crates/acos-render/tests/scenes/sqlite-crud.json",
+  "seq": 1,
+  "sha256": "0b369c8f7d38a9c668d9b648a4e3230a608d8d71063b707edbdcdaeeff8c8c64",
+  "unsupportedOps": [],
+  "version": "0.1.0",
+  "width": 1080
+}

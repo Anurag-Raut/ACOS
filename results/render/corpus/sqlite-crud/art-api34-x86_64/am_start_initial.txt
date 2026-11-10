@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.sqlitecrud/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.sqlitecrud/.MainActivity
+TotalTime: 496
+WaitTime: 521
+Complete

@@ -172,6 +172,52 @@ impl<T> HandleTable<T> {
         }
     }
 
+    /// Re-install a value at a previously serialised handle, preserving its
+    /// slot index and generation.
+    ///
+    /// Snapshot restore needs this: the framework's Java fields hold the exact
+    /// `(generation << 32) | index` value that was live when the snapshot was
+    /// taken, so the table must hand back the same handle rather than a fresh
+    /// one. A handle already live in the table is replaced without bumping its
+    /// generation; holes left by the serialised set are kept on the free list.
+    /// Returns `false` for the null sentinel.
+    pub fn reinsert(&mut self, handle: Handle, value: T) -> bool {
+        if handle.is_null() {
+            return false;
+        }
+        let index = handle.index() as usize;
+        let old_len = self.slots.len();
+        if old_len <= index {
+            self.slots.resize_with(index + 1, || Slot {
+                generation: 1,
+                value: None,
+            });
+            for i in old_len..index {
+                self.free.push(i as u32);
+            }
+        }
+        let slot = &mut self.slots[index];
+        if slot.value.is_none() {
+            self.live += 1;
+        }
+        slot.generation = handle.generation();
+        slot.value = Some(value);
+        if let Some(pos) = self.free.iter().position(|&i| i == index as u32) {
+            self.free.swap_remove(pos);
+        }
+        true
+    }
+
+    /// Drop every live object and reset handle generations.
+    ///
+    /// Used when importing a restored handle table over an already-initialised
+    /// process-global table.
+    pub fn clear(&mut self) {
+        self.slots.clear();
+        self.free.clear();
+        self.live = 0;
+    }
+
     /// Resolve a handle to a shared reference.
     pub fn get(&self, handle: Handle) -> Result<&T, HandleError> {
         if handle.is_null() {

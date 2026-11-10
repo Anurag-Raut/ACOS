@@ -202,7 +202,18 @@ public class RenderViewsMain {
         // Record the real `View.draw` calls into a RenderNode display list.
         RenderNode node = new RenderNode("acos-view-root");
         node.setPosition(0, 0, width, height);
+        // The standalone harness has no display service, so a `RippleDrawable`
+        // that starts its patterned background animation would die inside
+        // `Choreographer.getRefreshRate`. The reference frame is static, so
+        // stop those animations before recording (a real frame would run them).
+        quiesceRippleAnimations(root);
         RecordingCanvas canvas = node.beginRecording();
+        // A device composites the activity window's `windowBackground` behind
+        // the content view (`DecorView.draw`). This VM-level harness inflates
+        // the layout alone, so the theme background would otherwise be missing
+        // from every frame whose root has no background of its own. Draw it
+        // through the real framework drawable, exactly as the DecorView does.
+        drawWindowBackground(canvas, width, height);
         root.draw(canvas);
         node.endRecording();
 
@@ -216,6 +227,54 @@ public class RenderViewsMain {
         System.out.println("sync=" + rc);
         System.out.println("views=" + countViews(root));
         System.out.println("done");
+    }
+
+    /** Draw the theme's `windowBackground` behind the content, as `DecorView` does. */
+    static void drawWindowBackground(RecordingCanvas canvas, int width, int height) {
+        try {
+            android.util.TypedValue tv = new android.util.TypedValue();
+            if (!sTheme.resolveAttribute(android.R.attr.windowBackground, tv, true)
+                    || tv.resourceId == 0) {
+                return;
+            }
+            android.graphics.drawable.Drawable bg = sRes.getDrawable(tv.resourceId, sTheme);
+            if (bg == null) {
+                return;
+            }
+            bg.setBounds(0, 0, width, height);
+            bg.draw(canvas);
+        } catch (Throwable t) {
+            System.out.println("window-bg-skip " + t);
+        }
+    }
+
+    /**
+     * Force any `RippleDrawable` background out of its pending patterned
+     * animation. The static reference frame has no animation; without a display
+     * service the animator's `Choreographer` construction NPEs.
+     */
+    static int quiesceRippleAnimations(View v) {
+        int n = 0;
+        android.graphics.drawable.Drawable bg = v.getBackground();
+        if (bg != null
+                && bg.getClass().getName().equals("android.graphics.drawable.RippleDrawable")) {
+            try {
+                java.lang.reflect.Field f =
+                        bg.getClass().getDeclaredField("mRunBackgroundAnimation");
+                f.setAccessible(true);
+                f.setBoolean(bg, false);
+                n++;
+            } catch (Throwable t) {
+                // No field on this framework build: nothing to quiesce.
+            }
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                n += quiesceRippleAnimations(g.getChildAt(i));
+            }
+        }
+        return n;
     }
 
     static int countViews(View v) {

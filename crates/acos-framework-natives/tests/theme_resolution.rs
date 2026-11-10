@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::process::Command;
 
-use acos_framework_natives::res::value::TYPE_INT_COLOR_ARGB8;
+use acos_framework_natives::res::value::{TYPE_INT_COLOR_ARGB8, TYPE_NULL};
 use acos_framework_natives::res::{
     ApkAssets, AssetManager, AssetSource, ConfigurationNative, ResConfig, ResValue, Theme,
 };
@@ -378,4 +378,94 @@ fn theme_copy_and_rebase() {
     mgr.theme_rebase(b, &[0x0103_013f], &[false]);
     assert_eq!(mgr.theme(b).unwrap().len(), before);
     let _ = device_config();
+}
+
+/// Regression: `nativeRetrieveAttributes` must clear the whole `TypedArray`
+/// output buffer. `TypedArray.obtain` recycles arrays and `resize` does not
+/// clear a reused array, so an attribute absent from the current tag used to
+/// leave the previous `TypedArray`'s value in place. Concretely,
+/// `DrawableCorners` (5 slots) reused the `GradientDrawable` buffer and read the
+/// `<shape android:shape="0">` int at slot 3, raising
+/// `Can't convert value at index 3 to dimension: type=0x10, theme=null` while
+/// inflating `android:drawable/btn_default_material` (the framework `Button`).
+#[test]
+fn null_reference_entry_resolves_to_type_null() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mgr = build_manager(&apk_path);
+    // `android:drawable/config_scrollbarTrackVertical` is `@null` in the
+    // default configuration. Resolving it must materialise `TYPE_NULL`, not
+    // return the raw `TYPE_REFERENCE` with `data = 0`: the latter made
+    // `ResourcesImpl.loadDrawableForCookie` throw `NotFoundException` while
+    // inflating `ScrollView` (`config_scrollbarTrackVertical` is not a
+    // Drawable).
+    let (_src, entry, _final_id) = mgr
+        .resolve_references(0x0108_027e, true)
+        .expect("resolve config_scrollbarTrackVertical");
+    assert_eq!(
+        entry.value.data_type, TYPE_NULL,
+        "@null must resolve to TYPE_NULL, got type {:#04x} data {:#x}",
+        entry.value.data_type, entry.value.data
+    );
+}
+
+#[test]
+fn retrieve_attributes_clears_unset_slots() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = build_manager(&apk_path);
+    let cookie = 1i32;
+    let handle = mgr
+        .open_xml_asset(cookie, "res/drawable/btn_default_mtrl_shape.xml")
+        .expect("open framework drawable");
+    // Find the `<corners>` start tag.
+    let corners_pos = {
+        let block = mgr.xml_block(handle).unwrap();
+        block
+            .doc
+            .events
+            .iter()
+            .enumerate()
+            .find_map(|(i, ev)| match ev {
+                acos_framework_natives::res::xmlblock::XmlEvent::StartTag(t) => {
+                    (block.doc.string_block.get(t.name_index) == Some("corners"))
+                        .then_some(i)
+                }
+                _ => None,
+            })
+            .expect("corners tag")
+    };
+    let psh = mgr.create_parse_state(handle, 0).unwrap();
+    {
+        let st = mgr.parse_state_mut(psh).unwrap();
+        st.position = corners_pos;
+        st.started = true;
+    }
+    // `DrawableCorners` styleable order: radius, topLeft, topRight, bottomLeft,
+    // bottomRight. Only `radius` is present on `<corners>`.
+    let attrs = [0x0101_01a8i32, 0x0101_01a9, 0x0101_01aa, 0x0101_01ab, 0x0101_01ac];
+    // Poison every slot with the stale `TYPE_INT_DEC` that used to leak in.
+    let mut out_values = vec![0x10i32; attrs.len() * 7];
+    let mut out_indices = vec![-1i32; attrs.len() + 1];
+    assert!(mgr.retrieve_attributes(psh, &attrs, &mut out_values, &mut out_indices));
+    assert_eq!(out_indices[0], 1, "only radius is present");
+    // radius is a `?attr/buttonCornerRadius`, kept as TYPE_ATTRIBUTE because
+    // `retrieveAttributes` has no theme.
+    assert_eq!(
+        out_values[0], 0x02,
+        "radius must stay TYPE_ATTRIBUTE, got type {:#04x}",
+        out_values[0]
+    );
+    for i in 1..attrs.len() {
+        let slot = &out_values[i * 7..(i + 1) * 7];
+        assert!(
+            slot.iter().all(|v| *v == 0),
+            "slot {i} must be cleared (TYPE_NULL), got {slot:?}"
+        );
+    }
+    mgr.destroy_parse_state(psh);
 }

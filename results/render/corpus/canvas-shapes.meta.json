@@ -1,0 +1,17 @@
+{
+  "causeId": 1,
+  "contentHash": "6905205beb60e4caad363090a5ed9264",
+  "density": 2.625,
+  "frameClass": "Content",
+  "height": 2400,
+  "nodeCount": 6,
+  "output": "results/render/corpus/canvas-shapes.png",
+  "pngBytes": 128901,
+  "renderMs": 68.22892499999999,
+  "scene": "crates/acos-render/tests/scenes/canvas-shapes.json",
+  "seq": 1,
+  "sha256": "ef72552efddba11c0e3d2cf4b17f67f44154dfedf0e80cf31f53d4c388bd9ea1",
+  "unsupportedOps": [],
+  "version": "0.1.0",
+  "width": 1080
+}

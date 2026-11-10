@@ -8,13 +8,45 @@
 //! `ashmem` fd or hardware buffer are left unregistered and surface as
 //! `UNSUPPORTED_JAVA_API`.
 
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+
+use acos_render::image::ImageFormat;
 use acos_render::BitmapConfig;
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
 use crate::heap::{ArrayData, Object};
+use crate::javabridge::JavaValue;
 use crate::natives::gfx_state::{gj, render_err, rh, stale, with_ctx};
 use crate::vm::Vm;
+
+/// A decoded image held alive between `ImageDecoder.nCreate` and
+/// `nDecodeBitmap`/`nClose`. Android keeps the encoded stream in native memory
+/// and decodes lazily; ACOS decodes the header eagerly (for the sampled size
+/// the `ImageDecoder` constructor needs) and keeps the encoded bytes so each
+/// `nDecodeBitmap` can produce a fresh `Bitmap`.
+struct DecoderState {
+    bytes: Vec<u8>,
+    format: ImageFormat,
+    width: i32,
+    height: i32,
+    animated: bool,
+}
+
+thread_local! {
+    static DECODERS: RefCell<HashMap<u64, DecoderState>> = RefCell::new(HashMap::new());
+    static NEXT_DECODER: Cell<u64> = const { Cell::new(1) };
+}
+
+fn mime_for(format: ImageFormat) -> &'static str {
+    match format {
+        ImageFormat::Png => "image/png",
+        ImageFormat::Jpeg => "image/jpeg",
+        ImageFormat::WebP => "image/webp",
+        ImageFormat::Unknown => "image/*",
+    }
+}
 
 fn bitmap(vm: &Vm, ctx: NativeCtx, n: usize) -> VmResult<acos_render::Handle> {
     let j = vm.arg_i64(ctx, n);
@@ -73,6 +105,38 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(BM, "nativeSetHasMipMap", "(JZ)V", b_noop);
     vm.register_native(BM, "nativeExtractAlpha", "(JJ[I)Landroid/graphics/Bitmap;", b_extract_alpha);
     vm.register_native(BM, "nativeGetColor", "(JII)J", b_get_color);
+
+    const BF: &str = "Landroid/graphics/BitmapFactory;";
+    vm.register_native(
+        BF,
+        "nativeDecodeStream",
+        "(Ljava/io/InputStream;[BLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+        bf_decode_stream,
+    );
+    vm.register_native(
+        BF,
+        "nativeDecodeByteArray",
+        "([BIILandroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+        bf_decode_byte_array,
+    );
+
+    const ID: &str = "Landroid/graphics/ImageDecoder;";
+    vm.register_native(ID, "nCreate", "(Ljava/io/InputStream;[BZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_stream);
+    vm.register_native(ID, "nCreate", "([BIIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_bytes);
+    vm.register_native(ID, "nCreate", "(Ljava/nio/ByteBuffer;IIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
+    vm.register_native(ID, "nCreate", "(JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
+    vm.register_native(ID, "nCreate", "(Ljava/io/FileDescriptor;JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
+    vm.register_native(
+        ID,
+        "nDecodeBitmap",
+        "(JLandroid/graphics/ImageDecoder;ZIILandroid/graphics/Rect;ZIZZZJZ)Landroid/graphics/Bitmap;",
+        id_decode_bitmap,
+    );
+    vm.register_native(ID, "nGetSampledSize", "(JI)Landroid/util/Size;", id_get_sampled_size);
+    vm.register_native(ID, "nGetMimeType", "(J)Ljava/lang/String;", id_get_mime_type);
+    vm.register_native(ID, "nGetColorSpace", "(J)Landroid/graphics/ColorSpace;", b_null_ref);
+    vm.register_native(ID, "nGetPadding", "(JLandroid/graphics/Rect;)V", id_get_padding);
+    vm.register_native(ID, "nClose", "(J)V", id_close);
     Ok(())
 }
 
@@ -385,4 +449,282 @@ fn b_get_color(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = with_ctx(|c| c.bitmap_get_pixel(b, x, y).map_err(|e| render_err("Bitmap.getColor", e)))?;
     vm.ret_i64(ctx, c as i64);
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// ImageDecoder / BitmapFactory decode natives
+// ---------------------------------------------------------------------------
+
+fn bridge(e: crate::javabridge::BridgeError) -> VmError {
+    match e {
+        crate::javabridge::BridgeError::Vm(e) => e,
+        other => VmError::Internal(other.to_string()),
+    }
+}
+
+/// Wrap an `acos-render` bitmap handle in an `android.graphics.Bitmap` object.
+fn wrap_bitmap(vm: &mut Vm, h: acos_render::Handle) -> VmResult<u32> {
+    let (w, ht) = with_ctx(|c| {
+        c.bitmaps
+            .get(h)
+            .map(|b| (b.width() as i32, b.height() as i32))
+            .unwrap_or((0, 0))
+    });
+    let obj = vm.new_instance("Landroid/graphics/Bitmap;").map_err(bridge)?;
+    vm.set_field(obj, "mNativePtr", JavaValue::Long(gj(h))).map_err(bridge)?;
+    let _ = vm.set_field(obj, "mWidth", JavaValue::Int(w));
+    let _ = vm.set_field(obj, "mHeight", JavaValue::Int(ht));
+    let _ = vm.set_field(obj, "mDensity", JavaValue::Int(0));
+    Ok(obj)
+}
+
+fn byte_array_prefix(vm: &Vm, h: u32, n: usize) -> Vec<u8> {
+    match vm.heap.get(h) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Byte(v) => v.iter().take(n).map(|b| *b as u8).collect(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+/// Read a Java `InputStream` to EOF using the caller's scratch byte array.
+fn read_stream(vm: &mut Vm, stream: u32, storage: u32) -> VmResult<Vec<u8>> {
+    let buf = if storage != 0 && vm.heap.get(storage).is_some() {
+        storage
+    } else {
+        vm.new_array_empty("B", 16384).map_err(bridge)?
+    };
+    let cap = match vm.heap.get(buf) {
+        Some(Object::Array(a)) => a.len(),
+        _ => 0,
+    };
+    if cap == 0 {
+        return Err(VmError::Internal("ImageDecoder: empty scratch buffer".into()));
+    }
+    let mut out = Vec::new();
+    loop {
+        let n = vm
+            .call_method(stream, "read", "([B)I", &[JavaValue::Object(buf)])
+            .map_err(bridge)?;
+        let n = match n {
+            JavaValue::Int(n) => n,
+            _ => return Err(VmError::Internal("InputStream.read returned non-int".into())),
+        };
+        if n <= 0 {
+            break;
+        }
+        out.extend_from_slice(&byte_array_prefix(vm, buf, n as usize));
+        if out.len() > 512 * 1024 * 1024 {
+            return Err(VmError::unsupported_api(
+                "ImageDecoder: stream larger than 512 MiB",
+                "android.graphics.ImageDecoder",
+            ));
+        }
+    }
+    Ok(out)
+}
+
+fn register_decoder(bytes: Vec<u8>, format: ImageFormat, width: i32, height: i32, animated: bool) -> u64 {
+    let handle = NEXT_DECODER.with(|c| {
+        let h = c.get();
+        c.set(h + 1);
+        h
+    });
+    DECODERS.with(|d| {
+        d.borrow_mut().insert(
+            handle,
+            DecoderState {
+                bytes,
+                format,
+                width,
+                height,
+                animated,
+            },
+        );
+    });
+    handle
+}
+
+fn decoder_state(handle: u64) -> Option<(Vec<u8>, ImageFormat, i32, i32, bool)> {
+    DECODERS.with(|d| {
+        d.borrow()
+            .get(&handle)
+            .map(|s| (s.bytes.clone(), s.format, s.width, s.height, s.animated))
+    })
+}
+
+fn new_decoder_object(vm: &mut Vm, handle: u64, width: i32, height: i32, animated: bool) -> VmResult<u32> {
+    vm.new_instance_ctor(
+        "Landroid/graphics/ImageDecoder;",
+        "(JIIZZ)V",
+        &[
+            JavaValue::Long(handle as i64),
+            JavaValue::Int(width),
+            JavaValue::Int(height),
+            JavaValue::Boolean(false),
+            JavaValue::Boolean(animated),
+        ],
+    )
+    .map_err(bridge)
+}
+
+fn decode_bytes(bytes: &[u8]) -> VmResult<(ImageFormat, i32, i32)> {
+    let img = acos_render::image::decode(bytes).map_err(|e| {
+        VmError::unsupported_api(format!("ImageDecoder decode: {e}"), "acos-render")
+    })?;
+    Ok((acos_render::image::sniff(bytes), img.width as i32, img.height as i32))
+}
+
+fn id_create_stream(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let stream = vm.arg_ref(ctx, 0);
+    let storage = vm.arg_ref(ctx, 1);
+    let bytes = read_stream(vm, stream, storage)?;
+    let (format, width, height) = decode_bytes(&bytes)?;
+    let handle = register_decoder(bytes, format, width, height, false);
+    let obj = new_decoder_object(vm, handle, width, height, false)?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+fn id_create_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let arr = vm.arg_ref(ctx, 0);
+    let offset = vm.arg_i32(ctx, 1).max(0) as usize;
+    let length = vm.arg_i32(ctx, 2).max(0) as usize;
+    let all = byte_array_prefix(vm, arr, usize::MAX);
+    let end = (offset + length).min(all.len());
+    let slice = if offset <= all.len() {
+        all[offset..end].to_vec()
+    } else {
+        Vec::new()
+    };
+    let (format, width, height) = decode_bytes(&slice)?;
+    let handle = register_decoder(slice, format, width, height, false);
+    let obj = new_decoder_object(vm, handle, width, height, false)?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+fn id_create_unsupported(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_ref(ctx, 0);
+    Ok(())
+}
+
+fn id_decode_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
+    let (bytes, _format, _w, _h, _animated) = decoder_state(handle).ok_or_else(|| {
+        VmError::StaleHandle {
+            what: format!("ImageDecoder handle {handle:#x}"),
+        }
+    })?;
+    let h = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
+        .map_err(|e| render_err("ImageDecoder.decodeBitmap", e))?;
+    let obj = wrap_bitmap(vm, h)?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+fn id_get_sampled_size(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
+    let sample = vm.arg_i32(ctx, 1).max(1);
+    let (_bytes, _format, w, h, _animated) = decoder_state(handle).ok_or_else(|| {
+        VmError::StaleHandle {
+            what: format!("ImageDecoder handle {handle:#x}"),
+        }
+    })?;
+    let sw = (w / sample).max(1);
+    let sh = (h / sample).max(1);
+    let size = vm
+        .new_instance_ctor(
+            "Landroid/util/Size;",
+            "(II)V",
+            &[JavaValue::Int(sw), JavaValue::Int(sh)],
+        )
+        .map_err(bridge)?;
+    vm.ret_ref(ctx, size);
+    Ok(())
+}
+
+fn id_get_mime_type(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
+    let mime = decoder_state(handle)
+        .map(|(_, f, _, _, _)| mime_for(f))
+        .unwrap_or("image/*");
+    let s = vm.new_string(mime)?;
+    vm.ret_ref(ctx, s);
+    Ok(())
+}
+
+fn id_get_padding(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let rect = vm.arg_ref(ctx, 1);
+    if rect != 0 {
+        for f in ["left", "top", "right", "bottom"] {
+            let _ = vm.set_field(rect, f, JavaValue::Int(0));
+        }
+    }
+    Ok(())
+}
+
+fn id_close(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
+    DECODERS.with(|d| {
+        d.borrow_mut().remove(&handle);
+    });
+    Ok(())
+}
+
+// BitmapFactory
+fn options_just_bounds(vm: &mut Vm, opts: u32) -> bool {
+    if opts == 0 {
+        return false;
+    }
+    matches!(vm.get_field(opts, "inJustDecodeBounds"), Ok(JavaValue::Boolean(true)))
+}
+
+fn set_options_outputs(vm: &mut Vm, opts: u32, w: i32, h: i32, format: ImageFormat) {
+    if opts == 0 {
+        return;
+    }
+    let _ = vm.set_field(opts, "outWidth", JavaValue::Int(w));
+    let _ = vm.set_field(opts, "outHeight", JavaValue::Int(h));
+    let _ = vm.set_field(opts, "outConfig", JavaValue::Int(BitmapConfig::Rgba8888 as i32));
+    if let Ok(mime) = vm.new_string(mime_for(format)) {
+        let _ = vm.set_field(opts, "outMimeType", JavaValue::Object(mime));
+    }
+}
+
+fn bf_decode_bytes(vm: &mut Vm, ctx: NativeCtx, bytes: Vec<u8>) -> VmResult<()> {
+    let opts = vm.arg_ref(ctx, 3);
+    let (format, w, h) = decode_bytes(&bytes)?;
+    set_options_outputs(vm, opts, w, h, format);
+    if options_just_bounds(vm, opts) {
+        vm.ret_ref(ctx, 0);
+        return Ok(());
+    }
+    let hnd = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
+        .map_err(|e| render_err("BitmapFactory.decode", e))?;
+    let obj = wrap_bitmap(vm, hnd)?;
+    vm.ret_ref(ctx, obj);
+    Ok(())
+}
+
+fn bf_decode_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let arr = vm.arg_ref(ctx, 0);
+    let offset = vm.arg_i32(ctx, 1).max(0) as usize;
+    let length = vm.arg_i32(ctx, 2).max(0) as usize;
+    let all = byte_array_prefix(vm, arr, usize::MAX);
+    let end = (offset + length).min(all.len());
+    let slice = if offset <= all.len() {
+        all[offset..end].to_vec()
+    } else {
+        Vec::new()
+    };
+    bf_decode_bytes(vm, ctx, slice)
+}
+
+fn bf_decode_stream(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let stream = vm.arg_ref(ctx, 0);
+    let storage = vm.arg_ref(ctx, 1);
+    let bytes = read_stream(vm, stream, storage)?;
+    bf_decode_bytes(vm, ctx, bytes)
 }

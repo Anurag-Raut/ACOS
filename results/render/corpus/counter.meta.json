@@ -1,0 +1,17 @@
+{
+  "causeId": 1,
+  "contentHash": "cbefed8dc4a9e71b1f0dc3ae0a797655",
+  "density": 2.625,
+  "frameClass": "Content",
+  "height": 2400,
+  "nodeCount": 7,
+  "output": "results/render/corpus/counter.png",
+  "pngBytes": 85896,
+  "renderMs": 62.663122,
+  "scene": "crates/acos-render/tests/scenes/counter.json",
+  "seq": 1,
+  "sha256": "4d0885c1740b7a96eb04665c9c00d138aaa716d8bc6358e46561c6aec9027a12",
+  "unsupportedOps": [],
+  "version": "0.1.0",
+  "width": 1080
+}

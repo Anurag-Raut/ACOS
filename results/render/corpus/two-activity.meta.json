@@ -1,0 +1,17 @@
+{
+  "causeId": 1,
+  "contentHash": "de5f272fb808ce99fed79fd9e26c5789",
+  "density": 2.625,
+  "frameClass": "Content",
+  "height": 2400,
+  "nodeCount": 7,
+  "output": "results/render/corpus/two-activity.png",
+  "pngBytes": 87409,
+  "renderMs": 61.73194,
+  "scene": "crates/acos-render/tests/scenes/two-activity.json",
+  "seq": 1,
+  "sha256": "5bfbedcce9c9ae69a2ee47440fbd0c5cf515f1afc73c81e45c6a133bf0e3d163",
+  "unsupportedOps": [],
+  "version": "0.1.0",
+  "width": 1080
+}

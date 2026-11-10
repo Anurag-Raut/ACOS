@@ -323,12 +323,11 @@ fn run_harness(app: &str, layout: &str) -> Result<(), String> {
     if !outcome.stdout.lines().any(|l| l == "done") {
         return Err(format!("harness did not finish:\n{}", outcome.stdout));
     }
-    if let Some(line) = outcome
-        .stdout
-        .lines()
-        .find(|l| l.starts_with("INFLATE-FAILED"))
-    {
-        return Err(format!("framework inflation failed: {line}"));
+    if outcome.stdout.contains("INFLATE-FAILED") {
+        return Err(format!(
+            "framework inflation failed:\n{}",
+            outcome.stdout
+        ));
     }
     if std::env::var_os("ACOS_RENDER_VIEWS_VERBOSE").is_some() {
         eprintln!("[{app}] harness stdout:\n{}", outcome.stdout);
