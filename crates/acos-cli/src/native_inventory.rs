@@ -134,8 +134,8 @@ fn print_summary(report: &InventoryReport, top: usize, verbose: bool) {
     if verbose {
         let _ = writeln!(
             w,
-            "\n{:<36} {:>10} {:>7} {:>7} {:>7}  {}",
-            "library", "bytes?", "imports", "tls", "relocs", "containers"
+            "\n{:<36} {:>10} {:>7} {:>7} {:>7}  containers",
+            "library", "bytes?", "imports", "tls", "relocs"
         );
         for l in &report.libraries {
             let tls = [
@@ -161,8 +161,8 @@ fn print_summary(report: &InventoryReport, top: usize, verbose: bool) {
     }
     let _ = writeln!(
         w,
-        "\n{:<5} {:<9} {:<6} {:<40} {}",
-        "rank", "provision", "libs", "symbol", "note"
+        "\n{:<5} {:<9} {:<6} {:<40} note",
+        "rank", "provision", "libs", "symbol"
     );
     for (i, r) in report
         .unresolved

@@ -522,6 +522,44 @@ Status: accepted as a **limitation**, not a solution.
   future product path must additionally refuse to load native code unless an
   explicit sandbox feature is enabled. See `HONESTY_AUDIT.md` #1/§2 rank 1.
 
+### ADR-0018 update — native enable path (W59-A, 2026-11-11)
+
+Status: the ADR-0018 note's product ban is **conditionally lifted** behind an
+opt-in flag plus the ADR-0022 confinement layer; the default remains off.
+
+- **Opt-in.** `ACOS_NATIVE=1` (or `acos launch --native`) enables APK native
+  code for one launch process. Default is off until the security review passes,
+  exactly as the W35-A note required.
+- **ABI gate.** Before anything is extracted or mapped, the APK's `lib/<abi>/`
+  directories are compared with the host ABI (`x86_64`). An APK with native
+  code only for other ABIs fails with `UNSUPPORTED_ABI` naming every ABI it does
+  provide (`acos-apk::Apk::check_native_abi`, `HOST_ABI`).
+- **Never trust names.** `acos-apk::Apk::extract_native_lib(s)` copies a `.so`
+  into the app's VFS lib directory only after validating the ABI and file name
+  as single path components; `..`, `/`, `\` and NUL are `ZIP_SLIP`. The written
+  path is re-checked to stay a direct child of the destination. Stored vs
+  deflated entries and their in-APK `data_offset` are retained so the
+  uncompressed case can be mapped `fd+offset` rather than copied (loader-side
+  `android_dlopen_ext` mmap is the follow-up).
+- **Confinement precedes guest code.** `acos-native-loader` already refuses to
+  map a guest `.so` unless `acos_sandbox::confinement_active()` is true
+  (`LoaderConfig::require_confinement`, ADR-0022). The launch gate calls
+  `acos_sandbox::confine` in the launch process *before* the session worker
+  thread is spawned, because seccomp is installed with `TSYNC` and must run while
+  single-threaded. If a required layer is unavailable the launch fails closed
+  with `CONFINEMENT_UNAVAILABLE`; no native code is loaded.
+- **Resource caps.** The same profile installs `RLIMIT_AS`/`NOFILE`/`NPROC`/
+  `CPU`/`CORE` (ADR-0022) and the VM's `HostGuard` keeps the host below the
+  ADR-0018 RAM ceiling.
+- **Codes.** New stable `ErrorCode`s: `UNSUPPORTED_ABI`, `CONFINEMENT_UNAVAILABLE`,
+  `ZIP_SLIP`; the checked-in JSON Schemas were regenerated.
+- **Not yet wired.** Extracting on-demand at the `System.loadLibrary` call site
+  into the VFS lib dir, and MCP parity for `--native`, remain open; the loader
+  already accepts the APK `lib/<abi>/` bytes and enforces confinement, so the
+  product `acos`/MCP launch path still needs the JNI runtime attached. Until
+  then `--native` proves the ABI/confinement gate and fails closed, and no
+  runtime `System.loadLibrary` reaches untrusted ELF code.
+
 ## ADR-0019 — Text rendering: FreeType + HarfBuzz glyph rasterisation; no Skia adoption (supersedes the Skia part of the advisor suggestion)
 
 Status: accepted (2026-11-10), based on research/render-fidelity/REPORT.md.

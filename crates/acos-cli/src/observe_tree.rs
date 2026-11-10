@@ -171,7 +171,7 @@ fn split_tag(raw: &str) -> (&str, &str, bool) {
     }
 }
 
-fn attach(stack: &mut Vec<ViewNode>, roots: &mut Vec<ViewNode>, node: ViewNode) {
+fn attach(stack: &mut [ViewNode], roots: &mut Vec<ViewNode>, node: ViewNode) {
     match stack.last_mut() {
         Some(parent) => parent.children.push(node),
         None => roots.push(node),

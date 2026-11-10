@@ -94,6 +94,13 @@
           "type": "string"
         },
         {
+          "description": "The APK ships native code, but none for the host ABI (names the available ABIs).",
+          "enum": [
+            "UNSUPPORTED_ABI"
+          ],
+          "type": "string"
+        },
+        {
           "description": "Capture/observe was requested on a headless session.",
           "enum": [
             "NO_DISPLAY"
@@ -451,6 +458,13 @@
           "type": "string"
         },
         {
+          "description": "The process could not enter its confinement sandbox; native code is refused (fail closed).",
+          "enum": [
+            "CONFINEMENT_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The requested isolation level is advertised but its guarantees are unmet.",
           "enum": [
             "ISOLATION_UNSATISFIED"
@@ -503,6 +517,13 @@
           "description": "An artifact path was rejected (escape, absolute path, symlink, ...).",
           "enum": [
             "UNSAFE_PATH"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A native-library entry name attempts to escape its target directory.",
+          "enum": [
+            "ZIP_SLIP"
           ],
           "type": "string"
         },

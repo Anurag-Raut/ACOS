@@ -36,11 +36,31 @@ pub struct LaunchArgs {
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
+
+    /// Enable native code from the APK's `lib/<abi>/` under confinement.
+    ///
+    /// Off by default until the ADR-0018 security review passes. Also enabled
+    /// by `ACOS_NATIVE=1`. Fails closed (`CONFINEMENT_UNAVAILABLE`) when the
+    /// process cannot enter the sandbox, and `UNSUPPORTED_ABI` when the APK has
+    /// native code only for a non-host ABI.
+    #[arg(long)]
+    pub native: bool,
 }
 
 /// Run `acos launch`.
 pub fn run(args: LaunchArgs) -> ExitCode {
     let request_id = new_request_id();
+    if crate::native_launch::native_requested(args.native) {
+        if let Err(err) = gate_native(&args.apk) {
+            let envelope = session_error_envelope(&request_id, &err);
+            if args.json {
+                crate::print_json(&envelope);
+            } else {
+                eprintln!("launch: {}: {}", err.code, err.message);
+            }
+            return ExitCode::FAILURE;
+        }
+    }
     let session = AgentSession::start(SessionOptions {
         wall_secs: args.timeout,
         ..SessionOptions::default()
@@ -69,6 +89,16 @@ pub fn run(args: LaunchArgs) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// ABI-check the APK and, when it ships host-ABI native code, confine the
+/// process before the session worker is spawned.
+fn gate_native(apk: &std::path::Path) -> Result<(), SessionError> {
+    let (_apk, has_native) = crate::native_launch::check_apk(apk)?;
+    if has_native {
+        crate::native_launch::confine_native_launch(apk)?;
+    }
+    Ok(())
 }
 
 fn finish(envelope: &Envelope, args: &LaunchArgs, report: &LaunchReport) {

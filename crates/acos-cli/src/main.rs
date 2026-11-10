@@ -9,6 +9,7 @@ mod bench_sessions;
 mod frame_diff;
 mod launch;
 mod native_inventory;
+mod native_launch;
 mod observe_tree;
 mod parity;
 mod sandbox_probe;

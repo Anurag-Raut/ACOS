@@ -38,6 +38,8 @@ pub enum ErrorCode {
     RequiresGms,
     /// The APK/native library ABI is not supported by this engine.
     WrongAbi,
+    /// The APK ships native code, but none for the host ABI (names the available ABIs).
+    UnsupportedAbi,
     /// Capture/observe was requested on a headless session.
     NoDisplay,
     /// Text/semantics were requested but the chosen route cannot provide them.
@@ -154,6 +156,8 @@ pub enum ErrorCode {
     SessionBusy,
     /// The requested isolation level is not implemented for this app.
     IsolationUnavailable,
+    /// The process could not enter its confinement sandbox; native code is refused (fail closed).
+    ConfinementUnavailable,
     /// The requested isolation level is advertised but its guarantees are unmet.
     IsolationUnsatisfied,
     /// A memory admission/guard rule was triggered.
@@ -172,6 +176,8 @@ pub enum ErrorCode {
     InvalidArgument,
     /// An artifact path was rejected (escape, absolute path, symlink, ...).
     UnsafePath,
+    /// A native-library entry name attempts to escape its target directory.
+    ZipSlip,
     /// The artifacts directory is incomplete or contradicts its verdict.
     ArtifactsInvalid,
 
@@ -207,6 +213,7 @@ impl ErrorCode {
             ErrorCode::NeedsRealDevice => "NEEDS_REAL_DEVICE",
             ErrorCode::RequiresGms => "REQUIRES_GMS",
             ErrorCode::WrongAbi => "WRONG_ABI",
+            ErrorCode::UnsupportedAbi => "UNSUPPORTED_ABI",
             ErrorCode::NoDisplay => "NO_DISPLAY",
             ErrorCode::NoText => "NO_TEXT",
             ErrorCode::UnsupportedRelocation => "UNSUPPORTED_RELOCATION",
@@ -258,6 +265,7 @@ impl ErrorCode {
             ErrorCode::SessionNotFound => "SESSION_NOT_FOUND",
             ErrorCode::SessionBusy => "SESSION_BUSY",
             ErrorCode::IsolationUnavailable => "ISOLATION_UNAVAILABLE",
+            ErrorCode::ConfinementUnavailable => "CONFINEMENT_UNAVAILABLE",
             ErrorCode::IsolationUnsatisfied => "ISOLATION_UNSATISFIED",
             ErrorCode::RamGuard => "RAM_GUARD",
             ErrorCode::RamAbort => "RAM_ABORT",
@@ -266,6 +274,7 @@ impl ErrorCode {
             ErrorCode::InvalidScenario => "INVALID_SCENARIO",
             ErrorCode::InvalidArgument => "INVALID_ARGUMENT",
             ErrorCode::UnsafePath => "UNSAFE_PATH",
+            ErrorCode::ZipSlip => "ZIP_SLIP",
             ErrorCode::ArtifactsInvalid => "ARTIFACTS_INVALID",
             ErrorCode::RenderBadHandle => "RENDER_BAD_HANDLE",
             ErrorCode::RenderFontNotFound => "RENDER_FONT_NOT_FOUND",
@@ -301,6 +310,9 @@ impl ErrorCode {
             }
             ErrorCode::WrongAbi => {
                 "Compare the APK ABI with the engine ABI. Supply a build containing the supported ABI, or run an ABI that is actually supported."
+            }
+            ErrorCode::UnsupportedAbi => {
+                "The APK has native libraries for other ABIs only. Use an ABI-split or universal build that includes the engine ABI (x86_64), or do not request native loading."
             }
             ErrorCode::NoDisplay => {
                 "Create the session with a display (offscreen:WxH) before capture/observe, or drop the step for a headless logic-only scenario."
@@ -407,6 +419,9 @@ impl ErrorCode {
             ErrorCode::IsolationUnavailable => {
                 "Choose an isolation level this app/engine supports (shared-task < process < sandbox < core < vm), or report the missing guarantee."
             }
+            ErrorCode::ConfinementUnavailable => {
+                "Native code is refused because the process could not enter the seccomp/Landlock confinement. Do not retry unchanged; fix the confinement stack or launch without native loading."
+            }
             ErrorCode::IsolationUnsatisfied => {
                 "The requested isolation is not actually guaranteed. Do not claim data independence; escalate or report unsupported."
             }
@@ -430,6 +445,9 @@ impl ErrorCode {
             }
             ErrorCode::UnsafePath => {
                 "Use a path inside the workspace/artifacts directory. Absolute paths, `..` and symlink escapes are rejected."
+            }
+            ErrorCode::ZipSlip => {
+                "A native-library entry name escaped its target directory and was rejected. Treat the APK as hostile; do not extract it."
             }
             ErrorCode::ArtifactsInvalid => {
                 "The artifacts directory contradicts its verdict. Re-run verify; never accept a pass without frame/tree/step evidence."
@@ -492,7 +510,8 @@ impl ErrorCode {
             | ErrorCode::RamGuard
             | ErrorCode::RamAbort
             | ErrorCode::IsolationUnavailable
-            | ErrorCode::IsolationUnsatisfied => Status::Blocked,
+            | ErrorCode::IsolationUnsatisfied
+            | ErrorCode::ConfinementUnavailable => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
             | ErrorCode::UnsupportedBytecode
@@ -500,6 +519,7 @@ impl ErrorCode {
             | ErrorCode::NeedsRealDevice
             | ErrorCode::RequiresGms
             | ErrorCode::WrongAbi
+            | ErrorCode::UnsupportedAbi
             | ErrorCode::NoDisplay
             | ErrorCode::NoText
             | ErrorCode::UnsupportedRelocation
@@ -589,6 +609,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::NeedsRealDevice,
     ErrorCode::RequiresGms,
     ErrorCode::WrongAbi,
+    ErrorCode::UnsupportedAbi,
     ErrorCode::NoDisplay,
     ErrorCode::NoText,
     ErrorCode::UnsupportedRelocation,
@@ -640,6 +661,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::SessionNotFound,
     ErrorCode::SessionBusy,
     ErrorCode::IsolationUnavailable,
+    ErrorCode::ConfinementUnavailable,
     ErrorCode::IsolationUnsatisfied,
     ErrorCode::RamGuard,
     ErrorCode::RamAbort,
@@ -648,6 +670,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::InvalidScenario,
     ErrorCode::InvalidArgument,
     ErrorCode::UnsafePath,
+    ErrorCode::ZipSlip,
     ErrorCode::ArtifactsInvalid,
     ErrorCode::RenderBadHandle,
     ErrorCode::RenderFontNotFound,
@@ -672,6 +695,8 @@ pub const EXISTING_CRATE_CODES: &[&str] = &[
     "ARSC_MALFORMED",
     "APK_ENTRY",
     "APK_SIGNING_MALFORMED",
+    "UNSUPPORTED_ABI",
+    "ZIP_SLIP",
     // acos-dex
     "DEX_BAD_MAGIC",
     "DEX_UNSUPPORTED_VERSION",
@@ -709,6 +734,7 @@ pub const EXISTING_CRATE_CODES: &[&str] = &[
     "NATIVE_IO_ERROR",
     "NATIVE_SYMBOL_NOT_FOUND",
     "NATIVE_INVALID_ARGUMENT",
+    "CONFINEMENT_UNAVAILABLE",
     // acos-render
     "RENDER_UNSUPPORTED_OP",
     "RENDER_BAD_HANDLE",

@@ -19,6 +19,12 @@ pub const ARSC_MALFORMED: &str = "ARSC_MALFORMED";
 pub const APK_ENTRY: &str = "APK_ENTRY";
 /// The APK Signing Block is present but malformed.
 pub const APK_SIGNING_MALFORMED: &str = "APK_SIGNING_MALFORMED";
+/// The APK ships native code, but none for the host ABI.
+pub const UNSUPPORTED_ABI: &str = "UNSUPPORTED_ABI";
+/// A requested native library is not present in the APK for that ABI.
+pub const NATIVE_LIB_NOT_FOUND: &str = "NATIVE_LIB_NOT_FOUND";
+/// A native library entry name attempts to escape its target directory.
+pub const ZIP_SLIP: &str = "ZIP_SLIP";
 
 /// An error produced by APK ingest.
 #[derive(Debug, Clone, PartialEq, Eq)]
