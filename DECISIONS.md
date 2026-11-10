@@ -832,3 +832,58 @@ and `BenchGc` 1.16x over IR-off, and the arithmetic/field loops keep their
 1.9-3.8x wins. The remaining `BenchGc`/`BenchAlloc` gap to `java -Xint` is
 allocator/GC-bound, not dispatch-bound; a bump/size-class arena is the next
 lever and is out of scope here.
+
+---
+
+## ADR-0024 — Const+if fusion, 4-way virtual cache, slimmer `Object` (W89-A)
+
+**Status:** accepted (2026-11-11).
+
+**Context.** After ADR-0023 the remaining `java -Xint` gaps were dominated by
+dispatch on the arithmetic/array/field loops (`BenchArith` ~1.9x,
+`BenchLoop`/`BenchArray` ~2.1x) and by virtual/interface dispatch on
+`BenchVirtual` (~1.6x). The typed-IR loop already fused `<arith>/lit` + `if-*`
+(the counter idiom), but javac/d8 emits the *loop-bound constant* immediately
+before the loop test, so the test executes two dispatches (`const*`, `if-*`).
+The per-call-site virtual cache held one entry, so a 3-shape polymorphic cycle
+missed every probe and fell through to the tuple-keyed `dispatch_cache`
+`HashMap`.
+
+**Decision.**
+* Fuse a 32-bit `const*` + conditional branch into `Op::ConstIf` at IR-lowering
+  time, under the same guard as `ArithLitIf` (the branch must not be a re-entry
+  point). The `const*` write is pure, so re-entering the fused op is safe.
+* Replace the one-entry `DexCtx::virtual_cache` slot with a fixed 4-way
+  `VirtualCache` (linear probe, round-robin eviction). It remains a pure
+  function of (declared signature, receiver class), so no invalidation.
+* Box the widest `BuiltinData::StackTraceElement` variant so `Object` (and
+  therefore every `Option<Object>` slot moved per allocation/free) shrinks.
+* `take_field_vec` uses `clear` + `resize` instead of `resize` + `fill`.
+
+**Evidence** (`results/bench/w89a-after.json`; 5 interleaved `acos run-dex`
+rounds, min of each config, host JVM 17 `-Xint`; supplementary in-process
+`vmbench` best-of-8 is more stable):
+
+| Program | before ms | after ms | before x | after x |
+|---|---:|---:|---:|---:|
+| BenchVirtual | 1844.7 | 1558.0 | 1.61 | **1.36** |
+| BenchArray | 712.4 | 685.5 | 2.15 | **2.06** |
+| BenchFields | 115.9 | 112.4 | 1.55 | **1.51** |
+| BenchLoop | 834.1 | 826.2 | 2.06 | 2.04 |
+| BenchArith (vmbench) | ~985 | ~915 | ~2.0 | **1.86** |
+| BenchAlloc | 1620.6 | 1620.1 | 1.39 | 1.39 |
+| BenchGc | 347.2 | 345.2 | 2.44 | 2.43 |
+| BenchFib | 490.8 | 491.3 | 1.48 | 1.48 |
+| BenchString | 123.2 | 128.3 | 0.20 | 0.21 |
+
+`BenchCollections` 0.99x, `BenchStaticCall` 1.00x, `BenchVirtualCall` 1.01x are
+within the process-time noise floor; no row is a net regression beyond noise.
+Allocator-bound rows (`BenchAlloc`, `BenchGc`) are unchanged: their gap is the
+per-object host allocation and the two invoke trampolines per iteration, not
+dispatch or mark/sweep (measured `gc_ms` is ~7% of `BenchGc`), so a size-class
+arena remains the next lever.
+
+**Consequences.** Fused dispatch and the 4-way cache are on by default; no new
+`unsafe` (crate still `#![forbid(unsafe_code)]`). `cargo test -p acos-vm`,
+clippy `-D warnings --no-deps`, `cargo check --workspace --all-targets`, and
+`tools/diff-dexprogs.sh --corelib real` 27/27 normal + `--gc-stress` are green.

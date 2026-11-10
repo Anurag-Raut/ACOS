@@ -8,7 +8,7 @@ use crate::class::{ClassId, FieldSign, Insn, MethodCode, MethodImpl, MethodId, N
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
 use crate::heap::{ArrayData, Handle, Object, NULL};
-use crate::vm::{InvokeKind, ThreadStatus, Vm};
+use crate::vm::{InvokeKind, ThreadStatus, Vm, VirtualCache};
 
 thread_local! {
     /// Innermost synchronous Rust→Java call base (`call_method`,
@@ -2053,17 +2053,13 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             }
             match rclass {
                 Some(rc) => {
-                    // Probe the one-entry inline cache first; a hit skips the
-                    // tuple-keyed `HashMap` probe entirely.
-                    let hit = match vm.dexs[dex as usize]
+                    // Probe the polymorphic inline cache first; a hit (even
+                    // on a 2-4 shape cycle) skips the tuple-keyed `HashMap`
+                    // probe entirely.
+                    let hit = vm.dexs[dex as usize]
                         .virtual_cache
                         .get(insn.index as usize)
-                        .copied()
-                        .flatten()
-                    {
-                        Some((c, m)) if c == rc => Some(m),
-                        _ => None,
-                    };
+                        .and_then(|slot| slot.as_ref().and_then(|vc| vc.get(rc)));
                     match hit {
                         Some(m) => m,
                         None => {
@@ -2079,7 +2075,14 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                             if let Some(slot) =
                                 vm.dexs[dex as usize].virtual_cache.get_mut(insn.index as usize)
                             {
-                                *slot = Some((rc, m));
+                                match slot {
+                                    Some(vc) => vc.put(rc, m),
+                                    None => {
+                                        let mut vc = VirtualCache::new();
+                                        vc.put(rc, m);
+                                        *slot = Some(vc);
+                                    }
+                                }
                             }
                             m
                         }

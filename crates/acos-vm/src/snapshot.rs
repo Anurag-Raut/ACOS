@@ -48,7 +48,8 @@ use acos_dex::DexFile;
 use crate::class::{Class, ClassId, InitState, Method, TypeId, TypeInfo};
 use crate::error::{VmError, VmResult};
 use crate::heap::{
-    ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, ThreadData, NULL,
+    ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, StackTraceElementData, ThreadData,
+    NULL,
 };
 use crate::vm::{CoreLib, ThreadRT, ThreadStatus, Vm, VmOptions};
 
@@ -1435,23 +1436,18 @@ fn encode_builtin(w: &mut Writer, d: &BuiltinData) {
             w.bool(t.alive);
             w.bool(t.daemon);
         }
-        BuiltinData::StackTraceElement {
-            class_name,
-            method_name,
-            file_name,
-            line,
-        } => {
+        BuiltinData::StackTraceElement(d) => {
             w.u8(BUILTIN_STACK_TRACE);
-            w.str(class_name);
-            w.str(method_name);
-            match file_name {
+            w.str(&d.class_name);
+            w.str(&d.method_name);
+            match &d.file_name {
                 Some(f) => {
                     w.bool(true);
                     w.str(f);
                 }
                 None => w.bool(false),
             }
-            w.i32(*line);
+            w.i32(d.line);
         }
     }
 }
@@ -1522,12 +1518,12 @@ fn decode_builtin(r: &mut Reader<'_>, remap: &[u32]) -> VmResult<BuiltinData> {
             let method_name = r.str()?;
             let file_name = if r.bool()? { Some(r.str()?) } else { None };
             let line = r.i32()?;
-            BuiltinData::StackTraceElement {
+            BuiltinData::StackTraceElement(Box::new(StackTraceElementData {
                 class_name,
                 method_name,
                 file_name,
                 line,
-            }
+            }))
         }
         other => {
             return Err(VmError::SnapshotFormat(format!(

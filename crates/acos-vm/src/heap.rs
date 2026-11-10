@@ -28,12 +28,20 @@ pub enum BuiltinData {
     /// A live `java.lang.Thread`.
     Thread(ThreadData),
     /// `java.lang.StackTraceElement`.
-    StackTraceElement {
-        class_name: String,
-        method_name: String,
-        file_name: Option<String>,
-        line: i32,
-    },
+    ///
+    /// Boxed: this is the widest variant (three `String`s), so leaving it
+    /// inline set the size of every `Object` slot and every allocation/free
+    /// moved ~100 bytes. The variant is only ever built from a snapshot, so the
+    /// extra indirection on the cold path costs nothing.
+    StackTraceElement(Box<StackTraceElementData>),
+}
+
+#[derive(Clone, Debug)]
+pub struct StackTraceElementData {
+    pub class_name: String,
+    pub method_name: String,
+    pub file_name: Option<String>,
+    pub line: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -213,8 +221,10 @@ impl Heap {
     pub(crate) fn take_field_vec(&mut self, slots: usize) -> Vec<u32> {
         match self.field_pool.pop() {
             Some(mut v) => {
+                // `clear` + `resize` zeroes every slot without first zeroing a
+                // possibly-nonzero buffer twice (the old `resize` + `fill`).
+                v.clear();
                 v.resize(slots, 0);
-                v.fill(0);
                 v
             }
             None => vec![0; slots],
@@ -230,6 +240,7 @@ impl Heap {
 }
 
 /// Approximate retained size of an object (metadata + payload).
+#[inline]
 fn object_size(obj: &Object) -> usize {
     let base = std::mem::size_of::<Object>();
     let payload = match obj {
@@ -253,8 +264,8 @@ fn object_size(obj: &Object) -> usize {
             BuiltinData::EnumSet { elements, .. } => elements.len() * 4,
             BuiltinData::Thread(_) => 32,
             BuiltinData::Entry { .. } => 8,
-            BuiltinData::StackTraceElement { class_name, method_name, file_name, .. } => {
-                class_name.len() + method_name.len() + file_name.as_ref().map_or(0, |s| s.len())
+            BuiltinData::StackTraceElement(d) => {
+                d.class_name.len() + d.method_name.len() + d.file_name.as_ref().map_or(0, |s| s.len())
             }
         },
         Object::Class(_) => 16,

@@ -25,11 +25,67 @@ pub struct DexCtx {
     pub field_cache: Vec<Option<ResolvedField>>,
     pub method_cache: Vec<Option<MethodId>>,
     pub class_cache: Vec<Option<ClassId>>,
-    /// One-entry (receiver class -> method) inline cache per virtual/interface
-    /// call site. Monomorphic call sites (the overwhelming majority in both
-    /// console benchmarks and framework code) never touch the `dispatch_cache`
-    /// `HashMap` after the first call.
-    pub virtual_cache: Vec<Option<(ClassId, MethodId)>>,
+    /// A small polymorphic (receiver class -> method) inline cache per
+    /// virtual/interface call site. Monomorphic sites stay on the first entry;
+    /// polymorphic cycles that previously thrashed a one-entry cache (and so
+    /// always fell through to the tuple-keyed `dispatch_cache` `HashMap`) hit
+    /// one of four entries. Replacement is round-robin. The mapping is a pure
+    /// function of (declared signature, receiver class), so it never needs
+    /// invalidation.
+    pub virtual_cache: Vec<Option<VirtualCache>>,
+}
+
+/// A 4-way polymorphic inline cache for one call site.
+#[derive(Clone, Copy, Debug)]
+pub struct VirtualCache {
+    entries: [(ClassId, MethodId); 4],
+    len: u8,
+    next: u8,
+}
+
+impl Default for VirtualCache {
+    fn default() -> Self {
+        VirtualCache::new()
+    }
+}
+
+impl VirtualCache {
+    #[inline(always)]
+    pub fn new() -> VirtualCache {
+        VirtualCache {
+            entries: [(0, 0); 4],
+            len: 0,
+            next: 0,
+        }
+    }
+
+    /// Look up a receiver class; linear scan over at most four entries.
+    #[inline(always)]
+    pub fn get(&self, c: ClassId) -> Option<MethodId> {
+        let n = self.len as usize;
+        let mut i = 0;
+        while i < n {
+            if self.entries[i].0 == c {
+                return Some(self.entries[i].1);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// Insert a resolution, evicting round-robin once full.
+    #[inline]
+    pub fn put(&mut self, c: ClassId, m: MethodId) {
+        let n = self.len as usize;
+        if n < self.entries.len() {
+            self.entries[n] = (c, m);
+            self.len = (n + 1) as u8;
+        } else {
+            let i = self.next as usize;
+            self.entries[i] = (c, m);
+            self.next = ((i + 1) % self.entries.len()) as u8;
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -25,7 +25,8 @@
     "23_regex_split_replace",
     "24_zip_roundtrip",
     "25_security_digest",
-    "26_regex_matrix"
+    "26_regex_matrix",
+    "27_annotations_reflection"
   ],
   "executed": [
     {

@@ -149,6 +149,18 @@ pub enum Op {
     MoveException { dst: u16 },
     Const { dst: u16, val: i32 },
     ConstWide { dst: u16, val: i64 },
+    /// Fused 32-bit `const*` + conditional branch. javac/d8 frequently emits
+    /// the loop-bound constant immediately before the loop test, so this is
+    /// the loop-invariant-producer idiom (the `const*` write is pure, so
+    /// re-entering the fused op is always safe).
+    ConstIf {
+        dst: u16,
+        val: i32,
+        op: u8,
+        a: u16,
+        b: u16,
+        target: u32,
+    },
     /// `const-string`/`const-string/jumbo`: intern string `string_index` into `dst`.
     ConstString { dst: u16, string_index: u32 },
     /// `new-instance`: allocate `type_index`, store the handle in `dst`.
@@ -473,13 +485,34 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
     let mut i = 0usize;
     while i < n {
         let insn = &code.insns[i];
-        // Fuse `<arith>/lit` + conditional branch when the branch is not a
-        // re-entry point (so it can never be entered on its own).
-        let can_fuse = arith_lit(insn.op)
-            && i + 1 < n
-            && cond_branch(code.insns[i + 1].op)
-            && !is_target[i + 1];
-        let (op, len) = if can_fuse {
+        // Fuse a pure producer + conditional branch when the branch is not a
+        // re-entry point (so it can never be entered on its own). Two idioms
+        // cover the loop-increment/test shapes: `<arith>/lit` + `if-*` (the
+        // counter idiom) and `const*` + `if-*` (the loop-bound constant javac
+        // leaves inside the loop).
+        let fuse_with = if i + 1 < n && !is_target[i + 1] && cond_branch(code.insns[i + 1].op) {
+            if arith_lit(insn.op) {
+                Some(1u8)
+            } else if (0x12..=0x15).contains(&insn.op) {
+                Some(2u8)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let (op, len) = if fuse_with == Some(2) {
+            let b = &code.insns[i + 1];
+            let fused = Op::ConstIf {
+                dst: insn.regs[0],
+                val: insn.literal as i32,
+                op: b.op,
+                a: b.regs[0],
+                b: b.regs[1],
+                target: insn_target_insn(code, &pcs, i + 1),
+            };
+            (fused, 2u8)
+        } else if fuse_with == Some(1) {
             let b = &code.insns[i + 1];
             let fused = Op::ArithLitIf {
                 aop: insn.op,
@@ -516,6 +549,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
             Op::Goto { target } => Some(target),
             Op::If { target, .. } => Some(target),
             Op::ArithLitIf { target, .. } => Some(target),
+            Op::ConstIf { target, .. } => Some(target),
             _ => None,
         };
         if let Some(t) = t {
@@ -525,7 +559,10 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
                 *insn_to_op.get(*t as usize).unwrap_or(&u32::MAX)
             };
             match op {
-                Op::Goto { target } | Op::If { target, .. } | Op::ArithLitIf { target, .. } => {
+                Op::Goto { target }
+                | Op::If { target, .. }
+                | Op::ArithLitIf { target, .. }
+                | Op::ConstIf { target, .. } => {
                     *target = resolved;
                 }
                 _ => {}
@@ -541,6 +578,7 @@ pub(crate) fn lower(code: &MethodCode) -> Program {
             Op::Goto { target } => *target,
             Op::If { target, .. } => *target,
             Op::ArithLitIf { target, .. } => *target,
+            Op::ConstIf { target, .. } => *target,
             _ => return false,
         };
         t != u32::MAX && (t as usize) <= idx
@@ -977,6 +1015,26 @@ fn run_ir_loop(
             }
             Op::Const { dst, val } => f.set_reg(dst, val as u32),
             Op::ConstWide { dst, val } => f.set_reg_wide(dst, val as u64),
+            Op::ConstIf {
+                dst,
+                val,
+                op,
+                a,
+                b,
+                target,
+            } => {
+                if target == u32::MAX {
+                    break;
+                }
+                f.set_reg(dst, val as u32);
+                if cond_take(op, f.reg(a), f.reg(b)) {
+                    pc = target as usize;
+                } else {
+                    pc += 1;
+                }
+                count += len;
+                continue;
+            }
             Op::ArrayLen { dst, arr } => {
                 let h = f.reg(arr);
                 match heap.get(h) {
