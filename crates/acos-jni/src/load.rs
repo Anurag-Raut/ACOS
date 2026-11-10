@@ -133,6 +133,11 @@ pub(crate) fn load_named(vm: &mut Vm, requested: &str) -> Result<String, CallFai
         }));
     };
 
+    // Answer the guest library's NDK imports (`libandroid`/`libjnigraphics`)
+    // from the real ACOS substrates before its initializer runs. The host is
+    // process-wide and inert until native code actually calls an NDK symbol.
+    crate::ndk_host::install();
+
     let handle = loader.load_bytes(&bytes, &name).map_err(|e| {
         structured(JniError::LoadFailed {
             message: e.to_string(),

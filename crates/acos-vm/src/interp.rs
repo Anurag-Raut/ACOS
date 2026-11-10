@@ -4,8 +4,6 @@
 //! stack. Frames live in per-thread VM stacks and the scheduler picks a
 //! runnable thread for each step.
 
-use std::sync::Arc;
-
 use crate::class::{ClassId, FieldSign, Insn, MethodCode, MethodImpl, MethodId, NativeCtx};
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
@@ -13,20 +11,6 @@ use crate::heap::{ArrayData, Handle, Object, NULL};
 use crate::vm::{InvokeKind, ThreadStatus, Vm};
 
 thread_local! {
-    /// Shared empty body for native frames: avoids an `Arc` allocation on every
-    /// native invocation.
-    static EMPTY_CODE: Arc<MethodCode> = Arc::new(MethodCode {
-        registers_size: 0,
-        ins_size: 0,
-        outs_size: 0,
-        insns: Vec::new(),
-        pc_to_idx: Vec::new(),
-        raw: Vec::new(),
-        tries: Vec::new(),
-        line_table: Vec::new(),
-        source_file: None,
-    });
-
     /// Innermost synchronous Rust→Java call base (`call_method`,
     /// `initialize_class`, native→Java callbacks). Exception unwinding must not
     /// pop below this depth: it is converted into a VM-level pending exception
@@ -37,19 +21,22 @@ thread_local! {
     static EXCEPTION_FLOOR: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn empty_code() -> Arc<MethodCode> {
-    EMPTY_CODE.with(|c| c.clone())
+/// Borrow the decoded body of a DEX method. Frames no longer hold an
+/// `Arc<MethodCode>`: the body is owned by the method table and looked up by
+/// `MethodId`, so a call no longer pays an atomic clone/drop on push/pop.
+#[inline]
+fn code_of(vm: &Vm, method: MethodId) -> Option<&MethodCode> {
+    match &vm.methods[method as usize].imp {
+        MethodImpl::Dex { code: Some(c), .. } => Some(c),
+        _ => None,
+    }
 }
 
-/// Take a frame from the per-thread pool (or allocate one), reset it and size
-/// its register file. Reusing the `regs`/`refs` buffers removes two heap
-/// allocations per Java/native call from the hot invoke path.
 fn acquire_frame(
     vm: &mut Vm,
     t: usize,
     method: MethodId,
     class: ClassId,
-    code: Arc<MethodCode>,
     regs_size: usize,
 ) -> Frame {
     let mut frame = match vm.threads[t].frame_pool.pop() {
@@ -58,7 +45,7 @@ fn acquire_frame(
             // the same method body (the common recursive/looping case), so the
             // process-global cache is probed at most once per distinct body per
             // pooled slot.
-            if !Arc::ptr_eq(&f.code, &code) {
+            if f.method != method {
                 f.ir = None;
                 f.ir_checked = false;
             }
@@ -81,11 +68,10 @@ fn acquire_frame(
             f.refs.fill(false);
             f
         }
-        None => Frame::new(method, class, code.clone(), regs_size),
+        None => Frame::new(method, class, regs_size),
     };
     frame.method = method;
     frame.class = class;
-    frame.code = code;
     frame.pc = 0;
     frame.insn_index = 0;
     frame.pending_result = 0;
@@ -112,6 +98,10 @@ fn release_frame(vm: &mut Vm, t: usize, f: Frame) {
 pub fn run(vm: &mut Vm) -> VmResult<()> {
     let mut next_yield: u64 = 8192;
     loop {
+        // Host safe point: let an installed broker service requests queued by
+        // native OS threads. It runs here, on the owner thread, between green
+        // thread batches so the VM is not aliased from two threads.
+        crate::natives::safe_point::pump(vm);
         // Host RSS / watchdog check once per scheduler turn (cheap; the RSS
         // read is throttled). This bounds a stuck green thread even when it
         // never reaches an allocation.
@@ -214,9 +204,14 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                 // and would pay the per-segment entry cost.
                 if !vm.threads[t].frames[fi].ir_checked {
                     vm.threads[t].frames[fi].ir_checked = true;
-                    if crate::exec::is_loop_body(&vm.threads[t].frames[fi].code) {
-                        let code = vm.threads[t].frames[fi].code.clone();
-                        vm.threads[t].frames[fi].ir = Some(crate::exec::get_or_lower(&code));
+                    let method = vm.threads[t].frames[fi].method;
+                    if let MethodImpl::Dex { code: Some(code), .. } =
+                        &vm.methods[method as usize].imp
+                    {
+                        let code = code.clone();
+                        if crate::exec::is_loop_body(&code) {
+                            vm.threads[t].frames[fi].ir = Some(crate::exec::get_or_lower(&code));
+                        }
                     }
                 }
                 if vm.threads[t].frames[fi].ir.is_some() {
@@ -236,14 +231,34 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                     count += crate::exec::run_ir(f, heap, &prog, cap - count, ir_fields, classes);
                     f.ir = Some(prog);
                 } else {
-                    let Vm { threads, heap, .. } = &mut *vm;
+                    let Vm {
+                        threads,
+                        heap,
+                        methods,
+                        ..
+                    } = &mut *vm;
+                    let method = threads[t].frames[fi].method;
+                    let code = match &methods[method as usize].imp {
+                        MethodImpl::Dex { code: Some(c), .. } => c.as_ref(),
+                        _ => unreachable!(),
+                    };
                     let f = &mut threads[t].frames[fi];
-                    count += crate::dispatch::fast_run(f, heap, cap - count);
+                    count += crate::dispatch::fast_run(f, code, heap, cap - count);
                 }
             } else {
-                let Vm { threads, heap, .. } = &mut *vm;
+                let Vm {
+                    threads,
+                    heap,
+                    methods,
+                    ..
+                } = &mut *vm;
+                let method = threads[t].frames[fi].method;
+                let code = match &methods[method as usize].imp {
+                    MethodImpl::Dex { code: Some(c), .. } => c.as_ref(),
+                    _ => unreachable!(),
+                };
                 let f = &mut threads[t].frames[fi];
-                count += crate::dispatch::fast_run(f, heap, cap - count);
+                count += crate::dispatch::fast_run(f, code, heap, cap - count);
             }
         }
         if count >= cap || vm.threads[t].frames.len() <= stop_depth {
@@ -254,12 +269,19 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
         // ends every call. The register/result transfer and frame pop are the
         // same as the general path.
         if is_dex {
-            let frame = &vm.threads[t].frames[fi];
-            if let Some(insn) = frame.code.insns.get(frame.insn_index) {
+            let insn = {
+                let method = vm.threads[t].frames[fi].method;
+                match &vm.methods[method as usize].imp {
+                    MethodImpl::Dex { code: Some(code), .. } => {
+                        code.insns.get(vm.threads[t].frames[fi].insn_index).copied()
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(insn) = insn {
                 match insn.op {
                     // `return*`
                     0x0e..=0x11 => {
-                        let insn = *insn;
                         exec_return(vm, t, fi, &insn);
                         count += 1;
                         continue;
@@ -267,7 +289,6 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                     // `invoke-*`: skip the `exec_one` prologue, but keep the
                     // same Java-exception routing as the general path.
                     0x6e..=0x72 | 0x74..=0x78 => {
-                        let insn = *insn;
                         match invoke(vm, t, fi, &insn) {
                             Ok(()) => {}
                             Err(VmError::JavaException(h)) => handle_exception(vm, h)?,
@@ -419,7 +440,11 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
 
     let insn = {
         let f = &vm.threads[t].frames[fi];
-        match f.code.insns.get(f.insn_index) {
+        let code = match code_of(vm, method) {
+            Some(c) => c,
+            None => unreachable!(),
+        };
+        match code.insns.get(f.insn_index) {
             Some(i) => *i,
             None => {
                 return Err(VmError::Internal(format!(
@@ -445,18 +470,27 @@ fn pop_frame(vm: &mut Vm, t: usize) {
     if let Some(m) = f.monitor {
         exit_monitor(vm, m);
     }
+    // The caller's next instruction size is looked up before the mutable
+    // borrow below (frames no longer carry their own body reference).
+    let adv_size = if f.advance_on_return {
+        vm.threads[t]
+            .frames
+            .last()
+            .and_then(|caller| {
+                code_of(vm, caller.method)
+                    .and_then(|c| c.insns.get(caller.insn_index))
+                    .map(|i| i.size as u32)
+            })
+            .unwrap_or(0)
+    } else {
+        0
+    };
     if let Some(caller) = vm.threads[t].frames.last_mut() {
         caller.pending_result = f.pending_result;
         caller.pending_result_is_ref = f.pending_result_is_ref;
         caller.has_pending_result = true;
         if f.advance_on_return {
-            let size = caller
-                .code
-                .insns
-                .get(caller.insn_index)
-                .map(|i| i.size)
-                .unwrap_or(0);
-            caller.pc += size as u32;
+            caller.pc += adv_size;
             caller.insn_index += 1;
         }
     }
@@ -500,9 +534,18 @@ fn handle_exception_inner(vm: &mut Vm, h: Handle) -> VmResult<()> {
             return Ok(());
         }
         let fi = vm.threads[t].frames.len() - 1;
-        let (pc, code) = {
+        let (pc, method) = {
             let f = &vm.threads[t].frames[fi];
-            (f.pc, f.code.clone())
+            (f.pc, f.method)
+        };
+        // Native frames have no body and no handler; pop and keep unwinding.
+        // The `Arc` clone here is on the cold exception path only.
+        let code = match &vm.methods[method as usize].imp {
+            MethodImpl::Dex { code: Some(c), .. } => c.clone(),
+            _ => {
+                pop_frame_quiet(vm, t);
+                continue;
+            }
         };
         if let Some(addr) = find_handler(vm, &code, pc, h)? {
             let idx = code.pc_to_idx[addr as usize] as usize;
@@ -587,17 +630,22 @@ fn advance(vm: &mut Vm, t: usize, fi: usize, size: u8) {
 
 #[inline]
 fn branch_to(vm: &mut Vm, t: usize, fi: usize, target_pc: u32) -> VmResult<()> {
-    let (code, idx) = {
+    let idx = {
         let f = &vm.threads[t].frames[fi];
-        (f.code.clone(), f.code.pc_to_idx.get(target_pc as usize).copied())
+        code_of(vm, f.method).and_then(|c| c.pc_to_idx.get(target_pc as usize).copied())
     };
     let idx = idx.and_then(|i| if i == u32::MAX { None } else { Some(i as usize) });
     let idx = match idx {
         Some(i) => i,
         None => {
+            let src = {
+                let f = &vm.threads[t].frames[fi];
+                code_of(vm, f.method)
+                    .and_then(|c| c.source_file.clone())
+                    .unwrap_or_default()
+            };
             return Err(VmError::Internal(format!(
-                "branch to non-instruction pc {target_pc} in {}",
-                code.source_file.clone().unwrap_or_default()
+                "branch to non-instruction pc {target_pc} in {src}"
             )))
         }
     };
@@ -844,20 +892,41 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0x23 => {
             let len = reg(vm, t, fi, r1) as i32;
             let dex = frame_dex(vm, t, fi);
-            // `strip_prefix` already yields a `&str`; the extra `to_string()`
-            // only paid a second heap allocation per `new-array`.
-            let arr_desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-            let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc);
             if len < 0 {
                 return Err(vm.throw_new(
                     "Ljava/lang/NegativeArraySizeException;",
                     Some(&len.to_string()),
                 ));
             }
-            // Bound the guest length before building the backing store
-            // (HONESTY_AUDIT.md #2).
-            vm.check_array_len(elem, len as usize)?;
-            let obj = crate::vm::simple_array_object(elem, len as usize)?;
+            // Fast path: borrow the DEX component descriptor directly and build
+            // the backing store in place. `ArrayObj` already owns a copy of the
+            // element descriptor, so the previous unconditional `to_string()`
+            // here was a throwaway `String` heap allocation on every
+            // `new-array`. It is rebuilt only on the (cold) bounds-check error
+            // path, which needs the general `check_array_len` OOM throw.
+            let built = {
+                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?;
+                let elem = desc.strip_prefix('[').unwrap_or(desc);
+                if crate::heap::array_len_fits(elem, len as usize, vm.heap.max_bytes) {
+                    Some(crate::vm::simple_array_object(elem, len as usize)?)
+                } else {
+                    None
+                }
+            };
+            let obj = match built {
+                Some(obj) => obj,
+                None => {
+                    let desc = vm.dexs[dex as usize]
+                        .file
+                        .type_descriptor(insn.index)?
+                        .to_string();
+                    let elem = desc.strip_prefix('[').unwrap_or(&desc);
+                    // Same predicate as `array_len_fits`, so this always errs;
+                    // it is the only place the Java `OutOfMemoryError` message
+                    // is built.
+                    return Err(vm.check_array_len(elem, len as usize).unwrap_err());
+                }
+            };
             let h = vm.alloc(obj)?;
             set_ref(vm, t, fi, r0, h);
             advance(vm, t, fi, insn.size);
@@ -874,9 +943,13 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0x26 => {
             let arr = reg(vm, t, fi, r0);
             let payload_pc = rel_target(pc, insn.target);
-            let code = vm.threads[t].frames[fi].code.clone();
-            let payload = acos_dex::decode_payload(&code.raw, payload_pc as usize)
-                .map_err(|e| VmError::Internal(format!("fill-array-data payload: {e}")))?;
+            let payload = {
+                let f = &vm.threads[t].frames[fi];
+                let code = code_of(vm, f.method)
+                    .ok_or_else(|| VmError::Internal("no code for fill-array-data".into()))?;
+                acos_dex::decode_payload(&code.raw, payload_pc as usize)
+            }
+            .map_err(|e| VmError::Internal(format!("fill-array-data payload: {e}")))?;
             if let acos_dex::Payload::FillArrayData(fad) = payload {
                 fill_array_data(vm, arr, &fad)?;
             }
@@ -897,9 +970,13 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0x2b..=0x2c => {
             let value = reg(vm, t, fi, r0) as i32;
             let payload_pc = rel_target(pc, insn.target);
-            let code = vm.threads[t].frames[fi].code.clone();
-            let payload = acos_dex::decode_payload(&code.raw, payload_pc as usize)
-                .map_err(|e| VmError::Internal(format!("switch payload: {e}")))?;
+            let payload = {
+                let f = &vm.threads[t].frames[fi];
+                let code = code_of(vm, f.method)
+                    .ok_or_else(|| VmError::Internal("no code for switch".into()))?;
+                acos_dex::decode_payload(&code.raw, payload_pc as usize)
+            }
+            .map_err(|e| VmError::Internal(format!("switch payload: {e}")))?;
             let target = match payload {
                 acos_dex::Payload::PackedSwitch(sw) => {
                     let base = sw.keys.first().copied().unwrap_or(0) as i64;
@@ -2068,19 +2145,19 @@ fn build_frame(
     {
         return Err(VmError::JavaException(vm.stack_overflow_object));
     }
-    let (regs_size, ins_size, code, class_id) = {
+    let (regs_size, ins_size, class_id) = {
         let m = &vm.methods[method as usize];
         match &m.imp {
             MethodImpl::Dex { code: Some(c), .. } => {
-                (c.registers_size as usize, m.ins_size as usize, c.clone(), m.class)
+                (c.registers_size as usize, m.ins_size as usize, m.class)
             }
-            _ => (m.ins_size as usize, m.ins_size as usize, empty_code(), m.class),
+            _ => (m.ins_size as usize, m.ins_size as usize, m.class),
         }
     };
     let t = vm.current_thread;
     let base_slot = regs_size - ins_size;
     let n = ins_size.min(count);
-    let mut frame = acquire_frame(vm, t, method, class_id, code, regs_size);
+    let mut frame = acquire_frame(vm, t, method, class_id, regs_size);
     frame.advance_on_return = true;
     {
         let caller_regs = &vm.threads[t].frames.last().unwrap().regs;
@@ -2121,12 +2198,12 @@ pub fn push_frame_values(
         return Err(VmError::JavaException(vm.stack_overflow_object));
     }
     let m = vm.methods[method as usize].clone();
-    let (regs_size, code) = match &m.imp {
-        MethodImpl::Dex { code: Some(c), .. } => (c.registers_size as usize, c.clone()),
-        _ => (m.ins_size as usize, empty_code()),
+    let regs_size = match &m.imp {
+        MethodImpl::Dex { code: Some(c), .. } => c.registers_size as usize,
+        _ => m.ins_size as usize,
     };
     let t = vm.current_thread;
-    let mut frame = acquire_frame(vm, t, method, m.class, code, regs_size);
+    let mut frame = acquire_frame(vm, t, method, m.class, regs_size);
     let base = regs_size - m.ins_size as usize;
     let mut pos = base;
     if !m.is_static() {

@@ -188,3 +188,67 @@ acos_jni_test_slots(JNIEnv *env, jclass cls) {
     }
     return pass;
 }
+
+/*
+ * Brokered request channel from a native OS thread (ADR-0021 follow-up).
+ *
+ * The worker owns no `JavaVM` runtime state, so `FindClass`, `GetStaticMethodID`
+ * and `CallStaticIntMethod` are enqueued on the broker and serviced by the
+ * owner thread. The owner must pump while the worker runs, so the pump entry
+ * point is passed in by the caller. `result` is 1 when the worker saw the
+ * Java static method return 42 and then detached cleanly.
+ */
+typedef struct {
+    JavaVM *vm;
+    void (*pump)(void);
+    volatile int result;
+    volatile int done;
+} broker_worker_arg;
+
+static void *broker_worker_main(void *raw) {
+    broker_worker_arg *w = (broker_worker_arg *) raw;
+    JNIEnv *env = NULL;
+    if ((*w->vm)->AttachCurrentThread(w->vm, &env, NULL) != JNI_OK || env == NULL) {
+        w->done = 1;
+        return NULL;
+    }
+    jclass cls = (*env)->FindClass(env, "dev/acos/fixtures/broker/BrokerTarget");
+    jmethodID mid = cls != NULL
+        ? (*env)->GetStaticMethodID(env, cls, "add", "(II)I")
+        : NULL;
+    if (mid != NULL) {
+        if ((*env)->CallStaticIntMethod(env, cls, mid, 20, 22) == 42) {
+            w->result = 1;
+        }
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    (*w->vm)->DetachCurrentThread(w->vm);
+    w->done = 1;
+    return NULL;
+}
+
+JNIEXPORT jint JNICALL
+acos_jni_test_broker_worker(JNIEnv *env, jclass cls, void (*pump)(void)) {
+    (void) cls;
+    JavaVM *vm = NULL;
+    if ((*env)->GetJavaVM(env, &vm) != JNI_OK || vm == NULL) {
+        return 0;
+    }
+    broker_worker_arg w;
+    w.vm = vm;
+    w.pump = pump;
+    w.result = 0;
+    w.done = 0;
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, broker_worker_main, &w) != 0) {
+        return 0;
+    }
+    /* Keep servicing the broker until the worker has detached and exited. */
+    while (!w.done) {
+        pump();
+    }
+    pthread_join(tid, NULL);
+    return w.result;
+}

@@ -52,6 +52,13 @@ pub struct JniConfig {
     pub missing_policy: MissingPolicy,
     /// Optional guest `__android_log_*` sink.
     pub log_sink: Option<std::sync::Arc<dyn acos_native_loader::LogSink>>,
+    /// When `true` (the default), `System.loadLibrary` refuses to map a guest
+    /// `.so` unless the process reports an active confinement (ADR-0022).
+    ///
+    /// Product paths must leave this on. Trusted in-process tests that load
+    /// checked-in fixture libraries without entering a sandbox disable it with
+    /// [`JniConfig::for_tests_without_confinement`].
+    pub require_confinement: bool,
 }
 
 impl std::fmt::Debug for JniConfig {
@@ -62,6 +69,7 @@ impl std::fmt::Debug for JniConfig {
             .field("abi", &self.abi)
             .field("missing_policy", &self.missing_policy)
             .field("log_sink", &self.log_sink.is_some())
+            .field("require_confinement", &self.require_confinement)
             .finish()
     }
 }
@@ -74,6 +82,7 @@ impl Default for JniConfig {
             abi: "x86_64".to_string(),
             missing_policy: MissingPolicy::Strict,
             log_sink: None,
+            require_confinement: true,
         }
     }
 }
@@ -86,6 +95,19 @@ impl JniConfig {
 
     pub fn with_apk(mut self, path: impl Into<PathBuf>) -> Self {
         self.apk = Some(path.into());
+        self
+    }
+
+    /// Test-only: a config whose `System.loadLibrary` does not require an
+    /// active process confinement (ADR-0022).
+    ///
+    /// This exists for trusted in-process tests that load checked-in fixture
+    /// libraries and never run untrusted APK code. **Product code must not use
+    /// it** — it defeats the ADR-0022 guarantee that native APK code only runs
+    /// under a seccomp/landlock sandbox.
+    #[doc(hidden)]
+    pub fn for_tests_without_confinement(mut self) -> Self {
+        self.require_confinement = false;
         self
     }
 }
@@ -204,7 +226,7 @@ pub struct ThreadJni {
 }
 
 impl ThreadJni {
-    fn ensure_frame(&mut self) {
+    pub(crate) fn ensure_frame(&mut self) {
         if self.frames.is_empty() {
             self.frames.push(LocalFrame::default());
         }
@@ -277,6 +299,21 @@ thread_local! {
     /// Set when this OS thread attached through the process-global slots
     /// rather than owning a thread-local [`RUNTIME`].
     static ATTACHED_BY_GLOBAL: Cell<bool> = const { Cell::new(false) };
+    /// The synthetic VM-thread id a brokered JNI slot must act on behalf of.
+    /// Set only on the owner thread while it services a worker request, so the
+    /// reused slot implementations create locals and pending exceptions in the
+    /// worker's frames rather than the owner's.
+    static FORCED_THREAD: Cell<Option<usize>> = const { Cell::new(None) };
+}
+
+/// The override set by [`set_forced_thread`], if any.
+pub(crate) fn forced_thread() -> Option<usize> {
+    FORCED_THREAD.with(Cell::get)
+}
+
+/// Force JNI bookkeeping onto `t` for the duration of a brokered call.
+pub(crate) fn set_forced_thread(t: Option<usize>) {
+    FORCED_THREAD.with(|c| c.set(t));
 }
 
 // --- process-global attach slots -------------------------------------------
@@ -313,6 +350,9 @@ pub(crate) fn attach_current_os_thread() -> Option<usize> {
     let id = std::thread::current().id();
     global_attached().lock().unwrap().insert(id);
     ATTACHED_BY_GLOBAL.with(|c| c.set(true));
+    // Allocate the synthetic VM-thread id used for this worker's local
+    // reference frames and pending exception.
+    crate::broker::attach_worker();
     Some(env)
 }
 
@@ -388,6 +428,8 @@ pub struct JniRuntime {
     pub(crate) inner: Rc<RefCell<State>>,
     env: Box<EnvSlot>,
     vm: Box<VmSlot>,
+    /// Host thread that created (and owns) this runtime.
+    owner: ThreadId,
 }
 
 impl std::fmt::Debug for JniRuntime {
@@ -410,6 +452,8 @@ impl Drop for JniRuntime {
             clear_vm();
             RUNTIME.with(|r| *r.borrow_mut() = None);
         }
+        crate::broker::clear_owner();
+        crate::broker::uninstall_safe_point();
     }
 }
 
@@ -421,6 +465,7 @@ impl JniRuntime {
             missing_policy: config.missing_policy,
             log_sink: config.log_sink.clone(),
             system_properties: HashMap::new(),
+            require_confinement: config.require_confinement,
             ..LoaderConfig::default()
         });
         let env = Box::new(EnvSlot {
@@ -455,14 +500,24 @@ impl JniRuntime {
             inner: Rc::new(RefCell::new(state)),
             env,
             vm,
+            owner: std::thread::current().id(),
         };
         install_global_slots(env_slot);
+        // Publish this thread as the broker owner and install the VM
+        // safe-point hook that services queued native-thread requests.
+        crate::broker::set_owner();
+        crate::broker::install_safe_point();
         runtime
     }
 
     /// `JNIEnv*` handed to guest native code.
     pub fn env(&self) -> *mut std::os::raw::c_void {
         &*self.env as *const EnvSlot as *mut std::os::raw::c_void
+    }
+
+    /// Host thread that owns this runtime (the VM owner).
+    pub fn owner_thread_id(&self) -> ThreadId {
+        self.owner
     }
 
     /// `JavaVM*` handed to `JNI_OnLoad`.
@@ -596,6 +651,21 @@ impl JniRuntime {
         let mut st = self.inner.borrow_mut();
         let thread = st.last_thread;
         st.threads.get_mut(&thread).and_then(|s| s.error.take())
+    }
+
+    /// Service queued native-thread JNI requests against `vm`.
+    ///
+    /// This is the explicit form of the VM safe point. The VM's own yield
+    /// points (interpreter scheduler and looper pump) call it automatically
+    /// once the runtime is attached; tests and synchronous owner→native waits
+    /// call it directly. Returns how many requests were serviced.
+    pub fn pump_broker(&self, vm: &mut Vm) -> usize {
+        // The VM's owner pointer is installed by `bind`; make sure it matches
+        // the value the caller passed so the serviced slots act on this VM.
+        // SAFETY: `vm` is borrowed for the duration of the call.
+        unsafe { set_vm(vm as *mut Vm) };
+        // SAFETY: `vm` is the live owner VM borrowed for this call.
+        unsafe { crate::broker::service(vm as *mut Vm) }
     }
 
     /// Names and paths of loaded libraries (test/reporting aid).

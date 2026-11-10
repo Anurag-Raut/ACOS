@@ -43,18 +43,37 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(missing_debug_implementations)]
 
+pub mod broker;
 pub mod dispatch;
 pub mod error;
 pub mod jni;
 pub mod load;
+pub mod ndk_host;
 pub mod refs;
 pub mod state;
 pub mod table;
 pub mod traps;
 
+pub use broker::{attached_workers, pending_requests, take_worker_error};
 pub use error::JniError;
 pub use jni::{acos_jni_method_codes, acos_jni_va_invoke, implemented_slot_count, JniCallResult};
 pub use state::{JniConfig, JniRuntime, JNI_ERR, JNI_OK, JNI_VERSION_1_4, JNI_VERSION_1_6};
 
 /// Stable identity of the JNI table (test/debug aid).
 pub const JNI_SLOT_COUNT: usize = table::JNI_SLOT_COUNT;
+
+/// Service queued brokered JNI requests against the thread-local owner VM.
+///
+/// The VM's safe points call this automatically; native code may call it while
+/// the owner is blocked in a native call that is waiting on a worker, so the
+/// synchronous owner→native→worker→Java→owner pattern cannot deadlock.
+#[no_mangle]
+pub extern "C" fn acos_jni_broker_pump() -> usize {
+    broker::service_current()
+}
+
+/// Number of requests queued across all owners (diagnostic).
+#[no_mangle]
+pub extern "C" fn acos_jni_broker_pending() -> usize {
+    broker::pending_requests()
+}

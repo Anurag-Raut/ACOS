@@ -943,3 +943,98 @@ Correctness for the wave (worktree = HEAD `515eeff` + the kept change):
 Verdict: no measurable closure of the `BenchGc`/`BenchAlloc` gap from an
 allocation micro-optimisation. `bench-vm`/`vmbench` should next be run with an
 allocation-tier design, not more heap bookkeeping.
+
+### 8.13 Shared linked boot metadata: `Vm::restore` cost, W64-A / T-43 (2026-11-11)
+
+Target: cut `Vm::restore` (the framework ACOSSNAP restore of §8.10) and the
+per-session class re-link by sharing the **immutable linked class metadata**
+across VMs. Ownership: `crates/acos-vm/src/snapshot.rs`, `crates/acos-vm/src/vm.rs`
+(class link/cache construction), `crates/acos-runtime/src/session_pool.rs`.
+
+**What changed.** `Vm::snapshot()` now records, once per
+`(boot-DEX fingerprint, corelib, order-sensitive class-descriptor hash)`, an
+in-process [`BootImage`]: the already-linked `classes` (field layouts, absolute
+slot offsets, vtables, interface default tables, `direct_map`/`virtual_map`),
+`methods` (signatures, param types, `ins_size`/`ins_ref`, shared `Arc<MethodCode>`
+bodies) and `types`, plus the provider list (`Arc<DexFile>` order, boot/lazy jar
+lists, `c_*` ids). `Vm::restore` looks the image up **before** constructing a
+VM; on a hit it builds a bare `Vm` (`Vm::empty` + native registry + provider
+contexts) and clones the linked tables instead of re-parsing `class_data`,
+re-formatting signatures, re-interning method string constants, rebuilding
+vtables and re-decoding 255 DEX class bodies. Everything mutable stays per-VM:
+`statics`, `Class.init`, `Class.class_obj`, the heap, interner, `dispatch_cache`,
+IR quickening and the per-DEX resolution caches are re-seeded from the snapshot
+(or reset), so no mutable state is shared. The cache is bounded (4 images) and
+`#![forbid(unsafe_code)]` is untouched. A snapshot whose class set/order differs
+from the image falls back to the old relink path and records its own image; the
+**first** restore of a class set in a fresh process still pays that relink.
+
+Measurements (worktree of HEAD `145c6eb`, `dev` profile,
+`CARGO_TARGET_DIR=.cache/target-w64a`, `tools/bench-acos.sh --profile dev launch`,
+20 samples, host 32 threads / 60 GiB, loadavg ≈ 5–6 during the runs, corelib
+`real`, fixture `fixtures/build/apps/hello-views.apk`). "before" = the same
+tree with the T-43 diff stashed (relink path); "after" = the diff applied.
+Both rows are from the same two-run A/B, interleaved (before → after):
+
+| row | before p50 / p95 (ms) | after p50 / p95 (ms) | change |
+|---|---:|---:|---|
+| `Vm::restore` (+`Runtime::with_vm`) | 54.006 / 57.982 | **12.832 / 13.757** | **4.21x / 4.21x** |
+| after = restore + launch phases (`bindApplication` … `quitSafely`) | 210.462 / 218.174 | 172.658 / 178.162 | 1.22x / 1.22x |
+| `launch` before arm (Vm::new + framework boot, same run) | 223.747 / 237.742 | 236.279 / 376.856 | host noise, not a target |
+| template boot (paid once) | 80.356 | 92.686 | incl. image capture |
+| template snapshot capture | 0.771 | 6.820 | +one `BootImage::capture` |
+| snapshot size / classes | 221 324 B / 332 | 221 324 B / 332 | unchanged |
+
+Run files: baseline `results/bench/run-2026-11-11-003022.json` (HEAD, relink),
+after `results/bench/run-2026-11-11-003100.json` (HEAD + T-43). The restore
+phase split moved from `vm_new 5.4 + relink 41.0 + heap 1.6 + tables 0.7 +
+cache-clear 1.9` to `bare Vm + image clone ≈ 8.6 + heap 1.6 + tables 0.7`
+(image-path provider caches start empty, so the clear pass is skipped).
+
+**Targets.** `restore < 15 ms`: **met** (12.8 ms p50 / 13.8 ms p95). Launch
+total p50 < 60 ms: **not met** (172.7 ms). The restore half is now ~7 % of the
+total; the remaining 159.2 ms is the launch chain outside this change
+(`bindApplication` → `Application.onCreate` → `ClientTransaction` →
+`quitSafely`), which in this fixture still ends in the known pre-existing
+`uncaught java.lang.ExceptionInInitializerError` blocker (§8.10;
+`app_created = 0`, `transaction_delivered = 0` — evidence is the real
+framework work, not a stubbed pass). That arm is owned by the runtime/launch
+waves, not T-43.
+
+**SessionPool memory** (`acos bench sessions-pool --sessions 5,16 --runs 3`,
+fresh child per N, `anon+shmem` p50, real corelib, `02_int_arith`):
+
+| metric | before | after |
+|---|---:|---:|
+| N=5 total anon+shmem (MiB) | 45.078 | **40.148** |
+| N=16 total anon+shmem (MiB) | 82.121 | **65.023** |
+| marginal MiB/session (N=5→16) | 3.368 | **2.261** |
+| session create p50 (ms, N=5 / N=16) | 6.535 / 8.999 | **2.590 / 4.154** |
+| per-session reset p50 (ms, N=5 / N=16) | 7.930 / 8.189 | **3.801 / 3.899** |
+
+Marginal RSS is **better**, not worse: each session clones the shared linked
+tables rather than re-deriving them, and the one process-global image is
+bounded.
+
+**Correctness.**
+* `tools/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**
+  (`results/vm/dexprogs-w64a-real-normal.json`); `--gc-stress`: **27 / 0 / 0**
+  (`results/vm/dexprogs-w64a-real-gc-stress.json`).
+* `cargo test -p acos-vm --test snapshot`: **16 passed** (determinism,
+  idempotence, 100-cycle stability, mismatch refusal, real regex);
+  `cargo test -p acos-runtime --test session_pool`: **4 passed** (reset
+  isolation, panic isolation, deterministic across worker counts, wall guard).
+* `cargo clippy -p acos-vm -p acos-dex --lib --no-deps -- -D warnings`: clean.
+  (A workspace-wide `cargo clippy --all-targets -D warnings` still fails on a
+  pre-existing `acos-framework-natives` lint at HEAD, unrelated to this diff.)
+* `snapshot_probe --corelib real --dex 09_strings --iters 5`: outputs
+  **5/5 identical** to the fresh path, `determinism_byte_equal` and
+  `idempotence_byte_equal` true; 40-class restore p50 2.34 ms (from 5.8 ms).
+
+**Verdict / what remains.** Sharing the linked metadata is a 4.2x restore win
+and removes the per-session relink the §8.10 analysis named as dominant, with
+lower marginal RSS. Still open: (a) a cold process (`Vm::restore` without a
+prior in-process template/snapshot) pays the ~54 ms relink — a content-addressed
+on-disk `.cache/` image (validated by the same fingerprint/class-list key,
+atomically written) is the next step and is **not** implemented or claimed
+here; (b) the launch-total target needs the launch chain, not restore.

@@ -75,19 +75,42 @@ fn hello_jni_runs_through_the_vm() {
     vm.add_dex(dex);
 
     let apk = repo_root().join("fixtures/build/apps/hello-jni.apk");
-    let jni = JniRuntime::new(JniConfig::default().with_apk(&apk));
+    // The APK's `lib/<abi>/libhellojni.so` is a trusted, checked-in fixture, and
+    // this test process is not confined; opt out of the ADR-0022 confinement
+    // gate explicitly, exactly as `jni_native_fixture` does.
+    let jni = JniRuntime::new(
+        JniConfig::default()
+            .with_apk(&apk)
+            .for_tests_without_confinement(),
+    );
     jni.attach(&mut vm).expect("attach JNI");
 
     let outcome = vm.run("dev/acos/fixtures/hellojni/MainActivity", &[]);
     if let Some(acos_vm::VmError::JavaException(h)) = outcome.vm_error {
-        let class = vm
-            .class_of_object(h)
-            .map(|c| vm.class_desc(c).to_string())
-            .unwrap_or_else(|| "<dead>".into());
-        eprintln!(
-            "uncaught: {class}: {:?} (handle {h})",
-            vm.throwable_message(h)
-        );
+        let mut cur = Some(h);
+        let mut depth = 0;
+        while let Some(c) = cur {
+            if depth > 8 {
+                break;
+            }
+            let class = vm
+                .class_of_object(c)
+                .map(|id| vm.class_desc_of_id(id))
+                .unwrap_or_else(|| "<dead>".into());
+            eprintln!(
+                "{}cause[{}] handle {c}: {class}: {:?}",
+                if depth == 0 { "" } else { "  " },
+                depth,
+                vm.throwable_message(c)
+            );
+            if let Some(entries) = vm.throwable_stacks.get(&c) {
+                for e in entries {
+                    eprintln!("    at {}.{}({})", e.class, e.method, e.line);
+                }
+            }
+            cur = vm.throwable_cause(c);
+            depth += 1;
+        }
     }
     assert!(
         outcome.vm_error.is_none(),
@@ -169,4 +192,23 @@ fn hello_jni_runs_through_the_vm() {
     );
 
     assert_eq!(jni.take_error(), None, "no structured JNI error");
+}
+
+/// Regression guard for the ADR-0022 gate: `JniConfig` must keep requiring an
+/// active confinement by default, and the trusted-fixture opt-out used above
+/// must clear exactly that flag. The end-to-end test exercises the plumbing
+/// through `JniRuntime::new` (it fails to load `libhellojni.so` if the flag is
+/// ignored).
+#[test]
+fn jni_config_keeps_confinement_by_default() {
+    assert!(
+        JniConfig::default().require_confinement,
+        "product default must require process confinement"
+    );
+    assert!(
+        !JniConfig::default()
+            .for_tests_without_confinement()
+            .require_confinement,
+        "the trusted in-process fixture opt-out must clear the confinement flag"
+    );
 }

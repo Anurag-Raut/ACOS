@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use crate::class::{ClassId, MethodCode, MethodId};
+use crate::class::{ClassId, MethodId};
 use crate::heap::Handle;
 
 /// A 64-bit value split across two 32-bit register slots (Dalvik quoting).
@@ -14,7 +14,6 @@ use crate::heap::Handle;
 pub struct Frame {
     pub method: MethodId,
     pub class: ClassId,
-    pub code: Arc<MethodCode>,
     /// Current code-unit address (used for try tables and line numbers).
     pub pc: u32,
     /// Index into `code.insns`.
@@ -45,16 +44,10 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(
-        method: MethodId,
-        class: ClassId,
-        code: Arc<MethodCode>,
-        regs_size: usize,
-    ) -> Frame {
+    pub fn new(method: MethodId, class: ClassId, regs_size: usize) -> Frame {
         Frame {
             method,
             class,
-            code,
             pc: 0,
             insn_index: 0,
             regs: vec![0; regs_size],
@@ -124,8 +117,8 @@ impl Frame {
     /// target is not a valid instruction boundary; the caller then reports the
     /// structured internal error through the general path.
     #[inline(always)]
-    pub fn branch_to(&mut self, target_pc: u32) -> bool {
-        match self.code.pc_to_idx.get(target_pc as usize).copied() {
+    pub fn branch_to(&mut self, pc_to_idx: &[u32], target_pc: u32) -> bool {
+        match pc_to_idx.get(target_pc as usize).copied() {
             Some(i) if i != u32::MAX => {
                 self.pc = target_pc;
                 self.insn_index = i as usize;

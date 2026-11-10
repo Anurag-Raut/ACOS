@@ -63,7 +63,10 @@ fn enter(function: &'static str, exception_safe: bool) -> Option<Ctx> {
         return None;
     }
     // SAFETY: the pointer is set by `JniRuntime::attach` / native dispatch.
-    let t = unsafe { (*vm_ptr).current_thread };
+    // When the owner services a brokered worker request it forces the worker's
+    // synthetic thread id so locals/pending land in that worker's frame.
+    let t = crate::state::forced_thread()
+        .unwrap_or_else(|| unsafe { (*vm_ptr).current_thread });
     let pending = refs::pending(&rt, t).is_some();
     if pending && !exception_safe {
         refs::set_error(
@@ -219,6 +222,9 @@ pub unsafe extern "C" fn jni_GetVersion(_env: usize) -> i32 {
 }
 
 pub unsafe extern "C" fn jni_FindClass(_env: usize, name: *const c_char) -> usize {
+    if let Some(v) = crate::broker::worker_find_class(cstr(name).as_bytes()) {
+        return v as usize;
+    }
     let mut ctx = guard!("FindClass", false, 0);
     let name = cstr(name);
     let desc = if name.starts_with('[') || (name.starts_with('L') && name.ends_with(';')) {
@@ -269,6 +275,9 @@ pub unsafe extern "C" fn jni_IsAssignableFrom(_env: usize, a: usize, b: usize) -
 }
 
 pub unsafe extern "C" fn jni_GetObjectClass(_env: usize, obj: usize) -> usize {
+    if let Some(v) = crate::broker::worker_slot(crate::broker::Op::GetObjectClass { obj }, "GetObjectClass") {
+        return v as usize;
+    }
     let mut ctx = guard!("GetObjectClass", false, 0);
     let h = or_fail!(
         ctx,
@@ -311,6 +320,12 @@ pub unsafe extern "C" fn jni_IsInstanceOf(_env: usize, obj: usize, cls: usize) -
 }
 
 pub unsafe extern "C" fn jni_AllocObject(_env: usize, cls: usize) -> usize {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::AllocObject { class: cls },
+        "AllocObject",
+    ) {
+        return v as usize;
+    }
     let mut ctx = guard!("AllocObject", false, 0);
     let cid = or_fail!(ctx, 0, class_id(&mut ctx, cls as Handle, "AllocObject"));
     let vm = ctx.vm();
@@ -334,6 +349,9 @@ pub unsafe extern "C" fn jni_AllocObject(_env: usize, cls: usize) -> usize {
 // ---------------------------------------------------------------------------
 
 pub unsafe extern "C" fn jni_Throw(_env: usize, obj: usize) -> i32 {
+    if let Some(v) = crate::broker::worker_slot(crate::broker::Op::Throw { obj }, "Throw") {
+        return v as i32;
+    }
     let mut ctx = guard!("Throw", true, JNI_ERR);
     let h = match live(&mut ctx, obj as Handle, "throwable", "Throw") {
         Ok(h) => h,
@@ -363,6 +381,12 @@ pub unsafe extern "C" fn jni_Throw(_env: usize, obj: usize) -> i32 {
 }
 
 pub unsafe extern "C" fn jni_ThrowNew(_env: usize, cls: usize, msg: *const c_char) -> i32 {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::ThrowNew { class: cls, message: cstr(msg).into_bytes() },
+        "ThrowNew",
+    ) {
+        return v as i32;
+    }
     let mut ctx = guard!("ThrowNew", true, JNI_ERR);
     let cid = match class_id(&mut ctx, cls as Handle, "ThrowNew") {
         Ok(c) => c,
@@ -392,6 +416,9 @@ pub unsafe extern "C" fn jni_ThrowNew(_env: usize, cls: usize, msg: *const c_cha
 }
 
 pub unsafe extern "C" fn jni_ExceptionOccurred(_env: usize) -> usize {
+    if let Some(v) = crate::broker::worker_slot(crate::broker::Op::ExceptionOccurred, "ExceptionOccurred") {
+        return v as usize;
+    }
     let mut ctx = guard!("ExceptionOccurred", true, 0);
     let Some(h) = refs::pending(&ctx.rt, ctx.t) else {
         return 0;
@@ -415,6 +442,9 @@ pub unsafe extern "C" fn jni_ExceptionDescribe(_env: usize) {
 }
 
 pub unsafe extern "C" fn jni_ExceptionClear(_env: usize) {
+    if crate::broker::worker_slot(crate::broker::Op::ExceptionClear, "ExceptionClear").is_some() {
+        return;
+    }
     let Some(ctx) = enter("ExceptionClear", true) else {
         return;
     };
@@ -423,14 +453,19 @@ pub unsafe extern "C" fn jni_ExceptionClear(_env: usize) {
 }
 
 pub unsafe extern "C" fn jni_ExceptionCheck(_env: usize) -> u8 {
+    if let Some(v) = crate::broker::worker_slot(crate::broker::Op::ExceptionCheck, "ExceptionCheck") {
+        return v as u8;
+    }
     guard!("ExceptionCheck", true, 0);
     let rt = runtime_state().unwrap();
     let vm_ptr = crate::state::current_vm();
-    let t = if vm_ptr.is_null() {
-        0
-    } else {
-        unsafe { (*vm_ptr).current_thread }
-    };
+    let t = crate::state::forced_thread().unwrap_or_else(|| {
+        if vm_ptr.is_null() {
+            0
+        } else {
+            unsafe { (*vm_ptr).current_thread }
+        }
+    });
     refs::pending(&rt, t).is_some() as u8
 }
 
@@ -439,6 +474,12 @@ pub unsafe extern "C" fn jni_ExceptionCheck(_env: usize) -> u8 {
 // ---------------------------------------------------------------------------
 
 pub unsafe extern "C" fn jni_PushLocalFrame(_env: usize, capacity: i32) -> i32 {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::PushLocalFrame { cap: capacity },
+        "PushLocalFrame",
+    ) {
+        return v as i32;
+    }
     let mut ctx = guard!("PushLocalFrame", false, JNI_ERR);
     if !(0..=crate::state::MAX_LOCAL_CAPACITY).contains(&capacity) {
         let _ = throw_class(
@@ -453,12 +494,24 @@ pub unsafe extern "C" fn jni_PushLocalFrame(_env: usize, capacity: i32) -> i32 {
 }
 
 pub unsafe extern "C" fn jni_PopLocalFrame(_env: usize, result: usize) -> usize {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::PopLocalFrame { result },
+        "PopLocalFrame",
+    ) {
+        return v as usize;
+    }
     let ctx = guard!("PopLocalFrame", true, 0);
     let vm = ctx.vm();
     refs::pop_frame(vm, &ctx.rt, ctx.t, result as Handle) as usize
 }
 
 pub unsafe extern "C" fn jni_NewGlobalRef(_env: usize, obj: usize) -> usize {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::NewGlobalRef { obj },
+        "NewGlobalRef",
+    ) {
+        return v as usize;
+    }
     let mut ctx = guard!("NewGlobalRef", false, 0);
     let h = if obj == 0 {
         NULL
@@ -474,6 +527,14 @@ pub unsafe extern "C" fn jni_NewGlobalRef(_env: usize, obj: usize) -> usize {
 }
 
 pub unsafe extern "C" fn jni_DeleteGlobalRef(_env: usize, obj: usize) {
+    if crate::broker::worker_slot(
+        crate::broker::Op::DeleteGlobalRef { obj },
+        "DeleteGlobalRef",
+    )
+    .is_some()
+    {
+        return;
+    }
     let Some(ctx) = enter("DeleteGlobalRef", true) else {
         return;
     };
@@ -482,6 +543,14 @@ pub unsafe extern "C" fn jni_DeleteGlobalRef(_env: usize, obj: usize) {
 }
 
 pub unsafe extern "C" fn jni_DeleteLocalRef(_env: usize, obj: usize) {
+    if crate::broker::worker_slot(
+        crate::broker::Op::DeleteLocalRef { obj },
+        "DeleteLocalRef",
+    )
+    .is_some()
+    {
+        return;
+    }
     let Some(ctx) = enter("DeleteLocalRef", true) else {
         return;
     };
@@ -490,6 +559,12 @@ pub unsafe extern "C" fn jni_DeleteLocalRef(_env: usize, obj: usize) {
 }
 
 pub unsafe extern "C" fn jni_IsSameObject(_env: usize, a: usize, b: usize) -> u8 {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::IsSameObject { a, b },
+        "IsSameObject",
+    ) {
+        return v as u8;
+    }
     let ctx = guard!("IsSameObject", false, 0);
     // A cleared weak global reference is treated as `NULL`; this is the JNI
     // idiom `IsSameObject(env, weak, NULL)` for testing for collection.
@@ -672,6 +747,9 @@ pub unsafe extern "C" fn jni_GetMethodID(
     name: *const c_char,
     sig: *const c_char,
 ) -> usize {
+    if let Some(v) = crate::broker::worker_get_method_id(cls, cstr(name).as_bytes(), cstr(sig).as_bytes(), false) {
+        return v as usize;
+    }
     let mut ctx = guard!("GetMethodID", false, 0);
     let cid = or_fail!(ctx, 0, class_id(&mut ctx, cls as Handle, "GetMethodID"));
     let name = cstr(name);
@@ -685,6 +763,9 @@ pub unsafe extern "C" fn jni_GetStaticMethodID(
     name: *const c_char,
     sig: *const c_char,
 ) -> usize {
+    if let Some(v) = crate::broker::worker_get_method_id(cls, cstr(name).as_bytes(), cstr(sig).as_bytes(), true) {
+        return v as usize;
+    }
     let mut ctx = guard!("GetStaticMethodID", false, 0);
     let cid = or_fail!(
         ctx,
@@ -754,6 +835,9 @@ pub unsafe extern "C" fn jni_GetFieldID(
     name: *const c_char,
     sig: *const c_char,
 ) -> usize {
+    if let Some(v) = crate::broker::worker_get_field_id(cls, cstr(name).as_bytes(), cstr(sig).as_bytes(), false) {
+        return v as usize;
+    }
     let mut ctx = guard!("GetFieldID", false, 0);
     let cid = or_fail!(ctx, 0, class_id(&mut ctx, cls as Handle, "GetFieldID"));
     let name = cstr(name);
@@ -767,6 +851,9 @@ pub unsafe extern "C" fn jni_GetStaticFieldID(
     name: *const c_char,
     sig: *const c_char,
 ) -> usize {
+    if let Some(v) = crate::broker::worker_get_field_id(cls, cstr(name).as_bytes(), cstr(sig).as_bytes(), true) {
+        return v as usize;
+    }
     let mut ctx = guard!("GetStaticFieldID", false, 0);
     let cid = or_fail!(
         ctx,
@@ -909,6 +996,31 @@ fn set_field_impl(
     }
 }
 
+/// Field access for a brokered worker request. Runs on the owner thread with
+/// the worker's id forced by [`crate::broker`].
+pub(crate) fn broker_get_field(obj: usize, fid: usize) -> u64 {
+    let Some(mut ctx) = enter("GetField", false) else {
+        return 0;
+    };
+    match get_field_impl(&mut ctx, obj, fid, "GetField") {
+        Ok(bits) => bits,
+        Err(e) => {
+            record(&ctx, e);
+            0
+        }
+    }
+}
+
+/// Field write for a brokered worker request.
+pub(crate) fn broker_set_field(obj: usize, fid: usize, bits: u64) {
+    let Some(mut ctx) = enter("SetField", false) else {
+        return;
+    };
+    if let Err(e) = set_field_impl(&mut ctx, obj, fid, bits, "SetField") {
+        record(&ctx, e);
+    }
+}
+
 fn bridge_error(function: &str, e: BridgeError) -> JniError {
     match e {
         BridgeError::JavaException { class, message } => JniError::NativeFault {
@@ -930,6 +1042,11 @@ fn bridge_error(function: &str, e: BridgeError) -> JniError {
 macro_rules! get_field_slot {
     ($name:ident, $ret:ty, $conv:expr) => {
         pub unsafe extern "C" fn $name(_env: usize, obj: usize, fid: usize) -> $ret {
+            // Native OS threads route the read through the owner broker.
+            if let Some(bits) = crate::broker::worker_get_field(obj, fid, stringify!($name)) {
+                #[allow(clippy::redundant_closure_call)]
+                return ($conv)(bits);
+            }
             let mut ctx = guard!(stringify!($name), false, 0 as $ret);
             let bits = or_fail!(
                 ctx,
@@ -946,8 +1063,13 @@ macro_rules! get_field_slot {
 macro_rules! set_field_slot {
     ($name:ident, $arg:ty, $bits:expr) => {
         pub unsafe extern "C" fn $name(_env: usize, obj: usize, fid: usize, value: $arg) -> () {
-            let mut ctx = guard!(stringify!($name), false, ());
             let bits: u64 = ($bits)(value);
+            // Native OS threads route the write through the owner broker.
+            if crate::broker::is_worker() {
+                crate::broker::worker_set_field(obj, fid, bits, stringify!($name));
+                return;
+            }
+            let mut ctx = guard!(stringify!($name), false, ());
             if let Err(e) = set_field_impl(&mut ctx, obj, fid, bits, stringify!($name)) {
                 record(&ctx, e);
             }
@@ -1088,6 +1210,13 @@ fn take_buffer(ctx: &mut Ctx, ptr: usize) -> Option<Buffer> {
 }
 
 pub unsafe extern "C" fn jni_NewString(_env: usize, chars: *const u16, len: i32) -> usize {
+    if !chars.is_null() && len >= 0 {
+        // SAFETY: the caller supplies `len` UTF-16 code units.
+        let units = unsafe { std::slice::from_raw_parts(chars, len as usize) };
+        if let Some(v) = crate::broker::worker_new_string(units) {
+            return v as usize;
+        }
+    }
     let mut ctx = guard!("NewString", false, 0);
     if chars.is_null() || len < 0 {
         record(
@@ -1117,6 +1246,13 @@ pub unsafe extern "C" fn jni_NewString(_env: usize, chars: *const u16, len: i32)
 }
 
 pub unsafe extern "C" fn jni_NewStringUTF(_env: usize, bytes: *const c_char) -> usize {
+    if !bytes.is_null() {
+        // SAFETY: JNI passes a NUL-terminated modified-UTF-8 string.
+        let raw = unsafe { CStr::from_ptr(bytes) }.to_bytes();
+        if let Some(v) = crate::broker::worker_new_string_utf(raw) {
+            return v as usize;
+        }
+    }
     let mut ctx = guard!("NewStringUTF", false, 0);
     if bytes.is_null() {
         return 0;
@@ -1140,6 +1276,12 @@ pub unsafe extern "C" fn jni_NewStringUTF(_env: usize, bytes: *const c_char) -> 
 }
 
 pub unsafe extern "C" fn jni_GetStringLength(_env: usize, s: usize) -> i32 {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::GetStringLength { s },
+        "GetStringLength",
+    ) {
+        return v as i32;
+    }
     let mut ctx = guard!("GetStringLength", false, 0);
     let units = or_fail!(
         ctx,
@@ -1206,6 +1348,16 @@ pub unsafe extern "C" fn jni_GetStringUTFChars(
     s: usize,
     is_copy: *mut u8,
 ) -> *const c_char {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::GetStringUtfChars { s },
+        "GetStringUTFChars",
+    ) {
+        if !is_copy.is_null() {
+            // SAFETY: JNI requires a writable `jboolean*`.
+            unsafe { *is_copy = 1 };
+        }
+        return v as *const c_char;
+    }
     let mut ctx = guard!("GetStringUTFChars", false, std::ptr::null());
     if !is_copy.is_null() {
         unsafe { *is_copy = 1 };
@@ -1233,7 +1385,15 @@ pub unsafe extern "C" fn jni_GetStringUTFLength(_env: usize, s: usize) -> i32 {
     encode_mutf8(&units).len() as i32
 }
 
-pub unsafe extern "C" fn jni_ReleaseStringUTFChars(_env: usize, _s: usize, chars: *const c_char) {
+pub unsafe extern "C" fn jni_ReleaseStringUTFChars(_env: usize, s: usize, chars: *const c_char) {
+    if crate::broker::worker_slot(
+        crate::broker::Op::ReleaseStringUtfChars { s, chars: chars as usize },
+        "ReleaseStringUTFChars",
+    )
+    .is_some()
+    {
+        return;
+    }
     let Some(mut ctx) = enter("ReleaseStringUTFChars", true) else {
         return;
     };
@@ -2106,6 +2266,12 @@ pub unsafe extern "C" fn jni_MonitorExit(_env: usize, obj: usize) -> i32 {
 }
 
 pub unsafe extern "C" fn jni_GetObjectRefType(_env: usize, obj: usize) -> i32 {
+    if let Some(v) = crate::broker::worker_slot(
+        crate::broker::Op::GetObjectRefType { obj },
+        "GetObjectRefType",
+    ) {
+        return v as i32;
+    }
     let ctx = guard!(
         "GetObjectRefType",
         false,
@@ -2271,8 +2437,10 @@ fn attach_env(out: *mut usize) -> i32 {
 
 pub unsafe extern "C" fn vm_DetachCurrentThread(_vm: usize) -> i32 {
     // The owner thread's attachment is owned by `JniRuntime`; a native thread
-    // that attached through the global slots is recorded per OS thread.
+    // that attached through the global slots is recorded per OS thread. A
+    // brokered worker also asks the owner to release its reference frames.
     if runtime_state().is_none() {
+        crate::broker::detach_worker();
         crate::state::detach_current_os_thread();
     }
     JNI_OK
@@ -2308,6 +2476,15 @@ pub unsafe extern "C" fn vm_GetEnv(_vm: usize, out: *mut usize, version: i32) ->
 /// Descriptor-derived argument codes for `mid` (one byte per parameter).
 #[no_mangle]
 pub extern "C" fn acos_jni_method_codes(mid: usize) -> *const c_char {
+    // A native OS thread cannot read the owner's method table: ask the owner
+    // for the stable `arg_codes` pointer it minted with the method ID.
+    if crate::broker::is_worker() {
+        return crate::broker::worker_slot(
+            crate::broker::Op::MethodCodes { mid },
+            "Call<Type>Method",
+        )
+        .unwrap_or(0) as *const c_char;
+    }
     let Some(rt) = runtime_state() else {
         return std::ptr::null();
     };
@@ -2383,6 +2560,26 @@ pub unsafe extern "C" fn acos_jni_va_invoke(
     words: *const u64,
     n: i32,
 ) -> JniCallResult {
+    if crate::broker::is_worker() {
+        let raw: Vec<u64> = if n <= 0 || words.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: the worker shim supplies `n` argument words.
+            unsafe { std::slice::from_raw_parts(words, n as usize) }.to_vec()
+        };
+        return match crate::broker::worker_op(
+            crate::broker::Op::CallMethod { target, mid, mode, words: raw },
+            "Call<Type>Method",
+        ) {
+            Some(Ok(bits)) => JniCallResult { bits, kind: 0 },
+            Some(Err(e)) => {
+                crate::broker::set_worker_error(e);
+                zero_result()
+            }
+            None => JniCallResult { bits: 0, kind: 0 },
+        };
+    }
+
     let Some(mut ctx) = enter("Call<Type>Method", false) else {
         return zero_result();
     };
@@ -2471,7 +2668,7 @@ pub unsafe extern "C" fn acos_jni_va_invoke(
         Ok(v) => value_result(v),
         Err(BridgeError::JavaException { class, message }) => {
             let vm = ctx.vm();
-            match vm.new_throwable(&class, Some(&message)) {
+            match vm.new_throwable(&class_descriptor(&class), Some(&message)) {
                 Ok(h) => {
                     refs::set_pending(vm, &ctx.rt, ctx.t, h);
                 }
@@ -2506,6 +2703,26 @@ pub unsafe extern "C" fn acos_jni_va_invoke_nonvirtual(
     words: *const u64,
     n: i32,
 ) -> JniCallResult {
+    if crate::broker::is_worker() {
+        let raw: Vec<u64> = if n <= 0 || words.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: the worker shim supplies `n` argument words.
+            unsafe { std::slice::from_raw_parts(words, n as usize) }.to_vec()
+        };
+        return match crate::broker::worker_op(
+            crate::broker::Op::CallNonvirtual { obj, cls, mid, words: raw },
+            "CallNonvirtual<Type>Method",
+        ) {
+            Some(Ok(bits)) => JniCallResult { bits, kind: 0 },
+            Some(Err(e)) => {
+                crate::broker::set_worker_error(e);
+                zero_result()
+            }
+            None => JniCallResult { bits: 0, kind: 0 },
+        };
+    }
+
     const FN: &str = "CallNonvirtual<Type>Method";
     let Some(mut ctx) = enter(FN, false) else {
         return zero_result();
@@ -2578,7 +2795,7 @@ pub unsafe extern "C" fn acos_jni_va_invoke_nonvirtual(
         Ok(v) => value_result(v),
         Err(BridgeError::JavaException { class, message }) => {
             let vm = ctx.vm();
-            match vm.new_throwable(&class, Some(&message)) {
+            match vm.new_throwable(&class_descriptor(&class), Some(&message)) {
                 Ok(h) => refs::set_pending(vm, &ctx.rt, ctx.t, h),
                 Err(e) => record(
                     &ctx,

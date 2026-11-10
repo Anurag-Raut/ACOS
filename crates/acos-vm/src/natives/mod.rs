@@ -52,12 +52,14 @@ pub mod looper;
 mod math;
 mod memintarray;
 mod native_mem;
+pub mod ndk_substrate;
 mod os_clock;
 mod os_constants;
 mod parcel;
 pub mod os_log;
 pub mod os_misc;
 pub mod os_props;
+pub mod safe_point;
 mod reflect;
 #[path = "unsafe.rs"]
 mod unsafe_natives;

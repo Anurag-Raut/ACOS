@@ -92,6 +92,8 @@ struct Registry {
     /// Lazily-created manager for the static `XmlBlock.nativeCreate` and
     /// `ApkAssets.nativeOpenXml` paths, whose blocks have no framework owner.
     orphan: Option<u64>,
+    /// Open `AAssetDir` iteration cursors, keyed by a registry-local id.
+    dirs: HashMap<u64, (Vec<String>, usize)>,
     next: u64,
 }
 
@@ -2004,4 +2006,230 @@ fn xb_get_attribute_index(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let v = with_parse(pref, |s, d| s.get_attribute_index(d, ns_opt, &name)).unwrap_or(-1);
     vm.ret_i32(ctx, v);
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// NDK host substrate accessors
+//
+// The production NDK host (`acos-jni`) holds no unsafe state: it resolves a
+// Java `AssetManager`/`Bitmap`/`Surface` to a native handle and calls these
+// safe `pub(crate)` functions. `asset_*` handles are engine handles scoped to a
+// manager; `ndk_substrate` wraps them in a process-wide id namespace.
+// ---------------------------------------------------------------------------
+
+/// Whether `manager` names a live framework `AssetManager`.
+pub(crate) fn ndk_manager_exists(manager: u64) -> bool {
+    REG.with(|r| r.borrow().managers.contains_key(&manager))
+}
+
+/// The `ResConfig` of `manager`, or the closest live manager's real config.
+pub(crate) fn ndk_manager_config(manager: u64) -> Option<ResConfig> {
+    REG.with(|r| {
+        let reg = r.borrow();
+        if let Some(m) = reg.managers.get(&manager) {
+            return Some(m.config().clone());
+        }
+        reg.managers
+            .values()
+            .find(|m| m.contains_allocated_table())
+            .or_else(|| reg.managers.values().next())
+            .map(|m| m.config().clone())
+    })
+}
+
+fn ndk_lookup_manager(
+    reg: &mut Registry,
+    manager: u64,
+) -> Result<&mut AssetManager, String> {
+    reg.managers
+        .get_mut(&manager)
+        .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))
+}
+
+/// `AAssetManager_open`: open `filename` against the manager's real APK sources.
+pub(crate) fn ndk_asset_open(manager: u64, filename: &str, mode: i32) -> Result<u64, String> {
+    REG.with(|r| {
+        let mut reg = r.borrow_mut();
+        let m = ndk_lookup_manager(&mut reg, manager)?;
+        m.open_asset(filename, mode).map_err(|e| e.to_string())
+    })
+}
+
+/// `AAsset_read`: read into `out` from the asset's current position.
+pub(crate) fn ndk_asset_read(manager: u64, asset: u64, out: &mut [u8]) -> Result<usize, String> {
+    REG.with(|r| {
+        let mut reg = r.borrow_mut();
+        let m = ndk_lookup_manager(&mut reg, manager)?;
+        let h = m
+            .asset_mut(asset)
+            .ok_or_else(|| format!("unknown AAsset handle {asset:#x}"))?;
+        let n = h.read(out, 0, out.len());
+        if n < 0 {
+            Err("AAsset_read: buffer too small for the requested length".into())
+        } else {
+            Ok(n as usize)
+        }
+    })
+}
+
+/// `AAsset_seek`: move the read cursor (`whence` 0/1/2), returning the offset.
+pub(crate) fn ndk_asset_seek(
+    manager: u64,
+    asset: u64,
+    offset: i64,
+    whence: i32,
+) -> Result<i64, String> {
+    REG.with(|r| {
+        let mut reg = r.borrow_mut();
+        let m = ndk_lookup_manager(&mut reg, manager)?;
+        let h = m
+            .asset_mut(asset)
+            .ok_or_else(|| format!("unknown AAsset handle {asset:#x}"))?;
+        Ok(h.seek(offset, whence))
+    })
+}
+
+/// `AAsset_getLength`: the full asset length.
+pub(crate) fn ndk_asset_length(manager: u64, asset: u64) -> Result<u64, String> {
+    REG.with(|r| {
+        let reg = r.borrow();
+        let m = reg
+            .managers
+            .get(&manager)
+            .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))?;
+        m.asset(asset)
+            .map(|h| h.length())
+            .ok_or_else(|| format!("unknown AAsset handle {asset:#x}"))
+    })
+}
+
+/// `AAsset_getRemainingLength`: bytes left from the current position.
+pub(crate) fn ndk_asset_remaining(manager: u64, asset: u64) -> Result<u64, String> {
+    REG.with(|r| {
+        let reg = r.borrow();
+        let m = reg
+            .managers
+            .get(&manager)
+            .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))?;
+        m.asset(asset)
+            .map(|h| h.remaining_length())
+            .ok_or_else(|| format!("unknown AAsset handle {asset:#x}"))
+    })
+}
+
+/// `AAsset_getBuffer`: the whole entry, valid until `AAsset_close`.
+///
+/// The asset payload is never mutated after creation (reads only move the
+/// cursor), so the returned address stays valid for the handle's lifetime.
+pub(crate) fn ndk_asset_buffer(manager: u64, asset: u64) -> Result<*const u8, String> {
+    REG.with(|r| {
+        let reg = r.borrow();
+        let m = reg
+            .managers
+            .get(&manager)
+            .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))?;
+        m.asset(asset)
+            .map(|h| h.data.as_ptr())
+            .ok_or_else(|| format!("unknown AAsset handle {asset:#x}"))
+    })
+}
+
+/// `AAsset_isAllocated` — always true for an open handle in ACOS.
+pub(crate) fn ndk_asset_is_allocated(manager: u64, asset: u64) -> bool {
+    REG.with(|r| {
+        r.borrow()
+            .managers
+            .get(&manager)
+            .is_some_and(|m| m.asset(asset).is_some())
+    })
+}
+
+/// `AAsset_close`: destroy the engine asset handle.
+pub(crate) fn ndk_asset_close(manager: u64, asset: u64) {
+    REG.with(|r| {
+        if let Some(m) = r.borrow_mut().managers.get_mut(&manager) {
+            m.asset_destroy(asset);
+        }
+    });
+}
+
+/// `AAssetManager_openDir`: allocate a cursor over the direct children of `dir`.
+pub(crate) fn ndk_asset_dir(manager: u64, dir: &str) -> Result<Vec<String>, String> {
+    REG.with(|r| {
+        let reg = r.borrow();
+        let m = reg
+            .managers
+            .get(&manager)
+            .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))?;
+        let norm = dir.trim_matches('/');
+        let prefix = if norm.is_empty() {
+            String::new()
+        } else {
+            format!("{norm}/")
+        };
+        let mut names = Vec::new();
+        for src in m.sources() {
+            if let Ok(list) = src.list(norm) {
+                for name in list {
+                    let rest = name.strip_prefix(&prefix).unwrap_or(&name);
+                    if !rest.is_empty() && !rest.contains('/') {
+                        names.push(rest.to_string());
+                    }
+                }
+            }
+        }
+        names.sort();
+        names.dedup();
+        if names.is_empty() {
+            Err(format!("asset dir not found in APK sources: {dir}"))
+        } else {
+            Ok(names)
+        }
+    })
+}
+
+/// Allocate a registry-local cursor id for an `AAssetDir` list.
+pub(crate) fn ndk_dir_store(names: Vec<String>) -> u64 {
+    REG.with(|r| {
+        let mut reg = r.borrow_mut();
+        let id = reg.alloc();
+        reg.dirs.insert(id, (names, 0));
+        id
+    })
+}
+
+/// `AAssetDir_getNextFileName` — the next unread captured name, else `None`.
+pub(crate) fn ndk_dir_next(id: u64) -> Option<String> {
+    REG.with(|r| {
+        let mut reg = r.borrow_mut();
+        let (names, next) = reg.dirs.get_mut(&id)?;
+        let name = names.get(*next).cloned()?;
+        *next += 1;
+        Some(name)
+    })
+}
+
+/// `AAssetDir_rewind`.
+pub(crate) fn ndk_dir_rewind(id: u64) {
+    REG.with(|r| {
+        if let Some((_, next)) = r.borrow_mut().dirs.get_mut(&id) {
+            *next = 0;
+        }
+    });
+}
+
+/// `AAssetDir_close`.
+pub(crate) fn ndk_dir_close(id: u64) {
+    REG.with(|r| {
+        r.borrow_mut().dirs.remove(&id);
+    });
+}
+
+/// Test-only: install a real `AssetManager` into the registry so
+/// `ndk_substrate` can be exercised without the framework Java layer.
+#[cfg(test)]
+pub(crate) fn test_install_manager(ptr: u64, manager: AssetManager) {
+    REG.with(|r| {
+        r.borrow_mut().managers.insert(ptr, manager);
+    });
 }

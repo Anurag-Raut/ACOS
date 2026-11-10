@@ -11,7 +11,7 @@
 //! Everything here is safe Rust and mirrors the general path's semantics
 //! exactly; arithmetic edge cases delegate to the same helpers.
 
-use crate::class::Insn;
+use crate::class::{Insn, MethodCode};
 use crate::frame::Frame;
 use crate::heap::{ArrayData, Heap, Object, NULL};
 use crate::interp::{div_int, div_long, rem_int, rem_long};
@@ -46,8 +46,7 @@ fn rel_target(pc: u32, target: i32) -> u32 {
 /// stops before the first opcode that needs the general path (the caller runs
 /// that one with the interpreter), and writes the final pc/index back onto the
 /// frame.
-pub(crate) fn fast_run(f: &mut Frame, heap: &mut Heap, cap: u64) -> u64 {
-    let code = f.code.clone();
+pub(crate) fn fast_run(f: &mut Frame, code: &MethodCode, heap: &mut Heap, cap: u64) -> u64 {
     let insns: &[Insn] = &code.insns;
     let pc_to_idx: &[u32] = &code.pc_to_idx;
     let mut pc = f.pc;

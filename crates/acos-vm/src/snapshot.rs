@@ -39,9 +39,13 @@
 //!
 //! [ADR-0010]: ../../../../DECISIONS.md
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::class::InitState;
+use acos_dex::DexFile;
+
+use crate::class::{Class, ClassId, InitState, Method, TypeId, TypeInfo};
 use crate::error::{VmError, VmResult};
 use crate::heap::{
     ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, ThreadData, NULL,
@@ -84,6 +88,161 @@ pub struct RestoreStats {
     pub decode_nanos: u64,
     /// Bytes in the stream.
     pub bytes: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Process-global linked boot metadata (T-43)
+// ---------------------------------------------------------------------------
+
+/// The immutable, per-boot-classpath part of a linked VM class table.
+///
+/// Built once per `(boot fingerprint, ordered class descriptor list)` from a VM
+/// whose classes are already fully linked (the framework template, or the first
+/// restore of a given snapshot), and shared read-only by every later restore in
+/// the process. A restore clones this image instead of re-parsing DEX
+/// `class_data`, re-formatting signatures, re-interned strings, rebuilding
+/// vtables/interface tables and re-decoding method bodies for hundreds of boot
+/// classes.
+///
+/// Only **layout** is shared: `statics`, `init` state, `class_obj` handles, the
+/// heap, the interner and every inline-cache/quickening side vector stay
+/// per-VM, so two VMs restored from the same image never share mutable state.
+/// The `MethodCode` bodies inside are already process-shared `Arc`s and are a
+/// pure function of the DEX bytes.
+pub(crate) struct BootImage {
+    pub(crate) classes: Vec<Class>,
+    pub(crate) methods: Vec<Method>,
+    pub(crate) types: Vec<TypeInfo>,
+    pub(crate) type_by_desc: HashMap<String, TypeId>,
+    pub(crate) class_by_desc: HashMap<String, ClassId>,
+    pub(crate) loaded_array_elems: HashSet<String>,
+    pub(crate) builtin_alloc: HashMap<ClassId, crate::corelib::BuiltinAlloc>,
+    pub(crate) c_object: ClassId,
+    pub(crate) c_class: ClassId,
+    pub(crate) c_string: ClassId,
+    pub(crate) c_string_builder: ClassId,
+    pub(crate) c_throwable: ClassId,
+    pub(crate) c_integer: ClassId,
+    pub(crate) c_long: ClassId,
+    pub(crate) c_thread: ClassId,
+    pub(crate) c_print_stream: ClassId,
+    pub(crate) c_system: ClassId,
+    pub(crate) dex_files: Vec<Arc<DexFile>>,
+    pub(crate) boot_dexs: Vec<usize>,
+    pub(crate) boot_lazy_jars: Vec<String>,
+    pub(crate) boot_dir: Option<PathBuf>,
+}
+
+impl BootImage {
+    fn capture(vm: &Vm) -> BootImage {
+        BootImage {
+            classes: vm.classes.clone(),
+            methods: vm.methods.clone(),
+            types: vm.types.clone(),
+            type_by_desc: vm.type_by_desc.clone(),
+            class_by_desc: vm.class_by_desc.clone(),
+            loaded_array_elems: vm.loaded_array_elems.clone(),
+            builtin_alloc: vm.builtin_alloc.clone(),
+            c_object: vm.c_object,
+            c_class: vm.c_class,
+            c_string: vm.c_string,
+            c_string_builder: vm.c_string_builder,
+            c_throwable: vm.c_throwable,
+            c_integer: vm.c_integer,
+            c_long: vm.c_long,
+            c_thread: vm.c_thread,
+            c_print_stream: vm.c_print_stream,
+            c_system: vm.c_system,
+            dex_files: vm.dexs.iter().map(|d| d.file.clone()).collect(),
+            boot_dexs: vm.boot_dexs.clone(),
+            boot_lazy_jars: vm.boot_lazy_jars.clone(),
+            boot_dir: vm.boot_dir.clone(),
+        }
+    }
+
+    fn same_layout(&self, class_desc: &[String]) -> bool {
+        self.classes.len() == class_desc.len()
+            && self
+                .classes
+                .iter()
+                .zip(class_desc)
+                .all(|(c, d)| c.descriptor == *d)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BootKey {
+    fingerprint: u64,
+    corelib: u8,
+    /// Order-sensitive hash of the loaded class descriptors: a snapshot with a
+    /// different (or differently ordered) class set must not reuse an image.
+    classes: u64,
+}
+
+/// Bounded LRU-ish list of boot images. The limit keeps the process-global
+/// metadata bounded when a process snapshots several different class sets.
+const BOOT_IMAGE_SLOTS: usize = 4;
+
+type ImageCache = Mutex<Vec<(BootKey, Arc<BootImage>)>>;
+
+static BOOT_IMAGES: OnceLock<ImageCache> = OnceLock::new();
+
+fn image_cache() -> &'static ImageCache {
+    BOOT_IMAGES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn class_list_hash<'a>(descs: impl Iterator<Item = &'a str>) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut n = 0u64;
+    for d in descs {
+        h ^= d.len() as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        for b in d.as_bytes() {
+            h ^= *b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        n += 1;
+    }
+    h ^= n;
+    h
+}
+
+fn lookup_image(key: BootKey) -> Option<Arc<BootImage>> {
+    image_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .rev()
+        .find(|(k, _)| *k == key)
+        .map(|(_, img)| Arc::clone(img))
+}
+
+fn remember_image(key: BootKey, image: BootImage) {
+    let mut cache = image_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if cache.iter().any(|(k, _)| *k == key) {
+        return;
+    }
+    if cache.len() >= BOOT_IMAGE_SLOTS {
+        cache.remove(0);
+    }
+    cache.push((key, Arc::new(image)));
+}
+
+/// Number of boot images currently resident in this process (diagnostics).
+#[must_use]
+pub fn boot_image_count() -> usize {
+    image_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .len()
+}
+
+/// Drop every boot image. Existing restores keep their cloned tables alive.
+pub fn clear_boot_images() {
+    image_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +367,13 @@ impl<'a> Reader<'a> {
 
 /// FNV-1a over the loaded DEX provider fingerprints, in order.
 fn boot_fingerprint(vm: &Vm) -> u64 {
+    let dexs: Vec<Arc<DexFile>> = vm.dexs.iter().map(|d| d.file.clone()).collect();
+    boot_fingerprint_parts(vm.boot_dir.as_deref(), &dexs)
+}
+
+/// [`boot_fingerprint`] from the header alone, so a restore can validate the
+/// snapshot before constructing a `Vm` (T-43 fast path).
+fn boot_fingerprint_parts(boot_dir: Option<&Path>, dexs: &[Arc<DexFile>]) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     let mut mix = |b: u8| {
         h ^= b as u64;
@@ -219,7 +385,7 @@ fn boot_fingerprint(vm: &Vm) -> u64 {
     // a framework snapshot invalid against a fresh `Vm::new`. The list is the
     // stable identity of the boot image; content changes still surface through
     // the class-layout checks in `restore`.
-    if let Some(dir) = &vm.boot_dir {
+    if let Some(dir) = boot_dir {
         if let Ok(text) = std::fs::read_to_string(dir.join("BOOTCLASSPATH")) {
             for line in text.lines() {
                 let jar = line.trim();
@@ -228,7 +394,7 @@ fn boot_fingerprint(vm: &Vm) -> u64 {
                 }
                 mix(b'\n');
                 if let Ok(meta) = std::fs::metadata(dir.join("dex").join(jar.trim_end_matches(".jar"))) {
-                    for b in (meta.len() as u64).to_le_bytes() {
+                    for b in meta.len().to_le_bytes() {
                         mix(b);
                     }
                 }
@@ -236,10 +402,10 @@ fn boot_fingerprint(vm: &Vm) -> u64 {
         }
     }
     // Bootstrap has no on-disk boot classpath: fall back to the loaded providers.
-    if vm.boot_dir.is_none() {
-        for dex in &vm.dexs {
-            let bytes = dex.file.bytes();
-            let header = dex.file.header();
+    if boot_dir.is_none() {
+        for dex in dexs {
+            let bytes = dex.bytes();
+            let header = dex.header();
             for b in header.checksum.to_le_bytes() {
                 mix(b);
             }
@@ -260,6 +426,16 @@ fn boot_fingerprint(vm: &Vm) -> u64 {
 /// configuration the VM actually consults: corelib, boot dir, locale and the
 /// `ACOS_*` environment (sorted, so it is order-independent and deterministic).
 fn property_hash(vm: &Vm) -> u64 {
+    property_hash_parts(vm.corelib, vm.boot_dir.as_deref(), &vm.snapshot_locale)
+}
+
+/// [`property_hash`] from the snapshot header plus the environment, so a
+/// restore can refuse a mismatch before constructing a `Vm`.
+fn property_hash_parts(
+    corelib: CoreLib,
+    boot_dir: Option<&Path>,
+    locale: &str,
+) -> u64 {
     let mut props: Vec<(String, String)> = std::env::vars()
         .filter(|(k, _)| k.starts_with("ACOS_"))
         .collect();
@@ -273,13 +449,13 @@ fn property_hash(vm: &Vm) -> u64 {
         *h ^= 0xff;
         *h = h.wrapping_mul(0x0000_0100_0000_01b3);
     };
-    let core = match vm.corelib {
+    let core = match corelib {
         CoreLib::Bootstrap => "bootstrap",
         CoreLib::Real => "real",
     };
     mix(&mut h, core);
-    mix(&mut h, &vm.snapshot_locale);
-    if let Some(d) = &vm.boot_dir {
+    mix(&mut h, locale);
+    if let Some(d) = boot_dir {
         mix(&mut h, &d.to_string_lossy());
     }
     for (k, v) in &props {
@@ -406,6 +582,19 @@ impl Vm {
     /// iteration order): two snapshots of the same state are byte-equal.
     pub fn snapshot(&self) -> VmResult<Vec<u8>> {
         self.snapshot_preconditions()?;
+
+        // T-43: record the linked boot metadata so every later `Vm::restore` in
+        // this process can clone it instead of re-linking the boot classpath.
+        if self.corelib == CoreLib::Real {
+            let key = BootKey {
+                fingerprint: boot_fingerprint(self),
+                corelib: 1,
+                classes: class_list_hash(self.classes.iter().map(|c| c.descriptor.as_str())),
+            };
+            if lookup_image(key).is_none() {
+                remember_image(key, BootImage::capture(self));
+            }
+        }
 
         let mut w = Writer::default();
         w.raw(&SNAPSHOT_MAGIC);
@@ -600,60 +789,64 @@ impl Vm {
             boot_dir: header.boot_dir.as_ref().map(std::path::PathBuf::from),
             trace_natives: header.trace_natives,
         };
-        let mut vm = Vm::new(opts)?;
 
-        // Strict fingerprint / metadata refusal before touching any state.
-        let now_boot = boot_fingerprint(&vm);
+        // Strict fingerprint / metadata refusal before touching any state. The
+        // header alone is enough here, so a refused restore never pays for a
+        // `Vm` construction.
+        let now_boot = boot_fingerprint_parts(header.boot_dir.as_deref().map(Path::new), &[]);
         if now_boot != header.boot_fingerprint {
             return Err(VmError::SnapshotMismatch(format!(
                 "boot DEX fingerprint mismatch: snapshot {:016x}, boot {now_boot:016x}",
                 header.boot_fingerprint
             )));
         }
-        let now_props = property_hash(&vm);
+        let now_locale = std::env::var("LANG").unwrap_or_else(|_| "en-US".to_string());
+        if now_locale != header.locale {
+            return Err(VmError::SnapshotMismatch(format!(
+                "locale mismatch: snapshot {:?}, boot {:?}",
+                header.locale, now_locale
+            )));
+        }
+        let now_props = property_hash_parts(
+            header.corelib,
+            header.boot_dir.as_deref().map(Path::new),
+            &now_locale,
+        );
         if now_props != header.property_hash {
             return Err(VmError::SnapshotMismatch(format!(
                 "property hash mismatch: snapshot {:016x}, boot {now_props:016x}",
                 header.property_hash
             )));
         }
-        if vm.snapshot_locale != header.locale {
-            return Err(VmError::SnapshotMismatch(format!(
-                "locale mismatch: snapshot {:?}, boot {:?}",
-                header.locale, vm.snapshot_locale
-            )));
-        }
 
-        // ---- heap counters / metrics ------------------------------------
-        vm.heap.live_bytes = r.u64()? as usize;
-        vm.heap.peak_bytes = r.u64()? as usize;
-        vm.heap.allocations = r.u64()?;
-        vm.heap.gc_count = r.u64()?;
-        vm.heap.gc_nanos = r.u64()?;
-        vm.metrics.instructions = r.u64()?;
-        vm.metrics.invokes = r.u64()?;
-        vm.metrics.clinit_count = r.u64()?;
+        // ---- heap counters / metrics (staged until the VM exists) --------
+        let heap_live_bytes = r.u64()? as usize;
+        let heap_peak_bytes = r.u64()? as usize;
+        let heap_allocations = r.u64()?;
+        let heap_gc_count = r.u64()?;
+        let heap_gc_nanos = r.u64()?;
+        let metric_instructions = r.u64()?;
+        let metric_invokes = r.u64()?;
+        let metric_clinit_count = r.u64()?;
 
-        // ---- process roots / scalars ------------------------------------
-        vm.next_converter = r.u64()?;
-        vm.next_thread_id = r.u32()?;
-        vm.oom_object = r.handle()?;
-        vm.stack_overflow_object = r.handle()?;
-        vm.main_thread_group = r.handle()?;
-        vm.stdout = r.handle()?;
-        vm.stderr = r.handle()?;
-        vm.stopping = r.bool()?;
-        vm.exit_request = if r.bool()? { Some(r.i32()?) } else { None };
+        // ---- process roots / scalars (staged) ----------------------------
+        let next_converter = r.u64()?;
+        let next_thread_id = r.u32()?;
+        let oom_object = r.handle()?;
+        let stack_overflow_object = r.handle()?;
+        let main_thread_group = r.handle()?;
+        let stdout = r.handle()?;
+        let stderr = r.handle()?;
+        let stopping = r.bool()?;
+        let exit_request = if r.bool()? { Some(r.i32()?) } else { None };
         let out_len = r.u32()? as usize;
         r.need(out_len)?;
         let out = r.remaining()[..out_len].to_vec();
         r.pos += out_len;
-        vm.out_buf = out;
         let err_len = r.u32()? as usize;
         r.need(err_len)?;
         let err = r.remaining()[..err_len].to_vec();
         r.pos += err_len;
-        vm.err_buf = err;
 
         // ---- classes -----------------------------------------------------
         let class_count = header.class_count as usize;
@@ -674,23 +867,77 @@ impl Vm {
             class_meta.push((init, is_primitive, is_array, statics, class_obj));
         }
 
-        // Re-link any class the fresh VM does not already have, then build the
-        // old -> new id map by descriptor.
+        let class_key = if header.corelib == CoreLib::Real {
+            Some(BootKey {
+                fingerprint: header.boot_fingerprint,
+                corelib: 1,
+                classes: class_list_hash(class_desc.iter().map(String::as_str)),
+            })
+        } else {
+            None
+        };
+
+        // ---- build the VM: shared linked image (T-43) or a fresh relink ----
+        let image = class_key
+            .and_then(lookup_image)
+            .filter(|img| img.same_layout(&class_desc));
+        let mut vm = match &image {
+            Some(img) => {
+                // Cloning the shared linked boot metadata (field layouts,
+                // vtables/interface tables, method tables, decoded bodies and
+                // resolved provider list) replaces the per-restore re-link.
+                let mut vm = Vm::empty(opts);
+                vm.install_boot_image(img)?;
+                vm
+            }
+            None => Vm::new(opts)?,
+        };
+
+        // Seed the per-VM state that the image deliberately does not carry.
+        vm.heap.live_bytes = heap_live_bytes;
+        vm.heap.peak_bytes = heap_peak_bytes;
+        vm.heap.allocations = heap_allocations;
+        vm.heap.gc_count = heap_gc_count;
+        vm.heap.gc_nanos = heap_gc_nanos;
+        vm.metrics.instructions = metric_instructions;
+        vm.metrics.invokes = metric_invokes;
+        vm.metrics.clinit_count = metric_clinit_count;
+        vm.next_converter = next_converter;
+        vm.next_thread_id = next_thread_id;
+        vm.oom_object = oom_object;
+        vm.stack_overflow_object = stack_overflow_object;
+        vm.main_thread_group = main_thread_group;
+        vm.stdout = stdout;
+        vm.stderr = stderr;
+        vm.stopping = stopping;
+        vm.exit_request = exit_request;
+        vm.out_buf = out;
+        vm.err_buf = err;
+
+        // Build the snapshot -> VM class id map. The image path is keyed by the
+        // exact ordered descriptor list, so the mapping is the identity; the
+        // relink path resolves/loads each descriptor.
         let mut old_to_new = Vec::with_capacity(class_count);
-        for desc in &class_desc {
-            let id = match vm.find_class(desc) {
-                Some(id) => id,
-                None => vm.load_class(desc)?,
-            };
-            old_to_new.push(id);
-        }
-        for (i, desc) in class_desc.iter().enumerate() {
-            let new = old_to_new[i];
-            let got = vm.class_desc(new).to_string();
-            if &got != desc {
-                return Err(VmError::SnapshotMismatch(format!(
-                    "class id {i} maps to {got}, snapshot expected {desc}"
-                )));
+        if image.is_some() {
+            old_to_new.extend(0..class_count as u32);
+        } else {
+            // Re-link any class the fresh VM does not already have, then build
+            // the old -> new id map by descriptor.
+            for desc in &class_desc {
+                let id = match vm.find_class(desc) {
+                    Some(id) => id,
+                    None => vm.load_class(desc)?,
+                };
+                old_to_new.push(id);
+            }
+            for (i, desc) in class_desc.iter().enumerate() {
+                let new = old_to_new[i];
+                let got = vm.class_desc(new).to_string();
+                if &got != desc {
+                    return Err(VmError::SnapshotMismatch(format!(
+                        "class id {i} maps to {got}, snapshot expected {desc}"
+                    )));
+                }
             }
         }
 
@@ -708,6 +955,17 @@ impl Vm {
             vm.classes[new].statics.copy_from_slice(statics);
             vm.classes[new].init = *init;
             vm.classes[new].class_obj = *class_obj;
+        }
+
+        // First restore of this class set in this process: remember the linked
+        // metadata so the next restore clones it (both paths end with the same
+        // linked tables).
+        if image.is_none() {
+            if let Some(key) = class_key {
+                if lookup_image(key).is_none() {
+                    remember_image(key, BootImage::capture(&vm));
+                }
+            }
         }
 
         // ---- heap arena --------------------------------------------------
@@ -799,19 +1057,26 @@ impl Vm {
 
         // Re-resolution caches refer to the *old* class/provider layout; drop
         // them so every access re-resolves through the descriptor tables. This
-        // is what makes restore independent of DEX parse-order accidents.
-        for dex in &mut vm.dexs {
-            for s in &mut dex.string_cache {
-                *s = None;
-            }
-            for f in &mut dex.field_cache {
-                *f = None;
-            }
-            for m in &mut dex.method_cache {
-                *m = None;
-            }
-            for c in &mut dex.class_cache {
-                *c = None;
+        // is what makes restore independent of DEX parse-order accidents. The
+        // image path builds those provider contexts fresh, so they are already
+        // empty (and clearing 9 DEX-sized vectors is pure overhead there).
+        if image.is_none() {
+            for dex in &mut vm.dexs {
+                for s in &mut dex.string_cache {
+                    *s = None;
+                }
+                for f in &mut dex.field_cache {
+                    *f = None;
+                }
+                for m in &mut dex.method_cache {
+                    *m = None;
+                }
+                for c in &mut dex.class_cache {
+                    *c = None;
+                }
+                for v in &mut dex.virtual_cache {
+                    *v = None;
+                }
             }
         }
         vm.dispatch_cache.clear();

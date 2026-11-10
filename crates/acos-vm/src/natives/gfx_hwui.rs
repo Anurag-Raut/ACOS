@@ -93,6 +93,26 @@ pub fn install_sink(sink: Box<dyn FrameSink>) {
     SINK.with(|s| *s.borrow_mut() = sink);
 }
 
+/// Submit a completed `width`x`height` RGBA8888 buffer to the installed sink.
+///
+/// The NDK `ANativeWindow_unlockAndPost` path uses this: the software buffer is
+/// handed to the sink the runtime installed (its `WmSurfaceBackend`, which
+/// presents through the compositor and publishes into the `FrameStore`). With
+/// no runtime, the default `MemorySink` records the frame. Returns the sink's
+/// monotonic frame id (0 when the sink rejected the submission).
+pub fn submit_frame(
+    window_id: u64,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    cause_id: i64,
+) -> u64 {
+    SINK.with(|s| {
+        s.borrow_mut()
+            .submit_frame(window_id, width, height, rgba, cause_id)
+    })
+}
+
 /// The most recently submitted frame (test/introspection helper).
 pub fn last_frame() -> Option<CapturedFrame> {
     LAST.with(|l| l.borrow().clone())

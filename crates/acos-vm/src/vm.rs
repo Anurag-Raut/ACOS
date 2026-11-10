@@ -385,9 +385,13 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn new(options: VmOptions) -> VmResult<Vm> {
+    /// A VM with all per-instance state initialised and **no core library
+    /// installed**. `Vm::new` is this plus the corelib/boot-classpath bring-up;
+    /// the snapshot image path installs the shared linked boot metadata
+    /// instead of re-linking it (T-43).
+    pub(crate) fn empty(options: VmOptions) -> Vm {
         let heap = Heap::new(options.heap_max_bytes);
-        let mut vm = Vm {
+        Vm {
             heap,
             dexs: Vec::new(),
             classes: Vec::new(),
@@ -452,14 +456,20 @@ impl Vm {
             max_frames: 2048,
             host: HostGuard::from_env(),
             vfs: crate::vfs::Vfs::new(crate::vfs::VfsConfig::from_env()),
-        };
-        match options.corelib {
+        }
+    }
+
+    pub fn new(options: VmOptions) -> VmResult<Vm> {
+        let corelib = options.corelib;
+        let boot_dir = options.boot_dir.clone();
+        let mut vm = Vm::empty(options);
+        match corelib {
             CoreLib::Bootstrap => {
                 crate::corelib::install(&mut vm)?;
             }
             CoreLib::Real => {
                 crate::natives::install(&mut vm)?;
-                let dir = default_boot_dir(options.boot_dir.as_deref())
+                let dir = default_boot_dir(boot_dir.as_deref())
                     .ok_or_else(|| boot_classpath_missing(Path::new(".cache/boot/android-34"), "cache directory not found"))?;
                 vm.vfs.set_boot_root(&dir);
                 vm.load_boot_classpath(&dir)?;
@@ -467,6 +477,51 @@ impl Vm {
             }
         }
         Ok(vm)
+    }
+
+    /// Install the process-shared linked boot metadata (T-43).
+    ///
+    /// The image carries the *immutable* part of a linked boot classpath
+    /// (classes with field layouts/vtables/interface tables, methods with
+    /// decoded bodies, types, provider list) captured once per boot-classpath
+    /// fingerprint. The per-VM mutable state (statics, `init`, `class_obj`,
+    /// inline caches, quickening) is reset here and re-seeded by the caller
+    /// from the snapshot stream, so two VMs never share mutable state.
+    pub(crate) fn install_boot_image(
+        &mut self,
+        image: &crate::snapshot::BootImage,
+    ) -> VmResult<()> {
+        if self.corelib == CoreLib::Real {
+            // Same registry `Vm::new` installs; binding (not layout) state.
+            crate::natives::install(self)?;
+        }
+        for file in &image.dex_files {
+            self.add_shared_dex(file.clone());
+        }
+        self.boot_dexs = image.boot_dexs.clone();
+        self.boot_lazy_jars = image.boot_lazy_jars.clone();
+        self.boot_dir = image.boot_dir.clone();
+        if let Some(dir) = &self.boot_dir {
+            self.vfs.set_boot_root(dir);
+        }
+        self.classes = image.classes.clone();
+        self.methods = image.methods.clone();
+        self.types = image.types.clone();
+        self.type_by_desc = image.type_by_desc.clone();
+        self.class_by_desc = image.class_by_desc.clone();
+        self.loaded_array_elems = image.loaded_array_elems.clone();
+        self.builtin_alloc = image.builtin_alloc.clone();
+        self.c_object = image.c_object;
+        self.c_class = image.c_class;
+        self.c_string = image.c_string;
+        self.c_string_builder = image.c_string_builder;
+        self.c_throwable = image.c_throwable;
+        self.c_integer = image.c_integer;
+        self.c_long = image.c_long;
+        self.c_thread = image.c_thread;
+        self.c_print_stream = image.c_print_stream;
+        self.c_system = image.c_system;
+        Ok(())
     }
 
     /// Load the real boot-classpath DEX images, in `BOOTCLASSPATH` order.
@@ -1929,7 +1984,10 @@ impl Vm {
                     .get(f.method as usize)
                     .map(|m| m.name.clone())
                     .unwrap_or_default();
-                let line = f.code.line_for_pc(f.pc);
+                let line = match &self.methods[f.method as usize].imp {
+                    MethodImpl::Dex { code: Some(code), .. } => code.line_for_pc(f.pc),
+                    _ => 0,
+                };
                 entries.push(StackEntry { class, method, line });
             }
         }
@@ -2006,6 +2064,10 @@ impl Vm {
         // there is nothing left to wait for.
         loop {
             crate::interp::run(self)?;
+            // Host safe point: a broker (the JNI crate) may have queued work
+            // from native OS threads. Service it here, on the owner thread,
+            // while no Rust borrow of the VM is live elsewhere.
+            crate::natives::safe_point::pump(self);
             if self.pending_exception != NULL || self.exit_request.is_some() {
                 break;
             }

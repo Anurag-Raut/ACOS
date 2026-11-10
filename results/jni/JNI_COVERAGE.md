@@ -310,13 +310,41 @@ fixture mask).
 **Scope and safety.** The VM remains **single-threaded and owner-bound**
 (`acos-vm` is `#![forbid(unsafe_code)]`). An attached native OS thread may use
 the process-global `JNIEnv` for the slots that do not touch the VM (attach
-bookkeeping, `Exception*` queries on its own thread), but every slot that needs
-the VM still reports `JNI_NO_VM` when called from such a thread because no
-`*mut Vm` is installed there. It never races the owner. Running Java callbacks
-from a native OS thread while the owner is inside a native call is **not**
-implemented; the brokered design for it is recorded in ADR-0021 and requires a
-VM safe-point/pump that does not exist yet. This is the honest boundary, not a
-silently faked result.
+bookkeeping, `Exception*` queries on its own thread). Slots that need the VM are
+now **brokered to the owner** instead of failing with `JNI_NO_VM`; see the next
+section. The `*mut Vm` is still only ever dereferenced by the owner thread, so
+the VM is never touched by two threads at once.
+
+## Brokered JNI request channel (W57-A)
+
+An attached native OS thread (Hermes, the Flutter engine, fbjni, or a plain
+`pthread_create` thread) owns no `*mut Vm`, so VM-touching slots are turned into
+a request, enqueued on the owner's queue, and the worker **blocks** for the
+reply. The owner executes the request with the worker's forced thread id and
+returns the result. This covers `FindClass`, `NewString`/`NewStringUTF`,
+`GetMethodID`/`GetFieldID` (static and instance), `AllocObject`,
+`Call<Type>Method*`/`CallNonvirtual<Type>Method*`, `Get/Set<Type>Field` and the
+static variants, `GetObjectClass`, `IsSameObject`, `GetObjectRefType`,
+`ExceptionCheck`/`ExceptionOccurred`/`ExceptionClear`, `Throw`/`ThrowNew`,
+`PushLocalFrame`/`PopLocalFrame`, `NewGlobalRef`/`DeleteGlobalRef`/
+`DeleteLocalRef`, `GetStringLength`/`GetStringUTFChars`/
+`ReleaseStringUTFChars`, and the process-global attach bookkeeping.
+
+| concern | behaviour |
+|---------|-----------|
+| servicing | the owner drains the queue at two kinds of safe point: the `run_inner`/interpreter loop (`acos-vm/src/natives/safe_point.rs`) **and** an explicit nested pump used while the owner is itself blocked in a native call waiting on a worker (`acos_jni_broker_pump`, and `JniRuntime::pump_broker`). A synchronous owner→native→worker→Java→owner chain therefore cannot deadlock. |
+| re-entrancy | the safe-point hook has an atomic re-entrancy guard; draining a request may run Java, whose own safe points must not re-enter the pump. |
+| reference frames | the worker's local frames and roots live in the owner's per-thread `State`, keyed by the synthetic worker id; `execute` installs a base frame and the owner frees it on `Detach`. A worker that never issues a VM request owns no frames and detaches without a round trip. |
+| exceptions | a Java throw on the owner is materialised into the worker's pending slot and observed with `ExceptionCheck`/`ExceptionOccurred`; a broker/contract fault is marshalled back as a structured error, not a panic. |
+| timeout | a reply that is not serviced within `ACOS_JNI_BROKER_TIMEOUT_MS` (default 5000) returns `JNI_BROKER_TIMEOUT` (structured) instead of hanging forever. |
+| isolation | remote workers enqueue; only the owner dereferences the `Vm`. `acos-vm` stays `#![forbid(unsafe_code)]`; the `unsafe` is confined to `acos-jni/src/broker.rs` with `SAFETY` comments. |
+
+Evidence: `crates/acos-jni/tests/jni_broker.rs` (worker static/virtual calls,
+8 workers × 1000 calls, Java exception visible to the worker, owner native loop
+servicing synchronously, GC-stress local/global refs, balanced
+`attached_workers`/`jni_roots`, `AttachCurrentThread` path) and the NDK fixture
+`acos_jni_test_broker_worker` in `fixtures/jni/acos_jni_slots.c`, called by
+`jni_native_fixture`'s `native_fixture_worker_brokers_java_call`.
 
 ### Remaining structured-unsupported slots (6)
 

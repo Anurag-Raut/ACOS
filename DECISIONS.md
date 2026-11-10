@@ -647,6 +647,38 @@ Status: accepted (2026-11-11), workstream 3 of cross-platform apps.
   (`jni_native_fixture`, bit 10). `jni_slots::javavm_attach_getenv_and_versions`
   keeps the owner-thread contract.
 
+### ADR-0021 follow-up — brokered JNI request channel (W57-A), implemented
+
+Status: implemented (2026-11-11). The follow-up promised under *Why not a
+brokered re-entrant mutex now* has landed.
+
+- **Decision.** An attached native OS thread that owns no `*mut Vm` no longer
+  fails VM-touching slots with `JNI_NO_VM`. It enqueues a request in
+  `acos-jni/src/broker.rs` and blocks on a `Condvar` for the reply. The owner
+  drains the queue at two safe points: the interpreter/`run_inner` loop (via the
+  safe Rust hook `acos-vm/src/natives/safe_point.rs`) and an explicit nested
+  pump while the owner is itself blocked in a native call (`acos_jni_broker_pump`
+  / `JniRuntime::pump_broker`). This makes synchronous
+  owner→native→worker→Java→owner patterns terminate instead of deadlocking.
+- **Invariant.** The `Vm` is still only dereferenced by its owner thread. A
+  worker's forced thread id lets the owner run the slot against the worker's
+  reference frames and pending-exception slot, which the owner owns and frees on
+  `Detach`. The safe-point hook is re-entrancy-guarded. `acos-vm` remains
+  `#![forbid(unsafe_code)]`; `unsafe` is confined to `acos-jni/src/broker.rs`
+  with `SAFETY` comments.
+- **Errors and limits.** Java exceptions are marshalled back through the
+  worker's `ExceptionCheck`/`ExceptionOccurred`; broker faults become structured
+  errors; an unserviced reply is `JNI_BROKER_TIMEOUT` (default 5 s,
+  `ACOS_JNI_BROKER_TIMEOUT_MS`). A worker that never issues a VM request owns no
+  frames and detaches without a round trip.
+- **Evidence.** `crates/acos-jni/tests/jni_broker.rs` (7 tests, incl. 8 workers ×
+  1000 calls, GC stress with held local/global refs, balanced reference
+  accounting, and the Java-throw path) plus the NDK fixture
+  `acos_jni_test_broker_worker` driven by
+  `jni_native_fixture::native_fixture_worker_brokers_java_call`. Green 20× under
+  `ACOS_GC_STRESS=1`; `clippy -D warnings` on `acos-jni`; workspace check and
+  `diff-dexprogs --corelib real` all pass.
+
 ---
 
 ## ADR-0022 — Native confinement layer: `acos-sandbox`, no sudo, fail closed

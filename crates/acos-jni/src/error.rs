@@ -18,6 +18,11 @@ pub enum JniError {
     /// No attached VM on this host thread.
     #[error("JNI_NO_VM: {function} called without an attached VM")]
     NoVm { function: String },
+    /// A native OS thread's brokered JNI request was not serviced by the VM
+    /// owner before its deadline. The owner may be gone, or blocked in native
+    /// code that never reaches a safe point.
+    #[error("JNI_BROKER_TIMEOUT: {function} request not serviced within {millis} ms")]
+    BrokerTimeout { function: String, millis: u64 },
     /// A null `jclass`/`jobject`/`jmethodID` where a live reference is required.
     #[error("JNI_NULL_REFERENCE: {function} received a null {what}")]
     NullReference { function: String, what: String },
@@ -72,6 +77,7 @@ impl JniError {
             JniError::PendingException { .. } => "JNI_PENDING_EXCEPTION",
             JniError::Unsupported { .. } => "JNI_UNSUPPORTED",
             JniError::NoVm { .. } => "JNI_NO_VM",
+            JniError::BrokerTimeout { .. } => "JNI_BROKER_TIMEOUT",
             JniError::NullReference { .. } => "JNI_NULL_REFERENCE",
             JniError::BadReference { .. } => "JNI_BAD_REFERENCE",
             JniError::ClassNotFound { .. } => "JNI_CLASS_NOT_FOUND",
