@@ -162,6 +162,17 @@ pub enum ShaderSpec {
     },
 }
 
+/// Skia's `SkBlurMask::ConvertRadiusToSigma` / `BlurMaskFilter` semantics:
+/// the Java `blurRadius` is *not* the Gaussian standard deviation.
+///
+/// `sigma = radius * 0.57735f + 0.5f`. ACOS applies this in
+/// [`crate::canvas`] before approximating the Gaussian with box passes, so a
+/// `BlurMaskFilter(radius, ...)` or a `RenderEffect` blur has the same spread
+/// as Android's Skia rasteriser.
+pub fn radius_to_sigma(radius: f32) -> f32 {
+    radius * 0.57735 + 0.5
+}
+
 /// Android `MaskFilter.Blur` style.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum BlurStyle {
@@ -377,6 +388,16 @@ mod tests {
         let a = (p.effective_argb() >> 24) & 0xff;
         assert_eq!(a, 128);
         assert_eq!(p.effective_argb() & 0x00ff_ffff, 0x00112233);
+    }
+
+    #[test]
+    fn blur_radius_converts_to_skia_sigma() {
+        // Skia's ConvertRadiusToSigma: radius * 0.57735 + 0.5.
+        assert!((radius_to_sigma(0.0) - 0.5).abs() < 1e-6);
+        assert!((radius_to_sigma(1.0) - 1.07735).abs() < 1e-5);
+        assert!((radius_to_sigma(8.0) - 5.1188).abs() < 1e-4);
+        // Monotonic, so a larger radius always blurs more.
+        assert!(radius_to_sigma(2.0) > radius_to_sigma(1.0));
     }
 
     #[test]

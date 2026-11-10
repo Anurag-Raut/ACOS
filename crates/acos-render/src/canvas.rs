@@ -398,7 +398,11 @@ fn filter_device_bounds(
 
 fn mask_expand(mask_filter: Option<&MaskFilterSpec>) -> f32 {
     match mask_filter {
-        Some(MaskFilterSpec::Blur { radius, .. }) => radius * 3.0 + 2.0,
+        // Expand by the Gaussian sigma (not the Java radius), plus a pixel of
+        // slack, so the box approximation never clips the blur tail.
+        Some(MaskFilterSpec::Blur { radius, .. }) => {
+            crate::paint::radius_to_sigma(*radius) * 3.0 + 2.0
+        }
         None => 1.0,
     }
 }
@@ -625,6 +629,79 @@ pub(crate) fn blit_coverage(
                 out_g.min(a) as u8,
                 out_b.min(a) as u8,
                 a as u8,
+            )
+            .unwrap_or(*p);
+        }
+    }
+}
+
+/// Composite a premultiplied RGBA colour-glyph bitmap (emoji) with the paint's
+/// alpha (ADR-0019 / W70-A). The colour comes from the font; only the paint's
+/// alpha (and the canvas clip) modulate it, matching Android's colour-emoji
+/// blit. Source-over only, like [`blit_coverage`].
+pub(crate) fn blit_color(
+    target: &mut Pixmap,
+    clip: Option<&Mask>,
+    mask: &crate::text::freetype::GlyphMask,
+    origin_x: i32,
+    origin_y: i32,
+    argb: u32,
+) {
+    let Some(rgba) = mask.color.as_ref() else {
+        return;
+    };
+    if mask.is_empty() {
+        return;
+    }
+    let ca = (argb >> 24) & 0xff;
+    if ca == 0 {
+        return;
+    }
+    let tw = target.width() as i32;
+    let th = target.height() as i32;
+    let x0 = origin_x.max(0);
+    let y0 = origin_y.max(0);
+    let x1 = origin_x.saturating_add(mask.width as i32).min(tw);
+    let y1 = origin_y.saturating_add(mask.rows as i32).min(th);
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    let clip_data = clip.map(|m| m.data());
+    let cw = tw as usize;
+    let mw = mask.width as usize;
+    let pixels = target.pixels_mut();
+    for dy in y0..y1 {
+        let sy = (dy - origin_y) as usize;
+        let dst = &mut pixels[dy as usize * cw..(dy as usize + 1) * cw];
+        for dx in x0..x1 {
+            let s = (sy * mw + (dx - origin_x) as usize) * 4;
+            let clip_cov = match clip_data {
+                Some(d) => d[dy as usize * cw + dx as usize] as u32,
+                None => 255,
+            };
+            // Scale the premultiplied source by the paint alpha x clip coverage.
+            let scale = (ca * clip_cov + 127) / 255;
+            if scale == 0 {
+                continue;
+            }
+            let sa = (rgba[s + 3] as u32 * scale + 127) / 255;
+            if sa == 0 {
+                continue;
+            }
+            let sr = (rgba[s] as u32 * scale + 127) / 255;
+            let sg = (rgba[s + 1] as u32 * scale + 127) / 255;
+            let sb = (rgba[s + 2] as u32 * scale + 127) / 255;
+            let p = &mut dst[dx as usize];
+            let inv = 255 - sa;
+            let out_a = (sa + (p.alpha() as u32 * inv + 127) / 255).min(255);
+            let out_r = (sr + (p.red() as u32 * inv + 127) / 255).min(out_a);
+            let out_g = (sg + (p.green() as u32 * inv + 127) / 255).min(out_a);
+            let out_b = (sb + (p.blue() as u32 * inv + 127) / 255).min(out_a);
+            *p = PremultipliedColorU8::from_rgba(
+                out_r as u8,
+                out_g as u8,
+                out_b as u8,
+                out_a as u8,
             )
             .unwrap_or(*p);
         }
@@ -860,12 +937,15 @@ pub(crate) fn apply_mask_filter(pixmap: &mut Pixmap, filter: &MaskFilterSpec) {
             if *radius <= 0.0 {
                 return;
             }
+            // Android/Skia semantics: the public `radius` is converted to a
+            // Gaussian sigma before blurring (`sigma = radius * 0.57735 + 0.5`).
+            let sigma = crate::paint::radius_to_sigma(*radius);
             let original: Option<Vec<u32>> = if *style != BlurStyle::Normal {
                 Some(pixmap.pixels().iter().map(word_of).collect())
             } else {
                 None
             };
-            box_blur(pixmap, *radius);
+            box_blur(pixmap, sigma);
             if let Some(orig) = original {
                 match style {
                     BlurStyle::Outer => {
@@ -900,10 +980,15 @@ pub(crate) fn apply_mask_filter(pixmap: &mut Pixmap, filter: &MaskFilterSpec) {
     }
 }
 
-/// Three box-blur passes approximate a Gaussian well enough for the shadow
-/// workload; documented as approximate in the fidelity list.
-fn box_blur(pixmap: &mut Pixmap, radius: f32) {
-    let r = radius.round().max(1.0) as i32;
+/// Three box-blur passes approximate a Gaussian of standard deviation
+/// `sigma`; documented as approximate in the fidelity list. Each box pass has
+/// variance `r(r+1)/3`, so three passes have variance `r(r+1)` and we solve
+/// `r ≈ (sqrt(1 + 4σ²) - 1) / 2`.
+fn box_blur(pixmap: &mut Pixmap, sigma: f32) {
+    let r = gaussian_box_radius(sigma);
+    if r < 1 {
+        return;
+    }
     for _ in 0..3 {
         blur_pass(pixmap, r);
     }
@@ -980,6 +1065,13 @@ fn box_blur(pixmap: &mut Pixmap, radius: f32) {
         sum[2] = sum[2].saturating_sub(b as u32);
         sum[3] = sum[3].saturating_sub(a as u32);
     }
+    fn gaussian_box_radius(sigma: f32) -> i32 {
+        if !sigma.is_finite() || sigma <= 0.0 {
+            return 0;
+        }
+        (((1.0 + 4.0 * sigma * sigma).sqrt() - 1.0) * 0.5).round() as i32
+    }
+
     fn avg_px(sum: &[u32; 4], count: i32) -> u32 {
         if count <= 0 {
             return 0;

@@ -52,11 +52,20 @@ pub struct GlyphMask {
     /// Vertical bearing from the baseline to the mask's top edge.
     pub top: i32,
     pub coverage: Vec<u8>,
+    /// For a colour glyph (COLR/CPAL v0/v1, CBDT/CBLC, sbix) this is a
+    /// **premultiplied RGBA8** bitmap (`width * rows * 4` bytes) that replaces
+    /// `coverage` at blit time. `None` for an ordinary grayscale A8 mask.
+    pub color: Option<Vec<u8>>,
 }
 
 impl GlyphMask {
     pub fn is_empty(&self) -> bool {
         self.width == 0 || self.rows == 0
+    }
+
+    /// Whether this glyph carries its own colour (emoji) bitmap.
+    pub fn is_color(&self) -> bool {
+        self.color.is_some()
     }
 }
 
@@ -197,23 +206,58 @@ impl Rasterizer {
     ) -> Option<GlyphMask> {
         let library = self.library;
         let face = self.face_for(file)?;
-        if face.char_size != char_size {
-            // SAFETY: `face.raw` is a live face owned by `self`; `char_size`
-            // is a 26.6 (F26Dot6) pixel size. A non-scalable face returns an
-            // error and we fall back to outlines.
-            let err = unsafe {
-                ft::FT_Set_Char_Size(
-                    face.raw,
-                    char_size as ft::FT_F26Dot6,
-                    char_size as ft::FT_F26Dot6,
-                    0,
-                    0,
-                )
-            };
-            if err != 0 {
+        // A scalable face (outlines, COLRv0, sbix) is sized with
+        // `FT_Set_Char_Size`. A bitmap-only face (CBDT/CBLC) has fixed strikes
+        // and rejects an arbitrary pixel size, so pick the nearest strike and
+        // resample the result to the requested size below.
+        // SAFETY: `face.raw` is live; the face flags/size table are read-only.
+        let scalable = unsafe { (*face.raw).face_flags } & ft::FT_FACE_FLAG_SCALABLE != 0;
+        let mut bitmap_scale = 1.0f32;
+        if scalable {
+            if face.char_size != char_size {
+                // SAFETY: `char_size` is a 26.6 (F26Dot6) pixel size.
+                let err = unsafe {
+                    ft::FT_Set_Char_Size(
+                        face.raw,
+                        char_size as ft::FT_F26Dot6,
+                        char_size as ft::FT_F26Dot6,
+                        0,
+                        0,
+                    )
+                };
+                if err != 0 {
+                    return None;
+                }
+                face.char_size = char_size;
+            }
+        } else {
+            // SAFETY: `available_sizes` has `num_fixed_sizes` entries.
+            let num = unsafe { (*face.raw).num_fixed_sizes }.max(0);
+            if num == 0 {
                 return None;
             }
-            face.char_size = char_size;
+            let want_px = char_size as f32 / 64.0;
+            let mut best = 0i32;
+            let mut best_d = f32::MAX;
+            for i in 0..num {
+                // SAFETY: `i < num_fixed_sizes`.
+                let s = unsafe { &*(*face.raw).available_sizes.add(i as usize) };
+                let px = s.y_ppem as f32 / 64.0;
+                let d = (px - want_px).abs();
+                if d < best_d {
+                    best_d = d;
+                    best = i;
+                }
+            }
+            if unsafe { ft::FT_Select_Size(face.raw, best) } != 0 {
+                return None;
+            }
+            // SAFETY: `best < num_fixed_sizes`.
+            let strike_px = unsafe { (*face.raw).available_sizes.add(best as usize) };
+            let strike_px = unsafe { (*strike_px).y_ppem as f32 / 64.0 }.max(1.0);
+            bitmap_scale = want_px / strike_px;
+            // Force a size re-set if the next request is scalable/other.
+            face.char_size = 0;
         }
         if face.variations != *variations && !apply_variations(library, face, variations) {
             return None;
@@ -221,8 +265,11 @@ impl Rasterizer {
 
         // SAFETY: `face.raw` is live. `FT_LOAD_NO_HINTING` matches Android's
         // unhinted grayscale rasterisation; `FT_LOAD_RENDER` asks FreeType to
-        // render the glyph into `glyph.bitmap` in the same call.
-        let flags = ft::FT_LOAD_NO_HINTING | ft::FT_LOAD_RENDER;
+        // render the glyph into `glyph.bitmap` in the same call. `FT_LOAD_COLOR`
+        // asks FreeType to synthesise a premultiplied BGRA bitmap for a colour
+        // glyph (COLRv0/CPAL, CBDT/CBLC, sbix); it is a no-op for ordinary
+        // outline glyphs, which stay grayscale A8.
+        let flags = ft::FT_LOAD_NO_HINTING | ft::FT_LOAD_RENDER | ft::FT_LOAD_COLOR;
         let err = unsafe { ft::FT_Load_Glyph(face.raw, glyph_id as ft::FT_UInt, flags) };
         if err != 0 {
             return None;
@@ -236,9 +283,10 @@ impl Rasterizer {
         // SAFETY: the slot outlives these reads; we only borrow it under the
         // same lock and copy the bitmap bytes out before returning.
         let bitmap = unsafe { &(*slot).bitmap };
-        // Only grayscale masks are composited here; anything else (monochrome,
-        // LCD, bitmap strike, colour) falls back to the path renderer.
-        if bitmap.pixel_mode as i32 != ft::FT_PIXEL_MODE_GRAY as i32 {
+        // Grayscale A8 masks and colour BGRA bitmaps are composited here;
+        // anything else (monochrome, LCD, ...) falls back to the path renderer.
+        let mode = bitmap.pixel_mode as i32;
+        if mode != ft::FT_PIXEL_MODE_GRAY as i32 && mode != ft::FT_PIXEL_MODE_BGRA as i32 {
             return None;
         }
         let left = unsafe { (*slot).bitmap_left };
@@ -252,6 +300,7 @@ impl Rasterizer {
                 left,
                 top,
                 coverage: Vec::new(),
+                color: None,
             });
         }
         if bitmap.buffer.is_null() {
@@ -265,6 +314,54 @@ impl Rasterizer {
         // `buffer` after a render, and the buffer stays valid until the next
         // load on this face (we copy out immediately under the same lock).
         let src = unsafe { std::slice::from_raw_parts(bitmap.buffer, total) };
+
+        if bitmap.pixel_mode as i32 == ft::FT_PIXEL_MODE_BGRA as i32 {
+            // A colour glyph: COLR/CPAL layers, a CBDT/CBLC PNG strike or an
+            // sbix bitmap were composited by FreeType into premultiplied BGRA.
+            // Reorder to premultiplied RGBA for tiny-skia.
+            let mut rgba = vec![0u8; (width as usize) * (rows as usize) * 4];
+            for y in 0..rows as usize {
+                let src_row = if pitch >= 0 { y } else { rows as usize - 1 - y };
+                let off = src_row * abs_pitch;
+                let row_len = width as usize * 4;
+                if off + row_len > src.len() {
+                    return None;
+                }
+                for x in 0..width as usize {
+                    let s = off + x * 4;
+                    let d = (y * width as usize + x) * 4;
+                    // BGRA -> RGBA (both premultiplied).
+                    rgba[d] = src[s + 2];
+                    rgba[d + 1] = src[s + 1];
+                    rgba[d + 2] = src[s];
+                    rgba[d + 3] = src[s + 3];
+                }
+            }
+            let (rgba, width, rows, left, top) = if (bitmap_scale - 1.0).abs() > 0.01 {
+                let dw = ((width as f32 * bitmap_scale).round() as u32).max(1);
+                let dh = ((rows as f32 * bitmap_scale).round() as u32).max(1);
+                match scale_rgba(&rgba, width, rows, dw, dh) {
+                    Some((scaled, w, h)) => (
+                        scaled,
+                        w,
+                        h,
+                        (left as f32 * bitmap_scale).round() as i32,
+                        (top as f32 * bitmap_scale).round() as i32,
+                    ),
+                    None => (rgba, width, rows, left, top),
+                }
+            } else {
+                (rgba, width, rows, left, top)
+            };
+            return Some(GlyphMask {
+                width,
+                rows,
+                left,
+                top,
+                coverage: Vec::new(),
+                color: Some(rgba),
+            });
+        }
 
         let mut coverage = vec![0u8; (width as usize) * (rows as usize)];
         for y in 0..rows as usize {
@@ -285,6 +382,7 @@ impl Rasterizer {
             left,
             top,
             coverage,
+            color: None,
         })
     }
 }
@@ -308,6 +406,30 @@ fn rasterizer() -> Option<&'static Mutex<Rasterizer>> {
     RASTERIZER
         .get_or_init(|| Rasterizer::new().map(Mutex::new))
         .as_ref()
+}
+
+/// Resample a premultiplied RGBA8 bitmap to `dw x dh` (used to bring a fixed
+/// CBDT/CBLC strike to the requested text size). Bilinear via tiny-skia; the
+/// result is premultiplied RGBA8, matching the input.
+fn scale_rgba(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Option<(Vec<u8>, u32, u32)> {
+    use tiny_skia::{IntSize, Pixmap, PixmapPaint, Transform};
+    let size = IntSize::from_wh(sw, sh)?;
+    let pm = Pixmap::from_vec(src.to_vec(), size)?;
+    let mut dst = Pixmap::new(dw, dh)?;
+    let paint = PixmapPaint {
+        opacity: 1.0,
+        blend_mode: tiny_skia::BlendMode::Source,
+        quality: tiny_skia::FilterQuality::Bilinear,
+    };
+    dst.draw_pixmap(
+        0,
+        0,
+        pm.as_ref(),
+        &paint,
+        Transform::from_scale(dw as f32 / sw as f32, dh as f32 / sh as f32),
+        None,
+    );
+    Some((dst.take(), dw, dh))
 }
 
 /// Whether a FreeType rasteriser could be initialised at all.
@@ -540,5 +662,62 @@ mod tests {
         )
         .unwrap();
         assert_eq!(reordered.coverage, ordered.coverage);
+    }
+
+    #[test]
+    fn colour_emoji_rasterises_to_an_rgba_bitmap() {
+        let Some(fonts) = crate::FontCollection::shared() else {
+            eprintln!("SKIP: no fonts available");
+            return;
+        };
+        assert!(available(), "bundled FreeType failed to initialise");
+        // Use the CBDT/CBLC strike font explicitly: it is bitmap-only (no
+        // outlines), so it exercises the fixed-strike selection and resampling
+        // path as well as the BGRA colour bitmap. Android marks it
+        // `ignore="true"` when a COLR font is present, but the strike code is
+        // the same one `NotoColorEmojiFlags.ttf` uses at runtime.
+        let Some(entry) = fonts
+            .families
+            .iter()
+            .flat_map(|f| &f.fonts)
+            .find(|e| e.file.path.to_string_lossy().contains("Legacy"))
+        else {
+            eprintln!("SKIP: no CBDT emoji font available");
+            return;
+        };
+        let font = FontRef {
+            file: entry.file.clone(),
+            weight: entry.weight,
+            italic: entry.italic,
+            axes: entry.axes.clone(),
+            family_key: 0,
+        };
+        let face = ttf_parser::Face::parse(&font.file.data, font.file.face_index).unwrap();
+        let gid = face.glyph_index('\u{1F600}').expect("emoji glyph").0;
+        let size_px = 36.75f32;
+        let mask = rasterize(&font, gid, size_px, &font.axes).expect("colour mask");
+        assert!(mask.is_color(), "emoji must take the colour path: {font:?}");
+        let rgba = mask.color.as_ref().unwrap();
+        assert_eq!(rgba.len(), (mask.width * mask.rows * 4) as usize);
+        // The fixed strike was resampled to roughly the requested text size.
+        assert!(
+            mask.width as f32 >= size_px * 0.5 && mask.width as f32 <= size_px * 1.5,
+            "CBDT strike was not resampled to the text size: {} vs {size_px}",
+            mask.width
+        );
+        // At least one fully/partly opaque pixel and at least one non-gray
+        // pixel: a colour emoji must not be a monochrome A8 mask.
+        let mut opaque = 0usize;
+        let mut colourful = false;
+        for px in rgba.chunks_exact(4) {
+            if px[3] == 255 {
+                opaque += 1;
+            }
+            if px[0] != px[1] || px[1] != px[2] {
+                colourful = true;
+            }
+        }
+        assert!(opaque > 0, "emoji bitmap has no opaque pixels");
+        assert!(colourful, "emoji bitmap is monochrome");
     }
 }

@@ -51,6 +51,7 @@ struct NodeProps {
     outline: Outline,
     elevation: f32,
     ambient_shadow_color: u32,
+    spot_shadow_color: u32,
     local_bounds: RectF,
 }
 
@@ -1790,7 +1791,11 @@ impl RenderContext {
                     let (state, target) = self.canvas_parts_mut(surface)?;
                     let clip = state.clip.as_ref();
                     for (mask, dx, dy) in &placed {
-                        canvas::blit_coverage(target, clip, mask, *dx, *dy, argb);
+                        if mask.is_color() {
+                            canvas::blit_color(target, clip, mask, *dx, *dy, argb);
+                        } else {
+                            canvas::blit_coverage(target, clip, mask, *dx, *dy, argb);
+                        }
                     }
                 }
                 self.raster_ops += 1;
@@ -2173,6 +2178,7 @@ impl RenderContext {
             outline: n.outline.clone(),
             elevation: n.elevation,
             ambient_shadow_color: n.ambient_shadow_color,
+            spot_shadow_color: n.spot_shadow_color,
             local_bounds: RectF::new(
                 0.0,
                 0.0,
@@ -2229,27 +2235,44 @@ impl RenderContext {
     }
 
     fn draw_node_shadow(&mut self, surface: Handle, props: &NodeProps) -> RenderResult<()> {
-        // Approximate Android's ambient+spot shadow: a blurred outline offset
-        // by elevation. Labelled approximate in the fidelity list.
-        let paint = Paint {
+        // Two-lobe approximation of Android's `SkShadowUtils` shadow: a broad,
+        // soft **ambient** lobe that hugs the outline and a tighter, stronger
+        // **spot** lobe displaced down by the elevation. Both are drawn as the
+        // node outline blurred with the Skia radius->sigma conversion (the
+        // mask-filter path in `canvas.rs`). Android derives the exact lobe
+        // sigmas and light-direction offset from the light position; ACOS uses
+        // the vertical-light default (`lightX=0, lightY=-1`) that Material
+        // elevations assume. Labelled approximate in the fidelity list.
+        let e = props.elevation;
+        let path = props
+            .outline
+            .as_path()
+            .unwrap_or_else(|| Path::from_rect(props.local_bounds));
+        let ambient = Paint {
             color: props.ambient_shadow_color,
             style: PaintStyle::Fill,
             anti_alias: true,
             mask_filter: Some(MaskFilterSpec::Blur {
-                radius: props.elevation.max(1.0),
+                radius: (e * 0.6).max(1.0),
                 style: BlurStyle::Normal,
             }),
             ..Default::default()
         };
-        let mut path = props
-            .outline
-            .as_path()
-            .unwrap_or_else(|| Path::from_rect(props.local_bounds));
+        let spot = Paint {
+            color: props.spot_shadow_color,
+            style: PaintStyle::Fill,
+            anti_alias: true,
+            mask_filter: Some(MaskFilterSpec::Blur {
+                radius: e.max(1.0),
+                style: BlurStyle::Normal,
+            }),
+            ..Default::default()
+        };
         self.canvas_save(surface)?;
-        self.canvas_translate(surface, 0.0, props.elevation * 0.5)?;
-        self.draw_path_with_paint(surface, &path, &paint)?;
+        self.draw_path_with_paint(surface, &path, &ambient)?;
+        self.canvas_translate(surface, 0.0, e)?;
+        self.draw_path_with_paint(surface, &path, &spot)?;
         self.canvas_restore(surface)?;
-        let _ = &mut path;
         Ok(())
     }
 

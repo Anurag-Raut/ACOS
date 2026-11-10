@@ -208,6 +208,13 @@ pub enum ShaderSpecJson {
         #[serde(default)]
         positions: Option<Vec<f32>>,
     },
+    /// `android.graphics.BitmapShader` — tiles a bitmap in x and y with the
+    /// given tile mode (W70-A). `path` is resolved relative to the scene file.
+    Bitmap {
+        path: String,
+        #[serde(default)]
+        tile: Option<String>,
+    },
 }
 
 /// Result of rendering a scene.
@@ -496,6 +503,14 @@ fn apply_shader(ctx: &mut RenderContext, paint: Handle, shader: &ShaderSpecJson)
             let colors = parse_colors(colors)?;
             ctx.paint_set_shader_sweep(paint, center[0], center[1], colors, positions.clone(), None)
         }
+        ShaderSpecJson::Bitmap { path, tile } => {
+            let bytes = std::fs::read(path).map_err(|e| RenderError::Io {
+                msg: format!("reading shader bitmap {path}: {e}"),
+            })?;
+            let bitmap = ctx.bitmap_create_from_bytes(&bytes)?;
+            let tile = parse_tile(tile.as_deref());
+            ctx.paint_set_shader_bitmap(paint, bitmap, tile, tile, None)
+        }
     }
 }
 
@@ -561,6 +576,26 @@ pub fn parse_color(s: &str) -> Option<u32> {
 fn resolve_assets(node: &mut SceneNode, dir: &Path) {
     for op in node.ops.iter_mut() {
         if let OpSpec::Bitmap { path, .. } = op {
+            let p = PathBuf::from(&*path);
+            if p.is_relative() {
+                *path = dir.join(p).to_string_lossy().to_string();
+            }
+        }
+        let paint = match op {
+            OpSpec::Rect { paint, .. }
+            | OpSpec::RoundRect { paint, .. }
+            | OpSpec::Oval { paint, .. }
+            | OpSpec::Circle { paint, .. }
+            | OpSpec::Line { paint, .. }
+            | OpSpec::Text { paint, .. }
+            | OpSpec::Path { paint, .. } => paint.as_mut(),
+            OpSpec::Color { .. } | OpSpec::Bitmap { .. } => None,
+        };
+        if let Some(PaintSpec {
+            shader: Some(ShaderSpecJson::Bitmap { path, .. }),
+            ..
+        }) = paint
+        {
             let p = PathBuf::from(&*path);
             if p.is_relative() {
                 *path = dir.join(p).to_string_lossy().to_string();

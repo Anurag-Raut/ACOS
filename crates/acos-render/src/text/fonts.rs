@@ -53,6 +53,10 @@ pub struct Family {
     pub fonts: Vec<FontEntry>,
     /// Loaded lazily for coverage checks.
     pub coverage: std::sync::OnceLock<CoverageSet>,
+    /// Android's `fonts.xml` `ignore="true"`: the family is loaded (its files
+    /// are available for direct use, e.g. a colour/bitmap strike) but is never
+    /// selected by name or as a fallback.
+    pub ignored: bool,
 }
 
 /// A resolved font reference (family entry + coordinates).
@@ -167,6 +171,10 @@ impl FontCollection {
         for node in root.children().filter(|n| n.is_element()) {
             match node.tag_name().name() {
                 "family" => {
+                    // Android's `ignore="true"` marks a family that the
+                    // platform loads but never selects (e.g. the CBDT
+                    // `NotoColorEmojiLegacy.ttf` when a COLR font is present).
+                    let ignored = node.attribute("ignore") == Some("true");
                     let name = node.attribute("name").map(|s| s.to_string());
                     let lang = node.attribute("lang").map(|s| s.to_string());
                     let fallback_for = node.attribute("fallbackFor").map(|s| s.to_string());
@@ -218,6 +226,7 @@ impl FontCollection {
                             fallback_for,
                             fonts,
                             coverage: std::sync::OnceLock::new(),
+                            ignored,
                         });
                     }
                 }
@@ -232,8 +241,9 @@ impl FontCollection {
         }
         let default_family = families
             .iter()
-            .position(|f| f.name.as_deref() == Some("sans-serif"))
-            .or_else(|| families.iter().position(|f| f.name.is_some()))
+            .position(|f| !f.ignored && f.name.as_deref() == Some("sans-serif"))
+            .or_else(|| families.iter().position(|f| !f.ignored && f.name.is_some()))
+            .or_else(|| families.iter().position(|f| !f.ignored))
             .unwrap_or(0);
         Ok(FontCollection {
             families,
@@ -304,6 +314,7 @@ impl FontCollection {
                 fallback_for: None,
                 fonts,
                 coverage: std::sync::OnceLock::new(),
+                ignored: false,
             });
         }
         Some(FontCollection {
@@ -358,7 +369,7 @@ impl FontCollection {
         }
         self.families
             .iter()
-            .position(|f| f.name.as_deref() == Some(name))
+            .position(|f| !f.ignored && f.name.as_deref() == Some(name))
             .or(Some(self.default_family))
     }
 
@@ -374,7 +385,7 @@ impl FontCollection {
             chain.push(self.default_family);
         }
         for i in 0..self.families.len() {
-            if !chain.contains(&i) {
+            if !chain.contains(&i) && !self.families[i].ignored {
                 chain.push(i);
             }
         }
