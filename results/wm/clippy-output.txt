@@ -1,2 +1,2 @@
-    Checking acos-wm v0.1.0 (/home/Qui/Projects/acos/crates/acos-wm)
+    Blocking waiting for file lock on build directory
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s

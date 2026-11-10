@@ -14,9 +14,10 @@ SurfaceFlinger, input dispatcher, IME service and Choreographer vsync source
 
 ```text
 $ cargo test -p acos-wm
-  39 (lib) + 10 (codec_golden) + 4 (compositor) + 2 (fuzz)
+  44 (lib) + 10 (codec_golden) + 4 (compositor) + 2 (fuzz)
 +  6 (input) + 2 (multi_session) + 3 (replay) + 4 (vsync)
-= 70 tests, 0 failed
+= 75 tests, 0 failed
+  (the 44 lib tests include `damage_matches_full`, a 600-case proptest)
 
 $ cargo clippy -p acos-wm --all-targets -- -D warnings
 => clean
@@ -25,13 +26,67 @@ $ cargo run -p acos-wm --example replay_report
 rows=109 ok=43 error=0 not-owned=57 transport=9
 
 $ cargo bench -p acos-wm
-| operation | p50 (ns) | p95 (ns) | mean (ns) |
-|---|---:|---:|---:|
-| inject → deliver → ack (ns) | 430.0 | 872.0 | 522.7 |
-| relayout compute + reply (ns) | 861.0 | 1252.0 | 831.2 |
-| compositor present 1080×2400 (ns) | 50122067.0 | 50477220.0 | 50133653.7 |
-idle 5 s: timer arms 0, /proc/self/stat utime delta 0, stime delta 0 (see `bench.txt`)
+| operation | p50 (ns) | p95 (ns) |
+|---|---:|---:|
+| legacy compose+to_pixmap, 1 opaque layer | 49 252 303 | 50 168 508 |
+| compose, 1 opaque layer (full damage) | 215 829 | 243 101 |
+| present, 1 opaque layer (full damage) | 752 024 | 1 014 100 |
+| compose, 1 opaque layer (200×100 damage) | 1 493 | 1 542 |
+| present, 1 opaque layer (200×100 damage) | 385 319 | 435 745 |
+| compose, app + translucent IME (full) | 384 779 | 420 997 |
+| present, app + translucent IME (full) | 935 781 | 1 011 305 |
+| compose, app + IME (200×100 damage) | 1 553 | 1 603 |
+| present, app + IME (200×100 damage) | 381 081 | 485 539 |
+| present, no change (skipped) | 20 | 20 |
+idle 5 s: timer arms 0 (see `bench.txt`)
 ```
+
+## Compositor performance (follow-up)
+
+The compositor was the 50 ms hot path: `compose` allocated a fresh full-frame
+`Bitmap`, erased it, blitted every layer pixel-by-pixel through
+`get_pixel`/`set_pixel` float blending, then copied the whole thing again in
+`Bitmap::to_pixmap`. It now:
+
+- renders directly into the surface's **persistent** pixmap (no per-present
+  allocation, no `to_pixmap` copy);
+- tracks a **damage rect** per mutation (old ∪ new coverage) and re-composites
+  only that region — the full frame only on first present / `invalidate`;
+- has an **opaque row-memcpy** fast path and an integer premultiplied
+  `source-over` path, both row-wise over raw bytes with the damage clip applied;
+- **skips** invisible/zero-alpha layers and layers fully covered by an opaque
+  layer above them.
+
+The damage path is proven **pixel-exact** against a naive full composite by the
+600-case `damage_matches_full` proptest and the `damage_tracking_keeps_*`,
+`removed_layer_area_is_repainted` and `negative_position_and_crop_stay_in_bounds`
+tests (overlapping translucent layers, crop, alpha, negative positions,
+create/remove).
+
+| target (release, p50) | before | after | verdict |
+|---|---:|---:|---|
+| 1 opaque full-screen layer, first present | 49.3 ms | **0.75 ms** | ≤ 3 ms ✅ |
+| 1 opaque layer, repeat present, 200×100 damage | 49.3 ms | 0.385 ms (compose **1.5 µs**) | ≤ 0.2 ms ⚠️ |
+| no-change present | ~0 | **20 ns** | ~0 ✅ |
+| app + translucent IME, full present | 51.5 ms | **0.94 ms** | ≤ 4 ms ✅ |
+| app + IME, repeat present, 200×100 damage | 51.5 ms | **0.381 ms** (compose **1.6 µs**) | ≤ 0.5 ms ✅ |
+
+The one miss is not the compositor: the 0.385 ms repeat-present is almost
+entirely `acos_render::Surface::present`, which re-hashes the **whole**
+1080×2400 buffer (`xxh3_128`) and clones it (`Arc::new(pixmap.clone())`) on
+every frame. The compositor's own damage-limited work is **1.5 µs** (a 2000×
+reduction from the 49 ms legacy path). The exact `acos-render` request is in
+gap 10 below.
+
+After the fix the full end-to-end composite (0.75 ms) is well below
+`acos-render`'s own ~4–5 ms hello-views render, so the compositor no longer
+moves the fresh-screenshot metric.
+
+One deliberate per-commit cost: `set_buffer` scans an alpha-declared buffer once
+to learn whether it is fully opaque (`detect_opaque`), which is what enables the
+memcpy fast path. It short-circuits on the first transparent pixel and costs
+~0.54 ms for a fully-opaque 1080×2400 Rgba8888 frame (bench rows *commit … no-alpha
+declared* vs *… Rgba8888*); a transaction `opaque` hint would remove it.
 
 ## Design
 
@@ -45,7 +100,7 @@ display.rs    the real 1080x2400@420 geometry + the ten reference InsetsSources
 codec.rs      typed Parcel codecs whose field order is the DEX writeToParcel order
 wms.rs        IWindowSession/IWindowManager window state machine + frame/insets math
 callbacks.rs  the outgoing IWindow callback queue (resized, insetsControlChanged, …)
-compositor.rs SurfaceControl layer tree -> acos_render::Surface::present()
+compositor.rs SurfaceControl layer tree -> damage-tracked compose -> Surface::present()
 input.rs      InputDispatcher: hit-testing, injection, finishInputEvent acks, ANR
 ime.rs        IInputMethodManager + IRemoteInputConnection + InputConnection trait
 vsync.rs      DisplayEventReceiver/Choreographer generator (boot-anchored 60 Hz grid)
@@ -58,6 +113,14 @@ client has an outstanding `scheduleVsync`; the input dispatcher arms an ANR
 deadline only while an event is unacked. Every arm/disarm goes through the
 `Clock` seam, so the counting test (`clock.arm_count() == 0`) and the 5-second
 `/proc/self/stat` bench both prove the resting state is timer-free.
+
+**Damage-tracked compositing.** The compositor owns one persistent output
+buffer (the surface pixmap) and writes into it in place. Each layer mutation
+records the union of the layer's old and new display-space coverage in a
+pending damage rect; `present` re-composites only that region from the
+background plus every layer clipped to it. Because compositing is per-pixel
+local, this is provably pixel-identical to a full composite — the exact property
+`damage_matches_full` (600 cases) checks after every random mutation.
 
 ## Public API (native layer + agent)
 
@@ -193,17 +256,45 @@ marker).
    the typed transaction, but the V1 software composite rasterises the layer
    axis-aligned (identity); rotation/crop state is recorded for the native layer
    and the frame-timeline.
-10. The **VM-dependent halves** of T-37/T-38 (delivering the callback queue
+10. **`acos-render` API request — damage-aware commit.** The repeat-present
+   target (≤ 0.2 ms; § Compositor performance) is blocked by
+   `Surface::present`, which re-hashes the full 1080×2400 buffer and clones it
+   on every frame. The compositor's own damage-limited compose is 1.5 µs. The
+   requested addition (do not edit `acos-render` here; using the current API as
+   the fallback) is:
+
+   ```rust
+   // acos_render::Surface
+   pub struct Rect { pub x: u32, pub y: u32, pub w: u32, pub h: u32 }
+
+   /// Present after the caller has written a subset of the working buffer.
+   /// - `damage == None` means "unknown / whole frame".
+   /// - `content_hash` is over the full buffer (may be maintained incrementally
+   ///   from the previous hash and `damage`).
+   /// - The previous frame's pixels must stay immutable without a full clone:
+   ///   implement internal double buffering (present swaps front/back) or an
+   ///   `Arc<Pixmap>` COW, instead of `Arc::new(self.pixmap.clone())`.
+   /// - `frame_seq`, `cause_id`, `class`, timestamps keep their current meaning.
+   pub fn present_damage(&mut self, cause_id: i64, damage: Option<Rect>,
+                         unsupported_ops: Vec<String>) -> u64;
+   ```
+
+   A companion `pub fn pixmap_mut(&mut self) -> &mut Pixmap` would make the
+   damage contract explicit; `Surface::pixmap` is already public, so the
+   compositor writes directly today.
+11. The **VM-dependent halves** of T-37/T-38 (delivering the callback queue
    through the real looper, and the framework's own `IRemoteInputConnection`
    proxy) are out of scope: this crate produces the typed queue and the
    `InputConnection` trait the native layer binds to.
 
 ## Tests
 
-`cargo test -p acos-wm` (70 tests):
+`cargo test -p acos-wm` (75 tests):
 
-- `lib` — codec round-trips, wms frame/insets golden values, compositor damage,
-  input routing/ack/ANR, vsync grid, IME typing, transport framing, replay.
+- `lib` — codec round-trips, wms frame/insets golden values, compositor
+  damage-tracking (`damage_matches_full` 600-case proptest +
+  move/remove/negative-crop exactness), input routing/ack/ANR, vsync grid, IME
+  typing, transport framing, replay.
 - `codec_golden.rs` — explicit golden bytes (`Rect`, `Point`, `Insets`,
   `ClientWindowFrames`) + round-trip stability for all parcelables + the
   `parcelable_layouts.txt` coverage check.

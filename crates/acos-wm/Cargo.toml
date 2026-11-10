@@ -15,6 +15,7 @@ acos-parcel = { path = "../acos-parcel" }
 acos-aidl = { path = "../acos-aidl" }
 acos-protocol = { path = "../acos-protocol" }
 acos-render = { path = "../acos-render" }
+bytemuck = "1"
 rustix = { version = "1.1", features = ["fs", "net", "event", "time"] }
 thiserror = { workspace = true }
 
