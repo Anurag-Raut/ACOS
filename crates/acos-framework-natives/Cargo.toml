@@ -1,0 +1,20 @@
+[package]
+name = "acos-framework-natives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "VM-independent Rust engine behind the Android framework `android.content.res` natives (AssetManager, ApkAssets, StringBlock, XmlBlock, themes, styles)."
+
+[dependencies]
+memmap2 = "0.9"
+thiserror = { workspace = true }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+acos-apk = { path = "../acos-apk" }
+serde_json = { workspace = true }
+
+[[bench]]
+name = "res_bench"
+harness = false

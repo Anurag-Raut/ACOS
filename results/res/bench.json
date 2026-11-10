@@ -1,0 +1,8 @@
+{
+  "framework_res_load": {"p50_ns": 392853, "p95_ns": 897808},
+  "getResourceValue_uncached": {"p50_ns": 48723, "p95_ns": 50586},
+  "getResourceValue_cached": {"p50_ns": 210, "p95_ns": 230},
+  "applyStyle_textview": {"p50_ns": 762, "p95_ns": 802},
+  "xmlblock_parse_screen_simple": {"p50_ns": 531, "p95_ns": 561},
+  "xmlblock_walk_screen_simple": {"p50_ns": 40, "p95_ns": 50}
+}
