@@ -26,6 +26,7 @@ use acos_protocol::{
 use acos_runtime::session::{
     AgentSession, LaunchReport, SessionError, SessionOptions, StageStatus,
 };
+use acos_runtime::view_tree::{ViewNode, ViewTree};
 use serde_json::{json, Value};
 
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
@@ -186,6 +187,51 @@ impl SessionBackend {
         })
     }
 
+    fn call_observe_tree(
+        &self,
+        request_id: &str,
+        args: &Value,
+        _ctx: &CallContext,
+    ) -> Envelope {
+        let id = session_id(args);
+        let max_nodes = args
+            .get("max_nodes")
+            .and_then(Value::as_u64)
+            .unwrap_or(2000) as usize;
+        self.with_session(&id, |session| {
+            let status = session.status().ok();
+            match session.observe_tree(max_nodes) {
+                Ok(tree) => {
+                    let package = status
+                        .as_ref()
+                        .and_then(|s| s.package.clone())
+                        .unwrap_or_default();
+                    let stage = status
+                        .as_ref()
+                        .map(|s| s.stage_reached)
+                        .unwrap_or("none");
+                    Envelope::pass(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::NativeRuntime,
+                        Metrics::wall_ms(0),
+                    )
+                    .with_session_id(id.clone())
+                    .with_value_result(json!({
+                        "session_id": id,
+                        "package": package,
+                        "stage_reached": stage,
+                        "windows": tree.windows,
+                        "truncated": tree.truncated,
+                        "tree": view_tree_json(&tree),
+                    }))
+                    .with_capabilities(["ui.tree"])
+                }
+                Err(err) => session_error_envelope(request_id, Some(&id), &err),
+            }
+        })
+    }
+
     fn call_action(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
         let action = args.get("action").cloned().unwrap_or(Value::Null);
@@ -286,6 +332,7 @@ impl SessionBackend {
         let request_id = request_id(args);
         match name {
             "acos_launch" => Some(self.call_run(&request_id, args, ctx)),
+            "acos_observe_tree" => Some(self.call_observe_tree(&request_id, args, ctx)),
             "acos_observe" => Some(self.call_observe(&request_id, args, ctx)),
             "acos_tap" => Some(self.call_action(
                 &request_id,
@@ -555,6 +602,34 @@ fn session_error_envelope(
         envelope = envelope.with_session_id(id.to_string());
     }
     envelope
+}
+
+/// Serialize a live `ViewTree` into the `observe_tree` result object.
+fn view_tree_json(tree: &ViewTree) -> Value {
+    fn walk(node: &ViewNode) -> Value {
+        json!({
+            "id": node.id,
+            "class": node.class,
+            "resource_id": node.resource_id,
+            "text": node.text,
+            "content_desc": node.content_desc,
+            "bounds": node.bounds,
+            "visible": node.visible,
+            "enabled": node.enabled,
+            "focused": node.focused,
+            "clickable": node.clickable,
+            "scrollable": node.scrollable,
+            "checked": node.checked,
+            "package": node.package,
+            "children": node.children.iter().map(walk).collect::<Vec<_>>(),
+        })
+    }
+    json!({
+        "windows": tree.windows,
+        "truncated": tree.truncated,
+        "max_nodes": tree.max_nodes,
+        "nodes": tree.nodes.iter().map(walk).collect::<Vec<_>>(),
+    })
 }
 
 fn invalid_argument(request_id: &str, field: &str, reason: &str) -> Envelope {

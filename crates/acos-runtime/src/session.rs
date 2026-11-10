@@ -40,6 +40,7 @@ use acos_vm::vm::{CoreLib, VmOptions};
 use crate::frame_handoff::{install_frame_handoff, FrameStore};
 use crate::input_java;
 use crate::lifecycle::LifecycleReport;
+use crate::view_tree::ViewTree;
 use crate::Runtime;
 
 /// The launch stage ladder, in execution order.
@@ -244,6 +245,10 @@ enum Cmd {
         screenshot: Option<PathBuf>,
         reply: Sender<Result<ObserveReport, SessionError>>,
     },
+    ObserveTree {
+        max_nodes: usize,
+        reply: Sender<Result<ViewTree, SessionError>>,
+    },
     Tap {
         x: f32,
         y: f32,
@@ -399,6 +404,14 @@ impl AgentSession {
         self.round_trip(|reply| Cmd::Observe { screenshot, reply })
     }
 
+    /// Walk the live framework `View` hierarchy of the session's VM.
+    ///
+    /// Returns `UNSUPPORTED_BACKEND` with `details.reason = "not_ready"` when
+    /// the app has not added a window, so an empty tree is never a pass.
+    pub fn observe_tree(&self, max_nodes: usize) -> Result<ViewTree, SessionError> {
+        self.round_trip(|reply| Cmd::ObserveTree { max_nodes, reply })
+    }
+
     /// Tap at display coordinates.
     pub fn tap(&self, x: f32, y: f32) -> Result<InputReport, SessionError> {
         self.round_trip(|reply| Cmd::Tap { x, y, reply })
@@ -480,6 +493,9 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
             }
             Cmd::Observe { screenshot, reply } => {
                 let _ = reply.send(do_observe(&state, screenshot.as_deref()));
+            }
+            Cmd::ObserveTree { max_nodes, reply } => {
+                let _ = reply.send(do_observe_tree(&mut state, max_nodes));
             }
             Cmd::Tap { x, y, reply } => {
                 let _ = reply.send(finish_input(
@@ -587,8 +603,7 @@ fn finish_input(
 fn do_observe(
     state: &WorkerState,
     screenshot: Option<&Path>,
-) -> Result<ObserveReport, SessionError> {
-    let published = state.store.published_count();
+) -> Result<ObserveReport, SessionError> {    let published = state.store.published_count();
     let Some(frame) = state.store.latest() else {
         return Err(SessionError::new(
             "UNSUPPORTED_BACKEND",
@@ -642,6 +657,35 @@ fn do_observe(
 /// Implemented here (instead of dragging `acos-render`'s `tiny_skia::Pixmap`
 /// across the public API) so `observe --screenshot` is honest: the bytes are the
 /// pixels of the frame that was actually published.
+/// Walk the live `View` hierarchy of the session VM, or report why not.
+fn do_observe_tree(
+    state: &mut WorkerState,
+    max_nodes: usize,
+) -> Result<ViewTree, SessionError> {
+    let stage = state.stage_reached;
+    let Some(runtime) = state.runtime.as_mut() else {
+        return Err(SessionError::new(
+            "UNSUPPORTED_BACKEND",
+            format!(
+                "no View hierarchy to walk: the runtime is not booted (stage reached: {stage})"
+            ),
+        )
+        .with_details(vec![
+            ("reason", "not_ready".to_string()),
+            ("capability", "ui.tree".to_string()),
+            ("stage_reached", stage.to_string()),
+        ]));
+    };
+    match crate::view_tree::walk(runtime.vm_mut(), max_nodes) {
+        Ok(tree) => Ok(tree),
+        Err(e) => Err(SessionError::new(e.code(), e.message().to_string()).with_details(vec![
+            ("reason", e.reason().to_string()),
+            ("capability", "ui.tree".to_string()),
+            ("stage_reached", stage.to_string()),
+        ])),
+    }
+}
+
 fn encode_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
     if width == 0 || height == 0 {
         return Err("zero-sized frame".to_string());

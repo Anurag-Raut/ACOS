@@ -7,6 +7,8 @@ mod bench;
 mod bench_pool;
 mod bench_sessions;
 mod launch;
+mod observe_tree;
+mod parity;
 mod session;
 mod verify;
 
@@ -55,6 +57,8 @@ enum Command {
     },
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
+    /// Compare a real device's UI capture (or a recorded capture) with ACOS.
+    Parity(parity::ParityArgs),
     /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
     Bench(bench::BenchArgs),
 }
@@ -144,6 +148,7 @@ fn main() -> ExitCode {
         Command::Logs(args) => session::logs(args),
         Command::Session { command } => session::session(command),
         Command::Verify(args) => verify::run(args),
+        Command::Parity(args) => parity::run(args),
         Command::Bench(args) => bench::run(args),
     }
 }

@@ -130,21 +130,40 @@ pub fn observe(args: ObserveArgs) -> ExitCode {
         empty_status()
     });
 
+    // `--tree`/`--text` walk the live View hierarchy instead of the frame
+    // store: a tree exists as soon as the app has built one, even before a
+    // frame is published. An empty tree is never returned as a pass.
+    if args.tree || args.text {
+        let envelope = match session.observe_tree(2000) {
+            Ok(tree) => {
+                let mut result = json!({
+                    "session_id": args.session,
+                    "package": status.package.clone().unwrap_or_default(),
+                    "stage_reached": status.stage_reached,
+                    "windows": tree.windows,
+                    "truncated": tree.truncated,
+                    "tree": crate::observe_tree::tree_to_json(&tree),
+                });
+                if args.text {
+                    result["text"] = json!(crate::observe_tree::tree_text(&tree));
+                }
+                Envelope::pass(
+                    &request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    Metrics::wall_ms(0),
+                )
+                .with_session_id(args.session.clone())
+                .with_value_result(result)
+                .with_capabilities(["ui.tree"])
+            }
+            Err(err) => session_error_envelope(&request_id, &err),
+        };
+        return emit(&envelope, args.json);
+    }
+
     match session.observe(args.screenshot.clone()) {
         Ok(report) => {
-            if args.tree || args.text {
-                let envelope = fail(
-                    &request_id,
-                    ErrorCode::UnsupportedBackend,
-                    "UI tree extraction is not implemented in this build; refuse to return an empty tree",
-                    json!({
-                        "reason": "not_ready",
-                        "capability": "ui.tree",
-                        "stage_reached": report.stage_reached,
-                    }),
-                );
-                return emit(&envelope, args.json);
-            }
             let frame = report.frame.as_ref().map(|frame| {
                 json!({
                     "frame_seq": frame.frame_id,

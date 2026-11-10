@@ -44,6 +44,7 @@ pub mod session_pool;
 pub mod settings_java;
 pub mod transport;
 pub mod user_java;
+pub mod view_tree;
 pub mod wms_java;
 
 use std::cell::RefCell;
@@ -65,6 +66,7 @@ pub const FIXTURE_PID: i32 = 1000;
 pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
 pub use lifecycle::{LifecycleError, LifecycleReport};
+pub use view_tree::{TreeError, ViewNode, ViewTree};
 
 /// A booted ACOS runtime: VM + service host + Binder transport.
 pub struct Runtime {

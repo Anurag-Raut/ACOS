@@ -49,6 +49,7 @@ pub const HELP_TOOL: &str = "acos_help";
 /// [`crate::session_backend::SessionBackend`], not by the `acos` subprocess).
 pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_launch",
+    "acos_observe_tree",
     "acos_tap",
     "acos_key",
     "acos_swipe",
@@ -279,6 +280,14 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              otherwise the first blocked rung carries the structured blocker.",
             with_base(json!({"apk": {"type": "string"}, "timeout_ms": {"type": "integer"}})),
         ),
+        "acos_observe_tree" => (
+            "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
+             ViewRootImpl -> ViewGroup) and return the structured node tree (class, bounds, text, \
+             resource_id, clickable/enabled/focused, children). No screenshot is taken. Before the \
+             app adds a window this returns `UNSUPPORTED_BACKEND` with `details.reason=not_ready`, \
+             never an empty tree.",
+            with_base(json!({"max_nodes": {"type": "integer"}})),
+        ),
         "acos_tap" => (
             "Tap a point (`x`,`y`) or a text label in the held session. No window returns \
              `ELEMENT_NOT_FOUND` with `details.kind=NoWindowAtPoint`/`NoUiTree`.",
@@ -395,8 +404,8 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 6 session tools.
-        assert_eq!(infos.len(), 21);
+        // 13 protocol tools + acos_capabilities + acos_help + 7 session tools.
+        assert_eq!(infos.len(), 22);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(names.contains(descriptor.name.as_str()), "{}", descriptor.name);

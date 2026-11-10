@@ -1350,9 +1350,18 @@ thing that makes `observe` a pass:
   `meaningful`), `result.published_frames` and, with `--screenshot`, the
   written PNG path and byte count. The pixels come from the frame the guest
   actually produced; the CLI does not paint a placeholder.
-* `--tree`/`--text` return `UNSUPPORTED_BACKEND` (`ui.tree`) **even when a
-  frame exists**, because the accessibility tree extractor is not implemented
-  yet. An empty tree is never returned as a pass.
+* `--tree`/`--text` walk the live framework `View` hierarchy of the session VM
+  (`WindowManagerGlobal` → `ViewRootImpl`/`mViews` → `ViewGroup.getChildAt`) and
+  return `result.tree` with `nodes` (`id`, `class`, `resource_id`, `text`,
+  `content_desc`, `bounds`, `visible`, `enabled`, `focused`, `clickable`,
+  `scrollable`, `checked`, `package`, `children`), `result.windows` and
+  `result.truncated`; `--text` adds the flat `result.text` rendering. No
+  screenshot is required or taken. Bounds are the framework's own
+  `getLocationOnScreen` result, i.e. the same coordinates `uiautomator` reports.
+  Before the app adds a root window this is `status: unsupported`,
+  `error.code: UNSUPPORTED_BACKEND`, `error.details.reason: "not_ready"`
+  (`no_view_hierarchy_api` when the boot classpath lacks the root list), so an
+  empty tree is never a pass. MCP: `acos_observe_tree { session_id, max_nodes }`.
 
 `--apk APK` seeds the session with a real `launch` first (the same ladder as
 18.1) so `observe` describes the state the launch reached; without `--apk` the
@@ -1405,6 +1414,7 @@ tools hold their state across `tools/call` requests:
 |---|---|---|
 | `acos_run` / `acos_launch` | `run` | launch the APK, return the ladder |
 | `acos_observe` | `observe` | latest frame or structured `not_ready` |
+| `acos_observe_tree` | `observe --tree` | live `View` hierarchy or `not_ready` |
 | `acos_action` | `action` | `{kind: tap|swipe|key|back}` |
 | `acos_tap` | — | `{x,y}` or `{text}` |
 | `acos_key` | — | `{code}` |
@@ -1419,5 +1429,49 @@ Sessions are created lazily: an `observe`/`status`/`logs`/`action` on an unknown
 `not_ready` rather than `SESSION_NOT_FOUND`), and `destroy` removes it. A
 server wired to the bare `CliBackend` answers these six server-local tools with
 `UNSUPPORTED_BACKEND` rather than a false pass. `acos_capabilities` and
-`acos_help` remain server tools; `tools/list` now returns 21 descriptors
-(13 protocol commands + 2 meta + 6 session tools).
+`acos_help` remain server tools; `tools/list` now returns 22 descriptors
+(13 protocol commands + 2 meta + 7 session tools).
+
+---
+
+## 19. `acos parity` — device/ACOS UI-tree parity
+
+`acos parity` compares a normalized UI tree with ACOS's tree. There is no
+silent fallback and no empty pass: a missing device or an unavailable view
+hierarchy is a structured non-pass.
+
+### 19.1 Live: `acos parity --device <adb serial> <apk> [--output DIR] [--keep]`
+
+1. Refuses any APK whose package does not start with `dev.acos.fixtures.`
+   before installing it. Only `adb install`, `am start`, `uiautomator dump`,
+   `screencap` and `adb uninstall` of that package are issued; no device
+   setting is read or written.
+2. Captures the reference as `uiautomator dump` XML plus a screenshot.
+3. Boots ACOS in-process, launches the APK, walks the live `View` hierarchy and
+   captures the ACOS tree.
+4. Emits one JSON object: `{ok, mode: "physical-device", fidelity:
+   "physical-device", matches, differences[], device_nodes, acos_nodes,
+   identical, options, device, package, output}`.
+
+If the phone is missing the result is `ok: false`, `code: NEEDS_REAL_DEVICE`,
+exit 1. If ACOS cannot reach a root view the result is `ok: false` with the
+launch booleans and `reason: "not_ready"` — a blocker on the engine.
+
+### 19.2 Recorded: `acos parity --recorded <app> [--bounds-scale R] [--bounds-tolerance PX] [--acos-tree FILE]`
+
+Runs the same comparator with no phone: the device side is
+`fixtures/reference-device/<app>/snapshot-*.json`, the ACOS side is either a
+stored `observe --tree` JSON (`--acos-tree`) or the checked-in API-34 ART
+reference `ui_initial.xml`. `tools/parity/recorded.sh` runs every fixture app.
+
+### 19.3 Comparator
+
+Nodes match by `resource_id`, else `text|class`, else `class`. Matched nodes
+compare `text` (trimmed), `class`, and `bounds` after `--bounds-scale` with a
+per-edge `--bounds-tolerance`; `--strict-state` adds
+`enabled`/`focused`/`clickable`, `--ignore-bounds` disables bounds. Difference
+kinds are `missing_in_acos`, `extra_in_acos`, `text_differs`, `class_differs`,
+`bounds_differ` (labelled `bounds_differ_density` when scaling was applied) and
+`state_differs`.
+
+See `tools/parity/README.md` and `fixtures/reference-device/COMPARISON.md`.
