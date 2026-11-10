@@ -263,16 +263,33 @@ Two session-specific hints worth memorizing:
 
 ---
 
-## 6. Known state (as of 2026-11-11, HEAD `1041c21`)
+## 6. Known state (as of 2026-11-11, HEAD `2c682c7`)
 
 `tools/build-dogfood-apps.sh` builds the framework-only fixtures. On this HEAD:
 
-* `counter.apk` reaches `on_resume` for real; the lifecycle events come from the
-  app's own bytecode. `acos observe --tree` then returns a live `View`
-  hierarchy, and the daemon session survives across CLI processes.
-* `first_frame` is still `UNSUPPORTED_BACKEND` (`details.capability =
-  "ui.frame"`, `details.reason = "not_ready"`): no frame is published, so
-  `acos observe` (frame) is unsupported and a `tap` is acked but does not land.
+* **`counter.apk` reaches `first_frame` for real.** `acos launch
+  fixtures/build/apps/counter.apk --json` returns `status: pass` /
+  `reached_stage: first_frame`; a frame from the real `ThreadedRenderer.draw`
+  lands in the `FrameStore` (W133-A), `acos observe --apk … --tree` returns the
+  live `View` hierarchy (`count=0`, `Increment`, `Reset`), and
+  `acos observe --apk … --screenshot out.png` writes the frame.
+* **⚠ Boot-image restore is broken for launch.** The first (cold) launch
+  reaches `first_frame` (~0.9 s), but with the on-disk cache already populated
+  the warm launch fails at `activity_on_create`
+  (`java.lang.ExceptionInInitializerError` → ICU `DatPackageReader` index error)
+  **9/10 times**. Force the cold path with `ACOS_NO_BOOT_CACHE=1` (5/5 there).
+  This is an open runtime bug, not a tooling/tree problem; do not quote
+  "counter launches" without it.
+* **Tap is acked but does not land.** `acos tap --text Increment --json` returns
+  `accepted: true`, `state_changed: false`; the count stays `0`. Input delivery
+  is pending the W144-A leash fix.
+* **`hello-views.apk` reaches `on_resume`** (W138-A); its frame/correctness is
+  not yet scored. `counter` is the app that reaches `first_frame`.
+* `acos observe --tree` on a kept daemon session returns the live tree in
+  ~40 ms; with no session it still answers `UNSUPPORTED_BACKEND not_ready`.
+* Flutter: the separate engine path reaches a first frame and a tap on
+  `FlutterSession` (masked SSIM 0.9987); `acos launch --flutter` is wired but
+  the confined-child hold is partial (W142-A). See §7.
 * A themed activity that inflates `ListView` or `EditText` stops at
   `activity_on_create`. The message is a framework `InflateException`; the
   `details.root_cause` names the real blocker:

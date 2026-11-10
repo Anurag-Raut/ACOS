@@ -70,4 +70,12 @@ for spec in "${FIXTURE_TESTS[@]}"; do
     cargo test -p "$pkg" --test "$target" "${EXTRA[@]}"
 done
 
+# STATUS.md is a doc claim, not a test: warn (never fail the suite) when its
+# recorded HEAD has drifted from git HEAD. See tools/status-check.sh.
+if [ -x tools/status-check.sh ]; then
+    if ! tools/status-check.sh; then
+        echo "verify-all: WARNING: STATUS.md is stale (see status-check above)" >&2
+    fi
+fi
+
 echo "verify-all: OK (fixtures present, no test skipped)"

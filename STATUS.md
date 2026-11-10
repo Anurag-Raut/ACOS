@@ -1,27 +1,31 @@
 # ACOS — Status
 
-**As of 2026-11-11, HEAD `addd4e2`** ("Typed-text path …, on-disk boot image
-cache (warm 94→66 ms), dogfood wave 3"). `git log` is authoritative. This
-snapshot was rewritten after the V1 benchmark at `addd4e2`; **`BENCHMARKS.md` §9
-is the authoritative measured table** and `results/bench/v1-2026-11-11-0214.json`
-is its raw artifact. `TASKS.md` is the plan; `docs/V1.md` is the V1 definition;
+**As of 2026-11-11, HEAD `00950ce`** (W144-A; `main` advanced through
+`f1fa8c8`/`f3120d5`/`3ef0a72` after the measured commit). `git log` is
+authoritative. **`BENCHMARKS.md` §9 is the authoritative measured table**; its
+raw artifact is `results/bench/v1-2026-11-11-051824.json`, measured on a release
+build of **`2c682c7`** (the HEAD when this wave started) — `main` moved 4
+commits during the run, so the W142-A/W147-A/W144-A commits below are newer than
+the numbers. `TASKS.md` is the plan; `docs/V1.md` is the V1 definition;
 `docs/FINDINGS.md` is the append-only findings log; `EXPERIMENTS.md` is history.
 
 ## One line
 
-**Console execution is real and verified against real ART; framework boot
-delivers `bindApplication`, `Application.onCreate` runs on 3/5 samples, and the
-launch reaches `MainActivity.onCreate` (blocked in
-`VectorDrawable.nCreateGroup`), but the launch `ClientTransaction` is delivered
-0/5, so `onStart`/`onResume`, the first frame and input are not observed.** The
+**`counter.apk` reaches `first_frame` through a real launched Activity
+(`ThreadedRenderer.draw` → `FrameStore`); `hello-views`, `form-validation` and
+`list-scroll` reach `first_frame` at W147-A. A live `View` tree is observable
+(M7 49.9 ms p50), but a tap is accepted and does not land
+(`state_changed=false`), and the default boot-image **restore** path is broken
+(warm launch fails ~9/10 at `activity_on_create`), so `ACOS_NO_BOOT_CACHE=1` is
+required for a reliable launch.** The
 Rust VM runs the real Android 14 core-library bytecode, the real boot-classpath
 DEX is extracted unprivileged, `acos inspect`/`run-dex`/`verify` exist, and the
 Rust service layer (`acos-services`, `acos-wm`), the SQLite engine
 (`acos-sqlite`), the confinement layer (`acos-sandbox`) and the renderer
-(`acos-render`) have their own acceptance tests. The V1 benchmark at `addd4e2`
-beats legacy on memory only (**2 PASS / 9 FAIL** vs owner directive D2; see
-`BENCHMARKS.md` §9); everything downstream of `Activity.onCreate` — the rest of
-the lifecycle, frames, UI tree, input, reset, V1 verdict — is unverified.
+(`acos-render`) have their own acceptance tests. The V1 benchmark at `2c682c7`
+beats legacy on **4 of 11** metrics (**4 PASS / 7 not-pass** vs owner directive
+D2; see `BENCHMARKS.md` §9); the frame and live UI tree now land, while input,
+screenshot routing, reset, independence and the V1 verdict remain unverified.
 
 ## Milestone table (M0..M5 + V1 gate)
 
@@ -33,36 +37,35 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 |---|---|---|---|
 | **M0** static APK/DEX analysis | parse/verify/decode APK + DEX; differential vs `dexdump`/`aapt2` | **done** (static-analysis tier) | `crates/acos-dex/tests/diff_dexdump.sh` → 3 files / 380 methods / 4,253 insns / 0 mismatches (`docs/FINDINGS.md` F-0004); `crates/acos-apk/tests/differential_aapt2.rs`; `docs/FINDINGS.md` F-0002 |
 | **M1** println on the real core library | console programs execute on real `core-oj`/`core-libart`/`core-icu4j` DEX and match the ART oracle | **done** (art-reference) | `results/m1/README.md` (20/20 byte-identical, normal + GC-stress); `results/vm/OS_NATIVES_AUDIT.md` §3 (`--corelib real`: 25 pass / 0 fail / 0 unsupported of 25); `results/vm/dexprogs-real-normal.json` |
-| **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **partial** | `bindApplication` delivered and `Application.onCreate` runs (3/5 at `addd4e2`, `BENCHMARKS.md` §9.1 M3), and the launch reaches `MainActivity.onCreate` (`results/m2/M2_LOG.md`; `results/m2/boot-release.json`); it then blocks in `VectorDrawable.nCreateGroup`, the launch `ClientTransaction` is delivered 0/5, and the full `onStart`/`onResume` order is unverified; `crates/acos-runtime/tests/m2.rs` |
-| **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **partial** | renderer standalone verified: 88 tests, text advance within 0.3% of the ART UI dump (`results/render/README.md`); frame handoff `hardwareRenderer→compositor` exists (`crates/acos-runtime/src/frame_handoff.rs`); the V1 run measured a standalone hello-views cold frame at **2.54 ms**, SSIM 0.9938 (`BENCHMARKS.md` §9.1 M3/§9.2); **no framework-bound frame yet** (M3 gate not met) |
-| **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **not started** (gate); pieces partial | input natives + WMS input dispatcher have unit coverage (`results/wm/README.md`); UI tree is protocol-only (`UiNode`/`UiTree`); no Activity runs, so no tap→state evidence |
+| **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **done for counter** (gate enabled W147-A) | `bindApplication` + `Application.onCreate` run; the launch reaches `on_resume` and `first_frame` on `counter.apk` (`results/m2/M2_LOG.md`; `BENCHMARKS.md` §9.1 M3); `hello-views`/`form-validation`/`list-scroll` reach `first_frame` at W147-A (`f3120d5`); `crates/acos-runtime/tests/m2.rs` |
+| **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **done for counter** (W133-A) | `results/render/M3_LOG.md`, `results/render/m3-hello-views-vs-art.json`, `crates/acos-runtime/src/frame_handoff.rs`; framework-bound `acos launch counter.apk` → `first_frame` in **0.903 s p50**, 5/5 with `ACOS_NO_BOOT_CACHE=1` (`BENCHMARKS.md` §9.1 M3); the launched frame is not yet ART-scored |
+| **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **partial** — tree live, tap does not land | live `View` tree via `acos observe --tree` (M7 49.9 ms, `results/wm/README.md`); `acos tap --text Increment` is `accepted: true` but `state_changed: false`; W144-A input leash landed after the measured commit (`BENCHMARKS.md` §9.1 M7/M8) |
 | **M5** interaction trace | `lifecycle-summary.txt` + `ui_after_*` + native-diff | **not started** | depends on M2–M4 |
 | **V1 gate** `acos verify` full verdict | `acos verify --apk … --scenario … --json --artifacts …` passes on the two fixtures with no Android boot | **not started** | runner exists (`crates/acos-verify`, `scenarios/`), but the native backend stops at the first UI step (`docs/DEV_WORKFLOW.md` §9; `scenarios/README.md`). The V1 benchmark measures the gap: `BENCHMARKS.md` §9.1 M10 |
 
-## V1 benchmark (2026-11-11, `addd4e2`)
+## V1 benchmark (2026-11-11, measured at `2c682c7`)
 
 `BENCHMARKS.md` §9 is the authoritative measured table; raw per-round samples in
-`results/bench/v1-2026-11-11-0214.json` (release, 5 rounds, loadavg 4.58–4.73,
-42 205/61 908 MiB available). Reproduce with `tools/bench-v1.sh --rounds 5`.
+`results/bench/v1-2026-11-11-051824.json` (release, 3 rounds, loadavg 4.07,
+38.6 GiB available, `.cache/target-w148a`, guarded). Reproduce with
+`tools/bench-v1.sh --rounds 3`.
 
-Against owner directive D2 ("beat every legacy-tracked metric"): **2 PASS /
-9 FAIL**. The two passes are memory — M1 fixed idle core **171.97 MiB** vs
-206.0 MiB (W1) and M2 N=5 per-session **56.85 MiB** vs 78.7 MiB (v9). The nine
-failures are the unmeasured capabilities (M3–M8, M10, M11) plus M9 (memory
-measured, independent state not proven). ACOS-native launch at the same commit:
-cold process→`Vm` **16.43 ms** p50, framework boot→attach **13.60 ms**,
-`Vm::restore` **6.97 ms**, before/after launch **42.70 → 29.85 ms** (1.43×);
-SessionPool create **1.58 ms** and reset **2.08 ms** (N=5); N=20 pool 105.1 MiB
-total, 3.79 MiB/session marginal. VM throughput is behind `java -Xint` on 10/12
-`Bench*` programs (only `BenchString` 0.205×; worst `BenchGc` 3.162×,
-`BenchLoop` 2.111×). Renderer: cold hello-views frame 2.54 ms, warm 0.79 ms,
-PNG `FastFiltered` 7.01 ms; `frame-diff` 280.4 ms SSIM 0.9938. MCP `tools/call`
-5 ms p50 vs 2 ms bare CLI (3 ms server overhead); daemon ping reuse 0.009 ms vs
-50.2 ms process spawn. The three noisy rows (spread > 15 %) are
-`observe_tree_ms`, `frame_diff_ms`, `apk_inspect_ms`.
+Against owner directive D2: **4 PASS / 4 FAIL / 3 NOT_MEASURED** (7 of 11 not
+passing; was 2/9 at `addd4e2`). Passes:
+M1 fixed idle core **133.85 MiB** vs 206.0 (W1); M2 N=5 per-session
+**39.45 MiB** vs 78.7 (v9); M3 framework-bound `acos launch counter.apk` →
+`first_frame` **0.903 s p50** vs 3.620 s (⚠ boot cache off; the default warm
+launch reaches `first_frame` only 1/5, failing at `activity_on_create`); M7 live
+`View` tree **49.9 ms p50** vs 538 ms one-shot. Fails: M4/M5/M6/M8/M9/M10/M11
+(unmeasured capabilities plus the tap that does not land). ACOS-native:
+process→`Vm` 13.95 ms, boot→attach 12.44 ms, SessionPool create 1.24 ms / reset
+2.22 ms (N=5), renderer cold frame 2.98 ms, PNG 7.10 ms, `frame-diff` 171 ms,
+live tree 49.9 ms. VM throughput is behind `java -Xint` on 11/12 `Bench*`
+programs (only `BenchString` 0.215×; worst `BenchGc` 2.68×). Noisy rows:
+`observe_tree_ms`, `apk_inspect_ms`.
 
-**Test counts.** 985 `#[test]`/`#[tokio::test]` functions are declared across
-`crates/` at `addd4e2`; the full suite was **not** re-run in this V1 wave (the
+**Test counts.** 1046 `#[test]`/`#[tokio::test]` functions are declared across
+`crates/` at `2c682c7`; the full suite was **not** re-run in this V1 wave (the
 tree was shared with other agents). Recorded green suites include `acos-mcp`
 50/50 (`results/mcp/cargo-test.txt`), `acos-vm` snapshot 16/16 and the new
 boot-image-cache 10 unit + 3 integration, `acos-runtime` session_pool 4/4, and
@@ -70,13 +73,11 @@ boot-image-cache 10 unit + 3 integration, `acos-runtime` session_pool 4/4, and
 
 ### Known gaps (V1)
 
-1. **M2 Activity chain — `VectorDrawable`.** The launch reaches
-   `MainActivity.onCreate` but
-   `Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J` is
-   unimplemented, so the launch `ClientTransaction` is 0/5 and
-   `onStart`/`onResume`/first frame never happen. Working-tree WIP:
-   `crates/acos-vm/src/natives/gfx_vector.rs` (uncommitted). Evidence:
-   `BENCHMARKS.md` §9.1 M3; `results/m2/M2_LOG.md`.
+1. **Boot-image restore is broken for launch.** `VectorDrawable.nCreateGroup`
+   is fixed (`crates/acos-vm/src/natives/gfx_vector.rs`), but the on-disk
+   `ACOSSNAP` restore makes a warm `acos launch` fail at `activity_on_create`
+   (ICU `DatPackageReader` index error) ~9/10 times; `ACOS_NO_BOOT_CACHE=1` is
+   5/5. Evidence: `BENCHMARKS.md` §9.1 M3 and §9.5.
 2. **Renderer not framework-bound.** `acos-render` produces a correct
    hello-views frame (cold 2.54 ms, SSIM 0.9938 vs the ART capture) but no
    launched Activity publishes it through `frame_handoff`. Evidence:
@@ -94,7 +95,7 @@ boot-image-cache 10 unit + 3 integration, `acos-runtime` session_pool 4/4, and
 7. **IR tier default-off.** `ACOS_EXEC=ir` wins 2–2.7× on dispatch loops but is
    not default; `BenchGc`/`BenchAlloc` stay allocation-bound.
    Evidence: `BENCHMARKS.md` §8.9–§8.11.
-8. **Committed artifacts lag.** Several `results/` files predate `addd4e2`;
+8. **Committed artifacts lag.** Several `results/` files predate `2c682c7`;
    `results/vm/dexprogs-real-normal.json` (24/25) and
    `results/bench/baseline.json` (commit `fad5534`) are stale.
 
@@ -153,28 +154,28 @@ differential fixture.
 - **Framework boot:** real `ActivityThread` comes up, `attachApplication` is
   received by the Rust ATMS, `bindApplication` is delivered, and a real
   `ClientTransaction` is scheduled (`results/m2/M2_LOG.md`). `Application.onCreate`
-  runs on 3/5 samples; the launch then blocks in `VectorDrawable.nCreateGroup`
-  (`BENCHMARKS.md` §9.1 M3).
+  runs, the launch reaches `on_resume` and `first_frame` on `counter.apk`, and
+  `VectorDrawable.nCreateGroup` is implemented (`BENCHMARKS.md` §9.1 M3).
 - **Bench (native-runtime fidelity, not ART-verified):** `BENCHMARKS.md` §9 is
-  the authoritative table (commit `addd4e2`, release, 5 rounds,
-  `results/bench/v1-2026-11-11-0214.json`). Headline: process spawn → `Vm`
-  16.43 ms p50, framework boot → attachApplication 13.60 ms, `Vm::restore`
-  6.97 ms, before/after launch 42.70 → 29.85 ms, idle core 171.97 MiB booted /
-  28.91 MiB Vm-only, N=5 per-session 56.85 MiB, SessionPool create 1.58 ms /
-  reset 2.08 ms, hello-views cold frame 2.54 ms, `frame-diff` SSIM 0.9938. The
-  earlier `results/bench/REPORT.md` numbers (run `201637`, commit `ced0d70`) are
+  the authoritative table (measured at `2c682c7`, release, 3 rounds,
+  `results/bench/v1-2026-11-11-051824.json`). Headline: process spawn → `Vm`
+  13.95 ms p50, framework boot → attachApplication 12.44 ms, idle core
+  133.85 MiB booted / 21.71 MiB Vm-only, N=5 per-session 39.45 MiB,
+  SessionPool create 1.24 ms / reset 2.22 ms, renderer cold frame 2.98 ms,
+  `frame-diff` 171 ms, live View tree 49.9 ms, framework launch → `first_frame`
+  0.903 s (boot cache off). D2 result **4 PASS / 7 FAIL**. The earlier
+  `results/bench/REPORT.md` numbers (run `201637`, commit `ced0d70`) are
   superseded for V1 purposes and kept only as wave history.
 - **On-disk boot-image cache (T-43b, W96-A, `BENCHMARKS.md` §8.14):** a fresh
   process restores the framework-init `ACOSSNAP` from a content-addressed cache
   under `ACOS_CACHE_DIR`/`~/.cache/acos` in **65.676 ms p50** vs a full
-  framework boot of **94.221 ms p50** (1.44x; 5 interleaved fresh-process
-  rounds, `results/bench/w96a-cache.json`). The cold restore still pays the
-  ~54 ms class relink, so it is not the 12.8 ms in-process figure of §8.13.
-  `acos launch` is **not** wired yet: a restored post-attach snapshot leaves
-  stale `BinderProxy` handles (`unknown binder handle 0x24` at
-  `application_on_create`), so binder-identity re-seed (T-43) gates it. Launch
-  control unchanged at 5465 ms p50 wall / 517 MiB peak RSS
-  (`results/bench/w96a-launch.json`).
+  framework boot of **94.221 ms p50** (1.44x; `results/bench/w96a-cache.json`).
+  **`acos launch` is wired** (the old "not wired yet" claim is false at this
+  HEAD): `acos launch counter.apk --json` reaches `first_frame` in **0.903 s
+  p50** with `ACOS_NO_BOOT_CACHE=1`, 617 MiB peak RSS (`BENCHMARKS.md` §9.2).
+  The cache **restore** path is currently broken for launch: with a warm cache
+  the launch fails at `activity_on_create` ~9/10 (ICU `DatPackageReader`), so
+  the cold path must be forced until that is fixed.
 
 ## What is unsupported (`UNSUPPORTED_JAVA_API` sites, by area)
 
@@ -229,28 +230,25 @@ first (`HONESTY_AUDIT.md` #11).
 
 ## Per-metric vs legacy
 
-The authoritative ACOS-vs-legacy table is **`BENCHMARKS.md` §9.1** (commit
-`addd4e2`, 2026-11-11, release, 5 rounds). Result: **2 PASS / 9 FAIL** against
-owner directive D2 — memory (M1, M2) beats the legacy ACVM; every frame,
-screenshot, reset, UI-tree and end-to-end metric is either unmeasured or not
-comparable yet. The older `results/bench/REPORT.md` §2/§3 table (run
-`run-2026-11-10-201637.json`, commit `ced0d70`) is retained as wave history but
-is no longer the V1 record.
+The authoritative ACOS-vs-legacy table is **`BENCHMARKS.md` §9.1** (measured at
+`2c682c7`, 2026-11-11, release, 3 rounds;
+`results/bench/v1-2026-11-11-051824.json`). Result: **4 PASS / 7 FAIL** against
+owner directive D2 — M1/M2 memory, M3 framework-bound first frame and M7 live UI
+tree beat the legacy ACVM; M4/M5/M6/M8/M9/M10/M11 are missing or fail (the tap
+is accepted but does not land). The older `results/bench/REPORT.md` table
+(commit `ced0d70`) is retained as wave history but is no longer the V1 record.
 
 ## Next 10 tasks
 
-1. **Land the VectorDrawable/M2 activity chain** (`gfx_vector.rs` +
-   `fwk_m2_chain6.rs` in the working tree), then record a full M2 lifecycle run
-   with `app_created`/`tx_delivered` evidence. This is the single blocker for
-   M3–M8 and M10 (`BENCHMARKS.md` §9.1; today `ClientTransaction` is 0/5).
-2. Close the M2 gate: `Application.onCreate` + `MainActivity`
-   `onCreate→onStart→onResume` matching
-   `fixtures/reference/hello-views/art-api34-x86_64/lifecycle-summary.txt`.
-3. Bind `HardwareRenderer` → `frame_handoff` → completed-frame store and wire
-   `acos-render` to the graphics natives; record the M3 `frame_seq=1` non-black
-   frame (`crates/acos-runtime/src/frame_handoff.rs`).
-4. Implement input injection + the UI-tree bridge (`UiNode`/`UiTree`) and
-   record the M4 tap → `clicks: 1` transition.
+1. **Fix the boot-image restore path** so a warm `acos launch` reaches
+   `first_frame` deterministically (currently ~9/10 fail at
+   `activity_on_create`; `BENCHMARKS.md` §9.5 item 1). This is the top blocker.
+2. Land the W144-A input leash so `acos tap --text` changes state (today
+   `accepted: true`, `state_changed: false`).
+3. Route `observe --screenshot` through the kept daemon session and score the
+   launched `counter` frame against the ART reference (M5 and M3 correctness).
+4. Close the M2 gate with an ART-order lifecycle diff now that `on_resume` and
+   `first_frame` are reached.
 5. Finish the framework file/`/system` I/O substrate (FileChannel, `/system`
    fonts/resources) so `handleBindApplication` runs without a structured block.
 6. Commit the W25-B `OsConstants` + `libcore.io.Linux` work and clear the 9
@@ -268,8 +266,9 @@ is no longer the V1 record.
 
 ## Working tree / concurrency
 
-HEAD `addd4e2` is the committed checkpoint (the V1 benchmark target). The
-working tree carries uncommitted wave work from concurrent agents
+HEAD `00950ce` (W144-A) is the committed checkpoint; the V1 benchmark was
+measured at `2c682c7`, four commits earlier. The working tree carries
+uncommitted wave work from concurrent agents
 (W57/W61/W64/W65/W66 native/JNI/render additions, W68-A `gfx_vector` and
 `acos-runtime`/`acos-services`, W69-A frame/interp/vm/jni bisecting, W70-A
 `acos-render`, W71-A's W67-A security/test-honesty fixes, and W96-A/W97-A

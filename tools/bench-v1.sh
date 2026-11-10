@@ -343,6 +343,96 @@ finally:
 
 metrics["daemon"] = daemon
 
+# ---- 13. framework-bound capabilities at this HEAD -----------------------
+# These paths did not exist when §8 was written: a launched Activity reaching
+# first_frame (M3), a live View-tree dump (M7), a completed-frame retrieval
+# (M5) and an input action (M8). `ACOS_NO_BOOT_CACHE` is used for the
+# observe/tap rows because the default boot-image *restore* path is broken at
+# this commit (see launch_default) — an open bug, never a hidden pass.
+counter = os.path.join(ROOT, "fixtures/build/apps/counter.apk")
+NOCACHE = {"ACOS_NO_BOOT_CACHE": "1"}
+
+def run_json(cmd, env_extra=None, timeout=300):
+    e = dict(ENV)
+    if env_extra:
+        e.update(env_extra)
+    t0 = now_ms()
+    p = run(cmd, timeout=timeout, env=e)
+    return now_ms() - t0, p
+
+def doc_of(p):
+    try:
+        return json.loads(p.stdout.decode() or "{}")
+    except Exception:
+        return {}
+
+def launch_sample(env_extra=None):
+    dt, p = run_json([ACOS, "launch", counter, "--json"], env_extra)
+    d = doc_of(p); r = d.get("result") or {}
+    return {"outer_ms": round(dt, 2), "status": d.get("status"),
+            "stage": r.get("reached_stage"), "wall_ms": r.get("wall_ms"),
+            "peak_rss_mib": round((r.get("peak_rss_bytes") or 0) / 2**20, 1)}
+
+def cli_sample(args, env_extra=NOCACHE):
+    dt, p = run_json([ACOS] + args, env_extra)
+    d = doc_of(p); r = d.get("result") or {}
+    return {"ms": round(dt, 2), "status": d.get("status"),
+            "stage": r.get("stage_reached"), "accepted": r.get("accepted"),
+            "state_changed": r.get("state_changed")}
+
+fw_n = max(ROUNDS, 5)
+fw = {"n": fw_n}
+fw["launch_default"] = [launch_sample() for _ in range(fw_n)]
+fw["launch_nocache"] = [launch_sample(NOCACHE) for _ in range(fw_n)]
+shot_png = os.path.join(TMP, "counter-frame.png")
+fw["observe_tree_apk"] = [cli_sample(["observe", "--apk", counter, "--tree", "--json"]) for _ in range(fw_n)]
+fw["observe_screenshot_apk"] = [cli_sample(["observe", "--apk", counter, "--screenshot", shot_png, "--json"]) for _ in range(fw_n)]
+fw["tap_apk"] = [cli_sample(["tap", "--apk", counter, "--text", "Increment", "--json"]) for _ in range(fw_n)]
+
+# Pure in-session latency (no relaunch per call): own daemon, private socket.
+dsock = os.path.join(TMP, "fw.sock")
+try:
+    os.remove(dsock)
+except OSError:
+    pass
+denv = {**ENV, "ACOS_NO_BOOT_CACHE": "1", "ACOS_SESSION_SOCKET": dsock}
+dserve = subprocess.Popen([ACOS, "serve", "--socket", dsock, "--idle-timeout", "120"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=denv)
+dm = {}
+try:
+    for _ in range(100):
+        if os.path.exists(dsock):
+            break
+        time.sleep(0.05)
+    if os.path.exists(dsock):
+        senv = {"ACOS_NO_BOOT_CACHE": "1", "ACOS_SESSION_SOCKET": dsock}
+        dt, p = run_json([ACOS, "launch", counter, "--keep", "--json"], senv)
+        d = doc_of(p); r = d.get("result") or {}
+        dm["launch"] = {"ms": round(dt, 2), "status": d.get("status"), "stage": r.get("reached_stage")}
+        def sess(args):
+            xs = []; last = {}
+            for _ in range(max(ROUNDS, 5)):
+                dt, p = run_json([ACOS] + args + ["--session", "s_cli", "--json"], senv)
+                xs.append(round(dt, 2)); last = doc_of(p)
+            r = last.get("result") or {}
+            return stats(xs), {"status": last.get("status"), "stage": r.get("stage_reached"),
+                               "accepted": r.get("accepted"), "state_changed": r.get("state_changed")}
+        dm["tree"], dm["tree_info"] = sess(["observe", "--tree"])
+        dm["screenshot"], dm["screenshot_info"] = sess(["observe", "--screenshot", os.path.join(TMP, "sess-frame.png")])
+        dm["tap"], dm["tap_info"] = sess(["tap", "--text", "Increment"])
+finally:
+    dserve.terminate()
+    try:
+        dserve.wait(timeout=5)
+    except Exception:
+        dserve.kill()
+    try:
+        os.remove(dsock)
+    except OSError:
+        pass
+fw["daemon"] = dm
+metrics["fw"] = fw
+
 # ---- legacy table (BENCHMARKS.md §3/§5; reference only) ------------------
 LEGACY = {
     "M1": ("Fixed idle core memory", 206.0, "MiB anon+shmem (W1) / 303.9 (v9)"),
@@ -373,6 +463,31 @@ def add(mid, name, acos_v, legacy_v, legacy_label, ratio, verdict, plan, note=""
                  "legacy_label": legacy_label, "ratio": ratio, "verdict": verdict,
                  "plan": plan, "note": note})
 
+def _ms_stats(rows_, field="ms"):
+    xs = [r.get(field) for r in rows_ if r.get(field) is not None]
+    return stats(xs) if xs else None
+
+def _ff(rows_):
+    return sum(1 for r in rows_ if r.get("stage") == "first_frame")
+
+fw = metrics.get("fw") or {}
+fw_nc = fw.get("launch_nocache") or []
+fw_def = fw.get("launch_default") or []
+nc = _ms_stats(fw_nc, "outer_ms")
+def_st = _ms_stats(fw_def, "outer_ms")
+m3 = round(nc["median"] / 1000.0, 4) if nc else None
+m3_ok = bool(nc) and _ff(fw_nc) == len(fw_nc)
+dm = fw.get("daemon") or {}
+tree_stats = dm.get("tree")
+shot_stats = dm.get("screenshot")
+tap_stats = dm.get("tap")
+tree_info = dm.get("tree_info") or {}
+shot_info = dm.get("screenshot_info") or {}
+tap_info = dm.get("tap_info") or {}
+
+def _fmt_stats(s, field="median"):
+    return s[field] if s else None
+
 idle = med("idle_booted_mib")
 inc5 = (metrics.get("sessions_incremental_mib") or {}).get("5")
 add("M1", LEGACY["M1"][0], idle, LEGACY["M1"][1], LEGACY["M1"][2],
@@ -386,29 +501,40 @@ add("M2", LEGACY["M2"][0], inc5, LEGACY["M2"][1], LEGACY["M2"][2],
     "Finish the zygote-like template so the first session stops paying the boot classpath (MEMORY_PROFILE.md §5)." if inc5 and inc5 > LEGACY["M2"][1] else "",
     "N=5 incremental, anon+shmem.")
 cold_frame = med("render_hello_cold_ms")
-add("M3", LEGACY["M3"][0], round(cold_frame / 1000.0, 6) if cold_frame else None, LEGACY["M3"][1], LEGACY["M3"][2],
-    round((cold_frame / 1000.0) / LEGACY["M3"][1], 4) if cold_frame else None,
-    "FAIL", "Bind HardwareRenderer/ViewRootImpl -> frame_handoff -> FrameStore and measure the framework-bound frame; the current 4.5 ms is the renderer standalone (not the same metric).",
-    "Renderer-only cold first frame; NOT a launched-Activity frame.")
+add("M3", LEGACY["M3"][0], m3, LEGACY["M3"][1], LEGACY["M3"][2],
+    round(m3 / LEGACY["M3"][1], 4) if m3 else None,
+    "PASS" if (m3_ok and m3 and m3 <= LEGACY["M3"][1]) else ("FAIL" if m3 else "NOT_MEASURED"),
+    "Fix the ACOSSNAP restore path so the default warm launch reaches first_frame (it fails at activity_on_create 9/10); then score the launched frame against the ART reference.",
+    f"Framework-bound `acos launch counter.apk` -> first_frame, boot cache OFF (cold): {_ff(fw_nc)}/{len(fw_nc)} reached, p50 {_fmt_stats(nc)} ms outer. Default cache ON: {_ff(fw_def)}/{len(fw_def)} reached, p50 {_fmt_stats(def_st)} ms. RSS p50 {_fmt_stats(_ms_stats(fw_nc, 'peak_rss_mib'))} MiB. Launched frame correctness not ART-scored.")
 pool_create = (pool.get("5") or {}).get("create_ms")
 add("M4", LEGACY["M4"][0], round(pool_create / 1000.0, 6) if pool_create else None, LEGACY["M4"][1], LEGACY["M4"][2],
     None, "FAIL", "Add a worker-create path that reaches a frame; SessionPool restore is not worker-create->frame.",
     "SessionPool restore is a quiescent core VM, no frame.")
 shot = med("screenshot_warm_total_ms")
-add("M5", LEGACY["M5"][0], round(shot / 1000.0, 6) if shot else None, LEGACY["M5"][1], LEGACY["M5"][2],
-    round((shot / 1000.0) / LEGACY["M5"][1], 4) if shot else None,
-    "FAIL", "Publish a request-sequenced CompletedFrame from a launched Activity; the renderer-only encode is not a fresh screenshot.",
-    "Renderer warm raster + PNG FastFiltered; not framework-bound.")
+shot_ms = _fmt_stats(shot_stats)
+add("M5", LEGACY["M5"][0], round(shot_ms / 1000.0, 6) if shot_ms else None, LEGACY["M5"][1], LEGACY["M5"][2],
+    round((shot_ms / 1000.0) / LEGACY["M5"][1], 4) if shot_ms else None,
+    "PASS" if (shot_ms and shot_ms / 1000.0 <= LEGACY["M5"][1] and shot_info.get("status") == "pass")
+            else ("FAIL" if shot_ms else "NOT_MEASURED"),
+    "Route `observe --screenshot` through the daemon session (same-process `observe --apk` already publishes a CompletedFrame) and keep the frame request-sequenced.",
+    f"Daemon-session completed-frame retrieval p50 {shot_ms} ms (status={shot_info.get('status')}, stage={shot_info.get('stage')}); process stdout is wall-timed, includes PNG encode+write. Self-contained `observe --apk --screenshot` p50 {_fmt_stats(_ms_stats(fw.get('observe_screenshot_apk') or []))} ms incl. launch. Renderer-only warm encode is {shot} ms.")
 reset = (pool.get("5") or {}).get("reset_ms")
 add("M6", LEGACY["M6"][0], reset, LEGACY["M6"][1] * 1000.0, LEGACY["M6"][2],
     round(reset / (LEGACY["M6"][1] * 1000.0), 4) if reset else None,
     "FAIL", "Implement app-scoped reset -> first frame; pool reset is a core-VM restore with no app/frame.",
     "Pool reset-to-clean (N=5); legacy is app reset + frame.")
-add("M7", LEGACY["M7"][0], med("observe_tree_ms"), LEGACY["M7"][1] * 1000.0, LEGACY["M7"][2],
-    None, "FAIL", "Wire the UI-tree bridge (UiNode/UiTree) and time one tree dump; today observe --tree returns not_ready.",
-    "observe --tree returns UNSUPPORTED_BACKEND not_ready (no View hierarchy).")
-add("M8", "Action-to-state latency", None, None, LEGACY["M8"][2], None, "FAIL",
-    "Input injection + UI tree, then tap/type/scroll -> observed state.", "no input path / no tree")
+tree_ms = _fmt_stats(tree_stats)
+add("M7", LEGACY["M7"][0], tree_ms, LEGACY["M7"][1] * 1000.0, LEGACY["M7"][2],
+    round(tree_ms / (LEGACY["M7"][1] * 1000.0), 4) if tree_ms else None,
+    "PASS" if (tree_ms and tree_ms <= LEGACY["M7"][1] * 1000.0 and tree_info.get("status") == "pass")
+            else ("FAIL" if tree_ms else "NOT_MEASURED"),
+    "Keep the tree bridge; add text-equality checks against `ui_initial.xml` (currently only the shape is checked).",
+    f"Live View-tree dump from a kept daemon session (counter, stage={tree_info.get('stage')}); one dump with text nodes. Legacy one-shot 538-768 ms, structure 14-87 ms, persistent 4.1 ms; ACOS {tree_ms} ms. `observe --tree` without a session is still the not_ready path ({med('observe_tree_ms')} ms).")
+tap_ms = _fmt_stats(tap_stats)
+add("M8", "Action-to-state latency", round(tap_ms / 1000.0, 6) if tap_ms else None, None, LEGACY["M8"][2],
+    None, "FAIL",
+    "Land the tap: the input is acked but `state_changed=false` and the count stays `0` (W144-A leash fix pending).",
+    f"`acos tap --text Increment` accepted={tap_info.get('accepted')} state_changed={tap_info.get('state_changed')} p50 {tap_ms} ms; no observed state change.")
 add("M9", "Concurrent workloads", (metrics.get("pool_sessions") or {}).get("20", {}).get("total_mib"), None, LEGACY["M9"][2], None, "FAIL",
     "Per-session Binder transports so N sessions are independently usable, then assert independent state/input at N.", "memory at N=20 only; independent state not proven")
 add("M10", "End-to-end verify wall", None, LEGACY["M10"][1], LEGACY["M10"][2], None, "FAIL",
