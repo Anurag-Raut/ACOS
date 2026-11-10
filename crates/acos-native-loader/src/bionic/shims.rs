@@ -3,7 +3,7 @@
 //! These are the symbols whose ABI differs from glibc and therefore cannot be
 //! forwarded directly. Each shim documents *why* it exists.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -48,6 +48,8 @@ extern "C" {
     fn acos_fflush();
     fn acos_fopen();
     fn acos_fdopen();
+    fn acos_tmpfile();
+    fn acos_popen();
     fn acos_openlog();
     fn acos_closelog();
     fn acos_syslog();
@@ -81,13 +83,17 @@ pub fn c_android_log_assert_addr() -> *const c_void {
 
 // --- `__sF` stdio translation ----------------------------------------------
 
-/// Bionic `FILE` is opaque to us; we only compare stream pointers by address.
-const SF_STREAM_BYTES: usize = 256;
+/// Bionic `FILE` is opaque; its LP64 size is `152` bytes (NDK 27
+/// `bits/struct_file.h`: `struct __sFILE { char __private[152]; }`). Pre-M
+/// guests spell `stdin`/`stdout`/`stderr` as `&__sF[0..2]`, so the array
+/// stride is 152 and the stderr slot is `__sF + 304`, **not** a round number.
+/// Getting this wrong passes a bogus pointer into glibc `fwrite` and SIGSEGVs.
+pub const BIONIC_FILE_BYTES: usize = 152;
 
-#[repr(C, align(16))]
-struct SfBuffer([u8; SF_STREAM_BYTES * 3]);
+#[repr(C, align(8))]
+struct SfBuffer([u8; BIONIC_FILE_BYTES * 3]);
 
-static SF_BUF: SfBuffer = SfBuffer([0u8; SF_STREAM_BYTES * 3]);
+static SF_BUF: SfBuffer = SfBuffer([0u8; BIONIC_FILE_BYTES * 3]);
 
 /// Address of the fake bionic `__sF` array.
 #[allow(non_snake_case)]
@@ -95,7 +101,51 @@ pub fn __sF_addr() -> usize {
     &SF_BUF as *const SfBuffer as usize
 }
 
-/// Translate a guest stream pointer to a real host `FILE*`.
+/// Host `FILE*` values handed to the guest by our `fopen`/`fdopen`/`tmpfile`/
+/// `popen` shims. A pointer that is not a `__sF` slot, not a host std stream
+/// and not in this set is not a valid `FILE*`; the stdio trampolines fail
+/// closed instead of handing it to glibc (which crashes).
+fn file_registry() -> &'static Mutex<HashSet<usize>> {
+    static FILES: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+    FILES.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Register a host `FILE*` returned to guest code (called from C).
+#[no_mangle]
+pub extern "C" fn acos_register_file(f: usize) {
+    if f != 0 {
+        if let Ok(mut g) = file_registry().lock() {
+            g.insert(f);
+        }
+    }
+}
+
+/// Forget a host `FILE*` after it is closed (called from C).
+#[no_mangle]
+pub extern "C" fn acos_unregister_file(f: usize) {
+    if let Ok(mut g) = file_registry().lock() {
+        g.remove(&f);
+    }
+}
+
+fn file_is_known(f: usize) -> bool {
+    file_registry().lock().map(|g| g.contains(&f)).unwrap_or(false)
+}
+
+/// Emit the structured, fail-closed error for a stream that is not a `FILE*`.
+#[no_mangle]
+pub unsafe extern "C" fn acos_invalid_stream(stream: usize) {
+    eprintln!(
+        "ACOS_STDIO_INVALID_STREAM {}",
+        serde_json::json!({
+            "code": "INVALID_FILE_STREAM",
+            "stream": format!("0x{stream:x}"),
+        })
+    );
+}
+
+/// Translate a guest stream pointer to a real host `FILE*`, or `0` when the
+/// pointer is not a known stream. Callers must check for `0` and fail closed.
 ///
 /// # Safety
 /// Called from C with any pointer value; only compares addresses.
@@ -103,14 +153,22 @@ pub fn __sF_addr() -> usize {
 pub unsafe extern "C" fn acos_map_stream(stream: usize) -> usize {
     let base = __sF_addr();
     if stream == base {
-        stdin as usize
-    } else if stream == base + SF_STREAM_BYTES {
-        stdout as usize
-    } else if stream == base + SF_STREAM_BYTES * 2 {
-        stderr as usize
-    } else {
-        stream
+        return stdin as usize;
     }
+    if stream == base + BIONIC_FILE_BYTES {
+        return stdout as usize;
+    }
+    if stream == base + BIONIC_FILE_BYTES * 2 {
+        return stderr as usize;
+    }
+    if stream == stdin as usize || stream == stdout as usize || stream == stderr as usize {
+        return stream;
+    }
+    if file_is_known(stream) {
+        return stream;
+    }
+    acos_invalid_stream(stream);
+    0
 }
 
 /// Table addresses of the C stdio trampolines.
@@ -131,6 +189,9 @@ pub fn stdio_table() -> HashMap<&'static str, super::Shim> {
     add("fopen", acos_fopen as *const () as *const c_void);
     add("fopen64", acos_fopen as *const () as *const c_void);
     add("fdopen", acos_fdopen as *const () as *const c_void);
+    add("tmpfile", acos_tmpfile as *const () as *const c_void);
+    add("tmpfile64", acos_tmpfile as *const () as *const c_void);
+    add("popen", acos_popen as *const () as *const c_void);
     m
 }
 
@@ -507,7 +568,7 @@ static STDIN_CELL: AtomicUsize = AtomicUsize::new(0);
 static STDOUT_CELL: AtomicUsize = AtomicUsize::new(0);
 static STDERR_CELL: AtomicUsize = AtomicUsize::new(0);
 
-const SF_STRIDE: usize = SF_STREAM_BYTES;
+const SF_STRIDE: usize = BIONIC_FILE_BYTES;
 
 fn stream_addr(slot: usize) -> *const c_void {
     let cell: &AtomicUsize = match slot {
@@ -758,6 +819,10 @@ pub unsafe extern "C" fn __fwrite_chk(
         return 0;
     }
     let real = acos_map_stream(stream as usize) as *mut libc::FILE;
+    if real.is_null() {
+        *libc::__errno_location() = libc::EBADF;
+        return 0;
+    }
     libc::fwrite(ptr, size, nmemb, real)
 }
 
@@ -802,4 +867,38 @@ pub fn fortify_table() -> HashMap<&'static str, super::Shim> {
     add("__FD_ISSET_chk", __FD_ISSET_chk as *const c_void);
     // bionic uses `stderr`-style `__sF` slots for `tmpfile`/`fscanf` streams too.
     m
+}
+
+#[cfg(test)]
+mod stdio_map_tests {
+    use super::*;
+
+    /// The pre-M `__sF` layout must use bionic's real LP64 `FILE` size (152).
+    /// The old 256-byte stride missed `&__sF[2]` and passed a bogus pointer to
+    /// glibc `fwrite`, which SIGSEGV'd.
+    #[test]
+    fn sf_slots_use_bionic_stride_and_fail_closed() {
+        assert_eq!(BIONIC_FILE_BYTES, 152);
+        let base = __sF_addr();
+        // SAFETY: the shim only compares pointer addresses.
+        unsafe {
+            assert_eq!(acos_map_stream(base), stdin as usize);
+            assert_eq!(acos_map_stream(base + BIONIC_FILE_BYTES), stdout as usize);
+            assert_eq!(acos_map_stream(base + BIONIC_FILE_BYTES * 2), stderr as usize);
+            // The wrong stride and arbitrary pointers are not valid FILE*.
+            assert_eq!(acos_map_stream(base + 256), 0);
+            assert_eq!(acos_map_stream(0xdead_beef), 0);
+        }
+    }
+
+    #[test]
+    fn registered_host_file_roundtrips() {
+        let fake = 0x1234_5678usize;
+        acos_register_file(fake);
+        // SAFETY: the shim only compares pointer addresses.
+        unsafe { assert_eq!(acos_map_stream(fake), fake) };
+        acos_unregister_file(fake);
+        // SAFETY: the shim only compares pointer addresses.
+        unsafe { assert_eq!(acos_map_stream(fake), 0) };
+    }
 }

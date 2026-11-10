@@ -2447,7 +2447,13 @@ pub unsafe extern "C" fn vm_DetachCurrentThread(_vm: usize) -> i32 {
 }
 
 pub unsafe extern "C" fn vm_GetEnv(_vm: usize, out: *mut usize, version: i32) -> i32 {
-    if version != JNI_VERSION_1_6 && version != 0x0001_0004 {
+    // A JNI 1.6 VM supports every earlier 1.x request. `jni_lib_merge` in
+    // `libreactnative.so` asks for `JNI_VERSION_1_2`; rejecting it made the
+    // merged `JNI_OnLoad` return `JNI_ERR`. Accept 1.1 through 1.6.
+    let v = version as u32;
+    let major = (v >> 16) & 0xffff;
+    let minor = v & 0xffff;
+    if major != 1 || minor > JNI_VERSION_1_6 as u32 {
         return crate::state::JNI_EVERSION;
     }
     if out.is_null() {

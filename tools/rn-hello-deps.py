@@ -29,9 +29,16 @@ EXTRA_DIRS = [d for d in [os.environ.get("ACOS_RN_AAR_DIR", "")] if d]
 
 # (group, artifact, version) starting points. Versions are pinned to the RN
 # 0.81.4 dependency set so we never drift onto a cached 0.85/0.86 AAR.
+# `react-android`'s POM marks `com.facebook.fbjni:fbjni` `optional`, so a Maven
+# walk that skips optional deps (correct for transitive resolution) never pulls
+# the fbjni `classes.jar`. A real Gradle app declares fbjni as a runtime
+# dependency, so it is listed here explicitly as a root; otherwise the APK's DEX
+# omits `com.facebook.jni.*` and `libfbjni.so`'s `JNI_OnLoad` cannot run (see
+# results/rn/FIRST_RUN.md).
 ROOTS = [
     ("com.facebook.react", "react-android", "0.81.4"),
     ("com.facebook.react", "hermes-android", "0.81.4"),
+    ("com.facebook.fbjni", "fbjni", "0.7.0"),
     ("androidx.appcompat", "appcompat", "1.7.0"),
     ("androidx.swiperefreshlayout", "swiperefreshlayout", "1.1.0"),
     ("com.facebook.soloader", "soloader", "0.12.1"),

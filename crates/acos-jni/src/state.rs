@@ -25,6 +25,10 @@ use crate::error::JniError;
 pub const JNI_VERSION_1_6: i32 = 0x0001_0006;
 /// JNI version 1.4 (accepted for compatibility with older libraries).
 pub const JNI_VERSION_1_4: i32 = 0x0001_0004;
+/// JNI version 1.2 (React Native's `jni_lib_merge` calls `GetEnv` with this).
+pub const JNI_VERSION_1_2: i32 = 0x0001_0002;
+/// JNI version 1.1 (oldest version a 1.6 VM must accept).
+pub const JNI_VERSION_1_1: i32 = 0x0001_0001;
 pub const JNI_OK: i32 = 0;
 pub const JNI_ERR: i32 = -1;
 pub const JNI_EDETACHED: i32 = -2;

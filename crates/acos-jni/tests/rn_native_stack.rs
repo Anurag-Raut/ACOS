@@ -140,11 +140,17 @@ fn rn_child_worker() {
     // well as READ_FILE), so grant the APK's directory rather than the file.
     let apk_dir = apk.parent().unwrap_or_else(|| Path::new("."));
     let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
-    let profile = acos_sandbox::ConfineProfile::default()
+    // `CoreLib::Real` reads the Android 14 boot classpath. It is read-only here;
+    // the VM never writes to it (the linked image lives in the process).
+    let boot_dir = repo_root().join(".cache/boot/android-34");
+    let mut profile = acos_sandbox::ConfineProfile::default()
         .with_read_only(&libdir)
         .with_read_only(apk_dir)
         .with_read_only(&data_dir)
         .with_read_write(&scratch);
+    if boot_dir.join("BOOTCLASSPATH").is_file() {
+        profile = profile.with_read_only(&boot_dir);
+    }
     match acos_sandbox::confine(&profile) {
         Ok(report) => println!(
             "W76A_STAGE {}",
@@ -159,19 +165,30 @@ fn rn_child_worker() {
         }
     }
 
-    // 2. A minimal VM so `JNI_OnLoad` gets a real `JavaVM*`. Bootstrap core
-    //    library touches no files; the fixture's `JNI_OnLoad` only needs the
-    //    VM/JNI table.
+    // 2. A VM so `JNI_OnLoad` gets a real `JavaVM*`. React Native's fbjni needs
+    //    `java.lang.ref.PhantomReference` (the superclass of
+    //    `DestructorThread$Destructor`), which the Rust-built `Bootstrap` core
+    //    library does not provide; it also needs `Throwable.getStackTrace()` to
+    //    translate a C++ `JniException`. Use the real Android 14 boot classpath
+    //    when it is present (the production path); otherwise fall back to
+    //    `Bootstrap` and record the missing-class blocker.
+    let boot_ok = boot_dir.join("BOOTCLASSPATH").is_file();
+    let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
+    println!(
+        "W76A_STAGE {}",
+        serde_json::json!({"phase": "vm", "corelib": if boot_ok { "real" } else { "bootstrap" }})
+    );
     let mut vm = match Vm::new(VmOptions {
-        heap_max_bytes: 64 * 1024 * 1024,
-        corelib: CoreLib::Bootstrap,
+        heap_max_bytes: 256 * 1024 * 1024,
+        corelib,
+        boot_dir: if boot_ok { Some(boot_dir.clone()) } else { None },
         ..VmOptions::default()
     }) {
         Ok(vm) => vm,
         Err(e) => {
             println!(
                 "W76A_SUMMARY {}",
-                serde_json::json!({"confined": true, "error": format!("Vm::new: {e:?}")})
+                serde_json::json!({"confined": true, "error": format!("Vm::new({corelib:?}): {e:?}")})
             );
             return;
         }
@@ -189,29 +206,10 @@ fn rn_child_worker() {
             serde_json::json!({"phase": "apk-dex-error", "detail": e})
         ),
     }
-    // The fixture APK's DEX omits `com.facebook.jni.*` because react-android's
-    // POM marks the fbjni artifact `optional`; a real Gradle app adds it
-    // explicitly. Provide the same classes from a checked-in 10 KiB DEX so the
-    // native stack can proceed to the next blocker.
-    let fbjni_dex = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/fbjni-classes.dex");
-    if fbjni_dex.is_file() {
-        match std::fs::read(&fbjni_dex)
-            .map_err(|e| e.to_string())
-            .and_then(|b| DexFile::parse(b).map_err(|e| format!("{e:?}")))
-        {
-            Ok(dex) => {
-                vm.add_dex(dex);
-                println!(
-                    "W76A_STAGE {}",
-                    serde_json::json!({"phase": "fbjni-dex", "classes_added": 1})
-                );
-            }
-            Err(e) => println!(
-                "W76A_STAGE {}",
-                serde_json::json!({"phase": "fbjni-dex-error", "detail": e})
-            ),
-        }
-    }
+    // The fixture APK now carries `com.facebook.jni.*` because
+    // `tools/rn-hello-deps.py` lists `com.facebook.fbjni:fbjni` as a root (the
+    // `react-android` POM marks it `optional`, so a plain Maven walk drops it).
+    // The old 10 KiB `tests/data/fbjni-classes.dex` workaround is gone.
 
     let rt = JniRuntime::new(JniConfig::default().with_search_path(&libdir));
     if let Err(e) = rt.attach(&mut vm) {
