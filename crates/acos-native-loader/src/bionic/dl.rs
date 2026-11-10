@@ -1,0 +1,251 @@
+//! `dl*` shims backed by this loader.
+//!
+//! `dl_iterate_phdr` is the critical one for C++ unwinding: the guest's static
+//! libunwind walks it to locate `PT_GNU_EH_FRAME` for each loaded object. We
+//! report every mapped guest library with its real program headers and load
+//! bias.
+
+use std::collections::HashMap;
+use std::os::raw::{c_char, c_int, c_void};
+
+use super::Shim;
+use crate::elf::Phdr;
+use crate::loader::{
+    current_loader, dl_handle_lookup, dl_handle_remove, register_dl_handle, LibraryHandle,
+    LoaderInner, NativeLibrary, OBJECTS,
+};
+use std::sync::Arc;
+
+/// Matches glibc/bionic `struct dl_phdr_info`.
+#[repr(C)]
+pub struct DlPhdrInfo {
+    pub dlpi_addr: u64,
+    pub dlpi_name: *const c_char,
+    pub dlpi_phdr: *const Phdr,
+    pub dlpi_phnum: u16,
+    pub dlpi_adds: u64,
+    pub dlpi_subs: u64,
+    pub dlpi_tls_modid: usize,
+    pub dlpi_tls_data: *mut c_void,
+}
+
+/// `struct Dl_info`.
+#[repr(C)]
+pub struct DlInfo {
+    pub dli_fname: *const c_char,
+    pub dli_fbase: *mut c_void,
+    pub dli_sname: *const c_char,
+    pub dli_saddr: *mut c_void,
+}
+
+/// Callback type for `dl_iterate_phdr`.
+pub type DlIterateCallback = unsafe extern "C" fn(*mut DlPhdrInfo, usize, *mut c_void) -> c_int;
+
+/// `dl_iterate_phdr`.
+///
+/// # Safety
+/// `cb` must be a valid callback; guest code calls it synchronously.
+pub unsafe extern "C" fn dl_iterate_phdr(
+    cb: Option<DlIterateCallback>,
+    data: *mut c_void,
+) -> c_int {
+    let cb = match cb {
+        Some(c) => c,
+        None => return 0,
+    };
+    let objs: Vec<Arc<NativeLibrary>> = OBJECTS.lock().unwrap().clone();
+    for lib in objs {
+        let mut info = DlPhdrInfo {
+            dlpi_addr: lib.bias() as u64,
+            dlpi_name: lib.name_c.as_ptr(),
+            dlpi_phdr: lib.phdrs_ptr(),
+            dlpi_phnum: lib.phnum(),
+            dlpi_adds: 0,
+            dlpi_subs: 0,
+            dlpi_tls_modid: lib.tls_modid.unwrap_or(0),
+            dlpi_tls_data: std::ptr::null_mut(),
+        };
+        let rc = cb(&mut info, std::mem::size_of::<DlPhdrInfo>(), data);
+        if rc != 0 {
+            return rc;
+        }
+    }
+    0
+}
+
+fn cstr(p: *const c_char) -> String {
+    if p.is_null() {
+        String::new()
+    } else {
+        // SAFETY: caller-provided NUL-terminated string.
+        unsafe { std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned() }
+    }
+}
+
+/// `dlopen` (and `android_dlopen_ext`). Returns a non-zero handle id or 0.
+///
+/// # Safety
+/// `filename` must be a valid NUL-terminated string (or NULL).
+pub unsafe extern "C" fn dlopen(filename: *const c_char, _flags: c_int) -> *mut c_void {
+    let inner = match current_loader() {
+        Some(i) => i,
+        None => return std::ptr::null_mut(),
+    };
+    let name = cstr(filename);
+    let loader = crate::loader::Loader::from_inner(inner.clone());
+    let path = resolve_library(&inner, &name);
+    let handle = match loader.load(&path, &name) {
+        Ok(h) => h,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let id = register_dl_handle(&inner, handle.lib.clone());
+    id as *mut c_void
+}
+
+/// `android_dlopen_ext(filename, flags, extinfo)`.
+///
+/// # Safety
+/// See [`dlopen`].
+pub unsafe extern "C" fn android_dlopen_ext(
+    filename: *const c_char,
+    flags: c_int,
+    _extinfo: *const c_void,
+) -> *mut c_void {
+    dlopen(filename, flags)
+}
+
+/// Alias used internally by some bionic builds.
+///
+/// # Safety
+/// See [`dlopen`].
+pub unsafe extern "C" fn __loader_dlopen(
+    filename: *const c_char,
+    flags: c_int,
+    _caller: *const c_void,
+) -> *mut c_void {
+    dlopen(filename, flags)
+}
+
+/// `dlsym`.
+///
+/// # Safety
+/// `symbol` must be a valid NUL-terminated string.
+pub unsafe extern "C" fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void {
+    let name = cstr(symbol);
+    if handle.is_null() {
+        // RTLD_DEFAULT: search all loaded objects, then the bionic table.
+        let objs = OBJECTS.lock().unwrap().clone();
+        for lib in objs {
+            if let Some(p) = lib.symbol(&name) {
+                return p as *mut c_void;
+            }
+        }
+        return super::resolve(&name)
+            .map(|s| s.ptr as *mut c_void)
+            .unwrap_or(std::ptr::null_mut());
+    }
+    if handle as isize == -1 {
+        // RTLD_NEXT: unsupported.
+        return std::ptr::null_mut();
+    }
+    let inner = match current_loader() {
+        Some(i) => i,
+        None => return std::ptr::null_mut(),
+    };
+    match dl_handle_lookup(&inner, handle as usize) {
+        Some(lib) => lib
+            .symbol(&name)
+            .map(|p| p as *mut c_void)
+            .unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// `dlclose`.
+///
+/// # Safety
+/// `handle` must come from [`dlopen`] or be NULL.
+pub unsafe extern "C" fn dlclose(handle: *mut c_void) -> c_int {
+    if handle.is_null() || handle as isize == -1 {
+        return 0;
+    }
+    let inner = match current_loader() {
+        Some(i) => i,
+        None => return -1,
+    };
+    if let Some(lib) = dl_handle_remove(&inner, handle as usize) {
+        let loader = crate::loader::Loader::from_inner(inner);
+        let _ = loader.unload(&LibraryHandle { lib });
+    }
+    0
+}
+
+/// `dlerror` — always reports "no error" in this minimal implementation.
+///
+/// # Safety
+/// Always safe.
+pub unsafe extern "C" fn dlerror() -> *mut c_char {
+    std::ptr::null_mut()
+}
+
+/// `dladdr` — best-effort object/symbol lookup.
+///
+/// # Safety
+/// `info` must point to a writable `Dl_info`.
+pub unsafe extern "C" fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int {
+    if info.is_null() {
+        return 0;
+    }
+    *info = DlInfo {
+        dli_fname: std::ptr::null(),
+        dli_fbase: std::ptr::null_mut(),
+        dli_sname: std::ptr::null(),
+        dli_saddr: std::ptr::null_mut(),
+    };
+    let objs = OBJECTS.lock().unwrap().clone();
+    for lib in objs {
+        let a = addr as usize;
+        let start = lib.bias();
+        if a >= start && a < lib.runtime_end() {
+            (*info).dli_fname = lib.name_c.as_ptr();
+            (*info).dli_fbase = start as *mut c_void;
+            return 1;
+        }
+    }
+    0
+}
+
+fn resolve_library(inner: &Arc<LoaderInner>, name: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(name);
+    if p.is_absolute() || name.contains('/') {
+        return p.to_path_buf();
+    }
+    for dir in &inner.config().search_paths {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    p.to_path_buf()
+}
+
+macro_rules! shim {
+    ($m:expr, $name:literal, $f:path) => {
+        $m.insert(
+            $name,
+            Shim::shimmed($name, $f as *const () as *const c_void),
+        );
+    };
+}
+
+/// Add all `dl*` shims to the table.
+pub fn install(m: &mut HashMap<&'static str, Shim>) {
+    shim!(m, "dlopen", dlopen);
+    shim!(m, "android_dlopen_ext", android_dlopen_ext);
+    shim!(m, "__loader_dlopen", __loader_dlopen);
+    shim!(m, "dlsym", dlsym);
+    shim!(m, "dlclose", dlclose);
+    shim!(m, "dlerror", dlerror);
+    shim!(m, "dladdr", dladdr);
+    shim!(m, "dl_iterate_phdr", dl_iterate_phdr);
+}

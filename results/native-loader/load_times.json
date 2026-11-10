@@ -1,0 +1,26 @@
+[
+  {
+    "library": "libhellojni.so",
+    "engine": "acos-native-loader",
+    "iterations": 200,
+    "p50_ns": 8466,
+    "p95_ns": 10971,
+    "mean_ns": 9237
+  },
+  {
+    "library": "libtestcpp.so",
+    "engine": "acos-native-loader",
+    "iterations": 200,
+    "p50_ns": 287005,
+    "p95_ns": 310961,
+    "mean_ns": 293515
+  },
+  {
+    "library": "libhostref.so",
+    "engine": "host dlopen (glibc reference, NOT like-for-like)",
+    "iterations": 200,
+    "p50_ns": 7775,
+    "p95_ns": 9949,
+    "mean_ns": 8351
+  }
+]
