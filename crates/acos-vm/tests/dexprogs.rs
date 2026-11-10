@@ -61,6 +61,10 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     "24_zip_roundtrip",
     "25_security_digest",
     "26_regex_matrix",
+    // DEX annotation reflection needs real `libcore.reflect.AnnotationFactory`
+    // and `java.lang.reflect.Proxy`; verified against ART by
+    // `tools/diff-dexprogs.sh --corelib real`.
+    "27_annotations_reflection",
 ];
 
 #[test]

@@ -1,0 +1,37 @@
+class=@Info(color=BLUE, flag=true, name=cls, nested=@Nested(n=9, value=x), num=42, nums=[5, 6], tags=[a, b], type=class java.lang.String)
+present=true
+annotationType=Info
+equals=true
+hash=38502
+hashEq=true
+toString=@Info(color=BLUE, flag=true, name=cls, nested=@Nested(n=9, value=x), num=42, nums=[5, 6], tags=[a, b], type=class java.lang.String)
+name=cls
+num=42
+flag=true
+color=BLUE
+type=java.lang.String
+nums=[5, 6]
+tags=[a, b]
+nested=@Nested(n=9, value=x)
+nested.value=x
+nested.n=9
+declaredCount=2
+declared0=@Info(color=BLUE, flag=true, name=cls, nested=@Nested(n=9, value=x), num=42, nums=[5, 6], tags=[a, b], type=class java.lang.String)
+field=@Info(color=GREEN, flag=false, name=fld, nested=@Nested(n=3, value=nn), num=7, nums=[1, 2, 3], tags=[], type=class java.lang.Object)
+fieldPresent=true
+field.name=fld
+field.flag=false
+field.color=GREEN
+field.nums=[1, 2, 3]
+field.nested=@Nested(n=3, value=nn)
+method=@Info(color=RED, flag=true, name=def, nested=@Nested(n=3, value=nn), num=9, nums=[7], tags=[], type=class java.lang.Object)
+method.name=def
+method.num=9
+method.color=RED
+method.nums=[7]
+methodPresent=true
+methodDeclaredCount=1
+param=@Info(color=GREEN, flag=true, name=p, nested=@Nested(n=3, value=nn), num=7, nums=[1, 2, 3], tags=[], type=class java.lang.Integer)
+paramPresent=Info
+generic=java.util.ArrayList<java.lang.String>
+genericIfaces=1

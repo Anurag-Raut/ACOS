@@ -1110,3 +1110,87 @@ the canonical pattern (`attach` in `setup`, `bind` after the move, as in
 `crates/acos-jni/tests/jni_errors.rs`) the accounting is sound. The correct
 documentation fix is to call out the footgun next to `bind`, not to add a
 VM-side accounting change.
+
+## W38-A — DEX annotation reflection (fixture 27) and the next M2 blocker
+
+### What was implemented
+
+`Field.getAnnotationNative` no longer returns `null`. DEX annotation metadata
+was already parsed into `acos_dex::AnnotationsDirectory`; the missing piece was
+the reflection surface. New module `crates/acos-vm/src/natives/fwk_annotations.rs`:
+
+* `Class.getDeclaredMethodsUnchecked` / `getDeclaredConstructorsInternal` /
+  `getDeclaredConstructorInternal` / `getDeclaredMethodInternal` now build real
+  `Method` / `Constructor` mirrors (the `Executable` layout: `declaringClass`,
+  `accessFlags`, `artMethod`, `dexMethodIndex`).
+* `Executable.getMethodNameInternal` / `getMethodReturnTypeInternal` /
+  `getParameterTypesInternal` / `getParameterCountInternal` /
+  `compareMethodParametersInternal`, and `Method.getExceptionTypes` /
+  `getDefaultValue`.
+* `Class` / `Field` / `Executable` `getAnnotationNative`,
+  `getDeclaredAnnotations(Native)`, `isAnnotationPresentNative`,
+  `getParameterAnnotationsNative`, `getSignatureAnnotation`.
+* Annotation instances are materialised exactly as ART does: the encoded
+  elements are decoded (ints, strings, enums, classes, arrays, nested
+  annotations, defaults) into `libcore.reflect.AnnotationMember[]` and passed to
+  the **real** `libcore.reflect.AnnotationFactory.createAnnotation(Class,
+  AnnotationMember[])`, which returns the real `java.lang.reflect.Proxy`.
+  `Method.getDefaultValue` reads `@dalvik.annotation.AnnotationDefault` from the
+  annotation interface class (where d8 actually puts it).
+* New module `crates/acos-vm/src/natives/fwk_proxy.rs` implements the native
+  `java.lang.reflect.Proxy.generateProxy(...)`: it synthesises a class that
+  extends the real `Proxy`, implements every interface method plus the `Object`
+  contract, stores the handler in `Proxy.h`, and dispatches each call to
+  `InvocationHandler.invoke(proxy, method, args)`. `Constructor.newInstance0`
+  now accepts non-empty arguments. This also makes hand-written
+  `Proxy.newProxyInstance` work.
+
+`Method.equals` compares `getName()` results by **reference**, so method names
+are interned (`intern_str`), matching ART. Without that, `AnnotationFactory`
+rejected every element method with `IllegalArgumentException`.
+
+### Evidence
+
+* New fixture `fixtures/dexprogs/27_annotations_reflection` (RUNTIME annotations
+  with string/int/boolean/enum/class/int[]/String[]/nested elements and
+  defaults on a class, field, method and parameter; `getAnnotation`,
+  `isAnnotationPresent`, `getDeclaredAnnotations`, `toString`/`equals`/
+  `hashCode`/`annotationType`, `getGenericSuperclass`).
+  Captured from the API 34 oracle emulator (3 runs, deterministic) into
+  `fixtures/expected-art/dexprogs/27_annotations_reflection.{stdout,stderr,exit}`.
+  `acos run-dex --corelib real` is **byte-for-byte identical** to ART, normal and
+  `ACOS_GC_STRESS=1`.
+* The full real-corelib corpus (01–27) matches `fixtures/expected-art/dexprogs`
+  byte-for-byte and by exit code, normal and GC-stress.
+* `cargo test -p acos-dex -p acos-vm -- --skip thousand_events` passes except the
+  pre-existing `res_natives` failure (see below). The bootstrap `dexprogs` test
+  excludes 27 as `REAL_CORELIB_ONLY` (annotations require the real corelib and
+  the ART reference).
+
+### M2 progress
+
+`acos launch fixtures/build/apps/counter.apk` now gets **past**
+`Settings$Readable` (the W33-A blocker) and reaches `application_on_create`:
+
+```
+[    blocked] application_on_create
+    JAVA_EXCEPTION: java.lang.ExceptionInInitializerError
+[not-reached] client_transaction
+```
+
+The next blocker is an `ExceptionInInitializerError` raised while
+`Application.onCreate` runs. The launch diagnostic does not yet unwrap the
+wrapper's `cause`, so the exact failing `<clinit>` is not identified; the
+immediate next step is to unwrap `ExceptionInInitializerError.exception` in the
+probe/diagnostic and read the cause's class + first stack frame, then implement
+whatever native it names.
+
+### Caveats
+
+* At the time of writing the shared worktree did not compile: a concurrent
+  agent's in-progress `crates/acos-vm/src/exec.rs` has `apply_sign` private,
+  `Program.field_refs` missing and a non-exhaustive `Op` match. All test
+  evidence above was collected in a clean `git worktree` at HEAD (`ccd7ee7`)
+  with only this change applied.
+* `crates/acos-vm/tests/res_natives.rs` fails at HEAD (`resolve=false` vs the
+  expected `resolve=true`); it is untouched by this change and pre-existing.

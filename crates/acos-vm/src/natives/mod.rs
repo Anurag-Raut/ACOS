@@ -32,9 +32,11 @@ pub mod gfx_path;
 mod gfx_state;
 pub mod gfx_text;
 pub mod fwk_jni;
+mod fwk_annotations;
 mod fwk_m2_filechannel;
 mod fwk_m2_chain;
 mod fwk_m2_chain2;
+mod fwk_proxy;
 pub mod fwk_surface;
 pub mod fwk_vsync;
 mod fwk_reflect;
@@ -118,5 +120,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     os_log::install(vm);
     os_misc::install(vm);
     memintarray::install(vm);
+    // Register last: real DEX annotation reflection, the Method/Constructor
+    // mirror surface it needs, and `java.lang.reflect.Proxy`. These override
+    // the earlier null-returning placeholders (notably `Field.getAnnotationNative`
+    // from `fwk_m2_chain2`).
+    fwk_annotations::install(vm)?;
+    fwk_proxy::install(vm)?;
     Ok(())
 }

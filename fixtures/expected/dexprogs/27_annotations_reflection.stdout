@@ -1,0 +1,37 @@
+class=@Info(flag=true, color=BLUE, num=42, name="cls", type=java.lang.String.class, nested=@Nested(n=9, value="x"), nums={5, 6}, tags={"a", "b"})
+present=true
+annotationType=Info
+equals=true
+hash=38502
+hashEq=true
+toString=@Info(flag=true, color=BLUE, num=42, name="cls", type=java.lang.String.class, nested=@Nested(n=9, value="x"), nums={5, 6}, tags={"a", "b"})
+name=cls
+num=42
+flag=true
+color=BLUE
+type=java.lang.String
+nums=[5, 6]
+tags=[a, b]
+nested=@Nested(n=9, value="x")
+nested.value=x
+nested.n=9
+declaredCount=2
+declared0=@Simple(a="s", b=5, c={4, 5})
+field=@Info(flag=false, color=GREEN, num=7, name="fld", type=java.lang.Object.class, nested=@Nested(n=3, value="nn"), nums={1, 2, 3}, tags={})
+fieldPresent=true
+field.name=fld
+field.flag=false
+field.color=GREEN
+field.nums=[1, 2, 3]
+field.nested=@Nested(n=3, value="nn")
+method=@Info(flag=true, color=RED, num=9, name="def", type=java.lang.Object.class, nested=@Nested(n=3, value="nn"), nums={7}, tags={})
+method.name=def
+method.num=9
+method.color=RED
+method.nums=[7]
+methodPresent=true
+methodDeclaredCount=1
+param=@Info(flag=true, color=GREEN, num=7, name="p", type=java.lang.Integer.class, nested=@Nested(n=3, value="nn"), nums={1, 2, 3}, tags={})
+paramPresent=Info
+generic=java.util.ArrayList<java.lang.String>
+genericIfaces=1
