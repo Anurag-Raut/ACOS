@@ -34,6 +34,10 @@ pub struct Frame {
     /// originating `invoke-*` instruction (true) or leave its pc alone (native
     /// callbacks and class initialisers).
     pub advance_on_return: bool,
+    /// Byte size of the `invoke-*` instruction that called into this frame,
+    /// recorded by `invoke` so `pop_frame` can advance the caller without a
+    /// per-return lookup of the caller's instruction stream.
+    pub advance_size: u8,
     /// Lazily-lowered typed-IR program for this body (`ACOS_EXEC=ir`). Cached
     /// here so the per-batch dispatch does not probe the process-global cache.
     /// Only loop bodies get a program; straight-line bodies are run by
@@ -58,6 +62,7 @@ impl Frame {
             pending_exception: 0,
             monitor: None,
             advance_on_return: false,
+            advance_size: 0,
             ir: None,
             ir_checked: false,
         }

@@ -43,6 +43,10 @@ pub struct HostGuard {
     last_rss_check: Instant,
     /// Last observed RSS (bytes), for structured errors and metrics.
     rss_now: usize,
+    /// Call counter used to amortise the two `Instant::now` reads below. The
+    /// allocation hot path calls `check` once per object; reading the clock
+    /// twice per allocation measurably dominated allocator-bound programs.
+    tick: u32,
 }
 
 impl HostGuard {
@@ -69,6 +73,7 @@ impl HostGuard {
             started: now,
             last_rss_check: now,
             rss_now: 0,
+            tick: 0,
         }
     }
 
@@ -78,9 +83,17 @@ impl HostGuard {
         self.started = Instant::now();
     }
 
-    /// Cheap check. Always tests the wall clock (an `Instant` subtraction);
-    /// reads `/proc/self/status` at most every [`RSS_CHECK_INTERVAL`].
+    /// Cheap check. Tests the wall clock at most every 64 calls and reads
+    /// `/proc/self/status` at most every [`RSS_CHECK_INTERVAL`]. Amortising the
+    /// clock reads keeps the per-allocation cost to an integer increment while
+    /// bounding watchdog detection latency to a few microseconds of VM work.
     pub fn check(&mut self) -> VmResult<()> {
+        self.tick = self.tick.wrapping_add(1);
+        // Always do the first sample (so `rss_now` is populated), then sample
+        // once per 64 calls.
+        if self.rss_now != 0 && self.tick & 0x3f != 0 {
+            return Ok(());
+        }
         if let Some(max) = self.wall_max {
             let elapsed = self.started.elapsed();
             if elapsed > max {

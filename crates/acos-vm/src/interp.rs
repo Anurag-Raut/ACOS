@@ -80,6 +80,7 @@ fn acquire_frame(
     frame.pending_exception = NULL;
     frame.monitor = None;
     frame.advance_on_return = false;
+    frame.advance_size = 0;
     frame
 }
 
@@ -487,17 +488,13 @@ fn pop_frame(vm: &mut Vm, t: usize) {
     if let Some(m) = f.monitor {
         exit_monitor(vm, m);
     }
-    // The caller's next instruction size is looked up before the mutable
-    // borrow below (frames no longer carry their own body reference).
+    // The caller's next instruction size was recorded on its frame by
+    // `invoke`, so no per-return lookup of the caller's body is needed.
     let adv_size = if f.advance_on_return {
         vm.threads[t]
             .frames
             .last()
-            .and_then(|caller| {
-                code_of(vm, caller.method)
-                    .and_then(|c| c.insns.get(caller.insn_index))
-                    .map(|i| i.size as u32)
-            })
+            .map(|caller| caller.advance_size as u32)
             .unwrap_or(0)
     } else {
         0
@@ -2146,6 +2143,7 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         }
         frame.monitor = Some(target);
     }
+    vm.threads[t].frames[fi].advance_size = insn.size;
     vm.threads[t].frames.push(frame);
     vm.metrics.invokes += 1;
     Ok(())

@@ -1,0 +1,130 @@
+{
+  "schema": "acos-w83a-bench/v1",
+  "label": "w83a-after",
+  "profile": "release",
+  "repeats": 5,
+  "java": "17.0.21 -Xint",
+  "note": "5 interleaved rounds, min of each config",
+  "rows": {
+    "BenchArith": {
+      "before_ms": 976.56,
+      "after_ms": 961.4,
+      "java_xint_ms": 480.84,
+      "before_x": 2.031,
+      "after_x": 1.999,
+      "speedup": 1.016,
+      "ir_ms": 961.4,
+      "off_ms": 976.56
+    },
+    "BenchLoop": {
+      "before_ms": 914.06,
+      "after_ms": 851.08,
+      "java_xint_ms": 380.88,
+      "before_x": 2.4,
+      "after_x": 2.234,
+      "speedup": 1.074,
+      "ir_ms": 851.08,
+      "off_ms": 914.06
+    },
+    "BenchArray": {
+      "before_ms": 745.33,
+      "after_ms": 705.61,
+      "java_xint_ms": 314.23,
+      "before_x": 2.372,
+      "after_x": 2.246,
+      "speedup": 1.056,
+      "ir_ms": 705.61,
+      "off_ms": 745.33
+    },
+    "BenchFib": {
+      "before_ms": 497.05,
+      "after_ms": 483.54,
+      "java_xint_ms": 322.17,
+      "before_x": 1.543,
+      "after_x": 1.501,
+      "speedup": 1.028,
+      "ir_ms": 483.54,
+      "off_ms": 497.05
+    },
+    "BenchFields": {
+      "before_ms": 117.36,
+      "after_ms": 111.44,
+      "java_xint_ms": 73.31,
+      "before_x": 1.601,
+      "after_x": 1.52,
+      "speedup": 1.053,
+      "ir_ms": 111.44,
+      "off_ms": 117.36
+    },
+    "BenchStaticCall": {
+      "before_ms": 3186.54,
+      "after_ms": 3118.02,
+      "java_xint_ms": 2787.29,
+      "before_x": 1.143,
+      "after_x": 1.119,
+      "speedup": 1.022,
+      "ir_ms": 3118.02,
+      "off_ms": 3186.54
+    },
+    "BenchVirtualCall": {
+      "before_ms": 3232.82,
+      "after_ms": 3120.41,
+      "java_xint_ms": 2789.06,
+      "before_x": 1.159,
+      "after_x": 1.119,
+      "speedup": 1.036,
+      "ir_ms": 3120.41,
+      "off_ms": 3232.82
+    },
+    "BenchVirtual": {
+      "before_ms": 1832.24,
+      "after_ms": 1878.02,
+      "java_xint_ms": 1106.26,
+      "before_x": 1.656,
+      "after_x": 1.698,
+      "speedup": 0.976,
+      "ir_ms": 1878.02,
+      "off_ms": 1832.24
+    },
+    "BenchAlloc": {
+      "before_ms": 1956.13,
+      "after_ms": 1585.61,
+      "java_xint_ms": 1124.89,
+      "before_x": 1.739,
+      "after_x": 1.41,
+      "speedup": 1.234,
+      "ir_ms": 1585.61,
+      "off_ms": 1956.13
+    },
+    "BenchGc": {
+      "before_ms": 523.58,
+      "after_ms": 331.78,
+      "java_xint_ms": 127.28,
+      "before_x": 4.114,
+      "after_x": 2.607,
+      "speedup": 1.578,
+      "ir_ms": 331.78,
+      "off_ms": 523.58
+    },
+    "BenchString": {
+      "before_ms": 120.48,
+      "after_ms": 121.2,
+      "java_xint_ms": 579.46,
+      "before_x": 0.208,
+      "after_x": 0.209,
+      "speedup": 0.994,
+      "ir_ms": 121.2,
+      "off_ms": 120.48
+    },
+    "BenchCollections": {
+      "before_ms": 125.98,
+      "after_ms": 128.71,
+      "java_xint_ms": 79.11,
+      "before_x": 1.592,
+      "after_x": 1.627,
+      "speedup": 0.979,
+      "ir_ms": 128.71,
+      "off_ms": 125.98
+    }
+  }
+}

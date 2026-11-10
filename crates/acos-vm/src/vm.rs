@@ -283,6 +283,11 @@ pub struct Vm {
     /// arrays, so this keyed-by-`elem_desc` set removes the per-allocation
     /// `String` allocation and the `"["`-prefixed hash.
     pub(crate) loaded_array_elems: HashSet<String>,
+    /// One-entry fast path for the `loaded_array_elems` probe above: a tight
+    /// array-allocation loop almost always repeats the same element descriptor,
+    /// so remembering the last one skips the string hash on the common case.
+    /// Transient (not part of the heap snapshot).
+    pub(crate) last_array_elem: Option<String>,
     /// Descriptors of DEX classes whose `load_dex_class` is on the stack.
     ///
     /// A class is only inserted into `class_by_desc` once its fields, methods
@@ -397,6 +402,7 @@ impl Vm {
             classes: Vec::new(),
             class_by_desc: HashMap::new(),
             loaded_array_elems: HashSet::new(),
+            last_array_elem: None,
             loading_classes: HashSet::new(),
             types: Vec::new(),
             type_by_desc: HashMap::new(),
@@ -510,6 +516,7 @@ impl Vm {
         self.type_by_desc = image.type_by_desc.clone();
         self.class_by_desc = image.class_by_desc.clone();
         self.loaded_array_elems = image.loaded_array_elems.clone();
+        self.last_array_elem = None;
         self.builtin_alloc = image.builtin_alloc.clone();
         self.c_object = image.c_object;
         self.c_class = image.c_class;
@@ -1372,10 +1379,13 @@ impl Vm {
         // allocation (throttled internally).
         self.host.check()?;
         if let Object::Array(a) = &obj {
-            if !self.loaded_array_elems.contains(a.elem_desc.as_str()) {
-                let desc = format!("[{}", a.elem_desc);
-                self.load_class(&desc)?;
-                self.loaded_array_elems.insert(a.elem_desc.clone());
+            if self.last_array_elem.as_deref() != Some(a.elem_desc.as_str()) {
+                if !self.loaded_array_elems.contains(a.elem_desc.as_str()) {
+                    let desc = format!("[{}", a.elem_desc);
+                    self.load_class(&desc)?;
+                    self.loaded_array_elems.insert(a.elem_desc.clone());
+                }
+                self.last_array_elem = Some(a.elem_desc.clone());
             }
         }
         if self.gc_stress || self.heap.live_bytes >= self.gc_threshold {
