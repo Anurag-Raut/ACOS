@@ -62,7 +62,7 @@ pub enum MissingPolicy {
 }
 
 /// Loader configuration.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct LoaderConfig {
     /// Directories searched for `DT_NEEDED` libraries (e.g. the extracted
     /// APK `lib/x86_64/` directory).
@@ -81,6 +81,30 @@ pub struct LoaderConfig {
     /// paths until a seccomp/landlock sandbox exists (see DECISIONS.md,
     /// ADR-0018 note).
     pub allow_host_paths: bool,
+    /// When `true` (the default), the loader refuses to map a guest `.so`
+    /// unless this process reports an active confinement (`PR_SET_NO_NEW_PRIVS`
+    /// + Landlock + seccomp; see [`acos_sandbox::confinement_active`]).
+    ///
+    /// Product paths must leave this on. Trusted in-process tests that map
+    /// their own test libraries without entering a sandbox disable it with
+    /// [`LoaderConfig::for_tests_without_confinement`]. See DECISIONS.md
+    /// ADR-0022.
+    pub require_confinement: bool,
+}
+
+impl Default for LoaderConfig {
+    fn default() -> Self {
+        LoaderConfig {
+            search_paths: Vec::new(),
+            missing_policy: MissingPolicy::default(),
+            log_sink: None,
+            system_properties: HashMap::new(),
+            allow_host_paths: false,
+            // Product default: never map guest `PROT_EXEC` code unless the
+            // process is confined (ADR-0022).
+            require_confinement: true,
+        }
+    }
 }
 
 impl std::fmt::Debug for LoaderConfig {
@@ -90,6 +114,7 @@ impl std::fmt::Debug for LoaderConfig {
             .field("missing_policy", &self.missing_policy)
             .field("log_sink", &self.log_sink.is_some())
             .field("system_properties", &self.system_properties.len())
+            .field("require_confinement", &self.require_confinement)
             .finish()
     }
 }
@@ -117,5 +142,20 @@ impl LoaderConfig {
     pub fn with_host_paths_allowed(mut self) -> Self {
         self.allow_host_paths = true;
         self
+    }
+
+    /// Test-only: a loader that does not require an active confinement.
+    ///
+    /// This exists for trusted in-process tests that map their own test
+    /// libraries and never run untrusted APK code. **Product code must not use
+    /// it** — it defeats the ADR-0022 guarantee that native APK code only runs
+    /// under a seccomp/landlock sandbox. Runs are still safe because the test
+    /// inputs are checked-in fixtures, not guest code.
+    #[doc(hidden)]
+    pub fn for_tests_without_confinement() -> Self {
+        LoaderConfig {
+            require_confinement: false,
+            ..LoaderConfig::default()
+        }
     }
 }

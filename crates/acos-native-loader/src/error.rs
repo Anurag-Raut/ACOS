@@ -52,6 +52,16 @@ pub enum LoaderError {
     /// Caller supplied an invalid argument.
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
+
+    /// Native loading was refused because the process is not confined.
+    ///
+    /// The loader maps `PROT_EXEC` guest code in-process, so it refuses to
+    /// proceed unless `PR_SET_NO_NEW_PRIVS`, Landlock and seccomp are active
+    /// (see DECISIONS.md ADR-0022).
+    #[error(
+        "refusing to load native code: process confinement is not active (CONFINEMENT_UNAVAILABLE)"
+    )]
+    ConfinementRequired,
 }
 
 impl LoaderError {
@@ -67,6 +77,7 @@ impl LoaderError {
             LoaderError::Io(_) => "NATIVE_IO_ERROR",
             LoaderError::SymbolNotFound(_) => "NATIVE_SYMBOL_NOT_FOUND",
             LoaderError::InvalidArgument(_) => "NATIVE_INVALID_ARGUMENT",
+            LoaderError::ConfinementRequired => "CONFINEMENT_UNAVAILABLE",
         }
     }
 }

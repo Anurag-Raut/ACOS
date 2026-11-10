@@ -16,7 +16,7 @@ use std::os::raw::c_void;
 fn hello_jni_end_to_end() {
     let _g = common::serial();
     let jni = TestJni::install();
-    let loader = Loader::new(LoaderConfig::default());
+    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
     let bytes = std::fs::read(common::data("libhellojni.so")).expect("read fixture .so");
     let h = loader
         .load_bytes(&bytes, "libhellojni.so")

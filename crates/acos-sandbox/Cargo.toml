@@ -1,0 +1,24 @@
+[package]
+name = "acos-sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Confinement layer for ACOS: no_new_privs, fd/env/rlimit hygiene, Landlock filesystem rulesets and seccomp-bpf syscall filtering. The only ACOS crate allowed to hold the unsafe/libc calls needed to enter a sandbox (see DECISIONS.md ADR-0022)."
+
+[lib]
+name = "acos_sandbox"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sandbox_child"
+path = "src/bin/sandbox_child.rs"
+
+[dependencies]
+libc = "0.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

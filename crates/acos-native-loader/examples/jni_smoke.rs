@@ -19,7 +19,7 @@ unsafe fn sym_fn<R>(p: *const c_void) -> R {
 
 fn main() {
     let jni = TestJni::install();
-    let loader = Loader::new(LoaderConfig::default());
+    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
     let bytes = std::fs::read(data("libhellojni.so")).expect("read");
     let h = loader
         .load_bytes(&bytes, "libhellojni.so")

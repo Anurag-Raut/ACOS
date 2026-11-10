@@ -9,7 +9,7 @@ fn cpp_features_and_destructor_on_unload() {
     let _g = common::serial();
     let sink = common::RecordingSink::new_arc();
     let loader = Loader::new(
-        LoaderConfig::default()
+        LoaderConfig::for_tests_without_confinement()
             .with_search_path(common::data_dir())
             .with_log_sink(sink.clone()),
     );

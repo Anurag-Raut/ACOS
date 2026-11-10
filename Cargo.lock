@@ -32,6 +32,7 @@ dependencies = [
  "acos-protocol",
  "acos-render",
  "acos-runtime",
+ "acos-sandbox",
  "acos-services",
  "acos-verify",
  "acos-vm",
@@ -94,6 +95,7 @@ name = "acos-native-loader"
 version = "0.1.0"
 dependencies = [
  "acos-render",
+ "acos-sandbox",
  "cc",
  "libc",
  "serde",
@@ -158,6 +160,16 @@ dependencies = [
  "acos-services",
  "acos-vm",
  "acos-wm",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "acos-sandbox"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
  "serde_json",
  "thiserror",
 ]

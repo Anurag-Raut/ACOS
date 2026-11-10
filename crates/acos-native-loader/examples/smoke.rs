@@ -14,7 +14,7 @@ fn data(name: &str) -> PathBuf {
 fn main() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
     let loader = Loader::new(
-        LoaderConfig::default()
+        LoaderConfig::for_tests_without_confinement()
             .with_search_path(dir)
             .with_missing_policy(MissingPolicy::Strict),
     );

@@ -11,6 +11,7 @@ mod launch;
 mod native_inventory;
 mod observe_tree;
 mod parity;
+mod sandbox_probe;
 mod session;
 mod verify;
 
@@ -67,6 +68,8 @@ enum Command {
     Parity(parity::ParityArgs),
     /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
     Bench(bench::BenchArgs),
+    /// Probe confinement capabilities and report which layers are active (JSON).
+    SandboxProbe,
 }
 
 #[derive(Debug, clap::Args)]
@@ -158,6 +161,7 @@ fn main() -> ExitCode {
         Command::Parity(args) => parity::run(args),
         Command::Bench(args) => bench::run(args),
         Command::NativeInventory(args) => native_inventory::run(args),
+        Command::SandboxProbe => sandbox_probe::run(),
     }
 }
 

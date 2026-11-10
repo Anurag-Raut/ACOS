@@ -10,7 +10,7 @@ fn main() {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
     let path = dir.join("libtestmissing.so");
 
-    let strict = Loader::new(LoaderConfig::default().with_search_path(dir.clone()));
+    let strict = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(dir.clone()));
     match strict.load_file(&path) {
         Ok(_) => println!("unexpected success"),
         Err(e) => {
@@ -20,7 +20,7 @@ fn main() {
     }
 
     let lazy = Loader::new(
-        LoaderConfig::default()
+        LoaderConfig::for_tests_without_confinement()
             .with_search_path(dir)
             .with_missing_policy(MissingPolicy::LazyTrap),
     );

@@ -11,7 +11,7 @@ use common::{cstr, RecordingSink};
 fn c_library_all_features_including_packed_relocations() {
     let _g = common::serial();
     std::env::set_var("ACOS_TEST_ENV", "present");
-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
+    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
 
     // Plain RELA, Android APS2 packed RELA, and RELR packed forms must all load
     // and pass the same feature checks.
@@ -43,7 +43,7 @@ fn log_lines_are_captured_by_the_sink() {
     let _g = common::serial();
     std::env::set_var("ACOS_TEST_ENV", "present");
     let sink = RecordingSink::new_arc();
-    let config = LoaderConfig::default()
+    let config = LoaderConfig::for_tests_without_confinement()
         .with_search_path(common::data_dir())
         .with_log_sink(sink.clone());
     let loader = Loader::new(config);

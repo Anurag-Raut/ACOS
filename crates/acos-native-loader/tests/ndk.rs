@@ -389,7 +389,10 @@ fn ndk_surface_is_backed_by_real_acos_state() {
     });
     install_ndk_host(host.clone());
 
-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
+    // Trusted checked-in test object in an unconfined test process; use the
+    // explicit test-only confinement opt-out (ADR-0022).
+    let loader =
+        Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
     let h = loader.load_file(&common::data("libacosndk.so")).unwrap();
 
     // --- assets: bytes come from the APK entry ---------------------------

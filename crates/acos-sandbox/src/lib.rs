@@ -1,0 +1,109 @@
+//! # `acos-sandbox`
+//!
+//! The ACOS confinement layer. It is the **only** ACOS crate allowed to hold
+//! the `unsafe`/`libc` calls needed to enter a sandbox (see
+//! `DECISIONS.md` ADR-0022). No sudo and no kernel/system changes are required:
+//! every layer is an unprivileged Linux facility.
+//!
+//! [`confine`] applies, in order, the layers an untrusted APK native library
+//! needs to be contained inside the ACOS session process:
+//!
+//! 1. `prctl(PR_SET_NO_NEW_PRIVS)` — makes the following layers un-removable;
+//! 2. close inherited file descriptors (except an explicit keep list);
+//! 3. a sanitised environment (`clearenv` + a minimal set);
+//! 4. resource limits (address space, `NOFILE`, `NPROC`, CPU, `CORE=0`);
+//! 5. optional unprivileged user/network/mount namespaces;
+//! 6. a Landlock filesystem ruleset: read-only for system VFS roots and the
+//!    APK directory, read-write only for the app data directory, nothing else;
+//! 7. a seccomp-bpf filter that denies `exec*`, `ptrace`, `process_vm_*`,
+//!    `mount`/`unshare`/`setns`, `kexec`, `bpf`, `perf_event_open`, `keyctl`,
+//!    module ops, and every socket family except `AF_UNIX`, while leaving
+//!    futex, thread creation, `mmap`/`mprotect` (including `PROT_EXEC`),
+//!    signals, clocks, eventfd and epoll available.
+//!
+//! It **fails closed**: if any layer listed in [`ConfineProfile::required`]
+//! cannot be established, [`confine`] returns a structured
+//! [`ConfineError`] with code [`CONFINEMENT_UNAVAILABLE`]. The
+//! [`ConfinementReport`] always says exactly which layers are active.
+//!
+//! Optional cgroup-v2 memory/PID limits via `systemd-run --user --scope` are
+//! *probed* ([`Capabilities`]) but never required and never part of the fatal
+//! path.
+//!
+//! ## Never fake
+//!
+//! [`confine`] never reports a layer as active unless the kernel accepted it.
+//! A process that has not called [`confine`] reports
+//! [`confinement_active`]`() == false`, which is what the native loader checks
+//! before it maps an APK `.so`.
+#![deny(unsafe_op_in_unsafe_fn)]
+#![allow(clippy::missing_safety_doc)]
+
+use serde::{Deserialize, Serialize};
+
+mod confine;
+pub mod error;
+mod live;
+mod linux;
+mod probe;
+
+pub use confine::{
+    confine, confinement_active, ConfineProfile, ConfinementReport, LayerReport, LayerStatus,
+    NamespacePlan, RlimitProfile,
+};
+pub use error::{ConfineError, CONFINEMENT_FAILED, CONFINEMENT_UNAVAILABLE};
+pub use live::probe_live;
+pub use probe::{probe, systemd_user_scope_available, Capabilities};
+
+/// A confinement layer that can be independently probed and reported.
+///
+/// The `snake_case` serialisation is the stable wire name used by
+/// `acos sandbox-probe` and by the ADR-0022 report.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Layer {
+    /// `prctl(PR_SET_NO_NEW_PRIVS)`.
+    NoNewPrivs,
+    /// Closing inherited file descriptors.
+    CloseFds,
+    /// Clearing and re-seeding the process environment.
+    SanitizeEnv,
+    /// Address-space / file / process / CPU / core resource limits.
+    Rlimits,
+    /// Unprivileged user namespace.
+    UserNamespace,
+    /// Network namespace.
+    NetNamespace,
+    /// Mount namespace.
+    MountNamespace,
+    /// Landlock filesystem access ruleset.
+    Landlock,
+    /// seccomp-bpf syscall filter.
+    Seccomp,
+}
+
+impl Layer {
+    /// Stable machine-readable name (`snake_case`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Layer::NoNewPrivs => "no_new_privs",
+            Layer::CloseFds => "close_fds",
+            Layer::SanitizeEnv => "sanitize_env",
+            Layer::Rlimits => "rlimits",
+            Layer::UserNamespace => "user_namespace",
+            Layer::NetNamespace => "net_namespace",
+            Layer::MountNamespace => "mount_namespace",
+            Layer::Landlock => "landlock",
+            Layer::Seccomp => "seccomp",
+        }
+    }
+
+    /// The layers that must all be active for a process to count as confined.
+    pub const BASE: [Layer; 3] = [Layer::NoNewPrivs, Layer::Landlock, Layer::Seccomp];
+}
+
+impl std::fmt::Display for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}

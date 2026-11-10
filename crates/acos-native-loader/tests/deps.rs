@@ -7,7 +7,7 @@ use acos_native_loader::{Loader, LoaderConfig};
 #[test]
 fn dependency_order_and_interposition() {
     let _g = common::serial();
-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
+    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
     let h = loader.load_file(&common::data("libtestuser.so")).unwrap();
 
     // user_run checks: dep_greet, dep_calls_hook (dep's undefined symbol binds

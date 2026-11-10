@@ -608,3 +608,69 @@ Status: accepted (2026-11-11), workstream 3 of cross-platform apps.
   `GetEnv == JNI_OK` → `DetachCurrentThread == JNI_OK` → `JNI_EDETACHED`
   (`jni_native_fixture`, bit 10). `jni_slots::javavm_attach_getenv_and_versions`
   keeps the owner-thread contract.
+
+---
+
+## ADR-0022 — Native confinement layer: `acos-sandbox`, no sudo, fail closed
+
+Status: accepted (W53-A, 2026-11-11), supersedes the ADR-0018 note's
+"native loader sandbox gap" as a *limitation* (the gap is now closed by a
+layer; product wiring is still pending).
+
+- **Context.** `acos-native-loader` maps guest ELF `PROT_EXEC` and runs it in
+  the host process. The ADR-0018 note recorded that this is unsandboxed and
+  therefore disabled for product paths. Cross-platform apps (workstream 1)
+  need a confinement layer before an untrusted APK `.so` can run inside the
+  ACOS session process, with **no sudo and no kernel/system changes**.
+- **Decision.** Add `crates/acos-sandbox`, the *only* ACOS crate allowed to
+  hold the `unsafe`/`libc` calls needed to enter a sandbox. It exposes a
+  capability probe (`probe`, `Capabilities`), a profile (`ConfineProfile`), an
+  orchestrator (`confine`) and a live fork probe (`probe_live`). Layers, in
+  application order:
+  1. `prctl(PR_SET_NO_NEW_PRIVS)`;
+  2. close inherited fds except `keep_fds` (`close_range`, `ENOSYS` fallback);
+  3. sanitised env (`clearenv` + a minimal Android-flavoured set);
+  4. rlimits (`RLIMIT_AS=4 GiB`, `NOFILE=1024`, `NPROC=8192`, `CPU=60 s`,
+     `CORE=0`, all configurable);
+  5. optional unprivileged user/network/mount namespaces (`uid_map`/`gid_map`
+     + private mount propagation);
+  6. Landlock filesystem ruleset via the raw ABI (syscalls 444/445/446):
+     `handled_access_fs` is every right the ABI supports, read-only roots grant
+     `EXECUTE|READ_FILE|READ_DIR`, read-write roots grant the full mask, and
+     any path outside the listed roots is denied;
+  7. seccomp-bpf (`SECCOMP_SET_MODE_FILTER` + `TSYNC`; default `ALLOW`, denials
+     return `EACCES`) denying `execve`/`execveat`, `ptrace`, `process_vm_*`,
+     `mount`/`umount2`/`pivot_root`/`chroot`, `unshare`/`setns`, `kexec*`,
+     `bpf`, `perf_event_open`, `keyctl`/`add_key`/`request_key`, module ops,
+     `reboot`, and `socket`/`socketpair` for every family except `AF_UNIX`;
+     `futex`, threads, `mmap`/`mprotect` (including `PROT_EXEC`), signals,
+     clocks, `eventfd` and `epoll` stay available.
+  Optional cgroup-v2 memory/PID limits via `systemd-run --user --scope` are
+  **probed only** and never required.
+- **Ordering deviation from the work item.** Namespaces are applied *before*
+  Landlock/seccomp (not last): writing `uid_map` needs `/proc` and making
+  mounts private needs `mount`, both of which the later layers deny. This is
+  the only deviation; `PR_SET_NO_NEW_PRIVS` still precedes Landlock and seccomp.
+- **Fail closed.** `confine` returns a structured `ConfineError` with code
+  `CONFINEMENT_UNAVAILABLE` whenever a layer in `ConfineProfile::required` is
+  not active. It never reports a layer active unless the kernel accepted it.
+  `confinement_active()` is a process-global bit set only when
+  `PR_SET_NO_NEW_PRIVS` + Landlock + seccomp are all active.
+- **Native-loader integration.** `LoaderConfig` gains `require_confinement:
+  bool` (default `true`); `Loader::load_bytes_named` refuses with
+  `LoaderError::ConfinementRequired` (code `CONFINEMENT_UNAVAILABLE`) unless
+  the process reports confinement. Trusted in-process tests use the
+  clearly-named `LoaderConfig::for_tests_without_confinement()`; product paths
+  must not. `acos sandbox-probe` reports capabilities and a live layer report
+  as JSON.
+- **Evidence.** `cargo test -p acos-sandbox` runs `sandbox_child` as a separate
+  process and asserts, with confinement on, that `exec`, `ptrace`,
+  `process_vm_readv`, `socket(AF_INET)`, and open/write outside the allowed
+  roots fail while threads, `mmap(PROT_EXEC)`, `futex`, read of the read-only
+  root and write to the data dir succeed; with confinement off the denied
+  actions succeed, proving the sandbox is the cause. On the dev host (kernel
+  `7.2.11-arch1-1`, Landlock ABI 10) all six mandatory layers are active.
+- **Open question.** Running the confinement inside the already-multithreaded
+  session process: seccomp is installed with `TSYNC`, so `confine` must be
+  called before the runtime spawns coordinator threads, or the call fails
+  closed. The session-lifecycle workstream (W51-A) owns that call site.

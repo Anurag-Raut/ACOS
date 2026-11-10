@@ -44,7 +44,7 @@ fn main() {
         .unwrap_or(200);
     let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
     let loader = Loader::new(
-        LoaderConfig::default()
+        LoaderConfig::for_tests_without_confinement()
             .with_search_path(data.clone())
             .with_log_sink(Arc::new(NullSink)),
     );

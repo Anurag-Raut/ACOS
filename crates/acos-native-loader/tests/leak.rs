@@ -16,7 +16,7 @@ fn load_unload_1000_times_does_not_leak_mappings() {
     let _g = common::serial();
     let sink = common::RecordingSink::new_arc();
     let loader = Loader::new(
-        LoaderConfig::default()
+        LoaderConfig::for_tests_without_confinement()
             .with_search_path(common::data_dir())
             .with_log_sink(sink),
     );

@@ -49,7 +49,9 @@ fn native_fixture_exercises_slots_through_jni_table() {
     rt.attach(&mut vm).expect("attach");
     rt.bind(&mut vm);
 
-    let loader = Loader::new(LoaderConfig::default());
+    // The fixture is a trusted checked-in test object, not guest code; this
+    // trusted test process is not confined, so opt out explicitly (ADR-0022).
+    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
     let handle = loader.load_file(&path).expect("load fixture .so");
 
     let sym = handle

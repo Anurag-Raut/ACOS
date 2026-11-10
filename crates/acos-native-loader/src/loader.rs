@@ -338,6 +338,12 @@ impl Loader {
         path: Option<PathBuf>,
         name: &str,
     ) -> Result<LibraryHandle> {
+        // ADR-0022: mapping `PROT_EXEC` guest code in-process is only allowed
+        // once this process reports an active confinement. Product paths leave
+        // `require_confinement` on; trusted tests opt out explicitly.
+        if self.inner.config.require_confinement && !acos_sandbox::confinement_active() {
+            return Err(LoaderError::ConfinementRequired);
+        }
         let root = self.load_object(bytes, path, name)?;
         // Recursively load DT_NEEDED dependencies (pre-order registration gives
         // the ELF global search order: root, then deps breadth/depth-first).

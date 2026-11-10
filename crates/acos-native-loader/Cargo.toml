@@ -12,6 +12,7 @@ name = "acos_native_loader"
 path = "src/lib.rs"
 
 [dependencies]
+acos-sandbox = { path = "../acos-sandbox" }
 libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
