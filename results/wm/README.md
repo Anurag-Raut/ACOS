@@ -19,7 +19,13 @@ $ cargo test -p acos-wm
 = 75 tests, 0 failed
   (the 44 lib tests include `damage_matches_full`, a 600-case proptest)
 
-$ cargo clippy -p acos-wm --all-targets -- -D warnings
+$ cargo test -p acos-render
+  63 (lib) + 14 (contract) + 2 (golden) + 1 (hello_views_metrics)
++  4 (present_damage: hash equality + immutability)
+= 84 tests, 0 failed
+  (`present_damage` is a 600-case proptest)
+
+$ cargo clippy -p acos-wm -p acos-render --all-targets -- -D warnings
 => clean
 
 $ cargo run -p acos-wm --example replay_report
@@ -28,15 +34,15 @@ rows=109 ok=43 error=0 not-owned=57 transport=9
 $ cargo bench -p acos-wm
 | operation | p50 (ns) | p95 (ns) |
 |---|---:|---:|
-| legacy compose+to_pixmap, 1 opaque layer | 49 252 303 | 50 168 508 |
-| compose, 1 opaque layer (full damage) | 215 829 | 243 101 |
-| present, 1 opaque layer (full damage) | 752 024 | 1 014 100 |
-| compose, 1 opaque layer (200×100 damage) | 1 493 | 1 542 |
-| present, 1 opaque layer (200×100 damage) | 385 319 | 435 745 |
-| compose, app + translucent IME (full) | 384 779 | 420 997 |
-| present, app + translucent IME (full) | 935 781 | 1 011 305 |
-| compose, app + IME (200×100 damage) | 1 553 | 1 603 |
-| present, app + IME (200×100 damage) | 381 081 | 485 539 |
+| legacy compose+to_pixmap, 1 opaque layer | 49 767 019 | 50 461 404 |
+| compose, 1 opaque layer (full damage) | 203 957 | 247 339 |
+| present, 1 opaque layer (full damage) | 749 940 | 952 473 |
+| compose, 1 opaque layer (200×100 damage) | 1 533 | 1 583 |
+| present, 1 opaque layer (200×100 damage) | 19 928 | 22 403 |
+| compose, app + translucent IME (full) | 384 458 | 439 682 |
+| present, app + translucent IME (full) | 923 869 | 1 075 977 |
+| compose, app + IME (200×100 damage) | 1 593 | 1 624 |
+| present, app + IME (200×100 damage) | 20 018 | 22 372 |
 | present, no change (skipped) | 20 | 20 |
 idle 5 s: timer arms 0 (see `bench.txt`)
 ```
@@ -48,7 +54,7 @@ The compositor was the 50 ms hot path: `compose` allocated a fresh full-frame
 `get_pixel`/`set_pixel` float blending, then copied the whole thing again in
 `Bitmap::to_pixmap`. It now:
 
-- renders directly into the surface's **persistent** pixmap (no per-present
+- renders directly into the surface's working pixmap (no per-present
   allocation, no `to_pixmap` copy);
 - tracks a **damage rect** per mutation (old ∪ new coverage) and re-composites
   only that region — the full frame only on first present / `invalidate`;
@@ -66,17 +72,22 @@ create/remove).
 | target (release, p50) | before | after | verdict |
 |---|---:|---:|---|
 | 1 opaque full-screen layer, first present | 49.3 ms | **0.75 ms** | ≤ 3 ms ✅ |
-| 1 opaque layer, repeat present, 200×100 damage | 49.3 ms | 0.385 ms (compose **1.5 µs**) | ≤ 0.2 ms ⚠️ |
+| 1 opaque layer, repeat present, 200×100 damage | 49.3 ms | **0.020 ms** (compose **1.5 µs**) | ≤ 0.2 ms ✅ |
 | no-change present | ~0 | **20 ns** | ~0 ✅ |
 | app + translucent IME, full present | 51.5 ms | **0.94 ms** | ≤ 4 ms ✅ |
-| app + IME, repeat present, 200×100 damage | 51.5 ms | **0.381 ms** (compose **1.6 µs**) | ≤ 0.5 ms ✅ |
+| app + IME, repeat present, 200×100 damage | 51.5 ms | **0.020 ms** (compose **1.6 µs**) | ≤ 0.5 ms ✅ |
 
-The one miss is not the compositor: the 0.385 ms repeat-present is almost
-entirely `acos_render::Surface::present`, which re-hashes the **whole**
-1080×2400 buffer (`xxh3_128`) and clones it (`Arc::new(pixmap.clone())`) on
-every frame. The compositor's own damage-limited work is **1.5 µs** (a 2000×
-reduction from the 49 ms legacy path). The exact `acos-render` request is in
-gap 10 below.
+The repeat-present target was blocked by `acos_render::Surface::present`,
+which re-hashed the **whole** 1080×2400 buffer (`xxh3_128`) and cloned it
+(`Arc::new(pixmap.clone())`) on every frame. `Surface::present_damage` now
+re-hashes only the rows that intersect the caller's damage and re-folds a
+per-row xxh3 Merkle root (so the reported `content_hash` is still over the
+whole buffer), and double-buffers the pixels so a previous `Frame` stays
+immutable without a full clone. The compositor's own damage-limited work is
+**1.5 µs**; the end-to-end repeat present dropped from **0.385 ms to
+0.020 ms** (≈20×), while a full present still reports its honest full-buffer
+cost (≈0.42 ms at the `Surface` level, 0.75 ms end-to-end including the full
+composite).
 
 After the fix the full end-to-end composite (0.75 ms) is well below
 `acos-render`'s own ~4–5 ms hello-views render, so the compositor no longer
@@ -256,32 +267,40 @@ marker).
    the typed transaction, but the V1 software composite rasterises the layer
    axis-aligned (identity); rotation/crop state is recorded for the native layer
    and the frame-timeline.
-10. **`acos-render` API request — damage-aware commit.** The repeat-present
-   target (≤ 0.2 ms; § Compositor performance) is blocked by
-   `Surface::present`, which re-hashes the full 1080×2400 buffer and clones it
-   on every frame. The compositor's own damage-limited compose is 1.5 µs. The
-   requested addition (do not edit `acos-render` here; using the current API as
-   the fallback) is:
+10. **`acos-render` damage-aware commit — implemented.** The repeat-present
+    target (≤ 0.2 ms; § Compositor performance) was blocked by
+    `Surface::present`, which re-hashed the full 1080×2400 buffer and cloned it
+    on every frame. `acos-render` now provides:
 
-   ```rust
-   // acos_render::Surface
-   pub struct Rect { pub x: u32, pub y: u32, pub w: u32, pub h: u32 }
+    ```rust
+    // acos_render::Surface
+    pub fn present_damage(&mut self, cause_id: i64, damage: Option<Rect>,
+                          unsupported_ops: Vec<String>) -> u64;
+    pub fn pixmap(&self) -> &Pixmap;
+    pub fn pixmap_mut(&mut self) -> &mut Pixmap;
+    ```
 
-   /// Present after the caller has written a subset of the working buffer.
-   /// - `damage == None` means "unknown / whole frame".
-   /// - `content_hash` is over the full buffer (may be maintained incrementally
-   ///   from the previous hash and `damage`).
-   /// - The previous frame's pixels must stay immutable without a full clone:
-   ///   implement internal double buffering (present swaps front/back) or an
-   ///   `Arc<Pixmap>` COW, instead of `Arc::new(self.pixmap.clone())`.
-   /// - `frame_seq`, `cause_id`, `class`, timestamps keep their current meaning.
-   pub fn present_damage(&mut self, cause_id: i64, damage: Option<Rect>,
-                         unsupported_ops: Vec<String>) -> u64;
-   ```
+    `present()` is kept and is exactly `present_damage(cause_id, None, ops)`.
+    `damage == None` means "unknown / whole frame" and pays the honest
+    full-buffer cost; `Some(rect)` re-hashes only the rows intersecting `rect`.
+    The full-buffer `content_hash` is a Merkle fold — per-row xxh3-128, then a
+    streaming xxh3-128 over the row digests — so a damage-limited present
+    reports exactly the same hash as a full present of the same pixels (proven
+    by the 600-case `present_damage_hash_equals_full_present` proptest in
+    `crates/acos-render/tests/present_damage.rs`). `seq`, `cause_id`, `class`,
+    timestamps, `unsupported_ops` and the `NO_FRESH_FRAME` semantics are
+    unchanged.
 
-   A companion `pub fn pixmap_mut(&mut self) -> &mut Pixmap` would make the
-   damage contract explicit; `Surface::pixmap` is already public, so the
-   compositor writes directly today.
+    Previous frames stay immutable without a per-frame full clone: the surface
+    double-buffers, moving the just-presented pixels into the frame's
+    `Arc<Pixmap>` and working in the other buffer, which is synced over the
+    damage region. The other buffer is the previous frame's buffer reclaimed
+    with `Arc::try_unwrap`; if a handed-out frame still holds it, it is copied
+    first (Arc copy-on-write). In the steady state where the caller does not
+    retain frames across presents, no full clone is paid. Measured at the
+    `Surface` level (release, 1080×2400, p50 over 60 runs): repeat present with
+    a 200×100 damage rect **0.018 ms** (was 0.39 ms), full present **0.416 ms**
+    (honest, unchanged work).
 11. The **VM-dependent halves** of T-37/T-38 (delivering the callback queue
    through the real looper, and the framework's own `IRemoteInputConnection`
    proxy) are out of scope: this crate produces the typed queue and the

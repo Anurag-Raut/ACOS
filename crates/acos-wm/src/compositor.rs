@@ -35,7 +35,7 @@
 
 use std::collections::BTreeMap;
 
-use acos_render::{Bitmap, BitmapConfig, Surface};
+use acos_render::{Bitmap, BitmapConfig, Rect, Surface};
 
 use crate::display::DisplaySpec;
 use crate::error::{Result, WmError};
@@ -473,7 +473,11 @@ impl Compositor {
             return Ok(None);
         }
         self.compose(dmg)?;
-        let seq = self.surface.present(cause_id, Vec::new());
+        let seq = self.surface.present_damage(
+            cause_id,
+            Some(Rect::new(dmg.left, dmg.top, dmg.right, dmg.bottom)),
+            Vec::new(),
+        );
         self.presents += 1;
         self.last_cause = cause_id;
         Ok(Some(seq))
@@ -539,7 +543,7 @@ impl Compositor {
         }
         plan.reverse();
 
-        let data = self.surface.pixmap.data_mut();
+        let data = self.surface.pixmap_mut().data_mut();
         fill_rect(data, w, h, damage, BLACK);
         for (id, rect) in &plan {
             let Some(layer) = self.layers.get(id) else {
@@ -781,7 +785,7 @@ mod tests {
     /// Assert the surface equals a naive full composite, reporting the first
     /// differing pixel instead of dumping two 10 MB arrays.
     fn assert_matches_full(c: &Compositor, ctx: &str) {
-        let got = c.surface.pixmap.data();
+        let got = c.surface.pixmap().data();
         let want = composite_full(c);
         if got != want.as_slice() {
             let idx = got
@@ -931,7 +935,7 @@ mod tests {
         c.present(1).unwrap();
         assert_matches_full(&c, "after remove");
         // The former over-layer area is now green.
-        let d = c.surface.pixmap.data();
+        let d = c.surface.pixmap().data();
         let idx = (8 * 32 + 8) * 4;
         assert_eq!(&d[idx..idx + 4], &[0, 255, 0, 255]);
     }

@@ -4,26 +4,26 @@
 
 | operation | p50 (ns) | p95 (ns) | mean (ns) |
 |---|---:|---:|---:|
-| legacy compose+to_pixmap, 1 opaque layer | 49252303.0 | 50168508.0 | 49392098.2 |
-| legacy compose+to_pixmap, app+IME | 51468660.0 | 52150571.0 | 51596368.3 |
-| compose, 1 opaque layer (full damage) | 215829.0 | 243101.0 | 223285.9 |
-| present, 1 opaque layer (full damage) | 752024.0 | 1014100.0 | 817787.2 |
-| compose, 1 opaque layer (200x100 damage) | 1493.0 | 1542.0 | 4228.2 |
-| present, 1 opaque layer (200x100 damage) | 385319.0 | 435745.0 | 415744.6 |
-| compose, app + translucent IME (full) | 384779.0 | 420997.0 | 391565.3 |
-| present, app + translucent IME (full) | 935781.0 | 1011305.0 | 964907.0 |
-| compose, app + IME (200x100 damage) | 1553.0 | 1603.0 | 5527.2 |
-| present, app + IME (200x100 damage) | 381081.0 | 485539.0 | 418901.9 |
-| present, no change (skipped) | 20.0 | 20.0 | 16.2 |
-| commit 1080x2400 buffer, no-alpha declared | 152459.0 | 202824.0 | 183612.3 |
-| commit 1080x2400 buffer, Rgba8888 (opacity scan) | 695857.0 | 739591.0 | 720305.2 |
+| legacy compose+to_pixmap, 1 opaque layer | 49767019.0 | 50461404.0 | 49869195.1 |
+| legacy compose+to_pixmap, app+IME | 53084471.0 | 54474502.0 | 53202004.0 |
+| compose, 1 opaque layer (full damage) | 203957.0 | 247339.0 | 211458.5 |
+| present, 1 opaque layer (full damage) | 749940.0 | 952473.0 | 776151.9 |
+| compose, 1 opaque layer (200x100 damage) | 1533.0 | 1583.0 | 3869.4 |
+| present, 1 opaque layer (200x100 damage) | 19928.0 | 22403.0 | 38820.0 |
+| compose, app + translucent IME (full) | 384458.0 | 439682.0 | 392767.0 |
+| present, app + translucent IME (full) | 923869.0 | 1075977.0 | 952989.6 |
+| compose, app + IME (200x100 damage) | 1593.0 | 1624.0 | 5976.5 |
+| present, app + IME (200x100 damage) | 20018.0 | 22372.0 | 39604.2 |
+| present, no change (skipped) | 20.0 | 20.0 | 19.6 |
+| commit 1080x2400 buffer, no-alpha declared | 159973.0 | 214627.0 | 190605.7 |
+| commit 1080x2400 buffer, Rgba8888 (opacity scan) | 674838.0 | 712419.0 | 699274.7 |
 
 ## Input / relayout (nanoseconds)
 
 | operation | p50 (ns) | p95 (ns) | mean (ns) |
 |---|---:|---:|---:|
-| inject → deliver → ack | 421.0 | 721.0 | 492.0 |
-| relayout compute + reply | 411.0 | 611.0 | 472.8 |
+| inject → deliver → ack | 431.0 | 881.0 | 520.0 |
+| relayout compute + reply | 421.0 | 801.0 | 519.8 |
 
 ## Idle (5 s, no events)
 

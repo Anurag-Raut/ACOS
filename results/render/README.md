@@ -152,7 +152,9 @@ Constructors: `bitmap_create`, `bitmap_create_from_bytes` (PNG/JPEG/WebP),
 · `surface_capture` · `surface_capture_fresh(after_seq)` · `surface_last_seq` ·
 `surface_png(setting)` · `surface_rgba8` · `surface_render_node(surface, root, cause_id)`.
 
-`Frame` carries `seq`, `produced_at`, `cause_id`, `content_hash` (xxh3-128),
+`Frame` carries `seq`, `produced_at`, `cause_id`, `content_hash` (a Merkle fold
+of per-row xxh3-128 digests over the whole buffer; identical for a full present
+and a damage-limited `Surface::present_damage` of the same pixels),
 `class` (`Empty`/`SingleColour`/`Content`), `unsupported_ops`, `pixels: Arc<Pixmap>`
 and offers `png(setting)`, `qoi()`, `sha256()`, `rgba8()`. `capture_fresh` never
 returns a stale frame: it returns structured `NO_FRESH_FRAME`.

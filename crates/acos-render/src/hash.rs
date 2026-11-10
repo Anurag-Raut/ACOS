@@ -12,6 +12,31 @@ pub fn hash_pixels(data: &[u8]) -> u128 {
     xxhash_rust::xxh3::xxh3_128(data)
 }
 
+/// Hash an arbitrary byte slice to a 128-bit value (used per buffer row).
+pub fn hash_bytes(data: &[u8]) -> u128 {
+    xxhash_rust::xxh3::xxh3_128(data)
+}
+
+/// Fold per-row 128-bit hashes into a full-buffer content hash.
+///
+/// The frame `content_hash` is a Merkle-style fold: each buffer row is hashed
+/// with xxh3-128, then those digests are streamed through a second xxh3-128
+/// state. It is a deterministic function of every byte of the buffer (exactly
+/// the property the previous single-pass `xxh3_128(buffer)` had), but unlike a
+/// single-pass hash it can be maintained incrementally: a damage-limited present
+/// only re-hashes the rows that intersect the damage and then re-folds the
+/// (small, `height * 16` byte) row-hash array. `present()` and
+/// `present_damage()` both use this fold, so a damage-aware frame reports the
+/// same hash as a full present of the same pixels.
+pub fn hash_rows(row_hashes: &[u128]) -> u128 {
+    use xxhash_rust::xxh3::Xxh3;
+    let mut h = Xxh3::new();
+    for &r in row_hashes {
+        h.update(&r.to_le_bytes());
+    }
+    h.digest128()
+}
+
 /// Hex-encoded content hash.
 pub fn hash_hex(hash: u128) -> String {
     format!("{hash:032x}")

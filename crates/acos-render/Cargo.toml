@@ -38,6 +38,9 @@ image-webp = "0.2"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 sha2 = "0.10"
 
+[dev-dependencies]
+proptest = "1"
+
 [[example]]
 name = "render_scene"
 path = "examples/render_scene.rs"

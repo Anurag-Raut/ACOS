@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use crate::error::{RenderError, RenderResult};
+use crate::geom::Rect;
 use crate::hash;
 use tiny_skia::Pixmap;
 
@@ -99,6 +100,9 @@ pub struct Surface {
     pub width: u32,
     pub height: u32,
     pub density: f32,
+    /// The working buffer the next present snapshots. It is **not** the buffer
+    /// owned by the most recent [`Frame`]: presenting double-buffers (see
+    /// [`Surface::present_damage`]).
     pub pixmap: Pixmap,
     /// The canvas that rasterises into this surface.
     pub canvas: Option<crate::handle::Handle>,
@@ -108,6 +112,11 @@ pub struct Surface {
     pub last_tree_version: Option<u64>,
     pub raster_ops: u64,
     pub strict: bool,
+    /// Per-row xxh3-128 of the working buffer, used to maintain the full-buffer
+    /// content hash across damage-limited presents. `row_hashes_valid` is false
+    /// until the first present has hashed every row.
+    row_hashes: Vec<u128>,
+    row_hashes_valid: bool,
 }
 
 impl Surface {
@@ -128,6 +137,8 @@ impl Surface {
             last_tree_version: None,
             raster_ops: 0,
             strict: false,
+            row_hashes: Vec::new(),
+            row_hashes_valid: false,
         })
     }
 
@@ -137,11 +148,110 @@ impl Surface {
         }
     }
 
-    /// Present the working buffer as a new frame.
+    /// Borrow the working buffer that the next present snapshots.
+    pub fn pixmap(&self) -> &Pixmap {
+        &self.pixmap
+    }
+
+    /// Mutably borrow the working buffer.
+    ///
+    /// The caller owns the damage contract: writes made here are only reflected
+    /// in the next frame's content hash for the region passed to
+    /// [`Surface::present_damage`]. Writing through the public `pixmap` field is
+    /// equivalent; `pixmap_mut` exists to make that contract explicit at the
+    /// call site.
+    pub fn pixmap_mut(&mut self) -> &mut Pixmap {
+        &mut self.pixmap
+    }
+
+    /// Present the working buffer as a new frame, hashing every pixel.
+    ///
+    /// This is the full-frame path: it is equivalent to
+    /// `present_damage(cause_id, None, unsupported_ops)` and costs a full-buffer
+    /// hash plus a full-buffer copy. Callers that know which region changed
+    /// should use [`Surface::present_damage`] instead.
     pub fn present(&mut self, cause_id: i64, unsupported_ops: Vec<String>) -> u64 {
+        self.present_damage(cause_id, None, unsupported_ops)
+    }
+
+    /// Present after the caller has written a subset of the working buffer.
+    ///
+    /// * `damage == None` means "unknown / whole frame" and hashes/copies the
+    ///   whole buffer (the honest full-frame cost).
+    /// * `damage == Some(rect)` means only `rect` (clamped to the surface) may
+    ///   have changed. Only the rows intersecting `rect` are re-hashed; the
+    ///   full-buffer content hash is then re-folded from the per-row hashes, so
+    ///   it is identical to the hash a full [`Surface::present`] would report
+    ///   for the same pixels.
+    ///
+    /// ## Frame contract
+    ///
+    /// `seq`, `cause_id`, `content_hash` (over the whole buffer),
+    /// `class`, timestamps, `unsupported_ops` and the `NO_FRESH_FRAME`
+    /// semantics of `capture_fresh` are unchanged. `class` still classifies the
+    /// full working buffer.
+    ///
+    /// ## Double buffering / immutability
+    ///
+    /// The just-presented pixels are moved into an `Arc<Pixmap>` owned by the
+    /// new [`Frame`]; the surface keeps working in the *other* buffer, which is
+    /// first synced over `damage` so the next damage-only composite has the
+    /// right base. The other buffer is the previous frame's buffer, reclaimed
+    /// with `Arc::try_unwrap`: if a previously handed-out frame still references
+    /// it, the buffer is copied first (Arc copy-on-write), so previous frames
+    /// stay immutable. No full clone is paid on the steady-state damage path
+    /// where the caller does not retain frames across presents.
+    pub fn present_damage(
+        &mut self,
+        cause_id: i64,
+        damage: Option<Rect>,
+        unsupported_ops: Vec<String>,
+    ) -> u64 {
         self.seq += 1;
+        let w = self.width as usize;
+        let h = self.height as usize;
+
+        // Clamp the caller's damage to the buffer; `None` means "whole frame".
+        let full = damage.is_none();
+        let rect = clamp_damage(damage, self.width, self.height);
+
+        // Maintain the per-row hashes for the changed rows only. A partial
+        // present before every row has been hashed falls back to a full hash.
+        if full || !self.row_hashes_valid {
+            if self.row_hashes.len() != h {
+                self.row_hashes = vec![0u128; h];
+            }
+            let data = self.pixmap.data();
+            for y in 0..h {
+                self.row_hashes[y] = hash::hash_bytes(&data[y * w * 4..(y + 1) * w * 4]);
+            }
+            self.row_hashes_valid = true;
+        } else if !rect.is_empty() {
+            let data = self.pixmap.data();
+            for y in rect.top as usize..rect.bottom as usize {
+                self.row_hashes[y] = hash::hash_bytes(&data[y * w * 4..(y + 1) * w * 4]);
+            }
+        }
+        let content_hash = hash::hash_rows(&self.row_hashes);
         let class = classify(&self.pixmap);
-        let content_hash = hash::hash_pixels(self.pixmap.data());
+
+        // Reclaim the previous frame's buffer as the next working buffer. If an
+        // externally held frame still owns it, clone it (copy-on-write) so that
+        // frame stays immutable.
+        let mut next = match self.frame.take() {
+            Some(prev) => {
+                let Frame { pixels, .. } = prev;
+                match Arc::try_unwrap(pixels) {
+                    Ok(pixmap) => pixmap,
+                    Err(shared) => (*shared).clone(),
+                }
+            }
+            None => Pixmap::new(self.width, self.height)
+                .expect("surface dimensions validated at construction"),
+        };
+        copy_damage(&self.pixmap, &mut next, full, rect, w);
+        let presented = Arc::new(std::mem::replace(&mut self.pixmap, next));
+
         let frame = Frame {
             seq: self.seq,
             width: self.width,
@@ -153,7 +263,7 @@ impl Surface {
             content_hash,
             class,
             unsupported_ops,
-            pixels: Arc::new(self.pixmap.clone()),
+            pixels: presented,
         };
         self.frame = Some(frame);
         self.seq
@@ -201,6 +311,45 @@ impl Surface {
                 latest: 0,
             }),
         }
+    }
+}
+
+/// Clamp a caller-reported damage rect to `[0,width] x [0,height]`.
+///
+/// `None` ("unknown / whole frame") is clamped to the whole buffer; an empty or
+/// fully out-of-bounds rect yields an empty `Rect`, which the caller treats as
+/// "nothing changed".
+fn clamp_damage(damage: Option<Rect>, width: u32, height: u32) -> Rect {
+    let (w, h) = (width as i32, height as i32);
+    match damage {
+        None => Rect::new(0, 0, w, h),
+        Some(r) => Rect::new(
+            r.left.clamp(0, w),
+            r.top.clamp(0, h),
+            r.right.clamp(0, w),
+            r.bottom.clamp(0, h),
+        ),
+    }
+}
+
+/// Copy the presented region from the just-composited working buffer into the
+/// buffer that will become the next working buffer. `full` selects the whole
+/// buffer (the honest full-frame path); otherwise only `rect` is copied.
+fn copy_damage(src: &Pixmap, dst: &mut Pixmap, full: bool, rect: Rect, width: usize) {
+    let (l, t, r, b) = if full {
+        (0, 0, src.width() as i32, src.height() as i32)
+    } else {
+        (rect.left, rect.top, rect.right, rect.bottom)
+    };
+    if l >= r || t >= b {
+        return;
+    }
+    let row_bytes = (r - l) as usize * 4;
+    let src_data = src.data();
+    let dst_data = dst.data_mut();
+    for y in t..b {
+        let off = (y as usize * width + l as usize) * 4;
+        dst_data[off..off + row_bytes].copy_from_slice(&src_data[off..off + row_bytes]);
     }
 }
 

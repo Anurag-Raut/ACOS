@@ -13,7 +13,8 @@
 use std::time::Instant;
 
 use acos_render::{
-    BitmapConfig, DisplayOp, PngSetting, RectF, RenderContext, Scene, ACOS_RENDER_VERSION,
+    BitmapConfig, DisplayOp, PngSetting, Rect, RectF, RenderContext, Scene, Surface,
+    ACOS_RENDER_VERSION,
 };
 
 const ITER: usize = 60;
@@ -202,7 +203,49 @@ fn main() {
         }),
     );
 
-    // ---- (f) memory -----------------------------------------------------
+    // ---- (f) damage-aware present --------------------------------------
+    // 1080x2400 surface: a repeat present that reports a 200x100 damage rect
+    // must stay well under 0.1 ms, while the full-frame present reports the
+    // honest full-buffer cost. Run in release; p50 over 60 runs.
+    let mut surface = Surface::new(1080, 2400, 2.625).unwrap();
+    {
+        let data = surface.pixmap_mut().data_mut();
+        for (i, b) in data.iter_mut().enumerate() {
+            *b = (i as u32).wrapping_mul(2654435761) as u8;
+        }
+    }
+    surface.present(0, Vec::new());
+    let damage = Rect::new(100, 100, 300, 200);
+    let mut damage_present = Vec::new();
+    for i in 0..60 {
+        // Touch the reported region, then present only it.
+        {
+            let data = surface.pixmap_mut().data_mut();
+            let off = ((damage.top as u32 * 1080 + damage.left as u32) * 4) as usize;
+            data[off] = i as u8;
+        }
+        let t = Instant::now();
+        surface.present_damage(i as i64 + 1, Some(damage), Vec::new());
+        damage_present.push(t.elapsed().as_secs_f64() * 1000.0);
+    }
+    let mut full_present = Vec::new();
+    for i in 0..60 {
+        let t = Instant::now();
+        surface.present(i as i64 + 100, Vec::new());
+        full_present.push(t.elapsed().as_secs_f64() * 1000.0);
+    }
+    report.insert(
+        "presentDamage".into(),
+        serde_json::json!({
+            "width": 1080,
+            "height": 2400,
+            "damage": [100, 100, 300, 200],
+            "damageMs": percentile_json(&mut damage_present),
+            "fullMs": percentile_json(&mut full_present),
+        }),
+    );
+
+    // ---- (g) memory -----------------------------------------------------
     let (rss_after_heavy, hwm_after_heavy) = rss_kb().unwrap_or((0, 0));
     report.insert("rssKbAfterHeavy".into(), rss_after_heavy.into());
     report.insert("hwmKbAfterHeavy".into(), hwm_after_heavy.into());
