@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# frame-diff -- compare an ACOS-rendered frame against an art-reference capture.
+#
+# A thin, dependency-free front-end for `acos frame-diff` (the real
+# implementation lives in crates/acos-render/src/diff.rs and
+# crates/acos-cli/src/frame_diff.rs). It reports per-pixel error (MAE/RMSE/max/
+# PSNR), the differing-pixel fraction and bounding box, and structural SSIM +
+# block statistics. No image is resized or cropped; mismatched dimensions are an
+# error.
+#
+# Usage:
+#   tools/frame-diff <reference.png> <candidate.png> [extra acos frame-diff args]
+#   tools/frame-diff --default          # hello-views synthetic vs its ART capture
+#
+# Env:
+#   ACOS_BIN   path to the `acos` binary (otherwise target/{release,debug}/acos,
+#              otherwise `cargo run -q -p acos-cli --`).
+#
+# Examples:
+#   tools/frame-diff \
+#     fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png \
+#     results/render/hello-views.png --json
+#   tools/frame-diff --default --heatmap target/tmp/hello-views-diff.png
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [ "${1:-}" = "--default" ]; then
+    shift
+    set -- \
+        "fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png" \
+        "results/render/hello-views.png" \
+        "$@"
+fi
+
+find_acos() {
+    if [ -n "${ACOS_BIN:-}" ]; then
+        printf '%s\n' "$ACOS_BIN"
+        return
+    fi
+    if [ -x "$ROOT/target/release/acos" ]; then
+        printf '%s\n' "$ROOT/target/release/acos"
+        return
+    fi
+    if [ -x "$ROOT/target/debug/acos" ]; then
+        printf '%s\n' "$ROOT/target/debug/acos"
+        return
+    fi
+    if [ -n "${CARGO_TARGET_DIR:-}" ] && [ -x "$CARGO_TARGET_DIR/debug/acos" ]; then
+        printf '%s\n' "$CARGO_TARGET_DIR/debug/acos"
+        return
+    fi
+    printf '%s\n' ""
+}
+
+ACOS="$(find_acos)"
+if [ -z "$ACOS" ]; then
+    echo "frame-diff: building acos-cli ..." >&2
+    cargo build -q -p acos-cli
+    ACOS="$ROOT/target/debug/acos"
+fi
+
+exec "$ACOS" frame-diff "$@"

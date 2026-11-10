@@ -6,6 +6,7 @@
 mod bench;
 mod bench_pool;
 mod bench_sessions;
+mod frame_diff;
 mod launch;
 mod observe_tree;
 mod parity;
@@ -57,6 +58,8 @@ enum Command {
     },
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
+    /// Numerically compare two frames (per-pixel + structural diff).
+    FrameDiff(frame_diff::FrameDiffArgs),
     /// Compare a real device's UI capture (or a recorded capture) with ACOS.
     Parity(parity::ParityArgs),
     /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
@@ -148,6 +151,7 @@ fn main() -> ExitCode {
         Command::Logs(args) => session::logs(args),
         Command::Session { command } => session::session(command),
         Command::Verify(args) => verify::run(args),
+        Command::FrameDiff(args) => frame_diff::run(args),
         Command::Parity(args) => parity::run(args),
         Command::Bench(args) => bench::run(args),
     }

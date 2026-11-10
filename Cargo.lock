@@ -29,6 +29,7 @@ dependencies = [
  "acos-apk",
  "acos-dex",
  "acos-protocol",
+ "acos-render",
  "acos-runtime",
  "acos-services",
  "acos-verify",

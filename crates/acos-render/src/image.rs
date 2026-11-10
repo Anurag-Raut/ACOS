@@ -6,6 +6,7 @@
 use crate::error::{RenderError, RenderResult};
 
 /// A decoded image: premultiplied RGBA8, `[r,g,b,a]` byte order.
+#[derive(Clone)]
 pub struct DecodedImage {
     pub width: u32,
     pub height: u32,

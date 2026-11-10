@@ -14,6 +14,7 @@ path = "src/main.rs"
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
 acos-protocol = { path = "../acos-protocol" }
+acos-render = { path = "../acos-render" }
 acos-runtime = { path = "../acos-runtime" }
 acos-services = { path = "../acos-services" }
 acos-verify = { path = "../acos-verify" }
