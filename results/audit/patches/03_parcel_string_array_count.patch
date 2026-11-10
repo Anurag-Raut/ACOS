@@ -1,0 +1,28 @@
+diff --git a/crates/acos-parcel/tests/string_array_bounds.rs b/crates/acos-parcel/tests/string_array_bounds.rs
+new file mode 100644
+index 0000000..5eb6280
+--- /dev/null
++++ b/crates/acos-parcel/tests/string_array_bounds.rs
+@@ -0,0 +1,22 @@
++//! Failing-test proposal for results/audit/HONESTY_AUDIT.md finding #3.
++//!
++//! `Parcel::read_string16_array` allocates `Vec::with_capacity(len)` from the
++//! guest `int32` before validating the payload. A count that cannot fit must be
++//! rejected as `BadLength` (like the sibling array readers) without allocating
++//! the whole vector. Today it returns `Underflow` after allocating ~32 MB for
++//! this count. This test fails against HEAD e64897f.
++
++use acos_parcel::{Parcel, ParcelError};
++
++#[test]
++fn string_array_count_is_bounded_before_allocation() {
++    let mut p = Parcel::new();
++    // A count that cannot possibly fit in the remaining (empty) payload.
++    p.write_int32(1_000_000);
++    p.set_data_position(0);
++    let err = p.read_string16_array().expect_err("must reject");
++    assert!(
++        matches!(err, ParcelError::BadLength { .. }),
++        "expected BadLength before allocating the vector, got {err:?}"
++    );
++}
