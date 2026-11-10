@@ -1,0 +1,11 @@
+# acos-aidl default-subset coverage
+
+interfaces: 36
+methods: 106
+fully decoded: 105 (99.1%)
+interfaces absent from boot classpath: 1
+  missing android.net.IConnectivityManager: no $Stub in boot classpath
+
+Unknowns (hand-written Rust codecs needed):
+  cause: args: Map(Unknown(map key), Unknown(map value))
+    android.app.IApplicationThread.bindApplication (code 5)

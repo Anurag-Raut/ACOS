@@ -1,0 +1,25 @@
+# IWindowSession.relayout wire layout (mechanically decoded)
+
+code: 5
+signature: (Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIIIIILandroid/window/ClientWindowFrames;Landroid/util/MergedConfiguration;Landroid/view/SurfaceControl;Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;Landroid/os/Bundle;)I
+oneway: false
+
+args (request Parcel, interface token excluded):
+   0: Binder(android.view.IWindow)
+   1: TypedObject(android.view.WindowManager$LayoutParams, nullable=true)
+   2: I32
+   3: I32
+   4: I32
+   5: I32
+   6: I32
+   7: I32
+
+reply (reply Parcel, readException excluded):
+   0: I32
+   1: Cond(I32, [Parcelable(android.window.ClientWindowFrames)])
+   2: Cond(I32, [Parcelable(android.util.MergedConfiguration)])
+   3: Cond(I32, [Parcelable(android.view.SurfaceControl)])
+   4: Cond(I32, [Parcelable(android.view.InsetsState)])
+   5: Cond(I32, [Parcelable(android.view.InsetsSourceControl$Array)])
+   6: Cond(I32, [Parcelable(android.os.Bundle)])
+

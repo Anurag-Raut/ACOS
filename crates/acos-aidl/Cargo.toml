@@ -1,0 +1,17 @@
+[package]
+name = "acos-aidl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Mechanically-derived AIDL transaction tables for the ACOS Rust service layer"
+
+[dependencies]
+acos-dex = { path = "../acos-dex" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[[example]]
+name = "gen"
+path = "examples/gen.rs"

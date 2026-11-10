@@ -3,3 +3,4 @@ target/
 /results/tmp/
 /.cache/
 *.class
+/results/aidl/all_interfaces.json

@@ -1,0 +1,43 @@
+# acos-aidl full boot-classpath coverage
+
+interfaces: 1090
+methods: 10122
+fully decoded: 10098 (99.8%)
+decode errors: 106
+
+## Unknowns grouped by cause
+
+- args: List(Unknown(list element)) (5 methods):
+    android.content.pm.IPackageInstallerSession.requestChecksums (code 9)
+    android.content.pm.IPackageManager.requestPackageChecksums (code 183)
+    android.telephony.mbms.IMbmsGroupCallSessionCallback.onAvailableSaisUpdated (code 2)
+    android.telephony.mbms.vendor.IMbmsGroupCallService.updateGroupCall (code 3)
+    android.telephony.mbms.vendor.IMbmsGroupCallService.startGroupCall (code 4)
+- args: Map(Unknown(map key), Unknown(map value)) (4 methods):
+    android.accounts.IAccountManager.addAccountExplicitlyWithVisibility (code 38)
+    android.app.IApplicationThread.bindApplication (code 5)
+    android.service.autofill.IAutofillFieldClassificationService.calculateScores (code 1)
+    com.android.internal.telephony.IPhoneStateListener.onEmergencyNumberListChanged (code 26)
+- args: Unknown(Parcel.writeFixedArray @pc 0x001b) (1 methods):
+    android.hardware.security.keymint.IKeyMintDevice.getRootOfTrust (code 16)
+- reply: List(Unknown(list element)) (3 methods):
+    android.media.IAudioService.getReportedSurroundFormats (code 57)
+    android.media.IAudioService.getIndependentStreamTypes (code 81)
+    com.android.internal.telephony.ITelephony.getRadioPowerOffReasons (code 23)
+- reply: Map(Unknown(map key), Unknown(map value)) (10 methods):
+    android.accounts.IAccountManager.getPackagesAndVisibilityForAccount (code 37)
+    android.accounts.IAccountManager.getAccountsAndVisibilityForPackage (code 41)
+    android.hardware.input.IInputManager.getModifierKeyRemapping (code 28)
+    android.media.IAudioService.getSurroundFormats (code 56)
+    android.nfc.INfcAdapter.getTagIntentAppPreferenceForUser (code 29)
+    android.os.ISystemConfig.getDisabledUntilUsedPreinstalledCarrierAssociatedApps (code 2)
+    android.os.ISystemConfig.getDisabledUntilUsedPreinstalledCarrierAssociatedAppEntries (code 3)
+    com.android.internal.telephony.ITelephony.getEmergencyNumberList (code 237)
+    com.android.internal.widget.ILockSettings.getRecoveryStatus (code 40)
+    com.android.internal.widget.ILockSettings.recoverKeyChainSnapshot (code 44)
+- reply: Unknown(Parcel.createFixedArray @pc 0x002b) (1 methods):
+    android.hardware.security.keymint.IKeyMintDevice.getRootOfTrustChallenge (code 15)
+
+## Decode errors grouped by cause
+
+- method not found: 106
