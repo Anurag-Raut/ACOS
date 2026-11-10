@@ -312,6 +312,14 @@ fn flutter_child_worker() {
             .env
             .push(("ACOS_BOOT_DIR".to_string(), boot_dir.display().to_string()));
     }
+    // Diagnostics pass-through (harness only): confinement clears the
+    // environment (`sanitize_env`), so an opt-in trace switch must be forwarded
+    // explicitly to be visible inside the confined child.
+    for var in ["ACOS_TRACE_SEM", "ACOS_TRACE_EGL"] {
+        if let Ok(v) = std::env::var(var) {
+            profile.env.push((var.to_string(), v));
+        }
+    }
     // Dart AOT reserves a large (4 GiB, lightly committed) compressed-pointer
     // heap region at VM startup: `virtual_memory_compressed.cc` mmaps it with
     // MAP_NORESERVE|MAP_ANONYMOUS and fails with ENOMEM if RLIMIT_AS is too
@@ -564,6 +572,7 @@ fn flutter_child_worker() {
         serde_json::json!({"phase": "looper-prepared", "looper": format!("{looper:p}")})
     );
     let mut seen_frames = 0usize;
+    let mut tapped = false;
     let mut delivered = 0usize;
     let mut vsync_due = std::time::Instant::now();
     for _round in 0..1500 {
@@ -608,6 +617,37 @@ fn flutter_child_worker() {
                     "W93A_STAGE {}",
                     serde_json::json!({"phase": "vsync-deliver-error", "detail": format!("{e:?}")})
                 ),
+            }
+        }
+        // Drive the app: the probe's single `scheduleFrame()` is coalesced into
+        // the *first* frame (which the isolate requests from `main()` before the
+        // rasterizer has a surface), so ask again until a frame is presented and
+        // re-tap the Increment button for the second frame.
+        if _round % 40 == 39 {
+            let (method, sig) = if seen_frames == 0 {
+                ("requestFrame", "()V")
+            } else if !tapped && seen_frames >= 1 {
+                tapped = true;
+                ("tapIncrement", "()V")
+            } else {
+                ("", "")
+            };
+            if !method.is_empty() {
+                match vm.call_static(
+                    "Ldev/acos/fixtures/flutterhello/FlutterProbe;",
+                    method,
+                    sig,
+                    &[],
+                ) {
+                    Ok(_) => println!(
+                        "W93A_STAGE {}",
+                        serde_json::json!({"phase": "drive", "method": method, "frames": seen_frames})
+                    ),
+                    Err(e) => println!(
+                        "W93A_STAGE {}",
+                        serde_json::json!({"phase": "drive-error", "method": method, "detail": format!("{e:?}")})
+                    ),
+                }
             }
         }
         let frames = acos_jni::ndk_host::presented_frames();
@@ -705,6 +745,19 @@ fn flutter_child_worker() {
         .filter(|(c, _, _, _)| c.contains("FlutterJNI"))
         .map(|(c, n, s, p)| serde_json::json!({"class": c, "name": n, "sig": s, "ptr": p}))
         .collect();
+    let (sem_init_calls, sem_trywait_calls, sem_post_calls, sem_wait_calls) =
+        acos_native_loader::bionic::shims::sem_call_counts();
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({
+            "phase": "sem-calls",
+            "init": sem_init_calls,
+            "trywait": sem_trywait_calls,
+            "post": sem_post_calls,
+            "wait": sem_wait_calls,
+            "trace": std::env::var("ACOS_TRACE_SEM").ok(),
+        })
+    );
     println!(
         "W93A_STAGE {}",
         serde_json::json!({"phase": "vsync-counts", "delivered": delivered})

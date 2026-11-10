@@ -125,6 +125,9 @@ pub struct NativeLibrary {
     relocated: AtomicBool,
     protected: AtomicBool,
     loaded: AtomicBool,
+    /// Whether `JNI_OnLoad` has already run for this mapping. bionic runs it
+    /// once per loaded object, even when `System.loadLibrary` names it again.
+    jni_on_load: AtomicBool,
     pub(crate) name_c: std::ffi::CString,
     /// Lazily built (address, NUL-terminated name) table for `dladdr`.
     dladdr_syms: Mutex<Option<Vec<(usize, std::ffi::CString)>>>,
@@ -259,6 +262,16 @@ impl NativeLibrary {
         Some(self.runtime_addr(s.value) as *const c_void)
     }
 
+    /// Whether the object has already been through `JNI_OnLoad`.
+    pub fn jni_on_load_done(&self) -> bool {
+        self.jni_on_load.load(Ordering::Acquire)
+    }
+
+    /// Record that `JNI_OnLoad` has run for this mapping (idempotent).
+    pub fn note_jni_on_load(&self) {
+        self.jni_on_load.store(true, Ordering::Release);
+    }
+
     /// Whether the object is still mapped.
     pub fn is_loaded(&self) -> bool {
         self.loaded.load(Ordering::Acquire)
@@ -344,6 +357,40 @@ impl Loader {
         self.load_bytes_named(&bytes, Some(path.to_path_buf()), name)
     }
 
+    /// Find an object that is already mapped under one of `names` (file name,
+    /// `DT_SONAME` or full path) and take a reference to it.
+    ///
+    /// This is bionic `dlopen`'s "already loaded" rule: an object that is in the
+    /// process is never mapped a second time. `System.loadLibrary` is `dlopen`
+    /// plus `JNI_OnLoad`, so it must consult the same registry (`OBJECTS`);
+    /// otherwise a JNI load of an object the loader mapped itself produces a
+    /// second copy of its code and data, and the registered natives point into
+    /// the copy the VM never runs.
+    pub fn find_loaded(&self, names: &[&str]) -> Option<LibraryHandle> {
+        let found = OBJECTS
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|lib| {
+                names.iter().any(|name| {
+                    if name.is_empty() {
+                        return false;
+                    }
+                    lib.matches_name(name)
+                        || lib.path.as_deref() == Some(Path::new(name))
+                        || lib
+                            .path
+                            .as_deref()
+                            .and_then(Path::file_name)
+                            .and_then(|f| f.to_str())
+                            == Some(*name)
+                })
+            })
+            .cloned()?;
+        found.refs.fetch_add(1, Ordering::SeqCst);
+        Some(LibraryHandle { lib: found })
+    }
+
     /// Load a shared object from bytes (no file path, e.g. extracted from an APK).
     pub fn load_bytes(&self, bytes: &[u8], name: &str) -> Result<LibraryHandle> {
         self.load_bytes_named(bytes, None, name)
@@ -426,6 +473,7 @@ impl Loader {
             relocated: AtomicBool::new(false),
             protected: AtomicBool::new(false),
             loaded: AtomicBool::new(true),
+            jni_on_load: AtomicBool::new(false),
             name_c,
             dladdr_syms: Mutex::new(None),
         });

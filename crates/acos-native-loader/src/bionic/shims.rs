@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::os::raw::{c_char, c_int, c_void};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 // --- host libc symbols used by the shims -----------------------------------
 
@@ -597,105 +597,407 @@ pub fn init_stream_cells() {
 }
 
 // --- bionic sem_t ----------------------------------------------------------
+//
+// POSIX/bionic semaphores are *counters*, and the counter lives in the guest
+// object itself: bionic's `sem_t` is a 32-bit counter word (with a shared bit
+// above it) and `fml::Semaphore` — the engine's only user — only ever calls
+// `sem_init` / `sem_post` / `sem_wait` / `sem_trywait` / `sem_timedwait` /
+// `sem_destroy` on it. Storing the count in the guest word (instead of boxing a
+// host `sem_t` behind an address-keyed handle table) is what makes the shim
+// behave like bionic:
+//
+// * `sem_init` cannot lose the value, because there is no side table entry that
+//   a later lookup could miss;
+// * a `sem_t` that is copied or moved (the engine embeds the semaphore in a
+//   heap object that is built, `memcpy`'d and re-addressed) keeps its count;
+// * a `sem_t` that was never passed to `sem_init` reads as a zero counter, i.e.
+//   exactly the POSIX state of a freshly zeroed object, instead of every call
+//   silently returning `-1`.
+//
+// Blocking — the one thing a counter word cannot express — is provided by a
+// host-side table keyed by the guest address, created eagerly by `sem_init` and
+// lazily by the first blocking call, and removed by `sem_destroy`. Its only
+// state is a mutex/condvar pair: the *value* is always the guest word, so the
+// table can never desynchronise from the guest's view of the semaphore.
+//
+// Every entry point reports failure the way POSIX does (`-1` + `errno`), and
+// none of them can fail because of internal bookkeeping.
 
-/// Bionic's `sem_t` is an opaque 32-byte object with a different layout from
-/// glibc's, so guest storage is treated as a handle onto a host `sem_t` (the
-/// same indirection used for mutexes and condition variables).
-struct HostSem(libc::sem_t);
-// SAFETY: a `sem_t` is designed for cross-thread use.
-unsafe impl Send for HostSem {}
+/// Number of guest bytes a `sem_t` needs (the counter word).
+const SEM_BYTES: usize = std::mem::size_of::<c_int>();
+// The guest word is operated on atomically, so it must be exactly one `atomic_int`.
+const _: () = assert!(SEM_BYTES == std::mem::size_of::<AtomicI32>());
 
-fn sems() -> &'static Mutex<HashMap<usize, u64>> {
-    static SEMS: OnceLock<Mutex<HashMap<usize, u64>>> = OnceLock::new();
-    SEMS.get_or_init(|| Mutex::new(HashMap::new()))
+/// `SEM_VALUE_MAX` (bionic: `INT_MAX`).
+const SEM_VALUE_MAX: c_int = c_int::MAX;
+
+/// Per-address blocking state. The semaphore *value* is not stored here.
+struct SemWait {
+    lock: Mutex<()>,
+    cond: Condvar,
+    /// Set by `sem_destroy`: parked waiters wake and report `EINVAL` rather
+    /// than hanging forever on a destroyed semaphore.
+    destroyed: AtomicBool,
 }
 
-fn sem_ref(key: usize) -> Option<u64> {
-    sems().lock().ok()?.get(&key).copied()
+fn sem_waiters() -> &'static Mutex<HashMap<usize, Arc<SemWait>>> {
+    static SEM_WAITERS: OnceLock<Mutex<HashMap<usize, Arc<SemWait>>>> = OnceLock::new();
+    SEM_WAITERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The guest counter word. The guest address is the semaphore's identity, so
+/// the returned reference is tied to the guest object's lifetime.
+///
+/// # Safety
+/// `sem` must point to at least [`SEM_BYTES`] readable+writable guest bytes,
+/// aligned to `align_of::<c_int>()` (which every bionic `sem_t` is).
+unsafe fn sem_word(sem: *mut c_void) -> &'static AtomicI32 {
+    // SAFETY: guaranteed by the caller (checked for null/alignment by the
+    // entry points below).
+    unsafe { &*(sem as *const AtomicI32) }
+}
+
+/// Validate a guest `sem_t` pointer the way bionic does (`EINVAL`).
+fn check_sem(sem: *mut c_void) -> Result<&'static AtomicI32, c_int> {
+    if sem.is_null() || !(sem as usize).is_multiple_of(std::mem::align_of::<c_int>()) {
+        return Err(libc::EINVAL);
+    }
+    // SAFETY: non-null and correctly aligned; the guest object is `sem_t`.
+    Ok(unsafe { sem_word(sem) })
+}
+
+fn set_errno(e: c_int) {
+    // SAFETY: `__errno_location` always returns a valid thread-local pointer.
+    unsafe { *libc::__errno_location() = e };
+}
+
+/// Shared (or lazily created) blocking state for the semaphore at `key`.
+fn sem_wait_state(key: usize) -> Arc<SemWait> {
+    let mut table = sem_waiters().lock().unwrap_or_else(|e| e.into_inner());
+    table
+        .entry(key)
+        .or_insert_with(|| {
+            Arc::new(SemWait {
+                lock: Mutex::new(()),
+                cond: Condvar::new(),
+                destroyed: AtomicBool::new(false),
+            })
+        })
+        .clone()
+}
+
+fn sem_wait_state_if_present(key: usize) -> Option<Arc<SemWait>> {
+    sem_waiters()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&key)
+        .cloned()
+}
+
+/// `sem_trywait` on a validated word: `true` when the counter was decremented.
+fn sem_try_decrement(word: &AtomicI32) -> bool {
+    let mut cur = word.load(Ordering::SeqCst);
+    loop {
+        if cur <= 0 {
+            return false;
+        }
+        match word.compare_exchange_weak(cur, cur - 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return true,
+            Err(actual) => cur = actual,
+        }
+    }
+}
+
+/// Wake blocked waiters (if any). MUST be called while holding `state.lock` so
+/// that a waiter cannot slip between its "counter is zero" check and its
+/// `cond.wait()` and miss the wakeup.
+fn sem_wake(state: &SemWait) {
+    let _guard = state.lock.lock().unwrap_or_else(|e| e.into_inner());
+    state.cond.notify_all();
 }
 
 /// `sem_init(sem, pshared, value)`.
 ///
+/// Bionic's `sem_t` is process-private in ACOS (every guest object is mapped
+/// into one host process), so `pshared` is accepted and ignored, exactly as
+/// glibc does for `pshared != 0` on an unshared page.
+///
 /// # Safety
-/// `sem` must point to at least 32 writable guest bytes.
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes.
 pub unsafe extern "C" fn sem_init(sem: *mut c_void, _pshared: c_int, value: u32) -> c_int {
-    if sem.is_null() {
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    if value > SEM_VALUE_MAX as u32 {
+        set_errno(libc::EINVAL);
         return -1;
     }
-    let key = sem as usize;
-    let boxed = Box::new(HostSem(std::mem::zeroed()));
-    let ptr = Box::into_raw(boxed);
-    if libc::sem_init(&mut (*ptr).0, 0, value) != 0 {
-        drop(Box::from_raw(ptr));
-        return -1;
-    }
-    sems().lock().unwrap().insert(key, ptr as u64);
-    // Guest object is a handle: zero it so a stale copy is detectable.
-    std::ptr::write_bytes(sem as *mut u8, 0, 32);
+    SEM_CALLS[0].fetch_add(1, Ordering::Relaxed);
+    word.store(value as c_int, Ordering::SeqCst);
+    let state = sem_wait_state(sem as usize);
+    state.destroyed.store(false, Ordering::SeqCst);
+    trace_sem("sem_init", sem, Some(value as i64), 0);
     0
 }
 
 /// `sem_destroy`.
 ///
 /// # Safety
-/// `sem` must have been passed to [`sem_init`].
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes.
 pub unsafe extern "C" fn sem_destroy(sem: *mut c_void) -> c_int {
-    let key = sem as usize;
-    match sems().lock().unwrap().remove(&key) {
-        Some(p) => {
-            let boxed = Box::from_raw(p as *mut HostSem);
-            libc::sem_destroy(&boxed.0 as *const libc::sem_t as *mut libc::sem_t);
-            0
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
         }
-        None => -1,
+    };
+    let key = sem as usize;
+    if let Some(state) = sem_wait_state_if_present(key) {
+        {
+            // Wake anyone parked on this address so it reports `EINVAL`
+            // instead of blocking on a destroyed semaphore forever.
+            let _guard = state.lock.lock().unwrap_or_else(|e| e.into_inner());
+            state.destroyed.store(true, Ordering::SeqCst);
+            state.cond.notify_all();
+        }
+        sem_waiters()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&key);
     }
+    word.store(0, Ordering::SeqCst);
+    trace_sem("sem_destroy", sem, None, 0);
+    0
 }
 
 /// `sem_post`.
 ///
 /// # Safety
-/// `sem` must have been passed to [`sem_init`].
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes.
 pub unsafe extern "C" fn sem_post(sem: *mut c_void) -> c_int {
-    match sem_ref(sem as usize) {
-        Some(p) => libc::sem_post(&mut (*(p as *mut HostSem)).0),
-        None => -1,
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    SEM_CALLS[2].fetch_add(1, Ordering::Relaxed);
+    let mut cur = word.load(Ordering::SeqCst);
+    loop {
+        if cur == SEM_VALUE_MAX {
+            set_errno(libc::EOVERFLOW);
+            return -1;
+        }
+        match word.compare_exchange_weak(cur, cur + 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => break,
+            Err(actual) => cur = actual,
+        }
+    }
+    if let Some(state) = sem_wait_state_if_present(sem as usize) {
+        sem_wake(&state);
+    }
+    trace_sem("sem_post", sem, None, 0);
+    0
+}
+
+/// `sem_getvalue`.
+///
+/// # Safety
+/// `sem` must point to at least [`SEM_BYTES`] readable guest bytes and `out`
+/// to a writable `int`.
+pub unsafe extern "C" fn sem_getvalue(sem: *mut c_void, out: *mut c_int) -> c_int {
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    if out.is_null() {
+        set_errno(libc::EINVAL);
+        return -1;
+    }
+    // SAFETY: checked non-null; the guest passes a live `int`.
+    unsafe { *out = word.load(Ordering::SeqCst) };
+    0
+}
+
+/// Block until the counter can be decremented.
+///
+/// Returns `Ok(())` on success, `Err(errno)` otherwise. `deadline` limits the
+/// wait for `sem_timedwait`.
+fn sem_await(
+    key: usize,
+    word: &AtomicI32,
+    deadline: Option<std::time::SystemTime>,
+) -> Result<(), c_int> {
+    let state = sem_wait_state(key);
+    loop {
+        if sem_try_decrement(word) {
+            return Ok(());
+        }
+        let mut guard = state.lock.lock().unwrap_or_else(|e| e.into_inner());
+        // Re-check under the lock: a `sem_post` that ran between the check
+        // above and this lock has already published `cur > 0`.
+        if sem_try_decrement(word) {
+            return Ok(());
+        }
+        if state.destroyed.load(Ordering::SeqCst) {
+            return Err(libc::EINVAL);
+        }
+        match deadline {
+            None => {
+                let g = state.cond.wait(guard).unwrap_or_else(|e| e.into_inner());
+                guard = g;
+            }
+            Some(deadline) => {
+                let now = std::time::SystemTime::now();
+                if now >= deadline {
+                    return Err(libc::ETIMEDOUT);
+                }
+                let remaining = deadline.duration_since(now).unwrap_or_default();
+                let (g, _timeout) = state
+                    .cond
+                    .wait_timeout(guard, remaining)
+                    .unwrap_or_else(|e| e.into_inner());
+                guard = g;
+            }
+        }
+        drop(guard);
     }
 }
 
 /// `sem_wait`.
 ///
 /// # Safety
-/// `sem` must have been passed to [`sem_init`].
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes.
 pub unsafe extern "C" fn sem_wait(sem: *mut c_void) -> c_int {
-    match sem_ref(sem as usize) {
-        Some(p) => libc::sem_wait(&mut (*(p as *mut HostSem)).0),
-        None => -1,
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    SEM_CALLS[3].fetch_add(1, Ordering::Relaxed);
+    match sem_await(sem as usize, word, None) {
+        Ok(()) => {
+            trace_sem("sem_wait", sem, None, 0);
+            0
+        }
+        Err(e) => {
+            set_errno(e);
+            -1
+        }
     }
 }
 
 /// `sem_trywait`.
 ///
 /// # Safety
-/// `sem` must have been passed to [`sem_init`].
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes.
 pub unsafe extern "C" fn sem_trywait(sem: *mut c_void) -> c_int {
-    match sem_ref(sem as usize) {
-        Some(p) => libc::sem_trywait(&mut (*(p as *mut HostSem)).0),
-        None => -1,
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    SEM_CALLS[1].fetch_add(1, Ordering::Relaxed);
+    if sem_try_decrement(word) {
+        trace_sem("sem_trywait", sem, None, 0);
+        0
+    } else {
+        set_errno(libc::EAGAIN);
+        trace_sem("sem_trywait", sem, None, -1);
+        -1
     }
 }
 
-/// `sem_timedwait` with a bionic `timespec` (identical layout to glibc's).
+/// `sem_timedwait` with a bionic `timespec` (identical layout to glibc's,
+/// `CLOCK_REALTIME` per POSIX).
 ///
 /// # Safety
-/// `sem` must have been passed to [`sem_init`]; `abs_timeout` must point to a
-/// valid `timespec`.
+/// `sem` must point to at least [`SEM_BYTES`] writable guest bytes;
+/// `abs_timeout` must point to a valid `timespec`.
 pub unsafe extern "C" fn sem_timedwait(
     sem: *mut c_void,
     abs_timeout: *const libc::timespec,
 ) -> c_int {
-    match sem_ref(sem as usize) {
-        Some(p) => libc::sem_timedwait(&mut (*(p as *mut HostSem)).0, abs_timeout),
-        None => -1,
+    let word = match check_sem(sem) {
+        Ok(w) => w,
+        Err(e) => {
+            set_errno(e);
+            return -1;
+        }
+    };
+    if abs_timeout.is_null() {
+        set_errno(libc::EINVAL);
+        return -1;
+    }
+    // SAFETY: the caller guarantees a valid `timespec`.
+    let ts = unsafe { *abs_timeout };
+    if ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1_000_000_000 {
+        set_errno(libc::EINVAL);
+        return -1;
+    }
+    let deadline = std::time::UNIX_EPOCH
+        + std::time::Duration::from_secs(ts.tv_sec as u64)
+        + std::time::Duration::from_nanos(ts.tv_nsec as u64);
+    match sem_await(sem as usize, word, Some(deadline)) {
+        Ok(()) => {
+            trace_sem("sem_timedwait", sem, None, 0);
+            0
+        }
+        Err(e) => {
+            set_errno(e);
+            trace_sem("sem_timedwait", sem, None, -1);
+            -1
+        }
+    }
+}
+
+/// Counters for the `sem_*` entry points (diagnostics: proves whether the
+/// guest ever reaches the shims, and how many times).
+pub static SEM_CALLS: [AtomicUsize; 4] = [
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+];
+
+/// `(init, trywait, post, wait)` call counts.
+pub fn sem_call_counts() -> (usize, usize, usize, usize) {
+    (
+        SEM_CALLS[0].load(Ordering::Relaxed),
+        SEM_CALLS[1].load(Ordering::Relaxed),
+        SEM_CALLS[2].load(Ordering::Relaxed),
+        SEM_CALLS[3].load(Ordering::Relaxed),
+    )
+}
+
+/// `ACOS_TRACE_SEM=1` prints every semaphore operation (diagnostics only).
+fn trace_sem(op: &str, sem: *mut c_void, value: Option<i64>, rc: c_int) {
+    static ON: OnceLock<bool> = OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("ACOS_TRACE_SEM").is_ok_and(|v| v != "0")) {
+        return;
+    }
+    match value {
+        Some(v) => eprintln!(
+            "SEM {op} tid={:?} sem={sem:p} value={v} rc={rc}",
+            std::thread::current().id()
+        ),
+        None => eprintln!(
+            "SEM {op} tid={:?} sem={sem:p} rc={rc}",
+            std::thread::current().id()
+        ),
     }
 }
 
@@ -738,6 +1040,7 @@ pub fn android_extra_table() -> HashMap<&'static str, super::Shim> {
     add("sem_wait", sem_wait as *const c_void);
     add("sem_trywait", sem_trywait as *const c_void);
     add("sem_timedwait", sem_timedwait as *const c_void);
+    add("sem_getvalue", sem_getvalue as *const c_void);
     add("ATrace_beginSection", atrace_begin_section as *const c_void);
     add("ATrace_endSection", atrace_end_section as *const c_void);
     add("ATrace_isEnabled", atrace_is_enabled as *const c_void);
@@ -900,5 +1203,199 @@ mod stdio_map_tests {
         acos_unregister_file(fake);
         // SAFETY: the shim only compares pointer addresses.
         unsafe { assert_eq!(acos_map_stream(fake), 0) };
+    }
+}
+
+#[cfg(test)]
+mod sem_tests {
+    use super::*;
+
+    /// A guest `sem_t`: bionic treats it as a 32-bit counter word, and the
+    /// engine's `fml::Semaphore` only ever touches it through these shims.
+    #[repr(align(4))]
+    struct GuestSem([u8; SEM_BYTES]);
+
+    impl GuestSem {
+        fn new() -> Self {
+            GuestSem([0; SEM_BYTES])
+        }
+        fn raw(&self) -> *mut c_void {
+            self.0.as_ptr() as *mut c_void
+        }
+        fn counter(&self) -> c_int {
+            i32::from_ne_bytes(self.0)
+        }
+    }
+
+    fn errno() -> c_int {
+        // SAFETY: thread-local errno pointer.
+        unsafe { *libc::__errno_location() }
+    }
+
+    /// Exactly the sequence `fml::Semaphore` performs: the engine coalesces
+    /// frame requests with `TryWait()` on a semaphore created with value 1.
+    #[test]
+    fn fml_semaphore_trywait_sequence() {
+        let sem = GuestSem::new();
+        // SAFETY: `sem` is a live, aligned 4-byte guest object.
+        unsafe {
+            assert_eq!(sem_init(sem.raw(), 0, 1), 0, "sem_init(1)");
+            assert_eq!(sem.counter(), 1, "value is stored in the guest word");
+            assert_eq!(sem_trywait(sem.raw()), 0, "first TryWait takes the token");
+            assert_eq!(sem.counter(), 0);
+            assert_eq!(sem_trywait(sem.raw()), -1, "second TryWait has no token");
+            assert_eq!(errno(), libc::EAGAIN);
+            assert_eq!(sem_post(sem.raw()), 0);
+            assert_eq!(sem.counter(), 1);
+            assert_eq!(sem_trywait(sem.raw()), 0, "post makes the token available");
+            assert_eq!(sem_destroy(sem.raw()), 0);
+        }
+    }
+
+    /// A semaphore that is copied/moved after `sem_init` (the engine builds the
+    /// animator's semaphore in one object and the storage is re-addressed) must
+    /// keep working: the counter travels with the object.
+    #[test]
+    fn moved_and_copied_semaphore_keeps_its_count() {
+        let original = GuestSem::new();
+        // SAFETY: live aligned objects; `moved` is a byte-for-byte copy of the
+        // initialised semaphore, which is what a `memcpy`-ed holder looks like.
+        unsafe {
+            assert_eq!(sem_init(original.raw(), 0, 1), 0);
+            assert_eq!(sem_trywait(original.raw()), 0, "token taken at the original");
+            assert_eq!(sem_post(original.raw()), 0);
+            let mut moved = GuestSem::new();
+            moved.0.copy_from_slice(&original.0);
+            assert_eq!(moved.counter(), 1, "count moved with the object");
+            assert_eq!(sem_trywait(moved.raw()), 0, "moved handle still works");
+            assert_eq!(sem_trywait(moved.raw()), -1, "and shares the counter state");
+            assert_eq!(errno(), libc::EAGAIN);
+        }
+    }
+
+    /// A `sem_t` that never went through `sem_init` reads as a zeroed bionic
+    /// counter: `trywait` reports `EAGAIN` (never a silent `-1`/`EBADF`).
+    #[test]
+    fn never_initialised_semaphore_is_a_zero_counter() {
+        let sem = GuestSem::new();
+        // SAFETY: live aligned object.
+        unsafe {
+            assert_eq!(sem_trywait(sem.raw()), -1);
+            assert_eq!(errno(), libc::EAGAIN);
+            assert_eq!(sem_post(sem.raw()), 0, "post works without a table entry");
+            assert_eq!(sem_trywait(sem.raw()), 0);
+        }
+    }
+
+    /// `sem_timedwait` takes a `CLOCK_REALTIME` absolute deadline (POSIX), not a
+    /// relative timeout: a deadline 300 ms ahead returns `ETIMEDOUT` in ~300 ms,
+    /// whereas a relative reading of `tv_sec` would block for ~50 years.
+    #[test]
+    fn timedwait_uses_clock_realtime_absolute_deadline() {
+        let sem = GuestSem::new();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("host clock after the epoch");
+        let plus = |ms: u64| {
+            let t = now + std::time::Duration::from_millis(ms);
+            libc::timespec {
+                tv_sec: t.as_secs() as libc::time_t,
+                tv_nsec: t.subsec_nanos() as _,
+            }
+        };
+        let near = plus(300);
+        let past = libc::timespec {
+            tv_sec: now.as_secs() as libc::time_t - 1,
+            tv_nsec: 0,
+        };
+        // SAFETY: live aligned object and valid `timespec`s.
+        unsafe {
+            assert_eq!(sem_init(sem.raw(), 0, 1), 0);
+            assert_eq!(
+                sem_timedwait(sem.raw(), &near),
+                0,
+                "an available token is taken without waiting"
+            );
+            let started = std::time::Instant::now();
+            assert_eq!(sem_timedwait(sem.raw(), &near), -1, "no token: times out");
+            assert_eq!(errno(), libc::ETIMEDOUT);
+            let waited = started.elapsed();
+            assert!(
+                waited >= std::time::Duration::from_millis(250)
+                    && waited < std::time::Duration::from_secs(5),
+                "the deadline is absolute, not `now + tv_sec` ({waited:?})"
+            );
+            let started = std::time::Instant::now();
+            assert_eq!(
+                sem_timedwait(sem.raw(), &past),
+                -1,
+                "an already expired deadline returns immediately"
+            );
+            assert_eq!(errno(), libc::ETIMEDOUT);
+            assert!(started.elapsed() < std::time::Duration::from_secs(1));
+            assert_eq!(sem_post(sem.raw()), 0);
+        }
+    }
+
+    /// `sem_wait` blocks a *second* thread until `sem_post` from another thread,
+    /// which is the pattern the engine uses to hand frames between threads.
+    #[test]
+    fn cross_thread_post_unblocks_wait() {
+        use std::sync::mpsc;
+        // Leaked on purpose: the address is the semaphore's identity for the
+        // whole process, and the two threads join before the test returns.
+        let sem: &'static GuestSem = Box::leak(Box::new(GuestSem::new()));
+        // SAFETY: live aligned object, valid for the whole process.
+        unsafe { assert_eq!(sem_init(sem.raw(), 0, 0), 0) };
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let (done_tx, done_rx) = mpsc::channel::<c_int>();
+        let addr = sem.raw() as usize;
+        let waiter = std::thread::spawn(move || {
+            ready_tx.send(()).expect("signal readiness");
+            let started = std::time::Instant::now();
+            // SAFETY: the guest semaphore is alive for the whole process.
+            let rc = unsafe { sem_wait(addr as *mut c_void) };
+            done_tx.send(rc).expect("report rc");
+            started.elapsed()
+        });
+        ready_rx.recv().expect("waiter started");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(sem.counter(), 0, "waiter consumed nothing");
+        // SAFETY: same live object.
+        unsafe { assert_eq!(sem_post(sem.raw()), 0) };
+        let rc = done_rx.recv().expect("waiter finished");
+        let waited = waiter.join().expect("waiter thread");
+        assert_eq!(rc, 0, "sem_wait succeeded");
+        assert!(
+            waited >= std::time::Duration::from_millis(40),
+            "the waiter actually blocked ({waited:?})"
+        );
+        assert_eq!(sem.counter(), 0, "the token was consumed");
+        // SAFETY: same live object.
+        unsafe { assert_eq!(sem_destroy(sem.raw()), 0) };
+    }
+
+    /// `sem_getvalue` reports the guest counter, and bad pointers fail with
+    /// `EINVAL` instead of dereferencing NULL.
+    #[test]
+    fn getvalue_and_error_paths() {
+        let sem = GuestSem::new();
+        let mut out: c_int = -1;
+        // SAFETY: live aligned object and writable `int`.
+        unsafe {
+            assert_eq!(sem_init(sem.raw(), 0, 3), 0);
+            assert_eq!(sem_getvalue(sem.raw(), &mut out), 0);
+            assert_eq!(out, 3);
+            assert_eq!(sem_trywait(sem.raw()), 0);
+            assert_eq!(sem_getvalue(sem.raw(), &mut out), 0);
+            assert_eq!(out, 2);
+            assert_eq!(sem_init(std::ptr::null_mut(), 0, 1), -1);
+            assert_eq!(errno(), libc::EINVAL);
+            assert_eq!(sem_post(std::ptr::null_mut()), -1);
+            assert_eq!(sem_trywait(std::ptr::null_mut()), -1);
+            assert_eq!(sem_wait(std::ptr::null_mut()), -1);
+            assert_eq!(sem_destroy(std::ptr::null_mut()), -1);
+            assert_eq!(sem_destroy(sem.raw()), 0);
+        }
     }
 }

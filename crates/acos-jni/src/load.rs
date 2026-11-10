@@ -121,79 +121,122 @@ pub(crate) fn load_named(vm: &mut Vm, requested: &str) -> Result<String, CallFai
         }
     }
 
-    let Some((bytes, path, name)) = chosen else {
-        // A library that is not in a search path or the APK is treated as a
-        // framework library served by ACOS Rust natives (ADR-0014 /
-        // `acos-vm::natives::fwk_jni`): report it as loaded so
-        // `Runtime.nativeLoad` returns a path, exactly as the framework edge did
-        // before native loading was wired in. A missing Rust implementation
-        // still surfaces as a structured `UNSUPPORTED_JAVA_API` at the first
-        // call. An app-bundled library of the same name is found above and is
-        // mapped for real, so this never hides the APK's own code.
-        return Ok(file);
+    // bionic's "already loaded" rule: `System.loadLibrary` is `dlopen` plus
+    // `JNI_OnLoad`, and `dlopen` never maps a second copy of an object that is
+    // already in the process. Without this check a JNI load of a library the
+    // loader itself mapped (phase A) produces two copies of its code and data
+    // — for `libflutter.so` two engines, with the natives registered by the
+    // second `JNI_OnLoad` pointing into the copy this VM never runs.
+    let existing = {
+        let mut names = vec![file.clone(), requested.to_string()];
+        let direct = Path::new(requested);
+        if direct.is_absolute() {
+            names.push(direct.display().to_string());
+        }
+        for dir in &search_paths {
+            names.push(dir.join(&file).display().to_string());
+        }
+        if let Some((_, Some(path), _)) = &chosen {
+            names.push(path.clone());
+        }
+        let wanted: Vec<&str> = names.iter().map(String::as_str).collect();
+        loader.find_loaded(&wanted)
     };
 
-    // Answer the guest library's NDK imports (`libandroid`/`libjnigraphics`)
-    // from the real ACOS substrates before its initializer runs. The host is
-    // process-wide and inert until native code actually calls an NDK symbol.
-    crate::ndk_host::install();
+    let (handle, label) = match existing {
+        // The mapping is already published with a label (an on-disk path or the
+        // APK entry it was extracted from); report that same label.
+        Some(handle) => {
+            let label = handle
+                .library()
+                .path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| handle.library().name.clone());
+            (handle, label)
+        }
+        None => {
+            let Some((bytes, label, name)) = chosen else {
+                // A library that is not in a search path or the APK is treated as a
+                // framework library served by ACOS Rust natives (ADR-0014 /
+                // `acos-vm::natives::fwk_jni`): report it as loaded so
+                // `Runtime.nativeLoad` returns a path, exactly as the framework edge
+                // did before native loading was wired in. A missing Rust
+                // implementation still surfaces as a structured
+                // `UNSUPPORTED_JAVA_API` at the first call. An app-bundled library
+                // of the same name is found above and is mapped for real, so this
+                // never hides the APK's own code.
+                return Ok(file);
+            };
+            // Answer the guest library's NDK imports (`libandroid`/`libjnigraphics`)
+            // from the real ACOS substrates before its initializer runs. The host is
+            // process-wide and inert until native code actually calls an NDK symbol.
+            crate::ndk_host::install();
+            let label = label.unwrap_or(name.clone());
+            let handle = loader.load_bytes(&bytes, &name).map_err(|e| {
+                structured(JniError::LoadFailed {
+                    message: e.to_string(),
+                })
+            })?;
+            (handle, label)
+        }
+    };
+    let name = handle.library().name.clone();
 
-    let handle = loader.load_bytes(&bytes, &name).map_err(|e| {
-        structured(JniError::LoadFailed {
-            message: e.to_string(),
-        })
-    })?;
-
-    // Call the library's initializer before publishing it.
+    // Call the library's initializer before publishing it — exactly once per
+    // mapping, as bionic does (a second `System.loadLibrary` of an already
+    // loaded object does not re-run `JNI_OnLoad`).
     let on_load = handle.symbol("JNI_OnLoad");
     if let Some(p) = on_load {
-        if current_vm().is_null() {
+        if handle.library().jni_on_load_done() {
+            // Already initialised by an earlier load of this same mapping.
+        } else if current_vm().is_null() {
             return Err(structured(JniError::LoadFailed {
                 message: "JNI_OnLoad: runtime is not attached to this VM".into(),
             }));
-        }
-        let rt = runtime_state().unwrap();
-        let t = vm.current_thread;
-        refs::push_frame(&rt, t, 0);
-        let java_vm = rt.borrow().vm_slot as *mut std::os::raw::c_void;
-        // SAFETY: `JNI_OnLoad` has the JNI-mandated signature
-        // `jint (*)(JavaVM*, void*)`; the pointer came from a real export of a
-        // library the loader just mapped.
-        let f: unsafe extern "C" fn(*mut std::os::raw::c_void, *mut std::os::raw::c_void) -> i32 =
-            unsafe { std::mem::transmute(p) };
-        let rc = unsafe { f(java_vm, std::ptr::null_mut()) };
-        let error = refs::take_error(&rt, t);
-        let pending = refs::take_pending(vm, &rt, t);
-        let _ = refs::pop_frame(vm, &rt, t, acos_vm::heap::NULL);
-        if let Some(e) = error {
-            return Err(structured(e));
-        }
-        if let Some(h) = pending {
-            return Err(CallFailure::JavaException(h));
-        }
-        if rc != JNI_VERSION_1_4 && rc != JNI_VERSION_1_6 && rc != JNI_OK {
-            return Err(structured(JniError::LoadFailed {
-                message: format!("JNI_OnLoad of {name} returned {rc:#x} (JNI_ERR)"),
-            }));
+        } else {
+            let rt = runtime_state().unwrap();
+            let t = vm.current_thread;
+            refs::push_frame(&rt, t, 0);
+            let java_vm = rt.borrow().vm_slot as *mut std::os::raw::c_void;
+            // SAFETY: `JNI_OnLoad` has the JNI-mandated signature
+            // `jint (*)(JavaVM*, void*)`; the pointer came from a real export of a
+            // library the loader just mapped.
+            let f: unsafe extern "C" fn(
+                *mut std::os::raw::c_void,
+                *mut std::os::raw::c_void,
+            ) -> i32 = unsafe { std::mem::transmute(p) };
+            let rc = unsafe { f(java_vm, std::ptr::null_mut()) };
+            let error = refs::take_error(&rt, t);
+            let pending = refs::take_pending(vm, &rt, t);
+            let _ = refs::pop_frame(vm, &rt, t, acos_vm::heap::NULL);
+            if let Some(e) = error {
+                return Err(structured(e));
+            }
+            if let Some(h) = pending {
+                return Err(CallFailure::JavaException(h));
+            }
+            if rc != JNI_VERSION_1_4 && rc != JNI_VERSION_1_6 && rc != JNI_OK {
+                return Err(structured(JniError::LoadFailed {
+                    message: format!("JNI_OnLoad of {name} returned {rc:#x} (JNI_ERR)"),
+                }));
+            }
+            handle.library().note_jni_on_load();
         }
     }
 
     let rt = runtime_state().unwrap();
     {
         let mut st = rt.borrow_mut();
-        st.loaded
-            .insert(file.clone(), path.clone().unwrap_or_else(|| name.clone()));
-        st.loaded.insert(
-            requested.to_string(),
-            path.clone().unwrap_or_else(|| name.clone()),
-        );
+        st.loaded.insert(file.clone(), label.clone());
+        st.loaded.insert(requested.to_string(), label.clone());
         st.libs.push(LoadedLibrary {
             name: name.clone(),
-            path: path.clone(),
+            path: Some(label.clone()),
             handle: handle.clone(),
         });
     }
-    Ok(path.unwrap_or(name))
+    Ok(label)
 }
 
 // --- JNI name mangling ------------------------------------------------------

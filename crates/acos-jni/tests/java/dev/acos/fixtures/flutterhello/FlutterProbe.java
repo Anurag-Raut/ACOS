@@ -219,6 +219,31 @@ public final class FlutterProbe {
    * @param frameDelayNanos nanoseconds between the synthetic vsync and now
    */
   /** Number of engine vsync requests observed (diagnostic). */
+  /**
+   * Harness driver: request another frame from the platform thread.
+   *
+   * <p>A real app is driven by its own animation callbacks; the probe's single
+   * {@code scheduleFrame()} runs while the <em>first</em> frame is still in
+   * flight (the animator coalesces it), so the harness asks again once that
+   * frame has settled and the rasterizer has a surface.
+   */
+  public static void requestFrame() {
+    FlutterJNI jni = sJni;
+    if (jni != null) {
+      jni.scheduleFrame();
+    }
+  }
+
+  /** Harness driver: re-dispatch the counter tap (down+up) and schedule. */
+  public static void tapIncrement() {
+    FlutterJNI jni = sJni;
+    if (jni != null) {
+      ByteBuffer packet = buildTap(WIDTH * DPR / 2, (100 + 32) * DPR);
+      jni.dispatchPointerDataPacket(packet, 0);
+      jni.scheduleFrame();
+    }
+  }
+
   public static long vsyncRequestCount() {
     return sRequestCount;
   }
