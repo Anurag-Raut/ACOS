@@ -1348,6 +1348,7 @@ impl Vm {
         vm.heap.objects = objects;
         vm.heap.free = free;
         vm.heap.field_pool.clear();
+        vm.heap.field_pool_words = 0;
 
         // ---- interned strings / roots / caches ---------------------------
         let interned_n = r.u32()? as usize;

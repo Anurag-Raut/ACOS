@@ -83,15 +83,20 @@ impl HostGuard {
         self.started = Instant::now();
     }
 
-    /// Cheap check. Tests the wall clock at most every 64 calls and reads
-    /// `/proc/self/status` at most every [`RSS_CHECK_INTERVAL`]. Amortising the
-    /// clock reads keeps the per-allocation cost to an integer increment while
-    /// bounding watchdog detection latency to a few microseconds of VM work.
+    /// Cheap check. Tests the wall clock and reads `/proc/self/status` at most
+    /// every 64 calls. Amortising the clock/RSS reads keeps the per-allocation
+    /// cost to an integer increment while bounding watchdog detection latency to
+    /// a few microseconds of VM work. The scheduler also calls this once per
+    /// instruction batch, so a thread that never allocates is still bounded.
     pub fn check(&mut self) -> VmResult<()> {
-        // The wall clock is a *hard* ceiling: evaluate it on every call so a
-        // loop that allocates cannot run up to 64 allocations past the limit.
-        // (`Instant::now` is the cheap part; the `/proc` read is what is
-        // throttled below.)
+        self.tick = self.tick.wrapping_add(1);
+        // Always do the first RSS sample (so `rss_now` is populated), then
+        // sample once per 64 calls. `Instant::now` is a vDSO call but still
+        // dominated allocator-bound programs when paid per object; the hard
+        // ceiling is only overshot by at most 63 allocations (< a few us).
+        if self.rss_now != 0 && self.tick & 0x3f != 0 {
+            return Ok(());
+        }
         if let Some(max) = self.wall_max {
             let elapsed = self.started.elapsed();
             if elapsed > max {
@@ -100,12 +105,6 @@ impl HostGuard {
                     limit_secs: max.as_secs(),
                 });
             }
-        }
-        self.tick = self.tick.wrapping_add(1);
-        // Always do the first RSS sample (so `rss_now` is populated), then
-        // sample once per 64 calls.
-        if self.rss_now != 0 && self.tick & 0x3f != 0 {
-            return Ok(());
         }
         if self.rss_max_bytes != 0 {
             let now = Instant::now();

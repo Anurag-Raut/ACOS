@@ -131,6 +131,13 @@ pub struct Heap {
     /// storage removes a `Vec` allocation per object. Untraced: contents are
     /// zeroed on reuse.
     pub(crate) field_pool: Vec<Vec<u32>>,
+    /// Total capacity (in `u32` words) currently retained by `field_pool`.
+    /// Bounds the pool by bytes rather than by a fixed entry count: the pool is
+    /// the free list for instance field arrays, so a small fixed cap (4096)
+    /// recycled almost nothing on the allocation benchmarks, which free
+    /// hundreds of thousands of tiny instances per collection. The budget
+    /// keeps reuse high while capping retained memory.
+    pub(crate) field_pool_words: usize,
     /// Approximate live bytes reported as `heap_peak_bytes`.
     pub live_bytes: usize,
     pub peak_bytes: usize,
@@ -155,6 +162,7 @@ impl Heap {
             objects: vec![None],
             free: Vec::new(),
             field_pool: Vec::new(),
+            field_pool_words: 0,
             live_bytes: 0,
             peak_bytes: 0,
             max_bytes,
@@ -207,7 +215,9 @@ impl Heap {
             let size = object_size(&obj);
             self.live_bytes = self.live_bytes.saturating_sub(size);
             if let Object::Instance { fields, .. } = obj {
-                if fields.capacity() <= 64 && self.field_pool.len() < 4096 {
+                let cap = fields.capacity();
+                if cap <= 64 && self.field_pool_words + cap <= FIELD_POOL_MAX_WORDS {
+                    self.field_pool_words += cap;
                     self.field_pool.push(fields);
                 }
             }
@@ -221,6 +231,7 @@ impl Heap {
     pub(crate) fn take_field_vec(&mut self, slots: usize) -> Vec<u32> {
         match self.field_pool.pop() {
             Some(mut v) => {
+                self.field_pool_words = self.field_pool_words.saturating_sub(v.capacity());
                 // `clear` + `resize` zeroes every slot without first zeroing a
                 // possibly-nonzero buffer twice (the old `resize` + `fill`).
                 v.clear();
@@ -238,6 +249,13 @@ impl Heap {
         ))
     }
 }
+
+/// Upper bound on the total `u32` capacity retained by the instance
+/// field-array free list (32 MiB of words). The pool is byte-bounded rather
+/// than entry-bounded so a run that frees a large young generation can recycle
+/// it on the next one instead of falling back to one host allocation per
+/// object.
+const FIELD_POOL_MAX_WORDS: usize = 32 * 1024 * 1024 / 4;
 
 /// Approximate retained size of an object (metadata + payload).
 #[inline]
