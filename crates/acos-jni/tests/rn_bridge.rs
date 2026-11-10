@@ -429,9 +429,11 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
                 || l.starts_with("ACOS_RN_")
         })
         .collect();
+    // The child worker mirrors each guest stdout line as `W88A_PROBE <line>`,
+    // so the op marker is not at the start of the captured line (W143-A fix).
     let ops: Vec<&str> = stdout
         .lines()
-        .filter_map(|l| l.strip_prefix("ACOS_RN_OP "))
+        .filter_map(|l| l.split_once("ACOS_RN_OP ").map(|(_, rest)| rest))
         .collect();
     let summary_text = stdout
         .lines()
@@ -457,16 +459,16 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
 
     let out_dir = repo_root().join("results/rn");
     let _ = std::fs::create_dir_all(&out_dir);
-    // W140-A: the bridge artifact is `w140a-ops.json`. It carries the captured
+    // W143-A: the bridge artifact is `w143a-ops.json`. It carries the captured
     // `ACOS_RN_OP` batch under `ops` plus the full `ACOS_RN_BRIDGE` stage trail
     // (main-looper preparation, `ReactChoreographer`, `initializeBridge`,
-    // `runJSBundle`, `AppRegistry.runApplication`). With the generic
-    // `invoke-polymorphic` `VarHandle`/`MethodHandle` support (W140-A) the
-    // probe now runs `runJSBundle` through real core-library
-    // `ConcurrentLinkedQueue`/`ConcurrentHashMap`/`Striped64` code; the next
-    // blocker is the JS-level `__fbBatchedBridgeConfig` bootstrap.
+    // `runJSBundle`, `AppRegistry.runApplication`). W140-A got `runJSBundle`
+    // through the real core-library concurrency code; W143-A fixes the loader
+    // ordering (async file loader) so the queued
+    // `NativeToJsBridge::initializeRuntime` installs `global.nativeModuleProxy`
+    // before the bundle is evaluated.
     let _ = std::fs::write(
-        out_dir.join("w140a-ops.json"),
+        out_dir.join("w143a-ops.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "summary": summary,
             "stages": stage_lines,

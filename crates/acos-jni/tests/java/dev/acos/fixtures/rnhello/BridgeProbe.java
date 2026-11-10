@@ -25,16 +25,18 @@ import android.content.ContextWrapper;
 import android.content.pm.ApplicationInfo;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 
 import com.facebook.hermes.reactexecutor.HermesExecutorFactory;
-import com.facebook.react.internal.AndroidChoreographerProvider;
+import com.facebook.react.internal.ChoreographerProvider;
 import com.facebook.react.modules.core.ReactChoreographer;
 import com.facebook.react.NativeModuleRegistryBuilder;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.BaseJavaModule;
 import com.facebook.react.bridge.BridgeReactContext;
 import com.facebook.react.bridge.CatalystInstanceImpl;
 import com.facebook.react.bridge.DefaultJSExceptionHandler;
@@ -43,17 +45,17 @@ import com.facebook.react.bridge.JavaScriptExecutor;
 import com.facebook.react.bridge.ModuleHolder;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.NativeModuleRegistry;
+import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.queue.MessageQueueThreadSpec;
 import com.facebook.react.bridge.queue.ReactQueueConfigurationSpec;
 import com.facebook.react.modules.appstate.AppStateModule;
-import com.facebook.react.modules.core.ExceptionsManagerModule;
 import com.facebook.react.modules.core.TimingModule;
 import com.facebook.react.devsupport.ReleaseDevSupportManager;
 import com.facebook.react.modules.deviceinfo.DeviceInfoModule;
-import com.facebook.react.modules.systeminfo.AndroidInfoModule;
 import com.facebook.react.soloader.OpenSourceMergedSoMapping;
 import com.facebook.soloader.SoLoader;
 import com.facebook.soloader.SoSource;
@@ -115,6 +117,21 @@ public final class BridgeProbe {
       }
       t = t.getCause();
       depth++;
+    }
+  }
+
+  /** W143-A: log the exact throwable seen by the looper drain. */
+  static void dumpAt(String where, Throwable t) {
+    try {
+      emit(
+          "{\"phase\":\"drain-exception\",\"at\":\""
+              + esc(where)
+              + "\",\"class\":\""
+              + esc(t.getClass().getName())
+              + "\",\"toString\":\""
+              + esc(String.valueOf(t))
+              + "\"}");
+    } catch (Throwable ignored) {
     }
   }
 
@@ -269,7 +286,7 @@ public final class BridgeProbe {
    */
   public static final class LoggingUIManagerModule extends UIManagerModule {
     private final List<String> ops = new ArrayList<>();
-    private boolean forward = true;
+    private boolean forward = false;
 
     LoggingUIManagerModule(
         BridgeReactContext context, List<ViewManager> viewManagers, int minTimeLeftInFrame) {
@@ -290,6 +307,14 @@ public final class BridgeProbe {
     }
 
     @Override
+    public Map<String, Object> getConstants() {
+      Map<String, Object> c = super.getConstants();
+      emit("{\"phase\":\"uimanager-getConstants\",\"keys\":\"" + esc(c.keySet().toString()) + "\"}");
+      return c;
+    }
+
+    @Override
+    @ReactMethod
     public void createView(int tag, String className, int rootTag, ReadableMap props) {
       log("{\"op\":\"createView\",\"tag\":" + tag + ",\"class\":\"" + className + "\",\"rootTag\":" + rootTag + ",\"props\":" + json(props) + "}");
       if (forward) {
@@ -298,6 +323,7 @@ public final class BridgeProbe {
     }
 
     @Override
+    @ReactMethod
     public void updateView(int tag, String className, ReadableMap props) {
       log("{\"op\":\"updateView\",\"tag\":" + tag + ",\"class\":\"" + className + "\",\"props\":" + json(props) + "}");
       if (forward) {
@@ -306,6 +332,7 @@ public final class BridgeProbe {
     }
 
     @Override
+    @ReactMethod
     public void setChildren(int viewTag, ReadableArray childrenTags) {
       log("{\"op\":\"setChildren\",\"tag\":" + viewTag + ",\"children\":" + json(childrenTags) + "}");
       if (forward) {
@@ -314,6 +341,7 @@ public final class BridgeProbe {
     }
 
     @Override
+    @ReactMethod
     public void manageChildren(
         int viewTag,
         ReadableArray moveFrom,
@@ -328,10 +356,104 @@ public final class BridgeProbe {
     }
 
     @Override
+    @ReactMethod
     public void removeRootView(int rootViewTag) {
       log("{\"op\":\"removeRootView\",\"tag\":" + rootViewTag + "}");
       if (forward) {
         super.removeRootView(rootViewTag);
+      }
+    }
+  }
+
+  /**
+   * W143-A: a `PlatformConstants` module that does not need system services.
+   *
+   * `AndroidInfoModule.uiMode()` calls
+   * `Context.getSystemService(UI_MODE_SERVICE)`; the probe's `ProbeContext` is a
+   * `ContextWrapper` with a null base, so `ContextWrapper.getSystemService`
+   * throws a frame-less NPE and the whole `setUpDefaltReactNativeEnvironment`
+   * bundle bootstrap aborts. Returning the constants directly keeps the real
+   * `Build` values and reports a phone (`normal`) UI mode.
+   */
+  public static final class SimplePlatformConstantsModule extends BaseJavaModule {
+    @Override
+    public String getName() {
+      return "PlatformConstants";
+    }
+
+    @Override
+    public Map<String, Object> getConstants() {
+      Map<String, Object> c = new HashMap<>();
+      c.put("Version", Build.VERSION.SDK_INT);
+      c.put("Release", Build.VERSION.RELEASE);
+      c.put("Serial", Build.SERIAL);
+      c.put("Fingerprint", Build.FINGERPRINT);
+      c.put("Model", Build.MODEL);
+      c.put("Manufacturer", Build.MANUFACTURER);
+      c.put("Brand", Build.BRAND);
+      c.put("isTesting", false);
+      c.put("uiMode", "normal");
+      Map<String, Object> rnv = new HashMap<>();
+      rnv.put("major", 0);
+      rnv.put("minor", 81);
+      rnv.put("patch", 4);
+      rnv.put("prerelease", null);
+      c.put("reactNativeVersion", rnv);
+      return c;
+    }
+
+    // NOTE: the spec also declares `getAndroidID`, but a sync `@ReactMethod`
+    // forces `JavaNativeModule::getMethods()` to build a `MethodInvoker`, which
+    // calls JNI `FromReflectedMethod` (not implemented by the probe VM yet).
+    // `Platform.android.js` never calls it during startup, so it is omitted.
+  }
+
+  /**
+   * W143-A: a logging replacement for `ExceptionsManager`.
+   *
+   * The real module is a generated TurboModule spec whose `reportException`
+   * path is swallowed by `ReleaseDevSupportManager`; overrides on a subclass are
+   * also skipped by `JavaModuleWrapper.findMethods` (it inspects the
+   * TurboModule superclass). This plain `BaseJavaModule` has the same name and
+   * method descriptors, so the JS `ExceptionsManager` finds it through
+   * `NativeModules`, while every JS error is emitted for the harness.
+   */
+  public static final class LoggingExceptionsManagerModule extends BaseJavaModule {
+    @Override
+    public String getName() {
+      return "ExceptionsManager";
+    }
+
+    @ReactMethod
+    public void reportFatalException(String message, ReadableArray stack, double id) {
+      emit("{\"phase\":\"js-fatal\",\"message\":\"" + esc(message) + "\"}");
+      dumpJsStack(stack);
+    }
+
+    @ReactMethod
+    public void reportSoftException(String message, ReadableArray stack, double id) {
+      emit("{\"phase\":\"js-soft\",\"message\":\"" + esc(message) + "\"}");
+      dumpJsStack(stack);
+    }
+
+    @ReactMethod
+    public void reportException(ReadableMap data) {
+      emit("{\"phase\":\"js-exception\",\"data\":\"" + esc(String.valueOf(data)) + "\"}");
+    }
+
+    @ReactMethod
+    public void dismissRedbox() {}
+
+    private static void dumpJsStack(ReadableArray stack) {
+      if (stack == null) {
+        return;
+      }
+      for (int i = 0; i < stack.size() && i < 30; i++) {
+        try {
+          ReadableMap frame = stack.getMap(i);
+          emit("{\"phase\":\"js-frame\",\"frame\":\"" + esc(String.valueOf(frame)) + "\"}");
+        } catch (Throwable ignored) {
+        }
       }
     }
   }
@@ -433,6 +555,51 @@ public final class BridgeProbe {
   }
 
   /**
+   * W143-A: a self-driven `ChoreographerProvider`.
+   *
+   * `AndroidChoreographerProvider.getChoreographer()` builds a real
+   * `android.view.Choreographer`, whose constructor calls
+   * `DisplayManagerGlobal.getInstance()` ->
+   * `ServiceManager.rawGetService("display")`. The probe VM has no binder
+   * display service, so `rawGetService` throws a frame-less NPE (diagnosed in
+   * `results/rn/W143A_BRIDGE.md`). That is display/ServiceManager native work,
+   * outside this harness.
+   *
+   * Frame callbacks are what drive RN's `TimingModule` and the legacy
+   * `UIManagerModule`'s `DISPATCH_UI` flush, so simply dropping them stalls the
+   * React commit and no `UIManager` op ever reaches the bridge. This provider
+   * posts each requested frame back onto the main looper with a synthetic
+   * 16 ms clock, so the VM's virtual-time scheduler drives frames exactly like
+   * it drives the looper.
+   */
+  public static final class VirtualChoreographerProvider implements ChoreographerProvider {
+    public static final VirtualChoreographerProvider INSTANCE =
+        new VirtualChoreographerProvider();
+
+    private static final class Virtual implements ChoreographerProvider.Choreographer {
+      private long frameNanos = 0;
+
+      @Override
+      public void postFrameCallback(android.view.Choreographer.FrameCallback callback) {
+        new android.os.Handler(Looper.getMainLooper())
+            .post(
+                () -> {
+                  frameNanos += 16_000_000L;
+                  callback.doFrame(frameNanos);
+                });
+      }
+
+      @Override
+      public void removeFrameCallback(android.view.Choreographer.FrameCallback callback) {}
+    }
+
+    @Override
+    public ChoreographerProvider.Choreographer getChoreographer() {
+      return new Virtual();
+    }
+  }
+
+  /**
    * Prepare the process main looper and the `ReactChoreographer` singleton.
    *
    * Real Android does this in `ActivityThread.main` (`Looper.prepareMainLooper`)
@@ -454,8 +621,8 @@ public final class BridgeProbe {
       dump(t);
     }
     try {
-      ReactChoreographer.initialize(AndroidChoreographerProvider.INSTANCE);
-      stage("choreographer", "ok");
+      ReactChoreographer.initialize(VirtualChoreographerProvider.INSTANCE);
+      stage("choreographer", "ok-virtual-provider");
     } catch (Throwable t) {
       emit("{\"phase\":\"choreographer-error\",\"error\":\"" + esc(t.toString()) + "\"}");
       dump(t);
@@ -465,6 +632,22 @@ public final class BridgeProbe {
   public static void main(String[] args) {
     emit("{\"phase\":\"begin\"}");
     prepareMainThread();
+    // Earliest possible main-looper marker: proves the looper can dispatch and
+    // runs before the native `initializeRuntime` task posted by `initializeBridge`.
+    new android.os.Handler(Looper.getMainLooper())
+        .post(() -> stage("diag", "pre-bridge"));
+    // W143-A: force `ReadableType.<clinit>`. fbjni's `ReadableNativeMap.importTypes`
+    // reads the enum constants with JNI `GetStaticObjectField`; the VM's
+    // `jni_GetStaticFieldID` does not trigger class initialisation (the JNI spec
+    // requires it), so without this the enum static fields are still null and
+    // `ReadableNativeMap.localTypeMap` throws
+    // "null cannot be cast to non-null type com.facebook.react.bridge.ReadableType"
+    // as soon as any module calls `WritableMap.toHashMap()` (e.g. `DeviceInfo`).
+    try {
+      stage("readabletype-init", "values=" + ReadableType.values().length);
+    } catch (Throwable t) {
+      emit("{\"phase\":\"readabletype-init-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+    }
     String bundlePath = args.length > 0 ? args[0] : "";
     String libDir = args.length > 1 ? args[1] : "";
     String sourceDir = args.length > 2 ? args[2] : bundlePath;
@@ -534,11 +717,11 @@ public final class BridgeProbe {
       final LoggingUIManagerModule um = uiManager;
       Map<String, ModuleHolder> modules = new HashMap<>();
       putModule(modules, "UIManager", () -> um);
-      putModule(modules, "PlatformConstants", () -> new AndroidInfoModule(rc));
+      putModule(modules, "PlatformConstants", () -> new SimplePlatformConstantsModule());
       putModule(modules, "DeviceInfo", () -> new DeviceInfoModule(rc));
       // The real `ReleaseDevSupportManager` is RN's own no-op dev-support
       // implementation; the Kotlin constructors reject `null` (W88-A blocker 4).
-      putModule(modules, "ExceptionsManager", () -> new ExceptionsManagerModule(new ReleaseDevSupportManager()));
+      putModule(modules, "ExceptionsManager", () -> new LoggingExceptionsManagerModule());
       putModule(modules, "Timing", () -> new TimingModule(rc, new ReleaseDevSupportManager()));
       putModule(modules, "AppState", () -> new AppStateModule(rc));
       stage("modules", "count=" + modules.size());
@@ -554,8 +737,19 @@ public final class BridgeProbe {
       // out of this APK (W127-A). Both load the same Hermes bytecode.
       JSBundleLoader loader;
       if (!bundlePath.isEmpty()) {
-        loader = JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ true);
-        stage("loader", "file:" + bundlePath);
+        // `loadSynchronously` MUST be false. Native `Instance::initializeBridge`
+        // calls `NativeToJsBridge::initializeRuntime()` by *posting* it to the
+        // JS queue; it is that task which installs `global.nativeModuleProxy`
+        // (JSIExecutor::initializeRuntime). The sync loader
+        // (`NativeToJsBridge::loadBundleSync`) evaluates the bundle directly on
+        // the calling thread, running it *before* the queued
+        // `initializeRuntime`, so the JS `setUpDefaltReactNativeEnvironment`
+        // sees no `nativeModuleProxy` and no `__fbBatchedBridgeConfig` and
+        // aborts with "__fbBatchedBridgeConfig is not set". The async loader
+        // posts `loadBundle` behind `initializeRuntime` on the same main-looper
+        // queue; `Looper.loop()` below then drains both in order (W143-A).
+        loader = JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ false);
+        stage("loader", "file-async:" + bundlePath);
       } else {
         loader = JSBundleLoader.createAssetLoader(appContext, "index.android.bundle", true);
         stage("loader", "asset:index.android.bundle");
@@ -587,6 +781,11 @@ public final class BridgeProbe {
 
       reactContext.initializeWithInstance(catalyst);
       stage("initializeWithInstance", "ok");
+      // W143-A bisect markers: `initializeRuntime` was posted during
+      // `initializeBridge`; these run on the same main-looper queue right
+      // behind it and ahead of the bundle/`runApplication` tasks.
+      new android.os.Handler(Looper.getMainLooper())
+          .post(() -> stage("diag", "after-init"));
     } catch (Throwable t) {
       emit("{\"phase\":\"bridge-error\",\"at\":\"build\",\"error\":\"" + esc(t.toString()) + "\"}");
       dump(t);
@@ -596,6 +795,8 @@ public final class BridgeProbe {
     try {
       catalyst.runJSBundle();
       stage("runJSBundle", "ok");
+      new android.os.Handler(Looper.getMainLooper())
+          .post(() -> stage("diag", "after-runjsbundle"));
     } catch (Throwable t) {
       emit("{\"phase\":\"bridge-error\",\"at\":\"runJSBundle\",\"error\":\"" + esc(t.toString()) + "\"}");
       dump(t);
@@ -613,6 +814,8 @@ public final class BridgeProbe {
       appParams.pushMap(params);
       catalyst.callFunction("AppRegistry", "runApplication", (com.facebook.react.bridge.NativeArray) appParams);
       stage("runApplication", "ok");
+      new android.os.Handler(Looper.getMainLooper())
+          .post(() -> stage("diag", "after-runapplication"));
     } catch (Throwable t) {
       emit("{\"phase\":\"bridge-error\",\"at\":\"runApplication\",\"error\":\"" + esc(t.toString()) + "\"}");
       dump(t);
@@ -625,6 +828,7 @@ public final class BridgeProbe {
     // so the drain is deterministic and does not wait in real time.
     try {
       android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
+      handler.post(() -> stage("diag", "drain-start"));
       handler.postDelayed(
           new Runnable() {
             @Override
@@ -637,8 +841,17 @@ public final class BridgeProbe {
       Looper.loop();
       stage("looper-done", "ok");
     } catch (Throwable t) {
-      stage("drain-error", esc(t.toString()));
-      dump(t);
+      // `Looper.quit()` from the main thread throws this by design; it is the
+      // intended way to break our own embedded `Looper.loop()` here, not a
+      // failure. Treat it as a clean drain.
+      if (t instanceof IllegalStateException
+          && String.valueOf(t.getMessage()).contains("Main thread not allowed to quit")) {
+        stage("looper-done", "quit-sentinel");
+      } else {
+        stage("drain-error", esc(t.toString()));
+        dumpAt("looper-loop", t);
+        dump(t);
+      }
     }
 
     if (uiManager != null) {
