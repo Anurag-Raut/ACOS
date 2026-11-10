@@ -89,6 +89,7 @@ pub use verify::{verify, VerifyReport};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 
 /// Monotonic identity assigned to every parsed [`DexFile`].
@@ -339,6 +340,21 @@ impl FieldRef<'_> {
     }
 }
 
+/// Deep-size census of a parsed DEX file (`ACOS_PROFILE` diagnostics).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Footprint {
+    /// Raw DEX bytes retained (`Arc<[u8]>`).
+    pub raw_bytes: u64,
+    /// Id tables + class defs + lazily-parsed annotations.
+    pub parsed_bytes: u64,
+    /// Decoded string table, when materialised.
+    pub strings_bytes: u64,
+    /// Annotation directories actually parsed so far.
+    pub annotations_bytes: u64,
+    /// Number of class annotation directories materialised.
+    pub annotations_cached: u64,
+}
+
 /// A parsed DEX file.
 #[derive(Clone, Debug)]
 pub struct DexFile {
@@ -358,6 +374,14 @@ pub struct DexFile {
     method_handles: Vec<MethodHandle>,
     map: Vec<MapItem>,
     hiddenapi: Option<HiddenApiClassData>,
+    /// Lazily-parsed class annotations, keyed by `class_def_item.annotations_off`.
+    ///
+    /// The boot classpath carries tens of MiB of `annotations_directory_item`
+    /// payload that reflection touches for only a handful of classes; parsing
+    /// them eagerly into every `ClassDef` made that entire amount resident for
+    /// the process lifetime. `parse` now records only the offset and this cache
+    /// materialises a directory on first access.
+    annotations: Arc<Mutex<HashMap<u32, Arc<AnnotationsDirectory>>>>,
     /// Lazily-computed SHA-1 signature validity (see [`DexFile::signature_valid`]).
     signature_check: OnceLock<bool>,
     /// Lazily-built compact `descriptor hash -> class_defs` index. Shared by
@@ -796,11 +820,11 @@ impl DexFile {
             }
 
             let interfaces = parse_type_list(&r, interfaces_off, type_ids.len() as u32)?;
-            let annotations = if annotations_off == 0 {
-                None
-            } else {
-                Some(annotation::parse_directory(&r, annotations_off)?)
-            };
+            // Annotations stay unparsed here; `DexFile::annotations` parses a
+            // directory on first access and caches it. Keeping the field `None`
+            // also means the serialized `DexTables` form is annotation-free, so
+            // a restored process re-parses only what reflection asks for.
+            let annotations = None;
 
             class_defs.push(ClassDef {
                 class_idx,
@@ -871,6 +895,7 @@ impl DexFile {
             method_handles,
             map,
             hiddenapi,
+            annotations: Arc::new(Mutex::new(HashMap::new())),
             signature_check,
             class_index: OnceLock::new(),
         })
@@ -1182,9 +1207,126 @@ impl DexFile {
         Ok(Some(encoded::decode_array(&r, def.static_values_off as usize)?.0))
     }
 
-    /// The eagerly-parsed annotations directory for a class, if present.
-    pub fn annotations<'a>(&self, def: &'a ClassDef) -> Option<&'a AnnotationsDirectory> {
-        def.annotations.as_ref()
+    /// The annotations directory for a class, parsed on first access.
+    ///
+    /// Only the classes reflection actually asks about pay the parse (and the
+    /// retained bytes); the boot classpath's annotation payload is otherwise
+    /// never materialised. The cache is keyed by the directory's file offset,
+    /// which is unique within one DEX, and is shared by every VM that uses this
+    /// parsed file.
+    pub fn annotations(&self, def: &ClassDef) -> Option<Arc<AnnotationsDirectory>> {
+        if def.annotations_off == 0 {
+            return None;
+        }
+        if let Some(hit) = self
+            .annotations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&def.annotations_off)
+        {
+            return Some(Arc::clone(hit));
+        }
+        let r = self.reader();
+        let parsed = Arc::new(annotation::parse_directory(&r, def.annotations_off).ok()?);
+        self.annotations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(def.annotations_off, Arc::clone(&parsed));
+        Some(parsed)
+    }
+
+    /// Bytes currently retained by lazily-parsed annotation directories
+    /// (deep-size estimate, `ACOS_PROFILE` census only).
+    pub fn annotations_footprint(&self) -> (usize, u64) {
+        let guard = self.annotations.lock().unwrap_or_else(|e| e.into_inner());
+        let mut bytes = 0u64;
+        for dir in guard.values() {
+            let ann_bytes = |anns: &[Annotation]| -> u64 {
+                anns.iter()
+                    .map(|a| {
+                        let n = a.annotation.elements.len();
+                        (std::mem::size_of::<Annotation>() as u64)
+                            .saturating_add(n as u64 * 8)
+                    })
+                    .sum()
+            };
+            bytes += (std::mem::size_of::<AnnotationsDirectory>() as u64)
+                + ann_bytes(&dir.class_annotations)
+                + dir
+                    .field_annotations
+                    .iter()
+                    .map(|(_, a)| 8 + ann_bytes(a))
+                    .sum::<u64>()
+                + dir
+                    .method_annotations
+                    .iter()
+                    .map(|(_, a)| 8 + ann_bytes(a))
+                    .sum::<u64>()
+                + dir
+                    .parameter_annotations
+                    .iter()
+                    .map(|(_, sets)| {
+                        8 + sets
+                            .iter()
+                            .map(|a| 24 + ann_bytes(a))
+                            .sum::<u64>()
+                    })
+                    .sum::<u64>();
+        }
+        (guard.len(), bytes)
+    }
+
+    /// Deep-size census of the memory this parsed file retains (diagnostic
+    /// only, `ACOS_PROFILE`). All fields are byte estimates built from
+    /// `Vec`/`HashMap` lengths plus `String` capacities, never a guess at
+    /// allocator overhead.
+    pub fn footprint(&self) -> crate::Footprint {
+        let sz = |n: usize, e: usize| n.saturating_mul(e) as u64;
+        let class_defs = self
+            .class_defs
+            .iter()
+            .map(|d| std::mem::size_of::<ClassDef>() as u64 + sz(d.interfaces.len(), 4))
+            .sum::<u64>();
+        let strings = self
+            .strings
+            .get()
+            .and_then(|r| r.as_ref().ok())
+            .map(|v| v.iter().map(|s| s.capacity() as u64 + 4).sum::<u64>())
+            .unwrap_or(0);
+        let class_index = self
+            .class_index
+            .get()
+            .map(|m| m.len() as u64 * (8 + 8))
+            .unwrap_or(0);
+        let (ann_count, ann_bytes) = self.annotations_footprint();
+        let parsed = sz(self.string_data_offs.len(), 4)
+            + sz(self.type_ids.len(), 4)
+            + sz(self.proto_ids.len(), std::mem::size_of::<ProtoId>())
+            + sz(self.field_ids.len(), std::mem::size_of::<FieldId>())
+            + sz(self.method_ids.len(), std::mem::size_of::<MethodId>())
+            + class_defs
+            + sz(self.call_site_ids.len(), 4)
+            + sz(self.method_handles.len(), std::mem::size_of::<MethodHandle>())
+            + sz(self.map.len(), std::mem::size_of::<MapItem>())
+            + self
+                .hiddenapi
+                .as_ref()
+                .map(|h| {
+                    h.per_class
+                        .iter()
+                        .map(|f| 24 + f.len() as u64 * 4)
+                        .sum::<u64>()
+                })
+                .unwrap_or(0)
+            + class_index
+            + ann_bytes;
+        crate::Footprint {
+            raw_bytes: self.bytes.len() as u64,
+            parsed_bytes: parsed,
+            strings_bytes: strings,
+            annotations_bytes: ann_bytes,
+            annotations_cached: ann_count as u64,
+        }
     }
 
     /// Parse a `debug_info_item` line table for a code item.

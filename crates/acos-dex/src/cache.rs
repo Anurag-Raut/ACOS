@@ -171,6 +171,22 @@ impl BootCache {
         }
     }
 
+    /// Deep-size census of every parsed file this cache retains
+    /// (`ACOS_PROFILE` diagnostics).
+    pub fn footprint(&self) -> crate::Footprint {
+        let map = self.map.lock().unwrap_or_else(|e| e.into_inner());
+        let mut total = crate::Footprint::default();
+        for file in map.values() {
+            let f = file.footprint();
+            total.raw_bytes += f.raw_bytes;
+            total.parsed_bytes += f.parsed_bytes;
+            total.strings_bytes += f.strings_bytes;
+            total.annotations_bytes += f.annotations_bytes;
+            total.annotations_cached += f.annotations_cached;
+        }
+        total
+    }
+
     /// Drop every entry. Existing `Arc` owners keep their parsed file alive.
     pub fn clear(&self) {
         self.map

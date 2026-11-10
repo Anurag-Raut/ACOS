@@ -412,25 +412,39 @@ impl AssetManager {
                 }
             }
             if let Some((_src_index, value)) = found {
-                // A `@resid` reference (from the XML or a style) must be chased
-                // to its resource so the `TypedArray` carries the right asset
-                // cookie and pooled string; `build_typed_value` does both.
-                // Concrete XML values keep the `-1` cookie that routes string
-                // reads through the parser's own `StringBlock`.
-                let built = if value.is_reference() {
-                    self.resolve_references(value.data, true)
-                } else if value.data_type == TYPE_ATTRIBUTE {
-                    self.theme(theme)
-                        .and_then(|t| t.get(value.data))
-                        .filter(|v| v.is_reference())
-                        .and_then(|v| self.resolve_references(v.data, true))
+                // A `?attr` (from the XML or a style) is resolved through this
+                // `TypedArray`'s theme first (`ResolveAttributeReference`),
+                // then any resulting `@resid` through the resource table
+                // (`ResolveReference`). A `@resid` is chased directly. The
+                // theme value may be concrete (a dimension/color int), in
+                // which case it is written through as-is. `build_typed_value`
+                // supplies the right asset cookie and pooled string; concrete
+                // XML values keep the `-1` cookie that routes string reads
+                // through the parser's own `StringBlock`.
+                let themed = if value.data_type == TYPE_ATTRIBUTE
+                    || value.data_type == crate::res::value::TYPE_DYNAMIC_ATTRIBUTE
+                {
+                    self.theme(theme).map(|t| resolve_theme_attributes(t, value))
                 } else {
-                    None
+                    Some(value)
+                };
+                let built = match themed {
+                    Some(v)
+                        if v.data_type == TYPE_REFERENCE
+                            || v.data_type == crate::res::value::TYPE_DYNAMIC_REFERENCE =>
+                    {
+                        if v.data == 0 {
+                            None
+                        } else {
+                            self.resolve_references(v.data, true)
+                        }
+                    }
+                    _ => None,
                 }
                 .and_then(|(si, entry, fid)| self.build_typed_value(si, &entry, attr, fid, 0));
                 let tv = match built {
                     Some((_cookie, tv)) => tv,
-                    None => null_or_raw_typed_value(value, attr),
+                    None => null_or_raw_typed_value(themed.unwrap_or(value), attr),
                 };
                 tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
                 let slot = count as usize + 1;

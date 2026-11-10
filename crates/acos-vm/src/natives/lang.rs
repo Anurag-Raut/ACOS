@@ -1134,11 +1134,6 @@ fn thread_frames(vm: &Vm, thread: usize) -> Vec<CapturedFrame> {
     out
 }
 
-/// Snapshot the frames of the calling native's thread.
-fn capture_frames(vm: &Vm, ctx: NativeCtx) -> Vec<CapturedFrame> {
-    thread_frames(vm, ctx.thread)
-}
-
 /// Materialise captured frames as a real `java.lang.StackTraceElement[]`.
 fn build_stack_elements(vm: &mut Vm, frames: &[CapturedFrame]) -> VmResult<Handle> {
     let ste = vm.load_class("Ljava/lang/StackTraceElement;")?;
@@ -1180,10 +1175,12 @@ fn build_stack_elements(vm: &mut Vm, frames: &[CapturedFrame]) -> VmResult<Handl
     Ok(arr)
 }
 
-fn thr_fill_in(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    // Capture the real VM stack now: `getOurStackTrace` may be called long
-    // after the stack unwound (Kotlin's `Intrinsics.sanitizeStackTrace`).
-    let frames = capture_frames(vm, ctx);
+/// Capture `thread`'s Java frames and intern them, returning the opaque
+/// `long[]` token a real `Throwable.backtrace` holds. Shared by
+/// `nativeFillInStackTrace` (Java construction) and `Vm::new_throwable`
+/// (VM-constructed exceptions, which never run the Java constructor).
+pub(crate) fn capture_backtrace(vm: &mut Vm, thread: usize) -> VmResult<Handle> {
+    let frames = thread_frames(vm, thread);
     let id = BACKTRACE_IDS.with(|c| {
         let v = c.get();
         c.set(v + 1);
@@ -1191,10 +1188,16 @@ fn thr_fill_in(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     });
     BACKTRACES.with(|m| m.borrow_mut().insert(id, frames));
     // `Throwable.backtrace` is opaque to Java; a real `long[]` matches ART.
-    let h = vm.alloc(Object::Array(ArrayObj {
+    vm.alloc(Object::Array(ArrayObj {
         elem_desc: "J".to_string(),
         data: ArrayData::Long(vec![id as i64]),
-    }))?;
+    }))
+}
+
+fn thr_fill_in(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // Capture the real VM stack now: `getOurStackTrace` may be called long
+    // after the stack unwound (Kotlin's `Intrinsics.sanitizeStackTrace`).
+    let h = capture_backtrace(vm, ctx.thread)?;
     vm.ret_ref(ctx, h);
     Ok(())
 }

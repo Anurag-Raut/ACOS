@@ -2011,6 +2011,18 @@ impl Vm {
                 self.set_field_by_name(cid, h, "detailMessage", mh)?;
                 self.native_roots.pop();
             }
+            // Real JVMs fill the stack trace at construction time. VM-thrown
+            // exceptions bypass the Java `Throwable` constructor, so
+            // `nativeFillInStackTrace` never runs and `getStackTrace()` would
+            // return an empty array. Populate `backtrace` here, while `h` is
+            // rooted (the token allocation can trigger a GC).
+            let thread = self.current_thread;
+            if thread < self.threads.len() && !self.threads[thread].frames.is_empty() {
+                let bt = crate::natives::lang::capture_backtrace(self, thread)?;
+                self.native_roots.push(bt);
+                self.set_instance_field_by_name(h, "backtrace", bt);
+                self.native_roots.pop();
+            }
             Ok(())
         })();
         self.native_roots.pop();
@@ -2110,6 +2122,13 @@ impl Vm {
     }
 
     pub fn capture_stack(&mut self, throwable: Handle, thread: usize) {
+        // Real JVMs capture the stack once, at construction. An exception that
+        // is caught and re-thrown (`athrow`) must keep its original frames, so
+        // never overwrite an existing capture with a shallower post-unwind
+        // stack. VM-thrown exceptions already capture in `throw_new`.
+        if self.throwable_stacks.contains_key(&throwable) {
+            return;
+        }
         let mut entries = Vec::new();
         if let Some(t) = self.threads.get(thread) {
             for f in t.frames.iter().rev() {

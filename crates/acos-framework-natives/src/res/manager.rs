@@ -259,6 +259,19 @@ impl AssetManager {
         let mut cur = id;
         for _ in 0..MAX_REFERENCE_DEPTH {
             let hit = self.lookup_with(cur, requested)?;
+            // `AssetManager2::GetResource(resid, may_be_bag=true)`: a complex
+            // (bag/map) entry can't be represented as a `Res_value`, so AOSP
+            // synthesises a `TYPE_REFERENCE` to the bag id. `ResolveReference`
+            // stops there (`result->data == resolve_resid`), keeping the
+            // reference. This is what makes `?attr/textAppearance*` a
+            // `TYPE_REFERENCE` to the style bag, so
+            // `TypedArray.getResourceId`/`Theme.resolveAttribute` hand the
+            // framework the bag it must inflate.
+            if hit.entry.bag.is_some() {
+                let mut entry = hit.entry.clone();
+                entry.value = ResValue::reference(cur);
+                return Some((hit.source_index, entry, cur));
+            }
             let value = hit.entry.value;
             match value.data_type {
                 crate::res::value::TYPE_REFERENCE | crate::res::value::TYPE_DYNAMIC_REFERENCE
@@ -273,6 +286,11 @@ impl AssetManager {
                         let mut entry = hit.entry.clone();
                         entry.value = ResValue::NULL;
                         return Some((hit.source_index, entry, cur));
+                    }
+                    if value.data == cur {
+                        // Self-referential entry: AOSP stops rather than
+                        // looping (`result->data == resolve_resid`).
+                        return Some((hit.source_index, hit.entry, cur));
                     }
                     cur = value.data;
                 }

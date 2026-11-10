@@ -51,7 +51,7 @@ pub(crate) mod icu_regex;
 mod io;
 mod io_linux;
 pub mod jni_glue;
-mod lang;
+pub(crate) mod lang;
 pub mod looper;
 mod math;
 mod memintarray;

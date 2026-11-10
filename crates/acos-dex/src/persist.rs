@@ -12,7 +12,8 @@
 //! table, `class_data_item`, `code_item` and `debug_info_item` paths keep
 //! working exactly as before. Nothing here re-decodes a class body.
 
-use std::sync::{Arc, OnceLock};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -134,6 +135,7 @@ impl crate::DexFile {
             method_handles: tables.method_handles,
             map: tables.map,
             hiddenapi: tables.hiddenapi,
+            annotations: Arc::new(Mutex::new(HashMap::new())),
             signature_check: OnceLock::new(),
             class_index: OnceLock::new(),
         })

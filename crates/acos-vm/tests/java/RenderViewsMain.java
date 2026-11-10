@@ -134,6 +134,23 @@ public class RenderViewsMain {
             return null;
         }
 
+        // The real `android.test.mock.MockContext` throws here. A real Activity
+        // context is not restricted, and `TextView.readTextAppearance` reads
+        // this (API 34) while applying the resolved `textAppearance` bag.
+        @Override
+        public boolean isRestricted() {
+            return false;
+        }
+
+        // `MockContext` also throws here; an app context returns false (only
+        // system/unsafe resource loaders return true). The method is
+        // `@hide`, so it is absent from `android.jar`: no `@Override`, but the
+        // real `MockContext` is bound at runtime and dispatches here by
+        // signature.
+        public boolean canLoadUnsafeResources() {
+            return false;
+        }
+
         @Override
         public Object getSystemService(String name) {
             if (Context.LAYOUT_INFLATER_SERVICE.equals(name)) {
@@ -175,6 +192,7 @@ public class RenderViewsMain {
         config.densityDpi = 420;
         sRes = new Resources(am, metrics, config);
         seedViewConfiguration(metrics);
+        loadSystemFonts();
         sTheme = sRes.newTheme();
         sTheme.applyStyle(deviceDefaultTheme(), false);
 
@@ -355,6 +373,26 @@ public class RenderViewsMain {
      * standalone VM test has no service transport, so set that flag (the real
      * framework would set it on a device that does not probe the service).
      */
+    /**
+     * Populate `Typeface.sSystemFontMap` (and `Typeface.DEFAULT`). A real app
+     * gets this from `ActivityThread.handleBindApplication`; the VM-level
+     * harness has no ActivityThread, and API-34 lazy typeface initialization
+     * leaves the map empty. `loadPreinstalledSystemFontMap` is `@hide`, so it
+     * is reached reflectively. Without this, the now-resolved `textAppearance`
+     * `fontFamily` makes `Typeface.create(String, int)` dereference a null
+     * default.
+     */
+    static void loadSystemFonts() {
+        try {
+            java.lang.reflect.Method m = android.graphics.Typeface.class
+                    .getMethod("loadPreinstalledSystemFontMap");
+            m.invoke(null);
+            System.out.println("fonts=loaded");
+        } catch (Throwable t) {
+            System.out.println("fonts-skip " + t);
+        }
+    }
+
     static void seedViewConfiguration(DisplayMetrics metrics) throws Exception {
         ViewConfiguration.getAmbiguousGestureMultiplier();
         java.lang.reflect.Field f =
