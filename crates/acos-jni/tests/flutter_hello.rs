@@ -215,11 +215,48 @@ fn install_crash_handler() {
             };
             (text, base)
         };
-        let (pc_text, _) = describe(pc);
+        let (pc_text, _base) = describe(pc);
         let (addr_text, _) = describe(addr);
         eprintln!(
             "W103A_CRASH signal={sig} pc=0x{pc:x} [{pc_text}] fault=0x{addr:x} [{addr_text}]"
         );
+        // W117-A vptr watch: the engine's `ScheduleSecondaryCallback` crash
+        // (`libflutter.so+0x9cffee`, `call *0x18(%rax)` with the waiter vptr
+        // read back with its low 32 bits zeroed) needs the object bytes. Dump
+        // the general registers and the 8 words at the suspected object base
+        // (`%rbx`) so the damage is visible in the log. Printed *after* the
+        // primary line, and the handler is installed with SA_RESETHAND, so a
+        // fault during the dump only loses the dump.
+        let reg = |i: usize| -> usize {
+            if ctx.is_null() {
+                return 0;
+            }
+            // SAFETY: x86_64 Linux `ucontext_t`.
+            unsafe {
+                (*(ctx as *const libc::ucontext_t)).uc_mcontext.gregs[i] as usize
+            }
+        };
+        let (rax, rbx, rsi, rdi, rbp, rsp) = (
+            reg(libc::REG_RAX as usize),
+            reg(libc::REG_RBX as usize),
+            reg(libc::REG_RSI as usize),
+            reg(libc::REG_RDI as usize),
+            reg(libc::REG_RBP as usize),
+            reg(libc::REG_RSP as usize),
+        );
+        eprintln!(
+            "W117A_REGS rax=0x{rax:x} rbx=0x{rbx:x} rsi=0x{rsi:x} rdi=0x{rdi:x} \
+             rbp=0x{rbp:x} rsp=0x{rsp:x}"
+        );
+        if rbx >= 0x1000 {
+            // SAFETY: best-effort read of the candidate object; see above.
+            let words: [usize; 8] = unsafe { std::ptr::read_volatile(rbx as *const [usize; 8]) };
+            let mut line = String::new();
+            for (i, w) in words.iter().enumerate() {
+                line.push_str(&format!(" +0x{:x}=0x{:016x}", i * 8, w));
+            }
+            eprintln!("W117A_OBJECT rbx=0x{rbx:x}{line}");
+        }
         unsafe { libc::_exit(134) };
     }
 

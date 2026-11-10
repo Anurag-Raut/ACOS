@@ -129,6 +129,20 @@ fn make_looper(id: u64) -> Arc<Looper> {
     // SAFETY: plain syscalls; every failure is reported to the caller.
     let epoll = unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) };
     let wake = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+    if epoll >= 0 && wake >= 0 {
+        // Register the wake eventfd with the epoll set. Without this the
+        // `ALooper_wake` write lands on an fd nobody is waiting on, so a wake
+        // could never interrupt a blocked `pollOnce` (it silently degraded to a
+        // full-timeout wait). `poll` recognises `u64 == wake` and drains it.
+        let mut ev = libc::epoll_event {
+            events: libc::EPOLLIN as u32,
+            u64: wake as u64,
+        };
+        // SAFETY: both fds were just created successfully and are ours.
+        unsafe {
+            libc::epoll_ctl(epoll, libc::EPOLL_CTL_ADD, wake, &mut ev);
+        }
+    }
     Arc::new(Looper {
         id,
         epoll,
@@ -301,7 +315,10 @@ fn drain_wake(l: &Looper) {
     }
 }
 
-fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
+/// Wait for readiness. Returns the ready fd sources **and** whether the wake
+/// eventfd fired: bionic reports `ALOOPER_POLL_WAKE` for [`alooper_wake`], which
+/// is not a timeout even though no fd source was ready.
+fn poll(l: &Looper, timeout_ms: c_int) -> Result<(Vec<(c_int, c_int)>, bool), c_int> {
     if l.epoll < 0 {
         return Err(ALOOPER_POLL_ERROR);
     }
@@ -318,15 +335,19 @@ fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
     if n < 0 {
         let err = std::io::Error::last_os_error();
         if err.raw_os_error() == Some(libc::EINTR) {
-            return Ok(Vec::new());
+            // A signal is not a wake in bionic's sense; keep it a timeout so
+            // `pollAll` recomputes its remaining budget.
+            return Ok((Vec::new(), false));
         }
         return Err(ALOOPER_POLL_ERROR);
     }
     let mut ready = Vec::new();
+    let mut woke = false;
     for ev in events.iter().take(n as usize) {
         let fd = ev.u64 as c_int;
         if fd == l.wake {
             drain_wake(l);
+            woke = true;
             continue;
         }
         let raw = ev.events;
@@ -336,7 +357,7 @@ fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
         ));
         ready.push((fd, out_events(ev.events)));
     }
-    Ok(ready)
+    Ok((ready, woke))
 }
 
 /// Invoke at most one queued `AChoreographer` frame callback.
@@ -433,18 +454,25 @@ fn poll_once(l: &Looper, timeout_ms: c_int, out: &mut (c_int, c_int, *mut c_void
         *out = (-1, 0, std::ptr::null_mut());
         return ALOOPER_POLL_CALLBACK;
     }
-    let ready = match poll(l, timeout_ms) {
+    let (ready, woke) = match poll(l, timeout_ms) {
         Ok(r) => r,
         Err(code) => return code,
     };
     if ready.is_empty() {
         // The wait may have been woken by `post_frame_callback` (the wake fd is
-        // drained by `poll`), so re-check the queue before reporting a timeout.
+        // drained by `poll`), so re-check the queue before reporting a wake.
         if run_one_posted(l) {
             *out = (-1, 0, std::ptr::null_mut());
             return ALOOPER_POLL_CALLBACK;
         }
-        return ALOOPER_POLL_TIMEOUT;
+        // bionic: `ALooper_wake` is `ALOOPER_POLL_WAKE`, never a timeout. This
+        // matters because callers treat TIMEOUT as "nothing happened" and
+        // re-arm, while WAKE tells them to re-evaluate their task queue.
+        return if woke {
+            ALOOPER_POLL_WAKE
+        } else {
+            ALOOPER_POLL_TIMEOUT
+        };
     }
     let mut invoked_callback = false;
     for (fd, events) in ready {
@@ -480,6 +508,9 @@ fn poll_once(l: &Looper, timeout_ms: c_int, out: &mut (c_int, c_int, *mut c_void
     }
     if invoked_callback {
         ALOOPER_POLL_CALLBACK
+    } else if woke {
+        // Only the wake fd fired alongside non-callback sources.
+        ALOOPER_POLL_WAKE
     } else {
         ALOOPER_POLL_TIMEOUT
     }
@@ -620,4 +651,96 @@ pub fn table() -> Vec<(&'static str, *const c_void)> {
         ("ALooper_acquire", alooper_acquire as *const c_void),
         ("ALooper_release", alooper_release as *const c_void),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// Run one poll on `looper` and capture the out-parameters.
+    fn poll1(_looper: *mut c_void, timeout_ms: c_int) -> (c_int, c_int, c_int, *mut c_void) {
+        let mut fd = 0;
+        let mut events = 0;
+        let mut data = std::ptr::null_mut();
+        // SAFETY: looper from `alooper_prepare`, out-pointers are local.
+        let r = unsafe { alooper_pollonce(timeout_ms, &mut fd, &mut events, &mut data) };
+        (r, fd, events, data)
+    }
+
+    #[test]
+    fn poll_once_times_out_without_events() {
+        // SAFETY: prepare gives this test thread a looper of its own.
+        unsafe {
+            assert!(!alooper_prepare(0).is_null());
+        }
+        // SAFETY: the looper handle was created above on this thread.
+        let looper = unsafe { alooper_forthread() };
+        let (r, _, _, _) = poll1(looper, 20);
+        assert_eq!(r, ALOOPER_POLL_TIMEOUT);
+    }
+
+    #[test]
+    fn alooper_wake_reports_poll_wake_not_timeout() {
+        // SAFETY: the handle is only passed back to the shim, which validates it.
+        unsafe {
+            let l = alooper_prepare(0);
+            assert!(!l.is_null());
+            let l_addr = l as usize;
+            let waker = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(25));
+                alooper_wake(l_addr as *mut c_void);
+            });
+            let start = Instant::now();
+            let (r, _, _, _) = poll1(l, 2000);
+            waker.join().unwrap();
+            assert_eq!(r, ALOOPER_POLL_WAKE, "ALooper_wake must not look like a timeout");
+            assert!(start.elapsed() < Duration::from_millis(1500));
+        }
+    }
+
+    #[test]
+    fn fd_callback_reports_poll_callback() {
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        unsafe extern "C" fn cb(_fd: c_int, _events: c_int, _data: *mut c_void) -> c_int {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            1 // keep registered
+        }
+        // SAFETY: shim calls with a real pipe.
+        unsafe {
+            let l = alooper_prepare(0);
+            let mut fds = [0i32; 2];
+            assert_eq!(libc::pipe(fds.as_mut_ptr()), 0);
+            assert_eq!(alooper_addfd(l, fds[0], 0, 1, Some(cb), std::ptr::null_mut()), 1);
+            let b = b"x";
+            libc::write(fds[1], b.as_ptr() as *const c_void, 1);
+            let (r, fd, events, _) = poll1(l, 1000);
+            assert_eq!(r, ALOOPER_POLL_CALLBACK);
+            assert_eq!(fd, fds[0]);
+            assert_eq!(events, 1);
+            assert_eq!(CALLS.load(Ordering::SeqCst), 1);
+            let mut buf = [0u8; 1];
+            libc::read(fds[0], buf.as_mut_ptr() as *mut c_void, 1);
+            alooper_removefd(l, fds[0]);
+            libc::close(fds[0]);
+            libc::close(fds[1]);
+        }
+    }
+
+    #[test]
+    fn posted_frame_runs_from_poll_once() {
+        static FRAMES: AtomicUsize = AtomicUsize::new(0);
+        unsafe extern "C" fn frame_cb(_frame_time: i64, _data: *mut c_void) {
+            FRAMES.fetch_add(1, Ordering::SeqCst);
+        }
+        // SAFETY: the callback outlives the poll below.
+        unsafe {
+            assert!(!alooper_prepare(0).is_null());
+            assert!(post_frame_callback(16_666_667, frame_cb, std::ptr::null_mut()));
+            let looper = alooper_forthread();
+            let (r, _, _, _) = poll1(looper, 0);
+            assert_eq!(r, ALOOPER_POLL_CALLBACK);
+            assert_eq!(FRAMES.load(Ordering::SeqCst), 1);
+        }
+    }
 }

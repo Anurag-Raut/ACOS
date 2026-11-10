@@ -639,3 +639,161 @@ A one-line pointer to the engine source for `vsync_waiter.cc:89-152`,
 `message_loop_task_queues.cc:340-400` and `task_source.cc:20-100` (or a note
 that `TopTask` ignores the pause depth) would let the next wave fix the re-arm
 loop instead of re-deriving it.
+
+---
+
+# W117-A — bionic pthread attrs + ALooper wake semantics; primary frame task still not popped
+
+**Date:** 2026-11-11 (wave W117-A). **Base:** clean worktree of `HEAD`
+(`5c6f434`, "Persist linked BootImage…" — the W113-A commit `4f72f9c` is its
+parent). Built with `CARGO_TARGET_DIR=.cache/target-w117a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `tools/guarded.sh`; applied back with
+`git apply --check`. Not committed.
+
+The wave fixed the three shim defects the advisor ranked (bionic pthread
+attribute side-tables, `ALooper_pollOnce` wake/timeout semantics, and the
+attribute/clock path the engine actually uses) and added unit tests. It did
+**not** produce a frame: the primary frame task is still not popped, so Dart
+`onBeginFrame`/`onDrawFrame` never fire and no `ANativeWindow_lock` occurs.
+
+## Result at a glance
+
+| stage | W113-A | W117-A |
+|---|---|---|
+| `libflutter.so` load/reloc/`JNI_OnLoad` | ok | ok (510/0, 32 962 relocs) |
+| Dart `main()` | ok | ok (`ACOS_DART_MAIN entered`, every untraced run) |
+| `AChoreographer_postFrameCallback` | 1 post, async via `ALooper` | same: **tid 2, looper 0x1**, delivered from looper 0x1 |
+| `VsyncWaiter::ScheduleSecondaryCallback` crash | seen 4/5 traced runs | **not seen** in 4/4 W117-A runs (1 traced, 3 untraced) |
+| pthread mutex type honoured | **no** (attrs ignored) | **yes** — 1 recursive + 66 normal in the engine trace |
+| pthread condvar clock honoured | **no** (all realtime) | **yes** — 18/18 `CLOCK_MONOTONIC` in the engine trace |
+| `ALooper_wake` interrupts a blocked poll | **no** (wake fd not in epoll) | **yes** — returns `ALOOPER_POLL_WAKE` (`-1`), unit-tested |
+| Dart `onBeginFrame`/`onDrawFrame`/pointer | no | **no** |
+| `ANativeWindow_lock` / `unlockAndPost` | no | no |
+| PNG / `acos frame-diff` SSIM | not produced | **not produced** (no presented frame) |
+| second frame (counter: 1) | no | no |
+| `cargo test -p acos-native-loader` (all target) | pass | **pass** (now 22 lib + all integration) |
+| clippy / `cargo check --workspace --all-targets` / diff-dexprogs | pass | **pass — 27/27** |
+
+## 1. Fixed: bionic pthread attributes were silently discarded
+
+`pthread_mutex_init` ignored its `attr` argument entirely and built a default
+(normal) host mutex, and `pthread_cond_init` ignored the condvar clock.
+`pthread_condattr_setclock` was *forwarded straight to glibc on guest storage*
+(engine_gaps forwarding table), so its value never reached our `pthread_cond_init`.
+
+The diagnostic trace (`TRACE` in `acos-native-loader/src/bionic/pthread.rs`,
+off in the committed configuration) shows what the engine really asks for:
+
+```
+62x pthread_mutex_init type=0            (normal)
+ 1x pthread_mutex_init type=1            (RECURSIVE — would deadlock before)
+18x pthread_condattr_setclock clock=1    (CLOCK_MONOTONIC)
+18x pthread_cond_init clock=1            (CLOCK_MONOTONIC)
+```
+
+Before this fix every one of those 18 condvars was CLOCK_REALTIME while the
+engine arms **monotonic** deadlines, so each `pthread_cond_timedwait` would
+have returned `ETIMEDOUT` immediately (monotonic uptime ≪ wall-clock epoch).
+That is a class of bug that can drive exactly the kind of task-queue churn the
+W113-A trace saw (`RunExpiredTasksNow` re-arming to a deadline it can never
+reach), and the recursive mutex is a latent self-deadlock.
+
+Implementation:
+
+* `MutexAttrState`/`CondAttrState` side tables keyed by the guest object
+  address, with bionic's own 4-byte `int` encoding mirrored into the guest word
+  (so guest code reading the attribute directly agrees).
+* `host_mutex(type)` initialises recursive/errorcheck host mutexes with a host
+  attribute; static bionic initialisers are decoded from the guest object
+  (`0x4000` recursive, `0x8000` errorcheck, all-zero normal).
+* `pthread_cond_init` builds a glibc condvar with the requested clock;
+  `pthread_condattr_{set,get}clock`, `pthread_mutexattr_gettype` are now real
+  shims (overriding the forwarded `pthread_condattr_setclock`).
+* Unit tests assert: recursive re-lock succeeds, errorcheck returns `EDEADLK`,
+  the static `0x4000` initialiser is honoured, a monotonic condvar actually
+  sleeps ~50 ms (it returned immediately before), unknown clocks get `EINVAL`,
+  and pthread keys/once are per-thread and run-once.
+
+## 2. Fixed: `ALooper_wake` could not wake a blocked poll, and was reported as a timeout
+
+Two defects in `acos-native-loader/src/bionic/ndk/ndk_looper.rs`:
+
+1. The wake `eventfd` was created but **never registered in the looper's
+   `epoll` set**, so `ALooper_wake` wrote to an fd nobody waited on and a
+   blocked `ALooper_pollOnce(-1)` could not be interrupted by a wake (only by
+   the next fd/timer event). `post_frame_callback`'s "wake the blocked poll"
+   write was likewise a no-op. Fixed by `epoll_ctl(EPOLL_CTL_ADD)` on the wake
+   fd at looper creation; `poll` already drains it.
+2. `poll_once` dropped the wake event and then returned `ALOOPER_POLL_TIMEOUT`
+   (`-3`) when the wait was wake-only. bionic requires `ALOOPER_POLL_WAKE`
+   (`-1`). Fixed: `poll` now reports `woke`, and `pollOnce` returns `-1`
+   (unless a callback ran, which stays `-2`). `ALOOPER_POLL_CALLBACK` (`-2`)
+   and `ALOOPER_POLL_TIMEOUT` (`-3`) are unchanged, and `ALOOPER_POLL_ERROR`
+   (`-4`) is still returned on a failed wait.
+
+Unit tests: `alooper_wake_reports_poll_wake_not_timeout`,
+`poll_once_times_out_without_events`, `fd_callback_reports_poll_callback`,
+`posted_frame_runs_from_poll_once`.
+
+## 3. Not fixed: the primary frame callback/task still does not run
+
+All untraced W117-A runs are identical to W113-A: Dart `main()` runs, exactly
+**one** `AChoreographer_postFrameCallback` is made on `tid 2`/`looper 0x1`, it
+is queued and delivered asynchronously from that looper, and no second post
+follows. `W93A_STAGE {"delivered":0,"phase":"vsync-counts"}` (the Java
+`deliverVsync` fallback never fires), no `ACOS_DART_FRAME`, no
+`ANativeWindow_lock`/`unlockAndPost`, no `w117a-frame-*.png`.
+
+The pthread/looper fixes change the *shim* calls the engine makes but not the
+task-queue head-of-line behaviour W113-A isolated: after delivery,
+`MessageLoopTaskQueues::RunExpiredTasksNow` re-arms the platform timerfd to a
+stale pending task time and the freshly posted primary frame task is never
+popped. W117-A could not add the requested engine-side vptr watch (there is no
+safe breakpoint mechanism in this harness and `gdb` is not part of the test
+path); instead a **crash-time** watch was added to the harness `SIGSEGV`
+handler (`W117A_REGS` + an 8-word `W117A_OBJECT` dump at `%rbx`, the suspected
+waiter base) so that if the `+0x9cffee` corruption recurs the damaged bytes are
+captured. It did not reproduce in 4 runs (1 traced, 3 untraced), so there is no
+dump to report. The traced run is not a usable comparison point: with the
+looper trace enabled the run never even entered Dart `main` (14 looper events),
+i.e. the trace distorts timing enough to stall the engine.
+
+## 4. Answers to W113-A's precise questions (status)
+
+* **Primary/secondary pause semantics:** the advisor's reading is correct —
+  `PeekNextTaskUnlocked` honours `secondary_pause_requests_` and
+  `GetNextTaskToRun` re-arms before popping, so repeated old deadlines are
+  *expected* while a paused source heads the queue. The missing link remains
+  **why the freshly posted primary frame task is not at the head**.
+* **`ScheduleSecondaryCallback` `+0x9cffee`:** treated as a shim/ABI/lifetime
+  defect, not an engine race (advisor). The pthread fixes remove two concrete
+  lifetime hazards (18 condvars built with the wrong clock, one recursive mutex
+  built normal); no crash occurred in this wave. A hardware watchpoint on the
+  waiter vptr at `ScheduleSecondaryCallback` entry (vs. after construction)
+  remains the decisive next instrument.
+
+## 5. Acceptance (W117-A worktree of `5c6f434`)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-native-loader` (all targets) | **pass** (lib 22/22 + integration suites) |
+| `cargo test -p acos-jni --test flutter_hello -- --nocapture` | **pass 2/2**, 4 consecutive runs (1 traced, 3 untraced), 15.2–15.3 s each |
+| `cargo clippy -p acos-native-loader -p acos-jni --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check --workspace --all-targets` | **clean** (`check=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+| confined flutter run | `confined:true`, exit 0, `error:null` |
+| `libflutter.so` imports | 510 / 0 missing, 32 962 relocations |
+| PNG / `acos frame-diff` SSIM | **not reached** (no presented frame) |
+
+## 6. Files
+
+* `crates/acos-native-loader/src/bionic/pthread.rs` — attribute side tables
+  (mutex type, cond clock), bionic static-initialiser decoding,
+  `pthread_condattr_{set,get}clock` + `pthread_mutexattr_gettype` shims, unit
+  tests; inert-by-default `W117A` trace.
+* `crates/acos-native-loader/src/bionic/ndk/ndk_looper.rs` — wake eventfd
+  registered with `epoll`; `pollOnce` returns `ALOOPER_POLL_WAKE`; unit tests.
+* `crates/acos-jni/tests/flutter_hello.rs` — crash-time `W117A_REGS` /
+  `W117A_OBJECT` (waiter vptr) dump.
+* `results/flutter/w117a-untraced-run.log`,
+  `results/flutter/w117a-pthread-attrs.log` — evidence.
