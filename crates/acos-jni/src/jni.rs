@@ -2296,15 +2296,71 @@ pub unsafe extern "C" fn jni_GetObjectRefType(_env: usize, obj: usize) -> i32 {
 // Direct byte buffers
 // ---------------------------------------------------------------------------
 
-fn new_direct_buffer_object(ctx: &mut Ctx, _capacity: i64) -> Result<Handle, JniError> {
+/// `java.nio.DirectByteBuffer` — the real carrier object the JNI contract
+/// requires (a marker of any other type fails Java-side assignability).
+const DIRECT_BYTE_BUFFER: &str = "Ljava/nio/DirectByteBuffer;";
+/// Its `MemoryRef` holds the synthetic address/offset the buffer reads through.
+const DIRECT_BYTE_BUFFER_MEMORY_REF: &str = "Ljava/nio/DirectByteBuffer$MemoryRef;";
+
+/// Allocate a real `java.nio.DirectByteBuffer` over `address`/`capacity`.
+///
+/// ART's `NewDirectByteBuffer` builds the same pair
+/// (`MemoryRef(long addr, Object originalBufferObject)` +
+/// `DirectByteBuffer(int cap, MemoryRef)`); the resulting object answers
+/// `ByteBuffer.get`/`position`/`limit` and is assignable to every Java API that
+/// declares a `ByteBuffer` parameter (e.g. `FlutterJNI.handlePlatformMessage`).
+/// Only the JNI side table carries the raw address; Java reads through the
+/// usual `libcore.io.Memory`/`Unsafe` natives, which bounds-check the region.
+fn new_direct_buffer_object(
+    ctx: &mut Ctx,
+    address: i64,
+    capacity: i64,
+) -> Result<Handle, JniError> {
+    let cap = i32::try_from(capacity).map_err(|_| JniError::BadArgument {
+        function: "NewDirectByteBuffer".into(),
+        message: format!("capacity {capacity} exceeds the ByteBuffer int limit"),
+    })?;
     let vm = ctx.vm();
-    // The buffer's JNI identity (address/capacity) is carried in the JNI side
-    // table, so the marker object only needs a GC-visible identity. An empty
-    // `String` is used because allocating a fresh instance here interacts with
-    // a latent VM root-accounting issue; the JNI slots do not inspect the
-    // marker's Java type.
-    vm.new_string_utf16(Vec::new()).map_err(|e| JniError::NativeFault {
-        message: format!("NewDirectByteBuffer: cannot allocate marker: {e}"),
+    let mem = match vm.new_instance_ctor(
+        DIRECT_BYTE_BUFFER_MEMORY_REF,
+        "(JLjava/lang/Object;)V",
+        &[
+            acos_vm::JavaValue::Long(address),
+            acos_vm::JavaValue::Null,
+        ],
+    ) {
+        Ok(mem) => mem,
+        // A bootstrap/partial corelib (no `java.nio`) cannot declare a
+        // `ByteBuffer` parameter at all, so a real carrier is impossible. Keep
+        // the historic opaque marker: the JNI side table still owns the
+        // address/capacity pair, so `GetDirectBufferAddress`/`Capacity` answer
+        // exactly as before. Real corelibs (all application VMs) take the
+        // branch above and get a genuine `java.nio.DirectByteBuffer`.
+        Err(acos_vm::BridgeError::ClassNotFound(_)) => {
+            return vm
+                .new_string_utf16(Vec::new())
+                .map_err(|e| JniError::NativeFault {
+                    message: format!("NewDirectByteBuffer: marker: {e}"),
+                });
+        }
+        Err(e) => {
+            return Err(JniError::NativeFault {
+                message: format!("NewDirectByteBuffer: MemoryRef: {e}"),
+            })
+        }
+    };
+    let buffer = vm.new_instance_ctor(
+        DIRECT_BYTE_BUFFER,
+        "(ILjava/nio/DirectByteBuffer$MemoryRef;)V",
+        &[
+            acos_vm::JavaValue::Int(cap),
+            acos_vm::JavaValue::Object(mem),
+        ],
+    );
+    // The buffer keeps `memoryRef` reachable; the bridge root is not needed.
+    vm.release_bridge_root(mem);
+    buffer.map_err(|e| JniError::NativeFault {
+        message: format!("NewDirectByteBuffer: DirectByteBuffer: {e}"),
     })
 }
 
@@ -2341,7 +2397,7 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
     } else {
         address as i64
     };
-    let h = match new_direct_buffer_object(&mut ctx, capacity) {
+    let h = match new_direct_buffer_object(&mut ctx, addr, capacity) {
         Ok(h) => h,
         Err(e) => {
             record(&ctx, e);
@@ -2356,36 +2412,60 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
     lh as usize
 }
 
+/// `GetDirectBufferAddress`: the address a JNI-created direct buffer wraps.
+///
+/// The JNI side table is authoritative for buffers this slot created (the
+/// address may be a synthetic `native_mem` region, which Java cannot compute).
+/// For a buffer Java allocated itself (`ByteBuffer.allocateDirect`/`map`), read
+/// the real `DirectByteBuffer.address` field, exactly like ART — the same
+/// representation the `MemoryRef` ctor stores.
+///
+/// Returns NULL (0) for a non-direct buffer, a freed buffer, or a buffer whose
+/// recorded capacity is negative; callers must treat NULL as "not direct".
 pub unsafe extern "C" fn jni_GetDirectBufferAddress(_env: usize, obj: usize) -> usize {
     let ctx = guard!("GetDirectBufferAddress", false, 0);
     let h = obj as Handle;
     if h == NULL {
         return 0;
     }
-    let addr = ctx
-        .rt
-        .borrow()
-        .direct_buffers
-        .get(&h)
-        .map(|(addr, _)| *addr as usize)
-        .unwrap_or(0);
-    addr
+    if let Some((addr, cap)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
+        if cap < 0 {
+            return 0;
+        }
+        return addr as usize;
+    }
+    // Java-created direct buffer: `DirectByteBuffer.address` is the base the
+    // `MemoryRef` computed. `get_field` searches the class hierarchy.
+    let vm = ctx.vm();
+    if vm.heap.is_live(h) {
+        if let Ok(acos_vm::JavaValue::Long(addr)) = vm.get_field(h, "address") {
+            if addr != 0 {
+                return addr as usize;
+            }
+        }
+    }
+    0
 }
 
+/// `GetDirectBufferCapacity`: the buffer's capacity, or `-1` when `obj` is not
+/// a direct buffer. Mirrors `GetDirectBufferAddress` (JNI table first, then the
+/// Java `capacity` field) so the pair always describes the same buffer.
 pub unsafe extern "C" fn jni_GetDirectBufferCapacity(_env: usize, obj: usize) -> i64 {
     let ctx = guard!("GetDirectBufferCapacity", false, -1);
     let h = obj as Handle;
     if h == NULL {
         return -1;
     }
-    let cap = ctx
-        .rt
-        .borrow()
-        .direct_buffers
-        .get(&h)
-        .map(|(_, cap)| *cap)
-        .unwrap_or(-1);
-    cap
+    if let Some((_, cap)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
+        return cap;
+    }
+    let vm = ctx.vm();
+    if vm.heap.is_live(h) {
+        if let Ok(acos_vm::JavaValue::Int(cap)) = vm.get_field(h, "capacity") {
+            return cap as i64;
+        }
+    }
+    -1
 }
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,16 @@
 #include <string.h>
 
 extern uintptr_t acos_map_stream(uintptr_t stream);
+/* Translate guest `/system/...` paths to the extracted boot tree (W99-A). */
+extern size_t acos_translate_guest_path(const char *path, char *out, size_t out_len);
+
+/* `path`, or its boot-tree translation when one exists. */
+static const char *acos_guest_path(const char *path, char *buf, size_t len) {
+    if (path != NULL && acos_translate_guest_path(path, buf, len) > 0) {
+        return buf;
+    }
+    return path;
+}
 extern void acos_register_file(uintptr_t f);
 extern void acos_unregister_file(uintptr_t f);
 
@@ -105,7 +115,9 @@ int acos_fflush(uintptr_t stream) {
 }
 
 uintptr_t acos_fopen(const char *path, const char *mode) {
-    FILE *f = fopen(path, mode);
+    char translated[4096];
+    const char *real = acos_guest_path(path, translated, sizeof(translated));
+    FILE *f = fopen(real, mode);
     if (f != NULL) {
         acos_register_file((uintptr_t)f);
     }

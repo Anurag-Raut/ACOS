@@ -27,7 +27,6 @@
 //! All substrate state lives in `acos-vm` thread-locals; the host carries none,
 //! so it can be a `Send + Sync` `Arc` shared process-wide.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -213,26 +212,100 @@ struct Window {
     locked: bool,
 }
 
-thread_local! {
-    static WINDOWS: RefCell<HashMap<u64, Window>> = RefCell::new(HashMap::new());
-    static NEXT_WINDOW: RefCell<u64> = const { RefCell::new(0x4e57_0000) };
-    static CHOREO: RefCell<u64> = const { RefCell::new(0) };
+/// Process-wide window registry.
+///
+/// Not thread-local on purpose: an engine creates its `ANativeWindow` on the
+/// platform thread (`ANativeWindow_fromSurface`, from `nativeSurfaceCreated`)
+/// but locks/posts it from the **raster thread**. A per-thread map would make
+/// `ANativeWindow_lock` report "unknown window" on that thread and no frame
+/// would ever reach the compositor. The map is only ever touched through this
+/// mutex; a `Window` owns its pixel buffer, so it is `Send`.
+static WINDOWS: std::sync::OnceLock<std::sync::Mutex<HashMap<u64, Window>>> =
+    std::sync::OnceLock::new();
+
+fn windows() -> &'static std::sync::Mutex<HashMap<u64, Window>> {
+    WINDOWS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+static NEXT_WINDOW: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0x4e57_0000);
+static NEXT_CHOREO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The last buffer a window presented, process-wide.
+///
+/// The engine's raster thread is the one that publishes (it owns the software
+/// renderer), while the harness observes from the platform thread. A process
+/// global capture is therefore the only way to observe a real present without
+/// reaching into the engine's threads.
+static PRESENTED: std::sync::OnceLock<std::sync::Mutex<Vec<PresentedFrame>>> =
+    std::sync::OnceLock::new();
+
+/// Upper bound on retained presented frames (the harness only inspects the
+/// first few; an unbounded history would hold every 1 MiB+ buffer forever).
+const MAX_PRESENTED: usize = 16;
+
+/// One completed frame published through an `ANativeWindow`.
+#[derive(Clone, Debug)]
+pub struct PresentedFrame {
+    /// The window id (`ANativeWindow*`) that published it.
+    pub window: u64,
+    /// The compositor layer the window is bound to.
+    pub layer: u64,
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// RGBA8888 pixels, `width * height * 4` bytes.
+    pub rgba: Vec<u8>,
+    /// Sink frame sequence (0 when the sink rejected it).
+    pub seq: u64,
+    /// The host thread that published the frame (`{:?}` of its id).
+    pub thread: String,
+}
+
+fn record_presented(frame: PresentedFrame) {
+    let slot = PRESENTED.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    if let Ok(mut frames) = slot.lock() {
+        if frames.len() < MAX_PRESENTED {
+            frames.push(frame);
+        } else {
+            // Keep the newest bounded window rather than silently dropping.
+            frames.remove(0);
+            frames.push(frame);
+        }
+    }
+}
+
+/// Every buffer presented through an `ANativeWindow` on any thread (bounded).
+#[must_use]
+pub fn presented_frames() -> Vec<PresentedFrame> {
+    PRESENTED
+        .get()
+        .and_then(|slot| slot.lock().ok().map(|frames| frames.clone()))
+        .unwrap_or_default()
+}
+
+/// The most recent buffer presented through an `ANativeWindow` on any thread.
+#[must_use]
+pub fn last_presented_frame() -> Option<PresentedFrame> {
+    presented_frames().pop()
+}
+
+/// A monotonic nanosecond clock (host `CLOCK_MONOTONIC`, the `nanoTime` family).
+fn monotonic_nanos() -> i64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static START: OnceLock<Instant> = OnceLock::new();
+    let start = START.get_or_init(Instant::now);
+    i64::try_from(start.elapsed().as_nanos()).unwrap_or(i64::MAX)
 }
 
 fn alloc_window_id() -> u64 {
-    NEXT_WINDOW.with(|n| {
-        let mut n = n.borrow_mut();
-        *n = n.wrapping_add(1).max(1);
-        *n
-    })
+    NEXT_WINDOW.fetch_add(1, Ordering::SeqCst).max(1)
 }
 
 fn alloc_choreographer_id() -> u64 {
-    CHOREO.with(|n| {
-        let mut n = n.borrow_mut();
-        *n += 1;
-        *n
-    })
+    NEXT_CHOREO.fetch_add(1, Ordering::SeqCst) + 1
 }
 
 /// Invoke a guest frame callback. Kept out of the public surface so the raw
@@ -284,14 +357,12 @@ pub fn install_forced() {
 /// Geometry of a live `ANativeWindow` (used by the EGL window-surface host).
 #[must_use]
 pub fn window_geometry(window: u64) -> Option<(u32, u32)> {
-    WINDOWS.with(|w| {
-        let g = w.borrow();
-        let rec = g.get(&window)?;
-        if rec.width <= 0 || rec.height <= 0 {
-            return None;
-        }
-        Some((rec.width as u32, rec.height as u32))
-    })
+    let g = windows().lock().ok()?;
+    let rec = g.get(&window)?;
+    if rec.width <= 0 || rec.height <= 0 {
+        return None;
+    }
+    Some((rec.width as u32, rec.height as u32))
 }
 
 /// Publish `rgba` as the window's new contents, exactly like
@@ -299,8 +370,8 @@ pub fn window_geometry(window: u64) -> Option<(u32, u32)> {
 /// submit it to the compositor sink. Returns the compositor frame id (0 when
 /// the submission was rejected or the window is unknown).
 pub fn window_present(window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 {
-    let layer = WINDOWS.with(|w| {
-        let mut g = w.borrow_mut();
+    let Some((layer, pixels)) = (|| {
+        let mut g = windows().lock().ok()?;
         let rec = g.get_mut(&window)?;
         let len = checked_buffer_len(width as i32, height as i32, width as i32).ok()?;
         if rgba.len() < len {
@@ -311,18 +382,28 @@ pub fn window_present(window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 
         rec.stride = width as i32;
         rec.buffer.clear();
         rec.buffer.extend_from_slice(&rgba[..len]);
-        Some(rec.layer)
-    });
-    let Some(layer) = layer else {
+        Some((rec.layer, rec.buffer.clone()))
+    })()
+    else {
         eprintln!(
             "UNSUPPORTED_GLES call=eglSwapBuffers reason=unknown or unallocatable ANativeWindow \
              {window:#x}"
         );
         return 0;
     };
-    let pixels = WINDOWS.with(|w| w.borrow().get(&window).map(|r| r.buffer.clone()));
-    let Some(pixels) = pixels else { return 0 };
-    substrate::submit_frame(layer, width, height, &pixels, 0)
+    let seq = substrate::submit_frame(layer, width, height, &pixels, 0);
+    if seq != 0 {
+        record_presented(PresentedFrame {
+            window,
+            layer,
+            width,
+            height,
+            rgba: pixels,
+            seq,
+            thread: format!("{:?}", std::thread::current().id()),
+        });
+    }
+    seq
 }
 
 /// Register a native window without a Java `Surface` (integration tests).
@@ -333,8 +414,8 @@ pub fn window_present(window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 
 #[doc(hidden)]
 pub fn register_native_window(width: i32, height: i32, layer: u64, surface: u64) -> u64 {
     let id = alloc_window_id();
-    WINDOWS.with(|w| {
-        w.borrow_mut().insert(
+    if let Ok(mut g) = windows().lock() {
+        g.insert(
             id,
             Window {
                 surface,
@@ -347,7 +428,7 @@ pub fn register_native_window(width: i32, height: i32, layer: u64, surface: u64)
                 locked: false,
             },
         );
-    });
+    }
     id
 }
 
@@ -369,7 +450,23 @@ impl NdkHost for ProductionNdkHost {
     }
 
     fn asset_open(&self, manager: u64, filename: &str, mode: i32) -> NdkResult<u64> {
-        substrate::asset_open(manager, filename, mode)
+        match substrate::asset_open(manager, filename, mode) {
+            Ok(handle) => Ok(handle),
+            Err(first) => {
+                // Android's asset namespace root is the APK's `assets/`
+                // directory: `AAssetManager_open("flutter_assets/x")` reads the
+                // ZIP entry `assets/flutter_assets/x`. The ACOS asset engine
+                // matches entry names verbatim, so retry with the prefix (the
+                // exact AAPT mapping) before returning the documented error.
+                if !filename.starts_with("assets/") {
+                    let prefixed = format!("assets/{filename}");
+                    if let Ok(handle) = substrate::asset_open(manager, &prefixed, mode) {
+                        return Ok(handle);
+                    }
+                }
+                Err(first)
+            }
+        }
     }
 
     fn asset_read(&self, asset: u64, buf: &mut [u8]) -> NdkResult<usize> {
@@ -402,7 +499,19 @@ impl NdkHost for ProductionNdkHost {
     }
 
     fn asset_dir_open(&self, manager: u64, dir: &str) -> NdkResult<u64> {
-        substrate::asset_dir_open(manager, dir)
+        match substrate::asset_dir_open(manager, dir) {
+            Ok(handle) => Ok(handle),
+            Err(first) => {
+                // Same `assets/` namespace mapping as `AAssetManager_open`.
+                if !dir.starts_with("assets/") {
+                    let prefixed = format!("assets/{dir}");
+                    if let Ok(handle) = substrate::asset_dir_open(manager, &prefixed) {
+                        return Ok(handle);
+                    }
+                }
+                Err(first)
+            }
+        }
     }
 
     fn asset_dir_next(&self, dir: u64) -> NdkResult<Option<String>> {
@@ -466,8 +575,8 @@ impl NdkHost for ProductionNdkHost {
             .ok_or_else(|| format!("ANativeWindow_fromSurface: no live layer for {handle:#x}"))?;
         let (width, height) = substrate::surface_size(handle).unwrap_or((0, 0));
         let id = alloc_window_id();
-        WINDOWS.with(|w| {
-            w.borrow_mut().insert(
+        if let Ok(mut g) = windows().lock() {
+            g.insert(
                 id,
                 Window {
                     surface: handle,
@@ -480,7 +589,7 @@ impl NdkHost for ProductionNdkHost {
                     locked: false,
                 },
             );
-        });
+        }
         Ok(id)
     }
 
@@ -489,23 +598,23 @@ impl NdkHost for ProductionNdkHost {
     }
 
     fn window_release(&self, window: u64) -> NdkResult<()> {
-        WINDOWS.with(|w| {
-            w.borrow_mut().remove(&window);
-        });
+        if let Ok(mut g) = windows().lock() {
+            g.remove(&window);
+        }
         Ok(())
     }
 
     fn window_info(&self, window: u64) -> NdkResult<WindowInfo> {
-        WINDOWS.with(|w| {
-            let g = w.borrow();
-            let rec = g
-                .get(&window)
-                .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
-            Ok(WindowInfo {
-                width: rec.width,
-                height: rec.height,
-                format: rec.format,
-            })
+        let g = windows()
+            .lock()
+            .map_err(|_| "ANativeWindow_query: window table poisoned".to_string())?;
+        let rec = g
+            .get(&window)
+            .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
+        Ok(WindowInfo {
+            width: rec.width,
+            height: rec.height,
+            format: rec.format,
         })
     }
 
@@ -528,45 +637,50 @@ impl NdkHost for ProductionNdkHost {
                  bound {max_w}x{max_h}"
             ));
         }
-        WINDOWS.with(|w| {
-            let mut g = w.borrow_mut();
-            let rec = g
-                .get_mut(&window)
-                .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
-            rec.width = width;
-            rec.height = height;
-            rec.format = format;
-            rec.stride = width;
-            rec.buffer = vec![0u8; bytes];
-            Ok(())
-        })
+        let mut g = windows()
+            .lock()
+            .map_err(|_| "ANativeWindow_setBuffersGeometry: window table poisoned".to_string())?;
+        let rec = g
+            .get_mut(&window)
+            .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
+        rec.width = width;
+        rec.height = height;
+        rec.format = format;
+        rec.stride = width;
+        rec.buffer = vec![0u8; bytes];
+        Ok(())
     }
 
     fn window_lock(&self, window: u64, _dirty: Option<ARect>) -> NdkResult<WindowBuffer> {
-        WINDOWS.with(|w| {
-            let mut g = w.borrow_mut();
-            let rec = g
-                .get_mut(&window)
-                .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
-            let needed = checked_buffer_len(rec.width, rec.height, rec.stride)
-                .map_err(|e| format!("ANativeWindow_lock: {e}"))?;
-            if rec.buffer.len() < needed {
-                rec.buffer.resize(needed, 0);
-            }
-            rec.locked = true;
-            Ok(WindowBuffer {
-                width: rec.width,
-                height: rec.height,
-                stride: rec.stride,
-                format: rec.format,
-                bits: rec.buffer.as_mut_ptr(),
-            })
+        let mut g = windows().lock().map_err(|_| {
+            "ANativeWindow_lock: window table poisoned".to_string()
+        })?;
+        let rec = g
+            .get_mut(&window)
+            .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
+        let needed = checked_buffer_len(rec.width, rec.height, rec.stride)
+            .map_err(|e| format!("ANativeWindow_lock: {e}"))?;
+        if rec.buffer.len() < needed {
+            rec.buffer.resize(needed, 0);
+        }
+        rec.locked = true;
+        // SAFETY: `rec.buffer` stays alive and is not reallocated while the
+        // caller fills the locked region; `window_unlock_and_post` re-checks
+        // the length before using it.
+        Ok(WindowBuffer {
+            width: rec.width,
+            height: rec.height,
+            stride: rec.stride,
+            format: rec.format,
+            bits: rec.buffer.as_mut_ptr(),
         })
     }
 
     fn window_unlock_and_post(&self, window: u64) -> NdkResult<()> {
-        let (layer, width, height, stride, buffer) = WINDOWS.with(|w| {
-            let mut g = w.borrow_mut();
+        let (layer, width, height, stride, buffer) = {
+            let mut g = windows().lock().map_err(|_| {
+                "ANativeWindow_unlockAndPost: window table poisoned".to_string()
+            })?;
             let rec = g
                 .get_mut(&window)
                 .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
@@ -574,14 +688,14 @@ impl NdkHost for ProductionNdkHost {
                 return Err("ANativeWindow_unlockAndPost: window was not locked".to_string());
             }
             rec.locked = false;
-            Ok((
+            (
                 rec.layer,
                 rec.width as u32,
                 rec.height as u32,
                 rec.stride,
                 rec.buffer.clone(),
-            ))
-        })?;
+            )
+        };
         let expected = checked_buffer_len(width as i32, height as i32, stride)
             .map_err(|e| format!("ANativeWindow_unlockAndPost: {e}"))?;
         if buffer.len() < expected {
@@ -598,16 +712,25 @@ impl NdkHost for ProductionNdkHost {
                 "ANativeWindow_unlockAndPost: compositor rejected the frame submission".into(),
             );
         }
+        record_presented(PresentedFrame {
+            window,
+            layer,
+            width,
+            height,
+            rgba: buffer,
+            seq: frame,
+            thread: format!("{:?}", std::thread::current().id()),
+        });
         Ok(())
     }
 
     fn window_to_surface(&self, _env: usize, window: u64) -> NdkResult<u64> {
-        WINDOWS.with(|w| {
-            w.borrow()
-                .get(&window)
-                .map(|r| r.surface)
-                .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))
-        })
+        let g = windows()
+            .lock()
+            .map_err(|_| "ANativeWindow_getSurface: window table poisoned".to_string())?;
+        g.get(&window)
+            .map(|r| r.surface)
+            .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))
     }
 
     // --- configuration / vsync ------------------------------------------
@@ -626,8 +749,15 @@ impl NdkHost for ProductionNdkHost {
     ) -> NdkResult<u64> {
         // ACOS's frame clock is the virtual vsync timeline; the callback runs on
         // the calling thread's looper, exactly as the NDK contract requires.
+        //
+        // `frameTimeNanos` must be a **monotonic, increasing** timestamp: the
+        // engine derives the frame's `TimePoint` from it and animators/vsync
+        // bookkeeping assume successive frames advance. Use the host monotonic
+        // clock (same epoch family as `System.nanoTime`) instead of a fixed
+        // interval, which would make every frame look like the same instant.
         let interval = substrate::vsync_interval_nanos();
-        let frame_time = delay_nanos.max(0).saturating_add(interval);
+        let now = monotonic_nanos();
+        let frame_time = now.saturating_add(delay_nanos.max(0)).saturating_add(interval);
         if let Some(cb) = cb {
             // SAFETY: the guest registered this C callback for the frame; it
             // is invoked synchronously on the registering thread.
@@ -646,8 +776,8 @@ mod tests {
     use super::*;
 
     fn insert_window(id: u64, width: i32, height: i32) {
-        WINDOWS.with(|w| {
-            w.borrow_mut().insert(
+        if let Ok(mut g) = windows().lock() {
+            g.insert(
                 id,
                 Window {
                     surface: 1,
@@ -660,13 +790,13 @@ mod tests {
                     locked: false,
                 },
             );
-        });
+        }
     }
 
     fn remove_window(id: u64) {
-        WINDOWS.with(|w| {
-            w.borrow_mut().remove(&id);
-        });
+        if let Ok(mut g) = windows().lock() {
+            g.remove(&id);
+        }
     }
 
     #[test]
@@ -748,12 +878,12 @@ mod tests {
         // stride that is not smaller than the width.
         host.window_set_geometry(id, 16, 16, WINDOW_FORMAT_RGBA_8888)
             .unwrap();
-        WINDOWS.with(|w| {
-            let g = w.borrow();
+        {
+            let g = windows().lock().unwrap();
             let rec = g.get(&id).unwrap();
             assert_eq!(rec.buffer.len(), 16 * 16 * 4);
             assert_eq!(rec.stride, 16);
-        });
+        }
         let buf = host.window_lock(id, None).unwrap();
         assert_eq!((buf.width, buf.height, buf.stride), (16, 16, 16));
         assert!(host.window_lock(0xdead, None).is_err());

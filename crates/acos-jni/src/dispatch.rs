@@ -218,175 +218,149 @@ pub fn host_abi_supported() -> bool {
 
 fn abi_error() -> CallFailure {
     structured(JniError::Unsupported {
-        slot: "native ABI trampoline (only x86_64 System V is implemented)".into(),
+        slot: "native ABI trampoline (x86_64 System V only; >8 float args unsupported)"
+            .into(),
     })
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe fn call_guest_int(f: usize, ints: &[u64], floats: &[f64]) -> Result<u64, CallFailure> {
-    use std::arch::asm;
-    if floats.len() > 8 || ints.len() > 10 {
+core::arch::global_asm!(
+    // `extern "C" fn acos_jni_call_abi(f, ints, n_ints, floats, want_float) -> u64`
+    //
+    // Calls a guest native with the full System V x86_64 argument contract:
+    // the first six integer/pointer arguments in rdi..r9, up to eight SSE
+    // arguments in xmm0..xmm7, and **every remaining integer argument on the
+    // stack**. The previous implementation only spilled four words (enough for
+    // 10 args); engine entry points such as `nativeSetViewportMetrics(long,
+    // float, 15 ints, 3 arrays, 8 ints)` have 27 integer arguments, which hit
+    // the "ABI trampoline" error before the frame could ever be scheduled.
+    //
+    // `ints` always has at least six elements (the Rust wrapper pads the short
+    // case) and `floats` always has exactly eight.
+    ".globl acos_jni_call_abi",
+    ".hidden acos_jni_call_abi",
+    ".type acos_jni_call_abi, @function",
+    "acos_jni_call_abi:",
+    "  push rbx",
+    "  push r12",
+    "  push r13",
+    "  push r14",
+    "  push r15",
+    "  sub rsp, 16",
+    "  mov r12, rdi",              // f
+    "  mov r13, rsi",              // ints
+    "  mov r14, rdx",              // n_ints
+    "  mov r15, rcx",              // floats
+    "  mov [rsp], r8",             // want_float
+    // extra = max(0, n_ints - 6) * 8
+    "  xor ebx, ebx",
+    "  cmp r14, 6",
+    "  jbe 1f",
+    "  lea rbx, [r14 - 6]",
+    "  shl rbx, 3",
+    "1:",
+    // Reserve the outgoing stack-argument area, 16-byte aligned.
+    "  lea rdx, [rbx + 15]",
+    "  and rdx, -16",
+    "  sub rsp, rdx",
+    // Copy the stack-passed integer arguments in order.
+    "  xor rcx, rcx",
+    "2:",
+    "  cmp rcx, rbx",
+    "  jae 3f",
+    "  mov rdx, [r13 + rcx + 48]",
+    "  mov [rsp + rcx], rdx",
+    "  add rcx, 8",
+    "  jmp 2b",
+    "3:",
+    // Register arguments.
+    "  mov rdi, [r13 + 0]",
+    "  mov rsi, [r13 + 8]",
+    "  mov rdx, [r13 + 16]",
+    "  mov rcx, [r13 + 24]",
+    "  mov r8,  [r13 + 32]",
+    "  mov r9,  [r13 + 40]",
+    "  movsd xmm0, [r15 + 0]",
+    "  movsd xmm1, [r15 + 8]",
+    "  movsd xmm2, [r15 + 16]",
+    "  movsd xmm3, [r15 + 24]",
+    "  movsd xmm4, [r15 + 32]",
+    "  movsd xmm5, [r15 + 40]",
+    "  movsd xmm6, [r15 + 48]",
+    "  movsd xmm7, [r15 + 56]",
+    "  call r12",
+    // Restore the argument area (never the callee-saved rbx).
+    "  lea rdx, [rbx + 15]",
+    "  and rdx, -16",
+    "  add rsp, rdx",
+    "  cmp qword ptr [rsp], 0",
+    "  je 4f",
+    "  movq rax, xmm0",
+    "4:",
+    "  add rsp, 16",
+    "  pop r15",
+    "  pop r14",
+    "  pop r13",
+    "  pop r12",
+    "  pop rbx",
+    "  ret",
+    ".size acos_jni_call_abi, .-acos_jni_call_abi",
+);
+
+#[cfg(target_arch = "x86_64")]
+extern "C" {
+    fn acos_jni_call_abi(
+        f: usize,
+        ints: *const u64,
+        n_ints: usize,
+        floats: *const f64,
+        want_float: usize,
+    ) -> u64;
+}
+
+/// Marshal one guest native call through the System V ABI trampoline.
+///
+/// # Safety
+/// `f` must be a valid function pointer with the JNI C signature described by
+/// `ints`/`floats`; the caller owns the validity of every reference handle in
+/// `ints` for the duration of the call.
+#[cfg(target_arch = "x86_64")]
+unsafe fn call_guest_abi(
+    f: usize,
+    ints: &[u64],
+    floats: &[f64],
+    want_float: bool,
+) -> Result<u64, CallFailure> {
+    if floats.len() > 8 {
         return Err(abi_error());
     }
-    let mut a = [0u64; 10];
-    a[..ints.len()].copy_from_slice(ints);
+    // The trampoline always reads six integer registers, so pad short lists.
+    let mut head = [0u64; 6];
+    let n = ints.len();
+    if n >= 6 {
+        head.copy_from_slice(&ints[..6]);
+    } else {
+        head[..n].copy_from_slice(ints);
+    }
+    let base = if n >= 6 { ints.as_ptr() } else { head.as_ptr() };
     let mut x = [0f64; 8];
     x[..floats.len()].copy_from_slice(floats);
-    let mut ret: u64;
-    if ints.len() <= 6 {
-        // SAFETY: the function pointer came from a validated ELF export; the
-        // System V register assignment matches the JNI C ABI and all extra
-        // registers are marked clobbered.
-        unsafe {
-            asm!(
-                "call {f}",
-                f = in(reg) f,
-                inout("rdi") a[0] => _,
-                inout("rsi") a[1] => _,
-                inout("rdx") a[2] => _,
-                inout("rcx") a[3] => _,
-                inout("r8") a[4] => _,
-                inout("r9") a[5] => _,
-                inout("xmm0") x[0] => _,
-                inout("xmm1") x[1] => _,
-                inout("xmm2") x[2] => _,
-                inout("xmm3") x[3] => _,
-                inout("xmm4") x[4] => _,
-                inout("xmm5") x[5] => _,
-                inout("xmm6") x[6] => _,
-                inout("xmm7") x[7] => _,
-                out("r10") _, out("r11") _,
-                out("xmm8") _, out("xmm9") _, out("xmm10") _, out("xmm11") _,
-                out("xmm12") _, out("xmm13") _, out("xmm14") _, out("xmm15") _,
-                out("rax") ret,
-            );
-        }
-    } else {
-        // Stack arguments. `sub rsp, 32` keeps the mandated 16-byte call
-        // alignment; unused slots are ignored by the callee.
-        let e0 = a[6];
-        let e1 = a[7];
-        let e2 = a[8];
-        let e3 = a[9];
-        // SAFETY: as above, plus the four extra words are written to the
-        // outgoing argument area before the call.
-        unsafe {
-            asm!(
-                "sub rsp, 32",
-                "mov [rsp + 0], {e0}",
-                "mov [rsp + 8], {e1}",
-                "mov [rsp + 16], {e2}",
-                "mov [rsp + 24], {e3}",
-                "call {f}",
-                "add rsp, 32",
-                f = in(reg) f,
-                e0 = in(reg) e0,
-                e1 = in(reg) e1,
-                e2 = in(reg) e2,
-                e3 = in(reg) e3,
-                inout("rdi") a[0] => _,
-                inout("rsi") a[1] => _,
-                inout("rdx") a[2] => _,
-                inout("rcx") a[3] => _,
-                inout("r8") a[4] => _,
-                inout("r9") a[5] => _,
-                inout("xmm0") x[0] => _,
-                inout("xmm1") x[1] => _,
-                inout("xmm2") x[2] => _,
-                inout("xmm3") x[3] => _,
-                inout("xmm4") x[4] => _,
-                inout("xmm5") x[5] => _,
-                inout("xmm6") x[6] => _,
-                inout("xmm7") x[7] => _,
-                out("r10") _, out("r11") _,
-                out("xmm8") _, out("xmm9") _, out("xmm10") _, out("xmm11") _,
-                out("xmm12") _, out("xmm13") _, out("xmm14") _, out("xmm15") _,
-                out("rax") ret,
-            );
-        }
-    }
-    Ok(ret)
+    // SAFETY: `f` is the validated guest export; `base` has `n` readable words
+    // (padded to six) and `x` is exactly eight `f64`s, which the trampoline
+    // reads unconditionally.
+    Ok(unsafe { acos_jni_call_abi(f, base, n, x.as_ptr(), want_float as usize) })
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn call_guest_int(f: usize, ints: &[u64], floats: &[f64]) -> Result<u64, CallFailure> {
+    // SAFETY: forwarded from the caller's contract.
+    unsafe { call_guest_abi(f, ints, floats, false) }
 }
 
 #[cfg(target_arch = "x86_64")]
 unsafe fn call_guest_float(f: usize, ints: &[u64], floats: &[f64]) -> Result<u64, CallFailure> {
-    use std::arch::asm;
-    if floats.len() > 8 || ints.len() > 10 {
-        return Err(abi_error());
-    }
-    let mut a = [0u64; 10];
-    a[..ints.len()].copy_from_slice(ints);
-    let mut x = [0f64; 8];
-    x[..floats.len()].copy_from_slice(floats);
-    let ret: f64;
-    if ints.len() <= 6 {
-        // SAFETY: see `call_guest_int`; the float result arrives in xmm0.
-        unsafe {
-            asm!(
-                "call {f}",
-                f = in(reg) f,
-                inout("rdi") a[0] => _,
-                inout("rsi") a[1] => _,
-                inout("rdx") a[2] => _,
-                inout("rcx") a[3] => _,
-                inout("r8") a[4] => _,
-                inout("r9") a[5] => _,
-                inout("xmm0") x[0] => ret,
-                inout("xmm1") x[1] => _,
-                inout("xmm2") x[2] => _,
-                inout("xmm3") x[3] => _,
-                inout("xmm4") x[4] => _,
-                inout("xmm5") x[5] => _,
-                inout("xmm6") x[6] => _,
-                inout("xmm7") x[7] => _,
-                out("r10") _, out("r11") _,
-                out("xmm8") _, out("xmm9") _, out("xmm10") _, out("xmm11") _,
-                out("xmm12") _, out("xmm13") _, out("xmm14") _, out("xmm15") _,
-                out("rax") _,
-            );
-        }
-    } else {
-        let e0 = a[6];
-        let e1 = a[7];
-        let e2 = a[8];
-        let e3 = a[9];
-        // SAFETY: see `call_guest_int`.
-        unsafe {
-            asm!(
-                "sub rsp, 32",
-                "mov [rsp + 0], {e0}",
-                "mov [rsp + 8], {e1}",
-                "mov [rsp + 16], {e2}",
-                "mov [rsp + 24], {e3}",
-                "call {f}",
-                "add rsp, 32",
-                f = in(reg) f,
-                e0 = in(reg) e0,
-                e1 = in(reg) e1,
-                e2 = in(reg) e2,
-                e3 = in(reg) e3,
-                inout("rdi") a[0] => _,
-                inout("rsi") a[1] => _,
-                inout("rdx") a[2] => _,
-                inout("rcx") a[3] => _,
-                inout("r8") a[4] => _,
-                inout("r9") a[5] => _,
-                inout("xmm0") x[0] => ret,
-                inout("xmm1") x[1] => _,
-                inout("xmm2") x[2] => _,
-                inout("xmm3") x[3] => _,
-                inout("xmm4") x[4] => _,
-                inout("xmm5") x[5] => _,
-                inout("xmm6") x[6] => _,
-                inout("xmm7") x[7] => _,
-                out("r10") _, out("r11") _,
-                out("xmm8") _, out("xmm9") _, out("xmm10") _, out("xmm11") _,
-                out("xmm12") _, out("xmm13") _, out("xmm14") _, out("xmm15") _,
-                out("rax") _,
-            );
-        }
-    }
-    Ok(ret.to_bits())
+    // SAFETY: forwarded from the caller's contract.
+    unsafe { call_guest_abi(f, ints, floats, true) }
 }
 
 #[cfg(not(target_arch = "x86_64"))]

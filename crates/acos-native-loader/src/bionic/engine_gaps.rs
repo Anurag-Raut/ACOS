@@ -371,6 +371,81 @@ pub fn table() -> std::collections::HashMap<&'static str, super::Shim> {
     m
 }
 
+// ---------------------------------------------------------------------------
+// Guest `/system` path translation (W99-A)
+// ---------------------------------------------------------------------------
+
+/// Translate a guest *system* path to the extracted boot tree.
+///
+/// Android libraries open absolute paths (`/system/etc/fonts.xml`,
+/// `/system/fonts/Roboto-Regular.ttf`) that exist in the APK/boot extraction,
+/// not on the host root. `ACOS_BOOT_DIR` names that extraction (the harness /
+/// runtime sets it); the mapping mirrors the VM's VFS table
+/// (`crates/acos-vm/src/vfs.rs`): `/system/<rest>` -> `<boot>/<rest>`, with the
+/// framework's `fonts/` placement for `etc/fonts*.xml`.
+///
+/// Returns `None` when the path is not a translated `/system` path or when no
+/// candidate exists, so callers keep the original path (and the normal
+/// `ENOENT` contract) instead of inventing a file.
+#[cfg(unix)]
+pub fn translate_guest_system_path(path: &str) -> Option<String> {
+    let boot = std::env::var_os("ACOS_BOOT_DIR")?;
+    let boot = std::path::PathBuf::from(boot);
+    let rest = path.strip_prefix("/system/")?;
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(font) = rest.strip_prefix("fonts/") {
+        candidates.push(boot.join("fonts").join(font));
+    } else if let Some(etc) = rest.strip_prefix("etc/") {
+        // The boot extraction keeps `fonts.xml`/`fallback_fonts.xml` under
+        // `fonts/`, while the guest spells them under `etc/`.
+        candidates.push(boot.join("etc").join(etc));
+        candidates.push(boot.join("fonts").join(etc));
+    } else {
+        candidates.push(boot.join(rest));
+    }
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+/// C ABI used by the `fopen` shim: write the translated path into `out`.
+///
+/// Returns the number of bytes written (excluding the NUL) or 0 when the path
+/// is not translated. `out` is only written when a translation exists, so the
+/// caller can fall back to the original pointer.
+#[cfg(unix)]
+#[no_mangle]
+pub unsafe extern "C" fn acos_translate_guest_path(
+    path: *const std::os::raw::c_char,
+    out: *mut std::os::raw::c_char,
+    out_len: usize,
+) -> usize {
+    if path.is_null() || out.is_null() || out_len == 0 {
+        return 0;
+    }
+    // SAFETY: the caller (C stdio shim) passes a NUL-terminated guest string
+    // and a writable buffer of `out_len` bytes.
+    let Some(text) = unsafe { std::ffi::CStr::from_ptr(path) }.to_str().ok() else {
+        return 0;
+    };
+    let Some(translated) = translate_guest_system_path(text) else {
+        return 0;
+    };
+    let bytes = translated.as_bytes();
+    if bytes.len() + 1 > out_len {
+        return 0;
+    }
+    // SAFETY: bounds checked above; the destination is a valid writable buffer.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out as *mut u8, bytes.len());
+        *out.add(bytes.len()) = 0;
+    }
+    bytes.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,3 +521,4 @@ mod tests {
         }
     }
 }
+

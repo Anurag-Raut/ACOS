@@ -20,6 +20,11 @@ D8="$SDK/build-tools/$BT/d8"
 ANDROID_JAR="$SDK/platforms/android-34/android.jar"
 FLUTTER_JAR="$ROOT/.cache/flutter-1/engine/artifacts/flutter.jar"
 ANDROIDX_JAR="$ROOT/.cache/flutter-1/androidx.jar"
+# Compile-time stubs for @hide framework APIs (`AssetManager()` /
+# `addAssetPath(String)`). The stub classes are a javac classpath entry only and
+# are never packaged: d8 resolves `android.content.res.AssetManager` from
+# `android.jar`, so the DEX keeps the real framework reference.
+STUBS="$ROOT/crates/acos-vm/tests/java/stubs"
 WORK="$ROOT/target/tmp/flutter-hello-probe"
 
 die() { echo "flutter-hello-probe: error: $*" >&2; exit 1; }
@@ -32,13 +37,15 @@ die() { echo "flutter-hello-probe: error: $*" >&2; exit 1; }
 rm -rf "$WORK"
 mkdir -p "$WORK/classes" "$WORK/dex"
 
-CP="$FLUTTER_JAR:$ANDROID_JAR:$ANDROIDX_JAR"
+CP="$STUBS:$FLUTTER_JAR:$ANDROID_JAR:$ANDROIDX_JAR"
 echo "flutter-hello-probe: javac"
-javac --release 11 -encoding UTF-8 -cp "$CP" -d "$WORK/classes" \
+javac --release 11 -encoding UTF-8 -sourcepath "$STUBS" -cp "$CP" -d "$WORK/classes" \
     "$ROOT/crates/acos-jni/tests/java/dev/acos/fixtures/flutterhello/FlutterProbe.java"
 
 echo "flutter-hello-probe: d8"
+# Every class the probe compiled (anonymous delegates become nest mates).
+mapfile -t PROBE_CLASSES < <(find "$WORK/classes/dev" -name '*.class' | sort)
 "$D8" --min-api 26 --lib "$ANDROID_JAR" --output "$WORK/dex" \
-    "$WORK/classes/dev/acos/fixtures/flutterhello/FlutterProbe.class"
+    "${PROBE_CLASSES[@]}"
 cp "$WORK/dex/classes.dex" "$ROOT/crates/acos-jni/tests/data/flutter-probe.dex"
 echo "flutter-hello-probe: -> crates/acos-jni/tests/data/flutter-probe.dex"

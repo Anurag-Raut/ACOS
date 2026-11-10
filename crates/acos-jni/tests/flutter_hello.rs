@@ -137,6 +137,21 @@ fn missing_symbols(e: &LoaderError) -> Vec<serde_json::Value> {
     }
 }
 
+/// Write an RGBA8888 buffer as a PNG (8-bit, non-premultiplied channel order).
+fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(file),
+        width,
+        height,
+    );
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    writer.write_image_data(rgba).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// The child: confine, then load/drive the engine. Runs only with the env set.
 #[test]
 fn flutter_child_worker() {
@@ -166,6 +181,12 @@ fn flutter_child_worker() {
     }
     if boot_dir.join("BOOTCLASSPATH").is_file() {
         profile = profile.with_read_only(&boot_dir);
+        // The engine's Skia font manager opens `/system/etc/fonts.xml` and
+        // `/system/fonts/*` by absolute path; the native-loader's path
+        // translation maps those onto the extracted boot tree named here.
+        profile
+            .env
+            .push(("ACOS_BOOT_DIR".to_string(), boot_dir.display().to_string()));
     }
     // Dart AOT reserves a large (4 GiB, lightly committed) compressed-pointer
     // heap region at VM startup: `virtual_memory_compressed.cc` mmaps it with
@@ -381,14 +402,35 @@ fn flutter_child_worker() {
         app_path.display().to_string(),
         "main".to_string(),
         assets_dir.display().to_string(),
+        apk.display().to_string(),
     ];
     let outcome = vm.run("dev/acos/fixtures/flutterhello/FlutterProbe", &args);
-    // `runBundleAndSnapshotFromLibrary` is asynchronous: the root isolate's
-    // `main()` and the first frame are posted to the engine's platform task
-    // runner. In the real embedding the Android main `Looper` drains those
-    // tasks; here the harness pumps the same per-thread `ALooper` the engine
-    // prepared, then gives the engine's own threads time to run.
-    for _ in 0..30 {
+    // `runBundleAndSnapshotFromLibrary` is asynchronous: `main()`, surface
+    // creation, viewport metrics, vsync and the pointer packet are all posted
+    // to the engine's platform task runner. In the real embedding the Android
+    // main `Looper` drains those tasks; here the harness pumps the same
+    // per-thread `ALooper` the engine prepared.
+    //
+    // The software renderer draws on the engine's **raster** thread, so the
+    // pump is interleaved with short sleeps: the platform thread must keep
+    // draining tasks (vsync callbacks, frame scheduling) while the raster
+    // thread runs, and the presented-frame capture is written from that thread.
+    // The engine's fml platform runner is the calling thread's `ALooper`
+    // (`fml::MessageLoopAndroid`); `alooper_pollonce` is a no-op returning
+    // POLL_ERROR unless this thread has a prepared looper. Preparing is
+    // idempotent: it returns the looper `ALooper_prepare` already installed for
+    // this thread, or creates the platform-thread one if the engine has not
+    // been attached yet.
+    // SAFETY: `ALooper_prepare` has no preconditions.
+    let looper = unsafe {
+        acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0)
+    };
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({"phase": "looper-prepared", "looper": format!("{looper:p}")})
+    );
+    let mut seen_frames = 0usize;
+    for round in 0..120 {
         let mut fd: std::os::raw::c_int = 0;
         let mut events: std::os::raw::c_int = 0;
         let mut data: *mut std::os::raw::c_void = std::ptr::null_mut();
@@ -396,19 +438,83 @@ fn flutter_child_worker() {
         // `ALooper_prepare` installed for this thread.
         unsafe {
             acos_native_loader::bionic::ndk::ndk_looper::alooper_pollonce(
-                100,
+                50,
                 &mut fd,
                 &mut events,
                 &mut data,
             );
         }
+        if round % 4 == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        let frames = acos_jni::ndk_host::presented_frames();
+        if frames.len() > seen_frames {
+            seen_frames = frames.len();
+            println!(
+                "W93A_STAGE {}",
+                serde_json::json!({
+                    "phase": "frame-presented",
+                    "count": seen_frames,
+                    "width": frames.last().map(|f| f.width),
+                    "height": frames.last().map(|f| f.height),
+                    "seq": frames.last().map(|f| f.seq),
+                    "thread": frames.last().map(|f| f.thread.clone()),
+                })
+            );
+        }
     }
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(std::time::Duration::from_millis(500));
     for line in outcome.stdout.lines() {
         println!("W93A_PROBE {line}");
     }
     for line in outcome.stderr.lines() {
         println!("W93A_PROBE_ERR {line}");
+    }
+
+    // Persist every presented frame so `acos frame-diff` can compare the real
+    // engine output with the phone reference. Frames are RGBA8888 straight
+    // from `ANativeWindow_unlockAndPost` (premultiplied, like the compositor).
+    let frames = acos_jni::ndk_host::presented_frames();
+    let mut written: Vec<serde_json::Value> = Vec::new();
+    let out_frames = repo_root().join("results/flutter");
+    let _ = std::fs::create_dir_all(&out_frames);
+    let mut dedup: Vec<u64> = Vec::new();
+    for (i, frame) in frames.iter().enumerate() {
+        // Skip byte-identical consecutive frames (same pixels, new seq).
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for &b in frame.rgba.iter().step_by(7) {
+            hash ^= b as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        let path = out_frames.join(format!("w99a-frame-{i}.png"));
+        let ok = write_png(&path, frame.width, frame.height, &frame.rgba).is_ok();
+        written.push(serde_json::json!({
+            "index": i,
+            "path": path.display().to_string(),
+            "width": frame.width,
+            "height": frame.height,
+            "seq": frame.seq,
+            "hash": format!("{hash:016x}"),
+            "duplicate": dedup.contains(&hash),
+            "written": ok,
+        }));
+        dedup.push(hash);
+    }
+    if let Some(last) = frames.last() {
+        println!(
+            "W93A_STAGE {}",
+            serde_json::json!({
+                "phase": "frames-written",
+                "count": frames.len(),
+                "frames": written,
+                "last": {
+                    "width": last.width,
+                    "height": last.height,
+                    "seq": last.seq,
+                    "thread": last.thread,
+                },
+            })
+        );
     }
     if let Some(acos_vm::VmError::JavaException(h)) = outcome.vm_error {
         let class = vm
@@ -484,6 +590,21 @@ fn flutter_hello_under_confinement() {
         .filter(|l| l.starts_with("W93A_") || l.starts_with("ACOS_"))
     {
         eprintln!("child> {line}");
+    }
+    // Engine diagnostics: `__android_log_print` lines and structured refusals
+    // land on the child's stderr. They are the only view into asynchronous
+    // engine failures, so surface them (bounded) in the test report.
+    let diag: Vec<&str> = stderr
+        .lines()
+        .filter(|l| {
+            l.contains("android-log")
+                || l.starts_with("ACOS ")
+                || l.contains("FATAL")
+                || l.contains("flutter:")
+        })
+        .collect();
+    for line in diag.iter().take(120) {
+        eprintln!("child-err> {line}");
     }
 
     let stage_lines: Vec<&str> = stdout
