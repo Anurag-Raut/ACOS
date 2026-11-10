@@ -33,6 +33,11 @@ pub struct DexCtx {
     /// function of (declared signature, receiver class), so it never needs
     /// invalidation.
     pub virtual_cache: Vec<Option<VirtualCache>>,
+    /// Absolute path the provider was parsed from, when it came from the boot
+    /// classpath. Captured into the serialized boot image so a cold process can
+    /// re-open the identical provider list (index order is part of the
+    /// `MethodImpl::Dex { dex }` contract).
+    pub source: Option<std::path::PathBuf>,
 }
 
 /// A 4-way polymorphic inline cache for one call site.
@@ -584,7 +589,42 @@ impl Vm {
         self.c_thread = image.c_thread;
         self.c_print_stream = image.c_print_stream;
         self.c_system = image.c_system;
+        // A serialized image carries `NativeFn` placeholders; re-bind every one
+        // from the registry `natives::install` just populated above. For an
+        // in-process image this is a no-op (same function pointers). This runs
+        // on *every* install, so both `Vm::restore` and the later
+        // `RuntimeTemplate::restore_runtime` restore see usable natives.
+        self.rebind_serialized_natives();
         Ok(())
+    }
+
+    /// Re-bind methods that were decoded from an on-disk linked boot image.
+    ///
+    /// A raw `NativeFn` cannot cross a process boundary, so a serialized
+    /// `MethodImpl::Native` decodes to a placeholder. Every such method is
+    /// matched against the freshly installed native registry
+    /// `(class descriptor, name, signature)`; a miss (build skew) degrades to
+    /// `Abstract` so a call fails structurally instead of entering the wrong
+    /// native. This also re-applies the few VM-internal bytecode overrides that
+    /// `bind_dex_native` installed at boot (e.g. the `String` constructors).
+    pub(crate) fn rebind_serialized_natives(&mut self) {
+        if self.corelib != CoreLib::Real {
+            return;
+        }
+        for mid in 0..self.methods.len() {
+            if !matches!(self.methods[mid].imp, MethodImpl::Native(_)) {
+                continue;
+            }
+            let (class, name, sig) = {
+                let m = &self.methods[mid];
+                (m.class, m.name.clone(), m.sig.clone())
+            };
+            let desc = self.class_desc(class).to_string();
+            self.methods[mid].imp = match self.natives.get(&(desc, name, sig)) {
+                Some(&f) => MethodImpl::Native(f),
+                None => MethodImpl::Abstract,
+            };
+        }
     }
 
     /// Load the real boot-classpath DEX images, in `BOOTCLASSPATH` order.
@@ -633,6 +673,7 @@ impl Vm {
                 let dex = acos_dex::cache::shared_dex(&p)
                     .map_err(VmError::Load)?;
                 let idx = self.add_shared_dex(dex);
+                self.dexs[idx].source = Some(p);
                 self.boot_dexs.push(idx);
             }
         }
@@ -674,6 +715,7 @@ impl Vm {
                     .map_err(VmError::Load)?;
                 found |= dex.find_class_index(desc).is_some();
                 let idx = self.add_shared_dex(dex);
+                self.dexs[idx].source = Some(p);
                 self.boot_dexs.push(idx);
             }
             if found {
@@ -1426,6 +1468,7 @@ impl Vm {
             method_cache: vec![None; methods],
             virtual_cache: vec![None; methods],
             class_cache: vec![None; types],
+            source: None,
         });
         idx
     }

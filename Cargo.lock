@@ -252,6 +252,7 @@ dependencies = [
  "acos-test-support",
  "aes",
  "aes-gcm",
+ "borsh",
  "cbc",
  "ctr",
  "digest",

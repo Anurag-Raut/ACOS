@@ -285,7 +285,7 @@ impl Vm {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub enum BuiltinAlloc {
     List,
     Map,

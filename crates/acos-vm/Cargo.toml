@@ -35,6 +35,11 @@ rustix = { version = "1.1", features = ["event", "time", "pipe", "net", "fs"] }
 flate2 = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 libc = "0.2"
+# Compact, safe, derive-based binary serialization of the fully linked boot
+# image (class/method tables + decoded method bodies) for the on-disk boot
+# cache. borsh is already in the workspace lock graph (via bit-vec); the
+# `#![forbid(unsafe_code)]` invariant is preserved (borsh is safe Rust).
+borsh = { version = "1", features = ["derive", "rc"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

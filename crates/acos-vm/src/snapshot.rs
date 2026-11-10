@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use acos_dex::DexFile;
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::class::{Class, ClassId, InitState, Method, TypeId, TypeInfo};
 use crate::error::{VmError, VmResult};
@@ -141,6 +142,9 @@ pub(crate) struct BootImage {
     pub(crate) c_print_stream: ClassId,
     pub(crate) c_system: ClassId,
     pub(crate) dex_files: Vec<Arc<DexFile>>,
+    /// The source path of every provider, index-aligned with `dex_files`, so a
+    /// serialized image can re-open the identical list in a fresh process.
+    pub(crate) dex_paths: Vec<Option<PathBuf>>,
     pub(crate) boot_dexs: Vec<usize>,
     pub(crate) boot_lazy_jars: Vec<String>,
     pub(crate) boot_dir: Option<PathBuf>,
@@ -167,6 +171,7 @@ impl BootImage {
             c_print_stream: vm.c_print_stream,
             c_system: vm.c_system,
             dex_files: vm.dexs.iter().map(|d| d.file.clone()).collect(),
+            dex_paths: vm.dexs.iter().map(|d| d.source.clone()).collect(),
             boot_dexs: vm.boot_dexs.clone(),
             boot_lazy_jars: vm.boot_lazy_jars.clone(),
             boot_dir: vm.boot_dir.clone(),
@@ -181,6 +186,120 @@ impl BootImage {
                 .zip(class_desc)
                 .all(|(c, d)| c.descriptor == *d)
     }
+
+    /// Serialize the fully linked boot image (class tables, linked methods with
+    /// their decoded bodies, type tables and the provider list) into a compact
+    /// borsh stream. This is the payload the on-disk boot cache persists so a
+    /// cold process clones the image instead of re-parsing and re-linking the
+    /// boot classpath.
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        let data = SerializedBootImage {
+            classes: self.classes.clone(),
+            methods: self.methods.clone(),
+            types: self.types.clone(),
+            type_by_desc: self.type_by_desc.clone(),
+            class_by_desc: self.class_by_desc.clone(),
+            loaded_array_elems: self.loaded_array_elems.clone(),
+            builtin_alloc: self.builtin_alloc.clone(),
+            c_object: self.c_object,
+            c_class: self.c_class,
+            c_string: self.c_string,
+            c_string_builder: self.c_string_builder,
+            c_throwable: self.c_throwable,
+            c_integer: self.c_integer,
+            c_long: self.c_long,
+            c_thread: self.c_thread,
+            c_print_stream: self.c_print_stream,
+            c_system: self.c_system,
+            boot_dexs: self.boot_dexs.clone(),
+            boot_lazy_jars: self.boot_lazy_jars.clone(),
+            boot_dir: self
+                .boot_dir
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
+            dex_paths: self
+                .dex_paths
+                .iter()
+                .map(|p| p.as_ref().map(|p| p.to_string_lossy().into_owned()))
+                .collect(),
+        };
+        borsh::to_vec(&data).expect("in-memory borsh serialization cannot fail")
+    }
+
+    /// Rebuild a [`BootImage`] from [`BootImage::to_bytes`]. The provider list
+    /// is re-opened from the recorded paths through the process-global DEX
+    /// cache (one parse per process); any failure is a structured error so the
+    /// caller can fall back to a real boot.
+    pub(crate) fn from_bytes(bytes: &[u8]) -> VmResult<BootImage> {
+        let data: SerializedBootImage = borsh::from_slice(bytes)
+            .map_err(|e| VmError::SnapshotFormat(format!("linked boot image: {e}")))?;
+        let mut dex_files = Vec::with_capacity(data.dex_paths.len());
+        for path in &data.dex_paths {
+            let Some(path) = path else {
+                return Err(VmError::SnapshotFormat(
+                    "linked boot image contains a non-boot DEX provider".to_string(),
+                ));
+            };
+            let file = acos_dex::shared_dex(Path::new(path)).map_err(VmError::Load)?;
+            dex_files.push(file);
+        }
+        Ok(BootImage {
+            classes: data.classes,
+            methods: data.methods,
+            types: data.types,
+            type_by_desc: data.type_by_desc,
+            class_by_desc: data.class_by_desc,
+            loaded_array_elems: data.loaded_array_elems,
+            builtin_alloc: data.builtin_alloc,
+            c_object: data.c_object,
+            c_class: data.c_class,
+            c_string: data.c_string,
+            c_string_builder: data.c_string_builder,
+            c_throwable: data.c_throwable,
+            c_integer: data.c_integer,
+            c_long: data.c_long,
+            c_thread: data.c_thread,
+            c_print_stream: data.c_print_stream,
+            c_system: data.c_system,
+            dex_files,
+            dex_paths: data
+                .dex_paths
+                .into_iter()
+                .map(|p| p.map(PathBuf::from))
+                .collect(),
+            boot_dexs: data.boot_dexs,
+            boot_lazy_jars: data.boot_lazy_jars,
+            boot_dir: data.boot_dir.map(PathBuf::from),
+        })
+    }
+}
+
+/// Wire form of [`BootImage`] for the on-disk cache. `dex_files` is deliberately
+/// excluded: `Arc<DexFile>` is a process-local parsed object, so the provider
+/// list travels as paths and is re-opened through `acos_dex::shared_dex`.
+#[derive(BorshSerialize, BorshDeserialize)]
+struct SerializedBootImage {
+    classes: Vec<Class>,
+    methods: Vec<Method>,
+    types: Vec<TypeInfo>,
+    type_by_desc: HashMap<String, TypeId>,
+    class_by_desc: HashMap<String, ClassId>,
+    loaded_array_elems: HashSet<String>,
+    builtin_alloc: HashMap<ClassId, crate::corelib::BuiltinAlloc>,
+    c_object: ClassId,
+    c_class: ClassId,
+    c_string: ClassId,
+    c_string_builder: ClassId,
+    c_throwable: ClassId,
+    c_integer: ClassId,
+    c_long: ClassId,
+    c_thread: ClassId,
+    c_print_stream: ClassId,
+    c_system: ClassId,
+    boot_dexs: Vec<usize>,
+    boot_lazy_jars: Vec<String>,
+    boot_dir: Option<String>,
+    dex_paths: Vec<Option<String>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -857,6 +976,44 @@ impl Vm {
     pub fn snapshot_header(bytes: &[u8]) -> VmResult<SnapshotHeader> {
         let mut r = Reader::new(bytes);
         read_header(&mut r)
+    }
+
+    /// Serialize the fully linked boot image (class tables, linked methods with
+    /// decoded bodies, type tables and provider paths) captured from this VM.
+    ///
+    /// Only meaningful for `CoreLib::Real`: the builtin/bootstrap class set is
+    /// constructed in code and is not re-opened from the boot classpath. Returns
+    /// an empty vector otherwise so callers can simply skip persisting.
+    pub fn boot_image_bytes(&self) -> VmResult<Vec<u8>> {
+        if self.corelib != CoreLib::Real {
+            return Ok(Vec::new());
+        }
+        Ok(BootImage::capture(self).to_bytes())
+    }
+
+    /// Restore a VM from [`Vm::snapshot`] bytes, installing the linked boot
+    /// metadata in `image` (from [`Vm::boot_image_bytes`]) instead of re-linking
+    /// the boot classpath.
+    ///
+    /// The image is registered under the snapshot's own boot key before the
+    /// restore, so the normal `Vm::restore` image path takes it. A malformed
+    /// image is a `Ok(None)`-style miss for the caller: this returns `Err`, and
+    /// the caller falls back to a plain [`Vm::restore`] / fresh boot.
+    pub fn restore_with_boot_image(snapshot: &[u8], image: &[u8]) -> VmResult<Vm> {
+        let header = Vm::snapshot_header(snapshot)?;
+        if header.corelib == CoreLib::Real && !image.is_empty() {
+            let img = BootImage::from_bytes(image)?;
+            // Key the image by its own descriptor list: `Vm::restore` derives
+            // the same key from the snapshot's class list, so a tampered or
+            // mismatched image simply misses and the restore re-links.
+            let key = BootKey {
+                fingerprint: header.boot_fingerprint,
+                corelib: 1,
+                classes: class_list_hash(img.classes.iter().map(|c| c.descriptor.as_str())),
+            };
+            remember_image(key, img);
+        }
+        Vm::restore(snapshot)
     }
 
     /// Restore a VM from [`Vm::snapshot`] bytes.

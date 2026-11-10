@@ -46,7 +46,24 @@ case "$EXPECTED_KIND" in
     *) echo "diff-dexprogs: unknown --expected $EXPECTED_KIND" >&2; exit 2 ;;
 esac
 
-BIN="$ROOT/target/release/acos"
+# Resolve the acos binary. Honour an explicit ACOS_BIN override first, then
+# CARGO_TARGET_DIR (the harness builds into a non-default target dir), and
+# fall back to the workspace `target/release`. A relative CARGO_TARGET_DIR is
+# resolved against the repository root, matching cargo's own behaviour when the
+# script is invoked from anywhere.
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /*) TARGET_ROOT="$CARGO_TARGET_DIR" ;;
+        *) TARGET_ROOT="$ROOT/$CARGO_TARGET_DIR" ;;
+    esac
+else
+    TARGET_ROOT="$ROOT/target"
+fi
+if [ -n "${ACOS_BIN:-}" ]; then
+    BIN="$ACOS_BIN"
+else
+    BIN="$TARGET_ROOT/release/acos"
+fi
 FIX="$ROOT/fixtures/build/dexprogs"
 OUTDIR="$ROOT/results/vm"
 mkdir -p "$OUTDIR"
@@ -56,14 +73,14 @@ if [ ! -d "$FIX" ]; then
     exit 2
 fi
 if [ ! -x "$BIN" ]; then
-    echo "diff-dexprogs: building acos (release)..." >&2
+    echo "diff-dexprogs: building acos (release) -> $BIN..." >&2
     (cd "$ROOT" && "$ROOT/tools/guarded.sh" --mem 6G --time 1200 -- \
         cargo build --release -p acos-cli) || exit 2
 fi
 
-# Scratch is kept under target/tmp and removed on exit (ADR-0018).
-mkdir -p "$ROOT/target/tmp"
-TMP="$(mktemp -d "$ROOT/target/tmp/diff-dexprogs.XXXXXX")"
+# Scratch is kept under the target dir and removed on exit (ADR-0018).
+mkdir -p "$TARGET_ROOT/tmp"
+TMP="$(mktemp -d "$TARGET_ROOT/tmp/diff-dexprogs.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "diff-dexprogs: mode=$MODE corelib=$CORELIB expected=$EXPECTED_KIND"

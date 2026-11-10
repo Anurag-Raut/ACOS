@@ -42,7 +42,8 @@ use acos_vm::CoreLib;
 const MAGIC: [u8; 8] = *b"ACOSBIMG";
 /// Fixed header length in bytes (magic, format, key, len, checksum, ver-len).
 const HEADER_LEN: usize = 8 + 4 + 8 + 8 + 8 + 4;
-/// On-disk header format version. Bump on any layout change.
+/// On-disk header format version. Bump on any layout change. Version 2 adds the
+/// serialized, fully linked `BootImage` segment to the framed payload.
 pub const CACHE_FORMAT_VERSION: u32 = 2;
 /// Hard ceiling on a cache file read into memory; larger files are refused.
 pub const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;

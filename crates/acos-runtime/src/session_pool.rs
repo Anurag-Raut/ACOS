@@ -160,11 +160,13 @@ const BOOT_PAYLOAD_MAGIC: u32 = 0x314C_4241;
 /// Sanity bound on the binder-layout entry count decoded from a cache file.
 const MAX_BOOT_PAYLOAD_ENTRIES: usize = 1 << 20;
 
-/// A decoded boot-cache payload: `(vm snapshot, binder layout, attach record)`.
+/// A decoded boot-cache payload: `(vm snapshot, binder layout, attach record,
+/// linked boot image)`.
 type BootPayload = (
     Vec<u8>,
     Vec<(u64, String, BinderKind)>,
     Option<(u64, i64, String)>,
+    Vec<u8>,
 );
 
 fn kind_code(kind: BinderKind) -> u8 {
@@ -192,8 +194,9 @@ fn encode_boot_payload(
     snapshot: &[u8],
     layout: &[(u64, String, BinderKind)],
     attach: Option<&(u64, i64, String)>,
+    image: &[u8],
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(snapshot.len() + 96 + layout.len() * 48);
+    let mut out = Vec::with_capacity(snapshot.len() + image.len() + 104 + layout.len() * 48);
     out.extend_from_slice(&BOOT_PAYLOAD_MAGIC.to_le_bytes());
     out.extend_from_slice(&(layout.len() as u32).to_le_bytes());
     for (id, desc, kind) in layout {
@@ -215,6 +218,11 @@ fn encode_boot_payload(
     }
     out.extend_from_slice(&(snapshot.len() as u64).to_le_bytes());
     out.extend_from_slice(snapshot);
+    // The fully linked BootImage (class/method tables + decoded bodies). A
+    // legacy entry without this segment decodes as an empty image and the
+    // restore still works, just paying the relink.
+    out.extend_from_slice(&(image.len() as u64).to_le_bytes());
+    out.extend_from_slice(image);
     out
 }
 
@@ -286,10 +294,20 @@ fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload, String> {
     }
     let snap_len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default()) as usize;
     pos += 8;
-    if bytes.len() != pos + snap_len {
+    if bytes.len() < pos + snap_len {
         return Err("snapshot length mismatch".to_string());
     }
-    Ok((bytes[pos..].to_vec(), layout, attach))
+    let snapshot = bytes[pos..pos + snap_len].to_vec();
+    pos += snap_len;
+    if bytes.len() < pos + 8 {
+        return Err("truncated linked-image length".to_string());
+    }
+    let img_len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap_or_default()) as usize;
+    pos += 8;
+    if bytes.len() != pos + img_len {
+        return Err("linked-image length mismatch".to_string());
+    }
+    Ok((snapshot, layout, attach, bytes[pos..].to_vec()))
 }
 
 /// Structured pool failure.
@@ -1222,7 +1240,23 @@ impl RuntimeTemplate {
                 ))
             })?;
         if let (Some(cache), Some(key)) = (cache, cache_key) {
-            let payload = encode_boot_payload(&snapshot, &binder_layout, attach_seed.as_ref());
+            // Persist the fully linked BootImage alongside the snapshot so a
+            // cold process clones the class tables and decoded bodies instead
+            // of re-parsing + re-linking the boot classpath. A capture failure
+            // only loses the acceleration, never the boot.
+            // Diagnostic A/B escape: store an entry without the linked image so
+            // the same binary can measure the pre-serialization relink path.
+            let image = if std::env::var_os("ACOS_BOOT_CACHE_NO_IMAGE").is_some() {
+                Vec::new()
+            } else {
+                rt.vm().boot_image_bytes().unwrap_or_default()
+            };
+            let payload = encode_boot_payload(
+                &snapshot,
+                &binder_layout,
+                attach_seed.as_ref(),
+                &image,
+            );
             let _ = cache.store(key, &payload);
         }
         drop(guard);
@@ -1281,12 +1315,16 @@ impl RuntimeTemplate {
     /// launch; the restored `Vm` is dropped after recovering the preserved
     /// `ActivityThread` handle.
     fn from_cached(bytes: Vec<u8>, started: Instant) -> Result<RuntimeTemplate, PoolError> {
-        let (snapshot, binder_layout, attach) = decode_boot_payload(&bytes).map_err(|e| {
+        let (snapshot, binder_layout, attach, image) = decode_boot_payload(&bytes).map_err(|e| {
             PoolError::Restore(VmError::SnapshotFormat(format!(
                 "boot cache payload: {e}"
             )))
         })?;
-        let vm = Vm::restore(&snapshot).map_err(PoolError::Restore)?;
+        let vm = if image.is_empty() {
+            Vm::restore(&snapshot).map_err(PoolError::Restore)?
+        } else {
+            Vm::restore_with_boot_image(&snapshot, &image).map_err(PoolError::Restore)?
+        };
         let activity_thread = vm
             .find_instance_of_class("Landroid/app/ActivityThread;")
             .ok_or_else(|| {

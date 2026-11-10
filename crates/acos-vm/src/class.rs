@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use crate::error::{VmError, VmResult};
 use crate::heap::Handle;
 use crate::vm::Vm;
@@ -17,7 +19,7 @@ pub type MethodId = u32;
 pub type TypeId = u32;
 
 /// A decoded Dalvik instruction (pre-decoded once per method).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Insn {
     pub op: u8,
     pub size: u8,
@@ -38,7 +40,7 @@ impl Insn {
 }
 
 /// A try region mapped to a handler descriptor.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TryEntry {
     pub start: u32,
     pub end: u32,
@@ -48,7 +50,7 @@ pub struct TryEntry {
 
 /// Pre-decoded method body. Shared through `Arc` so a frame can hold it without
 /// borrowing the owning class.
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct MethodCode {
     pub registers_size: u16,
     pub ins_size: u16,
@@ -77,7 +79,7 @@ impl MethodCode {
 }
 
 /// A field declared by a class, with its resolved slot offset.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct FieldDef {
     pub name: String,
     pub desc: String,
@@ -93,7 +95,7 @@ pub struct FieldDef {
 /// How a field's storage narrows/widens on load/store (the Java primitive
 /// sub-word kinds). Cached in [`ResolvedField`] so the interpreter never has
 /// to look up the descriptor string on a field access.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum FieldSign {
     None,
     Byte,
@@ -155,6 +157,77 @@ impl std::fmt::Debug for MethodImpl {
     }
 }
 
+/// Placeholder bound into a `MethodImpl::Native` decoded from an on-disk boot
+/// image: a function pointer cannot cross a process boundary. Every such method
+/// is re-bound from the VM's native registry by
+/// `Vm::install_boot_image`/`rebind_serialized_natives`; if the registry has no
+/// entry (a build mismatch) the call fails structurally instead of running the
+/// wrong code.
+fn unbound_native(
+    _vm: &mut Vm,
+    _ctx: NativeCtx,
+) -> VmResult<()> {
+    Err(VmError::UnsupportedApi {
+        api: "<serialized native>".to_string(),
+        at: "restored boot image".to_string(),
+    })
+}
+
+/// `MethodImpl` cannot derive `Borsh*` because `NativeFn` is a raw function
+/// pointer. Dex/Abstract round-trip exactly; Native is written as a bare tag
+/// and decoded to [`unbound_native`] for the caller to re-bind.
+impl BorshSerialize for MethodImpl {
+    fn serialize<W: borsh::io::Write>(&self, w: &mut W) -> borsh::io::Result<()> {
+        match self {
+            MethodImpl::Dex { dex, method_idx, code } => {
+                0u8.serialize(w)?;
+                dex.serialize(w)?;
+                method_idx.serialize(w)?;
+                match code {
+                    Some(c) => {
+                        1u8.serialize(w)?;
+                        c.serialize(w)?;
+                    }
+                    None => 0u8.serialize(w)?,
+                }
+            }
+            MethodImpl::Native(_) => 1u8.serialize(w)?,
+            MethodImpl::Abstract => 2u8.serialize(w)?,
+        }
+        Ok(())
+    }
+}
+
+impl BorshDeserialize for MethodImpl {
+    fn deserialize_reader<R: borsh::io::Read>(r: &mut R) -> borsh::io::Result<Self> {
+        let tag = u8::deserialize_reader(r)?;
+        Ok(match tag {
+            0 => {
+                let dex = u32::deserialize_reader(r)?;
+                let method_idx = u32::deserialize_reader(r)?;
+                let code = if u8::deserialize_reader(r)? != 0 {
+                    Some(Arc::new(MethodCode::deserialize_reader(r)?))
+                } else {
+                    None
+                };
+                MethodImpl::Dex {
+                    dex,
+                    method_idx,
+                    code,
+                }
+            }
+            1 => MethodImpl::Native(unbound_native),
+            2 => MethodImpl::Abstract,
+            other => {
+                return Err(borsh::io::Error::new(
+                    borsh::io::ErrorKind::InvalidData,
+                    format!("bad MethodImpl tag {other}"),
+                ))
+            }
+        })
+    }
+}
+
 /// A native method: receives the VM and the index of its own call frame.
 pub type NativeFn = fn(&mut Vm, NativeCtx) -> VmResult<()>;
 
@@ -165,7 +238,7 @@ pub struct NativeCtx {
     pub frame: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Class {
     pub descriptor: String,
     pub access: u32,
@@ -197,7 +270,7 @@ pub struct Class {
     pub(crate) abstract_methods: std::collections::HashSet<(String, String)>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum InitState {
     NotInit,
     InProgress,
@@ -238,7 +311,7 @@ impl Class {
 }
 
 /// A runtime method.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Method {
     pub class: ClassId,
     pub name: String,
@@ -321,7 +394,7 @@ pub fn type_width(kind: TypeKind) -> u32 {
 }
 
 /// Type classification, used by arithmetic and GC.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum TypeKind {
     Void,
     Boolean,
@@ -356,7 +429,7 @@ impl TypeKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TypeInfo {
     pub descriptor: String,
     pub kind: TypeKind,
