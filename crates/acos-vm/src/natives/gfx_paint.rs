@@ -146,6 +146,15 @@ fn filters() -> &'static Mutex<HandleTable<ColorFilterSpec>> {
     FILTERS.get_or_init(|| Mutex::new(HandleTable::new()))
 }
 
+/// Resolve a colour-filter `jlong` into its description (used by
+/// `RenderEffect.createColorFilterEffect`).
+pub(crate) fn filter_spec(handle: i64) -> Option<ColorFilterSpec> {
+    filters()
+        .lock()
+        .ok()
+        .and_then(|g| g.get(Handle::from_jlong(handle)).ok().cloned())
+}
+
 // W75-A: `android.graphics` shaders. A shader is a pure description, so the
 // handle table stores a `ShaderSpec` directly (no borrowed rasteriser state).
 // `gfx_state::snapshot_paint` resolves the `Paint`'s shader handle into the

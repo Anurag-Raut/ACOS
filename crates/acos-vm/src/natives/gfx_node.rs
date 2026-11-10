@@ -15,12 +15,16 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 use acos_render::handle::Handle as RHandle;
 use acos_render::matrix::Matrix3x3;
+use acos_render::paint::{RenderEffectSpec, TileMode};
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
+use crate::natives::gfx_handles::{Handle, HandleTable};
+use crate::natives::gfx_paint;
 use crate::natives::gfx_state::{gj, render_err, rh, stale, with_ctx};
 use crate::vm::Vm;
 
@@ -65,6 +69,23 @@ impl Default for NodeExtra {
 thread_local! {
     static EXTRA: RefCell<HashMap<u64, NodeExtra>> = RefCell::new(HashMap::new());
     static NEXT_ID: RefCell<u64> = const { RefCell::new(1) };
+}
+
+/// `android.graphics.RenderEffect` descriptions, keyed by the `jlong` the
+/// framework holds in `RenderEffect.mNativeRenderEffect`.
+static EFFECTS: OnceLock<Mutex<HandleTable<RenderEffectSpec>>> = OnceLock::new();
+
+fn effects() -> &'static Mutex<HandleTable<RenderEffectSpec>> {
+    EFFECTS.get_or_init(|| Mutex::new(HandleTable::new()))
+}
+
+fn effect_spec(handle: i64) -> VmResult<RenderEffectSpec> {
+    effects()
+        .lock()
+        .map_err(|_| VmError::Internal("RenderEffect table poisoned".to_string()))?
+        .get(Handle::from_jlong(handle))
+        .cloned()
+        .map_err(|e| VmError::Internal(format!("RenderEffect: {e}")))
 }
 
 fn node(vm: &Vm, ctx: NativeCtx) -> VmResult<RHandle> {
@@ -175,6 +196,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(N, "nSetProjectionReceiver", "(JZ)Z", n_set_proj_receiver);
     vm.register_native(N, "nSetProjectBackwards", "(JZ)Z", n_set_project_backwards);
     vm.register_native(N, "nSetRenderEffect", "(JJ)Z", n_set_render_effect);
+
+    // RenderEffect factories (W78-A).
+    const RE: &str = "Landroid/graphics/RenderEffect;";
+    vm.register_native(RE, "nativeCreateBlurEffect", "(FFJI)J", re_blur);
+    vm.register_native(RE, "nativeCreateColorFilterEffect", "(JJ)J", re_color_filter);
+    vm.register_native(RE, "nativeGetFinalizer", "()J", re_finalizer);
 
     // Matrices.
     vm.register_native(N, "nHasIdentityMatrix", "(J)Z", n_identity);
@@ -646,15 +673,70 @@ fn n_set_project_backwards(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_render_effect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_i64(ctx, 1);
-    if v != 0 {
-        return Err(VmError::unsupported_api(
-            "RenderNode.setRenderEffect",
-            "acos-render has no RenderEffect model",
-        ));
-    }
-    extra(h, |e| e.render_effect = None);
+    let spec = if v == 0 {
+        None
+    } else {
+        Some(effect_spec(v)?)
+    };
+    extra(h, |e| e.render_effect = if v == 0 { None } else { Some(v) });
+    with_ctx(|c| {
+        if let Some(n) = c.render_nodes.get_mut(h) {
+            n.render_effect = spec;
+        }
+    });
     vm.ret_bool(ctx, true);
     Ok(())
+}
+
+fn re_finalizer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i64(ctx, 0);
+    Ok(())
+}
+
+fn store_effect(vm: &mut Vm, ctx: NativeCtx, spec: RenderEffectSpec) -> VmResult<()> {
+    let h = effects()
+        .lock()
+        .map_err(|_| VmError::Internal("RenderEffect table poisoned".to_string()))?
+        .insert(spec)
+        .to_jlong();
+    vm.ret_i64(ctx, h);
+    Ok(())
+}
+
+fn re_blur(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let sigma_x = vm.arg_f32(ctx, 0);
+    let sigma_y = vm.arg_f32(ctx, 1);
+    let input = vm.arg_i64(ctx, 2);
+    if input != 0 {
+        return Err(VmError::unsupported_api(
+            "RenderEffect blur chains",
+            "input RenderEffect",
+        ));
+    }
+    let edge = TileMode::from_ordinal(vm.arg_i32(ctx, 3)).unwrap_or(TileMode::Clamp);
+    store_effect(
+        vm,
+        ctx,
+        RenderEffectSpec::Blur {
+            sigma_x,
+            sigma_y,
+            edge,
+        },
+    )
+}
+
+fn re_color_filter(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let filter = vm.arg_i64(ctx, 0);
+    let input = vm.arg_i64(ctx, 1);
+    if input != 0 {
+        return Err(VmError::unsupported_api(
+            "RenderEffect colour-filter chains",
+            "input RenderEffect",
+        ));
+    }
+    let cf = gfx_paint::filter_spec(filter)
+        .ok_or_else(|| VmError::Internal("RenderEffect colour filter unresolved".to_string()))?;
+    store_effect(vm, ctx, RenderEffectSpec::ColorFilter(cf))
 }
 
 fn n_identity(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

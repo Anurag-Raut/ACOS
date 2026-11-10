@@ -288,7 +288,7 @@ fn nine_patch_scales_source_into_destination() {
     ctx.canvas_draw_nine_patch(
         surface,
         bmp,
-        acos_render::Rect::new(0, 0, 8, 8),
+        acos_render::NinePatchChunk::default(),
         acos_render::Rect::new(10, 10, 54, 54),
         None,
         false,
@@ -298,8 +298,9 @@ fn nine_patch_scales_source_into_destination() {
     let f = ctx.surface_capture(surface).unwrap().unwrap();
     assert_eq!(f.pixels.pixel(32, 32).unwrap().green(), 255);
     assert_eq!(f.pixels.pixel(2, 2).unwrap().alpha(), 0);
-    // The approximate nine-patch is reported on the frame, not silently ignored.
-    assert!(f.unsupported_ops.iter().any(|o| o.contains("NinePatch")));
+    // With no divs the stretch degrades to a uniform scale, with no
+    // unsupported op recorded.
+    assert!(f.unsupported_ops.is_empty(), "{:?}", f.unsupported_ops);
 }
 
 #[test]

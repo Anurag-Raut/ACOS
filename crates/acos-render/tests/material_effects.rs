@@ -6,7 +6,10 @@
 //! (`BitmapShader`, `RenderNode.setElevation`, `BlurMaskFilter`) rather than a
 //! screenshot diff. The per-scene ART reference diffs live in `corpus.rs`.
 
-use acos_render::{BitmapConfig, RenderContext, Scene};
+use acos_render::{
+    BitmapConfig, ColorFilterSpec, DisplayOp, Matrix3x3, PorterDuffMode, RectF,
+    RenderContext, RenderEffectSpec, Scene, ShaderSpec, TileMode,
+};
 
 fn render(scene_json: &str) -> acos_render::SceneRender {
     let scene = Scene::from_json(scene_json).expect("parse scene");
@@ -164,5 +167,98 @@ fn mask_filter_blur_radius_spreads_more() {
     assert!(
         blur8 > blur2,
         "radius 8 should spread more than radius 2: {blur8} vs {blur2}"
+    );
+}
+
+/// `RenderNode.setRenderEffect(createBlurEffect)` renders the node into an
+/// offscreen layer and blurs that layer before compositing: the halo reaches
+/// outside the node's own bounds.
+#[test]
+fn render_effect_blur_spreads_the_node_layer() {
+    let mut ctx = RenderContext::new();
+    let surface = ctx.surface_create(64, 64, 1.0).unwrap();
+    ctx.canvas_for_surface(surface).unwrap();
+    let paint = ctx.paint_create();
+    ctx.paint_set_color(paint, 0xff00_0000).unwrap();
+    let node = ctx.render_node_create("blurred");
+    ctx.render_nodes
+        .get_mut(node)
+        .unwrap()
+        .display_list
+        .push(DisplayOp::DrawRect(RectF::new(24.0, 24.0, 40.0, 40.0), paint));
+    ctx.render_nodes.get_mut(node).unwrap().render_effect = Some(RenderEffectSpec::Blur {
+        sigma_x: 5.0,
+        sigma_y: 5.0,
+        edge: TileMode::Clamp,
+    });
+    ctx.surface_render_node(surface, node, 1).unwrap();
+    let f = ctx.surface_capture(surface).unwrap().unwrap();
+    assert!(f.unsupported_ops.is_empty(), "{:?}", f.unsupported_ops);
+    assert_eq!(f.pixels.pixel(32, 32).unwrap().red(), 0, "centre stays black");
+    let halo = f.pixels.pixel(32, 18).unwrap().red();
+    assert!(halo < 250, "expected a blur halo outside the rect, got {halo}");
+}
+
+/// `RenderEffect.createColorFilterEffect` applies the filter to the node layer.
+#[test]
+fn render_effect_color_filter_transforms_the_node_layer() {
+    let mut ctx = RenderContext::new();
+    let surface = ctx.surface_create(32, 32, 1.0).unwrap();
+    ctx.canvas_for_surface(surface).unwrap();
+    let paint = ctx.paint_create();
+    ctx.paint_set_color(paint, 0xffff_0000).unwrap();
+    let node = ctx.render_node_create("filtered");
+    ctx.render_nodes
+        .get_mut(node)
+        .unwrap()
+        .display_list
+        .push(DisplayOp::DrawRect(RectF::new(4.0, 4.0, 28.0, 28.0), paint));
+    // Zero the RGB rows, keep alpha => red becomes black.
+    ctx.render_nodes.get_mut(node).unwrap().render_effect =
+        Some(RenderEffectSpec::ColorFilter(ColorFilterSpec::ColorMatrix {
+            matrix: [
+                0.0, 0.0, 0.0, 0.0, 0.0, // r
+                0.0, 0.0, 0.0, 0.0, 0.0, // g
+                0.0, 0.0, 0.0, 0.0, 0.0, // b
+                0.0, 0.0, 0.0, 1.0, 0.0, // a
+            ],
+        }));
+    ctx.surface_render_node(surface, node, 1).unwrap();
+    let f = ctx.surface_capture(surface).unwrap().unwrap();
+    let p = f.pixels.pixel(16, 16).unwrap();
+    assert_eq!((p.red(), p.green(), p.blue(), p.alpha()), (0, 0, 0, 255));
+}
+
+/// `ComposeShader` rasterises both shaders into offscreen layers and combines
+/// them with the PorterDuff operator instead of reporting unsupported.
+#[test]
+fn compose_shader_combines_two_shaders() {
+    let solid = |c: u32| ShaderSpec::Linear {
+        start: (0.0, 0.0),
+        end: (32.0, 0.0),
+        colors: vec![c, c],
+        positions: None,
+        tile: TileMode::Clamp,
+        local: Matrix3x3::identity(),
+    };
+    let mut ctx = RenderContext::new();
+    let surface = ctx.surface_create(32, 32, 1.0).unwrap();
+    ctx.canvas_for_surface(surface).unwrap();
+    let paint = ctx.paint_create();
+    ctx.paints.get_mut(paint).unwrap().shader = Some(ShaderSpec::Compose {
+        a: Box::new(solid(0xffff_0000)),
+        b: Box::new(solid(0xff00_00ff)),
+        mode: PorterDuffMode::Multiply,
+    });
+    ctx.canvas_draw_rect(surface, RectF::new(0.0, 0.0, 32.0, 32.0), paint)
+        .unwrap();
+    ctx.surface_present(surface, 1).unwrap();
+    let f = ctx.surface_capture(surface).unwrap().unwrap();
+    assert!(f.unsupported_ops.is_empty(), "{:?}", f.unsupported_ops);
+    let p = f.pixels.pixel(16, 16).unwrap();
+    assert!(
+        p.red() < 16 && p.green() < 16 && p.blue() < 16,
+        "multiply red*blue must be black, got {:?}",
+        (p.red(), p.green(), p.blue())
     );
 }

@@ -7,7 +7,7 @@
 
 use crate::color::{premultiply_channel, unpack_unpremul};
 use crate::error::{RenderError, RenderResult};
-use crate::geom::{Rect, RectF};
+use crate::geom::{NinePatchChunk, Rect, RectF};
 use crate::matrix::Matrix3x3;
 use crate::paint::{BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle};
 use crate::path::Path;
@@ -96,6 +96,12 @@ impl Canvas {
 
     pub fn save_count(&self) -> i32 {
         1 + self.save_stack.len() as i32
+    }
+
+    /// Mutable access to the topmost active save-layer's pixmap (used to apply
+    /// a node-level `RenderEffect` before the layer is composited).
+    pub fn top_layer_mut(&mut self) -> Option<&mut Pixmap> {
+        self.layers.last_mut().map(|l| &mut l.pixmap)
     }
 
     /// Reset all transient canvas state (new frame).
@@ -767,13 +773,16 @@ pub(crate) fn draw_bitmap(
     target.fill_path(&dst_path, &sk_paint, FillRule::Winding, transform, clip);
 }
 
-/// Nine-patch: stretch the 9 regions.
+/// Nine-patch: split the source into `(len(divs)+1)` columns/rows and stretch
+/// only the odd (stretchable) bands, keeping the even (fixed) bands at their
+/// source size. This is Android's `Canvas.drawPatch` semantics with the
+/// `npTc` divs; when the chunk has no divs it degrades to a uniform scale.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_nine_patch(
     target: &mut Pixmap,
     clip: Option<&Mask>,
     pixmap: PixmapRef,
-    src: Rect,
+    chunk: &NinePatchChunk,
     dst: Rect,
     paint: &Paint,
     filter: bool,
@@ -783,24 +792,112 @@ pub(crate) fn draw_nine_patch(
     } else {
         tiny_skia::FilterQuality::Nearest
     };
-    // The nine-patch chunk's actual divs are resolved by the caller into
-    // `src`; here we simply scale the whole image into `dst`. Widget
-    // backgrounds whose PNG has 1px border rows/columns are approximated by
-    // this uniform scale (labelled approximate).
-    let w = pixmap.width() as f32;
-    let h = pixmap.height() as f32;
-    let sx = dst.width() as f32 / w.max(1.0);
-    let sy = dst.height() as f32 / h.max(1.0);
-    let local = Transform::from_row(sx, 0.0, 0.0, sy, dst.left as f32, dst.top as f32);
-    let sk_paint = tiny_skia::Paint {
-        shader: tiny_skia::Pattern::new(pixmap, tiny_skia::SpreadMode::Pad, quality, 1.0, local),
-        blend_mode: paint.blend_mode,
-        anti_alias: true,
-        force_hq_pipeline: false,
-    };
-    let dst_path = rect_path(dst.to_rectf());
-    target.fill_path(&dst_path, &sk_paint, FillRule::Winding, Transform::identity(), clip);
-    let _ = src;
+    let opacity = paint.alpha as f32 / 255.0;
+    let (w, h) = (pixmap.width() as f32, pixmap.height() as f32);
+    if chunk.is_empty() {
+        let sx = dst.width() as f32 / w.max(1.0);
+        let sy = dst.height() as f32 / h.max(1.0);
+        let local = Transform::from_row(sx, 0.0, 0.0, sy, dst.left as f32, dst.top as f32);
+        let sk_paint = tiny_skia::Paint {
+            shader: tiny_skia::Pattern::new(pixmap, tiny_skia::SpreadMode::Pad, quality, opacity, local),
+            blend_mode: paint.blend_mode,
+            anti_alias: true,
+            force_hq_pipeline: false,
+        };
+        target.fill_path(
+            &rect_path(dst.to_rectf()),
+            &sk_paint,
+            FillRule::Winding,
+            Transform::identity(),
+            clip,
+        );
+        return;
+    }
+
+    let xcuts = source_cuts(&chunk.x_divs, w);
+    let ycuts = source_cuts(&chunk.y_divs, h);
+    let dxcuts = dest_cuts(&xcuts, dst.left as f32, dst.width() as f32);
+    let dycuts = dest_cuts(&ycuts, dst.top as f32, dst.height() as f32);
+    for j in 0..ycuts.len() - 1 {
+        for i in 0..xcuts.len() - 1 {
+            let sw = xcuts[i + 1] - xcuts[i];
+            let sh = ycuts[j + 1] - ycuts[j];
+            let dw = dxcuts[i + 1] - dxcuts[i];
+            let dh = dycuts[j + 1] - dycuts[j];
+            if sw <= 0.0 || sh <= 0.0 || dw <= 0.0 || dh <= 0.0 {
+                continue;
+            }
+            let scalex = dw / sw;
+            let scaley = dh / sh;
+            // Map source pixel (xcuts[i], ycuts[j]) to dest (dxcuts[i], dycuts[j]).
+            let tx = dxcuts[i] - xcuts[i] * scalex;
+            let ty = dycuts[j] - ycuts[j] * scaley;
+            let local = Transform::from_row(scalex, 0.0, 0.0, scaley, tx, ty);
+            let sk_paint = tiny_skia::Paint {
+                shader: tiny_skia::Pattern::new(pixmap, tiny_skia::SpreadMode::Pad, quality, opacity, local),
+                blend_mode: paint.blend_mode,
+                anti_alias: false,
+                force_hq_pipeline: false,
+            };
+            let dc = RectF::new(dxcuts[i], dycuts[j], dxcuts[i + 1], dycuts[j + 1]);
+            target.fill_path(
+                &rect_path(dc),
+                &sk_paint,
+                FillRule::Winding,
+                Transform::identity(),
+                clip,
+            );
+        }
+    }
+}
+
+/// Source row/column cuts: `[0, div0, div1, ..., extent]`.
+fn source_cuts(divs: &[i32], extent: f32) -> Vec<f32> {
+    let mut cuts = Vec::with_capacity(divs.len() + 2);
+    cuts.push(0.0);
+    for d in divs {
+        cuts.push(*d as f32);
+    }
+    cuts.push(extent);
+    cuts
+}
+
+/// Destination cuts: fixed (even) bands keep their source width; stretch
+/// (odd) bands share the remainder. When the destination cannot fit the fixed
+/// bands, everything scales proportionally (Android's shrink behaviour).
+fn dest_cuts(src_cuts: &[f32], origin: f32, extent: f32) -> Vec<f32> {
+    let n = src_cuts.len().saturating_sub(1);
+    let widths: Vec<f32> = (0..n).map(|i| src_cuts[i + 1] - src_cuts[i]).collect();
+    let fixed: f32 = widths.iter().enumerate().filter(|(i, _)| i % 2 == 0).map(|(_, w)| *w).sum();
+    let stretch: f32 = widths.iter().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, w)| *w).sum();
+    let total: f32 = widths.iter().sum();
+    let mut out = Vec::with_capacity(n + 1);
+    let mut x = origin;
+    out.push(x);
+    if stretch > 0.0 && fixed <= extent {
+        let scale = (extent - fixed) / stretch;
+        for (i, w) in widths.iter().enumerate() {
+            x += if i % 2 == 0 { *w } else { w * scale };
+            out.push(x);
+        }
+    } else if total > 0.0 {
+        let scale = extent / total;
+        for w in &widths {
+            x += w * scale;
+            out.push(x);
+        }
+    } else {
+        for _ in 0..n {
+            out.push(x);
+        }
+    }
+    out
+}
+
+/// Blur an RGBA8 pixmap with a Gaussian of standard deviation `sigma`.
+/// `RenderEffect` blur radii are already sigmas (`SkImageFilters::Blur`).
+pub(crate) fn blur_gaussian(pixmap: &mut Pixmap, sigma: f32) {
+    box_blur(pixmap, sigma);
 }
 
 /// Colour filter application over an RGBA8 pixmap.

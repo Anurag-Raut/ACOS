@@ -60,12 +60,12 @@ pub use color::{AndroidBlendMode, PorterDuffMode};
 pub use diff::{diff, DiffOptions, DiffReport};
 pub use context::{RenderContext, RenderNodeInfo};
 pub use error::{RenderError, RenderResult};
-pub use geom::{Outline, PointF, Rect, RectF};
+pub use geom::{NinePatchChunk, Outline, PointF, Rect, RectF};
 pub use handle::{Handle, HandleTable};
 pub use matrix::{Matrix3x3, ScaleToFit};
 pub use paint::{
-    BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle, PathEffectSpec, ShaderSpec,
-    StrokeCap, StrokeJoin, TextAlign, TileMode,
+    BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle, PathEffectSpec,
+    RenderEffectSpec, ShaderSpec, StrokeCap, StrokeJoin, TextAlign, TileMode,
 };
 pub use path::{FillType, Path, PathMeasure, PathOp, Verb};
 pub use region::{Region, RegionOp};

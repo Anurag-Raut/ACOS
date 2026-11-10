@@ -173,6 +173,22 @@ pub enum ShaderSpec {
     },
 }
 
+/// Android `android.graphics.RenderEffect` applied to a render node's offscreen
+/// layer before it is composited. Only the two effects the renderer consumes
+/// (blur and colour filter) are modelled; the input-effect chain is collapsed
+/// by the framework natives into these primitives.
+#[derive(Clone, PartialEq, Debug)]
+pub enum RenderEffectSpec {
+    /// `RenderEffect.createBlurEffect(radiusX, radiusY, edge)` — Android passes
+    /// the radius directly to `SkImageFilters::Blur` as the Gaussian sigma.
+    Blur {
+        sigma_x: f32,
+        sigma_y: f32,
+        edge: TileMode,
+    },
+    ColorFilter(ColorFilterSpec),
+}
+
 /// Skia's `SkBlurMask::ConvertRadiusToSigma` / `BlurMaskFilter` semantics:
 /// the Java `blurRadius` is *not* the Gaussian standard deviation.
 ///

@@ -22,16 +22,26 @@
 use std::cell::RefCell;
 
 use acos_render::canvas::ClipOp;
-use acos_render::geom::{Rect, RectF};
+use acos_render::geom::{NinePatchChunk, Rect, RectF};
 use acos_render::handle::Handle as RHandle;
 use acos_render::matrix::Matrix3x3;
 use acos_render::render_node::{DisplayOp, RenderNode};
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
+use crate::heap::{ArrayData, Object};
 use crate::natives::gfx_handles::{Handle, HandleTable};
 use crate::natives::gfx_state::{render_err, rh, snapshot_paint, snapshot_path, stale, with_ctx};
 use crate::vm::Vm;
+
+/// Nine-patch chunks parsed by `NinePatch.validateNinePatchChunk`, keyed by the
+/// `jlong` the framework holds in `NinePatch.mNativeChunk`.
+static NINE_PATCHES: std::sync::OnceLock<std::sync::Mutex<HandleTable<NinePatchChunk>>> =
+    std::sync::OnceLock::new();
+
+fn nine_patches() -> &'static std::sync::Mutex<HandleTable<NinePatchChunk>> {
+    NINE_PATCHES.get_or_init(|| std::sync::Mutex::new(HandleTable::new()))
+}
 
 /// A recording canvas staged against a `RenderNode`.
 struct RecCanvas {
@@ -228,6 +238,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(class, "nDrawBitmap", "(JJFFFFFFFFJII)V", d_bitmap_rects);
         vm.register_native(class, "nDrawNinePatch", "(JJJFFFFJII)V", d_nine_patch);
     }
+    // --- Nine-patch chunk validation (W78-A) ---
+    let np = "Landroid/graphics/NinePatch;";
+    vm.register_native(np, "validateNinePatchChunk", "([B)J", np_validate);
+    vm.register_native(np, "isNinePatchChunk", "([B)Z", np_is_valid);
+    vm.register_native(np, "nativeFinalize", "(J)V", noop);
     // `BaseCanvas` declares the legacy round-rect without the extra radius pair.
     vm.register_native(B, "nDrawRoundRect", "(JFFFFFFJ)V", d_round_rect);
     Ok(())
@@ -900,26 +915,78 @@ fn d_bitmap_rects(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn d_nine_patch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // `nDrawNinePatch(long canvas, long bitmap, long ninePatch,
+    //   float left, float top, float right, float bottom, long paint,
+    //   int dstGamma, int srcGamma)` — the rect is args 3..=6 and the paint is
+    // arg 7.
     let h = canvas_handle(vm, ctx)?;
     let bitmap = vm.arg_i64(ctx, 1);
-    let Some((w, ht)) = bitmap_bounds(bitmap) else {
+    if bitmap_bounds(bitmap).is_none() {
         return Err(stale("Bitmap", bitmap));
-    };
+    }
+    let chunk = nine_patch_chunk(vm.arg_i64(ctx, 2))?;
     let dst = RectF::new(
+        vm.arg_f32(ctx, 3),
         vm.arg_f32(ctx, 4),
         vm.arg_f32(ctx, 5),
         vm.arg_f32(ctx, 6),
-        vm.arg_f32(ctx, 7),
     );
-    let p = snap(vm.arg_i64(ctx, 8))?;
-    let src = Rect::new(0, 0, w as i32, ht as i32);
+    let p = snap(vm.arg_i64(ctx, 7))?;
     let dst_i = Rect::new(
         dst.left as i32,
         dst.top as i32,
         dst.right as i32,
         dst.bottom as i32,
     );
-    push(h, DisplayOp::DrawNinePatch(rh(bitmap), src, dst_i, p, true))
+    push(h, DisplayOp::DrawNinePatch(rh(bitmap), chunk, dst_i, p, true))
+}
+
+fn nine_patch_chunk(handle: i64) -> VmResult<NinePatchChunk> {
+    if handle == 0 {
+        return Ok(NinePatchChunk::default());
+    }
+    nine_patches()
+        .lock()
+        .map_err(|_| VmError::Internal("NinePatch table poisoned".to_string()))?
+        .get(Handle::from_jlong(handle))
+        .cloned()
+        .map_err(|e| VmError::Internal(format!("NinePatch chunk: {e}")))
+}
+
+fn read_byte_array(vm: &Vm, h: u32) -> Option<Vec<u8>> {
+    match vm.heap.get(h) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Byte(v) => Some(v.iter().map(|&b| b as u8).collect()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn np_validate(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = vm.arg_ref(ctx, 0);
+    let bytes = read_byte_array(vm, h).ok_or_else(|| {
+        VmError::Internal("NinePatch.validateNinePatchChunk: expected byte[]".to_string())
+    })?;
+    let chunk = NinePatchChunk::parse(&bytes).ok_or_else(|| {
+        VmError::Internal("NinePatch.validateNinePatchChunk: invalid npTc chunk".to_string())
+    })?;
+    let handle = nine_patches()
+        .lock()
+        .map_err(|_| VmError::Internal("NinePatch table poisoned".to_string()))?
+        .insert(chunk)
+        .to_jlong();
+    vm.ret_i64(ctx, handle);
+    Ok(())
+}
+
+fn np_is_valid(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = vm.arg_ref(ctx, 0);
+    let valid = read_byte_array(vm, h)
+        .map(|b| NinePatchChunk::parse(&b).is_some())
+        .unwrap_or(false);
+    vm.ret_bool(ctx, valid);
+    Ok(())
 }
 
 fn intersect(a: RectF, b: RectF) -> RectF {

@@ -32,7 +32,13 @@ pub enum DisplayOp {
     DrawPoint(f32, f32, Handle),
     DrawPath(Handle, Handle),
     DrawBitmap(Handle, Option<RectF>, RectF, Option<Handle>, bool),
-    DrawNinePatch(Handle, crate::geom::Rect, crate::geom::Rect, Handle, bool),
+    DrawNinePatch(
+        Handle,
+        crate::geom::NinePatchChunk,
+        crate::geom::Rect,
+        Handle,
+        bool,
+    ),
     DrawText(Vec<u16>, f32, f32, Handle),
     DrawRenderNode(Handle),
 }
@@ -85,6 +91,8 @@ pub struct RenderNode {
     pub has_overlapping_rendering: bool,
     pub layer_type: LayerType,
     pub layer_paint: Option<Handle>,
+    /// Node-level `RenderEffect` applied to the node's offscreen layer.
+    pub render_effect: Option<crate::paint::RenderEffectSpec>,
     pub display_list: Vec<DisplayOp>,
     pub children: Vec<Handle>,
     /// Mutation counter for damage tracking.
@@ -124,6 +132,7 @@ impl RenderNode {
             has_overlapping_rendering: true,
             layer_type: LayerType::None,
             layer_paint: None,
+            render_effect: None,
             display_list: Vec::new(),
             children: Vec::new(),
             version: 1,

@@ -16,14 +16,14 @@ use std::sync::Arc;
 use crate::bitmap::{Bitmap, BitmapConfig};
 use crate::canvas::{self, Canvas, CanvasTarget, ClipOp};
 use crate::error::{RenderError, RenderResult};
-use crate::geom::{Outline, Rect, RectF};
+use crate::geom::{NinePatchChunk, Outline, Rect, RectF};
 use crate::handle::{Handle, HandleTable};
 use crate::image;
 use crate::matrix::Matrix3x3;
 use crate::color::{AndroidBlendMode, PorterDuffMode};
 use crate::paint::{
-    BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle, PathEffectSpec, ShaderSpec,
-    StrokeCap, StrokeJoin, TextAlign, TileMode,
+    BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle, PathEffectSpec,
+    RenderEffectSpec, ShaderSpec, StrokeCap, StrokeJoin, TextAlign, TileMode,
 };
 use crate::path::{FillType, Path, PathOp};
 use crate::region::{Region, RegionOp};
@@ -53,6 +53,7 @@ struct NodeProps {
     ambient_shadow_color: u32,
     spot_shadow_color: u32,
     local_bounds: RectF,
+    render_effect: Option<RenderEffectSpec>,
 }
 
 /// The renderer context.
@@ -1458,6 +1459,10 @@ impl RenderContext {
             self.unsupported("Canvas perspective matrix")?;
             return Ok(());
         };
+        if let Some(ShaderSpec::Compose { a, b, mode }) = &paint.shader {
+            let (a, b, mode) = (a.clone(), b.clone(), *mode);
+            return self.draw_compose_shader(surface, path, paint, &a, &b, mode);
+        }
         let mut owned: Vec<tiny_skia::Pixmap> = Vec::new();
         let sk_paint = self.prepare_paint(paint, &mut owned);
         let fill_rule = path.fill_type().fill_rule();
@@ -1465,6 +1470,97 @@ impl RenderContext {
             let (state, target) = self.canvas_parts_mut(surface)?;
             let clip = state.clip.as_ref();
             canvas::emit_shape(target, clip, &sk_path, paint, &sk_paint, fill_rule, ts);
+        }
+        self.raster_ops += 1;
+        if let Some(s) = self.surfaces.get_mut(surface) {
+            s.raster_ops += 1;
+        }
+        Ok(())
+    }
+
+    /// Rasterise a `ComposeShader` by rendering both sub-shaders over the path
+    /// into offscreen layers and combining them with the PorterDuff operator.
+    /// tiny-skia cannot compose two shaders directly, so the composition is
+    /// done per-pixel in device-independent layer space.
+    fn draw_compose_shader(
+        &mut self,
+        surface: Handle,
+        path: &Path,
+        paint: &Paint,
+        shader_a: &ShaderSpec,
+        shader_b: &ShaderSpec,
+        mode: PorterDuffMode,
+    ) -> RenderResult<()> {
+        let Some(sk_path) = path.build_tiny_skia() else {
+            return Ok(());
+        };
+        let fill_rule = path.fill_type().fill_rule();
+        let (w, h) = {
+            let s = self.surfaces.get(surface).ok_or(RenderError::BadHandle)?;
+            (s.width, s.height)
+        };
+        let render_one = |ctx: &mut Self, shader: &ShaderSpec| -> Option<tiny_skia::Pixmap> {
+            let mut owned: Vec<tiny_skia::Pixmap> = Vec::new();
+            let mut p = paint.clone();
+            p.shader = Some(shader.clone());
+            p.color_filter = None;
+            p.mask_filter = None;
+            p.alpha = 255;
+            p.color = 0xffff_ffff;
+            p.blend_mode = tiny_skia::BlendMode::Source;
+            let sk = ctx.prepare_paint(&p, &mut owned);
+            let mut pm = tiny_skia::Pixmap::new(w, h)?;
+            pm.fill(tiny_skia::Color::TRANSPARENT);
+            // Evaluate in the path's local space; the final `emit_shape`
+            // applies the canvas matrix.
+            pm.fill_path(&sk_path, &sk, fill_rule, tiny_skia::Transform::identity(), None);
+            Some(pm)
+        };
+        let Some(mut dst) = render_one(self, shader_b) else {
+            return Ok(());
+        };
+        let Some(src) = render_one(self, shader_a) else {
+            return Ok(());
+        };
+        let compose_paint = tiny_skia::PixmapPaint {
+            opacity: 1.0,
+            blend_mode: mode.to_blend(),
+            quality: tiny_skia::FilterQuality::Nearest,
+        };
+        dst.draw_pixmap(
+            0,
+            0,
+            src.as_ref(),
+            &compose_paint,
+            tiny_skia::Transform::identity(),
+            None,
+        );
+        drop(src);
+        let owned: Vec<tiny_skia::Pixmap> = vec![dst];
+        let composed = owned.last().unwrap();
+        let pattern = tiny_skia::Pattern::new(
+            composed.as_ref(),
+            tiny_skia::SpreadMode::Pad,
+            tiny_skia::FilterQuality::Bilinear,
+            1.0,
+            tiny_skia::Transform::identity(),
+        );
+        let mut sk = tiny_skia::Paint {
+            shader: pattern,
+            blend_mode: paint.blend_mode,
+            anti_alias: paint.anti_alias,
+            force_hq_pipeline: false,
+        };
+        sk.set_color(crate::color::argb_to_sk(paint.effective_argb()));
+        let ts_opt = { self.surface_canvas(surface)?.state.matrix.to_affine() };
+        let Some(ts) = ts_opt else {
+            self.unsupported("Canvas perspective matrix")?;
+            return Ok(());
+        };
+        {
+            let (state, target) = self.canvas_parts_mut(surface)?;
+            let clip = state.clip.as_ref();
+            canvas::emit_shape(target, clip, &sk_path, paint, &sk, fill_rule, ts);
         }
         self.raster_ops += 1;
         if let Some(s) = self.surfaces.get_mut(surface) {
@@ -1858,7 +1954,7 @@ impl RenderContext {
         &mut self,
         surface: Handle,
         bitmap: Handle,
-        src: Rect,
+        chunk: NinePatchChunk,
         dst: Rect,
         paint: Option<Handle>,
         filter: bool,
@@ -1872,10 +1968,9 @@ impl RenderContext {
             Some(h) => self.paint_ref(h)?.clone(),
             None => Paint::default(),
         };
-        self.unsupported("NinePatch exact chunk stretching (uniform scale used)")?;
         let (state, target) = self.canvas_parts_mut(surface)?;
         let clip = state.clip.as_ref();
-        canvas::draw_nine_patch(target, clip, pm.as_ref(), src, dst, &paint, filter);
+        canvas::draw_nine_patch(target, clip, pm.as_ref(), &chunk, dst, &paint, filter);
         self.raster_ops += 1;
         Ok(())
     }
@@ -2196,6 +2291,7 @@ impl RenderContext {
                 n.width() as f32,
                 n.height() as f32,
             ),
+            render_effect: n.render_effect.clone(),
         };
         let ops = n.display_list.clone();
         let mut children: Vec<(f32, u64, Handle)> = n
@@ -2222,6 +2318,12 @@ impl RenderContext {
         if alpha < 1.0 {
             self.canvas_save_layer_alpha(surface, Some(props.local_bounds), (alpha * 255.0) as u8)?;
         }
+        // A node-level `RenderEffect` renders the node into its own offscreen
+        // layer; the effect is applied to that layer just before compositing.
+        let effect = props.render_effect.clone();
+        if effect.is_some() {
+            self.canvas_save_layer_alpha(surface, Some(props.local_bounds), 255)?;
+        }
         if props.elevation > 0.0 {
             self.draw_node_shadow(surface, &props)?;
         }
@@ -2235,12 +2337,42 @@ impl RenderContext {
             self.render_node_recursive(surface, child, depth + 1)?;
         }
 
+        if let Some(effect) = &effect {
+            self.apply_render_effect(surface, effect)?;
+            self.canvas_restore(surface)?;
+        }
         if alpha < 1.0 {
             self.canvas_restore(surface)?;
         }
         self.canvas_restore(surface)?;
         if let Some(n) = self.render_nodes.get_mut(node) {
             n.raster_ops += ops.len() as u64;
+        }
+        Ok(())
+    }
+
+    /// Apply a node `RenderEffect` to the topmost active save-layer. The layer
+    /// holds the node's rasterised content (including children).
+    fn apply_render_effect(&mut self, surface: Handle, effect: &RenderEffectSpec) -> RenderResult<()> {
+        let canvas_h = self
+            .surfaces
+            .get(surface)
+            .and_then(|s| s.canvas)
+            .ok_or(RenderError::BadHandle)?;
+        let canvas = self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)?;
+        let Some(pixmap) = canvas.top_layer_mut() else {
+            return Ok(());
+        };
+        match effect {
+            RenderEffectSpec::Blur { sigma_x, sigma_y, .. } => {
+                // `box_blur` is isotropic; use the geometric mean of the two
+                // sigmas so an anisotropic blur spreads by the same area.
+                let sigma = (*sigma_x * *sigma_y).max(0.0).sqrt();
+                if sigma > 0.0 {
+                    canvas::blur_gaussian(pixmap, sigma);
+                }
+            }
+            RenderEffectSpec::ColorFilter(cf) => canvas::apply_color_filter(pixmap, cf),
         }
         Ok(())
     }
@@ -2340,8 +2472,8 @@ impl RenderContext {
             DisplayOp::DrawBitmap(b, src, dst, p, filter) => {
                 self.canvas_draw_bitmap(surface, *b, *src, *dst, *p, *filter)?;
             }
-            DisplayOp::DrawNinePatch(b, src, dst, p, filter) => {
-                self.canvas_draw_nine_patch(surface, *b, *src, *dst, Some(*p), *filter)?;
+            DisplayOp::DrawNinePatch(b, chunk, dst, p, filter) => {
+                self.canvas_draw_nine_patch(surface, *b, chunk.clone(), *dst, Some(*p), *filter)?;
             }
             DisplayOp::DrawText(text, x, y, p) => {
                 self.canvas_draw_text(surface, text, *x, *y, *p)?;

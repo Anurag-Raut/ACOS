@@ -175,6 +175,92 @@ impl Rect {
     }
 }
 
+/// A parsed `Res_png_9patch` chunk (the `npTc` chunk passed to
+/// `NinePatch.validateNinePatchChunk` / `Canvas.nDrawNinePatch`).
+///
+/// aapt/aapt2 serialise the chunk as a 32-byte header followed by the div and
+/// colour arrays. The header's byte offsets are native-endian; the arrays are
+/// written in network (big-endian) order. ACOS consumes the divs to place the
+/// nine stretch regions; the colours are retained for completeness
+/// (`getTransparentRegion`).
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct NinePatchChunk {
+    pub x_divs: Vec<i32>,
+    pub y_divs: Vec<i32>,
+    pub colors: Vec<u32>,
+}
+
+impl NinePatchChunk {
+    /// Parse the serialized `npTc` bytes. Returns `None` for a truncated or
+    /// inconsistent chunk (never a silently wrong stretch).
+    pub fn parse(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 32 {
+            return None;
+        }
+        let nx = bytes[1] as usize;
+        let ny = bytes[2] as usize;
+        let nc = bytes[3] as usize;
+        let u32_le = |o: usize| {
+            u32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]) as usize
+        };
+        let (xo, yo, co) = (u32_le(4), u32_le(8), u32_le(28));
+        let fits = |o: usize, n: usize| o.checked_add(n * 4).map(|e| e <= bytes.len()).unwrap_or(false);
+        if !fits(xo, nx) || !fits(yo, ny) || !fits(co, nc) {
+            return None;
+        }
+        let read_i32 = |o: usize, n: usize| -> Vec<i32> {
+            (0..n)
+                .map(|i| {
+                    let p = o + i * 4;
+                    i32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]])
+                })
+                .collect()
+        };
+        let read_u32 = |o: usize, n: usize| -> Vec<u32> {
+            (0..n)
+                .map(|i| {
+                    let p = o + i * 4;
+                    u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]])
+                })
+                .collect()
+        };
+        Some(NinePatchChunk {
+            x_divs: read_i32(xo, nx),
+            y_divs: read_i32(yo, ny),
+            colors: read_u32(co, nc),
+        })
+    }
+
+    /// Serialise to the same `npTc` layout (used by tests and fixtures).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = vec![0u8; 32];
+        out[1] = self.x_divs.len() as u8;
+        out[2] = self.y_divs.len() as u8;
+        out[3] = self.colors.len() as u8;
+        let xo = 32usize;
+        let yo = xo + self.x_divs.len() * 4;
+        let co = yo + self.y_divs.len() * 4;
+        out[4..8].copy_from_slice(&(xo as u32).to_le_bytes());
+        out[8..12].copy_from_slice(&(yo as u32).to_le_bytes());
+        out[28..32].copy_from_slice(&(co as u32).to_le_bytes());
+        for d in &self.x_divs {
+            out.extend_from_slice(&d.to_be_bytes());
+        }
+        for d in &self.y_divs {
+            out.extend_from_slice(&d.to_be_bytes());
+        }
+        for c in &self.colors {
+            out.extend_from_slice(&c.to_be_bytes());
+        }
+        out
+    }
+
+    /// A chunk with no divs cannot describe stretch regions.
+    pub fn is_empty(&self) -> bool {
+        self.x_divs.is_empty() && self.y_divs.is_empty()
+    }
+}
+
 /// Android `android.graphics.Insets`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Insets {
