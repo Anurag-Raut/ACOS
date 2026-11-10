@@ -107,6 +107,7 @@ dependencies = [
  "jpeg-decoder",
  "memmap2",
  "png",
+ "proptest",
  "roxmltree",
  "rustybuzz",
  "serde",
@@ -118,6 +119,19 @@ dependencies = [
  "unicode-bidi",
  "unicode-script",
  "xxhash-rust",
+]
+
+[[package]]
+name = "acos-runtime"
+version = "0.1.0"
+dependencies = [
+ "acos-aidl",
+ "acos-dex",
+ "acos-parcel",
+ "acos-services",
+ "acos-vm",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

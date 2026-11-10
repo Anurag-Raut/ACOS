@@ -382,9 +382,16 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Bool, FieldOp::Bool],
         verification: Verification::Curated,
     },
+    // Real API-34 `ParcelFileDescriptor.writeToParcel`:
+    //   if (mCommFd != null) { writeInt(1); writeFileDescriptor(mFd); writeFileDescriptor(mCommFd); }
+    //   else                { writeInt(0); writeFileDescriptor(mFd); }
+    // The codec models the common no-`mCommFd` case (int marker + one fd); the
+    // `$2.createFromParcel` reader reads exactly `readInt()` then
+    // `readRawFileDescriptor()`. (A `mCommFd` descriptor pair is out of V1
+    // scope; the scanner originally reported the prefix as a single `Fd`.)
     ParcelableSpec {
         class: "android.os.ParcelFileDescriptor",
-        fields: &[FieldOp::Fd],
+        fields: &[FieldOp::Int, FieldOp::Fd],
         verification: Verification::Curated,
     },
     ParcelableSpec {
@@ -997,8 +1004,18 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                     write_payload(parcel, p)?;
                 }
                 Parcelable::Fd(fd) => {
+                    // Match `ParcelFileDescriptor.writeToParcel`: the `mCommFd`
+                    // presence marker followed by the fd (see the spec above).
                     parcel.write_string16("android.os.ParcelFileDescriptor")?;
-                    write_fd(parcel, &Value::RawFd(fd.as_ref().and_then(|f| f.try_clone().ok()).map(RawFdValue)))?;
+                    parcel.write_int32(0);
+                    write_fd(
+                        parcel,
+                        &Value::RawFd(
+                            fd.as_ref()
+                                .and_then(|f| f.try_clone().ok())
+                                .map(RawFdValue),
+                        ),
+                    )?;
                 }
             }
         }

@@ -1,0 +1,18 @@
+[package]
+name = "acos-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS runtime: owns the VM + in-process ServiceHost wiring and the Binder transport (T-19/T-21)."
+
+[dependencies]
+acos-aidl = { path = "../acos-aidl" }
+acos-dex = { path = "../acos-dex" }
+acos-parcel = { path = "../acos-parcel" }
+acos-services = { path = "../acos-services" }
+acos-vm = { path = "../acos-vm" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

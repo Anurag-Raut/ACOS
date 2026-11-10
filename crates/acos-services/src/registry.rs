@@ -298,14 +298,74 @@ pub fn install(host: &mut ServiceHost) {
 /// registered; this reconciles the two so `getActivityClientController()` and
 /// `getContentProvider()` return a binder the dispatcher can route.
 pub fn reconcile_aux(host: &mut ServiceHost) {
-    if let Some(controller) = host.aux("android.app.IActivityClientController") {
-        if let Some(entry) = host.binder_for_descriptor("android.app.IActivityClientController")
-        {
-            if entry != controller {
-                // The registered entry owns the dispatch; keep the aux handle
-                // stable by preferring it. This is a no-op in the standard
-                // install order (aux first, entry second).
-            }
-        }
+    // Kept for callers that register aux binders explicitly; the standard
+    // install order already produces a consistent table.
+    let _ = host.aux("android.app.IActivityClientController");
+}
+
+#[cfg(test)]
+mod t21_tests {
+    use super::*;
+    use crate::host::ServiceHost;
+
+    #[test]
+    fn names_map_to_descriptors_and_unknowns_are_none() {
+        assert_eq!(
+            descriptor_for("package"),
+            Some("android.content.pm.IPackageManager")
+        );
+        assert_eq!(descriptor_for("activity"), Some("android.app.IActivityManager"));
+        assert_eq!(name_for("android.app.IActivityManager"), Some("activity"));
+        assert_eq!(descriptor_for("definitely.not.a.service"), None);
+        assert_eq!(name_for("android.os.IBinder"), None);
+    }
+
+    #[test]
+    fn check_service_returns_a_binder_for_a_known_name_and_none_otherwise() {
+        let mut host = ServiceHost::standard();
+        let package = host
+            .check_service("package")
+            .expect("lookup is infallible")
+            .expect("package is registered");
+        assert_eq!(
+            host.descriptor_of(package),
+            Some("android.content.pm.IPackageManager")
+        );
+        assert!(host.check_service("not.here").unwrap().is_none());
+        assert!(host.service_names().contains(&"package"));
+    }
+
+    #[test]
+    fn add_service_through_the_host_is_not_reachable_from_an_app() {
+        // `IServiceManager.addService` is system-only; the host answers a
+        // structured unsupported error rather than a silent success.
+        let mut host = ServiceHost::standard();
+        let sm = host
+            .binder_for_descriptor("android.os.IServiceManager")
+            .expect("service manager binder");
+        let method = host
+            .method("android.os.IServiceManager", "addService")
+            .expect("addService table entry")
+            .clone();
+        let mut data = crate::codec::build_request(
+            "android.os.IServiceManager",
+            &method,
+            &[
+                crate::value::Value::Str(Some("test.svc".into())),
+                crate::value::Value::Binder(None),
+                crate::value::Value::Bool(false),
+                crate::value::Value::Int(0),
+            ],
+        )
+        .expect("build request");
+        data.set_data_position(0);
+        let mut reply = acos_parcel::Parcel::new();
+        let err = host
+            .transact(sm, method.code, &mut data, &mut reply, 0)
+            .expect_err("addService must fail");
+        assert!(matches!(
+            err,
+            crate::error::ServiceError::UnsupportedAndroidApi { .. }
+        ));
     }
 }

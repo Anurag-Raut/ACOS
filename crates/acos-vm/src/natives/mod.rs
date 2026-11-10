@@ -12,6 +12,7 @@
 //! `math`, `reflect`, `looper` (the real `android.os.MessageQueue` epoll
 //! looper) and the `os_*` framework-edge modules.
 
+pub mod binder;
 mod character;
 mod icu;
 mod io;
@@ -43,6 +44,9 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     parcel::install(vm)?;
     unsafe_natives::install(vm)?;
     looper::install(vm)?;
+    // Register last: the Binder transport re-registers the strong-binder
+    // `Parcel` natives (map insert) with its own handle mapping.
+    binder::install(vm)?;
     os_props::install(vm);
     os_clock::install(vm);
     os_log::install(vm);

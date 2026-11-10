@@ -333,13 +333,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         native_set_file_descriptor_events,
     );
 
-    // No process-global Binder command queue or caller-identity stack exists in
-    // ACOS yet. `Looper.loop` wraps message dispatch in
-    // `clearCallingIdentity`/`restoreCallingIdentity`, so these are required for
-    // the Java-level looper test; the real implementation is T-03/T-19.
-    vm.register_native("Landroid/os/Binder;", "flushPendingCommands", "()V", noop);
-    vm.register_native("Landroid/os/Binder;", "clearCallingIdentity", "()J", ret_zero_long);
-    vm.register_native("Landroid/os/Binder;", "restoreCallingIdentity", "(J)V", noop);
+    // The `android.os.Binder` caller-identity / command-queue natives now live
+    // in `natives/binder.rs` (T-19), backed by the real transport. They used to
+    // be registered here as no-op shims so `Looper.loop`'s
+    // `clearCallingIdentity`/`restoreCallingIdentity` wrapper could run; the
+    // full Binder native set replaces them.
     Ok(())
 }
 
@@ -505,15 +503,6 @@ fn remove_raw_fd(handle: &LooperHandle, fd: i32) -> io::Result<()> {
         .lock()
         .expect("looper registrations mutex")
         .remove(&raw);
-    Ok(())
-}
-
-fn noop(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Ok(())
-}
-
-fn ret_zero_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    vm.ret_i64(ctx, 0);
     Ok(())
 }
 

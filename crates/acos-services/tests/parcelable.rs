@@ -140,8 +140,9 @@ fn every_spec_round_trips_through_a_parcel() {
         let decoded = parcelable::read_payload(spec.class, &mut parcel).expect("read payload");
         if spec.class == "android.os.ParcelFileDescriptor" {
             // Descriptors are duplicated by the parcel, so compare presence.
-            assert!(matches!(value.field(0), Some(Value::RawFd(Some(_)))));
-            assert!(matches!(decoded.field(0), Some(Value::RawFd(Some(_)))));
+            // Field 0 is the `mCommFd` presence marker, field 1 the fd.
+            assert!(matches!(value.field(1), Some(Value::RawFd(Some(_)))));
+            assert!(matches!(decoded.field(1), Some(Value::RawFd(Some(_)))));
         } else {
             assert_eq!(
                 decoded, value,
@@ -171,7 +172,10 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         }
         "android.os.ParcelFileDescriptor" => {
             let fd = acos_parcel::ParcelFd::memfd("test-pfd").ok()?;
-            Parcelable::ordered(class, vec![Value::RawFd(Some(RawFdValue(fd)))])
+            Parcelable::ordered(
+                class,
+                vec![Value::Int(0), Value::RawFd(Some(RawFdValue(fd)))],
+            )
         }
         "android.os.Bundle" => {
             let mut b = Bundle::new();

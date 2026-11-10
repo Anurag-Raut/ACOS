@@ -124,8 +124,12 @@ impl BinderObjectSink for DefaultBinderObjectSink {
 // Per-VM (per OS thread) parcel store
 // ---------------------------------------------------------------------------
 
-struct ParcelStore {
-    table: ParcelTable,
+pub(crate) struct ParcelStore {
+    /// Parcel slab shared with the Binder transport (`natives/binder.rs`),
+    /// which must create/replace Java-visible parcels when it delivers an
+    /// incoming transaction. Exposed `pub(crate)` deliberately: it is the one
+    /// hook the Binder transport needs into this file.
+    pub(crate) table: ParcelTable,
     sink: Box<dyn BinderObjectSink>,
     /// Duplicates handed to Java as `FileDescriptor.descriptor`. Kept alive for
     /// the process lifetime so a Java `FileDescriptor` never dangles.
@@ -146,7 +150,12 @@ thread_local! {
     static STORE: RefCell<ParcelStore> = RefCell::new(ParcelStore::default());
 }
 
-fn with_store<R>(f: impl FnOnce(&mut ParcelStore) -> R) -> R {
+/// Run `f` with this host thread's parcel store.
+///
+/// `pub(crate)` so the Binder transport in `natives/binder.rs` can reach the
+/// same [`ParcelTable`] the Java `Parcel` natives use. The store is
+/// per-host-thread, so the transport and the VM always agree.
+pub(crate) fn with_store<R>(f: impl FnOnce(&mut ParcelStore) -> R) -> R {
     STORE.with(|s| f(&mut s.borrow_mut()))
 }
 

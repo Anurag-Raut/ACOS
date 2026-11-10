@@ -470,7 +470,7 @@ impl ServiceObject for GraphicsStatsService {
                 let fd = ParcelFd::memfd("acos-gfxstats").ok();
                 vec![Value::TypedObject(Parcelable::ordered(
                     "android.os.ParcelFileDescriptor",
-                    vec![Value::RawFd(fd.map(RawFdValue))],
+                    vec![Value::Int(0), Value::RawFd(fd.map(RawFdValue))],
                 ))]
             }
             _ => {
