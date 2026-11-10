@@ -43,12 +43,98 @@ pub struct TypefaceRec {
     pub weight: i32,
     pub italic: bool,
     pub font: Option<FontRef>,
+    /// Deferred face descriptor carried by a restored snapshot. `font` is
+    /// `None` in that case and the concrete face is rebuilt on first use, so a
+    /// restored launch that never touches text never loads the font collection.
+    pub deferred: Option<FaceRef>,
 }
 
 impl TypefaceRec {
     /// Android `Typeface.NORMAL` / `BOLD` / `ITALIC` / `BOLD_ITALIC` style bits.
     pub fn style_bits(&self) -> i32 {
         (if self.italic { 2 } else { 0 }) | (if self.weight >= 600 { 1 } else { 0 })
+    }
+
+    /// The concrete face for a typeface built from `FontFamily`/`Font` objects,
+    /// rebuilt lazily when the record came from a snapshot. `None` means the
+    /// typeface resolves by `family` name through `fonts.xml`.
+    pub fn resolved_font(&self) -> Option<FontRef> {
+        self.font
+            .clone()
+            .or_else(|| self.deferred.as_ref().and_then(FaceRef::resolve))
+    }
+}
+
+/// A serialisable face identity: the host font file, the face index inside it,
+/// the `fonts.xml` family key and the coordinates the face was resolved with.
+///
+/// A native [`FontRef`] owns an `Arc<FontFile>` (an mmap'd face plus a
+/// process-local id). A snapshot cannot carry those, so the restore path stores
+/// this descriptor and rebuilds the `FontRef` lazily on first use (see
+/// [`FaceRef::resolve`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceRef {
+    /// Host path of the mapped font file.
+    pub path: String,
+    /// Face index inside the file (a `.ttc` collection may hold several).
+    pub face_index: u32,
+    /// Index of the owning family in the loaded font collection.
+    pub family_key: usize,
+    pub weight: u16,
+    pub italic: bool,
+    pub axes: Vec<(String, f32)>,
+}
+
+impl FaceRef {
+    /// Capture a resolved face's serialisable identity.
+    pub fn of(font: &FontRef) -> FaceRef {
+        FaceRef {
+            path: font.file.path.to_string_lossy().into_owned(),
+            face_index: font.file.face_index,
+            family_key: font.family_key,
+            weight: font.weight,
+            italic: font.italic,
+            axes: font.axes.clone(),
+        }
+    }
+
+    /// Rebuild the `FontRef` from the process-wide font collection.
+    ///
+    /// Called lazily on first use, so a restored launch that never touches text
+    /// never pays for the collection load. The recorded family key is preferred;
+    /// the fallback scan keeps the face resolvable if a family was re-ordered.
+    pub fn resolve(&self) -> Option<FontRef> {
+        let fc = FontCollection::shared()?;
+        if let Some(fam) = fc.families.get(self.family_key) {
+            if let Some(entry) = fam.fonts.iter().find(|e| {
+                e.file.face_index == self.face_index
+                    && e.file.path.to_string_lossy() == self.path
+            }) {
+                return Some(FontRef {
+                    file: entry.file.clone(),
+                    weight: self.weight,
+                    italic: self.italic,
+                    axes: self.axes.clone(),
+                    family_key: self.family_key,
+                });
+            }
+        }
+        for (idx, fam) in fc.families.iter().enumerate() {
+            for entry in &fam.fonts {
+                if entry.file.face_index == self.face_index
+                    && entry.file.path.to_string_lossy() == self.path
+                {
+                    return Some(FontRef {
+                        file: entry.file.clone(),
+                        weight: self.weight,
+                        italic: self.italic,
+                        axes: self.axes.clone(),
+                        family_key: idx,
+                    });
+                }
+            }
+        }
+        None
     }
 }
 
@@ -141,6 +227,7 @@ impl TextShared {
                 weight: 400,
                 italic: false,
                 font: None,
+                deferred: None,
             })
             .to_jlong();
         TextShared {
@@ -171,7 +258,7 @@ impl TextShared {
             )
         })?;
         let tf = self.tf(attrs.typeface)?;
-        let font = match tf.font.clone() {
+        let font = match tf.resolved_font() {
             Some(f) => f,
             None => fonts
                 .resolve_typeface(tf.family.as_deref(), tf.weight.clamp(1, 1000) as u16, tf.italic)
@@ -243,8 +330,115 @@ static TEXT: OnceLock<Mutex<TextShared>> = OnceLock::new();
 pub fn with_text<R>(f: impl FnOnce(&mut TextShared) -> R) -> R {
     let m = TEXT.get_or_init(|| Mutex::new(TextShared::new()));
     match m.lock() {
-        Ok(mut g) => f(&mut g),
-        Err(poisoned) => f(&mut poisoned.into_inner()),
+        Ok(mut g) => {
+            install_staged_text(&mut g);
+            f(&mut g)
+        }
+        Err(poisoned) => {
+            let mut g = poisoned.into_inner();
+            install_staged_text(&mut g);
+            f(&mut g)
+        }
+    }
+}
+
+/// One serialised `Typeface` native record. `face` carries the concrete face
+/// when the typeface was built from `FontFamily`/`Font` objects; `None` means
+/// the typeface resolves by `family` name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypefaceRecordData {
+    pub handle: i64,
+    pub family: Option<String>,
+    pub weight: i32,
+    pub italic: bool,
+    pub face: Option<FaceRef>,
+}
+
+/// The serialised process-global text state carried by a snapshot.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextState {
+    pub typefaces: Vec<TypefaceRecordData>,
+    pub default_typeface: i64,
+}
+
+/// A text table set decoded from a snapshot but not yet imported into the live
+/// table. Importing happens on first text use, so a restored launch that never
+/// touches text pays neither the collection load nor the table rebuild.
+static STAGED_TEXT: Mutex<Option<TextState>> = Mutex::new(None);
+
+/// Stage a text state decoded from a snapshot. The next [`with_text`] call
+/// imports it (cheaply: the resolved faces stay deferred).
+pub(crate) fn stage_text_state(state: TextState) {
+    // An in-process restore shares the already-initialised live table produced
+    // by the template boot; importing the same state again would only clobber
+    // it. An empty state has nothing to import either.
+    if TEXT.get().is_some() || (state.typefaces.is_empty() && state.default_typeface == 0) {
+        return;
+    }
+    *STAGED_TEXT.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
+}
+
+fn install_staged_text(t: &mut TextShared) {
+    let Some(state) = STAGED_TEXT.lock().unwrap_or_else(|e| e.into_inner()).take() else {
+        return;
+    };
+    t.typefaces.clear();
+    for r in state.typefaces {
+        t.typefaces.reinsert(
+            Handle::from_jlong(r.handle),
+            TypefaceRec {
+                family: r.family,
+                weight: r.weight,
+                italic: r.italic,
+                font: None,
+                deferred: r.face,
+            },
+        );
+    }
+    t.default_typeface = state.default_typeface;
+    if !t.typefaces.contains(Handle::from_jlong(t.default_typeface)) {
+        // A malformed/older state must not leave `new_typeface` without a
+        // resolvable default; fall back to the first restored typeface.
+        t.default_typeface = t
+            .typefaces
+            .iter()
+            .next()
+            .map(|(h, _)| h.to_jlong())
+            .unwrap_or(0);
+    }
+}
+
+/// The live text table state, or the staged state when the table has not been
+/// initialised yet. `Vm::snapshot` serialises this so a snapshot of a restored
+/// VM stays byte-identical to the snapshot it came from.
+pub(crate) fn current_text_state() -> TextState {
+    if let Some(m) = TEXT.get() {
+        let t = m.lock().unwrap_or_else(|e| e.into_inner());
+        return state_from_text(&t);
+    }
+    STAGED_TEXT
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+
+fn state_from_text(t: &TextShared) -> TextState {
+    let mut typefaces: Vec<TypefaceRecordData> = t
+        .typefaces
+        .iter()
+        .map(|(h, r)| TypefaceRecordData {
+            handle: h.to_jlong(),
+            family: r.family.clone(),
+            weight: r.weight,
+            italic: r.italic,
+            face: r.font.as_ref().map(FaceRef::of).or_else(|| r.deferred.clone()),
+        })
+        .collect();
+    typefaces.sort_unstable_by_key(|r| r.handle);
+    TextState {
+        typefaces,
+        default_typeface: t.default_typeface,
     }
 }
 
@@ -337,6 +531,7 @@ pub fn new_typeface(family: Option<String>, weight: i32, italic: bool) -> i64 {
             weight,
             italic,
             font: None,
+            deferred: None,
         };
         let default = t
             .typefaces

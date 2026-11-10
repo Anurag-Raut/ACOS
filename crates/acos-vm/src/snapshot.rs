@@ -53,13 +53,15 @@ use crate::heap::{
     NULL,
 };
 use crate::javabridge::JavaValue;
+use crate::natives::fwk_fonts::{FamilyRecordData, FontRecordData, FontState};
+use crate::natives::gfx_text::{FaceRef, TextState, TypefaceRecordData};
 use crate::vm::{CoreLib, ThreadRT, ThreadStatus, Vm, VmOptions};
 
 /// File magic at offset 0 of every snapshot.
 pub const SNAPSHOT_MAGIC: [u8; 8] = *b"ACOSSNAP";
 /// Snapshot format version. Bump on any layout change; restore refuses to read
 /// a stream whose version differs.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 2;
 
 /// Process-native identity recovered from a restored `Vm` (T-43).
 #[derive(Clone, Debug, Default)]
@@ -682,12 +684,6 @@ impl Vm {
                 self.vfs.open_fd_count()
             )));
         }
-        if !self.converters.is_empty() {
-            return Err(VmError::SnapshotPrecondition(format!(
-                "{} ICU converter native handle(s) are registered; not serialisable yet",
-                self.converters.len()
-            )));
-        }
         if !self.monitors.is_empty() {
             return Err(VmError::SnapshotPrecondition(format!(
                 "{} monitor(s) are held",
@@ -868,6 +864,49 @@ impl Vm {
         for t in &self.threads {
             w.handle(t.object);
             w.u8(thread_status_tag(t.status));
+        }
+
+        // ---- font / typeface native tables (W115-A) ---------------------
+        // The snapshot carries the *identity* of every native
+        // `Font`/`FontFamily`/`Typeface` handle, not the resolved faces: a
+        // restore rebuilds them lazily from the recorded file path + index.
+        // This lets the template prime `Typeface.<clinit>` (which fills these
+        // tables) without the restored process holding dangling native handles.
+        // Bootstrap VMs never load the Android font stack; writing the live
+        // process tables there would leak another template's handles into a
+        // bootstrap snapshot. Only a real-corelib snapshot carries font state.
+        if self.corelib == CoreLib::Real {
+            let fonts = crate::natives::fwk_fonts::current_font_state();
+            write_font_state(&mut w, &fonts);
+            let text = crate::natives::gfx_text::current_text_state();
+            write_text_state(&mut w, &text);
+        } else {
+            write_font_state(&mut w, &FontState::default());
+            write_text_state(&mut w, &TextState::default());
+        }
+
+        // ---- ICU converter table (native charset id -> canonical name) ---
+        // The native `NativeConverter` is a Java wrapper around an id; the
+        // per-VM table is the only process state behind it. Priming `Typeface`
+        // leaves one open (the `fonts.xml` parser's UTF-8 decoder), so the
+        // table travels with the snapshot instead of refusing to snapshot.
+        let mut convs: Vec<(u64, String)> =
+            self.converters.iter().map(|(k, v)| (*k, v.clone())).collect();
+        convs.sort_by_key(|(k, _)| *k);
+        w.u32(convs.len() as u32);
+        for (k, v) in convs {
+            w.u64(k);
+            w.str(&v);
+        }
+
+        // ---- regex registry (ICU PatternNative handles) -----------------
+        // A primed `Typeface` leaves a compiled `FontVariationAxis` pattern in
+        // the process registry; the restored Java `Pattern` holds its handle.
+        // Carry the source + flags so a restore recompiles it.
+        if self.corelib == CoreLib::Real {
+            write_regex_state(&mut w, &crate::natives::icu_regex::current_regex_state());
+        } else {
+            write_regex_state(&mut w, &crate::natives::icu_regex::RegexState::default());
         }
 
         Ok(w.buf)
@@ -1318,6 +1357,30 @@ impl Vm {
         }
         vm.current_thread = 0;
 
+        // ---- font / typeface native tables (W115-A) ---------------------
+        // Stage the restored tables; the first font/text native imports them.
+        // The resolved FreeType/rustybuzz faces stay deferred until then, so a
+        // restored launch that never touches text never loads the collection.
+        let fonts = read_font_state(&mut r)?;
+        if header.corelib == CoreLib::Real {
+            crate::natives::fwk_fonts::stage_font_state(fonts);
+        }
+        let text = read_text_state(&mut r)?;
+        if header.corelib == CoreLib::Real {
+            crate::natives::gfx_text::stage_text_state(text);
+        }
+        let conv_n = r.u32()? as usize;
+        vm.converters.clear();
+        for _ in 0..conv_n {
+            let k = r.u64()?;
+            let v = r.str()?;
+            vm.converters.insert(k, v);
+        }
+        let regex = read_regex_state(&mut r)?;
+        if header.corelib == CoreLib::Real {
+            crate::natives::icu_regex::stage_regex_state(regex);
+        }
+
         // Re-resolution caches refer to the *old* class/provider layout; drop
         // them so every access re-resolves through the descriptor tables. This
         // is what makes restore independent of DEX parse-order accidents. The
@@ -1400,6 +1463,196 @@ fn read_header(r: &mut Reader<'_>) -> VmResult<SnapshotHeader> {
         class_count,
         object_slots,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Font / typeface native table section (W115-A)
+// ---------------------------------------------------------------------------
+
+fn write_font_state(w: &mut Writer, state: &FontState) {
+    w.u32(state.fonts.len() as u32);
+    for f in &state.fonts {
+        w.i64(f.handle);
+        w.str(&f.path);
+        w.u32(f.ttc_index);
+        w.i32(f.weight);
+        w.bool(f.italic);
+        w.u32(f.axes.len() as u32);
+        for (tag, value) in &f.axes {
+            w.u32(*tag);
+            w.u32(value.to_bits());
+        }
+        w.str(&f.locale_list);
+        w.i32(f.source_id);
+    }
+    w.u32(state.families.len() as u32);
+    for fam in &state.families {
+        w.i64(fam.handle);
+        w.u32(fam.fonts.len() as u32);
+        for h in &fam.fonts {
+            w.i64(*h);
+        }
+        w.str(&fam.lang_tags);
+        w.i32(fam.variant);
+    }
+}
+
+fn read_font_state(r: &mut Reader<'_>) -> VmResult<FontState> {
+    let n = r.u32()? as usize;
+    let mut fonts = Vec::with_capacity(n);
+    for _ in 0..n {
+        let handle = r.i64()?;
+        let path = r.str()?;
+        let ttc_index = r.u32()?;
+        let weight = r.i32()?;
+        let italic = r.bool()?;
+        let axn = r.u32()? as usize;
+        let mut axes = Vec::with_capacity(axn);
+        for _ in 0..axn {
+            axes.push((r.u32()?, f32::from_bits(r.u32()?)));
+        }
+        let locale_list = r.str()?;
+        let source_id = r.i32()?;
+        fonts.push(FontRecordData {
+            handle,
+            path,
+            ttc_index,
+            weight,
+            italic,
+            axes,
+            locale_list,
+            source_id,
+        });
+    }
+    let n = r.u32()? as usize;
+    let mut families = Vec::with_capacity(n);
+    for _ in 0..n {
+        let handle = r.i64()?;
+        let fcount = r.u32()? as usize;
+        let mut fs = Vec::with_capacity(fcount);
+        for _ in 0..fcount {
+            fs.push(r.i64()?);
+        }
+        let lang_tags = r.str()?;
+        let variant = r.i32()?;
+        families.push(FamilyRecordData {
+            handle,
+            fonts: fs,
+            lang_tags,
+            variant,
+        });
+    }
+    Ok(FontState { fonts, families })
+}
+
+fn write_text_state(w: &mut Writer, state: &TextState) {
+    w.i64(state.default_typeface);
+    w.u32(state.typefaces.len() as u32);
+    for t in &state.typefaces {
+        w.i64(t.handle);
+        match &t.family {
+            Some(f) => {
+                w.bool(true);
+                w.str(f);
+            }
+            None => w.bool(false),
+        }
+        w.i32(t.weight);
+        w.bool(t.italic);
+        write_face_ref(w, t.face.as_ref());
+    }
+}
+
+fn read_text_state(r: &mut Reader<'_>) -> VmResult<TextState> {
+    let default_typeface = r.i64()?;
+    let n = r.u32()? as usize;
+    let mut typefaces = Vec::with_capacity(n);
+    for _ in 0..n {
+        let handle = r.i64()?;
+        let family = if r.bool()? { Some(r.str()?) } else { None };
+        let weight = r.i32()?;
+        let italic = r.bool()?;
+        let face = read_face_ref(r)?;
+        typefaces.push(TypefaceRecordData {
+            handle,
+            family,
+            weight,
+            italic,
+            face,
+        });
+    }
+    Ok(TextState {
+        typefaces,
+        default_typeface,
+    })
+}
+
+fn write_face_ref(w: &mut Writer, face: Option<&FaceRef>) {
+    match face {
+        Some(f) => {
+            w.bool(true);
+            w.str(&f.path);
+            w.u32(f.face_index);
+            w.u32(f.family_key as u32);
+            w.u16(f.weight);
+            w.bool(f.italic);
+            w.u32(f.axes.len() as u32);
+            for (tag, value) in &f.axes {
+                w.str(tag);
+                w.u32(value.to_bits());
+            }
+        }
+        None => w.bool(false),
+    }
+}
+
+fn read_face_ref(r: &mut Reader<'_>) -> VmResult<Option<FaceRef>> {
+    if !r.bool()? {
+        return Ok(None);
+    }
+    let path = r.str()?;
+    let face_index = r.u32()?;
+    let family_key = r.u32()? as usize;
+    let weight = r.u16()?;
+    let italic = r.bool()?;
+    let n = r.u32()? as usize;
+    let mut axes = Vec::with_capacity(n);
+    for _ in 0..n {
+        let tag = r.str()?;
+        let value = f32::from_bits(r.u32()?);
+        axes.push((tag, value));
+    }
+    Ok(Some(FaceRef {
+        path,
+        face_index,
+        family_key,
+        weight,
+        italic,
+        axes,
+    }))
+}
+
+fn write_regex_state(w: &mut Writer, state: &crate::natives::icu_regex::RegexState) {
+    w.u64(state.next);
+    w.u32(state.patterns.len() as u32);
+    for (h, source, flags) in &state.patterns {
+        w.u64(*h);
+        w.str(source);
+        w.u32(*flags);
+    }
+}
+
+fn read_regex_state(r: &mut Reader<'_>) -> VmResult<crate::natives::icu_regex::RegexState> {
+    let next = r.u64()?;
+    let n = r.u32()? as usize;
+    let mut patterns = Vec::with_capacity(n);
+    for _ in 0..n {
+        let h = r.u64()?;
+        let source = r.str()?;
+        let flags = r.u32()?;
+        patterns.push((h, source, flags));
+    }
+    Ok(crate::natives::icu_regex::RegexState { next, patterns })
 }
 
 fn init_state_tag(s: InitState) -> u8 {

@@ -76,11 +76,13 @@ use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread
 /// template is booted (and never again when it is restored from the on-disk
 /// boot cache).
 ///
-/// `Typeface` is deliberately **not** here: its `<clinit>` populates the
+/// `Typeface` used to be deliberately absent: its `<clinit>` fills the
 /// process-global font handle tables (`natives::fwk_fonts` / `gfx_text`), which
-/// the `ACOSSNAP` stream does not carry, so a cross-process restore would leave
-/// dangling native handles (see `results/perf/LAUNCH_PROFILE.md`). It is left to
-/// the per-launch path.
+/// the `ACOSSNAP` stream did not carry. W115-A now serialises those tables
+/// (handles + file paths + family indices; resolved faces are rebuilt lazily),
+/// so a restored process re-imports them on first font use and the handles the
+/// restored Java fields hold stay valid. `Typeface` and the `Font`/`FontFamily`
+/// helpers its `<clinit>` drives are therefore primed.
 ///
 /// A candidate is included only after it initialises successfully during the
 /// template boot; a failure reverts the class to `NotInit` so the launch-time
@@ -96,6 +98,12 @@ pub const DETERMINISTIC_CLINIT_CLASSES: &[&str] = &[
     "Landroid/content/res/Configuration;",
     "Landroid/os/LocaleList;",
     "Ljava/util/Locale;",
+    // Font stack driven by `Typeface.<clinit>` (W115-A). The native font
+    // tables it fills are snapshotted and re-seeded lazily on restore.
+    "Landroid/graphics/Typeface;",
+    "Landroid/graphics/fonts/Font;",
+    "Landroid/graphics/fonts/FontFamily;",
+    "Landroid/graphics/fonts/FontFamily$Builder;",
 ];
 
 /// Initialise the deterministic framework classes in [`DETERMINISTIC_CLINIT_CLASSES`].

@@ -1,0 +1,28 @@
+{
+  "wave": "W115-A",
+  "metric": "font-table reseed on snapshot restore (Typeface priming)",
+  "method": "5 interleaved fresh-process warm-cache launches, release, same binary, ACOS_CLINIT_PRIME on/off, separate warm caches",
+  "fixture": "fixtures/build/apps/counter.apk",
+  "corelib": "real",
+  "before": {
+    "label": "ACOS_CLINIT_PRIME=0 (Typeface not primed)",
+    "wall_ms": [780, 786, 880, 838, 961],
+    "wall_p50_ms": 838,
+    "peak_rss_bytes": [536952832, 537112576, 536981504, 537153536, 536788992],
+    "peak_rss_p50_bytes": 536981504,
+    "peak_rss_p50_mib": 512.1
+  },
+  "after": {
+    "label": "ACOS_CLINIT_PRIME=1 (Typeface + font stack primed, tables snapshotted/reseeded)",
+    "wall_ms": [525, 539, 526, 533, 547],
+    "wall_p50_ms": 533,
+    "peak_rss_bytes": [515661824, 515817472, 516083712, 515747840, 515756032],
+    "peak_rss_p50_bytes": 515756032,
+    "peak_rss_p50_mib": 491.9
+  },
+  "delta": {
+    "wall_p50_ms": -305,
+    "wall_p50_pct": -36.4,
+    "peak_rss_p50_mib": -20.2
+  }
+}

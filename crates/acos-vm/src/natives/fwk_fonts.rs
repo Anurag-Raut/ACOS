@@ -71,6 +71,54 @@ pub struct FontRec {
     pub source_id: i32,
 }
 
+impl FontRec {
+    /// The resolved acos-render face, rebuilt lazily when the record came from a
+    /// snapshot (the snapshot stores the guest path and coordinates, not the
+    /// process-global `FontRef`/`FontFile`).
+    pub fn resolved_font(&self) -> Option<FontRef> {
+        self.font.clone().or_else(|| {
+            resolve_font_ref(
+                &self.path,
+                self.ttc_index,
+                self.weight,
+                self.italic,
+                &self.axes,
+            )
+        })
+    }
+}
+
+/// One serialised `Font` native record. The resolved face and the transient
+/// native buffer address are deliberately absent; both are rebuilt/zeroed on
+/// restore so the bytes are process-independent and deterministic.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FontRecordData {
+    pub handle: i64,
+    pub path: String,
+    pub ttc_index: u32,
+    pub weight: i32,
+    pub italic: bool,
+    pub axes: Vec<(u32, f32)>,
+    pub locale_list: String,
+    pub source_id: i32,
+}
+
+/// One serialised `FontFamily` native record.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FamilyRecordData {
+    pub handle: i64,
+    pub fonts: Vec<i64>,
+    pub lang_tags: String,
+    pub variant: i32,
+}
+
+/// The complete process-global font native table set carried by a snapshot.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FontState {
+    pub fonts: Vec<FontRecordData>,
+    pub families: Vec<FamilyRecordData>,
+}
+
 /// A native `android.graphics.fonts.FontFamily`.
 #[derive(Clone, Debug)]
 pub struct FontFamilyRec {
@@ -126,13 +174,122 @@ static FONTS: OnceLock<Mutex<FontShared>> = OnceLock::new();
 fn with_fonts<R>(f: impl FnOnce(&mut FontShared) -> R) -> R {
     let m = FONTS.get_or_init(|| Mutex::new(FontShared::new()));
     match m.lock() {
-        Ok(mut g) => f(&mut g),
-        Err(poisoned) => f(&mut poisoned.into_inner()),
+        Ok(mut g) => {
+            install_staged_fonts(&mut g);
+            f(&mut g)
+        }
+        Err(poisoned) => {
+            let mut g = poisoned.into_inner();
+            install_staged_fonts(&mut g);
+            f(&mut g)
+        }
     }
 }
 
 fn font_error(kind: &str, e: &crate::natives::gfx_handles::HandleError) -> VmError {
     VmError::Internal(format!("{kind}: {e}"))
+}
+
+/// A font table set decoded from a snapshot but not yet imported into the live
+/// table. Importing happens on first font use, so a restored launch that never
+/// touches text pays neither the collection load nor the table rebuild.
+static STAGED_FONTS: Mutex<Option<FontState>> = Mutex::new(None);
+
+/// Stage a font state decoded from a snapshot. The next [`with_fonts`] call
+/// imports it (cheaply: the resolved faces stay deferred).
+pub(crate) fn stage_font_state(state: FontState) {
+    // An in-process restore shares the already-initialised live table produced
+    // by the template boot; importing the same state again would only clobber
+    // it. An empty state has nothing to import either.
+    if FONTS.get().is_some() || (state.fonts.is_empty() && state.families.is_empty()) {
+        return;
+    }
+    *STAGED_FONTS.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
+}
+
+fn install_staged_fonts(g: &mut FontShared) {
+    let Some(state) = STAGED_FONTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    else {
+        return;
+    };
+    g.fonts.clear();
+    g.families.clear();
+    g.font_builders.clear();
+    g.family_builders.clear();
+    for r in state.fonts {
+        g.fonts.reinsert(
+            GfxHandle::from_jlong(r.handle),
+            FontRec {
+                path: r.path,
+                ttc_index: r.ttc_index,
+                weight: r.weight,
+                italic: r.italic,
+                axes: r.axes,
+                font: None,
+                buffer_addr: 0,
+                locale_list: r.locale_list,
+                source_id: r.source_id,
+            },
+        );
+    }
+    for f in state.families {
+        g.families.reinsert(
+            GfxHandle::from_jlong(f.handle),
+            FontFamilyRec {
+                fonts: f.fonts,
+                lang_tags: f.lang_tags,
+                variant: f.variant,
+            },
+        );
+    }
+}
+
+/// The live font table state, or the staged state when the table has not been
+/// initialised yet. `Vm::snapshot` serialises this so a snapshot of a restored
+/// VM stays byte-identical to the snapshot it came from.
+pub(crate) fn current_font_state() -> FontState {
+    if let Some(m) = FONTS.get() {
+        let g = m.lock().unwrap_or_else(|e| e.into_inner());
+        return state_from_shared(&g);
+    }
+    STAGED_FONTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+
+fn state_from_shared(g: &FontShared) -> FontState {
+    let mut fonts: Vec<FontRecordData> = g
+        .fonts
+        .iter()
+        .map(|(h, r)| FontRecordData {
+            handle: h.to_jlong(),
+            path: r.path.clone(),
+            ttc_index: r.ttc_index,
+            weight: r.weight,
+            italic: r.italic,
+            axes: r.axes.clone(),
+            locale_list: r.locale_list.clone(),
+            source_id: r.source_id,
+        })
+        .collect();
+    fonts.sort_unstable_by_key(|r| r.handle);
+    let mut families: Vec<FamilyRecordData> = g
+        .families
+        .iter()
+        .map(|(h, r)| FamilyRecordData {
+            handle: h.to_jlong(),
+            fonts: r.fonts.clone(),
+            lang_tags: r.lang_tags.clone(),
+            variant: r.variant,
+        })
+        .collect();
+    families.sort_unstable_by_key(|r| r.handle);
+    FontState { fonts, families }
 }
 
 fn unsupported(what: &str) -> VmError {
@@ -326,7 +483,9 @@ fn font_metrics(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let rec = with_fonts(|s| s.font(vm.arg_i64(ctx, 0)))?;
     let paint_ptr = vm.arg_i64(ctx, 1);
     let out = vm.arg_ref(ctx, 2);
-    let font = rec.font.ok_or_else(|| unsupported("Font.nGetFontMetrics without a resolved face"))?;
+    let font = rec
+        .resolved_font()
+        .ok_or_else(|| unsupported("Font.nGetFontMetrics without a resolved face"))?;
     let attrs = crate::natives::gfx_paint::paint_rec(paint_ptr)?.text_attrs();
     let m = metrics_for(&font, &attrs);
     write_font_metrics(vm, out, &m);
@@ -346,7 +505,9 @@ fn font_glyph_bounds(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let glyph_id = vm.arg_i32(ctx, 1).max(0) as u16;
     let paint_ptr = vm.arg_i64(ctx, 2);
     let out = vm.arg_ref(ctx, 3);
-    let font = rec.font.ok_or_else(|| unsupported("Font.nGetGlyphBounds without a resolved face"))?;
+    let font = rec
+        .resolved_font()
+        .ok_or_else(|| unsupported("Font.nGetGlyphBounds without a resolved face"))?;
     let attrs = crate::natives::gfx_paint::paint_rec(paint_ptr)?.text_attrs();
     let advance = glyph_bounds(&font, glyph_id, attrs.text_size, attrs.scale_x, vm, out)?;
     vm.ret_f32(ctx, advance);
@@ -370,7 +531,12 @@ fn font_minikin_ptr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let rec = with_fonts(|s| s.font(vm.arg_i64(ctx, 0)))?;
     // A stable identity used by `Font.equals`; the acos-render font id is
     // exactly one per mapped face.
-    vm.ret_i64(ctx, rec.font.as_ref().map(|f| f.file.id as i64).unwrap_or(0));
+    vm.ret_i64(
+        ctx,
+        rec.resolved_font()
+            .map(|f| f.file.id as i64)
+            .unwrap_or(0),
+    );
     Ok(())
 }
 
@@ -493,7 +659,7 @@ fn typeface_create_from_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
                 Ok(f) => f,
                 Err(_) => continue,
             };
-            if let Some(fr) = font.font.clone() {
+            if let Some(fr) = font.resolved_font() {
                 let w = if weight >= 0 { weight } else { font.weight };
                 let it = if italic >= 0 { italic != 0 } else { font.italic };
                 let family = family_name_of(&fr).or_else(|| ttf_family_name(&fr));
@@ -508,6 +674,7 @@ fn typeface_create_from_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             weight,
             italic,
             font: Some(font),
+            deferred: None,
         },
         // No resolvable family (e.g. a font whose file is absent from the
         // extracted image): fall back to the default typeface like the
@@ -542,7 +709,7 @@ fn typeface_force_static_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn typeface_supported_axes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let rec = gfx_text::typeface_rec(vm.arg_i64(ctx, 0))?;
     let tags: Vec<i32> = rec
-        .font
+        .resolved_font()
         .as_ref()
         .map(variable_axis_tags)
         .unwrap_or_default()
