@@ -42,7 +42,6 @@ public final class FlutterProbe {
 
   private static final int HEIGHT = 2400;
   private static final float DPR = 2.625f;
-  private static final int DENSITY_DPI = 420;
 
   /** Flutter's {@code PointerData} wire size (36 int64/float64 fields). */
   private static final int POINTER_FIELDS = 36;
@@ -51,6 +50,9 @@ public final class FlutterProbe {
 
   /** 60 Hz reference refresh, matching {@code fwk_vsync::DEFAULT_INTERVAL_NANOS}. */
   private static final long REFRESH_PERIOD_NANOS = 16_666_667L;
+
+  /** The reference device's status-bar height (48dp, Android 13 gesture nav). */
+  private static final int STATUS_BAR_DP = 48;
 
   /**
    * The live engine handle. The engine's vsync path is native -> Java
@@ -133,39 +135,43 @@ public final class FlutterProbe {
       jni.onSurfaceCreated(surface);
       System.out.println("ACOS_FLUTTER_PROBE phase=surfaceCreated ok");
 
-      // The 27-argument native viewport contract: devicePixelRatio, physical
-      // size, paddings, view insets, system-gesture insets, touch slop, three
-      // rect arrays (gesture exclusion / display features / cutout) and the
-      // trailing display metrics. Padding is zero: the fixture deliberately
-      // does not model insets so the reference comparison is stable.
+      // The 27-argument native viewport contract (FlutterJNI 3.47):
+      // devicePixelRatio, physicalSize, paddings, view insets, system-gesture
+      // insets, touchSlop, the three display-feature rect arrays
+      // (bounds/type/state), then minWidth, maxWidth, minHeight, maxHeight and
+      // the four display-corner radii. Padding/insets/constraints are zero on
+      // purpose: the fixture does not model insets, so the reference
+      // comparison is stable. W128-A: the eighth trailing slot used to carry
+      // `densutyDpi`, but this engine version reads that position as
+      // `minWidth` — a non-zero value there constrains the view to 420 px.
       jni.setViewportMetrics(
           DPR,
           WIDTH,
           HEIGHT,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          new int[0],
-          new int[0],
-          new int[0],
-          DENSITY_DPI,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0);
+          (int) (STATUS_BAR_DP * DPR), // physicalPaddingTop (48dp status bar)
+          0, // physicalPaddingRight
+          0, // physicalPaddingBottom
+          0, // physicalPaddingLeft
+          0, // physicalViewInsetTop
+          0, // physicalViewInsetRight
+          0, // physicalViewInsetBottom
+          0, // physicalViewInsetLeft
+          0, // systemGestureInsetTop
+          0, // systemGestureInsetRight
+          0, // systemGestureInsetBottom
+          0, // systemGestureInsetLeft
+          0, // physicalTouchSlop
+          new int[0], // displayFeaturesBounds
+          new int[0], // displayFeaturesType
+          new int[0], // displayFeaturesState
+          0, // minWidth
+          WIDTH, // maxWidth
+          0, // minHeight
+          HEIGHT, // maxHeight
+          0, // physicalDisplayCornerRadiusTopLeft
+          0, // physicalDisplayCornerRadiusTopRight
+          0, // physicalDisplayCornerRadiusBottomRight
+          0); // physicalDisplayCornerRadiusBottomLeft
       System.out.println("ACOS_FLUTTER_PROBE phase=viewport ok");
 
       jni.setRefreshRateFPS(60.0f);

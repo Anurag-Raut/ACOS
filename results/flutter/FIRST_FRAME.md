@@ -1013,3 +1013,43 @@ Worktree-only instrumentation (all inert for the product path): the
 `W119A_BASE` publish in the harness child and `tools/flutter-engine-gdb.py`.
 Nothing in `acos-native-loader` changed in this wave, so clippy/check/test
 results are the W117-A baseline re-verified on `ee2d88a`.
+
+---
+
+# W128-A — **the first frame is presented** (1080×2400, Skia software rasteriser)
+
+**Date:** 2026-11-11 (wave W128-A). **Base:** clean worktree of `HEAD`
+(`b7eb230`, W122-A). Full write-up: `results/flutter/W128A.md`. Not committed.
+
+W126-A's next step ("trace `PlatformViewAndroid::SurfaceCreated` → EGL; maybe
+the engine is not in software mode") was two levels too high: the surface chain
+was already running, the engine **had** picked software rendering
+(`AndroidContext::RenderingApi() == 0` → `AndroidSurfaceSoftware`), and EGL is
+correctly never called on that path. Two silent early returns sat in between,
+both now fixed:
+
+| defect | evidence | fix |
+|---|---|---|
+| `acos_jni_call_abi` widened `float` arguments to `f64` and loaded them with `movsd`; a guest `float` parameter reads the low 32 bits, which for `2.625f` is `0.0f` | `flutter::SetViewportMetrics` does `movss %xmm0` at `0x5301b2`; `Shell::OnPlatformViewSetViewportMetrics` (`0x9c1764`) returns immediately when `device_pixel_ratio <= 0`; `ViewportMetrics` dumped at `SVSHELL` was `dpr 0.0` | SSE arguments carried as raw bit patterns + `movq`; 3 unit tests |
+| the harness passed its old `densityDpi` argument into the engine's `minWidth` slot and left `maxWidth`/`maxHeight` = 0, so `Shell::ShouldDiscardLayerTree` discarded every 1080×2400 layer tree | `Rasterizer::DrawToSurfacesUnsafe` (`0x9b556e`) calls `Surface` vtable `+0x38` = `Shell::ShouldDiscardLayerTree` (`0x9c4b5c`), got `true`, emptied the task vector and returned | argument names taken from the embedding jar's `LocalVariableTable`; `maxWidth = WIDTH`, `maxHeight = HEIGHT`, 48 dp status-bar padding |
+
+| stage | W126-A | W128-A |
+|---|---|---|
+| Dart `FlutterView.physicalSize` | `Size(0.0, 0.0)`, `dpr 1.0` | **`Size(1080.0, 2400.0)`, `dpr 2.625`** |
+| Dart `view.render(scene)` → `PlatformConfigurationNativeApi::Render` | never | **38×** |
+| `Shell::OnAnimatorDraw` → `Rasterizer::Draw` → `DrawToSurfaces(Unsafe)` | never | **every frame** (raster thread) |
+| `GPUSurfaceSoftware::AcquireFrame` → `AcquireBackingStore` → `PresentBackingStore` | never | **every frame** |
+| `ANativeWindow_lock`/`unlockAndPost`, PNG | none | **2 frames 1080×2400 → `w128a-frame-0/-1.png`** |
+| `acos frame-diff` vs phone reference | not run | `global_ssim 0.2929`, `mean_ssim 0.9389`, `psnr 19.99 dB`, 6.4 % differing |
+| Dart `onPointerDataPacket` | no | **still no** (residual, `W128A.md` §4) |
+
+Two harness bugs that would have hidden the result in any wave: the child wrote
+PNGs into the repo (Landlock `EACCES`, so `written:false` silently), and
+`write_png` assumed a tight `width*height*4` layout instead of the window's row
+stride. Frames are now written to the child's scratch and published by the
+parent.
+
+Acceptance on `b7eb230`: `cargo test -p acos-jni` pass (incl. `flutter_hello`
+2/2), clippy `-D warnings --no-deps` clean, `cargo check --workspace
+--all-targets` clean, `diff-dexprogs --corelib real` 27/27, 41 engine
+breakpoints byte-verified.

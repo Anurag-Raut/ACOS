@@ -147,8 +147,40 @@ fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), St
     );
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
+    // `ANativeWindow_unlockAndPost` hands back the whole buffer, whose row
+    // stride may exceed the visible width (the driver's `stride` in pixels).
+    // Pack the visible rows before encoding instead of asserting a tight
+    // `width * height * 4` layout: a strided buffer used to fail the encoder
+    // silently and produced no PNG even though the frame was presented.
+    let tight = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|px| px.checked_mul(4))
+        .ok_or_else(|| "frame size overflow".to_string())?;
+    let packed: Vec<u8>;
+    let data: &[u8] = if rgba.len() == tight {
+        rgba
+    } else if height > 0 && rgba.len().is_multiple_of(height as usize) {
+        let stride = rgba.len() / height as usize;
+        let row = width as usize * 4;
+        if stride < row {
+            return Err(format!(
+                "frame buffer {} bytes is shorter than a {width}x{height} row",
+                rgba.len()
+            ));
+        }
+        packed = rgba
+            .chunks_exact(stride)
+            .flat_map(|chunk| chunk[..row].iter().copied())
+            .collect();
+        &packed
+    } else {
+        return Err(format!(
+            "frame buffer {} bytes does not describe a {width}x{height} RGBA image",
+            rgba.len()
+        ));
+    };
     let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-    writer.write_image_data(rgba).map_err(|e| e.to_string())?;
+    writer.write_image_data(data).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -683,7 +715,12 @@ fn flutter_child_worker() {
     // from `ANativeWindow_unlockAndPost` (premultiplied, like the compositor).
     let frames = acos_jni::ndk_host::presented_frames();
     let mut written: Vec<serde_json::Value> = Vec::new();
-    let out_frames = repo_root().join("results/flutter");
+    // W128-A: the confined child may only write inside its scratch directory
+    // (ADR-0022: Landlock grants exactly `with_read_write(&scratch)`), so the
+    // PNGs are written there and the **parent** copies them into
+    // `results/flutter/`. Writing straight into the repo gave
+    // `Permission denied (os error 13)` and silently produced no PNG.
+    let out_frames = scratch.join("frames");
     let _ = std::fs::create_dir_all(&out_frames);
     let mut dedup: Vec<u64> = Vec::new();
     for (i, frame) in frames.iter().enumerate() {
@@ -693,17 +730,19 @@ fn flutter_child_worker() {
             hash ^= b as u64;
             hash = hash.wrapping_mul(0x100000001b3);
         }
-        let path = out_frames.join(format!("w108a-frame-{i}.png"));
-        let ok = write_png(&path, frame.width, frame.height, &frame.rgba).is_ok();
+        let path = out_frames.join(format!("w128a-frame-{i}.png"));
+        let png = write_png(&path, frame.width, frame.height, &frame.rgba);
         written.push(serde_json::json!({
             "index": i,
             "path": path.display().to_string(),
             "width": frame.width,
             "height": frame.height,
             "seq": frame.seq,
+            "bytes": frame.rgba.len(),
             "hash": format!("{hash:016x}"),
             "duplicate": dedup.contains(&hash),
-            "written": ok,
+            "written": png.is_ok(),
+            "error": png.err(),
         }));
         dedup.push(hash);
     }
@@ -881,6 +920,23 @@ fn flutter_hello_under_confinement() {
 
     let out_dir = repo_root().join("results/flutter");
     let _ = std::fs::create_dir_all(&out_dir);
+    // Frames the confined child presented: written to its scratch (the only
+    // place it may write) and published here by the parent.
+    if let Ok(entries) = std::fs::read_dir(scratch.join("frames")) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if let Ok(bytes) = std::fs::read(entry.path()) {
+                match std::fs::write(out_dir.join(&name), &bytes) {
+                    Ok(()) => eprintln!(
+                        "published frame {} ({} bytes)",
+                        name.to_string_lossy(),
+                        bytes.len()
+                    ),
+                    Err(e) => eprintln!("could not publish {}: {e}", name.to_string_lossy()),
+                }
+            }
+        }
+    }
     let _ = std::fs::write(
         out_dir.join("w93a-first-run.json"),
         serde_json::to_string_pretty(&serde_json::json!({

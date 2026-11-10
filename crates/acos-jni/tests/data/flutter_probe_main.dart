@@ -14,6 +14,10 @@ bool _buttonDown = false;
 
 void main() {
   print("ACOS_DART_MAIN entered");
+  print(
+    'ACOS_DART_MAIN views=${_dispatcher.views.length} '
+    'implicit=${_dispatcher.implicitView?.viewId}',
+  );
   _dispatcher.onBeginFrame = _onBeginFrame;
   _dispatcher.onDrawFrame = _onDrawFrame;
   _dispatcher.onPointerDataPacket = _onPointerDataPacket;
@@ -26,8 +30,22 @@ void _onBeginFrame(Duration _) {
   print("ACOS_DART_BEGINFRAME");
 }
 
+int _drawAttempts = 0;
+
 void _onDrawFrame() {
-  print("ACOS_DART_FRAME draw");
+  _drawAttempts++;
+  if (_drawAttempts <= 3 || _drawAttempts % 10 == 0) {
+    // W128-A: the exact reason a draw produces no scene has to be visible in
+    // the engine log, not inferred. `views` is the engine-pushed view registry
+    // and `physicalSize` comes from the viewport metrics.
+    print(
+      'ACOS_DART_FRAME draw n=$_drawAttempts views=${_dispatcher.views.length} '
+      'implicit=${_dispatcher.implicitView?.viewId} '
+      'size=${_view?.physicalSize} dpr=${_view?.devicePixelRatio}',
+    );
+  } else {
+    print("ACOS_DART_FRAME draw");
+  }
   final view = _view;
   if (view == null) {
     return;
