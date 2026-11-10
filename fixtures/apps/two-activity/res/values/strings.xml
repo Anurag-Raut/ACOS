@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Two Activity</string>
+    <string name="hint">Name</string>
+    <string name="go">Go</string>
+    <string name="inc">Increment</string>
+    <string name="back">Back</string>
+    <string name="idle">idle</string>
+</resources>
