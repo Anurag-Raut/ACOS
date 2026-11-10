@@ -103,6 +103,47 @@ though `getText()` and `textColor` are set and the equal-geometry
 `canvas-shapes` status `TextView` does emit `nDrawText`. This is the dominant
 residual for counter and is unsolved.
 
+### W129-A update (HEAD `b7eb230` worktree, `.cache/wt-w129a`)
+
+| app | pipeline status | pipeline SSIM | masked SSIM | hand-authored SSIM | provenance |
+|---|---|---:|---:|---:|---|
+| canvas-shapes | frame produced | 0.8305 | **0.8949** | 0.9953 | pipeline-generated |
+| counter | frame produced | **0.8782** | **0.9424** | 0.9944 | pipeline-generated |
+| form-validation | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9924 | hand-authored |
+| text-input | inflation failed (`EditText` NPE, no `Application`) | — | — | 0.9906 | hand-authored |
+| widget-gallery | inflation failed at line #19 (`StateListAnimator` → `Choreographer`, no display service) | — | — | 0.9700 | hand-authored |
+
+**Root cause of the zero-`DrawText` gap (fixed).** `Canvas.getClipBounds` and
+the tracked clip were kept in **device/root** coordinates, but the framework
+passes clip rectangles in the canvas's **current local** coordinate space. For
+a `TextView` reached through a translated parent (`View.draw(canvas, parent,
+long)` translates by `mLeft, mTop`), `ViewGroup.drawChild` clips to the child's
+local `[0,0,w,h]`; intersecting that with the device-space padding clip produced
+the nonsensical `[42,42,9,18]` (`right < left`, `bottom < top`).
+`Layout.getLineRangeForDraw` then saw an empty clip and returned `lastLine < 0`,
+so `TextView.onDraw` → `Layout.draw` produced **zero** text ops. `canvas-shapes`
+was unaffected because its `TextView` sits at `(0,0)` (identity translation) and
+its text op came from `ShapeView`'s direct `Canvas.drawText`, not from a
+`Layout`.
+
+| Fix | File | Effect |
+|---|---|---|
+| `nClipRect` now maps the local rect through the current matrix before intersecting the device-space tracked clip; `nGetClipBounds`, `nQuickReject`, `nDrawPaint`, and `nSaveUnclippedLayer` map accordingly. | `crates/acos-vm/src/natives/gfx_canvas.rs` | counter's three `TextView`/`Button` labels now record `DrawText` ops (`finishRecording ops=41 text=3`, was `ops=38 text=0`); `canvas-shapes` stays `text=2`. |
+| The harness `DisplayMetrics` now sets `scaledDensity`/`xdpi`/`ydpi`/`widthPixels`/`heightPixels` to the device values. | `crates/acos-vm/tests/java/RenderViewsMain.java` | honest `DisplayMetrics` (was leaving `scaledDensity` at its default); no SSIM change on its own. |
+
+**Why SSIM did not move: text is drawn but at 15 px, not 36.75 px.** The
+harness now records the counter labels, but `TextView.getTextSize()` is `15.0`
+(its constructor default, in px) instead of the theme's `14sp` = `36.75` at
+density `2.625`. The theme's `?attr/textAppearanceDeviceDefault` (a **style
+bag**) is resolved by `AssetManager` to `TYPE_NULL` rather than kept as a
+`TYPE_REFERENCE` to the bag, so `TypedArray.getResourceId` returns `-1` and
+`TextView.applyTextAppearance` never runs. That is a resource-resolution gap
+(`resolve_references` chasing a bag into its empty `Res_value`), not a canvas
+gap; a local fix to return the bag reference was attempted and correctly failed
+`ColorStateList`/`GradientDrawable` inflation, so it was reverted rather than
+landed half-working. This is the dominant remaining counter/canvas-shapes
+residual and is recorded here honestly.
+
 ## 4. W104-A framework-side fixes
 
 | Fix | File | Effect |
@@ -122,17 +163,22 @@ residual for counter and is unsolved.
 3. **`BitmapFactory` natives still missing**: `nativeDecodeAsset`, `nativeDecodeFileDescriptor`, `nativeIsSeekable`, `nativeColorSpace`, `nativeInBitmap`, and the `BitmapRegionDecoder` surface. The `ImageDecoder` `FileDescriptor`/`ByteBuffer`/`J`-ptr `nCreate` overloads return `null`; only stream + `byte[]` decode today.
 4. **`invoke-polymorphic`/`invoke-custom` (`0xfa..=0xfd`)** remain unimplemented in `interp.rs`; worked around for `AtomicInteger`/`AtomicLong`/`AtomicBoolean` only.
 5. **`acos launch` next blocker** (`counter.apk`, `ACOS_BOOT_DIR=.cache/boot/android-34`): `java.lang.IllegalStateException: Main thread not allowed to quit` at `MessageQueue.next` ← `Looper.loop`, blocking `on_resume`/`first_frame`.
-6. **`DecorView`/status/action bar are not composed** in the VM-level harness (W122-A). The layout is measured at the full 2400 px instead of the 275 px decor offset, and the status bar + action bar are absent from every pipeline frame. Fix: instantiate the real `com.android.internal.policy.PhoneWindow` (with a `Window.Callback` stub) and draw `getDecorView()`, or add a VM-level harness mode that does. Owner: `render_views.rs` / `RenderViewsMain.java`.
-7. **`TextView`/`Button` text emits no op on the `counter`/`widget` path** (W122-A). `counter`'s three text widgets record zero `DrawText` ops while `canvas-shapes`' `TextView` records one; the trigger is unconfirmed. Likely a `Layout`/`TextLine`/`BoringLayout` path that does not reach `nDrawText`/`nDrawTextRun`. Owner: `gfx_canvas.rs` + harness.
+6. **`DecorView`/status/action bar are not composed** in the VM-level harness (W122-A, still open in W129-A). The layout is measured at the full 2400 px instead of the 275 px decor offset, and the status bar + action bar are absent from every pipeline frame. Fix: instantiate the real `com.android.internal.policy.PhoneWindow` (with a `Window.Callback` stub) and draw `getDecorView()`, or add a VM-level harness mode that does. Owner: `render_views.rs` / `RenderViewsMain.java`.
+7. **Text draws at 15 px instead of the theme's 14sp** (W129-A, narrowed). The zero-`DrawText` clip bug is fixed (item 7 of W122-A); the labels are now recorded, but `TextView.getTextSize()` is the 15 px constructor default because `?attr/textAppearanceDeviceDefault` resolves to a bag that `AssetManager` reports as `TYPE_NULL`. Fix: return a `TYPE_REFERENCE` to the bag from `resolve_references` (AOSP `ResolveReference` semantics) without breaking `ColorStateList`/`GradientDrawable` inflation. Owner: `acos-framework-natives/src/res/{manager,theme}.rs`.
+8. **`TextView`/`Button` text emits no op on the `counter`/`widget` path** (W122-A) — **FIXED** in W129-A: `Canvas.getClipBounds`/clip tracking were in device coordinates while the framework passes local rectangles. `counter` now records `ops=41 text=3`.
 
-## 6. Acceptance (W104-A worktree, measured)
+## 6. Acceptance (W129-A worktree, measured)
 
 ```
-cargo test -p acos-vm --test render_views                       -> ok (1 passed; canvas-shapes 0.8305, counter 0.8783)
-cargo test -p acos-framework-natives --test theme_resolution    -> ok (5 passed)
+cargo test -p acos-vm --test render_views                       -> ok (1 passed; canvas-shapes 0.8305, counter 0.8782)
 cargo clippy -p acos-vm -p acos-render -p acos-framework-natives --all-targets --no-deps -- -D warnings -> 0 warnings
 cargo check --workspace --all-targets                           -> clean
-tools/diff-dexprogs.sh --corelib real                           -> 27 pass / 0 fail / 0 unsupported
+tools/diff-dexprogs.sh --corelib real                           -> see results/vm/dexprogs-real-normal.json
 ```
+
+W129-A scope: `crates/acos-vm/tests/{render_views.rs,java/RenderViewsMain.java}`,
+`crates/acos-vm/src/natives/gfx_*`, `crates/acos-render`. Items (b) `DecorView`
+composition, (c) `EditText` `Application`, and (d) `IDisplayManager` reply for
+`widget-gallery` were **not** landed in this wave.
 
 Nothing committed.

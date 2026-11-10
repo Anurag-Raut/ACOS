@@ -40,7 +40,7 @@ use acos_vm::vm::{CoreLib, VmOptions};
 use crate::frame_handoff::{install_frame_handoff, FrameStore};
 use crate::input_java;
 use crate::lifecycle::LifecycleReport;
-use crate::view_tree::ViewTree;
+use crate::view_tree::{ViewNode, ViewTree};
 use crate::Runtime;
 
 /// The launch stage ladder, in execution order.
@@ -583,11 +583,7 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                 ));
             }
             Cmd::TapText { label, reply } => {
-                let _ = reply.send(Err(SessionError::new(
-                    "ELEMENT_NOT_FOUND",
-                    format!("cannot resolve label {label:?}: no UI tree has been extracted"),
-                )
-                .with_details(vec![("kind", "NoUiTree".to_string()), ("label", label)])));
+                let _ = reply.send(do_tap_text(&mut state, &label));
             }
             Cmd::Key { code, reply } => {
                 let _ = reply.send(finish_input(
@@ -817,6 +813,55 @@ fn do_observe_tree(
             ("stage_reached", stage.to_string()),
         ])),
     }
+}
+
+/// Resolve a text label in the live view tree and tap its centre.
+///
+/// The label is matched against `ViewNode.text`, the same value the JSON tree
+/// exposes, so an `acos observe --tree` label and an `acos tap --text` label
+/// refer to the same node. Bounds are screen pixels, so the centre is the tap
+/// point.
+fn do_tap_text(state: &mut WorkerState, label: &str) -> Result<InputReport, SessionError> {
+    let tree = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES)?;
+    let node = find_node_by_text(&tree, label).ok_or_else(|| {
+        SessionError::new(
+            "ELEMENT_NOT_FOUND",
+            format!("no node with text {label:?} in the view tree"),
+        )
+        .with_details(vec![
+            ("kind", "NoSuchNode".to_string()),
+            ("label", label.to_string()),
+        ])
+    })?;
+    let [left, top, right, bottom] = node.bounds;
+    if right <= left || bottom <= top {
+        return Err(SessionError::new(
+            "ELEMENT_NOT_FOUND",
+            format!("node {label:?} has empty bounds {left},{top},{right},{bottom}"),
+        )
+        .with_details(vec![
+            ("kind", "EmptyBounds".to_string()),
+            ("label", label.to_string()),
+        ]));
+    }
+    let x = (left + right) as f32 / 2.0;
+    let y = (top + bottom) as f32 / 2.0;
+    finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))
+}
+
+/// Depth-first search for the first node whose `text` equals `label`.
+fn find_node_by_text<'a>(tree: &'a ViewTree, label: &str) -> Option<&'a ViewNode> {
+    fn search<'a>(node: &'a ViewNode, label: &str) -> Option<&'a ViewNode> {
+        if node.text == label {
+            return Some(node);
+        }
+        node.children
+            .iter()
+            .find_map(|child| search(child, label))
+    }
+    tree.nodes
+        .iter()
+        .find_map(|root| search(root, label))
 }
 
 fn encode_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {

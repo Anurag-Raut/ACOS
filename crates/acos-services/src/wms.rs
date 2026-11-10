@@ -352,6 +352,7 @@ pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use acos_wm::codec::inset_type;
     use acos_wm::geom::RectI;
     use acos_wm::wms::{ADD_BAD_APP_TOKEN, ADD_OKAY, RELAYOUT_RES_FIRST_TIME};
 
@@ -368,12 +369,14 @@ mod tests {
         assert_eq!(add.result, ADD_OKAY);
         assert_eq!(add.out_frame, RectI::new(0, 128, 1080, 2337));
         assert_eq!(
-            add.insets_state.visible_insets_for(0).top,
+            add.insets_state.visible_insets_for(inset_type::STATUS_BAR).top,
             128,
             "status bar inset"
         );
         assert_eq!(
-            add.insets_state.visible_insets_for(1).bottom,
+            add.insets_state
+                .visible_insets_for(inset_type::NAVIGATION_BAR)
+                .bottom,
             63,
             "nav bar inset"
         );

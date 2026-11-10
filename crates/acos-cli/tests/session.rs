@@ -207,11 +207,14 @@ fn swipe_without_a_window_is_a_structured_error() {
 
 #[test]
 fn tap_text_without_a_tree_is_a_structured_error() {
+    // No app has been launched, so there is no View hierarchy to resolve the
+    // label against; the honest answer is a backend error, not a false hit.
     let out = run(&["tap", "--text", "increment", "--json"]);
     assert!(!out.status.success());
     let v = parse_json(&out.stdout);
-    assert_eq!(v["error"]["code"], "ELEMENT_NOT_FOUND");
-    assert_eq!(v["error"]["details"]["kind"], "NoUiTree");
+    assert_eq!(v["error"]["code"], "UNSUPPORTED_BACKEND");
+    assert_eq!(v["error"]["details"]["reason"], "not_ready");
+    assert_eq!(v["error"]["details"]["capability"], "ui.tree");
 }
 
 #[test]

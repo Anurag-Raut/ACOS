@@ -166,6 +166,11 @@ public class RenderViewsMain {
         DisplayMetrics metrics = new DisplayMetrics();
         metrics.density = 2.625f;
         metrics.densityDpi = 420;
+        metrics.scaledDensity = 2.625f;
+        metrics.xdpi = 420f;
+        metrics.ydpi = 420f;
+        metrics.widthPixels = width;
+        metrics.heightPixels = height;
         Configuration config = new Configuration();
         config.densityDpi = 420;
         sRes = new Resources(am, metrics, config);
@@ -258,7 +263,22 @@ public class RenderViewsMain {
         if (v instanceof android.widget.TextView) {
             android.widget.TextView tv = (android.widget.TextView) v;
             sb.append(" text=").append(tv.getText())
-              .append(" color=").append(Integer.toHexString(tv.getCurrentTextColor()));
+              .append(" color=").append(Integer.toHexString(tv.getCurrentTextColor()))
+              .append(" textSize=").append(tv.getTextSize());
+            android.text.Layout lay = tv.getLayout();
+            if (lay == null) {
+                sb.append(" layout=null");
+            } else {
+                sb.append(" layout=").append(lay.getClass().getSimpleName())
+                  .append(" lines=").append(lay.getLineCount())
+                  .append(" w=").append(lay.getWidth())
+                  .append(" h=").append(lay.getHeight());
+                if (lay.getLineCount() > 0) {
+                    sb.append(" line0=[").append(lay.getLineStart(0)).append(',')
+                      .append(lay.getLineEnd(0)).append(") top=").append(lay.getLineTop(0))
+                      .append(" bot=").append(lay.getLineBottom(0));
+                }
+            }
         }
         System.out.println("VIEW " + sb);
         if (v instanceof ViewGroup) {

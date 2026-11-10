@@ -33,8 +33,10 @@ mod gfx_state;
 pub mod gfx_vector;
 pub mod gfx_text;
 pub mod fwk_jni;
+mod fwk_animation;
 mod fwk_annotations;
 mod fwk_m2_filechannel;
+mod fwk_method_invoke;
 mod fwk_m2_chain;
 mod fwk_m2_chain2;
 mod fwk_m2_chain6;
@@ -121,6 +123,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     fwk_m2_chain::install(vm)?;
     fwk_m2_chain2::install(vm)?;
     fwk_m2_chain6::install(vm)?;
+    // `android.animation.PropertyValuesHolder`'s twelve JNI setters (the
+    // `StateListAnimator` -> `AnimatorSet` -> `PropertyValuesHolder` path).
+    fwk_animation::install(vm)?;
+    // `java.lang.reflect.Method.invoke`, the reflection fallback the animation
+    // setup uses for property getters.
+    fwk_method_invoke::install(vm)?;
     fwk_surface::install(vm)?;
     fwk_vsync::install(vm)?;
     parcel::install(vm)?;

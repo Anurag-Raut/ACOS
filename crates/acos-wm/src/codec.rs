@@ -695,6 +695,27 @@ pub struct DisplayShape {
     pub scale: f32,
 }
 
+impl DisplayShape {
+    /// `DisplayShape.NONE`: the framework's rectangular-display singleton.
+    ///
+    /// `InsetsState.readFromParcel` assigns `mDisplayShape` from the parcel and
+    /// `calculateRelativeDisplayShape` dereferences it unconditionally, so the
+    /// field can never be a null parcel object.
+    #[must_use]
+    pub fn none() -> Self {
+        DisplayShape {
+            spec: String::new(),
+            display_width: 0,
+            display_height: 0,
+            physical_pixel_display_size_ratio: 0.0,
+            rotation: 0,
+            offset_x: 0,
+            offset_y: 0,
+            scale: 1.0,
+        }
+    }
+}
+
 impl ParcelCodec for DisplayShape {
     const NAME: &'static str = "android.view.DisplayShape";
 
@@ -728,34 +749,44 @@ impl ParcelCodec for DisplayShape {
 // InsetsState / InsetsSource / InsetsSourceControl
 // ---------------------------------------------------------------------------
 
-/// The eight `InsetsState.InternalInsetsType` values ACOS models.
+/// The `WindowInsets.Type` public bit values an `InsetsSource` carries.
+///
+/// `InsetsSource.mType` is an `@InsetsType` value: the framework compares it
+/// against `WindowInsets.Type.*` (`InsetsState.processSource` /
+/// `WindowInsets$Type.indexOf`) and `InsetsSource.createId` rejects anything
+/// that is not a single `Type` bit. The DEX-derived values are
+/// `STATUS_BARS=1, NAVIGATION_BARS=2, CAPTION_BAR=4, IME=8, SYSTEM_GESTURES=16`,
+/// `MANDATORY_SYSTEM_GESTURES=32, TAPPABLE_ELEMENT=64, DISPLAY_CUTOUT=128`,
+/// `WINDOW_DECOR=256, SYSTEM_OVERLAYS=512`. (These are *not* the legacy
+/// `ITYPE_*` indices a `dumpsys` prints: the wire format stores the public
+/// type, which is what `WindowInsets$Type.indexOf` accepts.)
 pub mod inset_type {
-    /// `ITYPE_STATUS_BAR`.
-    pub const STATUS_BAR: i32 = 0;
-    /// `ITYPE_NAVIGATION_BAR`.
-    pub const NAVIGATION_BAR: i32 = 1;
-    /// `ITYPE_CAPTION_BAR`.
-    pub const CAPTION_BAR: i32 = 2;
-    /// `ITYPE_TOP_GESTURES`.
-    pub const TOP_GESTURES: i32 = 3;
-    /// `ITYPE_BOTTOM_GESTURES`.
-    pub const BOTTOM_GESTURES: i32 = 4;
-    /// `ITYPE_LEFT_GESTURES`.
-    pub const LEFT_GESTURES: i32 = 5;
-    /// `ITYPE_RIGHT_GESTURES`.
-    pub const RIGHT_GESTURES: i32 = 6;
-    /// `ITYPE_TOP_TAPPABLE_ELEMENT`.
-    pub const TOP_TAPPABLE_ELEMENT: i32 = 7;
-    /// `ITYPE_BOTTOM_TAPPABLE_ELEMENT`.
-    pub const BOTTOM_TAPPABLE_ELEMENT: i32 = 8;
-    /// `ITYPE_IME`.
-    pub const IME: i32 = 13;
-    /// `ITYPE_DISPLAY_CUTOUT`.
-    pub const DISPLAY_CUTOUT: i32 = 21;
-    /// `ITYPE_SYSTEM_GESTURES`.
-    pub const SYSTEM_GESTURES: i32 = 23;
-    /// `ITYPE_MANDATORY_SYSTEM_GESTURES`.
-    pub const MANDATORY_SYSTEM_GESTURES: i32 = 24;
+    /// `WindowInsets.Type.statusBars()`.
+    pub const STATUS_BAR: i32 = 1;
+    /// `WindowInsets.Type.navigationBars()`.
+    pub const NAVIGATION_BAR: i32 = 2;
+    /// `WindowInsets.Type.captionBar()`.
+    pub const CAPTION_BAR: i32 = 4;
+    /// `WindowInsets.Type.systemGestures()` (top strip).
+    pub const TOP_GESTURES: i32 = 16;
+    /// `WindowInsets.Type.systemGestures()` (bottom strip).
+    pub const BOTTOM_GESTURES: i32 = 16;
+    /// `WindowInsets.Type.systemGestures()` (left strip).
+    pub const LEFT_GESTURES: i32 = 16;
+    /// `WindowInsets.Type.systemGestures()` (right strip).
+    pub const RIGHT_GESTURES: i32 = 16;
+    /// `WindowInsets.Type.tappableElement()` (status-bar strip).
+    pub const TOP_TAPPABLE_ELEMENT: i32 = 64;
+    /// `WindowInsets.Type.tappableElement()` (nav-bar strip).
+    pub const BOTTOM_TAPPABLE_ELEMENT: i32 = 64;
+    /// `WindowInsets.Type.ime()`.
+    pub const IME: i32 = 8;
+    /// `WindowInsets.Type.displayCutout()`.
+    pub const DISPLAY_CUTOUT: i32 = 128;
+    /// `WindowInsets.Type.systemGestures()`.
+    pub const SYSTEM_GESTURES: i32 = 16;
+    /// `WindowInsets.Type.mandatorySystemGestures()`.
+    pub const MANDATORY_SYSTEM_GESTURES: i32 = 32;
 }
 
 /// `android.view.InsetsSource`.

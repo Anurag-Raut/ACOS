@@ -18,7 +18,8 @@ use acos_parcel::binder::BinderId;
 use crate::callbacks::{CallbackQueue, WmCallback};
 use crate::codec::{
     inset_type, ClientWindowFrames, Configuration, Cutout, CutoutPathParserInfo, DisplayCutout,
-    InsetsSource, InsetsSourceControl, InsetsSourceControlArray, InsetsState, LayoutParams,
+    DisplayShape, InsetsSource, InsetsSourceControl, InsetsSourceControlArray, InsetsState,
+    LayoutParams,
     MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners, SurfaceControlInfo,
     WindowConfiguration,
 };
@@ -288,7 +289,17 @@ impl WindowManager {
             .unwrap_or_else(|_| Channel::in_memory(channel_name, 0));
         let channel_handle = self.channels.register(channel);
         let insets_state = reference_insets_state(&self.display, false);
-        let insets_controls = reference_insets_controls(&self.display, layer);
+        // The controls describe inset-animation leash surfaces the window
+        // manager owns. They are distinct layers: `base_layer + id` would make
+        // the status-bar leash *be* the window layer, so a released leash would
+        // invalidate the window's SurfaceControl. Allocate a fresh handle for
+        // each leash instead.
+        let mut insets_controls = reference_insets_controls(&self.display, layer);
+        for control in &mut insets_controls.0 {
+            if let Some(leash) = control.leash.as_mut() {
+                leash.handle = Some(self.alloc_layer());
+            }
+        }
         let focusable = !params.is_system_window();
         let z = self.windows.len() as i64 + 1;
 
@@ -510,7 +521,7 @@ impl WindowManager {
     /// `IWindowSession.updateRequestedVisibleTypes` (oneway).
     pub fn update_requested_visible_types(&mut self, window: WindowId, types: i32) -> Result<()> {
         let display = self.display;
-        let ime_visible = types & (1 << inset_type::IME) != 0;
+        let ime_visible = types & inset_type::IME != 0;
         let (state, controls) = {
             let record = self
                 .windows
@@ -532,7 +543,7 @@ impl WindowManager {
             self.callbacks.push(
                 window,
                 WmCallback::ShowInsets {
-                    types: 1 << inset_type::IME,
+                    types: inset_type::IME,
                     from_ime: false,
                     token: None,
                 },
@@ -655,7 +666,7 @@ pub fn empty_insets_state(display: &DisplaySpec) -> InsetsState {
         rounded_corners: None,
         rounded_corner_frame: RectI::default(),
         privacy_indicator_bounds: None,
-        display_shape: None,
+        display_shape: Some(DisplayShape::none()),
         sources: vec![],
     }
 }
@@ -738,8 +749,9 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
             static_bounds: vec![RectI::new(827, 0, 1043, 128)],
             rotation: 0,
         }),
-        // DisplayShape is left absent: its string spec is not in the capture.
-        display_shape: None,
+        // The framework dereferences `mDisplayShape`, so it must be a real
+        // parcel object; `DisplayShape.NONE` is the rectangular-display value.
+        display_shape: Some(DisplayShape::none()),
         sources,
     }
 }
@@ -980,7 +992,7 @@ mod tests {
         wm.add_to_display_as_user(sess, BinderId(1), app_params(), 0)
             .unwrap();
         wm.callbacks.clear();
-        wm.update_requested_visible_types(1, 1 << inset_type::IME)
+        wm.update_requested_visible_types(1, inset_type::IME)
             .unwrap();
         let c = wm.callbacks.pop().unwrap();
         assert!(matches!(c.callback, WmCallback::ShowInsets { .. }));

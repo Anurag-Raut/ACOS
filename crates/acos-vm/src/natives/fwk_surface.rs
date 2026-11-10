@@ -1159,9 +1159,20 @@ fn native_set_flags(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn native_set_transform_hint(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    // `setTransformHint(int)` is a transaction-level hint in this API.
+    // `SurfaceControl.setTransformHint(int)` is a direct layer call:
+    // `nativeSetTransformHint(long nativeObject, int hint)` (`(JI)V`). The
+    // transaction-scoped variant has the `(JJI)V` shape handled by
+    // `nativeSetFixedTransformHint`.
+    let handle = vm.arg_i64(ctx, 0) as u64;
     let hint = vm.arg_i32(ctx, 1);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::Recorded { tag: 1, args: [hint as i64, 0, 0, 0] }))
+    let outcome = with_state(|st| match st.layers.get_mut(&handle) {
+        Some(l) => {
+            l.transform_hint = hint;
+            Ok(())
+        }
+        None => Err(()),
+    });
+    outcome.map_err(|()| stale_error(vm, handle))
 }
 
 fn native_set_layer_stack(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

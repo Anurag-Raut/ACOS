@@ -6,7 +6,7 @@
 
 use acos_parcel::Parcel;
 use acos_wm::codec::{
-    ClientWindowFrames, Configuration, Cutout, InsetsSource, LayoutParams,
+    inset_type, ClientWindowFrames, Configuration, Cutout, InsetsSource, LayoutParams,
     MergedConfiguration, ParcelCodec, PrivacyIndicatorBounds, RoundedCorners, WindowConfiguration,
 };
 use acos_wm::display::DisplaySpec;
@@ -151,8 +151,8 @@ fn insets_state_round_trips_with_reference_sources() {
     assert!(!ime.visible);
     assert_eq!(ime.visible_frame, Some(RectI::new(0, 2274, 1080, 2400)));
     // Status/nav insets are the measured 128/63.
-    assert_eq!(state.visible_insets_for(0).top, 128);
-    assert_eq!(state.visible_insets_for(1).bottom, 63);
+    assert_eq!(state.visible_insets_for(inset_type::STATUS_BAR).top, 128);
+    assert_eq!(state.visible_insets_for(inset_type::NAVIGATION_BAR).bottom, 63);
     roundtrip(empty_insets_state(&dc));
 }
 
@@ -161,7 +161,7 @@ fn insets_state_ime_visible_round_trips() {
     let dc = DisplaySpec::reference_1080x2400();
     let state = reference_insets_state(&dc, true);
     roundtrip(state.clone());
-    assert_eq!(state.visible_insets_for(13).bottom, 126);
+    assert_eq!(state.visible_insets_for(inset_type::IME).bottom, 126);
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn optional_codecs_round_trip() {
     });
     roundtrip(InsetsSource {
         id: 3,
-        type_: 13,
+        type_: inset_type::IME,
         frame: RectI::new(0, 0, 0, 0),
         visible_frame: Some(RectI::new(0, 2274, 1080, 2400)),
         visible: false,

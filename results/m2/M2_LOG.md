@@ -2328,3 +2328,148 @@ commit. Worktrees and scratch targets were deleted.
 
 Final state: pump + virtual-time clock + `System.nanoTime` fix + tests + this log
 table are uncommitted on main; orchestrator to commit selectively.
+
+# W124-A session — PropertyValuesHolder / Method.invoke / insets codec; counter reaches onResume
+
+Worktree: clean HEAD `0b875d8`, `CARGO_TARGET_DIR=.cache/target-w124a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_BOOT_DIR=.cache/boot/android-34`. No commits.
+Owned files only, plus the `acos-wm` codec the relayout reply needs (no agent
+owns it in this wave; see below).
+
+## Bottom line
+
+`counter.apk` now runs past the animation setup and the WindowInsets decode:
+`android.animation.PropertyValuesHolder`'s twelve JNI setters, `java.lang.reflect.Method.invoke`,
+and the `InsetsState`/`InsetsSourceControl` reply are real, and the
+`SurfaceControl` out-param path works. `performTraversals` reaches
+`relayoutWindow` (`IWindowSession.relayout` reply decoded) and `onResume` runs
+(`AcosCounter: onResume`). The `first_frame` rung is the next blocker: the app
+process reaches `on_resume` but no frame is published — the render/handoff path
+(W122-A's harness) has not produced a completed frame. `acos observe --tree`
+returns the live tree (`count=0`, `inc`/`reset` buttons); `acos tap --text
+Increment` now resolves the node and injects the tap, but the app does not
+receive the click until a frame is published (`state_changed=false`).
+
+## Ladder (`counter.apk`, `ACOS_BOOT_DIR=.cache/boot/android-34`)
+
+| Rung | Before W124-A | After W124-A | Evidence |
+|---|---|---|---|
+| `application_on_create` .. `activity_on_create` | ok | ok | launch JSON |
+| `PropertyValuesHolder.setupSetter` -> `nGetFloatMethod` | `UNSUPPORTED_JAVA_API` | **ok** | full 12-native surface |
+| `setupSetterAndGetter` -> `Method.invoke` | `UNSUPPORTED_JAVA_API` | **ok** | getter invoked; `nCallFloatMethod` runs |
+| `WindowInsets$Type.indexOf(21)` | `IllegalArgumentException` | **fixed** | source type must be the public `WindowInsets.Type` bit |
+| `InsetsState.calculateRelativeDisplayShape` -> NPE | NPE (`mDisplayShape` null) | **fixed** | codec writes `DisplayShape.NONE` |
+| `ViewRootImpl.setView` -> `addToDisplayAsUser` | ok | ok | `ACOS_WMS_TRACE` |
+| `performTraversals` -> `dispatchApplyInsets` | reached, NPE | **ok** | `ViewRootImpl.getWindowInsets` |
+| `IWindowSession.relayout` | not reached | **reached, reply decoded** | `ACOS_WMS_TRACE` code=5; `relayoutWindow` runs |
+| `SurfaceControl.setTransformHint(nativeObject)` | stale transaction | **ok** | direct layer call |
+| `Surface.copyFrom(surfaceControl)` | stale layer (leash alias free) | **ok** | leashes are distinct layers |
+| `onResume` (`ResumeActivityItem`) | not reached | **ok** | `AcosCounter: onResume` |
+| `first_frame` | not reached | blocked: no completed frame | `UNSUPPORTED_BACKEND` |
+| `acos observe --tree` | — | **pass** | `count='0'`, `inc`/`reset` |
+| `acos tap --text Increment` | stub `ELEMENT_NOT_FOUND/NoUiTree` | resolves node + injects tap; `state_changed=false` (needs a frame) | tap JSON |
+
+## Fix 1 — `PropertyValuesHolder` native surface (new `fwk_animation.rs`)
+
+The API-34 boot DEX declares exactly twelve `PropertyValuesHolder` natives:
+`nGetFloatMethod`, `nGetIntMethod`, `nGetMultipleFloatMethod`,
+`nGetMultipleIntMethod`, `nCallFloatMethod`, `nCallIntMethod`,
+`nCallTwoFloatMethod`, `nCallTwoIntMethod`, `nCallFourFloatMethod`,
+`nCallFourIntMethod`, `nCallMultipleFloatMethod`, `nCallMultipleIntMethod`.
+(The legacy `nSetFloatValues`/`nInitializeIntProperty` the dispatch mentioned no
+longer exist in Android 14 — verified against both the framework DEX and the
+bootclasspath native table.) `nGet*Method` builds the fixed-arity `(T…)V` (or
+`(F)V`/`(I)V`) signature, resolves the setter with `find_method(..., Virtual)`
+and returns an opaque tagged `jlong` carrying the VM `MethodId`; a miss raises
+`NoSuchMethodError`, which `FloatPropertyValuesHolder.setupSetter` catches and
+falls back to reflection as on ART. `nCall*Method` decodes the handle and runs
+the real DEX method through `interp::call_method`; the multiple variants expand
+the `float[]`/`int[]` into individual arguments, matching ART's
+`CallVoidMethodA` implementation.
+
+## Fix 2 — `java.lang.reflect.Method.invoke` (new `fwk_method_invoke.rs`)
+
+`Method.invoke` is declared `native` in the API-34 boot DEX, so the animation
+getter fallback died on it. The native reads `artMethod` from the `Method`
+mirror, unboxes the `Object[]` parameters per the target method's types
+(`fwk_annotations::unbox_primitive`), dispatches through `interp::call_method`
+and boxes the result. This is the same contract `fwk_proxy` and
+`fwk_reflect`'s `Constructor.newInstance0` already use.
+
+## Fix 3 — insets wire format uses the public `WindowInsets.Type` bits
+
+`InsetsSource.mType` is an `@InsetsType` value: `ViewRootImpl` compares it with
+`WindowInsets.Type.*` and `WindowInsets$Type.indexOf` / `InsetsSource.createId`
+reject anything that is not a single type bit. The codec modelled the legacy
+`ITYPE_*` indices (`STATUS_BAR=0 … DISPLAY_CUTOUT=21`), so the framework threw
+`type needs to be >= FIRST and <= LAST, type=21` while processing our display
+cutout. `acos_wm::codec::inset_type` now carries the DEX-derived public values
+(`STATUS_BAR=1, NAVIGATION_BAR=2, CAPTION_BAR=4, IME=8, SYSTEM_GESTURES=16,
+MANDATORY_SYSTEM_GESTURES=32, TAPPABLE_ELEMENT=64, DISPLAY_CUTOUT=128`), and
+`updateRequestedVisibleTypes`/`ShowInsets` use the type bit directly (not
+`1 << type`).
+
+## Fix 4 — `DisplayShape` must be a real parcel object
+
+`InsetsState.readFromParcel` assigns `mDisplayShape` from the parcel and
+`calculateRelativeDisplayShape` dereferences it unconditionally, so a null
+marker yields `mDisplayShape == null` and an NPE. The reference state now writes
+`DisplayShape::none()` (the framework's `DisplayShape.NONE`).
+
+## Fix 5 — inset control leashes are distinct layers
+
+`reference_insets_controls` built the leash handles as `base_layer + id`, so the
+status-bar leash *was* the window layer. When the framework released a leash
+`SurfaceControl`, `NativeAllocationRegistry.applyFreeFunction` marked the window
+layer dead and `Surface.copyFrom` failed with a stale handle. The window manager
+now allocates a fresh layer per leash (inset-animation surfaces really are
+separate layers).
+
+## Fix 6 — `SurfaceControl.setTransformHint` is a direct layer call
+
+`nativeSetTransformHint(long nativeObject, int hint)` (`(JI)V`) is not the
+transaction-scoped `(JJI)V` shape; it now updates the layer's `transform_hint`
+directly instead of looking up a transaction.
+
+## Fix 7 — lifecycle log peek + `acos tap --text`
+
+`fixture_log()` drained the whole sink and kept only `AcosFixture` records, so
+an app that logs under its own tag (`AcosCounter`) lost its `onResume` line
+before the session's stage probe and `acos logs` could see it; it now peeks the
+sink (cleared at the start of each run). `Cmd::TapText` was a hard-coded
+"no UI tree" stub; it now walks the live `view_tree` and injects a tap at the
+matched node's centre, so `acos tap --text Increment` resolves and taps the
+button. (The app still needs a published frame for the click to land —
+`first_frame` below.)
+
+## Gates (this worktree)
+
+| Item | Result |
+|---|---|
+| `cargo check --workspace --all-targets` | clean |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo test -p acos-vm` | all pass (incl. `render_views` with `.cache/boot` present) |
+| `cargo test -p acos-wm` | all pass |
+| `cargo test -p acos-services` | all pass (incl. parcelable) |
+| `cargo test -p acos-cli` | all pass |
+| `cargo test -p acos-runtime` | all pass except the **pre-existing** `pms.rs::pms_java_app_info_matches_the_reference_capture` (`expected 43 fields, got 23`, fails identically on clean `HEAD`, W118-A) |
+| `tools/diff-dexprogs.sh --corelib real` | 27 pass / 0 fail / 0 unsupported |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | 27 pass / 0 fail / 0 unsupported |
+
+## Honesty / handoff
+
+* The API-34 DEX has exactly the twelve `PropertyValuesHolder` natives; the
+  older `nSetFloatValues`/`nInitializeIntProperty` are absent, so nothing was
+  invented to "complete" them.
+* The M2 gate stays `#[ignore]`d: its fixture `hello-views` is still blocked at
+  `android.widget.EditText` inflate (`android.content.IContentProvider LIST_config`
+  unsupported), so `onResume` is not reached there. `counter.apk` does reach
+  `onResume`, but the gate's reference is the hello-views `AcosFixture` log.
+* The `acos-wm` codec/wms changes (fixes 3–5) are outside the declared file set
+  but are the relayout reply the dispatch requires; no other agent owns
+  `acos-wm` in this wave.
+* `first_frame` is W122-A's render-pipeline/harness scope: the app reaches
+  `on_resume`, the view tree is live, but no `FrameStore` frame is published, so
+  the tap round trip cannot complete yet.
+* No fake: every rung above is a real framework method running the real boot
+  DEX; the only ACOS-side values are the WMS reply fields.

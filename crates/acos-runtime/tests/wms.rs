@@ -21,8 +21,8 @@ use acos_parcel::Parcel;
 use acos_runtime::wms_java;
 use acos_vm::natives::fwk_surface::SurfaceBackend;
 use acos_wm::codec::{
-    ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
-    ParcelCodec, SurfaceControlInfo,
+    inset_type, ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams,
+    MergedConfiguration, ParcelCodec, SurfaceControlInfo,
 };
 use acos_wm::geom::RectI;
 
@@ -138,14 +138,25 @@ fn add_to_display_as_user_returns_reference_frame_and_insets() {
     assert!(channel_token.is_some(), "channel token binder");
 
     let insets: InsetsState = read_cond(&mut reply).expect("insets state");
-    assert_eq!(insets.visible_insets_for(0).top, 128, "status bar");
-    assert_eq!(insets.visible_insets_for(1).bottom, 63, "nav bar");
+    assert_eq!(
+        insets.visible_insets_for(inset_type::STATUS_BAR).top,
+        128,
+        "status bar"
+    );
+    assert_eq!(
+        insets.visible_insets_for(inset_type::NAVIGATION_BAR).bottom,
+        63,
+        "nav bar"
+    );
     assert_eq!(insets.display_frame.right, 1080);
     assert_eq!(insets.display_frame.bottom, 2400);
 
     let controls: InsetsSourceControlArray = read_cond(&mut reply).expect("insets controls");
     assert_eq!(controls.0.len(), 3);
-    assert!(controls.0.iter().any(|c| c.type_ == 13), "IME control");
+    assert!(
+        controls.0.iter().any(|c| c.type_ == inset_type::IME),
+        "IME control"
+    );
 
     let out_frame = read_cond::<RectI>(&mut reply).expect("outFrame");
     assert_eq!(out_frame, RectI::new(0, 128, 1080, 2337));

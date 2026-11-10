@@ -303,6 +303,17 @@ fn rc_finish(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             canvas_node.0, node.0
         )));
     }
+    if std::env::var_os("ACOS_RENDER_VIEWS_VERBOSE").is_some() {
+        let text_ops = ops
+            .iter()
+            .filter(|o| matches!(o, DisplayOp::DrawText(..)))
+            .count();
+        eprintln!(
+            "RecordingCanvas.finishRecording ops={} text={}",
+            ops.len(),
+            text_ops
+        );
+    }
     // Publish the staged list atomically onto the node.
     with_ctx(|c| {
         if let Some(n) = c.render_nodes.get_mut(node) {
@@ -445,7 +456,12 @@ fn c_save_unclipped_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let n = rec(h, |c| {
         c.stack.push((c.matrix, c.clip));
         c.ops.push(DisplayOp::Save);
-        c.clip = bounds;
+        // `bounds` is in the current (local) coordinate space; the tracked clip
+        // is kept in device/root coordinates, so map it through the matrix.
+        c.clip = c
+            .matrix
+            .map_rect(&bounds)
+            .unwrap_or_else(|| RectF::new(0.0, 0.0, 0.0, 0.0));
         c.ops.push(DisplayOp::ClipRect(bounds, ClipOp::Replace, false));
         c.ops.push(DisplayOp::SaveLayerAlpha(Some(bounds), 255));
         c.unclipped.push(c.ops.len() - 1);
@@ -634,12 +650,21 @@ fn c_clip_rect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let op = ClipOp::from_ordinal(vm.arg_i32(ctx, 5)).unwrap_or(ClipOp::Intersect);
     rec(h, |c| {
         c.ops.push(DisplayOp::ClipRect(r, op, false));
-        // Track the (rectangular) clip for quick-reject/getClipBounds. Only
-        // Intersect and Replace stay rectangular; Difference and
+        // The argument is in the current (local) coordinate space, but the
+        // tracked clip is kept in device/root coordinates so successive
+        // intersects compose correctly under a translated/concatenated canvas.
+        // (Not mapping it made `getClipBounds` return a local-sized rect at a
+        // parent-space offset — e.g. `[42,42,9,18]` — so `Layout.draw` saw an
+        // empty clip and every `TextView`/`Button` label vanished.)
+        let device = c
+            .matrix
+            .map_rect(&r)
+            .unwrap_or_else(|| RectF::new(0.0, 0.0, 0.0, 0.0));
+        // Only Intersect and Replace stay rectangular; Difference and
         // ReverseDifference are left to the rasteriser's mask.
         c.clip = match op {
-            ClipOp::Replace => r,
-            ClipOp::Intersect => intersect(c.clip, r),
+            ClipOp::Replace => device,
+            ClipOp::Intersect => intersect(c.clip, device),
             ClipOp::Difference | ClipOp::ReverseDifference => c.clip,
         };
     });
@@ -658,7 +683,15 @@ fn c_clip_path(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn c_get_clip_bounds(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = canvas_handle(vm, ctx)?;
-    let clip = rec(h, |c| c.clip).unwrap_or_default();
+    // The tracked clip is in device/root coordinates; `getClipBounds` must
+    // report it in the canvas's current local coordinate space.
+    let clip = rec(h, |c| {
+        c.matrix
+            .inverted()
+            .and_then(|inv| inv.map_rect(&c.clip))
+            .unwrap_or(c.clip)
+    })
+    .unwrap_or_default();
     let obj = vm.arg_ref(ctx, 1);
     vm.set_instance_field_by_name(obj, "left", clip.left.floor() as i32 as u32);
     vm.set_instance_field_by_name(obj, "top", clip.top.floor() as i32 as u32);
@@ -688,8 +721,11 @@ fn c_quick_reject_rect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         let b = vm.get_instance_field_by_name(obj, "bottom").unwrap_or(0) as i32;
         RectF::new(l as f32, t as f32, rr as f32, b as f32)
     };
-    let clip = rec(h, |c| c.clip).unwrap_or_default();
-    vm.ret_bool(ctx, !overlaps(clip, r));
+    let (clip, matrix) = rec(h, |c| (c.clip, c.matrix)).unwrap_or_default();
+    let device = matrix
+        .map_rect(&r)
+        .unwrap_or_else(|| RectF::new(0.0, 0.0, 0.0, 0.0));
+    vm.ret_bool(ctx, !overlaps(clip, device));
     Ok(())
 }
 
@@ -851,7 +887,15 @@ fn d_color_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn d_paint(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = canvas_handle(vm, ctx)?;
     let p = snap(vm.arg_i64(ctx, 1))?;
-    let clip = rec(h, |c| c.clip).unwrap_or_default();
+    // The op is recorded in local coordinates and transformed on replay, so
+    // report the tracked device clip back in this canvas's local space.
+    let clip = rec(h, |c| {
+        c.matrix
+            .inverted()
+            .and_then(|inv| inv.map_rect(&c.clip))
+            .unwrap_or(c.clip)
+    })
+    .unwrap_or_default();
     push(h, DisplayOp::DrawRect(clip, p))
 }
 

@@ -291,9 +291,14 @@ impl Runtime {
 }
 
 /// The `AcosFixture` messages currently in the process log sink.
+///
+/// This peeks the sink instead of draining it: a fixture that logs under its
+/// own tag (e.g. `AcosCounter`) still has its `onResume` line visible to the
+/// session's `acos logs` view and to the stage probe. The sink is cleared at
+/// the start of each lifecycle run.
 #[must_use]
 pub fn fixture_log() -> LifecycleLog {
-    os_log::drain()
+    os_log::records()
         .into_iter()
         .filter(|r| r.tag == "AcosFixture")
         .map(|r| r.msg)
