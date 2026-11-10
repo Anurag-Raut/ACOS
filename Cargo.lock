@@ -72,6 +72,7 @@ version = "0.1.0"
 dependencies = [
  "acos-dex",
  "acos-native-loader",
+ "acos-sandbox",
  "acos-test-support",
  "acos-vm",
  "cc",
