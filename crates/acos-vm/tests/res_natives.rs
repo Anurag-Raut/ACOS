@@ -193,6 +193,11 @@ fn assert_reference(out: &str) {
         "orientation=1",
         "width=-1",
         "height=-1",
+        // W110-A: `open` + `available` + `read` + `close` over a real asset
+        // stream. Exercises `nativeAssetGetLength`/`nativeAssetGetRemainingLength`/
+        // `nativeAssetRead`/`nativeAssetDestroy`, whose real Java signatures take
+        // only the asset pointer.
+        "asset.ok=true",
         "done",
     ] {
         assert!(

@@ -5,6 +5,7 @@ import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import java.io.InputStream;
 import org.xmlpull.v1.XmlPullParser;
 
 /**
@@ -82,6 +83,19 @@ public class ResMain {
         System.out.println("height=" + ta.getInt(3, -999));
         ta.recycle();
         parser.close();
+
+        // Regression (W110-A): the static `nativeAsset*` methods receive only
+        // the `AssetInputStream` pointer, but the engine's asset ids are
+        // per-manager. A native that read a second `(manager, handle)` argument
+        // crashed with an out-of-bounds register read as soon as a drawable
+        // opened a real asset stream. Open the compiled layout and exercise
+        // length / available / read / close end to end.
+        InputStream asset = am.open("res/layout/main.xml");
+        int assetLen = asset.available();
+        byte[] head = new byte[4];
+        int got = asset.read(head);
+        asset.close();
+        System.out.println("asset.ok=" + (assetLen > 0 && got == 4 && (head[0] & 0xff) == 0x03));
 
         System.out.println("done");
     }

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use crate::res::config::ResConfig;
 use crate::res::manager::{AssetManager, MAX_REFERENCE_DEPTH};
 use crate::res::value::{
-    ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE, TYPE_DYNAMIC_REFERENCE,
-    TYPE_NULL, TYPE_REFERENCE,
+    ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE, TYPE_DYNAMIC_ATTRIBUTE,
+    TYPE_DYNAMIC_REFERENCE, TYPE_NULL, TYPE_REFERENCE,
 };
 use crate::res::xmlblock::{XmlEvent, XmlParserState};
 
@@ -350,16 +350,29 @@ impl AssetManager {
                         .find_map(|m| m.get(&wanted).copied())
                 });
             if let Some(value) = resolved {
-                let tv = TypedValueOut {
-                    data_type: value.data_type,
-                    data: value.data,
-                    asset_cookie: -1,
-                    resource_id: if value.is_reference() { value.data } else { attr },
-                    changing_configurations: 0,
-                    density: config.density,
-                    source_resource_id: attr,
-                    flags: 0,
-                    string: None,
+                // Chase the value to its concrete form, exactly like
+                // `AssetManager2::ResolveAttributeReference` + `ResolveReference`:
+                // a `?attr` chain is followed through the theme, then a `@resid`
+                // through the resource table. `nativeResolveAttrs` previously
+                // copied a resolved `TYPE_REFERENCE` verbatim, so
+                // `Resources.Theme.resolveAttributes` (used by
+                // `VectorDrawable.applyTheme`) handed a `TYPE_REFERENCE` to
+                // `Resources.loadColorStateList`, whose `loadComplexColor` raised
+                // `UnsupportedOperationException: Can't convert to ComplexColor:
+                // type=0x1`.
+                let chained = resolve_theme_attributes(themed, value);
+                let built = if chained.is_reference() && chained.data != 0 {
+                    self.resolve_references(chained.data, true).and_then(
+                        |(source_index, entry, final_id)| {
+                            self.build_typed_value(source_index, &entry, attr, final_id, 0)
+                        },
+                    )
+                } else {
+                    None
+                };
+                let tv = match built {
+                    Some((_cookie, tv)) => tv,
+                    None => null_or_raw_typed_value(chained, attr),
                 };
                 tv.write_style(&mut out_values_direct[i * STYLE_NUM_ENTRIES..]);
                 let slot = out_count as usize + 1;
@@ -436,6 +449,23 @@ impl AssetManager {
         }
     }
 
+}
+
+/// Follow a `?attr` chain through the theme's own values, stopping at the
+/// first non-attribute (or on a depth/cycle bound). `@resid` references are
+/// left for [`AssetManager::resolve_references`], which owns the resource-table
+/// lookup.
+fn resolve_theme_attributes(theme: &Theme, mut value: ResValue) -> ResValue {
+    for _ in 0..MAX_REFERENCE_DEPTH {
+        match value.data_type {
+            TYPE_ATTRIBUTE | TYPE_DYNAMIC_ATTRIBUTE => match theme.get_raw(value.data) {
+                Some(next) => value = next,
+                None => break,
+            },
+            _ => break,
+        }
+    }
+    value
 }
 
 /// The `TypedValue` for a raw style value that did not resolve.

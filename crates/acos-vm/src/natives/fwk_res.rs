@@ -118,6 +118,26 @@ thread_local! {
     static REG: RefCell<Registry> = RefCell::new(Registry::default());
 }
 
+/// Pack an `AssetManager` registry handle and an engine asset handle into the
+/// single `long` that the platform's static `nativeAsset*` methods receive.
+///
+/// The real `android.content.res.AssetManager` declares `nativeAssetGetLength`
+/// as `(J)J` etc. — it passes only the `AAsset*` equivalent, while the engine's
+/// asset ids are per-manager. Encoding the owning manager in the high 32 bits
+/// keeps the Java-visible handle opaque and self-describing.
+fn pack_asset(mgr: u64, handle: u64) -> u64 {
+    if handle == 0 {
+        0
+    } else {
+        (mgr << 32) | (handle & 0xffff_ffff)
+    }
+}
+
+/// Split a packed asset handle back into `(manager, asset)`.
+fn unpack_asset(packed: u64) -> (u64, u64) {
+    (packed >> 32, packed & 0xffff_ffff)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -938,7 +958,7 @@ fn am_open_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             .and_then(|m| m.open_asset(&name, mode).ok())
             .unwrap_or(0)
     });
-    vm.ret_i64(ctx, h as i64);
+    vm.ret_i64(ctx, pack_asset(mgr, h) as i64);
     Ok(())
 }
 
@@ -956,7 +976,7 @@ fn am_open_non_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             .and_then(|m| m.open_non_asset(cookie, &name, mode).ok())
             .unwrap_or(0)
     });
-    vm.ret_i64(ctx, h as i64);
+    vm.ret_i64(ctx, pack_asset(mgr, h) as i64);
     Ok(())
 }
 
@@ -1453,8 +1473,7 @@ fn am_get_parent_theme_identifier(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_destroy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
     REG.with(|r| {
         if let Some(m) = r.borrow_mut().managers.get_mut(&mgr) {
             m.asset_destroy(handle);
@@ -1464,8 +1483,7 @@ fn am_asset_destroy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_read_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
     let n = REG.with(|r| {
         r.borrow_mut()
             .managers
@@ -1479,11 +1497,10 @@ fn am_asset_read_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_read(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
-    let buf = vm.arg_ref(ctx, 2);
-    let off = vm.arg_i32(ctx, 3) as usize;
-    let len = vm.arg_i32(ctx, 4) as usize;
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
+    let buf = vm.arg_ref(ctx, 1);
+    let off = vm.arg_i32(ctx, 2) as usize;
+    let len = vm.arg_i32(ctx, 3) as usize;
     let arr_len = vm.array_length(buf).unwrap_or(0);
     let mut tmp = vec![0u8; arr_len];
     let n = REG.with(|r| {
@@ -1502,10 +1519,9 @@ fn am_asset_read(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_seek(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
-    let offset = vm.arg_i64(ctx, 2);
-    let whence = vm.arg_i32(ctx, 3);
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
+    let offset = vm.arg_i64(ctx, 1);
+    let whence = vm.arg_i32(ctx, 2);
     let n = REG.with(|r| {
         r.borrow_mut()
             .managers
@@ -1519,8 +1535,7 @@ fn am_asset_seek(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_get_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
     let n = REG.with(|r| {
         r.borrow()
             .managers
@@ -1534,8 +1549,7 @@ fn am_asset_get_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn am_asset_get_remaining_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let mgr = vm.arg_i64(ctx, 0) as u64;
-    let handle = vm.arg_i64(ctx, 1) as u64;
+    let (mgr, handle) = unpack_asset(vm.arg_i64(ctx, 0) as u64);
     let n = REG.with(|r| {
         r.borrow()
             .managers

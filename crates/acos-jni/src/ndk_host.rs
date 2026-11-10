@@ -759,9 +759,26 @@ impl NdkHost for ProductionNdkHost {
         let now = monotonic_nanos();
         let frame_time = now.saturating_add(delay_nanos.max(0)).saturating_add(interval);
         if let Some(cb) = cb {
-            // SAFETY: the guest registered this C callback for the frame; it
-            // is invoked synchronously on the registering thread.
-            unsafe { invoke_frame_callback(cb, frame_time, data) };
+            // Real Android never runs the frame callback inside the post: the
+            // Choreographer queues it on the calling thread's looper and the
+            // looper delivers it at the next poll with the frame time. Running
+            // it synchronously here re-enters the engine's `RequestFrame`
+            // mid-task (the callback consumes the waiter state before the
+            // posting task returns), which leaves a mismatched frame callback
+            // and no frame. Queue it on the loader's `ALooper` instead.
+            // SAFETY: the guest registered this C callback for the frame and
+            // supplied `data`; the NDK contract ties both to the looper.
+            let queued = unsafe {
+                acos_native_loader::bionic::ndk::ndk_looper::post_frame_callback(
+                    frame_time, cb, data,
+                )
+            };
+            if !queued {
+                // No prepared looper on this thread: fall back to a direct
+                // invocation so a caller without a looper still advances.
+                // SAFETY: forwarded from the caller's contract.
+                unsafe { invoke_frame_callback(cb, frame_time, data) };
+            }
         }
         Ok(alloc_choreographer_id())
     }

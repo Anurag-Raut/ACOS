@@ -59,6 +59,15 @@ fn post(
     data: *mut c_void,
     symbol: &'static str,
 ) -> u64 {
+    static TRACED: AtomicUsize = AtomicUsize::new(0);
+    if TRACED.fetch_add(1, Ordering::Relaxed) < 16 {
+        eprintln!(
+            "ACOS W108A {symbol} delay={frame_time_nanos} cb={:p} data={:p} tid={:?}",
+            cb.map(|f| f as *const c_void).unwrap_or(std::ptr::null()),
+            data,
+            std::thread::current().id()
+        );
+    }
     match with_host(|h| h.choreographer_post(frame_time_nanos, cb, data)) {
         Ok(token) => token,
         Err(e) => host_failed(LIB, symbol, e, 0),

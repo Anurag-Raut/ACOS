@@ -12,4 +12,12 @@ public class AssetManager {
     public int addAssetPath(String path) {
         return 0;
     }
+
+    public java.io.InputStream open(String fileName) {
+        return null;
+    }
+
+    public java.io.InputStream open(String fileName, int accessMode) {
+        return null;
+    }
 }

@@ -473,3 +473,82 @@ fn retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array() {
     assert_eq!(out_indices, vec![2, 1, 2, -1]);
     eprintln!("retrieveAttributes cleared stale width slot; fillColor=#ffffffff");
 }
+
+/// Regression (W110-A): `nativeResolveAttrs` must chase a theme-resolved
+/// `@resid` to its concrete value, exactly like
+/// `AssetManager2::ResolveAttributeReference` + `ResolveReference`.
+///
+/// `VectorDrawable.applyTheme` resolves its
+/// `android:tint="?attr/colorControlNormal"` through
+/// `Resources.Theme.resolveAttributes` (`nativeResolveAttrs`). The device theme
+/// stores `colorControlNormal` as a `@color` reference; returning that raw
+/// `TYPE_REFERENCE` made `TypedArray.getColorStateList` ->
+/// `Resources.loadColorStateList` -> `loadComplexColor` raise
+/// `UnsupportedOperationException: Can't convert to ComplexColor: type=0x1`
+/// while inflating `android:drawable/ic_ab_back_material` on `counter.apk`.
+#[test]
+fn resolve_attrs_chases_a_theme_reference_to_a_concrete_color() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = acos_framework_natives::res::AssetManager::new();
+    mgr.add_apk_assets(ApkAssets::open(&apk_path).unwrap());
+    let theme = mgr.theme_create();
+    // android:style/Theme.DeviceDefault.Light.DarkActionBar (the app's default
+    // device theme).
+    mgr.theme_apply_style(theme, 0x0103_013f, false);
+    // `VectorDrawable_tint` requests `?attr/colorControlNormal` (0x01010429);
+    // the styleable slot id only feeds `sourceResourceId`.
+    let in_values = [0x0101_0429i32];
+    let attrs = [0x0101_0515i32];
+    let mut out_values = vec![0i32; 7];
+    let mut out_indices = vec![-1i32; 2];
+    assert!(mgr.resolve_attrs(
+        theme,
+        0,
+        0,
+        Some(&in_values),
+        &attrs,
+        &mut out_values,
+        &mut out_indices,
+    ));
+    let tv = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
+    assert_ne!(
+        tv.data_type, 0x01,
+        "resolved value must not stay a TYPE_REFERENCE (@resid)"
+    );
+    assert_ne!(
+        tv.data_type, 0x02,
+        "resolved value must not stay a TYPE_ATTRIBUTE (?attr)"
+    );
+    if tv.data_type == 0x03 {
+        // A ColorStateList file path (`res/color/*.xml`). `TypedArray` reads it
+        // back lazily through `AssetManager.getPooledStringForCookie`, so assert
+        // the ARSC pool decodes at the reported cookie/data.
+        let src = &mgr.sources()[tv.asset_cookie as usize - 1];
+        let table = src.resource_table().unwrap();
+        let bytes = src.resource_bytes().unwrap();
+        let path = table
+            .global_string(bytes, tv.data)
+            .expect("pooled color path");
+        assert!(
+            path.starts_with("res/color/"),
+            "unexpected color path: {path}"
+        );
+        eprintln!(
+            "resolveAttrs colorControlNormal -> {path} (cookie {})",
+            tv.asset_cookie
+        );
+    } else {
+        assert!(
+            (0x1c..=0x1f).contains(&tv.data_type),
+            "unexpected resolved type {:#04x}",
+            tv.data_type
+        );
+        eprintln!("resolveAttrs colorControlNormal -> #{:08x}", tv.data);
+    }
+    assert_eq!(out_indices[0], 1, "one attribute must be reported");
+    assert_eq!(out_indices[1], 0);
+}

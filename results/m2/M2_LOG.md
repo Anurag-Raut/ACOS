@@ -1949,3 +1949,132 @@ resolved `TYPE_REFERENCE` to its concrete color the way `fill_outputs` does.
 * The `gfx_vector.rs` clippy fixes are mechanical
   (`map(|x| x.clone())` -> `cloned()`, one
   `#[allow(clippy::too_many_arguments)]`) and behaviour-neutral.
+
+---
+
+# W110-A session — `nativeResolveAttrs` reference chasing + static `nativeAsset*` ABI
+
+Worktree: clean HEAD `d18f066`, `CARGO_TARGET_DIR=.cache/target-w110a`,
+`CARGO_PROFILE_DEV_DEBUG=0`. No commits.
+
+## Bottom line
+
+Two launch-chain blockers are fixed and regression-tested. `counter.apk` now
+inflates `android:drawable/ic_ab_back_material` and reaches the default
+launcher-icon decode inside `PhoneWindow.installDecor`; the single remaining
+blocker is `android.graphics.ImageDecoder.nCreate` (image/render, W104-A).
+
+## Blocker 1 — `nativeResolveAttrs` returned a raw `@resid`
+
+`VectorDrawable.applyTheme(636)` -> `ResourcesImpl.loadDrawable(696)` ->
+`loadComplexColorForCookie` raised
+`UnsupportedOperationException: Can't convert to ComplexColor: type=0x1`.
+
+`AssetManager::resolve_attrs` selected the theme value through `Theme::get`
+(which follows `?attr` chains) and then copied the resulting `ResValue`
+verbatim. For `?attr/colorControlNormal` the chain ends at a `@color`
+`TYPE_REFERENCE`, which the framework's `TypedArray.getColorStateList` handed
+to `Resources.loadColorStateList` -> `loadComplexColor`, where a
+`TYPE_REFERENCE` is not a valid ComplexColor.
+
+Fix (`crates/acos-framework-natives/src/res/theme.rs`): mirror
+`AssetManager2::ResolveAttributeReference` + `ResolveReference`. Follow any
+remaining `?attr` chain through the theme, then chase a `@resid` through the
+resource table with `resolve_references` + `build_typed_value`, so the output
+carries the concrete value, the right asset cookie and pooled string.
+
+Regression:
+`xmlblock_diff::resolve_attrs_chases_a_theme_reference_to_a_concrete_color`
+resolves `Theme.DeviceDefault.Light.DarkActionBar` +
+`?attr/colorControlNormal` and asserts the result is not `TYPE_REFERENCE` /
+`TYPE_ATTRIBUTE`. It resolves to
+`res/color/text_color_secondary_device_default_light.xml` (cookie 1).
+
+## Blocker 2 — static `nativeAsset*` natives read a phantom second argument
+
+With blocker 1 fixed, the launch aborted in a Rust panic:
+`corelib/mod.rs:76 index out of bounds: the len is 2 but the index is 2` at
+`am_asset_get_length`, called from
+`ApplicationPackageManager.getDefaultActivityIcon`.
+
+The real `android.content.res.AssetManager` declares the static asset natives
+as `(J)...` and passes only the `AssetInputStream` pointer, but the engine's
+asset ids are per-manager. Every `am_asset_*` implementation read
+`mgr = arg0, handle = arg1`, so the first real asset stream
+(`AssetInputStream.<init>` -> `nativeAssetGetLength`) read past the register
+frame.
+
+Fix (`crates/acos-vm/src/natives/fwk_res.rs`): encode the owning manager in the
+high 32 bits of the Java-visible pointer (`pack_asset(mgr, handle)`) at
+`nativeOpenAsset`/`nativeOpenNonAsset`, and `unpack_asset` it in
+`nativeAssetDestroy`/`ReadChar`/`Read`/`Seek`/`GetLength`/
+`GetRemainingLength`, whose argument indices now match the real signatures
+(`read(ptr, b, off, len)`, `seek(ptr, offset, whence)`).
+
+Regression: `ResMain.java` opens `res/layout/main.xml` through
+`AssetManager.open`, then `available()`, `read(byte[4])` (AXML magic `0x03`)
+and `close()`. `res_natives` asserts `asset.ok=true` in both normal and
+`ACOS_GC_STRESS=1` runs.
+
+## Current blocker (still `activity_on_create`)
+
+```
+android.app.ApplicationPackageManager.getDefaultActivityIcon()
+  <- com.android.internal.policy.PhoneWindow.installDecor()
+  <- PhoneWindow.setContentView <- Activity.setContentView
+  <- MainActivity.onCreate
+Resources.getDrawable(sym_def_app_icon)
+  -> AdaptiveIconDrawable.inflateLayers -> BitmapDrawable.inflate
+  -> ImageDecoder.decodeBitmap -> ImageDecoder$InputStreamSource.createImageDecoder
+  -> android.graphics.ImageDecoder.nCreate(InputStream, byte[], boolean, Source)
+ERROR: vm: Landroid/graphics/ImageDecoder;->nCreate(...) is not implemented
+```
+
+This is the image/render surface owned by W104-A; ACOS has no `ImageDecoder`
+natives yet. `acos-render` already exposes `bitmap_create_from_bytes`
+(PNG/JPEG/WebP), so the decoder can be wired there.
+
+## Gates (this worktree)
+
+| Item | Result |
+|---|---|
+| `cargo test -p acos-framework-natives` | 8 unit + 24 integration pass |
+| `cargo test -p acos-vm --lib` | 120/120 |
+| `cargo test -p acos-vm --test res_natives` (normal + gc-stress) | pass, `asset.ok=true` |
+| `cargo test -p acos-runtime --test m2` | 2 passed / 1 ignored |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | clean |
+| `diff-dexprogs.sh --corelib real` | 27/27 |
+| `diff-dexprogs.sh --corelib real --gc-stress` | 27/27 |
+
+## Overlap / coordination
+
+`crates/acos-framework-natives/src/res/manager.rs`, `theme.rs`,
+`crates/acos-framework-natives/tests/theme_resolution.rs` and
+`crates/acos-vm/src/natives/fwk_res.rs` are also modified in the uncommitted
+`.cache/wt-w104a` worktree (same `resolve_attrs` reference chase, the same
+`pack_asset` asset ABI, plus `resolve_references` `?attr` chaining and a
+`retrieve_attributes` clear). This session's `fwk_res.rs` fix is that
+worktree's `pack_asset` implementation verbatim, to avoid a divergent
+duplicate; the `theme.rs` fix here is the `resolve_attrs` part only. W104-A's
+`manager.rs`/`fill_outputs` extras are not included.
+
+## Honesty
+
+* The M2 gate stays `#[ignore]`d; its reason now names `ImageDecoder.nCreate`.
+  No Application/Activity callback is claimed beyond what the non-ignored
+  tests pin.
+* No `Ok(())`/stub was used for `ImageDecoder`; it remains a structured
+  `UNSUPPORTED_JAVA_API` and is reported, not faked.
+
+## Copy-back
+
+Main advanced to `2392dcd` (W105-A parcelable/session-handler commit) while this
+session ran. The patch was generated from the `d18f066` worktree, applied to
+main with `git apply` (clean), and re-confirmed there:
+
+* `cargo test -p acos-framework-natives --test xmlblock_diff` -> 6/6;
+* `cargo test -p acos-vm --test res_natives` -> 2/2 (normal + gc-stress);
+* `lifecycle_probe counter.apk` -> same `ImageDecoder.nCreate` blocker.
+
+The worktree and its `target-w110a` scratch were deleted after the copy-back.

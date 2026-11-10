@@ -606,7 +606,7 @@ fn flutter_child_worker() {
             hash ^= b as u64;
             hash = hash.wrapping_mul(0x100000001b3);
         }
-        let path = out_frames.join(format!("w99a-frame-{i}.png"));
+        let path = out_frames.join(format!("w108a-frame-{i}.png"));
         let ok = write_png(&path, frame.width, frame.height, &frame.rgba).is_ok();
         written.push(serde_json::json!({
             "index": i,

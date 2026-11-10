@@ -12,7 +12,7 @@
 //! framework state, so no host is required.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::os::raw::{c_int, c_void};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -53,11 +53,32 @@ struct Source {
 // contract ties to the looper's lifetime; the table is mutex-protected.
 unsafe impl Send for Source {}
 
+/// A frame callback queued by `AChoreographer_postFrameCallback` for delivery
+/// from its looper's poll.
+///
+/// `frame_time_nanos` is the vsync timestamp the engine's callback receives;
+/// `cb`/`data` are the guest's pointers. Nothing here fakes the frame time: the
+/// host computed it from the virtual vsync clock before queueing.
+struct PostedFrame {
+    frame_time_nanos: i64,
+    cb: unsafe extern "C" fn(i64, *mut c_void),
+    data: *mut c_void,
+}
+
+// SAFETY: the pointers are the guest's callback/data, tied to the looper's
+// lifetime; the queue is mutex-protected and only invoked on a polling thread.
+unsafe impl Send for PostedFrame {}
+
 struct Looper {
     id: u64,
     epoll: c_int,
     wake: c_int,
     sources: Mutex<HashMap<c_int, Source>>,
+    /// Frame callbacks posted by `AChoreographer_postFrameCallback` on this
+    /// thread's looper, delivered from `pollOnce`/`pollAll` (never inline from
+    /// the post). This is what keeps the engine's frame state consistent: real
+    /// Android runs the callback from the looper, after the post returns.
+    posted: Mutex<VecDeque<PostedFrame>>,
     refs: AtomicUsize,
 }
 
@@ -89,6 +110,7 @@ fn make_looper(id: u64) -> Arc<Looper> {
         epoll,
         wake,
         sources: Mutex::new(HashMap::new()),
+        posted: Mutex::new(VecDeque::new()),
         refs: AtomicUsize::new(1),
     })
 }
@@ -277,12 +299,111 @@ fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
     Ok(ready)
 }
 
+/// Invoke at most one queued `AChoreographer` frame callback.
+///
+/// Returns `true` when a callback ran. The callback is invoked on the calling
+/// (polling) thread, exactly as bionic's `AChoreographer` does — never from
+/// [`post_frame_callback`], which only enqueues.
+fn run_one_posted(l: &Looper) -> bool {
+    let next = l
+        .posted
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .pop_front();
+    match next {
+        Some(p) => {
+            static TRACED: AtomicUsize = AtomicUsize::new(0);
+            if TRACED.fetch_add(1, Ordering::Relaxed) < 16 {
+                eprintln!(
+                    "ACOS W108A choreographer_deliver tid={:?} frame_time={} cb={:p} data={:p}",
+                    std::thread::current().id(),
+                    p.frame_time_nanos,
+                    p.cb as *const c_void,
+                    p.data
+                );
+            }
+            // SAFETY: the guest registered this C callback for the frame and
+            // supplied the opaque data pointer; the NDK contract ties both to
+            // the looper's lifetime.
+            unsafe { (p.cb)(p.frame_time_nanos, p.data) };
+            true
+        }
+        None => false,
+    }
+}
+
+/// Queue a frame callback on the calling thread's looper.
+///
+/// This is the native `AChoreographer` delivery path: the callback is *not*
+/// invoked here. It runs later, from this thread's `ALooper_pollOnce` /
+/// `ALooper_pollAll` (the engine's own message loop) with `frame_time_nanos`,
+/// which is what real Android does. Returns `false` when the calling thread has
+/// no prepared `ALooper`; the caller then decides how to surface the frame.
+///
+/// # Safety
+/// `cb` must be a valid C function pointer and `data` the opaque pointer the
+/// guest registered with `AChoreographer_postFrameCallback`; both stay valid
+/// until the callback is invoked.
+pub unsafe fn post_frame_callback(
+    frame_time_nanos: i64,
+    cb: unsafe extern "C" fn(i64, *mut c_void),
+    data: *mut c_void,
+) -> bool {
+    let Some(l) = THREAD_LOOPER
+        .with(|t| *t.borrow())
+        .and_then(|id| lookup(super::handle(id)))
+    else {
+        return false;
+    };
+    // Bounded diagnostic trace: proves the post is queued (not inline) and
+    // names the thread looper that will deliver it.
+    static TRACED: AtomicUsize = AtomicUsize::new(0);
+    if TRACED.fetch_add(1, Ordering::Relaxed) < 16 {
+        eprintln!(
+            "ACOS W108A choreographer_post tid={:?} looper={:#x} frame_time={frame_time_nanos} \
+             cb={:p} data={:p}",
+            std::thread::current().id(),
+            l.id,
+            cb as *const c_void,
+            data
+        );
+    }
+    l.posted
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push_back(PostedFrame {
+            frame_time_nanos,
+            cb,
+            data,
+        });
+    // Wake a blocked poll so the frame is not delayed a full timeout.
+    if l.wake >= 0 {
+        let v = 1u64;
+        // SAFETY: eventfd owned by this looper, non-blocking.
+        unsafe {
+            libc::write(l.wake, &v as *const u64 as *const c_void, 8);
+        }
+    }
+    true
+}
+
 fn poll_once(l: &Looper, timeout_ms: c_int, out: &mut (c_int, c_int, *mut c_void)) -> c_int {
+    // A frame callback queued before the wait must not sit behind the timeout.
+    if run_one_posted(l) {
+        *out = (-1, 0, std::ptr::null_mut());
+        return ALOOPER_POLL_CALLBACK;
+    }
     let ready = match poll(l, timeout_ms) {
         Ok(r) => r,
         Err(code) => return code,
     };
     if ready.is_empty() {
+        // The wait may have been woken by `post_frame_callback` (the wake fd is
+        // drained by `poll`), so re-check the queue before reporting a timeout.
+        if run_one_posted(l) {
+            *out = (-1, 0, std::ptr::null_mut());
+            return ALOOPER_POLL_CALLBACK;
+        }
         return ALOOPER_POLL_TIMEOUT;
     }
     let mut invoked_callback = false;

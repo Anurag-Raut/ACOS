@@ -23,6 +23,7 @@ void main() {
 
 void _onBeginFrame(Duration _) {
   // The frame is drawn in _onDrawFrame.
+  print("ACOS_DART_BEGINFRAME");
 }
 
 void _onDrawFrame() {
@@ -95,6 +96,7 @@ ui.Paragraph _paragraph(String text, double size, ui.Color color) {
 }
 
 void _onPointerDataPacket(ui.PointerDataPacket packet) {
+  print("ACOS_DART_POINTER n=${packet.data.length}");
   for (final ui.PointerData data in packet.data) {
     final view = _view;
     if (view == null) {
