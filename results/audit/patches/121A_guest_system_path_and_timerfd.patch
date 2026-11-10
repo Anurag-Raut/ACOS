@@ -1,0 +1,73 @@
+diff --git a/crates/acos-native-loader/src/bionic/engine_gaps.rs b/crates/acos-native-loader/src/bionic/engine_gaps.rs
+index 140e6d1..f7f7273 100644
+--- a/crates/acos-native-loader/src/bionic/engine_gaps.rs
++++ b/crates/acos-native-loader/src/bionic/engine_gaps.rs
+@@ -134,7 +134,10 @@ pub unsafe extern "C" fn acos_timerfd_settime(
+     old_value: *mut libc::itimerspec,
+ ) -> c_int {
+     let r = libc::timerfd_settime(fd, flags, new_value, old_value);
+-    if !new_value.is_null() {
++    // Only dereference `new_value` when the trace is enabled: the pointer is
++    // guest-supplied and may be invalid, in which case libc returns EFAULT but
++    // an unconditional `*new_value` here would fault the host (W121-A).
++    if TIMER_TRACE && !new_value.is_null() {
+         let v = (*new_value).it_value;
+         let i = (*new_value).it_interval;
+         gap_trace(format_args!(
+@@ -452,6 +455,12 @@ pub fn translate_guest_system_path(path: &str) -> Option<String> {
+     let boot = std::env::var_os("ACOS_BOOT_DIR")?;
+     let boot = std::path::PathBuf::from(boot);
+     let rest = path.strip_prefix("/system/")?;
++    // The suffix is guest-controlled: reject any `..`, root or prefix
++    // component so `/system/../../etc/passwd` cannot escape the boot tree
++    // through `Path::join` (W121-A).
++    if has_escaping_component(rest) {
++        return None;
++    }
+     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+     if let Some(font) = rest.strip_prefix("fonts/") {
+         candidates.push(boot.join("fonts").join(font));
+@@ -471,6 +480,15 @@ pub fn translate_guest_system_path(path: &str) -> Option<String> {
+     None
+ }
+ 
++/// Whether a guest-supplied `/system/` suffix contains a component that would
++/// escape the boot tree when joined (`..`, an absolute root, or a Windows-style
++/// prefix). Pure so it is unit-testable without mutating the environment.
++fn has_escaping_component(rest: &str) -> bool {
++    std::path::Path::new(rest)
++        .components()
++        .any(|c| !matches!(c, std::path::Component::Normal(_)))
++}
++
+ /// C ABI used by the `fopen` shim: write the translated path into `out`.
+ ///
+ /// Returns the number of bytes written (excluding the NUL) or 0 when the path
+@@ -568,6 +586,27 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn system_path_suffix_cannot_escape_the_boot_tree() {
++        for rest in ["../etc/passwd", "fonts/../../etc/passwd", "/etc/passwd", "a/../../b"] {
++            assert!(has_escaping_component(rest), "must reject {rest:?}");
++        }
++        for rest in ["fonts/Roboto-Regular.ttf", "etc/fonts.xml", "a/b/c"] {
++            assert!(!has_escaping_component(rest), "must accept {rest:?}");
++        }
++    }
++
++    #[test]
++    fn timerfd_settime_tolerates_an_invalid_pointer() {
++        // With the trace inert the guest pointer is never dereferenced; a
++        // nonsense `new_value` must not fault the host (W121-A).
++        // SAFETY: the shim only forwards the pointer to the kernel.
++        let rc = unsafe {
++            acos_timerfd_settime(-1, 0, 0xdead_beef_usize as *const libc::itimerspec, std::ptr::null_mut())
++        };
++        assert_eq!(rc, -1);
++    }
++
+     #[test]
+     fn openssl_hooks_roundtrip_through_the_process_allocator() {
+         // SAFETY: the hooks take/return plain allocations.

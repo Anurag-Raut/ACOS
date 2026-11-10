@@ -9,6 +9,7 @@
 //! Read-only roots grant `EXECUTE|READ_FILE|READ_DIR`; read-write roots grant
 //! the full handled mask.
 
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::os::raw::c_int;
 use std::os::unix::ffi::OsStrExt;
@@ -130,6 +131,18 @@ fn read_only_access() -> u64 {
     FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 }
 
+/// Rights granted on an *ancestor* directory of a granted path: search only.
+///
+/// Resolving an absolute path (`realpath(3)`, `File.canonicalize0`, an
+/// `openat` after a `chdir`) needs `EXECUTE` (search) on every directory on the
+/// way down, not just on the target. Without it a grant is unreachable even
+/// though the target itself is allowed. `READ_DIR` is deliberately *not*
+/// granted: it would expose the ancestor's directory listing, and traversal
+/// does not need it.
+fn ancestor_access() -> u64 {
+    FS_EXECUTE
+}
+
 /// Create a ruleset for `abi`, returning its fd and the IPC scope mask.
 fn create_ruleset(abi: u32) -> Result<(c_int, u64), String> {
     let handled = handled_fs(abi);
@@ -175,6 +188,39 @@ pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String,
 
     let mut rules = 0usize;
     let mut skipped = Vec::new();
+    // Traversal chain: for every granted path, grant `EXECUTE`-only on each
+    // ancestor directory (the chain, never siblings). Landlock rules on a
+    // directory apply to the whole subtree, so this makes the grants above
+    // reachable by absolute-path resolution while adding no listing, read or
+    // write ability outside them (W120-A). Directly-granted ancestors are
+    // skipped: their own rule already carries `EXECUTE`.
+    let direct: HashSet<&Path> = read_only
+        .iter()
+        .chain(read_write.iter())
+        .map(PathBuf::as_path)
+        .collect();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    for path in read_only.iter().chain(read_write.iter()) {
+        let mut cur = path.parent();
+        while let Some(dir) = cur {
+            if !direct.contains(dir) && seen.insert(dir.to_path_buf()) {
+                match add_path_rule(ruleset_fd, dir, ancestor_access()) {
+                    Ok(true) => rules += 1,
+                    // A missing ancestor contributes no traversal; the target
+                    // rule below still reports it is missing.
+                    Ok(false) => {}
+                    Err(e) => {
+                        // SAFETY: `ruleset_fd` is a live descriptor returned above.
+                        unsafe {
+                            libc::close(ruleset_fd);
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+            cur = dir.parent();
+        }
+    }
     for path in read_only {
         match add_path_rule(ruleset_fd, path, read_only_access()) {
             Ok(true) => rules += 1,
@@ -326,5 +372,16 @@ mod tests {
         assert_eq!(read_only_access() & DIRECTORY_ONLY_RIGHTS, FS_READ_DIR);
         // A directory keeps the directory-only rights; a file loses them.
         assert_eq!(read_only_access() & !DIRECTORY_ONLY_RIGHTS, FS_EXECUTE | FS_READ_FILE);
+    }
+
+    /// W120-A: an ancestor grant carries search only. It must not leak the
+    /// ancestor's listing (`READ_DIR`), its files (`READ_FILE`) or any write.
+    #[test]
+    fn ancestor_access_is_search_only() {
+        assert_eq!(ancestor_access(), FS_EXECUTE);
+        assert_eq!(
+            ancestor_access() & (FS_READ_DIR | FS_READ_FILE | FS_WRITE_FILE),
+            0
+        );
     }
 }

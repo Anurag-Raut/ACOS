@@ -129,6 +129,28 @@ fn rn_bridge_child_worker() {
         dst
     };
 
+    // Stage the guest-visible tree inside the VM sandbox VFS root. SoLoader
+    // resolves `ApplicationInfo.sourceDir` and `nativeLibraryDir` through
+    // `java.io.File`, i.e. as *guest* paths in the VM's VFS; host paths are not
+    // mapped (W106-A mis-attributed the resulting `EACCES` to Landlock `realpath`
+    // ancestry — the real cause was the VFS session root not being writable).
+    // The Rust native loader still loads by SONAME from the host lib dir below.
+    let session_root = scratch.join("session");
+    let guest_app_dir = session_root.join("data/user/0/dev.acos.fixtures.rnhello");
+    let guest_lib_dir = guest_app_dir.join("lib");
+    std::fs::create_dir_all(&guest_lib_dir).expect("guest lib dir");
+    for entry in std::fs::read_dir(&libdir).expect("read scratch lib dir") {
+        let entry = entry.expect("lib entry");
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            std::fs::copy(entry.path(), guest_lib_dir.join(entry.file_name()))
+                .expect("stage guest lib");
+        }
+    }
+    let guest_apk = guest_app_dir.join("base.apk");
+    std::fs::copy(&apk, &guest_apk).expect("stage guest apk");
+    let guest_lib_dir_str = "/data/user/0/dev.acos.fixtures.rnhello/lib".to_string();
+    let guest_apk_str = "/data/user/0/dev.acos.fixtures.rnhello/base.apk".to_string();
+
     let apk_dir = apk.parent().unwrap_or_else(|| Path::new("."));
     let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
     let probe_lib_dir = repo_root().join("fixtures/build/rn-bridge/x86_64");
@@ -183,6 +205,19 @@ fn rn_bridge_child_worker() {
     if boot_dir.join("BOOTCLASSPATH").is_file() {
         profile = profile.with_read_only(&boot_dir);
     }
+    // The VM's sandbox VFS creates its session root lazily *after* confinement
+    // (`VfsConfig::from_env`). By default that is `.cache/sessions/<id>/data`,
+    // which is only read-only under this profile, so `Vfs::new` is poisoned
+    // with `EACCES` and every `File.canonicalize0` fails. Pin the VFS root into
+    // the writable scratch (`session_root`, already populated above) and keep
+    // it visible across `clearenv`, exactly like the product launch path
+    // (`acos-cli`'s `session_root`).
+    let _ = std::fs::create_dir_all(session_root.join("data/user/0"));
+    profile = profile.with_read_write(&session_root);
+    profile.env.push((
+        "ACOS_SESSION_ROOT".to_string(),
+        session_root.display().to_string(),
+    ));
     match acos_sandbox::confine(&profile) {
         Ok(report) => println!(
             "W88A_STAGE {}",
@@ -308,7 +343,8 @@ fn rn_bridge_child_worker() {
 
     let args = vec![
         bundle_path.display().to_string(),
-        libdir.display().to_string(),
+        guest_lib_dir_str.clone(),
+        guest_apk_str.clone(),
         apk.display().to_string(),
     ];
     let outcome = vm.run("dev/acos/fixtures/rnhello/BridgeProbe", &args);
@@ -422,7 +458,7 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
     let out_dir = repo_root().join("results/rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
-        out_dir.join("w88a-bridge.json"),
+        out_dir.join("w120a-bridge.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "summary": summary,
             "stages": stage_lines,

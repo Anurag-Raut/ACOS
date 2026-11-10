@@ -47,6 +47,7 @@ import com.facebook.react.bridge.queue.ReactQueueConfigurationSpec;
 import com.facebook.react.modules.appstate.AppStateModule;
 import com.facebook.react.modules.core.ExceptionsManagerModule;
 import com.facebook.react.modules.core.TimingModule;
+import com.facebook.react.devsupport.ReleaseDevSupportManager;
 import com.facebook.react.modules.deviceinfo.DeviceInfoModule;
 import com.facebook.react.modules.systeminfo.AndroidInfoModule;
 import com.facebook.react.soloader.OpenSourceMergedSoMapping;
@@ -146,19 +147,24 @@ public final class BridgeProbe {
 
   /** A context that stands in for the host Activity/Application. */
   public static final class ProbeContext extends ContextWrapper {
+    /** Guest path (VM sandbox namespace), e.g. {@code /data/user/0/<pkg>/lib}. */
     private final String libDir;
-    private final String apkPath;
+    /** Guest path of the base APK, used only for `File`-based existence checks. */
+    private final String sourceDir;
+    /** Host APK path handed to the `AssetManager` native, which is host-based. */
+    private final String assetApkPath;
     private final AssetManager assets;
 
-    public ProbeContext(String libDir, String apkPath) {
+    public ProbeContext(String libDir, String sourceDir, String assetApkPath) {
       super(null);
       this.libDir = libDir;
-      this.apkPath = apkPath;
+      this.sourceDir = sourceDir;
+      this.assetApkPath = assetApkPath;
       AssetManager am = new AssetManager();
       boolean ok = false;
       try {
-        ok = am.addAssetPath(apkPath) != 0;
-        stage("assets", "addAssetPath=" + ok + " apk=" + apkPath);
+        ok = am.addAssetPath(assetApkPath) != 0;
+        stage("assets", "addAssetPath=" + ok + " apk=" + assetApkPath);
       } catch (Throwable t) {
         emit("{\"phase\":\"assets-error\",\"error\":\"" + esc(t.toString()) + "\"}");
       }
@@ -199,8 +205,12 @@ public final class BridgeProbe {
     public ApplicationInfo getApplicationInfo() {
       ApplicationInfo ai = new ApplicationInfo();
       ai.packageName = getPackageName();
-      ai.sourceDir = apkPath;
-      ai.publicSourceDir = apkPath;
+      // `sourceDir`/`nativeLibraryDir` are guest paths: `SoLoader` canonicalizes
+      // and existence-checks them through `java.io.File`, which the VM resolves
+      // in its sandbox VFS. The host APK path is used only by the AssetManager
+      // native (`assetApkPath`), which is host-based.
+      ai.sourceDir = sourceDir;
+      ai.publicSourceDir = sourceDir;
       ai.nativeLibraryDir = libDir;
       ai.metaData = new Bundle();
       // `FLAG_EXTRACT_NATIVE_LIBS` (0x10000000): the fixture libs are already
@@ -418,8 +428,9 @@ public final class BridgeProbe {
     emit("{\"phase\":\"begin\"}");
     String bundlePath = args.length > 0 ? args[0] : "";
     String libDir = args.length > 1 ? args[1] : "";
-    String apkPath = args.length > 2 ? args[2] : bundlePath;
-    ProbeContext appContext = new ProbeContext(libDir, apkPath);
+    String sourceDir = args.length > 2 ? args[2] : bundlePath;
+    String assetApkPath = args.length > 3 ? args[3] : sourceDir;
+    ProbeContext appContext = new ProbeContext(libDir, sourceDir, assetApkPath);
     try {
       initSoLoader(appContext);
     } catch (Throwable t) {
@@ -486,8 +497,10 @@ public final class BridgeProbe {
       putModule(modules, "UIManager", () -> um);
       putModule(modules, "PlatformConstants", () -> new AndroidInfoModule(rc));
       putModule(modules, "DeviceInfo", () -> new DeviceInfoModule(rc));
-      putModule(modules, "ExceptionsManager", () -> new ExceptionsManagerModule(null));
-      putModule(modules, "Timing", () -> new TimingModule(rc, null));
+      // The real `ReleaseDevSupportManager` is RN's own no-op dev-support
+      // implementation; the Kotlin constructors reject `null` (W88-A blocker 4).
+      putModule(modules, "ExceptionsManager", () -> new ExceptionsManagerModule(new ReleaseDevSupportManager()));
+      putModule(modules, "Timing", () -> new TimingModule(rc, new ReleaseDevSupportManager()));
       putModule(modules, "AppState", () -> new AppStateModule(rc));
       stage("modules", "count=" + modules.size());
 

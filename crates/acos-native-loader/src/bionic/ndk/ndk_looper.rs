@@ -142,6 +142,20 @@ fn make_looper(id: u64) -> Arc<Looper> {
         unsafe {
             libc::epoll_ctl(epoll, libc::EPOLL_CTL_ADD, wake, &mut ev);
         }
+    } else {
+        // Only one of the two descriptors was created: close it here so a
+        // failed `ALooper_prepare` (or a caller that never releases the
+        // looper) cannot leak an fd (W121-A).
+        // SAFETY: each fd is closed only when `>= 0`, i.e. it was opened by
+        // the syscall above and is owned by this function.
+        unsafe {
+            if epoll >= 0 {
+                libc::close(epoll);
+            }
+            if wake >= 0 {
+                libc::close(wake);
+            }
+        }
     }
     Arc::new(Looper {
         id,

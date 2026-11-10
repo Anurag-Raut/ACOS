@@ -82,6 +82,14 @@ fn run() -> i32 {
     match action.as_str() {
         "open_ro" => do_read(ro.map(|p| p.join("hello.txt"))),
         "open_outside" => do_read(outside.map(|p| p.join("secret.txt"))),
+        // `realpath(3)`/`File.canonicalize0` of a granted path needs search
+        // (`EXECUTE`) on every ancestor; of an outside path it must still be
+        // denied (W120-A).
+        "canonicalize_ro" => do_canonicalize(ro.map(|p| p.join("hello.txt"))),
+        "canonicalize_outside" => do_canonicalize(outside.map(|p| p.join("secret.txt"))),
+        // Traversal (`EXECUTE`) on an ancestor must not become directory listing
+        // (`READ_DIR`) of that ancestor or its siblings (W120-A).
+        "list_outside" => do_list(outside),
         "write_data" => do_write(rw.map(|p| p.join("out.txt"))),
         "write_ro" => do_write(ro.map(|p| p.join("nope.txt"))),
         "write_outside" => do_write(outside.map(|p| p.join("nope.txt"))),
@@ -351,6 +359,34 @@ fn do_read(path: Option<PathBuf>) -> i32 {
     };
     match std::fs::read_to_string(&path) {
         Ok(_) => EXIT_OK,
+        Err(e) => classify(&e),
+    }
+}
+
+fn do_canonicalize(path: Option<PathBuf>) -> i32 {
+    let Some(path) = path else {
+        return EXIT_UNEXPECTED;
+    };
+    match std::fs::canonicalize(&path) {
+        Ok(_) => EXIT_OK,
+        Err(e) => classify(&e),
+    }
+}
+
+fn do_list(path: Option<PathBuf>) -> i32 {
+    let Some(path) = path else {
+        return EXIT_UNEXPECTED;
+    };
+    match std::fs::read_dir(&path) {
+        Ok(entries) => {
+            // Force the directory read so the denial surfaces here.
+            for entry in entries {
+                if entry.is_err() {
+                    return EXIT_UNEXPECTED;
+                }
+            }
+            EXIT_OK
+        }
         Err(e) => classify(&e),
     }
 }

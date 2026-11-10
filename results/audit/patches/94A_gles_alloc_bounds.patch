@@ -1,0 +1,60 @@
+--- a/crates/acos-gles/src/gl.rs
++++ b/crates/acos-gles/src/gl.rs
+@@ -19,6 +19,13 @@
+     StencilOp,
+ };
+ 
++/// Highest mip level the substrate will allocate. GLES2's maximum texture size
++/// is `MAX_DIM` (4096), i.e. 13 levels; 31 is a structural cap that still
++/// rejects a guest-supplied `level` before it can drive an enormous `mips`
++/// resize (a `level` near `i32::MAX` resized the `Vec` to ~64 GiB and aborted
++/// the confined process).
++const MAX_MIP_LEVEL: i32 = 31;
++
+ /// One shader object's compile result.
+ #[derive(Clone, Debug)]
+ #[allow(missing_docs)]
+@@ -1023,7 +1030,7 @@
+             self.set_error(c::INVALID_ENUM);
+             return;
+         }
+-        if level < 0 {
++        if level < 0 || level > MAX_MIP_LEVEL {
+             self.set_error(c::INVALID_VALUE);
+             return;
+         }
+@@ -1161,7 +1168,7 @@
+         height: i32,
+         border: i32,
+     ) {
+-        if target != c::TEXTURE_2D || level < 0 {
++        if target != c::TEXTURE_2D || level < 0 || level > MAX_MIP_LEVEL {
+             self.set_error(c::INVALID_ENUM);
+             return;
+         }
+@@ -1169,6 +1176,13 @@
+             self.set_error(c::INVALID_VALUE);
+             return;
+         }
++        // `copy_region` sizes a `width * height * 4` allocation from guest
++        // arguments; bound it to the advertised `MAX_DIM` so a hostile
++        // `glCopyTexImage2D` cannot request an exabyte-scale buffer.
++        if width as u32 > c::MAX_DIM || height as u32 > c::MAX_DIM {
++            self.set_error(c::INVALID_VALUE);
++            return;
++        }
+         let Some(rgba) = self.copy_region(surface, x, y, width, height) else {
+             self.set_error(c::INVALID_OPERATION);
+             return;
+@@ -1928,6 +1942,11 @@
+             self.set_error(c::INVALID_VALUE);
+             return Vec::new();
+         }
++        // `width * height * 4` is guest-controlled; bound it before allocating.
++        if width as u32 > c::MAX_DIM || height as u32 > c::MAX_DIM {
++            self.set_error(c::INVALID_VALUE);
++            return Vec::new();
++        }
+         let fbo = self.framebuffer;
+         let fb = if fbo != 0 {
+             match self.framebuffers.get(&fbo) {

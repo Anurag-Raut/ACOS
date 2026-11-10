@@ -81,6 +81,13 @@ fn confined_process_denies_dangerous_actions_and_allows_normal_ones() {
         "futex",
         "tgkill_self",
         "personality_ok",
+        // W120-A: absolute-path resolution of a granted path must succeed; it
+        // needs search on the ancestor chain, which the profile now grants.
+        "canonicalize_ro",
+        // Resolving an *outside* path is pure traversal (no content read), so
+        // it also succeeds: the ancestor grant is `EXECUTE`-only. The content
+        // stays unreachable — `open_outside`/`list_outside` below prove that.
+        "canonicalize_outside",
     ] {
         assert_eq!(
             sandbox.run(action, true),
@@ -90,7 +97,14 @@ fn confined_process_denies_dangerous_actions_and_allows_normal_ones() {
     }
 
     // Denied: filesystem escape.
-    for action in ["open_outside", "write_ro", "write_outside"] {
+    for action in [
+        "open_outside",
+        "write_ro",
+        "write_outside",
+        // `EXECUTE` (search) does not imply `READ_DIR` (listing): the ancestor
+        // grant must not leak sibling directory names.
+        "list_outside",
+    ] {
         assert_eq!(
             sandbox.run(action, true),
             DENIED,
