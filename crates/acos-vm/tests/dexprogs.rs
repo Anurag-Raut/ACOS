@@ -60,6 +60,7 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     "23_regex_split_replace",
     "24_zip_roundtrip",
     "25_security_digest",
+    "26_regex_matrix",
 ];
 
 #[test]

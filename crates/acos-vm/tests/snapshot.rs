@@ -56,6 +56,7 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     "21_regex_basic",
     "22_regex_advanced",
     "23_regex_split_replace",
+    "26_regex_matrix",
 ];
 
 struct Output {

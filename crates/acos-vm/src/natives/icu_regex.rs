@@ -17,31 +17,38 @@
 //! UTF-16 code-unit indices, as `/data/local/tmp`'s `dalvikvm` / the framework
 //! expects.
 //!
-//! Supported (verified against ART in `fixtures/expected-art/dexprogs`):
-//! literals, `.` (with `DOTALL`/`UNIX_LINES`), `\d \D \w \W \s \S \h \H \v \V`,
-//! character classes/ranges/negation/intersection (`&&`), POSIX and `\p{...}`
-//! properties (the subset resolved below), greedy/lazy/possessive quantifiers,
-//! `{n}`, `{n,}`, `{n,m}`, capturing / non-capturing / named groups, `(?i)`
-//! inline flags, alternation, backreferences (`\1`..`\n`, `\k<name>`),
-//! lookahead / lookbehind (positive and negative), atomic groups, `^ $ \A \z
+//! Supported (verified against ART in `fixtures/expected-art/dexprogs`, see the
+//! 386-case `26_regex_matrix` corpus): literals, `.` (with
+//! `DOTALL`/`UNIX_LINES`), `\d \D \w \W \s \S \h \H \v \V`, character
+//! classes/ranges/negation/intersection (`&&`), POSIX `[[:name:]]` and
+//! `\p{...}` properties (all general categories, `sc=`/`Script=` scripts and the
+//! binary properties below), full Unicode case folding for `CASE_INSENSITIVE`,
+//! greedy/lazy/possessive quantifiers, `{n}`, `{n,}`, `{n,m}`, capturing /
+//! non-capturing / named groups, `(?imsxdu)` inline flags, `LITERAL`,
+//! alternation, backreferences (`\1`..`\n`, `\k<name>`), lookahead / lookbehind
+//! (positive and negative, bounded variable length), atomic groups, `^ $ \A \z
 //! \Z \b \B \G \R`, `\Q..\E`, hex / unicode / octal / control escapes, region
-//! bounds, anchoring bounds and transparent bounds.
+//! bounds, anchoring bounds and (look-ahead) transparent bounds.
 //!
 //! Constructs ICU accepts but this engine does not are reported as structured
 //! `UNSUPPORTED_JAVA_API` (never silently mis-matched). Patterns that are
 //! invalid *per ICU* raise a real `java.util.regex.PatternSyntaxException` with
 //! a description, the pattern and an approximate 0-based index.
 //!
-//! Known honest approximations (documented, not silent):
-//! * `CASE_INSENSITIVE` uses simple Unicode case folding via Rust's
-//!   `to_lowercase`/`to_uppercase` first-scalar mapping; the handful of ICU
-//!   special folds (e.g. Kelvin sign as `k`) are not modelled.
-//! * Unicode properties are approximated with the standard library's `char`
-//!   predicates (`is_alphabetic`, `is_numeric`, ...); the exact general
-//!   category tables are not embedded.
-//! * `hitEnd()`/`requireEnd()` are best-effort: `hitEnd` is set when a
-//!   consuming instruction reaches the match limit, and `requireEnd` mirrors it
-//!   for a successful match.
+//! Catastrophic backtracking is bounded by `ACOS_REGEX_MAX_STEPS` (default 20M
+//! steps); exceeding it yields a structured `UNSUPPORTED_JAVA_API` instead of
+//! spinning until the `HostGuard` wall clock fires.
+//!
+//! Known honest approximations (documented, not silent; see
+//! `results/vm/REGEX_DIVERGENCES.md`):
+//! * `\X` extended grapheme clusters and `\b{g}` are not implemented (`\b{g}`
+//!   is rejected the way ART rejects it).
+//! * Unicode *blocks* (`\p{blk=...}`, `\p{Block=...}`, `\p{In...}`) are not
+//!   modelled (script-aligned `In<Script>` names fall back to scripts).
+//! * Full case folding is applied to contiguous literal runs; folds that would
+//!   have to span a quantifier boundary are not modelled.
+//! * `hitEnd()`/`requireEnd()` follow ART's behaviour for end anchors and
+//!   consuming instructions, but remain best-effort for lookaround.
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -110,6 +117,13 @@ enum Inst {
     Jmp(u32),
     /// Record the current code-point position in capture slot `n`.
     Save(u16),
+    /// Record the current position in hidden loop slot `n` (used to detect
+    /// iterations that consume nothing so an unbounded quantifier cannot spin
+    /// forever).
+    SaveLoop(u16),
+    /// End of an unbounded repetition: if the body consumed nothing this
+    /// iteration, jump to `exit`, otherwise loop back to `start`.
+    LoopEnd { start: u32, exit: u32, slot: u16 },
     /// Zero-width assertion.
     Assert(AssertKind),
     /// Backreference to capture slot `2n`.
@@ -315,6 +329,10 @@ struct Pattern {
     folds: Vec<Vec<char>>,
     group_count: usize,
     names: HashMap<String, usize>,
+    /// Total capture slots (group slots + hidden loop slots).
+    caps_len: usize,
+    /// Index of the first hidden loop slot in the capture vector.
+    caps_base: usize,
 }
 
 // ===========================================================================
@@ -336,6 +354,8 @@ struct Parser {
     group_count: usize,
     names: HashMap<String, usize>,
     depth: usize,
+    /// Number of hidden loop slots allocated so far.
+    hidden_slots: usize,
     /// Non-zero while parsing the body of a look-behind group; unbounded
     /// quantifiers are rejected there because ICU requires a finite maximum
     /// length.
@@ -355,6 +375,7 @@ impl Parser {
             group_count: 0,
             names: HashMap::new(),
             depth: 0,
+            hidden_slots: 0,
             lookbehind: 0,
         }
     }
@@ -409,6 +430,12 @@ impl Parser {
         (self.folds.len() - 1) as u32
     }
 
+    fn new_hidden_slot(&mut self) -> u16 {
+        let h = self.hidden_slots;
+        self.hidden_slots += 1;
+        h as u16
+    }
+
     fn parse(mut self, initial_flags: u32) -> Result<Pattern, PErr> {
         let mut flags = initial_flags;
         let mut main;
@@ -431,12 +458,16 @@ impl Parser {
         }
         main.push(Inst::Match);
         self.programs[0] = main;
+        let caps_base = (self.group_count + 1) * 2;
+        let caps_len = caps_base + self.hidden_slots;
         Ok(Pattern {
             programs: self.programs,
             classes: self.classes,
             folds: self.folds,
             group_count: self.group_count,
             names: self.names,
+            caps_len,
+            caps_base,
         })
     }
 
@@ -646,14 +677,19 @@ impl Parser {
     }
 
     fn compile_repeat(&mut self, body: Vec<Inst>, q: Quant) -> Result<Vec<Inst>, PErr> {
+        let slot = if q.max.is_none() {
+            self.new_hidden_slot()
+        } else {
+            0
+        };
         if q.kind == QKind::Possessive {
             let mut sub: Vec<Inst> = Vec::new();
-            emit_repeat(&mut sub, &body, q.min, q.max, false)?;
+            emit_repeat(&mut sub, &body, q.min, q.max, false, slot)?;
             let idx = self.add_sub(sub);
             return Ok(vec![Inst::Atomic(idx)]);
         }
         let mut buf: Vec<Inst> = Vec::new();
-        emit_repeat(&mut buf, &body, q.min, q.max, q.kind == QKind::Lazy)?;
+        emit_repeat(&mut buf, &body, q.min, q.max, q.kind == QKind::Lazy, slot)?;
         Ok(buf)
     }
 
@@ -770,21 +806,21 @@ impl Parser {
                     }]);
                 }
                 let name = self.read_name('>')?;
+                let idx = self.new_group();
+                self.names.insert(name, idx);
                 let mut inner = *flags;
                 let body = self.parse_alt(&mut inner)?;
                 self.expect(')')?;
-                let idx = self.new_group();
-                self.names.insert(name, idx);
                 return Ok(wrap_capture(idx, body));
             }
             if self.eat('P') {
                 if self.eat('<') {
                     let name = self.read_name('>')?;
+                    let idx = self.new_group();
+                    self.names.insert(name, idx);
                     let mut inner = *flags;
                     let body = self.parse_alt(&mut inner)?;
                     self.expect(')')?;
-                    let idx = self.new_group();
-                    self.names.insert(name, idx);
                     return Ok(wrap_capture(idx, body));
                 }
                 return Err(PErr::Unsupported(
@@ -795,10 +831,10 @@ impl Parser {
             // Inline flags: (?imsxdu) or (?imsxdu:...)
             self.parse_inline_flags(flags)
         } else {
+            let idx = self.new_group();
             let mut inner = *flags;
             let body = self.parse_alt(&mut inner)?;
             self.expect(')')?;
-            let idx = self.new_group();
             Ok(wrap_capture(idx, body))
         }
     }
@@ -850,10 +886,13 @@ impl Parser {
                     self.pos += 1;
                 }
                 'U' => {
-                    return Err(PErr::Unsupported(
-                        "UNICODE_CHARACTER_CLASS inline flag".to_string(),
+                    // Android's Pattern parser does not accept the inline
+                    // UNICODE_CHARACTER_CLASS flag (ART raises
+                    // PatternSyntaxException).
+                    return Err(PErr::Syntax(
+                        "Unknown inline flag 'U'".to_string(),
                         self.pos,
-                    ))
+                    ));
                 }
                 other => {
                     return Err(PErr::Syntax(
@@ -917,7 +956,20 @@ impl Parser {
             )]);
         }
         match c {
-            'b' => Ok(vec![Inst::Assert(AssertKind::WordBoundary)]),
+            'b' => {
+                // `\b{g}` (grapheme-cluster boundary) is not supported by
+                // Android's Pattern; ART raises PatternSyntaxException.
+                if self.peek() == Some('{')
+                    && self.peek_at(1) == Some('g')
+                    && self.peek_at(2) == Some('}')
+                {
+                    return Err(PErr::Syntax(
+                        "Unsupported boundary matcher '\\b{g}'".to_string(),
+                        self.pos,
+                    ));
+                }
+                Ok(vec![Inst::Assert(AssertKind::WordBoundary)])
+            }
             'B' => Ok(vec![Inst::Assert(AssertKind::NotWordBoundary)]),
             'A' => Ok(vec![Inst::Assert(AssertKind::StartInput)]),
             'z' => Ok(vec![Inst::Assert(AssertKind::EndInput)]),
@@ -1088,8 +1140,16 @@ impl Parser {
                     self.pos,
                 ));
             }
-            return u32::from_str_radix(&s, 16)
-                .map_err(|_| PErr::Syntax("Hexadecimal codepoint too large".to_string(), self.pos));
+            let val = u32::from_str_radix(&s, 16).map_err(|_| {
+                PErr::Syntax("Hexadecimal codepoint too large".to_string(), self.pos)
+            })?;
+            if val > 0x10FFFF {
+                return Err(PErr::Syntax(
+                    "Hexadecimal codepoint too large".to_string(),
+                    self.pos,
+                ));
+            }
+            return Ok(val);
         }
         let mut val = 0u32;
         for _ in 0..2 {
@@ -1358,6 +1418,10 @@ fn offset_jumps(inst: &mut Inst, base: u32) {
             *b += base;
         }
         Inst::Jmp(a) => *a += base,
+        Inst::LoopEnd { start, exit, .. } => {
+            *start += base;
+            *exit += base;
+        }
         _ => {}
     }
 }
@@ -1409,6 +1473,7 @@ fn emit_repeat(
     min: u32,
     max: Option<u32>,
     lazy: bool,
+    slot: u16,
 ) -> Result<(), PErr> {
     for _ in 0..min {
         splice(buf, body.to_vec());
@@ -1433,13 +1498,22 @@ fn emit_repeat(
             let l1 = buf.len();
             buf.push(Inst::Split(0, 0));
             let bstart = buf.len() as u32;
+            buf.push(Inst::SaveLoop(slot));
             splice(buf, body.to_vec());
-            buf.push(Inst::Jmp(l1 as u32));
-            let l3 = buf.len() as u32;
+            let loop_end = buf.len();
+            buf.push(Inst::LoopEnd {
+                start: l1 as u32,
+                exit: 0,
+                slot,
+            });
+            let lend = buf.len() as u32;
+            if let Inst::LoopEnd { exit, .. } = &mut buf[loop_end] {
+                *exit = lend;
+            }
             buf[l1] = if lazy {
-                Inst::Split(l3, bstart)
+                Inst::Split(lend, bstart)
             } else {
-                Inst::Split(bstart, l3)
+                Inst::Split(bstart, lend)
             };
         }
     }
@@ -1754,6 +1828,7 @@ impl Pattern {
         limit: usize,
         caps_in: Vec<Option<usize>>,
         ctx: &Ctx,
+        must_end: Option<usize>,
     ) -> Option<(usize, Vec<Option<usize>>)> {
         let prog = &self.programs[prog_idx as usize];
         let mut pc = 0usize;
@@ -1768,14 +1843,21 @@ impl Pattern {
             }
             ctx.steps.set(step);
             match &prog[pc] {
-                Inst::Match => return Some((pos, caps)),
-                Inst::Char(c, ic) => {
-                    if pos < limit && char_eq(ctx.input.cps[pos], *c, *ic) {
-                        pos += 1;
-                        pc += 1;
-                        continue 'main;
+                Inst::Match => {
+                    if must_end.is_none_or(|e| pos == e) {
+                        return Some((pos, caps));
                     }
-                    ctx.hit_end.set(true);
+                }
+                Inst::Char(c, ic) => {
+                    if pos < limit {
+                        if char_eq(ctx.input.cps[pos], *c, *ic) {
+                            pos += 1;
+                            pc += 1;
+                            continue 'main;
+                        }
+                    } else {
+                        ctx.hit_end.set(true);
+                    }
                 }
                 Inst::Class(ci, ic) => {
                     if pos < limit {
@@ -1870,6 +1952,20 @@ impl Pattern {
                     pc += 1;
                     continue 'main;
                 }
+                Inst::SaveLoop(h) => {
+                    let idx = self.caps_base + *h as usize;
+                    if idx < caps.len() {
+                        caps[idx] = Some(pos);
+                    }
+                    pc += 1;
+                    continue 'main;
+                }
+                Inst::LoopEnd { start, exit, slot } => {
+                    let idx = self.caps_base + *slot as usize;
+                    let empty = caps.get(idx).copied().flatten() == Some(pos);
+                    pc = if empty { *exit as usize } else { *start as usize };
+                    continue 'main;
+                }
                 Inst::Backref(n, ic) => {
                     let s = caps.get(*n as usize).copied().flatten();
                     let e = caps.get(*n as usize + 1).copied().flatten();
@@ -1904,17 +2000,20 @@ impl Pattern {
                         } else {
                             ctx.region_end
                         };
-                        self.run(*prog, pos, ll, caps.clone(), ctx)
+                        self.run(*prog, pos, ll, caps.clone(), ctx, None)
                     } else {
-                        let lo = if ctx.transparent { 0 } else { ctx.region_start };
+                        // ART's opaque bounds still let a look-behind see
+                        // characters before the region start (probed on the
+                        // API-34 emulator); only look-ahead is clamped at the
+                        // region end.
                         let mut found = None;
-                        let mut s = lo;
+                        let mut s = 0;
                         while s <= pos {
-                            if let Some((end, nc)) = self.run(*prog, s, pos, caps.clone(), ctx) {
-                                if end == pos {
-                                    found = Some(nc);
-                                    break;
-                                }
+                            if let Some((_, nc)) =
+                                self.run(*prog, s, pos, caps.clone(), ctx, Some(pos))
+                            {
+                                found = Some(nc);
+                                break;
                             }
                             s += 1;
                         }
@@ -1933,7 +2032,7 @@ impl Pattern {
                     }
                 }
                 Inst::Atomic(sub) => {
-                    if let Some((end, nc)) = self.run(*sub, pos, limit, caps.clone(), ctx) {
+                    if let Some((end, nc)) = self.run(*sub, pos, limit, caps.clone(), ctx, None) {
                         pos = end;
                         caps = nc;
                         pc += 1;
@@ -1957,11 +2056,20 @@ impl Pattern {
             AssertKind::StartInput => pos == 0,
             AssertKind::EndInput => {
                 ctx.require_end.set(true);
-                pos == ctx.input.cps.len()
+                let end = ctx.input.cps.len();
+                if pos == end {
+                    ctx.hit_end.set(true);
+                }
+                pos == end
             }
             AssertKind::EndInputOrFinalNewline => {
                 ctx.require_end.set(true);
-                pos == ctx.input.cps.len() || is_final_newline(ctx.input, pos, ctx.input.cps.len())
+                let end = ctx.input.cps.len();
+                let ok = pos == end || is_final_newline(ctx.input, pos, end);
+                if ok {
+                    ctx.hit_end.set(true);
+                }
+                ok
             }
             AssertKind::StartLine(multiline) => {
                 if multiline {
@@ -1975,10 +2083,17 @@ impl Pattern {
                 let end = ctx.effective_end();
                 if multiline {
                     ctx.require_end.set(true);
+                    if pos == end {
+                        ctx.hit_end.set(true);
+                    }
                     pos == end || (pos < end && is_line_terminator(ctx.input.cps[pos]))
                 } else {
                     ctx.require_end.set(true);
-                    pos == end || is_final_newline(ctx.input, pos, end)
+                    let ok = pos == end || is_final_newline(ctx.input, pos, end);
+                    if ok {
+                        ctx.hit_end.set(true);
+                    }
+                    ok
                 }
             }
             AssertKind::WordBoundary => ctx.word_boundary(pos),
@@ -1995,8 +2110,8 @@ fn attempt(
     start: usize,
     require_end: bool,
 ) -> Option<(usize, Vec<Option<usize>>)> {
-    let mut caps = vec![None; (pat.group_count + 1) * 2];
-    let r = pat.run(0, start, ctx.region_end, caps, ctx)?;
+    let mut caps = vec![None; pat.caps_len];
+    let r = pat.run(0, start, ctx.region_end, caps, ctx, None)?;
     caps = r.1;
     let end = r.0;
     if require_end && end != ctx.region_end {
@@ -2594,5 +2709,167 @@ mod tests {
     fn anchors_multiline() {
         assert!(m("(?m)^b", "a\nb").is_some());
         assert!(m("^b", "a\nb").is_none());
+    }
+
+    // ---- full Unicode case folding -------------------------------------
+
+    fn mf(pat: &str, flags: u32, text: &str) -> Option<Vec<Option<usize>>> {
+        let p = compile(pat, flags);
+        let input = Input::build(&text.encode_utf16().collect::<Vec<u16>>());
+        let ctx = ctx_for(&input);
+        find_from(&p, &ctx, 0).map(|(_, caps)| caps)
+    }
+
+    fn find_text(pat: &str, flags: u32, text: &str) -> Option<String> {
+        let p = compile(pat, flags);
+        let input = Input::build(&text.encode_utf16().collect::<Vec<u16>>());
+        let ctx = ctx_for(&input);
+        let (_, caps) = find_from(&p, &ctx, 0)?;
+        let s = caps[0]?;
+        let e = caps[1]?;
+        let a = input.cp_to_u16[s];
+        let b = input.cp_to_u16[e];
+        Some(String::from_utf16_lossy(&input.units[a..b]))
+    }
+
+    #[test]
+    fn full_case_folding_expands_pattern() {
+        // Pattern sharp-s folds to "ss" and consumes two input code points.
+        assert!(mf("\u{00df}", F_CASE_INSENSITIVE, "ss").is_some());
+        assert_eq!(find_text("\u{00df}", F_CASE_INSENSITIVE, "SS").as_deref(), Some("SS"));
+        assert!(mf("\u{fb01}", F_CASE_INSENSITIVE, "fi").is_some());
+        assert!(mf("\u{212a}", F_CASE_INSENSITIVE, "k").is_some());
+        assert!(mf("\u{03c2}", F_CASE_INSENSITIVE, "\u{03a3}").is_some());
+        assert!(mf("stra\u{00df}e", F_CASE_INSENSITIVE, "STRASSE").is_some());
+    }
+
+    #[test]
+    fn full_case_folding_expands_input() {
+        // Pattern "ss" matches a single sharp-s input code point.
+        assert!(mf("ss", F_CASE_INSENSITIVE, "\u{00df}").is_some());
+        assert!(mf("fi", F_CASE_INSENSITIVE, "\u{fb01}").is_some());
+        assert!(mf("ss", F_CASE_INSENSITIVE, "s").is_none());
+    }
+
+    #[test]
+    fn case_folding_is_not_simple_lowercase() {
+        // A lone 's' must not match sharp-s, and sharp-s must not match 's'.
+        assert!(mf("\u{00df}", F_CASE_INSENSITIVE, "s").is_none());
+        assert!(mf("s", F_CASE_INSENSITIVE, "\u{00df}").is_none());
+        assert!(mf("\u{00df}", 0, "ss").is_none());
+    }
+
+    #[test]
+    fn case_insensitive_classes_and_negation() {
+        assert!(mf("[a-z]", F_CASE_INSENSITIVE, "Z").is_some());
+        assert!(mf("[^a]", F_CASE_INSENSITIVE, "A").is_none());
+        assert!(mf("[^a]", F_CASE_INSENSITIVE, "B").is_some());
+        assert!(mf("[\u{00df}]", F_CASE_INSENSITIVE, "\u{1e9e}").is_some());
+        assert!(mf("[\u{00df}]", F_CASE_INSENSITIVE, "s").is_none());
+    }
+
+    // ---- Unicode properties --------------------------------------------
+
+    #[test]
+    fn general_categories() {
+        assert!(m("\\p{Nd}", "\u{0660}").is_some());
+        assert!(m("\\p{Nd}", "a").is_none());
+        assert!(m("\\p{Lu}", "\u{00c9}").is_some());
+        assert!(m("\\p{Ll}", "\u{00e9}").is_some());
+        assert!(m("\\p{L}", "\u{5b57}").is_some());
+        assert!(m("\\p{No}", "\u{00bd}").is_some());
+        assert!(m("\\p{Sm}", "+").is_some());
+        assert!(m("\\P{L}", "5").is_some());
+    }
+
+    #[test]
+    fn unicode_digit_is_decimal_only() {
+        assert!(m("\\d", "\u{0660}").is_some());
+        assert!(m("\\d", "\u{2160}").is_none()); // Roman numeral: Nl, not Nd
+        assert!(m("\\d", "\u{00bd}").is_none()); // vulgar fraction: No
+    }
+
+    #[test]
+    fn script_properties() {
+        assert!(m("\\p{sc=Greek}", "\u{03b1}").is_some());
+        assert!(m("\\p{IsGreek}", "\u{03b1}").is_some());
+        assert!(m("\\p{Greek}", "\u{03b1}").is_some());
+        assert!(m("\\p{sc=Latin}", "a").is_some());
+        assert!(m("\\p{sc=Greek}", "a").is_none());
+    }
+
+    #[test]
+    fn java_whitespace_differs_from_unicode_white_space() {
+        assert!(m("\\p{javaWhitespace}", " ").is_some());
+        assert!(m("\\p{javaWhitespace}", "\u{00a0}").is_none());
+        assert!(m("\\p{javaWhitespace}", "\u{0085}").is_none());
+        assert!(m("\\p{White_Space}", "\u{00a0}").is_some());
+    }
+
+    #[test]
+    fn posix_classes() {
+        assert!(m("[[:alpha:]]", "\u{00e9}").is_some());
+        assert!(m("[[:digit:]]", "\u{0660}").is_some());
+        assert!(m("[[:xdigit:]]", "\u{ff10}").is_some());
+        assert!(m("[[:xdigit:]]", "g").is_none());
+        assert!(m("[[:blank:]]", "\u{00a0}").is_some());
+        assert!(m("[[:cntrl:]]", "\u{0001}").is_some());
+    }
+
+    // ---- flags / structural fixes --------------------------------------
+
+    #[test]
+    fn literal_flag() {
+        assert!(mf("a.b", F_LITERAL, "a.b").is_some());
+        assert!(mf("a.b", F_LITERAL, "axb").is_none());
+        assert!(mf("a*b", F_LITERAL, "a*b").is_some());
+        assert!(mf("\u{00df}", F_LITERAL | F_CASE_INSENSITIVE, "SS").is_some());
+    }
+
+    #[test]
+    fn capturing_groups_numbered_outer_first() {
+        let p = compile("(a(b(c)))", 0);
+        let input = Input::build(&"abc".encode_utf16().collect::<Vec<u16>>());
+        let ctx = ctx_for(&input);
+        let (_, caps) = find_from(&p, &ctx, 0).unwrap();
+        assert_eq!(group_text(&input, &caps, 1).as_deref(), Some("abc"));
+        assert_eq!(group_text(&input, &caps, 2).as_deref(), Some("bc"));
+        assert_eq!(group_text(&input, &caps, 3).as_deref(), Some("c"));
+    }
+
+    #[test]
+    fn bounded_variable_lookbehind_uses_alternation() {
+        assert!(m("(?<=ab|abc)d", "abcd").is_some());
+        assert!(m("(?<=a{1,3})b", "aaab").is_some());
+    }
+
+    #[test]
+    fn unbounded_lookbehind_is_rejected() {
+        assert!(Parser::new("(?<=a+)b".chars().collect()).parse(0).is_err());
+        assert!(Parser::new("(?<=a*)b".chars().collect()).parse(0).is_err());
+        assert!(Parser::new("(?<=a{2,})b".chars().collect()).parse(0).is_err());
+    }
+
+    #[test]
+    fn unknown_inline_flag_is_a_syntax_error() {
+        assert!(Parser::new("(?U)\\w".chars().collect()).parse(0).is_err());
+    }
+
+    #[test]
+    fn empty_loop_cannot_spin_forever() {
+        // The nested star would loop forever without the hidden loop slot.
+        assert!(m("(a*)*", "aaa").is_some());
+        assert!(m("(?:)*", "aaa").is_some());
+        assert!(m("(?:a?)*", "aaa").is_some());
+    }
+
+    #[test]
+    fn backtracking_step_budget_is_bounded() {
+        // A pathological but finite pattern must complete under the step budget
+        // rather than hang.
+        let p = compile("(a+)+$", 0);
+        let input = Input::build(&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!".encode_utf16().collect::<Vec<u16>>());
+        let ctx = ctx_for(&input);
+        let _ = attempt(&p, &ctx, 0, true);
     }
 }
