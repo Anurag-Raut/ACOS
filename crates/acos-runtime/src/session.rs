@@ -1236,13 +1236,28 @@ fn blocker_for(idx: usize, report: &LifecycleReport, msgs: &[String]) -> StageBl
     // The protocol hints for `UNSUPPORTED_JAVA_API`/`UNSUPPORTED_ANDROID_API`
     // tell the agent to read `details.api`/`details.at`; make that true by
     // pulling the first `Lclass;->name(sig)` and the `(at ... pc=...)` frame out
-    // of the runtime message.
-    if code.starts_with("UNSUPPORTED") {
+    // of the runtime message. A framework `RuntimeException` wraps the real
+    // blocker several `caused by:` levels deep, so the shallow first line is not
+    // enough: surface the deepest cause, and parse its
+    // `unsupported Android API: <iface> code <n> (<method>)` form into
+    // `api`/`at` when the shallow line did not carry one.
+    if code.starts_with("UNSUPPORTED") || code == "JAVA_EXCEPTION" {
         if let Some(api) = extract_api(&raw) {
             details.push(("api".to_string(), api));
         }
         if let Some(at) = extract_at(&raw) {
             details.push(("at".to_string(), at));
+        }
+        if let Some(root) = extract_root_cause(&raw) {
+            if let Some((api, at)) = parse_unsupported_android_api(&root) {
+                if !details.iter().any(|(k, _)| k == "api") {
+                    details.push(("api".to_string(), api));
+                }
+                if !details.iter().any(|(k, _)| k == "at") {
+                    details.push(("at".to_string(), at));
+                }
+            }
+            details.push(("root_cause".to_string(), root));
         }
     }
     StageBlocker {
@@ -1266,6 +1281,29 @@ fn extract_api(raw: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// The deepest `caused by:` line in a concatenated Java exception message.
+/// `Throwable.getMessage` renders causes outermost-first, so the last one is
+/// the root cause an agent must act on.
+fn extract_root_cause(raw: &str) -> Option<String> {
+    raw.lines()
+        .filter_map(|line| line.trim_start().strip_prefix("caused by:"))
+        .next_back()
+        .map(|rest| rest.trim().to_string())
+}
+
+/// Parse `unsupported Android API: <iface> code <n> (<method>)` into
+/// `("<iface>;-><method>", "<iface>.<method>")`, matching the shape of the
+/// `details.api`/`details.at` fields the error hint points at.
+fn parse_unsupported_android_api(line: &str) -> Option<(String, String)> {
+    let rest = line.split_once("unsupported Android API: ")?.1.trim();
+    let (iface, tail) = rest.split_once(" code ")?;
+    let method = tail.split_once('(')?.1.trim_end_matches(')').trim();
+    if iface.is_empty() || method.is_empty() {
+        return None;
+    }
+    Some((format!("{iface};->{method}"), format!("{iface}.{method}")))
 }
 
 /// The `Lclass;.name` inside a `(at ... pc=...)` runtime frame, if present.
@@ -1344,6 +1382,29 @@ mod tests {
             Some("Landroid/graphics/drawable/VectorDrawable;.nCreateGroup")
         );
         assert_eq!(extract_api("plain failure with no api token"), None);
+    }
+
+    #[test]
+    fn buried_java_cause_is_surfaced_and_parsed() {
+        let raw = "java exception: java.lang.RuntimeException: Unable to start activity\n    \
+                   at android.os.Looper.loop(294)\n  caused by: android.view.InflateException: \
+                   Error inflating class android.widget.ListView\n  caused by: \
+                   java.lang.UnsupportedOperationException: unsupported Android API: \
+                   android.content.IContentProvider code 0 (LIST_config)\n    \
+                   at android.view.LayoutInflater.createView(875)";
+        assert_eq!(
+            extract_root_cause(raw).as_deref(),
+            Some(
+                "java.lang.UnsupportedOperationException: unsupported Android API: \
+                 android.content.IContentProvider code 0 (LIST_config)"
+            )
+        );
+        let root = extract_root_cause(raw).expect("root cause");
+        let (api, at) = parse_unsupported_android_api(&root).expect("parsed");
+        assert_eq!(api, "android.content.IContentProvider;->LIST_config");
+        assert_eq!(at, "android.content.IContentProvider.LIST_config");
+        assert_eq!(extract_root_cause("no causes here"), None);
+        assert_eq!(parse_unsupported_android_api("no marker"), None);
     }
 
     #[test]

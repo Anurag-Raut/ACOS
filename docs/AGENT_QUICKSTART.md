@@ -125,6 +125,14 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    client_transaction → activity_on_create → on_resume → first_frame`.
    The first non-`ok` rung carries the blocker; `reached_stage` is the honest
    answer to "how far did it get?".
+
+   **Current ceiling (2026-11-11, HEAD `1041c21`).** A `TextView`/`Button`
+   activity reaches `on_resume` for real (`counter.apk`); a themed activity that
+   inflates a `ListView` or `EditText` still stops at `activity_on_create` with
+   `UNSUPPORTED_JAVA_API` whose `root_cause` is
+   `android.content.IContentProvider code 0 (LIST_config)`. `first_frame` is
+   `UNSUPPORTED_BACKEND` (`ui.frame`, `not_ready`) even when `on_resume` ran, so
+   `acos observe --tree` works but `acos observe` (frame) does not. See §6.
 4. **Check the state before observing.** `acos_status { session_id }`. Tells
    "never started" from "started but no window yet". `acos_logs` now also
    returns `launched` and `stage_reached`: an empty log buffer is only a clean
@@ -152,6 +160,15 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    The field must already have input focus — observe the tree and tap it first;
    an unfocused field returns `ELEMENT_NOT_FOUND` with
    `details.kind = NoFocusedEditor`.
+
+   **Read `text_path` and `state_changed`.** `CommitText` needs a live editor;
+   if the focused view is *not* an editor (e.g. a `Button`), the command still
+   succeeds with `text_path: "key-events"` and sends the key sequence to
+   whatever is focused. `status: "pass"` there means "input was delivered",
+   **not** "the text was inserted" — check `text_path` before trusting it.
+   Likewise a `tap` before `first_frame` returns `status: "pass"`,
+   `accepted: true`, but `state_changed: false` and the click does not land;
+   the frame that would route the event has not been published.
 7. **Read logs.** `acos_logs { session_id }` for the app's own `Log.i` lines.
 8. **Assert.** For scenario-driven runs use `acos_verify` with a YAML scenario
    and read `verdict.json`; evidence (frames, tree, events) must exist for a
@@ -229,7 +246,7 @@ Branch on `error.code`. The envelope always carries `code`, `message`, `hint`,
 |---|---|---|
 | Engine cannot do it (`unsupported`) | `UNSUPPORTED_JAVA_API`, `UNSUPPORTED_ANDROID_API`, `UNSUPPORTED_BYTECODE`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`, `UNSUPPORTED_BACKEND`, `NEEDS_REAL_DEVICE`, `REQUIRES_GMS`, `WRONG_ABI`, `NO_DISPLAY`, `NO_TEXT`, `RENDER_UNSUPPORTED_OP` | Read `details.api`/`details.at` (the exact missing native), `details.symbol`/`details.library`, or `details.reason`; avoid the API, pick another backend, or report unsupported. **Never a pass.** |
 | App is wrong (`fail`) | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND` | Read the assertion diff / re-observe the tree, then fix the app or the expectation. |
-| App crashed/hung | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | Read the crash/ANR event and last actions. |
+| App crashed/hung | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | Read `details.root_cause` (the deepest `caused by:` line, now surfaced), the crash/ANR event and last actions. A framework `RuntimeException` (e.g. an `InflateException`) hides the real engine blocker several causes deep. |
 | Bad artifact | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | Rebuild/re-sign/repackage, then `acos_inspect` again. Not an app verdict. |
 | Session/resource | `SESSION_NOT_FOUND`, `SESSION_BUSY`, `STALE_REF`, `TIMEOUT`, `RESOURCE_LIMIT`, `RAM_GUARD`, `RAM_ABORT` | Create the session first, serialise mutations, re-observe after mutations, reduce concurrency/raise a budget. |
 | Evidence/fidelity | `NO_FRESH_FRAME`, `UNVERIFIED_FIDELITY`, `ARTIFACTS_INVALID`, `UNSAFE_PATH` | Wait for a new frame, use `after_seq`/`after_cause`, rerun at a qualifying fidelity, keep artifacts inside the artifacts dir. |
@@ -246,20 +263,35 @@ Two session-specific hints worth memorizing:
 
 ---
 
-## 6. Known state (as of this wave)
+## 6. Known state (as of 2026-11-11, HEAD `1041c21`)
 
-`tools/build-dogfood-apps.sh` builds the framework-only fixtures, and
-`acos launch` currently stops at:
+`tools/build-dogfood-apps.sh` builds the framework-only fixtures. On this HEAD:
 
-```
-[blocked] activity_on_create
-  UNSUPPORTED_JAVA_API
-  api: Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J
-  at:  Landroid/graphics/drawable/VectorDrawable;.nCreateGroup
-```
+* `counter.apk` reaches `on_resume` for real; the lifecycle events come from the
+  app's own bytecode. `acos observe --tree` then returns a live `View`
+  hierarchy, and the daemon session survives across CLI processes.
+* `first_frame` is still `UNSUPPORTED_BACKEND` (`details.capability =
+  "ui.frame"`, `details.reason = "not_ready"`): no frame is published, so
+  `acos observe` (frame) is unsupported and a `tap` is acked but does not land.
+* A themed activity that inflates `ListView` or `EditText` stops at
+  `activity_on_create`. The message is a framework `InflateException`; the
+  `details.root_cause` names the real blocker:
 
-That is the `VectorDrawable` native vector-tree surface (`gfx_vector`), tracked
-separately. Until it lands, themed activities stop at `activity_on_create`; the
-fixtures are otherwise indistinguishable at the launch level. `acos launch`
-now reports the exact missing API in `details.api`/`details.at`, so an agent can
-link the blocker without reading the `java-tail` by hand.
+  ```
+  [blocked] activity_on_create
+    UNSUPPORTED_JAVA_API
+    root_cause: java.lang.UnsupportedOperationException: unsupported Android API: \
+                android.content.IContentProvider code 0 (LIST_config)
+  ```
+
+  i.e. the settings provider does not answer the `LIST_config` call. This gates
+  every list/text input app (list-scroll, text-input, todo-dogfood, and a
+  `ListView`/`EditText` notes app). It is a runtime/provider gap, not an app or
+  tooling bug.
+
+The previous `VectorDrawable.nCreateGroup` blocker is fixed; if you still see
+it, your binary predates the `gfx_vector` work and should be rebuilt.
+`acos launch` reports the exact missing API in `details.api`/`details.at` for a
+shallow one-line blocker, and now also `details.root_cause` for a wrapped Java
+exception, so an agent can link the blocker without reading the `java-tail` by
+hand.
