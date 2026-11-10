@@ -483,6 +483,16 @@ fn flutter_child_worker() {
         }
     };
 
+    // W119-A (worktree-only diagnostic): publish the engine load bias so the
+    // out-of-process gdb driver can set breakpoints inside the anonymous
+    // mapping (the loader maps with MAP_ANONYMOUS, so /proc/pid/maps carries no
+    // path to match on).
+    if let Some(handle) = &engine_handle {
+        let bias = handle.library().bias();
+        let _ = std::fs::write(scratch.join("base.txt"), format!("{bias:x}"));
+        println!("W119A_BASE 0x{bias:x}");
+    }
+
     // Phase A2: run `JNI_OnLoad` from the raw handle (exercises the same
     // registration path as `System.loadLibrary`, without the VM yet).
     if let Some(handle) = &engine_handle {

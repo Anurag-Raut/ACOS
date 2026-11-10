@@ -1,0 +1,29 @@
+ENGINE_BASE 0x7ffff41dd000
+SEMINIT 1 tid=2 sem=0x7fffe23d7b70 value=2
+SEMINIT 2 tid=2 sem=0x7fffe23d7c20 value=0
+SEMINIT 3 tid=2 sem=0x7fffe23d7c70 value=1
+REQFRAME 1 tid=2
+TRYWAIT 1 tid=2 valid=1 sem_word=0x0
+MODULE_SEM_TRYWAT 1 tid=2 sem=0x7fffe23d7c70
+REQFRAME 2 tid=2
+TRYWAIT 2 tid=2 valid=1 sem_word=0x0
+MODULE_SEM_TRYWAT 2 tid=2 sem=0x7fffe23d7c70
+REQFRAME 3 tid=2
+TRYWAIT 3 tid=2 valid=1 sem_word=0x0
+MODULE_SEM_TRYWAT 3 tid=2 sem=0x7fffe23d7c70
+REQFRAME 4 tid=2
+TRYWAIT 4 tid=2 valid=1 sem_word=0x0
+MODULE_SEM_TRYWAT 4 tid=2 sem=0x7fffe23d7c70
+REQFRAME 5 tid=2
+TRYWAIT 5 tid=2 valid=1 sem_word=0x0
+MODULE_SEM_TRYWAT 5 tid=2 sem=0x7fffe23d7c70
+DONE
+sem_init #1 tid=2 addr=0x7fffe23d7ba0
+sem_init #2 tid=2 addr=0x7fffe23d7c50
+sem_init #3 tid=2 addr=0x7fffe23d7ca0
+sem_trywait #1 tid=2 addr=0x7fffe23d7ca0
+sem_trywait #2 tid=2 addr=0x7fffe23d7ca0
+sem_trywait #3 tid=2 addr=0x7fffe23d7ca0
+sem_trywait #4 tid=2 addr=0x7fffe23d7ca0
+sem_trywait #5 tid=2 addr=0x7fffe23d7ca0
+DONE2

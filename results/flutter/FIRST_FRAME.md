@@ -797,3 +797,219 @@ i.e. the trace distorts timing enough to stall the engine.
   `W117A_OBJECT` (waiter vptr) dump.
 * `results/flutter/w117a-untraced-run.log`,
   `results/flutter/w117a-pthread-attrs.log` — evidence.
+
+---
+
+# W119-A — the primary frame task has never been posted: `Animator::RequestFrame` dies in `Semaphore::TryWait` (engine-side observation at last)
+
+**Date:** 2026-11-11 (wave W119-A). **Base:** clean worktree of `HEAD`
+(`ee2d88a`, the W117-A commit). Built with `CARGO_TARGET_DIR=.cache/target-w119a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `tools/guarded.sh`. Not committed. Offsets are for
+the pinned engine in `.cache/flutter-1/lib-x86_64/libflutter.so`
+(Flutter 3.47 x86_64, build id `fe9fabe9…`, with DWARF).
+
+## Result at a glance
+
+| stage | W117-A | W119-A |
+|---|---|---|
+| `libflutter.so` load/reloc/`JNI_OnLoad` | ok | ok (510/0, 32 962 relocs) |
+| Dart `main()` | ok | ok (`ACOS_DART_MAIN entered`) |
+| engine-side breakpoints actually fire | **no** (wrong copy, see §1) | **yes** — 14 sites, verified bytes |
+| clock / `TimePoint::Now` / timerfd units | "assumed to agree" | **measured and correct** (§2) |
+| `RunExpiredTasksNow` pop decision | "stale re-arm loop, never pops" | **pops correctly**: `target − now = −0.4…−6 ms` every sample (§2) |
+| `Animator::RequestFrame` | assumed to run | called 5×, **posts nothing** (`frame_request_pending_semaphore_.TryWait()` false) |
+| `AChoreographer_postFrameCallback` | 1 post | 1 post — but from `VsyncWaiter::ScheduleSecondaryCallback`, **not** from the animator |
+| `VsyncWaiter::FireCallback` | assumed to post the frame task | runs with **empty `callback_`** → posts nothing (§4) |
+| `FireCallback::$_0` frame task / `Animator::AwaitVSync::$_0` / `Shell::OnAnimatorBeginFrame` | "never runs" | **confirmed never entered** (§4) |
+| `RegisterTask` / `PostTask` census | — | 19 / 18 in the whole process; neither the frame request nor the frame task is among them (§4) |
+| Dart `onBeginFrame` / `ANativeWindow_lock` / PNG | no | still no — but now with a named cause |
+| tests / clippy / check / dexprogs | pass | see §6 |
+
+## 1. Method: how to breakpoint a `MAP_ANONYMOUS` engine — and the two-copies trap
+
+The engine is mapped with `MAP_ANONYMOUS` (`loader.rs::map_segments`), so
+`/proc/pid/maps` has no `libflutter.so` path and `gdb` cannot resolve the file.
+The harness child now publishes its load bias (`W119A_BASE`, and
+`<scratch>/base.txt`), and `tools/flutter-engine-gdb.py` finds the base
+**from a running call** instead:
+
+```
+base = *(uint64_t*)rsp − 0x559bf3      # instruction after `call timerfd_settime@plt`
+                                       # in fml::MessageLoopAndroid::WakeUp
+```
+
+That correction is the whole reason the previous two waves could not observe the
+engine: **two copies of `libflutter.so` are mapped simultaneously.**
+
+| copy | address (one run) | loaded by | executes |
+|---|---|---|---|
+| A | `0x7ffff60b2000` | the harness: `loader.load(&path, "libflutter.so")` (phase A) | nothing after `JNI_OnLoad` |
+| B | `0x7ffff41dd000` | the JNI path: `System.loadLibrary("flutter")` → `acos_jni::load::load_named` | **all** engine threads, timers, task queues, vsync |
+
+Breakpoints installed on copy A report "never hit" for *every* engine symbol
+(`WAKEUP`, `RunExpiredTasksNow`, `RegisterTask`, `FireCallback`, …) while the
+same functions demonstrably run — the trap W113-A/W117-A fell into. Every engine
+static is duplicated: `MessageLoopTaskQueues::GetInstance()`, the `tls_*`
+spinners, and the 42 JNI natives registered twice (the second registration
+wins). `bionic::dl::dlopen` dedupes through `OBJECTS`, but
+`acos_jni::load::load_named` calls `Loader::load` directly and only consults its
+own per-runtime `loaded` map, so the JNI spelling of a load maps a *fresh* copy.
+This is a real ACOS defect independent of the frame bug (166 MiB duplicated,
+two engines' worth of globals) and the first thing to fix.
+
+The driver (`tools/flutter-engine-gdb.py`) prints the first bytes at each site
+so a mismatched engine fails loudly instead of silently "never hitting":
+
+```
+ENGINE_BASE 0x7ffff41dd000 (from timerfd_settime return)
+SITE +0x554e66 CMP      bytes=49394540     # cmp [r13+0x40],rax
+SITE +0x9d0010 FIRECB   bytes=55415741     # push rbp; push r15; push r14; push r13
+SITE +0x9acdaa REQFRAME bytes=41574156
+INSTALLED 14 sites
+```
+
+## 2. Answers to W113-A's precise questions — every timer/clock hypothesis is falsified
+
+The advisor's reading of the pinned binary is confirmed at `+0x554e66`
+(`cmp QWORD PTR [r13+0x40], rax; jle` → pop-and-run when `target_time <= now`,
+with `r13 = DelayedTask*` from `PeekNextTaskUnlocked` and `now` = the value
+captured at `RunExpiredTasksNow` entry). With the *correct* base instrumented:
+
+```
+CMP 19 tid=2 target=37320956538589 now=37320954538624 delta_us=1999   → future, stays queued
+WAKE 38 tid=2 time=37320956538589                                     → re-arm to it
+RUNEXP 24 tid=2
+CMP 20 tid=2 target=37320956538589 now=37320958485403 delta_us=-1947  → past, pops
+CMP 21 tid=2 target=37320958033147 now=37320958485403 delta_us=-453   → past, pops
+NOTASK 24 tid=2
+```
+
+* The "stale deadline re-arm loop" W113-A saw is **normal operation**. The
+  repeated `settime` values are several tasks that share one due instant: the
+  engine re-arms to the head task *before* popping, so consecutive `WakeUp`s can
+  carry the same timestamp, and each `RunExpiredTasksNow` then pops it.
+  Deltas in every sample are **negative** (0.4–6 ms in the past), i.e. the engine
+  never believes `now < deadline` for a due task.
+* Clock: `fml::TimePoint::Now()` (`0x557526`) → `gSteadyClockSource` (null in
+  production, a test hook) → `std::__fl::chrono::steady_clock::now()`
+  (`0x53cab4`) → `clock_gettime(1)` → `tv_sec * 1e9 + tv_nsec`. Our `clock_gettime`
+  is a plain forward to glibc, so `CLOCK_MONOTONIC` is byte-identical to the
+  clock the timerfd uses; on this host `CLOCK_MONOTONIC == CLOCK_BOOTTIME`
+  (37065.232 s both), so even a boottime/monotonic mix-up would be invisible and
+  is *not* the bug. `TimerRearm` (`0x559bb0`) divides the ns `TimePoint` by 1e9
+  into `sec/nsec` and passes `TFD_TIMER_ABSTIME`; the trace shows
+  `clock=1 flags=526336` (non-blocking+cloexec) on create and `flags=1` on settime,
+  i.e. the same monotonic clock end to end. No unit or epoch mismatch, no
+  overflow (`int64_t` ns has a 292-year range).
+* Queue identity is sound: every post and every wake in the run carries the same
+  merged queue id, and posts/pops both happen on tid 2 (platform = UI thread in
+  this engine); no emutls/`Merge`/`Owns` misbehaviour is visible.
+
+## 3. The chain, measured end to end
+
+```
+REQFRAME 1..5   tid=2   Animator::RequestFrame            (called 5×, posts nothing)
+SECCB    1      tid=2   VsyncWaiter::ScheduleSecondaryCallback
+AWAIT    1      tid=2   VsyncWaiterAndroid::AwaitVSync
+POSTFRAME 1     tid=2   AChoreographer_postFrameCallback  (the single post)
+FIRECB   1      tid=2   VsyncWaiter::FireCallback(frame, target, pause_rendering=1)
+                        → callback_ is EMPTY → no frame task, no pause, nothing posted
+```
+
+`FIRECB 1`, `FRAMETASK` (`0x9d04de`), `AWCB` (`Animator::AwaitVSync::$_0`,
+`0x9ad1c6`) and `ONANIMBEGIN` (`Shell::OnAnimatorBeginFrame`, `0x9c3522`) never
+run — the last two never at all, and `FRAMETASK` not once in the whole process.
+
+## 4. Root cause: `Animator::RequestFrame` returns before its `PostTask`
+
+`animator.cc:250` is `if (!frame_request_pending_semaphore_.TryWait()) return;`.
+`fml::Semaphore` is *not* a libc++ mutex: it is a bionic `sem_t` wrapper
+(`semaphore.cc:143`), i.e. `sem_init` / `sem_post` / `sem_trywait` — **ACOS
+shims**, with a handle side-table (`bionic/shims.rs::sems()`, guest object zeroed
+and a host `sem_t` boxed). Measured:
+
+```
+SEMINIT 3 tid=2 sem=0x7fffe23d7c70 value=1          ← the animator's semaphore, value 1
+REQFRAME 1 tid=2
+TRYWAIT 1 tid=2 valid=1 sem_word=0x0                ← valid_ == 1, guest word zeroed by our shim
+MODULE_SEM_TRYWAT 1 tid=2 sem=0x7fffe23d7c70         ← sem_trywait on that same object …
+REQFRAME 2 tid=2                                     → returned −1 (EAGAIN), so RequestFrame bailed
+… repeated for all 5 RequestFrame calls
+```
+
+`Semaphore::TryWait` (`0x5567ba`) is *silent* on failure: `cmp BYTE [rdi],1; jne
+→ return false` (invalid handle) and `sem_trywait` returning `−1` (non-EINTR) →
+`false`. So the engine's "coalesce frame requests" logic concludes a request is
+already in flight and drops every single one. Consequences, all measured:
+
+* `RegisterTask` census for the whole process: **19** posts (18 `PostTask`s), and
+  **none** carries `Animator::RequestFrame(bool)::$_0` (vtable `+0xc6bce0`) or
+  `VsyncWaiter::FireCallback(...)::$_0` (`+0xc6ed40`). What *is* posted is shell
+  setup, `DartIsolate::UpdateThreadPoolNames()::$_3` (×4),
+  `SetMessageHandlingTaskRunner`, `Shell::OnPlatformViewScheduleFrame::$_0`,
+  `OnDisplayUpdates`, `OnEngineHandlePlatformMessage`, and — last —
+  `Animator::ScheduleMaybeClearTraceFlowIds()::$_0` (`+0xc6bd70`), i.e.
+  `Animator::AwaitVSync` finally ran *after* the vsync had already been
+  delivered.
+* Because `callback_` is empty, `FireCallback` takes the `vsync_waiter.cc:104`
+  branch: it neither pauses the Dart event loop nor posts the UI frame task.
+* The only vsync in the run comes from `ScheduleSecondaryCallback`
+  (`AwaitVSyncForSecondaryCallback`), which never installs `callback_`.
+* `Animator::BeginFrame` → `Shell::OnAnimatorBeginFrame` → Dart `onBeginFrame`
+  therefore never happens; no `onDrawFrame`, no `ANativeWindow_lock`, no PNG.
+  The task queue then goes completely quiet (the last two pops are the
+  `ScheduleMaybeClearTraceFlowIds` post and `OnEngineHandlePlatformMessage`).
+
+So the defect that W113-A and W117-A were looking for *downstream* (queue ids,
+pause semantics, cloxk, re-arm) is actually **upstream**: the semaphore shim
+makes the animator unable to request a frame at all. Both earlier waves'
+"head-of-line / stale re-arm" reading is a misreading of normal re-arm traffic,
+and their `+0x9cffee` vtable crash is a timing artefact of tracing (not seen in
+any W119-A run).
+
+### What must be fixed (next change, not this diagnostic wave)
+
+1. `bionic/shims.rs`: make the `sem_*` handle table answer reliably. Prime
+   suspect: `sem_ref()` returning `None`/a stale box for a handle that
+   `sem_init` did insert (the guest word is zeroed by design, so any code path
+   that reaches glibc directly, or any object that is *moved* after `sem_init`
+   — the key is the guest address — silently degrades to `−1`). Add a unit test
+   that mirrors `fml::Semaphore` exactly: `sem_init(sem, 0, 1)` →
+   `sem_trywait == 0` → second `sem_trywait == -1/EAGAIN` → `sem_post` →
+   `sem_trywait == 0`, plus a moved-handle case.
+2. `acos_jni::load::load_named`: consult the loader's `OBJECTS` registry before
+   mapping, so `System.loadLibrary("flutter")` cannot create a second copy of an
+   already-mapped engine (and register exactly one `JNI_OnLoad`).
+3. Only then re-drive the frame; with `RequestFrame` able to post, the vsync
+   chain reaches `FireCallback::$_0` → `Animator::AwaitVSync::$_0` →
+   `Shell::OnAnimatorBeginFrame` → Dart `onBeginFrame`.
+
+## 5. Instrument shipped (harness-only, inert)
+
+* `tools/flutter-engine-gdb.py` — out-of-process gdb driver: derives the
+  executing copy's base from `timerfd_settime`'s return address, verifies the
+  site bytes, then traces `WakeUp`/`PostTask`/`RegisterTask`/`RunExpiredTasksNow`/
+  the pop-compare/both invocation loops/`FireCallback`/frame task/`AwaitVSync`/
+  `ScheduleSecondaryCallback`/`OnAnimatorBeginFrame`, printing each closure's
+  `std::function` vtable offset (so a task is identified, not guessed).
+* `crates/acos-jni/tests/flutter_hello.rs` — one `W119A_BASE` line + the
+  `base.txt` publish (needed because the mapping is anonymous).
+* Evidence: `results/flutter/w119a-gdb-sites.log`,
+  `w119a-timerfd-queue.log`, `w119a-task-post.log`, `w119a-messageloop-post.log`,
+  `w119a-task-invocations.log`, `w119a-vsync-chain.log`, `w119a-semaphore.log`.
+
+## 6. Acceptance (W119-A worktree of `ee2d88a`)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-jni --test flutter_hello -- --nocapture` | **pass 2/2**, 15.27 s (`ACOS_DART_MAIN entered`, `confined:true`, `error:null`) |
+| `cargo clippy -p acos-native-loader -p acos-jni --all-targets --no-deps -- -D warnings` | **clean** (`clippy=0`) |
+| `cargo check --workspace --all-targets` | **clean** (`check=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+| engine-side breakpoints | 14 sites installed and verified by first-byte read (§1) |
+| released frame | **no** — but the blocking call is now named and reproduced (`Semaphore::TryWait`, §4) |
+
+Worktree-only instrumentation (all inert for the product path): the
+`W119A_BASE` publish in the harness child and `tools/flutter-engine-gdb.py`.
+Nothing in `acos-native-loader` changed in this wave, so clippy/check/test
+results are the W117-A baseline re-verified on `ee2d88a`.
