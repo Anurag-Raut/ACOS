@@ -147,6 +147,65 @@ impl Runtime {
         report
     }
 
+    /// [`Runtime::boot_and_run_lifecycle`] for a `Vm` restored from a
+    /// framework-init snapshot (T-43b).
+    ///
+    /// The app DEX is parsed and added first, exactly as `boot_app_process`
+    /// would have done, then the same real framework lifecycle runs. Any
+    /// failure is reported in the returned [`LifecycleReport`], never as a
+    /// panic, so the caller can fall back or report the honest blocker.
+    pub fn boot_and_run_lifecycle_from_boot(
+        &mut self,
+        apk_path: impl AsRef<Path>,
+        activity_thread: Handle,
+    ) -> LifecycleReport {
+        let started = std::time::Instant::now();
+        let _ = os_log::drain();
+        let mut report = LifecycleReport {
+            events: Vec::new(),
+            elapsed: std::time::Duration::ZERO,
+            classes_loaded: 0,
+            bind_delivered: false,
+            app_created: false,
+            transaction_scheduled: false,
+            transaction_delivered: false,
+            looper_quit: false,
+            error: None,
+        };
+        let inner = (|| -> Result<Handle, LifecycleError> {
+            let apk_path = apk_path.as_ref();
+            self.host()
+                .borrow_mut()
+                .install_package_from_apk(apk_path)?;
+            self.load_app_dex(apk_path)?;
+            self.run_lifecycle_after_boot(apk_path, activity_thread, &mut report)
+        })();
+        if let Err(e) = inner {
+            report.error = Some(format!(
+                "{e}\n  java-tail: {}\n  native-tail: {}",
+                java_tail(self.vm()),
+                native_tail(self.vm())
+            ));
+        }
+        report.events = fixture_log();
+        report.classes_loaded = self.vm().classes.len();
+        report.elapsed = started.elapsed();
+        report
+    }
+
+    /// Parse and add the APK's first `classes.dex`, as `boot_app_process` does.
+    pub fn load_app_dex(&mut self, apk_path: &Path) -> Result<(), LifecycleError> {
+        let apk = Apk::open(apk_path).map_err(|e| LifecycleError::Boot(BootError::Apk(e)))?;
+        let dex = apk
+            .dex_files
+            .first()
+            .ok_or(LifecycleError::Boot(BootError::NoDex))?;
+        let parsed = acos_dex::DexFile::parse(dex.bytes.clone())
+            .map_err(|e| LifecycleError::Boot(BootError::Dex(e)))?;
+        self.vm_mut().add_dex(parsed);
+        Ok(())
+    }
+
     fn run_lifecycle_inner(
         &mut self,
         apk_path: &Path,
@@ -160,12 +219,23 @@ impl Runtime {
             .borrow_mut()
             .install_package_from_apk(apk_path)?;
         let boot = self.boot_app_process(apk_path)?;
+        self.run_lifecycle_after_boot(apk_path, boot.activity_thread, report)
+    }
+
+    /// Drive `bindApplication` + the launch transaction on a `Runtime` whose
+    /// framework `Vm` was already booted (or restored from an ACOSSNAP boot
+    /// image).
+    fn run_lifecycle_after_boot(
+        &mut self,
+        apk_path: &Path,
+        thread: Handle,
+        report: &mut LifecycleReport,
+    ) -> Result<Handle, LifecycleError> {
         let mut app = app_info_for(apk_path)?;
         // The framework's `LoadedApk`/`PathClassLoader`/`AssetManager` must see
         // a guest path, not the host fixture path. Stage it before the bind.
         crate::apk_loader::stage(self.vm(), apk_path, &mut app)
             .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(e)))?;
-        let thread = boot.activity_thread;
 
         // Enter the real `Looper.loop()` under the interpreter scheduler: it
         // parks the main thread in `MessageQueue.next()` and returns when the

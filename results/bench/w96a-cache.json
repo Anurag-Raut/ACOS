@@ -1,0 +1,92 @@
+{
+  "wave": "W96-A",
+  "task": "T-43b",
+  "metric": "framework boot-image cache (cold process)",
+  "date": "2026-11-11",
+  "profile": "dev",
+  "corelib": "real",
+  "fixture": "fixtures/build/apps/counter.apk",
+  "host": {
+    "threads": 32,
+    "ram_gib": 60
+  },
+  "method": "5 interleaved before/after rounds; each round spawns a fresh `acos bench launch --runs 1` process. before = ACOS_BOOT_CACHE=0 (full Vm::new + prepareMainLooper + ActivityThread + attach); after = ACOS_CACHE_DIR warm (disk ACOSSNAP load + Vm::restore).",
+  "definition": {
+    "before": "RuntimeTemplate::boot internal framework bring-up (Vm::new + framework stages + ACOSSNAP capture)",
+    "after": "cache load + checksum + Vm::restore (cold class relink) + BootImage capture"
+  },
+  "unit": "ms",
+  "type": "wall",
+  "template_boot_ms": {
+    "before": {
+      "n": 5,
+      "min": 87.744,
+      "p50": 94.221,
+      "max": 95.912,
+      "raw": [
+        87.744,
+        93.623,
+        94.221,
+        94.862,
+        95.912
+      ]
+    },
+    "after": {
+      "n": 5,
+      "min": 63.066,
+      "p50": 65.676,
+      "max": 69.192,
+      "raw": [
+        63.066,
+        64.221,
+        65.676,
+        66.586,
+        69.192
+      ]
+    }
+  },
+  "template_snapshot_ms": {
+    "before": {
+      "n": 5,
+      "min": 6.28,
+      "p50": 6.698,
+      "max": 6.903,
+      "raw": [
+        6.28,
+        6.326,
+        6.698,
+        6.701,
+        6.903
+      ]
+    },
+    "after": {
+      "n": 5,
+      "min": 62.805,
+      "p50": 65.402,
+      "max": 68.901,
+      "raw": [
+        62.805,
+        63.946,
+        65.402,
+        66.31,
+        68.901
+      ]
+    }
+  },
+  "per_launch_restore_ms_after_inprocess_image": {
+    "n": 5,
+    "min": 10.329,
+    "p50": 10.931,
+    "max": 12.458,
+    "raw": [
+      10.329,
+      10.926,
+      10.931,
+      10.983,
+      12.458
+    ]
+  },
+  "from_cache_all_hit": true,
+  "speedup_p50": 1.435,
+  "note": "The cold cache restore still pays the ~54 ms class relink (no serialized linked-class image), so it reaches ~65 ms, not the 12.8 ms in-process restore of BENCHMARKS.md 8.13. Serializing the BootImage is the next lever. `acos launch` is NOT wired to the cache (T-43 binder-identity re-seed is missing); the real launch path is unchanged (see w96a-launch.json)."
+}

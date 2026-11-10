@@ -153,6 +153,9 @@ pub struct InputReport {
     pub accepted: bool,
     /// Acknowledgement sequence numbers.
     pub ack_seqs: Vec<u32>,
+    /// For `text`, which path edited the field (`input-connection` or
+    /// `key-events`); `None` for every other action.
+    pub path: Option<String>,
 }
 
 /// One guest log line.
@@ -215,6 +218,12 @@ pub fn session_error_hint(code: &str, details: &[(String, String)]) -> Option<&'
                 "No frame has been published yet. Run `acos launch` and read its ladder: a frame \
                  only exists after the render/handoff path completes. Do not treat this as a pass.",
             ),
+            Some("input.text") => Some(
+                "Typed text edits the focused editor, so a field must have input focus first. \
+                 Observe the tree, tap the text field (or otherwise focus it), then type. \
+                 For characters the key-event fallback cannot map, the focused field must expose \
+                 an InputConnection (a TextView/EditText does).",
+            ),
             _ => None,
         },
         "ELEMENT_NOT_FOUND" => match get("kind") {
@@ -230,6 +239,10 @@ pub fn session_error_hint(code: &str, details: &[(String, String)]) -> Option<&'
             Some("NoFocusedWindow") => Some(
                 "No window holds input focus yet. Launch and observe first; the app must add and \
                  focus a window before key input is delivered.",
+            ),
+            Some("NoFocusedEditor") => Some(
+                "No view currently holds editor focus. Tap the text field first (the IME edits \
+                 the focused view), then retry `acos session text`.",
             ),
             _ => None,
         },
@@ -310,6 +323,10 @@ enum Cmd {
     },
     Key {
         code: i32,
+        reply: Sender<Result<InputReport, SessionError>>,
+    },
+    Text {
+        text: String,
         reply: Sender<Result<InputReport, SessionError>>,
     },
     Swipe {
@@ -481,6 +498,18 @@ impl AgentSession {
         self.round_trip(|reply| Cmd::Key { code, reply })
     }
 
+    /// Type `text` into the focused editor.
+    ///
+    /// Uses the real framework `InputConnection.commitText` path when the
+    /// focused view is editable, and the dispatcher's key-event fallback
+    /// otherwise.
+    pub fn text(&self, text: impl Into<String>) -> Result<InputReport, SessionError> {
+        self.round_trip(|reply| Cmd::Text {
+            text: text.into(),
+            reply,
+        })
+    }
+
     /// Swipe between two points.
     pub fn swipe(
         &self,
@@ -566,6 +595,9 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                     input_java::inject_key(code).map_err(input_error),
                 ));
             }
+            Cmd::Text { text, reply } => {
+                let _ = reply.send(do_text(&mut state, &text));
+            }
             Cmd::Swipe {
                 from,
                 to,
@@ -645,9 +677,60 @@ fn finish_input(
             kind: kind.to_string(),
             accepted: true,
             ack_seqs,
+            path: None,
         }),
         Err(e) => Err(e),
     }
+}
+
+/// Type `text` into the focused editor through the real `InputConnection` path.
+fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionError> {
+    let stage = state.stage_reached;
+    let Some(runtime) = state.runtime.as_mut() else {
+        return Err(SessionError::new(
+            "UNSUPPORTED_BACKEND",
+            format!(
+                "cannot type text: the runtime is not booted (stage reached: {stage})"
+            ),
+        )
+        .with_details(vec![
+            ("reason", "not_ready".to_string()),
+            ("capability", "input.text".to_string()),
+            ("stage_reached", stage.to_string()),
+        ]));
+    };
+    match crate::text_java::inject_text(runtime.vm_mut(), text) {
+        Ok(report) => Ok(InputReport {
+            kind: "text".to_string(),
+            accepted: true,
+            ack_seqs: report.ack_seqs,
+            path: Some(report.path.as_str().to_string()),
+        }),
+        Err(e) => Err(text_error(&e, stage)),
+    }
+}
+
+fn text_error(e: &crate::text_java::TextError, stage: &str) -> SessionError {
+    let mut details = vec![
+        ("kind", e.kind().to_string()),
+        ("stage_reached", stage.to_string()),
+    ];
+    match e {
+        crate::text_java::TextError::NoFocusedEditor => {
+            details.push(("capability", "input.text".to_string()));
+        }
+        crate::text_java::TextError::NoFocusedWindow => {}
+        crate::text_java::TextError::UnsupportedCharacter(ch) => {
+            details.push(("character", ch.to_string()));
+            details.push(("capability", "input.text".to_string()));
+        }
+        crate::text_java::TextError::NotReady(_) => {
+            details.push(("reason", "not_ready".to_string()));
+            details.push(("capability", "input.text".to_string()));
+        }
+        crate::text_java::TextError::Framework(_) => {}
+    }
+    SessionError::new(e.code(), e.message()).with_details(details)
 }
 
 fn do_observe(

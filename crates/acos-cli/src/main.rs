@@ -59,7 +59,7 @@ enum Command {
     /// Run the local session daemon (unix socket) so the CLI is not stateless.
     Serve(serve::ServeArgs),
     /// Session daemon lifecycle: list, status, observe, tap, key, text, logs,
-    /// reset, destroy.
+    /// reset, destroy. `text` types into the focused editor.
     Session {
         #[command(subcommand)]
         command: session::SessionCommand,

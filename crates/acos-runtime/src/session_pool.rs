@@ -58,6 +58,7 @@ use acos_vm::vm::{CoreLib, RunOutcome, Vm, VmOptions};
 use acos_vm::VmError;
 
 use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
+use crate::boot_image_cache::{BootImageCache, LoadResult};
 use crate::transport::ServiceTransport;
 use crate::{Runtime, FIXTURE_UID};
 
@@ -827,6 +828,7 @@ pub struct RuntimeTemplate {
     boot_ms: f64,
     snapshot_ms: f64,
     classes: usize,
+    from_cache: bool,
 }
 
 impl RuntimeTemplate {
@@ -835,14 +837,49 @@ impl RuntimeTemplate {
     /// This is the only step that pays the framework boot cost; it must run on
     /// the thread that will own the `Runtime` (the `Runtime` is not `Send`).
     pub fn boot() -> Result<RuntimeTemplate, PoolError> {
-        let started = Instant::now();
-        let mut rt = Runtime::standard_with(VmOptions {
-            corelib: CoreLib::Real,
-            ..VmOptions::default()
-        })
-        .map_err(PoolError::Boot)?;
+        let cache = crate::boot_image_cache::from_env();
+        Self::boot_with_options(
+            VmOptions {
+                corelib: CoreLib::Real,
+                ..VmOptions::default()
+            },
+            cache.as_ref(),
+        )
+    }
 
+    /// [`RuntimeTemplate::boot`] with explicit VM options and an optional cache.
+    ///
+    /// The on-disk lookup is keyed by `hash(boot classpath + ACOS version +
+    /// format version)`. Any cache problem (miss, corrupt/oversized file,
+    /// fingerprint or version mismatch, failed restore) falls back to the real
+    /// framework boot and is never surfaced as a template failure.
+    pub fn boot_with_options(
+        options: VmOptions,
+        cache: Option<&BootImageCache>,
+    ) -> Result<RuntimeTemplate, PoolError> {
         seed_device_environment();
+        let boot_dir = acos_vm::vm::default_boot_dir(options.boot_dir.as_deref());
+        let cache_key = cache.map(|c| c.image_key(boot_dir.as_deref(), options.corelib));
+        let mut guard = None;
+
+        if let (Some(cache), Some(key)) = (cache, cache_key) {
+            let started = Instant::now();
+            if let Some(template) = Self::cached_hit(cache, key, started) {
+                return Ok(template);
+            }
+            // Only one cold process should pay the boot; the losers wait.
+            if let Some(lock) = cache.lock(key) {
+                if let Some(template) = Self::cached_hit(cache, key, started) {
+                    return Ok(template);
+                }
+                guard = Some(lock);
+            } else if let Some(template) = Self::cached_wait(cache, key) {
+                return Ok(template);
+            }
+        }
+
+        let started = Instant::now();
+        let mut rt = Runtime::standard_with(options).map_err(PoolError::Boot)?;
         let log = {
             let host = rt.host();
             let mut host = host.borrow_mut();
@@ -884,13 +921,79 @@ impl RuntimeTemplate {
                     "ActivityThread instance missing from the snapshot".into(),
                 ))
             })?;
+        if let (Some(cache), Some(key)) = (cache, cache_key) {
+            let _ = cache.store(key, &snapshot);
+        }
+        drop(guard);
         Ok(RuntimeTemplate {
             snapshot: Arc::from(snapshot),
             activity_thread,
             boot_ms,
             snapshot_ms,
             classes,
+            from_cache: false,
         })
+    }
+
+    /// Validate a loaded entry and rebuild the template without booting.
+    fn cached_hit(
+        cache: &BootImageCache,
+        key: u64,
+        started: Instant,
+    ) -> Option<RuntimeTemplate> {
+        match cache.load(key) {
+            LoadResult::Hit(bytes) => Self::from_cached(bytes, started).ok(),
+            LoadResult::Invalid(_) => {
+                // A rejected (corrupt/version-mismatched) entry is removed so
+                // the next process does not retry it. The snapshot's own
+                // validation is what ultimately decides.
+                let _ = std::fs::remove_file(cache.entry_path(key));
+                None
+            }
+            LoadResult::Miss => None,
+        }
+    }
+
+    fn cached_wait(cache: &BootImageCache, key: u64) -> Option<RuntimeTemplate> {
+        let started = Instant::now();
+        match cache.wait_for(key, Duration::from_secs(30)) {
+            LoadResult::Hit(bytes) => Self::from_cached(bytes, started).ok(),
+            _ => None,
+        }
+    }
+
+    /// Build a template from an on-disk snapshot.
+    ///
+    /// `Vm::restore` re-validates the header, boot fingerprint, property hash
+    /// and class layout, so a stale or tampered cache entry cannot become a
+    /// launch; the restored `Vm` is dropped after recovering the preserved
+    /// `ActivityThread` handle.
+    fn from_cached(bytes: Vec<u8>, started: Instant) -> Result<RuntimeTemplate, PoolError> {
+        let vm = Vm::restore(&bytes).map_err(PoolError::Restore)?;
+        let activity_thread = vm
+            .find_instance_of_class("Landroid/app/ActivityThread;")
+            .ok_or_else(|| {
+                PoolError::Restore(VmError::SnapshotPrecondition(
+                    "ActivityThread instance missing from the cached snapshot".into(),
+                ))
+            })?;
+        let classes = vm.classes.len();
+        drop(vm);
+        let load_ms = started.elapsed().as_secs_f64() * 1000.0;
+        Ok(RuntimeTemplate {
+            snapshot: Arc::from(bytes),
+            activity_thread,
+            boot_ms: 0.0,
+            snapshot_ms: load_ms,
+            classes,
+            from_cache: true,
+        })
+    }
+
+    /// Whether this template came from the on-disk cache (no framework boot).
+    #[must_use]
+    pub fn from_cache(&self) -> bool {
+        self.from_cache
     }
 
     /// The template boot wall time (paid once).

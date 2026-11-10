@@ -56,6 +56,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_observe_tree",
     "acos_tap",
     "acos_key",
+    "acos_text",
     "acos_swipe",
     "acos_logs",
     "acos_status",
@@ -340,6 +341,21 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "code": {"type": ["integer", "string"], "description": "Numeric key code or name."}
             })),
         ),
+        "acos_text" => (
+            "Type `text` into the session's focused editor. Prefers the real framework IME \
+             commit path (`View.onCreateInputConnection` -> `InputConnection.commitText`), so \
+             `TextWatcher`s, the selection and the cursor update exactly as on a device; falls \
+             back to a `KeyEvent` sequence through the input dispatcher only when the focused \
+             view has no editable connection. `result.text_path` is `input-connection` or \
+             `key-events`. The field must already have input focus: observe the tree and tap it \
+             first. Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedEditor` (tap the \
+             field first) or `NoFocusedWindow`; UNSUPPORTED_BACKEND when a character cannot be \
+             represented on the key-event fallback. Composing text and IME actions are not \
+             modelled.",
+            with_base(json!({
+                "text": {"type": "string", "description": "Text to type into the focused field."}
+            })),
+        ),
         "acos_swipe" => (
             "Swipe in the held session from `from` to `to`; each point is an object with integer \
              `x` and `y`. `duration_ms` defaults to 300. Common errors: ELEMENT_NOT_FOUND with \
@@ -507,8 +523,8 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 8 session tools.
-        assert_eq!(infos.len(), 23);
+        // 13 protocol tools + acos_capabilities + acos_help + 9 session tools.
+        assert_eq!(infos.len(), 24);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(names.contains(descriptor.name.as_str()), "{}", descriptor.name);

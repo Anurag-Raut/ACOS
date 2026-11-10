@@ -421,6 +421,18 @@ fn boot_fingerprint_parts(boot_dir: Option<&Path>, dexs: &[Arc<DexFile>]) -> u64
     h
 }
 
+/// The boot-classpath fingerprint for a boot directory, computed the same way
+/// [`boot_fingerprint`] computes it from a live `Vm` (the `BOOTCLASSPATH` jar
+/// list and each jar's on-disk identity).
+///
+/// Exposed so the on-disk boot-image cache (T-43b) can key an entry without
+/// constructing a `Vm`. It is a **cache key**, not a security token: the
+/// snapshot stream is re-validated by [`Vm::restore`] on every load.
+#[must_use]
+pub fn boot_dir_fingerprint(boot_dir: Option<&Path>) -> u64 {
+    boot_fingerprint_parts(boot_dir, &[])
+}
+
 /// Hash of the property table that a snapshot is valid for.
 ///
 /// ACOS has no guest `SystemProperties` table yet, so the hash covers the

@@ -447,6 +447,26 @@ impl SessionBackend {
         })
     }
 
+    /// `acos_text`: type into the focused editor.
+    ///
+    /// The runtime prefers the real framework
+    /// `InputConnection.commitText` path and falls back to dispatcher key
+    /// events only for fields with no editable connection.
+    fn call_text(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
+        let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_text", args) {
+                return env;
+            }
+        }
+        let Some(text) = args.get("text").and_then(Value::as_str) else {
+            return invalid_argument(request_id, "text", "`text` must be a string");
+        };
+        self.with_session(&id, |session| {
+            input_envelope(request_id, &id, session.text(text), "text")
+        })
+    }
+
     fn call_action(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
         if self.has_native_child(&id) {
@@ -589,11 +609,7 @@ impl SessionBackend {
             "acos_status" => Some(self.call_status(&request_id, args)),
             "acos_reset" => Some(self.call_reset(&request_id, args, ctx)),
             "acos_destroy" => Some(self.call_destroy(&request_id, args, ctx)),
-            "acos_text" => Some(unsupported(
-                &request_id,
-                "input.text",
-                "typed-text input is not implemented in this build",
-            )),
+            "acos_text" => Some(self.call_text(&request_id, args, ctx)),
             "acos_doctor" => Some(self.cli.call_doctor(&request_id, args, ctx)),
             _ => None,
         }
@@ -800,8 +816,9 @@ fn input_envelope(
             "session_id": session_id,
             "action": kind,
             "accepted": report.accepted,
-            "state_changed": false,
+            "state_changed": report.path.is_some(),
             "input_ack_seq": report.ack_seqs.last().copied(),
+            "text_path": report.path,
         }))
         .with_capabilities(["input"]),
         Err(err) => session_error_envelope(request_id, Some(session_id), &err),

@@ -40,7 +40,7 @@ For the tool surface, the MCP equivalents are:
 
 ## 1. MCP tools (what exists today)
 
-`tools/list` returns 22 descriptors. Availability is probed from the `acos`
+`tools/list` returns 24 descriptors. Availability is probed from the `acos`
 binary; `available=false` tools return a structured `unsupported` envelope, not
 a false pass.
 
@@ -54,6 +54,7 @@ a false pass.
 | `acos_observe` | in-process session | yes | Latest completed frame metadata |
 | `acos_tap` | in-process session | yes | Tap by `text` or `x`/`y` |
 | `acos_key` | in-process session | yes | Key input (BACK/HOME/ENTER/...) |
+| `acos_text` | in-process session | yes | Type text into the focused editor (`InputConnection.commitText`) |
 | `acos_swipe` | in-process session | yes | Swipe `from`→`to` |
 | `acos_action` | in-process session | yes | Protocol-level unified action (`tap`/`key`/`swipe`/`back`) |
 | `acos_logs` | in-process session | yes | Guest log buffer |
@@ -135,7 +136,22 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    `details.reason = "not_ready"` and `details.stage_reached` — never an empty
    tree.
 6. **Act.** `acos_tap { text }` (preferred) or `acos_tap { x, y }`;
-   `acos_key { code }`; `acos_swipe { from, to }`.
+   `acos_key { code }`; `acos_text { text }` to type into the focused editor;
+   `acos_swipe { from, to }`.
+
+   `acos_text` / `acos session text` edits the field the way a soft keyboard
+   does: it finds the focused view, asks the framework for its own
+   `InputConnection` (`View.onCreateInputConnection`, the real
+   `EditableInputConnection` for a `TextView`/`EditText`) and calls
+   `commitText`, so `TextWatcher`s, the selection and the cursor update as on
+   device. The result carries `text_path: "input-connection"`. If the focused
+   view has no editable connection it falls back to a `KeyEvent` sequence
+   (`text_path: "key-events"`, mapping `a-z 0-9 space newline`); characters
+   that fallback cannot represent return a structured `UNSUPPORTED_BACKEND`,
+   never a dropped character. Composing text and IME actions are not modelled.
+   The field must already have input focus — observe the tree and tap it first;
+   an unfocused field returns `ELEMENT_NOT_FOUND` with
+   `details.kind = NoFocusedEditor`.
 7. **Read logs.** `acos_logs { session_id }` for the app's own `Log.i` lines.
 8. **Assert.** For scenario-driven runs use `acos_verify` with a YAML scenario
    and read `verdict.json`; evidence (frames, tree, events) must exist for a
@@ -150,6 +166,7 @@ acos launch  fixtures/build/apps/todo-dogfood.apk --keep --json
 # each of the following talks to that same daemon session:
 acos observe --json
 acos tap     --text "+1" --json
+acos session text --text "hello" --json   # focused editor
 acos logs    --json
 acos session status --json
 ```

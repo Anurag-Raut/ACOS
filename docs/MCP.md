@@ -125,6 +125,7 @@ server.
 | `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |
 | `acos_key` | server | - | `native-runtime` | - |
+| `acos_text` | server | - | `native-runtime` | - |
 | `acos_swipe` | server | - | `native-runtime` | - |
 | `acos_logs` | server | - | `native-runtime` | - |
 | `acos_status` | server | - | `native-runtime` | - |
@@ -135,7 +136,7 @@ Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 
 The server-local tools are served in-process (they never shell out):
 `acos_launch` boots an APK into a session that persists across calls and returns
-the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_swipe`/`acos_logs`/`acos_status`
+the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
 drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
 SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
 boot-classpath cache, host memory) and returns each failing check's `fix`.

@@ -499,8 +499,9 @@ fn finish_input(
             "session_id": session_id,
             "action": report.kind,
             "accepted": report.accepted,
-            "state_changed": false,
+            "state_changed": report.path.is_some(),
             "input_ack_seq": report.ack_seqs.last().copied(),
+            "text_path": report.path,
         }))
         .with_capabilities(["input"]),
         Err(err) => session_error_envelope(request_id, &err),
@@ -675,11 +676,24 @@ pub struct SessionTextArgs {
     /// Session id label (default `s_cli`).
     #[arg(long, default_value = "s_cli")]
     pub session: String,
-    /// Text to type into the focused field.
-    pub text: String,
+    /// Text to type into the focused editor (positional form).
+    pub text: Option<String>,
+    /// Text to type into the focused editor (flag form, matching `acos tap --text`).
+    #[arg(long = "text", value_name = "TEXT")]
+    pub text_flag: Option<String>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
+}
+
+impl SessionTextArgs {
+    /// The text from either the positional or the `--text` flag.
+    fn resolve_text(&self) -> Result<String, String> {
+        self.text_flag
+            .clone()
+            .or_else(|| self.text.clone())
+            .ok_or_else(|| "missing text (pass it positionally or with `--text`)".to_string())
+    }
 }
 
 /// `acos session` subcommands. Every one talks to the `acos serve` daemon and
@@ -696,7 +710,7 @@ pub enum SessionCommand {
     Tap(SessionTapArgs),
     /// Press a key code.
     Key(SessionKeyArgs),
-    /// Type text into the focused field (reported unsupported until input lands).
+    /// Type text into the focused editor (real InputConnection.commitText path).
     Text(SessionTextArgs),
     /// Read the guest log buffer.
     Logs(SessionCmdArgs),
@@ -810,21 +824,29 @@ fn session_key(args: SessionKeyArgs) -> ExitCode {
 }
 
 fn session_text(args: SessionTextArgs) -> ExitCode {
+    let text = match args.resolve_text() {
+        Ok(text) => text,
+        Err(reason) => {
+            let envelope = fail(
+                &new_request_id(),
+                ErrorCode::InvalidArgument,
+                reason,
+                json!({"field": "text"}),
+            );
+            return emit(&envelope, args.json);
+        }
+    };
     let daemon_args = json!({
         "base": daemon_base(&args.session),
-        "text": args.text,
+        "text": text.clone(),
     });
     if let Some(code) = call_ensure_daemon("acos_text", &daemon_args, args.json) {
         return code;
     }
-    // No in-process typed-text path exists either; fail honestly.
-    let envelope = fail(
-        &new_request_id(),
-        ErrorCode::UnsupportedBackend,
-        "typed-text input is not implemented in this build; use `acos session key`",
-        json!({"capability": "input.text"}),
-    );
-    emit(&envelope, args.json)
+    let request_id = new_request_id();
+    let session = start_session(120);
+    let result = session.text(text);
+    finish_input(&session, &request_id, &args.session, args.json, result)
 }
 
 fn session_logs(args: SessionCmdArgs) -> ExitCode {

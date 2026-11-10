@@ -860,12 +860,13 @@ fn bench_launch(args: &BenchArgs) -> Result<Value, BenchFailure> {
             "first_blocker": before_blocker,
         },
         "template": {
-            "path": "one framework boot + ACOSSNAP capture",
+            "path": "one framework boot + ACOSSNAP capture, or an on-disk cache load (T-43b)",
             "boot_ms": round3(template_boot_ms),
             "internal_boot_ms": round3(template_boot_internal_ms),
             "snapshot_ms": round3(template_snapshot_ms),
             "snapshot_bytes": template_snapshot_bytes,
             "classes": template_classes,
+            "from_cache": template.from_cache(),
         },
         "after": {
             "path": "Vm::restore from ACOSSNAP + Runtime::with_vm + app DEX load + bindApplication + ClientTransaction",

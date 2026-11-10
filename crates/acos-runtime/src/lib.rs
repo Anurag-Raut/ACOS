@@ -31,6 +31,7 @@ pub mod ams_java;
 pub mod atms_boot;
 pub mod bind_app;
 pub mod boot;
+pub mod boot_image_cache;
 pub mod clipboard_java;
 pub mod frame_handoff;
 pub mod client_transaction;
@@ -44,6 +45,7 @@ pub mod pms_java;
 pub mod session;
 pub mod session_pool;
 pub mod settings_java;
+pub mod text_java;
 pub mod transport;
 pub mod user_java;
 pub mod view_tree;
@@ -70,6 +72,7 @@ pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
 pub use lifecycle::{LifecycleError, LifecycleReport};
 pub use session::SessionError;
+pub use text_java::{TextError, TextPath, TextReport};
 pub use view_tree::{TreeError, ViewNode, ViewTree};
 
 /// A booted ACOS runtime: VM + service host + Binder transport.
