@@ -124,6 +124,45 @@ fn no_ticks_when_nothing_is_scheduled() {
     );
 }
 
+/// The deterministic virtual-time scheduler drives the same real
+/// `Choreographer`/`DisplayEventReceiver` chain without a real 16.6 ms sleep
+/// per frame. This is the pump the lifecycle driver uses to reach the first
+/// `performTraversals`.
+#[test]
+fn choreographer_frames_run_under_virtual_time() {
+    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
+        eprintln!("SKIP choreographer frames under virtual time: javac/d8 unavailable");
+        return;
+    };
+    fwk_vsync::reset();
+    let Some(mut rt) = common::new_runtime() else {
+        return;
+    };
+    rt.vm_mut()
+        .add_dex(acos_dex::DexFile::parse(std::fs::read(&dex).unwrap()).unwrap());
+    let start = std::time::Instant::now();
+    let outcome = rt.vm_mut().run_virtual("VsyncMain", &[]);
+    let wall = start.elapsed();
+    assert_eq!(
+        outcome.exit_code, 0,
+        "VsyncMain virtual failed: vm_error={:?}\nstdout:\n{}\nstderr:\n{}",
+        outcome.vm_error, outcome.stdout, outcome.stderr
+    );
+    assert_eq!(field(&outcome.stdout, "frames"), "3", "stdout:\n{}", outcome.stdout);
+    assert_eq!(
+        field(&outcome.stdout, "monotonic"),
+        "true",
+        "frame times not strictly monotonic:\n{}",
+        outcome.stdout
+    );
+    assert!(
+        wall < std::time::Duration::from_secs(3),
+        "virtual time must not sleep one 16.6 ms interval per vsync: {wall:?}"
+    );
+    assert!(fwk_vsync::tick_count() >= 3, "expected >=3 ticks");
+    assert!(fwk_vsync::is_idle(), "vsync source idle after the chain");
+}
+
 /// Read `Choreographer.getInstance().mDisplayEventReceiver.getLatestVsyncEventData().frameTimelines[0].vsyncId`.
 fn latest_vsync_id(vm: &mut acos_vm::Vm) -> Option<i64> {
     let ch = vm

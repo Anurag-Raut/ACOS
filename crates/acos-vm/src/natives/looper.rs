@@ -9,11 +9,14 @@
 //!   and returns. The native frame is popped by the interpreter as usual, so
 //!   when the thread is woken it resumes *after* the `nativePollOnce` call in
 //!   `MessageQueue.next()` and re-reads the Java queue.
-//! * [`pump`] is called by [`crate::vm::Vm::run_inner`] whenever the interpreter
-//!   scheduler runs out of runnable threads. It blocks the host on the process
-//!   `epoll` set with the earliest parked deadline and wakes the corresponding
-//!   green thread. With no messages and `-1` timeout this is a single
-//!   `epoll_wait(2)` with no timeout: zero CPU and no periodic wakeups.
+//! * [`pump`] is called by [`crate::vm::Vm::run_scheduler`] whenever the
+//!   interpreter scheduler runs out of runnable threads. It blocks the host on
+//!   the process `epoll` set with the earliest parked deadline and wakes the
+//!   corresponding green thread. With no messages and `-1` timeout this is a
+//!   single `epoll_wait(2)` with no timeout: zero CPU and no periodic wakeups.
+//!   [`pump_virtual`] is the deterministic variant the lifecycle driver uses:
+//!   instead of blocking for a future deadline it advances the guest clock to
+//!   it.
 //!
 //! All file descriptors live in a per-host-thread process registry. A
 //! [`LooperHandle`] is a reference-counted handle to one MessageQueue's
@@ -250,8 +253,33 @@ impl Proc {
 /// The scheduler hook: called when the interpreter has no runnable green
 /// thread left. Blocks the host on the process `epoll` set until a parked
 /// looper is woken or its deadline expires. Returns `true` if it made
-/// progress (so [`crate::vm::Vm::run_inner`] should re-enter the scheduler).
+/// progress (so [`crate::vm::Vm::run_scheduler`] should re-enter the
+/// scheduler).
 pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
+    pump_impl(vm, false)
+}
+
+/// The deterministic scheduler hook used by the lifecycle driver.
+///
+/// Identical to [`pump`] except that, when every green thread is parked on a
+/// *future* deadline (and no `epoll` fd is readable), it advances the guest
+/// monotonic clock to that deadline instead of blocking the host. The parked
+/// looper then sees `SystemClock.uptimeMillis()` pass `Message.when` and
+/// dispatches the message, exactly as if the host had slept until then. This
+/// is what lets a `Choreographer` `doFrame` scheduled at the next vsync run
+/// without a real 16.6 ms wait per frame.
+pub(crate) fn pump_virtual(vm: &mut Vm) -> VmResult<bool> {
+    pump_impl(vm, true)
+}
+
+/// Shared body of [`pump`] / [`pump_virtual`].
+///
+/// `virtual_time` selects what to do when there is only a future deadline and
+/// nothing readable on the process `epoll` set:
+///
+/// * `false` — block the host until the deadline (or a wake) arrives;
+/// * `true` — advance the guest clock to the deadline and wake the looper.
+fn pump_impl(vm: &mut Vm, virtual_time: bool) -> VmResult<bool> {
     // A run whose only thread is parked here must still obey the host
     // watchdog; check before blocking and again when the wait returns.
     vm.host.check()?;
@@ -275,22 +303,7 @@ pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
     });
 
     if !expired.is_empty() {
-        for t in &expired {
-            if let Some(th) = vm.threads.get_mut(*t) {
-                if th.status == ThreadStatus::Parked {
-                    th.status = ThreadStatus::Runnable;
-                }
-            }
-        }
-        PROC.with(|p| {
-            let mut p = p.borrow_mut();
-            for l in p.loopers.values_mut() {
-                if l.parked_thread.map(|t| expired.contains(&t)).unwrap_or(false) {
-                    l.parked_thread = None;
-                    l.deadline = None;
-                }
-            }
-        });
+        wake_threads(vm, &expired);
         return Ok(true);
     }
 
@@ -305,15 +318,21 @@ pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
         return Ok(false);
     };
 
-    // Block no longer than the earliest parked deadline *or* the remaining
+    // In virtual time there is never a reason to block: poll the fds without a
+    // timeout and, if nothing is readable, move the clock instead. In real time
+    // block no longer than the earliest parked deadline *or* the remaining
     // wall-clock budget, so a permanently parked looper cannot hang the run
     // past `ACOS_WALL_MAX_SECS`.
-    let deadline_wait = next_deadline.and_then(|d| d.checked_duration_since(Instant::now()));
-    let timeout = match (deadline_wait, vm.host.remaining_wall()) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        (Some(a), None) => Some(a),
-        (None, Some(b)) => Some(b),
-        (None, None) => None,
+    let timeout = if virtual_time {
+        Some(Duration::ZERO)
+    } else {
+        let deadline_wait = next_deadline.and_then(|d| d.checked_duration_since(Instant::now()));
+        match (deadline_wait, vm.host.remaining_wall()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
     };
     let mut events = empty_events();
     let ts = timeout.map(timespec);
@@ -335,27 +354,62 @@ pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
             }
         });
     }
-    for t in &woken {
+    if !woken.is_empty() {
+        wake_threads(vm, &woken);
+        return Ok(true);
+    }
+
+    if virtual_time {
+        // No fd is readable and no deadline has passed in real time. If a
+        // future deadline exists, jump the guest clock to it (plus 1 ms so a
+        // truncated millisecond poll timeout cannot leave `now < msg.when`)
+        // and wake the parked looper(s) whose deadline is now due.
+        let Some(deadline) = next_deadline else {
+            return Ok(false);
+        };
+        let target = Instant::now();
+        let delta = deadline.saturating_duration_since(target);
+        crate::natives::os_clock::advance_virtual_nanos(
+            delta.as_nanos().min(i64::MAX as u128) as i64 + 1_000_000,
+        );
+        let due = PROC.with(|p| {
+            let p = p.borrow();
+            p.loopers
+                .values()
+                .filter_map(|l| match (l.parked_thread, l.deadline) {
+                    (Some(t), Some(d)) if d <= deadline => Some(t),
+                    _ => None,
+                })
+                .collect::<Vec<usize>>()
+        });
+        wake_threads(vm, &due);
+        return Ok(true);
+    }
+
+    vm.host.check()?;
+    // Even on a pure timeout (`n == 0`) loop again so the deadline check runs.
+    Ok(true)
+}
+
+/// Mark every parked looper thread in `threads` runnable and clear its parked
+/// state. Used by both the real-time and virtual-time pumps.
+fn wake_threads(vm: &mut Vm, threads: &[usize]) {
+    for t in threads {
         if let Some(th) = vm.threads.get_mut(*t) {
             if th.status == ThreadStatus::Parked {
                 th.status = ThreadStatus::Runnable;
             }
         }
     }
-    if !woken.is_empty() {
-        PROC.with(|p| {
-            let mut p = p.borrow_mut();
-            for l in p.loopers.values_mut() {
-                if l.parked_thread.map(|t| woken.contains(&t)).unwrap_or(false) {
-                    l.parked_thread = None;
-                    l.deadline = None;
-                }
+    PROC.with(|p| {
+        let mut p = p.borrow_mut();
+        for l in p.loopers.values_mut() {
+            if l.parked_thread.map(|t| threads.contains(&t)).unwrap_or(false) {
+                l.parked_thread = None;
+                l.deadline = None;
             }
-        });
-    }
-    vm.host.check()?;
-    // Even on a pure timeout (`n == 0`) loop again so the deadline check runs.
-    Ok(true)
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------

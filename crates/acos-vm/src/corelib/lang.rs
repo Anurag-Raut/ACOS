@@ -1481,11 +1481,9 @@ fn sys_current_time(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn sys_nano_time(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as i64)
-        .unwrap_or(0);
-    vm.ret_i64(ctx, t);
+    // Same monotonic, boot-anchored timebase as the real `System.nanoTime` and
+    // `SystemClock.uptime*` natives (see `natives::lang::sys_nano_time`).
+    vm.ret_i64(ctx, crate::natives::os_clock::uptime_nanos());
     Ok(())
 }
 

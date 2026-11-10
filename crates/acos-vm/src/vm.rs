@@ -2117,7 +2117,19 @@ impl Vm {
     // ---- public entry ----------------------------------------------------
 
     pub fn run(&mut self, main_class: &str, args: &[String]) -> RunOutcome {
-        match self.run_inner(main_class, args) {
+        self.run_with(main_class, args, false)
+    }
+
+    /// [`Vm::run`] with deterministic virtual-time looper pumping: when every
+    /// green thread is parked on a future message deadline the guest clock is
+    /// advanced to it instead of sleeping. Used by tests and by callers that
+    /// want future-dated framework work to run without real-time waits.
+    pub fn run_virtual(&mut self, main_class: &str, args: &[String]) -> RunOutcome {
+        self.run_with(main_class, args, true)
+    }
+
+    fn run_with(&mut self, main_class: &str, args: &[String], virtual_time: bool) -> RunOutcome {
+        match self.run_program(main_class, args, virtual_time) {
             Ok(mut outcome) => {
                 outcome.metrics = self.metrics_block();
                 outcome
@@ -2137,7 +2149,12 @@ impl Vm {
         }
     }
 
-    fn run_inner(&mut self, main_class: &str, args: &[String]) -> VmResult<RunOutcome> {
+    fn run_program(
+        &mut self,
+        main_class: &str,
+        args: &[String],
+        virtual_time: bool,
+    ) -> VmResult<RunOutcome> {
         // Arm the watchdog for the actual run (boot parsing happens in
         // `Vm::new`); the host RSS ceiling is already live.
         self.host.arm_wall();
@@ -2175,22 +2192,10 @@ impl Vm {
 
         // The interpreter returns when no green thread is runnable. If the
         // remaining threads are parked in a looper, block the host on the
-        // process epoll set and then resume them. `pump` returns false when
-        // there is nothing left to wait for.
-        loop {
-            crate::interp::run(self)?;
-            // Host safe point: a broker (the JNI crate) may have queued work
-            // from native OS threads. Service it here, on the owner thread,
-            // while no Rust borrow of the VM is live elsewhere.
-            crate::natives::safe_point::pump(self);
-            if self.pending_exception != NULL || self.exit_request.is_some() {
-                break;
-            }
-            self.host.check()?;
-            if !crate::natives::looper::pump(self)? {
-                break;
-            }
-        }
+        // process epoll set and then resume them (or, in virtual time, advance
+        // the guest clock to their deadline). `pump` returns false when there
+        // is nothing left to wait for.
+        self.run_scheduler(virtual_time)?;
 
         // Collect an uncaught exception if any.
         if self.pending_exception != NULL {
@@ -2221,6 +2226,51 @@ impl Vm {
             metrics: Metrics::default(),
             vm_error: None,
         })
+    }
+
+    /// Run the interpreter until no green thread is runnable, pumping parked
+    /// loopers back to life.
+    ///
+    /// With `virtual_time == false` this is the real-time scheduler used by
+    /// [`Vm::run`]: a fully parked VM blocks the host on the process `epoll`
+    /// set until a wake or the earliest message deadline.
+    ///
+    /// With `virtual_time == true` an all-idle VM instead advances the guest
+    /// monotonic clock to the next due message and wakes that looper, so
+    /// future-dated framework work (a `Choreographer` `doFrame` at the next
+    /// vsync) runs deterministically without a real-time sleep. The iteration
+    /// count is bounded so a self-rescheduling message cannot spin forever;
+    /// the host wall watchdog (`vm.host`) still applies on real time.
+    pub fn run_scheduler(&mut self, virtual_time: bool) -> VmResult<()> {
+        /// Upper bound on pump turns per scheduler entry. A normal frame is a
+        /// handful of turns; a repeating timer is capped here and the host
+        /// wall budget stops it after that.
+        const MAX_PUMP_TURNS: u32 = 100_000;
+        let mut turns: u32 = 0;
+        loop {
+            crate::interp::run(self)?;
+            // Host safe point: a broker (the JNI crate) may have queued work
+            // from native OS threads. Service it here, on the owner thread,
+            // while no Rust borrow of the VM is live elsewhere.
+            crate::natives::safe_point::pump(self);
+            if self.pending_exception != NULL || self.exit_request.is_some() {
+                break;
+            }
+            self.host.check()?;
+            let progressed = if virtual_time {
+                crate::natives::looper::pump_virtual(self)?
+            } else {
+                crate::natives::looper::pump(self)?
+            };
+            if !progressed {
+                break;
+            }
+            turns += 1;
+            if turns >= MAX_PUMP_TURNS {
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// Exit code requested by `System.exit`, if any.

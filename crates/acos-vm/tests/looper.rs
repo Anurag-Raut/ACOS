@@ -42,7 +42,9 @@ fn sdk_dir() -> Option<PathBuf> {
 /// loud skip message) when the host build tools are unavailable.
 fn compile_java(names: &[&str]) -> Option<PathBuf> {
     let root = repo_root();
-    let out = root.join("target/tmp/acos-java-cases/looper");
+    // Key the output on the source set so two tests compiling different
+    // classes do not collide on one cached `classes.dex`.
+    let out = root.join(format!("target/tmp/acos-java-cases/looper-{}", names.join("-")));
     let dex = out.join("classes.dex");
     if dex.is_file() {
         return Some(dex);
@@ -92,6 +94,7 @@ fn compile_java(names: &[&str]) -> Option<PathBuf> {
     Some(dex)
 }
 
+/// One host `javac`/`d8` compile, run once per process via a cache file.
 fn new_real_vm() -> Option<Vm> {
     let options = VmOptions {
         corelib: CoreLib::Real,
@@ -165,6 +168,42 @@ fn looper_handle_wakes_from_host_thread() {
     assert!(
         elapsed < Duration::from_secs(3),
         "woke too late: {elapsed:?}"
+    );
+}
+
+/// Virtual time: a 60 s delayed message must fire in well under a second of
+/// wall time, and the guest must still observe the full 60 s of uptime.
+#[test]
+fn virtual_looper_advances_clock_to_future_deadline() {
+    let Some(dex) = compile_java(&["LooperVirtual"]) else {
+        eprintln!("SKIP virtual_looper_advances_clock_to_future_deadline: javac/d8 unavailable");
+        return;
+    };
+    let Some(mut vm) = new_real_vm() else {
+        return;
+    };
+    vm.add_dex(DexFile::parse(std::fs::read(&dex).unwrap()).unwrap());
+    let start = Instant::now();
+    let outcome = vm.run_virtual("LooperVirtual", &[]);
+    let wall = start.elapsed();
+    assert_eq!(
+        outcome.exit_code, 0,
+        "virtual run failed: {:?}\n{}",
+        outcome.vm_error, outcome.stderr
+    );
+    let delayed: i64 = outcome
+        .stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("virtual_delayed_ms="))
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or_else(|| panic!("delayed line missing: {:?}", outcome.stdout));
+    assert!(
+        (59_990..=60_010).contains(&delayed),
+        "guest observed {delayed} ms, want ~60000"
+    );
+    assert!(
+        wall < Duration::from_secs(5),
+        "virtual time must not sleep for the deadline: {wall:?}"
     );
 }
 

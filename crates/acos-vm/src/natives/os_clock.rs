@@ -9,9 +9,24 @@
 //! `currentThreadTimeMillis` is the calling OS thread's CPU time, read from
 //! `/proc/thread-self/stat` (utime+stime). Linux reports those fields in
 //! `USER_HZ` units, which is always 100 on Linux, so one tick is 10 ms.
+//!
+//! # Virtual time
+//!
+//! The lifecycle driver (`acos-runtime::lifecycle`) pumps the main looper to
+//! quiescence. When every green thread is parked on a *future* message deadline
+//! (a `Choreographer` `doFrame` at the next vsync, for example) the process is
+//! idle and a real device would simply let the clock run. Blocking the host for
+//! every such deadline is slow and non-deterministic, so the looper pump may
+//! **advance** this clock to the earliest parked deadline instead of sleeping.
+//! The guest sees exactly what it would see after sleeping that long: nothing is
+//! faked, the monotonic timeline just moves forward.
+//!
+//! The offset is per host thread (the VM is single-threaded) and only ever
+//! moves forward, so `uptime`/`elapsedRealtime` remain monotonic.
 
+use std::cell::Cell;
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::class::NativeCtx;
 use crate::error::VmResult;
@@ -20,13 +35,49 @@ use crate::vm::Vm;
 /// `USER_HZ`: the unit of the utime/stime fields in `/proc/<pid>/stat`.
 pub const CLOCK_TICKS_PER_SEC: u64 = 100;
 
+thread_local! {
+    /// Extra time the guest believes has elapsed, in nanoseconds. Advanced by
+    /// the looper pump ([`advance_virtual_nanos`]) when the VM goes idle.
+    static VIRTUAL_OFFSET_NANOS: Cell<i64> = const { Cell::new(0) };
+}
+
 fn boot() -> &'static Instant {
     static BOOT: OnceLock<Instant> = OnceLock::new();
     BOOT.get_or_init(Instant::now)
 }
 
+fn virtual_offset_nanos() -> i64 {
+    VIRTUAL_OFFSET_NANOS.with(Cell::get)
+}
+
 fn uptime() -> std::time::Duration {
-    boot().elapsed()
+    let real = boot().elapsed();
+    let offset = virtual_offset_nanos();
+    if offset > 0 {
+        real.saturating_add(Duration::from_nanos(offset as u64))
+    } else {
+        real
+    }
+}
+
+/// Advance the guest monotonic clock by `nanos` nanoseconds.
+///
+/// Called by the looper pump when every green thread is parked on a future
+/// deadline: the guest only observes a clock that has moved to that deadline,
+/// exactly as if the host had slept until then. Only forward movement is
+/// allowed so the timeline stays monotonic.
+pub fn advance_virtual_nanos(nanos: i64) {
+    if nanos <= 0 {
+        return;
+    }
+    VIRTUAL_OFFSET_NANOS.with(|c| c.set(c.get().saturating_add(nanos)));
+}
+
+/// The current virtual offset in nanoseconds (0 until the first advance).
+#[cfg(test)]
+#[must_use]
+pub fn virtual_offset() -> i64 {
+    virtual_offset_nanos()
 }
 
 /// `SystemClock.uptimeMillis()` — milliseconds since boot, not counting sleep.
@@ -149,6 +200,23 @@ mod tests {
         assert!(ns / 1_000_000 >= ms, "millis and nanos share one anchor");
         assert_eq!(elapsed_realtime_millis(), uptime_millis());
         assert!(uptime_nanos() <= elapsed_realtime_nanos());
+    }
+
+    #[test]
+    fn virtual_clock_advances_forward_only() {
+        // The offset is per host thread, so this test thread starts at zero.
+        assert_eq!(virtual_offset(), 0);
+        advance_virtual_nanos(0);
+        advance_virtual_nanos(-5);
+        assert_eq!(virtual_offset(), 0, "only forward movement is allowed");
+        let before = uptime_millis();
+        advance_virtual_nanos(1_500_000_000);
+        assert_eq!(virtual_offset(), 1_500_000_000);
+        assert!(
+            uptime_millis() >= before + 1_500,
+            "uptime must observe the advanced offset"
+        );
+        assert_eq!(elapsed_realtime_millis(), uptime_millis());
     }
 
     #[test]

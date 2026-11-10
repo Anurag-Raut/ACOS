@@ -341,8 +341,16 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
 
 /// Run the interpreter until no green thread is runnable (the main looper has
 /// drained its queue and parked) or a structured error surfaces.
+///
+/// The looper is pumped with **virtual time**: the framework's main looper
+/// parks on future-dated `Handler` messages (the `Choreographer` `doFrame`
+/// posted at the next vsync, in particular), and `run_scheduler` advances the
+/// guest monotonic clock to the earliest such deadline when every thread is
+/// idle, so `performTraversals` -> `IWindowSession.relayout` actually runs.
+/// This mirrors a device that simply waits for the vsync, without the real
+/// 16.6 ms sleep per frame and with a deterministic timeline.
 fn run_phase(vm: &mut Vm) -> Result<(), LifecycleError> {
-    acos_vm::interp::run(vm)?;
+    vm.run_scheduler(true)?;
     if vm.pending_exception != NULL {
         let h = vm.pending_exception;
         vm.pending_exception = NULL;

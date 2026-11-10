@@ -36,6 +36,12 @@ use crate::vm::Vm;
 
 use super::looper::{handle_for_ptr, LooperHandle};
 
+/// `ACOS_VSYNC_TRACE=1` prints every vsync request and dispatch (timestamp,
+/// id, frame, physical display). Inert unless the env var is set.
+fn trace_enabled() -> bool {
+    std::env::var_os("ACOS_VSYNC_TRACE").is_some()
+}
+
 /// Finalizer token returned by `nativeGetDisplayEventReceiverFinalizer`.
 ///
 /// The framework's `NativeAllocationRegistry` hands this token back to
@@ -296,6 +302,14 @@ fn native_schedule_vsync(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         if r.base_nanos == 0 {
             r.base_nanos = now_nanos();
         }
+        if trace_enabled() {
+            eprintln!(
+                "VSYNC-TRACE scheduleVsync id={} base={} now={}",
+                ptr,
+                r.base_nanos,
+                now_nanos()
+            );
+        }
         let one: u64 = 1;
         rustix::io::write(&r.eventfd, &one.to_ne_bytes()).is_ok()
     });
@@ -446,6 +460,12 @@ pub(crate) fn on_looper_wake(vm: &mut Vm, looper: u64) -> VmResult<bool> {
             vm.release_bridge_root(receiver);
             continue;
         };
+        if trace_enabled() {
+            eprintln!(
+                "VSYNC-TRACE dispatchVsync timestamp={} vsyncId={} frame={} display={}",
+                event.timestamp_nanos, event.vsync_id, event.frame, event.physical_display_id
+            );
+        }
         set_vsync_event_data(vm, event_obj, event)?;
         let res = vm.call_method(
             receiver,

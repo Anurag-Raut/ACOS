@@ -872,11 +872,12 @@ fn sys_current_time_millis(_vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn sys_nano_time(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as i64)
-        .unwrap_or(0);
-    vm.ret_i64(ctx, ns);
+    // `System.nanoTime()` is CLOCK_MONOTONIC on Android: nanoseconds since
+    // boot, in the *same* timebase as `SystemClock.uptimeMillis()`/
+    // `uptimeNanos()`. Returning epoch time here made `Choreographer` see a
+    // vsync timestamp ~56 years "in the past", take the jitter branch in
+    // `doFrame`, and replace the frame time with `System.nanoTime()`.
+    vm.ret_i64(ctx, crate::natives::os_clock::uptime_nanos());
     Ok(())
 }
 

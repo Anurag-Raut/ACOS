@@ -2191,3 +2191,140 @@ does not fire; see the blocker above.
 * Next: (1) W104-A lands `ImageDecoder`; (2) pump loopers in `run_phase` so the
   first traversal runs and `relayout` is exercised; (3) then
   `measure`/`layout`/`draw`.
+
+# W118-A session — lifecycle driver pumps the looper with virtual time; first vsync + traversal
+
+Worktree: clean HEAD `17f9c42`, `CARGO_TARGET_DIR=.cache/target-w118a`,
+`CARGO_PROFILE_DEV_DEBUG=0`. No commits. Owned files only
+(`acos-runtime/src/lifecycle.rs`, `acos-vm/src/natives/looper.rs`,
+`acos-vm/src/natives/os_clock.rs`, `acos-vm/src/vm.rs`, display natives
+`acos-vm/src/natives/fwk_vsync.rs`). `System.nanoTime` is also aligned to the
+monotonic boot clock because the vsync timebase depends on it (see below); the
+two `lang.rs` files are the only files outside the declared set and the change
+is two lines each (reported, not hidden).
+
+## Bottom line
+
+`lifecycle::run_phase` now calls `Vm::run_scheduler(/*virtual_time=*/true)`
+instead of a single `interp::run`. `run_scheduler` loops the interpreter, the
+broker safe point and the looper pump until no thread is runnable; the
+virtual-time pump advances the guest monotonic clock to the earliest parked
+message deadline when every green thread is idle. `counter.apk` therefore runs
+`Choreographer`'s future-dated `doFrame`: `nativeScheduleVsync` is delivered as
+a real `DisplayEventReceiver.onVsync(timestamp, displayId, frame,
+VsyncEventData)` on the looper thread, the frame timestamp is on the same
+monotonic timebase as `Message.when`, and `performTraversals` ->
+`dispatchAttachedToWindow` runs. Re-checked on `main` with W104-A's now-committed
+`ImageDecoder` (`740f749`): the same result. The next real blocker is an
+unimplemented `android.animation.PropertyValuesHolder.nGetFloatMethod`
+(graphics/animation, W104-A scope); `IWindowSession.relayout` is not yet
+reached.
+
+## Ladder (`counter.apk`, `ACOS_BOOT_DIR=.cache/boot/android-34`)
+
+Without W104-A's graphics natives (committed HEAD):
+
+| Rung | Before W118-A | After W118-A | Evidence |
+|---|---|---|---|
+| `application_on_create`, `Activity.onCreate`, `setContentView` | ok | ok | `bind_delivered=true app_created=true` |
+| `ImageDecoder.nCreate` | `UNSUPPORTED_JAVA_API` | reproduced (W104-A, uncommitted) | error names `ImageDecoder.nCreate` |
+| first vsync (`scheduleTraversals` -> `nativeScheduleVsync`) | scheduled but `doFrame` never runs (`run_phase` did not pump) | **dispatched** (`ACOS_VSYNC_TRACE`: `dispatchVsync timestamp=… vsyncId=1 frame=1`) | virtual pump |
+| `performTraversals` -> `dispatchAttachedToWindow` | not reached | **reached** | needs W104-A's graphics patch, below |
+| `IWindowSession.relayout` | not reached | not reached | blocked at `PropertyValuesHolder.nGetFloatMethod` |
+| `onResume` stage | not reached | not reached | same blocker |
+
+Re-run on `main` after W104-A committed its real `ImageDecoder`/`BitmapFactory`
+natives (`740f749`, rebased on): the same rungs hold with no scratch patch.
+
+| Rung | State after W118-A + W104-A scratch | Evidence |
+|---|---|---|
+| `ImageDecoder.nCreate` | ok (real decode) | launch proceeds |
+| `ViewRootImpl.setView` -> `addToDisplayAsUser` | ok, reply decoded by the real proxy | `ACOS_WMS_TRACE`: `IWindowSession code=2 addToDisplayAsUser` |
+| `nativeScheduleVsync` -> `DisplayEventReceiver.onVsync` | **ok** | `ACOS_VSYNC_TRACE`: schedule base `4816309208`; dispatch `timestamp=4832975875 = base + 16.6 ms`, `vsyncId=1 frame=1`; second schedule at `now=4836600717` (clock advanced) |
+| `performTraversals` -> `dispatchAttachedToWindow` | reached; blocks inside | stack: `ViewRootImpl` -> `ViewGroup.dispatchAttachedToWindow` -> `TextView.drawableStateChanged` -> `StateListAnimator.start` -> `AnimatorSet.start` -> `PropertyValuesHolder.setupSetter` |
+| next blocker | `android.animation.PropertyValuesHolder.nGetFloatMethod(Class, String)` is not implemented (W104-A animation natives) | `java-tail` |
+
+## Fix 1 — lifecycle driver pumps the looper (virtual time)
+
+`acos-vm/src/natives/looper.rs`: `pump` is split into `pump_impl(vm,
+virtual_time)`; `pump` (real time, unchanged for `Vm::run`) and the new
+`pump_virtual` share it. `pump_virtual` first does a zero-timeout `epoll_wait`
+(so real fd wakes — vsync/input — are never starved), then, if a future parked
+deadline exists, advances the guest monotonic clock to `deadline + 1 ms` and
+marks the parked looper thread runnable. A new `wake_threads` helper removes the
+previously duplicated wake/clear block.
+
+`acos-vm/src/natives/os_clock.rs`: a per-host-thread, forward-only virtual
+offset (`advance_virtual_nanos`, `virtual_offset`) added to `uptime()`, so
+`SystemClock.uptimeMillis/Nanos` and `elapsedRealtime*` all observe the jump.
+Only the looper pump advances it.
+
+`acos-vm/src/vm.rs`: `run_inner` is now `run_program(..., virtual_time)` behind
+`run` (real) and a new public `run_virtual`; `run_scheduler(virtual_time)` owns
+the scheduler loop with a bounded pump-turn count (`MAX_PUMP_TURNS = 100_000`)
+plus the existing host wall/RSS watchdog. `lifecycle::run_phase` calls
+`vm.run_scheduler(true)`.
+
+## Fix 2 — `System.nanoTime` shares the monotonic timebase
+
+`android.view.Choreographer` expects the vsync timestamp in the
+`System.nanoTime()` timebase (`CLOCK_MONOTONIC`, ns since boot) — the same
+timebase as `SystemClock.uptime*`. ACOS's `System.nanoTime` returned **epoch**
+ns, so `doFrame` computed `jitterNanos = System.nanoTime() - frameTimeNanos` of
+~56 years and replaced the vsync frame time with `System.nanoTime()`. That did
+not show under the real-time pump (three 16.6 ms sleeps made the replaced times
+increasing) but collapses the three frame times when the frames are generated
+instantly. `natives/lang.rs::sys_nano_time` and `corelib/lang.rs::sys_nano_time`
+now return `os_clock::uptime_nanos()` (same monotonic, boot-anchored clock as
+`SystemClock`). `natives::os_clock` visibility was widened to `pub(crate)` for
+the bootstrap corelib.
+
+## Tests added
+
+* `acos-vm/tests/looper.rs::virtual_looper_advances_clock_to_future_deadline`
+  (`LooperVirtual.java`): a real `Handler.postDelayed(..., 60_000)` fires with
+  `virtual_delayed_ms≈60000` in < 5 s of wall time under `Vm::run_virtual`.
+* `acos-runtime/tests/vsync_natives.rs::choreographer_frames_run_under_virtual_time`:
+  the real `Choreographer.postFrameCallback` chain delivers 3 strictly
+  monotonic frames under virtual time in < 3 s.
+* `os_clock::tests::virtual_clock_advances_forward_only`.
+
+## Gates
+
+| Item | Result |
+|---|---|
+| `cargo check --workspace --all-targets` | clean |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo test -p acos-vm` (lib + all integration) | all pass (incl. `os_natives`, `looper`, `render_views`, `res_natives`) |
+| `cargo test -p acos-runtime` | all pass except the **pre-existing** `pms.rs::pms_java_app_info_matches_the_reference_capture` (fails identically on clean `HEAD`: `getActivityInfo` reply `expected 43 fields, got 23`; not touched here) |
+| `tools/diff-dexprogs.sh --corelib real` | 27 pass / 0 fail / 0 unsupported |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | 27 pass / 0 fail / 0 unsupported |
+
+## Honesty / handoff
+
+* No fake: the pump only moves the clock forward to a deadline the framework
+  itself armed; the guest sees the same state it would after sleeping.
+  `System.nanoTime` is fixed to the real monotonic timebase, not tuned to a
+  test.
+* W104-A's graphics/animation work was applied **only** in a scratch worktree
+  to cross the ImageDecoder gate and never entered this session's diff; the
+  `PropertyValuesHolder` blocker below is W104-A's file scope.
+* The M2 gate stays `#[ignore]`d. The pump rung is verified by the two new
+  deterministic tests and the `ACOS_VSYNC_TRACE` schedule/dispatch pair.
+* Next: W104-A lands `PropertyValuesHolder` (and the rest of the animation
+  natives); then `relayout`/`finishDrawing`/measure/layout/draw through the
+  recording path into `acos-render`, then `onResume` via `ResumeActivityItem`.
+
+## Copy-back
+
+Main advanced to `834d92c` (W106-A/W117-A) then `740f749` (W104-A
+`ImageDecoder`/`BitmapFactory`) while this session ran. The source diff was
+generated from the `17f9c42` worktree, `git apply --check` clean against main,
+and applied (source-only; the worktree's `results/vm/dexprogs-*.json` evidence is
+informational). The `pub(crate) mod os_clock;` one-line visibility change was
+swept into W104-A's `740f749` commit when W104-A committed `natives/mod.rs`; it
+is present on main and is the only part of this session carried by another
+commit. Worktrees and scratch targets were deleted.
+
+Final state: pump + virtual-time clock + `System.nanoTime` fix + tests + this log
+table are uncommitted on main; orchestrator to commit selectively.
