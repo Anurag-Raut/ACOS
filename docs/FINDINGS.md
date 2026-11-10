@@ -236,3 +236,7 @@ acos-vm runs all 20 fixture programs byte-identical to real ART (fixtures/expect
 ## 2026-11-10 — M1 reached: real Android 14 core library on the Rust VM
 
 All 20 console programs run on the real core-oj/core-libart/core-icu4j bytecode (439 Rust natives, 8 modules) and match real-ART stdout and exit code byte for byte, normally and under GC stress. 01_hello: 23 ms wall (14 ms VM bring-up incl. boot-classpath parse, 8 ms run), 36 MiB peak RSS, 196 classes loaded, 46 <clinit>, 42,550 instructions, 8,227 invokes; real ART dalvikvm cold hello was 71 ms (different host, ART has a boot image: indicative only). A real String/Thread bridge was needed because the real String's constructors and many methods are VM-implemented in ART. Next critical path: boot the framework classes and the Binder transport (T-18..T-27).
+
+## 2026-11-10 — Runaway acos process reached 45 GB RSS (host-safety incident)
+
+During the parallel W9/W10 waves a debug `acos run-dex .../01_hello/classes.dex --main Main` was found after ~2.8 h with 45 GB RSS (host 62 GB, no swap, ~91% used). It was killed manually; no crash. There was no host-side memory or time ceiling in the VM (only the guest ACOS_HEAP_MAX). Actions: temporary watchdog (kills acos processes >8 GB or when MemAvailable <9 GB, log in /tmp/acos-ramguard.log), W12 to find the root cause and add VM-side limits and tools/guarded.sh. Policy recorded in DECISIONS.md ADR-0018.

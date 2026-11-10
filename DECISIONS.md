@@ -485,3 +485,13 @@ real boot classpath at all.
 - **One consumer (owner directive D1, 2026-11-10).** ACOS has exactly one
   consumer: an AI coding agent. No human-facing UX. Machine-first JSON/MCP,
   structured errors, stable ids. See `SPEC.md` "Owner directives".
+
+## ADR-0018 — Host resource policy: RAM ceiling 90%, internal target 85%, free promptly
+
+Status: accepted (owner directive, 2026-11-10).
+
+- Host RAM use must never exceed 90% (the host has 62 GB and no swap, so exceeding it can hard-crash the PC). The internal target is 85%; guards act when MemAvailable drops below ~9 GiB.
+- Every VM, test, benchmark and emulator process runs under a memory and wall-clock bound (`tools/guarded.sh`, `tools/ramguard.sh`; VM-side `ACOS_HOST_RSS_MAX` and `ACOS_WALL_MAX_SECS` with structured errors `HOST_MEMORY_LIMIT` / `TIMEOUT`).
+- Resources are released as soon as they are no longer needed: processes, fds, temp dirs, scratch artifacts, finished agents, merged worktrees.
+- Orchestrator checks `free -m` before dispatching a parallel wave and gives every implementer the bounded-run rule.
+- Incident that motivated this: a debug `acos run-dex` of 01_hello ran for about 2.8 h and reached 45 GB RSS (see docs/FINDINGS.md). It was killed by hand. Root cause and the product-side guard are tracked in W12.
