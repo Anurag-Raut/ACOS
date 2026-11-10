@@ -1,0 +1,80 @@
+   Compiling acos-services v0.1.0 (/home/Qui/Projects/acos/crates/acos-services)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running unittests src/lib.rs (target/debug/deps/acos_services-8966c2ba2dfa15f5)
+
+running 11 tests
+test exception::tests::codes_are_stable ... ok
+test exception::tests::every_framework_exception_code_round_trips ... ok
+test exception::tests::no_exception_writes_zero ... ok
+test exception::tests::service_specific_round_trips_message ... ok
+test provider::tests::injected_generation_backing_is_used ... ok
+test provider::tests::seeded_keys_match_settings_keys_tsv ... ok
+test provider::tests::put_updates_value_and_bumps_generation ... ok
+test provider::tests::get_returns_value_bundle_and_generation_fd ... ok
+test trace::tests::summaries_are_bounded ... ok
+test trace::tests::memory_trace_records ... ok
+test provider::tests::unknown_provider_method_is_structured ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/host.rs (target/debug/deps/host-95100b6b239296f7)
+
+running 9 tests
+test not_owned_interfaces_name_the_owner ... ok
+test trace_off_by_default ... ok
+test services_are_constructed_lazily ... ok
+test unknown_service_name_returns_none ... ok
+test unknown_transaction_is_structured_error ... ok
+test interface_token_mismatch_is_rejected ... ok
+test trace_records_calls_when_enabled ... ok
+test random_bytes_never_panic ... ok
+test random_args_never_panic ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/lifecycle.rs (target/debug/deps/lifecycle-ab31314fa5a8a23e)
+
+running 6 tests
+test launch_mode_decisions_match_android ... ok
+test illegal_transitions_are_rejected ... ok
+test stop_emits_save_state_after_stop ... ok
+test replay_lifecycle_summary_order ... ok
+test transition_table_never_returns_uncreated ... ok
+test random_walk_is_total ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/parcelable.rs (target/debug/deps/parcelable-eb9f2e3a73f74888)
+
+running 3 tests
+test every_spec_round_trips_through_a_parcel ... ok
+test parcel_exception_constants_match_the_framework ... ok
+test codec_field_orders_match_the_framework_dex ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.86s
+
+     Running tests/replay.rs (target/debug/deps/replay-a8c765368bf9645b)
+
+running 2 tests
+test replay_all_measured_outgoing_calls ... ok
+test replay_launch_sequence_is_order_stable ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/smoke.rs (target/debug/deps/smoke-ef02e27e3d1da259)
+
+running 5 tests
+test service_manager_checks_activity ... ok
+test display_info_round_trip ... ok
+test package_application_info_from_apk ... ok
+test activity_check_permission ... ok
+test settings_read_and_generation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_services
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

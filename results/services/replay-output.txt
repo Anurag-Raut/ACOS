@@ -1,0 +1,70 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/replay.rs (target/debug/deps/replay-a8c765368bf9645b)
+
+running 2 tests
+row                                                            owner    result
+IDisplayManager.getPreferredWideGamutColorSpaceId              services ok
+IDisplayManager.getOverlaySupport                              services ok
+IDisplayManager.getDisplayInfo                                 services ok
+INetworkManagementService.setUidCleartextNetworkPolicy         services ok
+IPackageManager.notifyDexLoad                                  services ok
+IActivityManager.checkPermission                               services ok
+IPackageManager.getPackagesForUid                              services ok
+IPackageManager.getApplicationInfo                             services ok
+IActivityManager.attachApplication                             services ok
+IServiceManager.checkService                                   services ok
+IGameManagerService.isAngleEnabled                             services ok
+IPackageManager.hasSystemFeature                               services ok
+IPackageManager.getPackageInfo                                 services ok
+IActivityManager.finishAttachApplication                       services ok
+IDisplayManager.registerCallbackWithEventMask                  services ok
+IActivityTaskManager.getActivityClientController               services ok
+IActivityClientController.getDisplayId                         services ok
+IVirtualDeviceManager.getDeviceIdForDisplayId                  services ok
+IActivityManager.getContentProvider                            services ok
+IAccessibilityManager.addClient                                services ok
+IAccessibilityManager.getRecommendedTimeoutMillis              services ok
+IAccessibilityManager.getFocusStrokeWidth                      services ok
+IAccessibilityManager.getFocusColor                            services ok
+IActivityClientController.setTaskDescription                   services ok
+IActivityClientController.reportSizeConfigurations             services ok
+IVoiceInteractionManagerService.notifyActivityEventChanged     services ok
+IDisplayManager.getDisplayIds                                  services ok
+IActivityManager.setRenderThread                               services ok
+IGraphicsStats.requestBufferForProcess                         services ok
+IActivityClientController.activityResumed                      services ok
+IContentCaptureManager.registerContentCaptureOptionsCallback   services ok
+ITextServicesManager.getCurrentSpellCheckerSubtype             services ok
+IInputManager.getVelocityTrackerStrategy                       services ok
+IInputManager.registerInputDevicesChangedListener              services ok
+IInputManager.getInputDeviceIds                                services ok
+IInputManager.getInputDevice                                   services ok
+IContentService.registerContentObserver                        services ok
+IActivityClientController.activityIdle                         services ok
+IContentProvider.call (GET_system)                             services ok
+IContentProvider.call (GET_global)                             services ok
+IContentProvider.call (PUT_system)                             services ok
+IAutoFillManager.addClient                                     services ok
+IAutoFillManager.startSession                                  services ok
+IPackageManager.hasSystemFeature (interaction)                 services ok
+IActivityTaskManager.reportAssistContextExtras                 services ok
+ITextServicesManager.isSpellCheckerEnabled                     services ok
+ITextServicesManager.getCurrentSpellCheckerSubtype (interaction) services ok
+ITextServicesManager.getCurrentSpellChecker                    services ok
+ITextServicesManager.getSpellCheckerService                    services ok
+IAudioService.areNavigationRepeatSoundEffectsEnabled           services ok
+IAudioService.playSoundEffect                                  services ok
+IAndroidFuture.complete                                        services ok
+IServiceManager.checkService (interaction)                     services ok
+IContentProvider.call (GET_secure)                             services ok
+IApplicationThread.profilerControl (system->app delivery)      acos-wm  not-owned
+IWindowSession.onRectangleOnScreenRequested (acos-wm)          acos-wm  not-owned
+IInputMethodManager.reportPerceptibleAsync (acos-wm)           acos-wm  not-owned
+IInputMethodSession.updateSelection (acos-wm)                  acos-wm  not-owned
+IImeTracker.onProgress (acos-wm)                               acos-wm  not-owned
+replayed 59 rows: 54 ok, 5 not-owned
+test replay_all_measured_outgoing_calls ... ok
+test replay_launch_sequence_is_order_stable ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

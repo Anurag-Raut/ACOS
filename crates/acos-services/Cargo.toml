@@ -1,0 +1,24 @@
+[package]
+name = "acos-services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS in-process Android system services: Binder dispatch, mini PMS/ATMS, Settings provider and display/misc state machines."
+
+[dependencies]
+acos-aidl = { path = "../acos-aidl" }
+acos-apk = { path = "../acos-apk" }
+acos-dex = { path = "../acos-dex" }
+acos-parcel = { path = "../acos-parcel" }
+acos-protocol = { path = "../acos-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+
+[[example]]
+name = "scan-parcelables"
+path = "examples/scan_parcelables.rs"
