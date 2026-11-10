@@ -31,6 +31,28 @@ struct Case {
     max_differing: f64,
 }
 
+/// Scene provenance: `hand-authored` scenes are a DisplayList/Canvas
+/// reconstruction of the ART UI dump (measures scene authoring).
+/// `pipeline-generated` scenes come from the real framework `View.draw` →
+/// `RecordingCanvas` → `HardwareRenderer` → `acos-render` path (see
+/// `crates/acos-vm/tests/render_views.rs`, W101-A).
+fn pipeline_metrics() -> std::collections::HashMap<String, serde_json::Value> {
+    let path = out_dir().join("corpus-pipeline-metrics.json");
+    let mut map = std::collections::HashMap::new();
+    if let Ok(bytes) = std::fs::read(&path) {
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if let Some(scenes) = v.get("scenes").and_then(|s| s.as_array()) {
+                for s in scenes {
+                    if let Some(app) = s.get("app").and_then(|a| a.as_str()) {
+                        map.insert(app.to_string(), s.clone());
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
 // Thresholds are *measured* (see `results/render/corpus-metrics.json`), with
 // roughly 25-40% headroom on MAE and a 0.005 SSIM floor margin.
 const CASES: &[Case] = &[
@@ -161,6 +183,9 @@ fn out_dir() -> PathBuf {
 
 #[test]
 fn fixture_scenes_match_art_reference() {
+    // Real-pipeline scenes (W101-A) are reported alongside the hand-authored
+    // ones so `corpus-metrics.json` records which evidence is which.
+    let pipeline = pipeline_metrics();
     let mut rows = Vec::new();
     for case in CASES {
         let ref_path = repo_root().join(case.reference);
@@ -223,9 +248,25 @@ fn fixture_scenes_match_art_reference() {
             report.blocks.changed_fraction * 100.0,
         );
 
+        let pipeline_row = pipeline.get(case.app);
+        let provenance = if pipeline_row
+            .and_then(|r| r.get("status"))
+            .and_then(|s| s.as_str())
+            == Some("ok")
+        {
+            "pipeline-generated"
+        } else {
+            "hand-authored"
+        };
         rows.push(serde_json::json!({
             "app": case.app,
             "tier": "art-reference",
+            "provenance": provenance,
+            // When a real-pipeline frame for this app exists, record it next to
+            // the hand-authored scene metric (W101-A).
+            "pipelineSsim": pipeline_row.and_then(|r| r.get("meanSsim")).cloned(),
+            "pipelineMae": pipeline_row.and_then(|r| r.get("meanAbsError")).cloned(),
+            "pipelineStatus": pipeline_row.and_then(|r| r.get("status")).cloned(),
             "reference": case.reference,
             "scene": format!("crates/acos-render/tests/scenes/{}.json", case.app),
             "width": out.frame.width,
@@ -278,6 +319,7 @@ fn fixture_scenes_match_art_reference() {
         "wave": "W66-A",
         "corpus": "fixture-apps",
         "note": "candidate = acos-render scene reconstruction; reference = ART API-34 emulator",
+        "provenance": "hand-authored scenes; `provenance` per scene is `pipeline-generated` when crates/acos-vm/tests/render_views.rs produced a real View.draw frame for that app (W101-A)",
         "scenes": rows,
     });
     let out = out_dir().join("corpus-metrics.json");

@@ -364,6 +364,9 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nInit", "()J", paint_init);
     vm.register_native(p, "nInitWithPaint", "(J)J", paint_init_with);
     vm.register_native(p, "nSet", "(J)V", paint_set);
+    // API 34 declares `nSet(long dst, long src)`; the Java `Paint(Paint)` copy
+    // constructor routes through it. Same copy semantics as the legacy form.
+    vm.register_native(p, "nSet", "(JJ)V", paint_set);
     vm.register_native(p, "nReset", "(J)V", paint_reset);
     vm.register_native(p, "nGetNativeFinalizer", "()J", release_func);
 
@@ -906,8 +909,10 @@ fn paint_run_char_advance(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let text_h = vm.arg_ref(ctx, 1);
     let start = vm.arg_i32(ctx, 2).max(0) as usize;
     let end = vm.arg_i32(ctx, 3).max(0) as usize;
-    let arr = vm.arg_ref(ctx, 7);
-    let index = vm.arg_i32(ctx, 8).max(0) as usize;
+    // `nGetRunCharacterAdvance(J [C I I I I Z I [F I)F`: the advances array and
+    // its write index are arguments 8 and 9 (7 is the run offset).
+    let arr = vm.arg_ref(ctx, 8);
+    let index = vm.arg_i32(ctx, 9).max(0) as usize;
     let all = gfx_text::char_array(vm, text_h)?;
     let end = end.min(all.len());
     let slice = if start <= end { &all[start..end] } else { &[][..] };
