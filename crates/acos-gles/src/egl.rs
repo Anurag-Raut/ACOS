@@ -131,7 +131,7 @@ impl Default for Config {
             blue: 8,
             alpha: 8,
             depth: 24,
-            stencil: 0,
+            stencil: 8,
             surface_type: attrib::WINDOW_BIT | attrib::PBUFFER_BIT | attrib::PIXMAP_BIT,
             renderable_type: attrib::OPENGL_ES_BIT | attrib::OPENGL_ES2_BIT,
             samples: 0,
@@ -825,7 +825,9 @@ pub fn query_string(display: u64, name: i32) -> Option<&'static str> {
     match name {
         attrib::VENDOR => Some("ACOS"),
         attrib::VERSION => Some("1.4 ACOS-1"),
-        attrib::EXTENSIONS => Some("EGL_KHR_surfaceless_context EGL_ANDROID_native_fence_sync"),
+        // Only what is implemented: no surfaceless contexts, no EGL images,
+        // no KHR fence sync. Advertising otherwise would be dishonest.
+        attrib::EXTENSIONS => Some(""),
         attrib::CLIENT_APIS => Some("OpenGL_ES"),
         _ => None,
     }

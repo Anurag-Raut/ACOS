@@ -137,6 +137,29 @@ pub mod consts {
     pub const CW: u32 = 0x0900;
     pub const CCW: u32 = 0x0901;
 
+    pub const STENCIL_TEST: u32 = 0x0B90;
+    pub const STENCIL_FUNC: u32 = 0x0B92;
+    pub const STENCIL_VALUE_MASK: u32 = 0x0B93;
+    pub const STENCIL_FAIL: u32 = 0x0B94;
+    pub const STENCIL_PASS_DEPTH_FAIL: u32 = 0x0B95;
+    pub const STENCIL_PASS_DEPTH_PASS: u32 = 0x0B96;
+    pub const STENCIL_REF: u32 = 0x0B97;
+    pub const STENCIL_WRITEMASK: u32 = 0x0B98;
+    pub const STENCIL_BACK_FUNC: u32 = 0x8800;
+    pub const STENCIL_BACK_FAIL: u32 = 0x8801;
+    pub const STENCIL_BACK_PASS_DEPTH_FAIL: u32 = 0x8802;
+    pub const STENCIL_BACK_PASS_DEPTH_PASS: u32 = 0x8803;
+    pub const STENCIL_BACK_REF: u32 = 0x8CA3;
+    pub const STENCIL_BACK_VALUE_MASK: u32 = 0x8CA1;
+    pub const STENCIL_BACK_WRITEMASK: u32 = 0x8CA2;
+    pub const KEEP: u32 = 0x1E00;
+    pub const REPLACE: u32 = 0x1E01;
+    pub const INCR: u32 = 0x1E02;
+    pub const DECR: u32 = 0x1E03;
+    pub const INVERT: u32 = 0x150A;
+    pub const INCR_WRAP: u32 = 0x8507;
+    pub const DECR_WRAP: u32 = 0x8508;
+
     pub const BYTE: u32 = 0x1400;
     pub const UNSIGNED_BYTE: u32 = 0x1401;
     pub const SHORT: u32 = 0x1402;

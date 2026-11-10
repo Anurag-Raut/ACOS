@@ -140,9 +140,57 @@ int acos_gles_test(void *native_window) {
                  GL_RGBA, GL_UNSIGNED_BYTE, pixel);
     if (!(pixel[0] < 40 && pixel[2] > 200)) FAIL(17);
 
+    /* --- client-side vertex arrays (no bound ARRAY_BUFFER) --- */
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glVertexAttribPointer((GLuint)pos, 2, GL_FLOAT, GL_FALSE, 0, vertices);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUniform4f(color, 0.0f, 1.0f, 0.0f, 1.0f); /* green */
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (glGetError() != GL_NO_ERROR) FAIL(19);
+    memset(pixel, 0, sizeof(pixel));
+    glReadPixels(1, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    if (!(pixel[0] < 40 && pixel[1] > 200 && pixel[2] < 40)) FAIL(20);
+
+    /* --- stencil buffer + stencil test (Skia clip path) --- */
+    glClearStencil(0);
+    glClear(GL_STENCIL_BUFFER_BIT);
+    glEnable(GL_STENCIL_TEST);
+    glStencilMask(0xFF);
+    glStencilFunc(GL_EQUAL, 1, 0xFF); /* nothing is 1 yet: the draw is masked */
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUniform4f(color, 0.0f, 0.0f, 1.0f, 1.0f); /* blue */
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    memset(pixel, 0, sizeof(pixel));
+    glReadPixels(1, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    if (!(pixel[0] < 40 && pixel[1] < 40 && pixel[2] < 40)) FAIL(21);
+    glStencilFunc(GL_EQUAL, 0, 0xFF); /* every stencil value is 0: now it draws */
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (glGetError() != GL_NO_ERROR) FAIL(22);
+    memset(pixel, 0, sizeof(pixel));
+    glReadPixels(1, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    if (!(pixel[0] < 40 && pixel[1] < 40 && pixel[2] > 200)) FAIL(23);
+    glDisable(GL_STENCIL_TEST);
+
+    /* --- glCopyTexImage2D + glGenerateMipmap --- */
+    GLuint copy_tex = 0;
+    glGenTextures(1, &copy_tex);
+    glBindTexture(GL_TEXTURE_2D, copy_tex);
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0,
+                     ACOS_GLES_FIXTURE_WIDTH, ACOS_GLES_FIXTURE_HEIGHT, 0);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (glGetError() != GL_NO_ERROR) FAIL(24);
+    glDeleteTextures(1, &copy_tex);
+
     if (!eglSwapBuffers(display, surface)) FAIL(18);
 
     glDeleteBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    (void)copy_tex;
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroyContext(display, context);
     eglDestroySurface(display, surface);

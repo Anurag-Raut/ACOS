@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use crate::error::{consts as c, diagnostic, unsupported};
 use crate::glsl::{self, Stage, TextureLookup, Ty, Unit, Value, VertexOut};
 use crate::raster::{
-    project, Blend, BlendFactor, Cull, DepthFunc, Framebuffer, RasterState,
+    project, Blend, BlendFactor, Cull, DepthFunc, Framebuffer, RasterState, StencilFace,
+    StencilOp,
 };
 
 /// One shader object's compile result.
@@ -79,6 +80,10 @@ pub struct AttribArray {
     pub normalized: bool,
     pub stride: i32,
     pub offset: i32,
+    /// Guest pointer for a client-side array (only meaningful when
+    /// `buffer == 0`); the bytes are copied by the FFI layer, never dereferenced
+    /// here.
+    pub client_ptr: usize,
 }
 
 impl Default for AttribArray {
@@ -90,18 +95,25 @@ impl Default for AttribArray {
             normalized: false,
             stride: 0,
             offset: 0,
+            client_ptr: 0,
         }
     }
 }
 
 /// A texture object (always RGBA8888 internally).
+///
+/// Level 0 lives in `width`/`height`/`rgba`; generated or uploaded mip levels
+/// (`glGenerateMipmap`, `glTexImage2D level > 0`) live in `mips`, where
+/// `mips[i]` is level `i + 1`.
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub struct Texture {
     pub width: u32,
     pub height: u32,
-    /// Straight RGBA8888.
+    /// Straight RGBA8888 (level 0).
     pub rgba: Vec<u8>,
+    /// Mip levels 1.., each `(width, height, RGBA8888)`.
+    pub mips: Vec<(u32, u32, Vec<u8>)>,
     pub min_filter: u32,
     pub mag_filter: u32,
     pub wrap_s: u32,
@@ -114,6 +126,7 @@ impl Texture {
             width: 0,
             height: 0,
             rgba: Vec::new(),
+            mips: Vec::new(),
             min_filter: c::NEAREST_MIPMAP_LINEAR,
             mag_filter: c::LINEAR,
             wrap_s: c::REPEAT,
@@ -123,6 +136,32 @@ impl Texture {
 
     fn allocated(&self) -> bool {
         self.width > 0 && self.height > 0 && self.rgba.len() >= self.width as usize * self.height as usize * 4
+    }
+
+    /// The RGBA level `l` (`0` is the base level).
+    #[must_use]
+    pub fn level(&self, l: u32) -> Option<(u32, u32, &[u8])> {
+        if l == 0 {
+            if self.allocated() {
+                Some((self.width, self.height, &self.rgba))
+            } else {
+                None
+            }
+        } else {
+            self.mips
+                .get((l - 1) as usize)
+                .map(|(w, h, d)| (*w, *h, d.as_slice()))
+        }
+    }
+
+    /// Number of mip levels present (base + generated/uploaded).
+    #[must_use]
+    pub fn level_count(&self) -> u32 {
+        if !self.allocated() {
+            0
+        } else {
+            1 + self.mips.len() as u32
+        }
     }
 }
 
@@ -185,6 +224,17 @@ pub struct Gl {
     pub color_mask: [bool; 4],
     pub unpack_alignment: i32,
     pub line_width: f32,
+    /// `glEnable(GL_STENCIL_TEST)`.
+    pub stencil_test: bool,
+    /// Front/back stencil compare + op state.
+    pub stencil_front: StencilFace,
+    pub stencil_back: StencilFace,
+    /// `glClearStencil`.
+    pub clear_stencil: i32,
+    /// Guest-memory bytes copied for client-side vertex arrays, keyed by
+    /// attribute slot. Populated from the FFI layer (checked guest reads);
+    /// never a raw guest pointer inside this module.
+    pub client_arrays: HashMap<u32, Vec<u8>>,
     pub error: u32,
 }
 
@@ -237,6 +287,11 @@ impl Gl {
             color_mask: [true; 4],
             unpack_alignment: 4,
             line_width: 1.0,
+            stencil_test: false,
+            stencil_front: StencilFace::always(),
+            stencil_back: StencilFace::always(),
+            clear_stencil: 0,
+            client_arrays: HashMap::new(),
             error: c::NO_ERROR,
         }
     }
@@ -740,9 +795,9 @@ impl Gl {
         ty: u32,
         normalized: bool,
         stride: i32,
-        offset: i32,
+        pointer: usize,
     ) {
-        if index as usize >= c::MAX_ATTRIBS || !(1..=4).contains(&size) || stride < 0 || offset < 0 {
+        if index as usize >= c::MAX_ATTRIBS || !(1..=4).contains(&size) || stride < 0 {
             self.set_error(c::INVALID_VALUE);
             return;
         }
@@ -754,17 +809,87 @@ impl Gl {
             self.set_error(c::INVALID_ENUM);
             return;
         }
+        let buffer = self.array_buffer;
+        if buffer == 0 {
+            self.client_arrays.remove(&index);
+        } else if pointer > i32::MAX as usize {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
         self.attrib_arrays.insert(
             index,
             AttribArray {
-                buffer: self.array_buffer,
+                buffer,
                 size,
                 ty,
                 normalized,
                 stride,
-                offset,
+                // In-buffer byte offset; for a client-side array the copy starts
+                // at the guest pointer, so the offset within the copy is 0.
+                offset: if buffer == 0 { 0 } else { pointer as i32 },
+                client_ptr: if buffer == 0 { pointer } else { 0 },
             },
         );
+    }
+
+    /// `(slot, guest pointer, byte length)` reads the FFI layer must perform for
+    /// the enabled client-side vertex arrays up to `max_index`.
+    #[must_use]
+    pub fn client_array_requirements(&self, max_index: u32) -> Vec<(u32, usize, usize)> {
+        let mut out = Vec::new();
+        for (slot, array) in &self.attrib_arrays {
+            if array.client_ptr == 0
+                || !self.attrib_enabled.get(*slot as usize).copied().unwrap_or(false)
+            {
+                continue;
+            }
+            let comp = component_size(array.ty);
+            let stride = if array.stride > 0 {
+                array.stride as usize
+            } else {
+                comp * array.size as usize
+            };
+            let len = stride
+                .saturating_mul(max_index as usize)
+                .saturating_add(comp.saturating_mul(array.size as usize));
+            out.push((*slot, array.client_ptr, len));
+        }
+        out.sort_unstable_by_key(|(slot, _, _)| *slot);
+        out
+    }
+
+    /// Install the checked guest bytes the FFI layer copied for a client array.
+    pub fn set_client_array(&mut self, slot: u32, bytes: Vec<u8>) {
+        self.client_arrays.insert(slot, bytes);
+    }
+
+    /// Largest index referenced by a bound `ELEMENT_ARRAY_BUFFER` draw.
+    #[must_use]
+    pub fn max_element_index(&self, count: i32, ty: u32, offset: i32) -> Option<u32> {
+        if count < 0 || offset < 0 {
+            return None;
+        }
+        let buf = self.buffers.get(&self.element_buffer)?;
+        let stride = match ty {
+            c::UNSIGNED_BYTE => 1,
+            c::UNSIGNED_SHORT => 2,
+            _ => 4,
+        };
+        let mut max = 0u32;
+        for i in 0..count as usize {
+            let at = offset as usize + i * stride;
+            let v = match ty {
+                c::UNSIGNED_BYTE => buf.get(at).copied().map(u32::from),
+                c::UNSIGNED_SHORT => buf
+                    .get(at..at + 2)
+                    .map(|b| u32::from(u16::from_le_bytes([b[0], b[1]]))),
+                _ => buf
+                    .get(at..at + 4)
+                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+            }?;
+            max = max.max(v);
+        }
+        Some(max)
     }
 
     /// `glEnableVertexAttribArray` / `glDisableVertexAttribArray`.
@@ -898,13 +1023,9 @@ impl Gl {
             self.set_error(c::INVALID_ENUM);
             return;
         }
-        if level != 0 {
-            // Only level 0 is stored; a mip level above 0 is accepted but the
-            // sampler always reads level 0 (reported, not silent).
-            diagnostic(
-                "glTexImage2D",
-                format!("mip level {level} ignored; level 0 is sampled"),
-            );
+        if level < 0 {
+            self.set_error(c::INVALID_VALUE);
+            return;
         }
         if border != 0 {
             self.set_error(c::INVALID_VALUE);
@@ -931,9 +1052,19 @@ impl Gl {
             return;
         };
         let _ = internal;
-        t.width = width as u32;
-        t.height = height as u32;
-        t.rgba = rgba;
+        if level == 0 {
+            t.width = width as u32;
+            t.height = height as u32;
+            t.rgba = rgba;
+            // A new base level invalidates any previously generated chain.
+            t.mips.clear();
+        } else {
+            let idx = (level - 1) as usize;
+            if t.mips.len() <= idx {
+                t.mips.resize_with(idx + 1, || (0, 0, Vec::new()));
+            }
+            t.mips[idx] = (width as u32, height as u32, rgba);
+        }
     }
 
     /// `glTexSubImage2D`.
@@ -987,16 +1118,178 @@ impl Gl {
         }
     }
 
-    /// `glGenerateMipmap` — accepted; the sampler reads level 0 only.
+    /// `glGenerateMipmap` — build the box-filtered mip chain from level 0.
     pub fn generate_mipmap(&mut self, target: u32) {
         if target != c::TEXTURE_2D {
             self.set_error(c::INVALID_ENUM);
             return;
         }
-        diagnostic(
-            "glGenerateMipmap",
-            "mipmaps are not generated; the sampler filters level 0",
-        );
+        let id = self.bound_textures[self.active_texture];
+        let Some(t) = self.textures.get_mut(&id) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        if !t.allocated() {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        }
+        t.mips.clear();
+        let (mut w, mut h) = (t.width, t.height);
+        let mut src = t.rgba.clone();
+        while w > 1 || h > 1 {
+            let nw = (w / 2).max(1);
+            let nh = (h / 2).max(1);
+            let dst = downsample_rgba(&src, w, h, nw, nh);
+            t.mips.push((nw, nh, dst.clone()));
+            src = dst;
+            w = nw;
+            h = nh;
+        }
+    }
+
+    /// `glCopyTexImage2D` — define a texture level from the current draw buffer.
+    #[allow(clippy::too_many_arguments)]
+    pub fn copy_tex_image_2d(
+        &mut self,
+        surface: &Framebuffer,
+        target: u32,
+        level: i32,
+        internal: i32,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        border: i32,
+    ) {
+        if target != c::TEXTURE_2D || level < 0 {
+            self.set_error(c::INVALID_ENUM);
+            return;
+        }
+        if border != 0 || width <= 0 || height <= 0 {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
+        let Some(rgba) = self.copy_region(surface, x, y, width, height) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        let id = self.bound_textures[self.active_texture];
+        let Some(t) = self.textures.get_mut(&id) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        let _ = internal;
+        if level == 0 {
+            t.width = width as u32;
+            t.height = height as u32;
+            t.rgba = rgba;
+            t.mips.clear();
+        } else {
+            let idx = (level - 1) as usize;
+            if t.mips.len() <= idx {
+                t.mips.resize_with(idx + 1, || (0, 0, Vec::new()));
+            }
+            t.mips[idx] = (width as u32, height as u32, rgba);
+        }
+    }
+
+    /// `glCopyTexSubImage2D` — update a texture sub-rectangle from the draw buffer.
+    #[allow(clippy::too_many_arguments)]
+    pub fn copy_tex_sub_image_2d(
+        &mut self,
+        surface: &Framebuffer,
+        target: u32,
+        level: i32,
+        xoffset: i32,
+        yoffset: i32,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) {
+        if target != c::TEXTURE_2D || level < 0 {
+            self.set_error(c::INVALID_ENUM);
+            return;
+        }
+        if xoffset < 0 || yoffset < 0 || width <= 0 || height <= 0 {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
+        let id = self.bound_textures[self.active_texture];
+        let (tw, th) = match self.textures.get(&id) {
+            Some(t) => {
+                let l = level as u32;
+                match t.level(l) {
+                    Some((w, h, _)) => (w, h),
+                    None => {
+                        self.set_error(c::INVALID_OPERATION);
+                        return;
+                    }
+                }
+            }
+            None => {
+                self.set_error(c::INVALID_OPERATION);
+                return;
+            }
+        };
+        if (xoffset as u32 + width as u32) > tw || (yoffset as u32 + height as u32) > th {
+            self.set_error(c::INVALID_VALUE);
+            return;
+        }
+        let Some(src) = self.copy_region(surface, x, y, width, height) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        let Some(t) = self.textures.get_mut(&id) else {
+            self.set_error(c::INVALID_OPERATION);
+            return;
+        };
+        let dst_buf: &mut Vec<u8> = if level == 0 {
+            &mut t.rgba
+        } else {
+            match t.mips.get_mut((level - 1) as usize) {
+                Some((_, _, d)) => d,
+                None => return,
+            }
+        };
+        for row in 0..height as usize {
+            let dst = ((yoffset as usize + row) * tw as usize + xoffset as usize) * 4;
+            let s = row * width as usize * 4;
+            dst_buf[dst..dst + width as usize * 4]
+                .copy_from_slice(&src[s..s + width as usize * 4]);
+        }
+    }
+
+    /// Read a rectangle of the current draw buffer in GL bottom-left order.
+    fn copy_region(
+        &self,
+        surface: &Framebuffer,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) -> Option<Vec<u8>> {
+        let fbo = self.framebuffer;
+        let fb: &Framebuffer = if fbo != 0 {
+            &**self.framebuffers.get(&fbo)?
+        } else {
+            surface
+        };
+        let mut out = vec![0u8; width as usize * height as usize * 4];
+        for row in 0..height {
+            for col in 0..width {
+                let sx = x + col;
+                let sy = fb.height as i32 - 1 - (y + row);
+                let px = if sx < 0 || sy < 0 || sx >= fb.width as i32 || sy >= fb.height as i32 {
+                    [0, 0, 0, 0]
+                } else {
+                    fb.pixel(sx as u32, sy as u32)
+                };
+                let i = (row as usize * width as usize + col as usize) * 4;
+                out[i..i + 4].copy_from_slice(&px);
+            }
+        }
+        Some(out)
     }
 
     // -- framebuffers ----------------------------------------------------
@@ -1260,6 +1553,7 @@ impl Gl {
             c::BLEND => self.blend = true,
             c::CULL_FACE => self.cull = true,
             c::SCISSOR_TEST => self.scissor_test = true,
+            c::STENCIL_TEST => self.stencil_test = true,
             c::DITHER => {}
             other => {
                 unsupported("glEnable", format!("capability {other:#x}"));
@@ -1275,6 +1569,7 @@ impl Gl {
             c::BLEND => self.blend = false,
             c::CULL_FACE => self.cull = false,
             c::SCISSOR_TEST => self.scissor_test = false,
+            c::STENCIL_TEST => self.stencil_test = false,
             c::DITHER => {}
             other => {
                 unsupported("glDisable", format!("capability {other:#x}"));
@@ -1349,9 +1644,9 @@ impl Gl {
         self.clear_depth = d.clamp(0.0, 1.0);
     }
 
-    /// `glClearStencil` — accepted (there is no stencil buffer).
-    pub fn clear_stencil(&mut self, _v: i32) {
-        diagnostic("glClearStencil", "no stencil buffer; `STENCIL_BUFFER_BIT` is ignored");
+    /// `glClearStencil`.
+    pub fn clear_stencil(&mut self, v: i32) {
+        self.clear_stencil = v & 0xFF;
     }
 
     /// `glCullFace`.
@@ -1406,9 +1701,73 @@ impl Gl {
         self.line_width = width;
     }
 
-    /// `glStencil*` — no stencil buffer exists; accepted with a diagnostic.
-    pub fn stencil_noop(&mut self, call: &str) {
-        diagnostic(call, "no stencil buffer; the stencil state is recorded only");
+    /// `glStencilFunc` — sets the front and back compare state.
+    pub fn stencil_func(&mut self, func: u32, reference: i32, mask: u32) {
+        self.stencil_func_separate(c::FRONT_AND_BACK, func, reference, mask);
+    }
+
+    /// `glStencilFuncSeparate`.
+    pub fn stencil_func_separate(&mut self, face: u32, func: u32, reference: i32, mask: u32) {
+        let Some(f) = depth_func(func) else {
+            unsupported("glStencilFuncSeparate", format!("func {func:#x}"));
+            self.set_error(c::INVALID_ENUM);
+            return;
+        };
+        for target in self.stencil_faces(face) {
+            target.func = f;
+            target.reference = reference;
+            target.value_mask = mask;
+        }
+    }
+
+    /// `glStencilMask`.
+    pub fn stencil_mask(&mut self, mask: u32) {
+        self.stencil_mask_separate(c::FRONT_AND_BACK, mask);
+    }
+
+    /// `glStencilMaskSeparate`.
+    pub fn stencil_mask_separate(&mut self, face: u32, mask: u32) {
+        for target in self.stencil_faces(face) {
+            target.write_mask = mask;
+        }
+    }
+
+    /// `glStencilOp`.
+    pub fn stencil_op(&mut self, sfail: u32, dpfail: u32, dppass: u32) {
+        self.stencil_op_separate(c::FRONT_AND_BACK, sfail, dpfail, dppass);
+    }
+
+    /// `glStencilOpSeparate`.
+    pub fn stencil_op_separate(&mut self, face: u32, sfail: u32, dpfail: u32, dppass: u32) {
+        let Some(sf) = stencil_op(sfail) else {
+            unsupported("glStencilOpSeparate", format!("sfail {sfail:#x}"));
+            self.set_error(c::INVALID_ENUM);
+            return;
+        };
+        let Some(dp) = stencil_op(dpfail) else {
+            unsupported("glStencilOpSeparate", format!("dpfail {dpfail:#x}"));
+            self.set_error(c::INVALID_ENUM);
+            return;
+        };
+        let Some(pp) = stencil_op(dppass) else {
+            unsupported("glStencilOpSeparate", format!("dppass {dppass:#x}"));
+            self.set_error(c::INVALID_ENUM);
+            return;
+        };
+        for target in self.stencil_faces(face) {
+            target.sfail = sf;
+            target.dpfail = dp;
+            target.dppass = pp;
+        }
+    }
+
+    /// Resolve a `GL_FRONT`/`GL_BACK`/`GL_FRONT_AND_BACK` face token.
+    fn stencil_faces(&mut self, face: u32) -> Vec<&mut StencilFace> {
+        match face {
+            c::FRONT => vec![&mut self.stencil_front],
+            c::BACK => vec![&mut self.stencil_back],
+            _ => vec![&mut self.stencil_front, &mut self.stencil_back],
+        }
     }
 
     // -- target resolution ----------------------------------------------
@@ -1451,6 +1810,9 @@ impl Gl {
                 None
             },
             front_ccw: self.front_ccw,
+            stencil_test: self.stencil_test,
+            stencil_front: self.stencil_front,
+            stencil_back: self.stencil_back,
         }
     }
 
@@ -1526,7 +1888,18 @@ impl Gl {
             }
         }
         if mask & c::STENCIL_BUFFER_BIT != 0 {
-            diagnostic("glClear", "no stencil buffer; STENCIL_BUFFER_BIT ignored");
+            let value = (self.clear_stencil & 0xFF) as u8;
+            let write_mask = self.stencil_front.write_mask & self.stencil_back.write_mask;
+            if let Some(s) = target.stencil.as_mut() {
+                let (x0, y0, x1, y1) = rect;
+                for y in y0.max(0)..y1.min(target.height as i32) {
+                    let row = y as usize * target.width as usize;
+                    for x in x0.max(0)..x1.min(target.width as i32) {
+                        let i = row + x as usize;
+                        s[i] = (s[i] & !(write_mask as u8)) | (value & write_mask as u8);
+                    }
+                }
+            }
         }
         self.flush_fbo_to_attachment(fbo);
     }
@@ -1615,6 +1988,13 @@ impl Gl {
             c::TEXTURE_BINDING_2D => vec![self.bound_textures[self.active_texture] as i32],
             c::ACTIVE_TEXTURE => vec![c::TEXTURE0 as i32 + self.active_texture as i32],
             c::DEPTH_WRITEMASK => vec![i32::from(self.depth_mask)],
+            c::STENCIL_TEST => vec![i32::from(self.stencil_test)],
+            c::STENCIL_REF => vec![self.stencil_front.reference],
+            c::STENCIL_VALUE_MASK => vec![self.stencil_front.value_mask as i32],
+            c::STENCIL_WRITEMASK => vec![self.stencil_front.write_mask as i32],
+            c::STENCIL_BACK_REF => vec![self.stencil_back.reference],
+            c::STENCIL_BACK_VALUE_MASK => vec![self.stencil_back.value_mask as i32],
+            c::STENCIL_BACK_WRITEMASK => vec![self.stencil_back.write_mask as i32],
             c::UNPACK_ALIGNMENT => vec![self.unpack_alignment],
             c::PACK_ALIGNMENT => vec![4],
             other => {
@@ -1634,7 +2014,10 @@ impl Gl {
             c::RENDERER => Some("ACOS software GLES2 (acos-gles)"),
             c::VERSION => Some("OpenGL ES 2.0 ACOS-1"),
             c::SHADING_LANGUAGE_VERSION => Some("OpenGL ES GLSL ES 1.00 ACOS-1"),
-            c::EXTENSIONS => Some("GL_OES_rgb8_rgba8 GL_OES_depth24 GL_OES_fbo_render_mipmap"),
+            // Only extensions whose behaviour this substrate actually provides.
+            c::EXTENSIONS => Some(
+                "GL_OES_rgb8_rgba8 GL_OES_depth24 GL_OES_element_index_uint GL_OES_texture_npot",
+            ),
             _ => None,
         }
     }
@@ -1745,10 +2128,14 @@ impl Gl {
                 let Some(loc) = *loc else { continue };
                 let value = if self.attrib_enabled.get(loc as usize).copied().unwrap_or(false) {
                     match self.attrib_arrays.get(&loc) {
-                        Some(array) => match self.buffers.get(&array.buffer) {
-                            Some(buf) => read_attribute(buf, *index, array),
-                            None => None,
-                        },
+                        Some(array) => {
+                            let buf = if array.buffer == 0 {
+                                self.client_arrays.get(&loc).map(Vec::as_slice)
+                            } else {
+                                self.buffers.get(&array.buffer).map(Vec::as_slice)
+                            };
+                            buf.and_then(|b| read_attribute(b, *index, array))
+                        }
                         None => None,
                     }
                 } else {
@@ -1811,8 +2198,33 @@ impl Gl {
             return;
         }
         let state = self.raster_state(target_w, target_h);
+        // Project once, and estimate the largest screen-space varying gradient
+        // so mipmapped minification can pick a level. The estimate is affine
+        // (perspective correction ignored), which is accurate enough for LOD.
+        let mut screen_tris: Vec<[crate::raster::ScreenVertex; 3]> = Vec::new();
+        let mut lod_grad = 0.0f32;
+        for (a, b, cc) in triangles {
+            // Anything at/behind the eye cannot be projected; GL clips it.
+            if a.clip[3] <= 0.0 || b.clip[3] <= 0.0 || cc.clip[3] <= 0.0 {
+                continue;
+            }
+            let screen = [
+                project(a.clip, a.varyings, &state),
+                project(b.clip, b.varyings, &state),
+                project(cc.clip, cc.varyings, &state),
+            ];
+            lod_grad = lod_grad.max(varying_gradient(&screen));
+            screen_tris.push(screen);
+        }
+        if screen_tris.is_empty() {
+            return;
+        }
         let (textures, bound) = (&self.textures, self.bound_textures);
-        let sampler = Sampler { textures, bound };
+        let sampler = Sampler {
+            textures,
+            bound,
+            grad: lod_grad,
+        };
         let target: &mut Framebuffer = if fbo != 0 {
             match self.framebuffers.get_mut(&fbo) {
                 Some(fb) => fb,
@@ -1825,27 +2237,19 @@ impl Gl {
             surface
         };
         let mut errors: Vec<String> = Vec::new();
-        for (a, b, cc) in triangles {
-            // Anything at/behind the eye cannot be projected; GL clips it.
-            if a.clip[3] <= 0.0 || b.clip[3] <= 0.0 || cc.clip[3] <= 0.0 {
-                continue;
-            }
-            let screen = [
-                project(a.clip, a.varyings, &state),
-                project(b.clip, b.varyings, &state),
-                project(cc.clip, cc.varyings, &state),
-            ];
+        for screen in &screen_tris {
             crate::raster::triangle(
                 target,
                 &state,
                 [&screen[0], &screen[1], &screen[2]],
                 |varyings, coord| {
-                    match glsl::run_fragment(
+                    match glsl::run_fragment_lod(
                         &program.fs_unit,
                         &uniforms,
                         &fs_varyings,
                         varyings,
                         coord,
+                        sampler.lod(),
                         &sampler,
                     ) {
                         Ok(v) => v,
@@ -1921,6 +2325,86 @@ fn assemble(mode: u32, vertices: &[VertexOut]) -> Vec<(VertexOut, VertexOut, Ver
 struct Sampler<'a> {
     textures: &'a HashMap<u32, Texture>,
     bound: [u32; c::TEXTURE_UNITS],
+    /// Largest affine varying gradient in screen space (units per pixel).
+    grad: f32,
+}
+
+impl Sampler<'_> {
+    /// Base LOD for mipmapped minification; `0.0` when there is no estimate.
+    fn lod(&self) -> f32 {
+        self.grad
+    }
+
+    fn sample_level(&self, tex: &Texture, u: f32, v: f32, level: u32) -> [f32; 4] {
+        let Some((w, h, data)) = tex.level(level) else {
+            return [0.0, 0.0, 0.0, 1.0];
+        };
+        let wrap = |c: f32, mode: u32| -> f32 {
+            match mode {
+                c::CLAMP_TO_EDGE => c.clamp(0.0, 1.0),
+                c::MIRRORED_REPEAT => {
+                    let t = c - 2.0 * (c * 0.5).floor();
+                    if t > 1.0 {
+                        2.0 - t
+                    } else {
+                        t.abs()
+                    }
+                }
+                _ => c - c.floor(),
+            }
+        };
+        let u = wrap(u, tex.wrap_s);
+        let v = wrap(v, tex.wrap_t);
+        let fetch = |x: i32, y: i32| -> [f32; 4] {
+            let x = x.clamp(0, w as i32 - 1) as usize;
+            let y = y.clamp(0, h as i32 - 1) as usize;
+            let i = (y * w as usize + x) * 4;
+            [
+                f32::from(data[i]) / 255.0,
+                f32::from(data[i + 1]) / 255.0,
+                f32::from(data[i + 2]) / 255.0,
+                f32::from(data[i + 3]) / 255.0,
+            ]
+        };
+        if level == 0 && !self.linear_for(tex) {
+            let x = (u * w as f32) as i32;
+            let y = (v * h as f32) as i32;
+            return fetch(x, y);
+        }
+        if level > 0 && matches!(tex.min_filter, c::NEAREST_MIPMAP_NEAREST | c::NEAREST_MIPMAP_LINEAR) {
+            let x = (u * w as f32) as i32;
+            let y = (v * h as f32) as i32;
+            return fetch(x, y);
+        }
+        let fx = u * w as f32 - 0.5;
+        let fy = v * h as f32 - 0.5;
+        let x0 = fx.floor() as i32;
+        let y0 = fy.floor() as i32;
+        let tx = fx - x0 as f32;
+        let ty = fy - y0 as f32;
+        let p00 = fetch(x0, y0);
+        let p10 = fetch(x0 + 1, y0);
+        let p01 = fetch(x0, y0 + 1);
+        let p11 = fetch(x0 + 1, y0 + 1);
+        let mut out = [0.0f32; 4];
+        for k in 0..4 {
+            let top = p00[k] * (1.0 - tx) + p10[k] * tx;
+            let bottom = p01[k] * (1.0 - tx) + p11[k] * tx;
+            out[k] = top * (1.0 - ty) + bottom * ty;
+        }
+        out
+    }
+
+    fn linear_for(&self, tex: &Texture) -> bool {
+        matches!(tex.mag_filter, c::LINEAR)
+            || matches!(
+                tex.min_filter,
+                c::LINEAR
+                    | c::LINEAR_MIPMAP_NEAREST
+                    | c::LINEAR_MIPMAP_LINEAR
+                    | c::NEAREST_MIPMAP_LINEAR
+            )
+    }
 }
 
 impl TextureLookup for Sampler<'_> {
@@ -1992,6 +2476,108 @@ impl TextureLookup for Sampler<'_> {
         }
         out
     }
+
+    fn sample_lod(&self, unit: i32, u: f32, v: f32, lod: f32) -> [f32; 4] {
+        let unit = unit.clamp(0, c::TEXTURE_UNITS as i32 - 1) as usize;
+        let Some(tex) = self.textures.get(&self.bound[unit]) else {
+            return [0.0, 0.0, 0.0, 1.0];
+        };
+        if tex.width == 0 || tex.height == 0 {
+            return [0.0, 0.0, 0.0, 1.0];
+        }
+        let mipmapped = matches!(
+            tex.min_filter,
+            c::NEAREST_MIPMAP_NEAREST
+                | c::LINEAR_MIPMAP_NEAREST
+                | c::NEAREST_MIPMAP_LINEAR
+                | c::LINEAR_MIPMAP_LINEAR
+        );
+        if !mipmapped || tex.level_count() <= 1 {
+            return self.sample(unit as i32, u, v);
+        }
+        let max_level = tex.level_count() - 1;
+        let lod = lod_bias(tex, lod).clamp(0.0, max_level as f32);
+        match tex.min_filter {
+            c::NEAREST_MIPMAP_NEAREST | c::LINEAR_MIPMAP_NEAREST => {
+                self.sample_level(tex, u, v, lod.round() as u32)
+            }
+            _ => {
+                let lo = lod.floor() as u32;
+                let hi = (lo + 1).min(max_level);
+                let f = lod - lo as f32;
+                let a = self.sample_level(tex, u, v, lo);
+                let b = self.sample_level(tex, u, v, hi);
+                let mut out = [0.0f32; 4];
+                for k in 0..4 {
+                    out[k] = a[k] * (1.0 - f) + b[k] * f;
+                }
+                out
+            }
+        }
+    }
+}
+
+/// The LOD (in log2 texel/pixel units) implied by the largest varying gradient
+/// and the texture's base size. `grad` is the varying value change per pixel.
+fn lod_bias(tex: &Texture, grad: f32) -> f32 {
+    if grad <= 0.0 {
+        return 0.0;
+    }
+    let extent = tex.width.max(tex.height) as f32;
+    (grad * extent).max(1.0).log2()
+}
+
+/// Largest affine screen-space gradient over all varying components.
+fn varying_gradient(screen: &[crate::raster::ScreenVertex; 3]) -> f32 {
+    let [a, b, cc] = screen;
+    let denom = (b.x - a.x) * (cc.y - a.y) - (cc.x - a.x) * (b.y - a.y);
+    if denom.abs() < 1e-12 {
+        return 0.0;
+    }
+    let mut max_grad = 0.0f32;
+    for i in 0..a.varyings.len() {
+        let va = a.varyings.get(i).map_or([0.0; 4], Value::to_vec4);
+        let vb = b.varyings.get(i).map_or(va, Value::to_vec4);
+        let vc = cc.varyings.get(i).map_or(va, Value::to_vec4);
+        let n = a
+            .varyings
+            .get(i)
+            .map_or(1, Value::width)
+            .max(b.varyings.get(i).map_or(1, Value::width))
+            .max(cc.varyings.get(i).map_or(1, Value::width))
+            .min(4);
+        for k in 0..n {
+            let dvdx = ((vb[k] - va[k]) * (cc.y - a.y) - (vc[k] - va[k]) * (b.y - a.y)) / denom;
+            let dvdy = ((vc[k] - va[k]) * (b.x - a.x) - (vb[k] - va[k]) * (cc.x - a.x)) / denom;
+            max_grad = max_grad.max((dvdx * dvdx + dvdy * dvdy).sqrt());
+        }
+    }
+    max_grad
+}
+
+/// Box-filtered 2x2 downsample of an RGBA8888 image.
+fn downsample_rgba(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
+    let mut out = vec![0u8; nw as usize * nh as usize * 4];
+    for y in 0..nh {
+        for x in 0..nw {
+            let sx0 = (x * 2).min(w.saturating_sub(1));
+            let sy0 = (y * 2).min(h.saturating_sub(1));
+            let sx1 = (sx0 + 1).min(w.saturating_sub(1));
+            let sy1 = (sy0 + 1).min(h.saturating_sub(1));
+            let mut acc = [0u32; 4];
+            for (sx, sy) in [(sx0, sy0), (sx1, sy0), (sx0, sy1), (sx1, sy1)] {
+                let i = (sy as usize * w as usize + sx as usize) * 4;
+                for k in 0..4 {
+                    acc[k] += u32::from(src[i + k]);
+                }
+            }
+            let d = (y as usize * nw as usize + x as usize) * 4;
+            for k in 0..4 {
+                out[d + k] = (acc[k] / 4) as u8;
+            }
+        }
+    }
+    out
 }
 
 fn read_attribute(buf: &[u8], index: u32, array: &AttribArray) -> Option<Value> {
@@ -2160,4 +2746,26 @@ fn depth_func(v: u32) -> Option<DepthFunc> {
         c::ALWAYS => DepthFunc::Always,
         _ => return None,
     })
+}
+
+fn stencil_op(v: u32) -> Option<StencilOp> {
+    Some(match v {
+        c::KEEP => StencilOp::Keep,
+        c::ZERO => StencilOp::Zero,
+        c::REPLACE => StencilOp::Replace,
+        c::INCR => StencilOp::Incr,
+        c::DECR => StencilOp::Decr,
+        c::INVERT => StencilOp::Invert,
+        c::INCR_WRAP => StencilOp::IncrWrap,
+        c::DECR_WRAP => StencilOp::DecrWrap,
+        _ => return None,
+    })
+}
+
+fn component_size(ty: u32) -> usize {
+    match ty {
+        c::BYTE | c::UNSIGNED_BYTE => 1,
+        c::SHORT | c::UNSIGNED_SHORT => 2,
+        _ => 4,
+    }
 }

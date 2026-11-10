@@ -19,7 +19,8 @@
 
 use crate::glsl::Value;
 
-/// `GL_UNSIGNED_BYTE`-style RGBA colour buffer plus an optional depth buffer.
+/// `GL_UNSIGNED_BYTE`-style RGBA colour buffer plus optional depth and 8-bit
+/// stencil buffers.
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub struct Framebuffer {
@@ -29,6 +30,8 @@ pub struct Framebuffer {
     pub color: Vec<u8>,
     /// `None` until a depth buffer is requested (`glDepthMask`/`glEnable`).
     pub depth: Option<Vec<f32>>,
+    /// 8-bit stencil buffer (Skia's clip path needs it).
+    pub stencil: Option<Vec<u8>>,
 }
 
 impl Framebuffer {
@@ -40,6 +43,7 @@ impl Framebuffer {
             height,
             color: vec![0u8; width as usize * height as usize * 4],
             depth: Some(vec![1.0; width as usize * height as usize]),
+            stencil: Some(vec![0u8; width as usize * height as usize]),
         }
     }
 
@@ -60,6 +64,7 @@ impl Framebuffer {
         self.height = height;
         self.color = vec![0u8; width as usize * height as usize * 4];
         self.depth = Some(vec![1.0; width as usize * height as usize]);
+        self.stencil = Some(vec![0u8; width as usize * height as usize]);
     }
 
     /// Straight (non-premultiplied) RGBA8888 at `(x, y)`.
@@ -227,6 +232,66 @@ pub enum Cull {
     FrontAndBack,
 }
 
+/// A GLES2 stencil operation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(missing_docs)]
+pub enum StencilOp {
+    Keep,
+    Zero,
+    Replace,
+    Incr,
+    Decr,
+    Invert,
+    IncrWrap,
+    DecrWrap,
+}
+
+impl StencilOp {
+    /// Apply the operation to `stored` (masked later by `write_mask`).
+    #[must_use]
+    pub fn apply(self, stored: u8, reference: u8) -> u8 {
+        match self {
+            StencilOp::Keep => stored,
+            StencilOp::Zero => 0,
+            StencilOp::Replace => reference,
+            StencilOp::Incr => stored.saturating_add(1),
+            StencilOp::Decr => stored.saturating_sub(1),
+            StencilOp::Invert => !stored,
+            StencilOp::IncrWrap => stored.wrapping_add(1),
+            StencilOp::DecrWrap => stored.wrapping_sub(1),
+        }
+    }
+}
+
+/// Per-face stencil state (`glStencilFunc[Separate]` + `glStencilOp[Separate]`).
+#[derive(Clone, Copy, Debug)]
+#[allow(missing_docs)]
+pub struct StencilFace {
+    pub func: DepthFunc,
+    pub reference: i32,
+    pub value_mask: u32,
+    pub write_mask: u32,
+    pub sfail: StencilOp,
+    pub dpfail: StencilOp,
+    pub dppass: StencilOp,
+}
+
+impl StencilFace {
+    /// `GL_ALWAYS`, ref 0, masks 0xFF, all ops `KEEP` (the GLES2 initial state).
+    #[must_use]
+    pub fn always() -> StencilFace {
+        StencilFace {
+            func: DepthFunc::Always,
+            reference: 0,
+            value_mask: 0xFF,
+            write_mask: 0xFF,
+            sfail: StencilOp::Keep,
+            dpfail: StencilOp::Keep,
+            dppass: StencilOp::Keep,
+        }
+    }
+}
+
 /// Fixed-function state for one draw.
 #[derive(Clone, Copy, Debug)]
 #[allow(missing_docs)]
@@ -244,6 +309,12 @@ pub struct RasterState {
     pub cull: Option<Cull>,
     /// `true` = counter-clockwise is front-facing.
     pub front_ccw: bool,
+    /// `glEnable(GL_STENCIL_TEST)`.
+    pub stencil_test: bool,
+    /// Front-facing stencil state.
+    pub stencil_front: StencilFace,
+    /// Back-facing stencil state.
+    pub stencil_back: StencilFace,
 }
 
 impl Default for RasterState {
@@ -258,6 +329,9 @@ impl Default for RasterState {
             color_mask: [true; 4],
             cull: None,
             front_ccw: true,
+            stencil_test: false,
+            stencil_front: StencilFace::always(),
+            stencil_back: StencilFace::always(),
         }
     }
 }
@@ -297,9 +371,17 @@ fn edge(ax: f32, ay: f32, bx: f32, by: f32, px: f32, py: f32) -> f32 {
     (bx - ax) * (py - ay) - (by - ay) * (px - ax)
 }
 
-/// Interpolate `a` at weights `(w0, w1, w2)` with perspective correction.
-fn interpolate(a: &ScreenVertex, b: &ScreenVertex, c: &ScreenVertex, w: [f32; 3], iw: f32) -> Vec<Value> {
-    let mut out = Vec::with_capacity(a.varyings.len());
+/// Interpolate `a` at weights `(w0, w1, w2)` with perspective correction,
+/// writing into a reused buffer (no per-fragment allocation).
+fn interpolate_into(
+    out: &mut Vec<Value>,
+    a: &ScreenVertex,
+    b: &ScreenVertex,
+    c: &ScreenVertex,
+    w: [f32; 3],
+    iw: f32,
+) {
+    out.clear();
     for i in 0..a.varyings.len() {
         let va = &a.varyings[i];
         let vb = b.varyings.get(i).unwrap_or(va);
@@ -326,7 +408,6 @@ fn interpolate(a: &ScreenVertex, b: &ScreenVertex, c: &ScreenVertex, w: [f32; 3]
             other => other.clone(),
         });
     }
-    out
 }
 
 /// Rasterise one triangle.
@@ -388,34 +469,88 @@ where
     let (y0, y1) = (min_y as i32, max_y as i32);
     let inv_area = 1.0 / area;
     let mut shaded = 0usize;
+    let mut varyings: Vec<Value> = Vec::new();
+    // Edge functions are affine in `x`, so step them along each scanline
+    // instead of re-evaluating three multiplies per pixel.
+    let step0 = b.y - c.y;
+    let step1 = c.y - a.y;
+    let step2 = a.y - b.y;
+    let px0 = x0 as f32 + 0.5;
 
     for y in y0..y1 {
         let py = y as f32 + 0.5;
+        let mut e0 = edge(b.x, b.y, c.x, c.y, px0, py);
+        let mut e1 = edge(c.x, c.y, a.x, a.y, px0, py);
+        let mut e2 = edge(a.x, a.y, b.x, b.y, px0, py);
         for x in x0..x1 {
-            let px = x as f32 + 0.5;
-            let w0 = edge(b.x, b.y, c.x, c.y, px, py) * inv_area;
-            let w1 = edge(c.x, c.y, a.x, a.y, px, py) * inv_area;
-            let w2 = edge(a.x, a.y, b.x, b.y, px, py) * inv_area;
+            let w0 = e0 * inv_area;
+            let w1 = e1 * inv_area;
+            let w2 = e2 * inv_area;
+            e0 += step0;
+            e1 += step1;
+            e2 += step2;
             if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                 continue;
             }
+            let px = x as f32 + 0.5;
             let z = w0 * a.z + w1 * b.z + w2 * c.z;
             if !(0.0..=1.0).contains(&z) {
                 continue;
             }
             let depth_index = y as usize * fb.width as usize + x as usize;
-            if state.depth_test {
-                let stored = fb
-                    .depth
-                    .as_ref()
-                    .and_then(|d| d.get(depth_index).copied())
-                    .unwrap_or(1.0);
-                if !state.depth_func.passes(z, stored) {
-                    continue;
-                }
+            // GL order: stencil test → depth test; the stencil op runs on
+            // every fragment that reaches the buffer, pass or fail.
+            let (stencil_pass, depth_pass) = {
+                let depth_pass = if state.depth_test {
+                    let stored = fb
+                        .depth
+                        .as_ref()
+                        .and_then(|d| d.get(depth_index).copied())
+                        .unwrap_or(1.0);
+                    state.depth_func.passes(z, stored)
+                } else {
+                    true
+                };
+                let stencil_pass = if state.stencil_test {
+                    match fb.stencil.as_ref().and_then(|s| s.get(depth_index).copied()) {
+                        Some(stored) => {
+                            let face = if is_front {
+                                state.stencil_front
+                            } else {
+                                state.stencil_back
+                            };
+                            let sref = (face.reference as u32) & face.value_mask;
+                            let sval = u32::from(stored) & face.value_mask;
+                            let pass = face.func.passes(sref as f32, sval as f32);
+                            let op = if !pass {
+                                face.sfail
+                            } else if !depth_pass {
+                                face.dpfail
+                            } else {
+                                face.dppass
+                            };
+                            let new = op.apply(stored, face.reference as u8);
+                            if let Some(s) = fb.stencil.as_mut() {
+                                if depth_index < s.len() {
+                                    s[depth_index] =
+                                        (stored & !(face.write_mask as u8))
+                                            | (new & face.write_mask as u8);
+                                }
+                            }
+                            pass
+                        }
+                        None => true,
+                    }
+                } else {
+                    true
+                };
+                (stencil_pass, depth_pass)
+            };
+            if !stencil_pass || !depth_pass {
+                continue;
             }
             let iw = w0 * a.inv_w + w1 * b.inv_w + w2 * c.inv_w;
-            let varyings = interpolate(a, b, c, [w0, w1, w2], iw);
+            interpolate_into(&mut varyings, a, b, c, [w0, w1, w2], iw);
             let frag_coord = [px, py, z, if iw == 0.0 { 1.0 } else { 1.0 / iw }];
             let Some(src) = fragment(&varyings, frag_coord) else {
                 continue;
@@ -528,6 +663,69 @@ mod tests {
         // A farther fragment must not overwrite the nearer one.
         assert_eq!(quad(0.5, [0.0, 1.0, 0.0, 1.0]), 0);
         assert_eq!(fb.pixel(0, 0), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn stencil_test_masks_fragments() {
+        let mut fb = Framebuffer::new(4, 4);
+        // Left half of the stencil buffer is 1, right half is 0.
+        if let Some(s) = fb.stencil.as_mut() {
+            for y in 0..4usize {
+                for x in 0..4usize {
+                    s[y * 4 + x] = if x < 2 { 1 } else { 0 };
+                }
+            }
+        }
+        let st = RasterState {
+            viewport: (0, 0, 4, 4),
+            stencil_test: true,
+            stencil_front: StencilFace {
+                func: DepthFunc::Equal,
+                reference: 1,
+                value_mask: 0xFF,
+                write_mask: 0xFF,
+                sfail: StencilOp::Keep,
+                dpfail: StencilOp::Keep,
+                dppass: StencilOp::Keep,
+            },
+            ..RasterState::default()
+        };
+        let a = project([-1.0, -1.0, 0.0, 1.0], vec![], &st);
+        let b = project([3.0, -1.0, 0.0, 1.0], vec![], &st);
+        let c = project([-1.0, 3.0, 0.0, 1.0], vec![], &st);
+        triangle(&mut fb, &st, [&a, &b, &c], |_, _| Some([1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(fb.pixel(0, 0), [255, 0, 0, 255], "stencil==1 passes");
+        assert_eq!(fb.pixel(3, 0), [0, 0, 0, 0], "stencil==0 is masked");
+    }
+
+    #[test]
+    fn stencil_invert_op_runs_on_failed_test() {
+        let mut fb = Framebuffer::new(2, 1);
+        if let Some(s) = fb.stencil.as_mut() {
+            s[0] = 0x0F;
+            s[1] = 0x00;
+        }
+        let st = RasterState {
+            viewport: (0, 0, 2, 1),
+            stencil_test: true,
+            stencil_front: StencilFace {
+                func: DepthFunc::Equal,
+                reference: 0,
+                value_mask: 0xFF,
+                write_mask: 0xFF,
+                sfail: StencilOp::Invert,
+                dpfail: StencilOp::Keep,
+                dppass: StencilOp::Keep,
+            },
+            ..RasterState::default()
+        };
+        let a = project([-1.0, -1.0, 0.0, 1.0], vec![], &st);
+        let b = project([1.0, -1.0, 0.0, 1.0], vec![], &st);
+        let c = project([-1.0, 1.0, 0.0, 1.0], vec![], &st);
+        triangle(&mut fb, &st, [&a, &b, &c], |_, _| Some([1.0, 1.0, 1.0, 1.0]));
+        let s = fb.stencil.as_ref().unwrap();
+        assert_eq!(s[0], 0xF0, "failing fragment inverts the stored value");
+        assert_eq!(s[1], 0x00, "passing fragment keeps it");
     }
 
     #[test]

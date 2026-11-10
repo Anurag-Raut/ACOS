@@ -8,3 +8,7 @@ description = "ACOS software GLES2/EGL substrate: GLSL ES 1.00 interpreter + sca
 
 [dependencies]
 acos-native-loader = { path = "../acos-native-loader" }
+
+[[bench]]
+name = "frame"
+harness = false

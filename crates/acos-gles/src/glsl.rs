@@ -187,6 +187,9 @@ impl std::fmt::Display for EvalError {
 
 type EvalResult<T> = Result<T, EvalError>;
 
+/// Hard cap on `for`-loop iterations (a non-constant bound is an error).
+const FOR_ITERATION_CAP: u32 = 4096;
+
 fn err<T>(msg: impl Into<String>) -> EvalResult<T> {
     Err(EvalError(msg.into()))
 }
@@ -245,6 +248,15 @@ pub enum Stmt {
         cond: Expr,
         then: Vec<Stmt>,
         otherwise: Option<Vec<Stmt>>,
+    },
+    /// `for (init; cond; step) body` — unrolled at evaluation with a hard
+    /// iteration cap, so a non-constant bound is a structured runtime error
+    /// rather than an unbounded loop.
+    For {
+        init: Vec<Stmt>,
+        cond: Option<Expr>,
+        step: Option<Expr>,
+        body: Vec<Stmt>,
     },
     Discard,
     Empty,
@@ -398,7 +410,7 @@ fn lex(src: &str) -> Result<Vec<Tok>, String> {
             }
             continue;
         }
-        const TWO: [&str; 8] = ["==", "!=", "<=", ">=", "&&", "||", "+=", "-="];
+        const TWO: [&str; 10] = ["==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "++", "--"];
         if i + 1 < bytes.len() {
             let pair: String = bytes[i..i + 2].iter().collect();
             if let Some(op) = TWO.iter().find(|o| **o == pair) {
@@ -653,9 +665,44 @@ impl Parser {
                     self.expect_punct(";")?;
                     return Ok(Stmt::Discard);
                 }
-                "for" | "while" | "do" => {
+                "for" => {
+                    self.next();
+                    self.expect_punct("(")?;
+                    let init = if self.eat_punct(";") {
+                        Vec::new()
+                    } else {
+                        vec![self.stmt()?]
+                    };
+                    let cond = if self.eat_punct(";") {
+                        None
+                    } else {
+                        let e = self.expr()?;
+                        self.expect_punct(";")?;
+                        Some(e)
+                    };
+                    let step = if self.eat_punct(")") {
+                        None
+                    } else {
+                        let e = self.expr()?;
+                        self.expect_punct(")")?;
+                        Some(e)
+                    };
+                    let body = if matches!(self.peek(), Some(Tok::Punct("{"))) {
+                        self.block()?
+                    } else {
+                        vec![self.stmt()?]
+                    };
+                    return Ok(Stmt::For {
+                        init,
+                        cond,
+                        step,
+                        body,
+                    });
+                }
+                "while" | "do" => {
                     return Err(format!(
-                        "`{word}` loops are outside the interpreted GLSL subset"
+                        "`{word}` loops are outside the interpreted GLSL subset (only bounded \
+                         `for` loops are evaluated)"
                     ))
                 }
                 "break" | "continue" => {
@@ -681,6 +728,21 @@ impl Parser {
 
     fn assignment(&mut self) -> Result<Expr, String> {
         let lhs = self.binary(0)?;
+        // Postfix `++`/`--` desugar to `target += 1.0`. `grab` must be a
+        // plain or swizzled lvalue; the evaluator rejects anything else.
+        let postfix_op = match self.peek() {
+            Some(Tok::Punct("++")) => Some(BinOp::Add),
+            Some(Tok::Punct("--")) => Some(BinOp::Sub),
+            _ => None,
+        };
+        if let Some(op) = postfix_op {
+            self.next();
+            return Ok(Expr::Assign {
+                target: Box::new(lhs),
+                op: Some(op),
+                value: Box::new(Expr::Float(1.0)),
+            });
+        }
         let op = match self.peek() {
             Some(Tok::Punct("=")) => None,
             Some(Tok::Punct("+=")) => Some(BinOp::Add),
@@ -728,6 +790,21 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
+        let prefix_op = if self.eat_punct("++") {
+            Some(BinOp::Add)
+        } else if self.eat_punct("--") {
+            Some(BinOp::Sub)
+        } else {
+            None
+        };
+        if let Some(op) = prefix_op {
+            let target = self.unary()?;
+            return Ok(Expr::Assign {
+                target: Box::new(target),
+                op: Some(op),
+                value: Box::new(Expr::Float(1.0)),
+            });
+        }
         if self.eat_punct("-") {
             return Ok(Expr::Neg(Box::new(self.unary()?)));
         }
@@ -770,6 +847,12 @@ impl Parser {
                     return Ok(Expr::Bool(false));
                 }
                 if self.eat_punct("(") {
+                    if matches!(name.as_str(), "dFdx" | "dFdy" | "fwidth") {
+                        return Err(format!(
+                            "`{name}` (fragment derivative builtin) is outside the interpreted \
+                             GLSL subset"
+                        ));
+                    }
                     let mut args = Vec::new();
                     if !self.eat_punct(")") {
                         loop {
@@ -849,8 +932,15 @@ impl Unit {
 /// Texture access for `texture2D` during fragment evaluation.
 pub trait TextureLookup {
     /// Sample `unit` at `(u, v)` in normalised `[0,1]` coordinates, returning
-    /// straight (non-premultiplied) RGBA.
+    /// straight (non-premultiplied) RGBA at the base level.
     fn sample(&self, unit: i32, u: f32, v: f32) -> [f32; 4];
+
+    /// Sample with a LOD hint (in texels per pixel units). The default ignores
+    /// the hint, so a level-0-only provider stays correct.
+    fn sample_lod(&self, unit: i32, u: f32, v: f32, lod: f32) -> [f32; 4] {
+        let _ = lod;
+        self.sample(unit, u, v)
+    }
 }
 
 /// A no-texture lookup (all samples are opaque black with alpha 1).
@@ -945,6 +1035,8 @@ enum Flow {
 struct Interpreter<'a> {
     /// Texture units visible to `texture2D`.
     textures: &'a dyn TextureLookup,
+    /// LOD hint forwarded to mipmapped texture lookups.
+    lod: f32,
 }
 
 impl<'a> Interpreter<'a> {
@@ -1113,7 +1205,7 @@ impl<'a> Interpreter<'a> {
         for a in args {
             vals.push(self.eval(a, env)?);
         }
-        builtin(name, &vals, self.textures)
+        builtin(name, &vals, self.textures, self.lod)
     }
 
     fn run_body(&self, body: &[Stmt], env: &mut Env) -> EvalResult<Flow> {
@@ -1167,6 +1259,49 @@ impl<'a> Interpreter<'a> {
                 };
                 env.pop();
                 flow
+            }
+            Stmt::For {
+                init,
+                cond,
+                step,
+                body,
+            } => {
+                env.push();
+                let mut flow = Flow::Normal;
+                for s in init {
+                    match self.run_stmt(s, env)? {
+                        Flow::Normal => {}
+                        other => {
+                            flow = other;
+                            break;
+                        }
+                    }
+                }
+                let mut iterations = 0u32;
+                loop {
+                    if !matches!(flow, Flow::Normal) {
+                        break;
+                    }
+                    if let Some(cond) = cond {
+                        if !self.eval(cond, env)?.truthy() {
+                            break;
+                        }
+                    }
+                    flow = self.run_body(body, env)?;
+                    if let Some(step) = step {
+                        self.eval(step, env)?;
+                    }
+                    iterations += 1;
+                    if iterations > FOR_ITERATION_CAP {
+                        env.pop();
+                        return err(format!(
+                            "for loop exceeded the interpreter iteration cap ({FOR_ITERATION_CAP}); \
+                             only bounded loops are evaluated"
+                        ));
+                    }
+                }
+                env.pop();
+                Ok(flow)
             }
         }
     }
@@ -1306,7 +1441,19 @@ fn components_eq(a: &Value, b: &Value) -> bool {
 }
 
 fn construct(ty: Ty, args: &[Value]) -> EvalResult<Value> {
-    let flat: Vec<f32> = args.iter().flat_map(|a| a.to_vec4().to_vec()).collect();
+    // Scalars contribute one component, vectors/matrices their live extent.
+    // (Broadcasting a scalar to four here would corrupt `vec4(a, b, c, d)`.)
+    let mut flat: Vec<f32> = Vec::new();
+    for a in args {
+        match a {
+            Value::F(x) => flat.push(*x),
+            Value::I(x) => flat.push(*x as f32),
+            Value::B(b) => flat.push(f32::from(u8::from(*b))),
+            Value::V(c, n) => flat.extend_from_slice(&c[..*n]),
+            Value::M(m, n) => flat.extend_from_slice(&m[..n * n]),
+            Value::S(s) => flat.push(*s as f32),
+        }
+    }
     let n = ty.cols();
     if ty.is_matrix() {
         if args.len() == 1 && args[0].width() == 1 {
@@ -1334,6 +1481,10 @@ fn construct(ty: Ty, args: &[Value]) -> EvalResult<Value> {
         Ty::Int => Ok(Value::I(args.first().map_or(0, |v| v.to_f32() as i32))),
         Ty::Bool => Ok(Value::B(args.first().is_some_and(Value::truthy))),
         Ty::Vec2 | Ty::Vec3 | Ty::Vec4 => {
+            if args.len() == 1 && args[0].width() == 1 {
+                // `vec4(x)` broadcasts a single scalar (GLSL ES 1.00 §5.4.2).
+                return Ok(Value::V([args[0].to_f32(); 4], n));
+            }
             if flat.len() < n {
                 return err(format!(
                     "{} constructor needs {n} components, got {}",
@@ -1365,7 +1516,12 @@ fn ty_name(ty: Ty) -> &'static str {
     }
 }
 
-fn builtin(name: &str, args: &[Value], textures: &dyn TextureLookup) -> EvalResult<Value> {
+fn builtin(
+    name: &str,
+    args: &[Value],
+    textures: &dyn TextureLookup,
+    lod: f32,
+) -> EvalResult<Value> {
     let a = |i: usize| args.get(i).cloned().unwrap_or(Value::F(0.0));
     Ok(match name {
         "texture2D" => {
@@ -1374,7 +1530,7 @@ fn builtin(name: &str, args: &[Value], textures: &dyn TextureLookup) -> EvalResu
                 other => other.to_f32() as i32,
             };
             let c = a(1).to_vec4();
-            let s = textures.sample(unit, c[0], c[1]);
+            let s = textures.sample_lod(unit, c[0], c[1], lod);
             Value::vec4(s[0], s[1], s[2], s[3])
         }
         "abs" => map1(&a(0), f32::abs),
@@ -1509,6 +1665,7 @@ pub fn run_vertex(
     env.declare("gl_PointSize", Value::F(1.0));
     let interp = Interpreter {
         textures: &NoTextures,
+        lod: 0.0,
     };
     let main = unit
         .functions
@@ -1553,6 +1710,27 @@ pub fn run_fragment(
     frag_coords: [f32; 4],
     textures: &dyn TextureLookup,
 ) -> EvalResult<Option<[f32; 4]>> {
+    run_fragment_lod(
+        unit,
+        uniforms,
+        varyings,
+        interpolation,
+        frag_coords,
+        0.0,
+        textures,
+    )
+}
+
+/// Like [`run_fragment`] but forwards a LOD hint to mipmapped texture lookups.
+pub fn run_fragment_lod(
+    unit: &Unit,
+    uniforms: &[(String, Value)],
+    varyings: &[String],
+    interpolation: &[Value],
+    frag_coords: [f32; 4],
+    lod: f32,
+    textures: &dyn TextureLookup,
+) -> EvalResult<Option<[f32; 4]>> {
     let mut env = Env::new();
     for (name, v) in uniforms {
         env.declare(name, v.clone());
@@ -1564,7 +1742,7 @@ pub fn run_fragment(
     env.declare("gl_FrontFacing", Value::B(true));
     env.declare("gl_FragColor", Value::vec4(0.0, 0.0, 0.0, 1.0));
     env.declare("gl_FragData", Value::vec4(0.0, 0.0, 0.0, 1.0));
-    let interp = Interpreter { textures };
+    let interp = Interpreter { textures, lod };
     let main = unit
         .functions
         .iter()
@@ -1622,9 +1800,13 @@ mod tests {
 
     #[test]
     fn rejects_outside_subset_with_a_reason() {
-        let loops = "attribute vec4 p; void main() { for (int i = 0; i < 4; i++) {} }";
-        let e = parse(loops, Stage::Vertex).unwrap_err();
-        assert!(e.contains("`for`"), "{e}");
+        let derivative = "void main() { float d = dFdx(gl_FragCoord.x); }";
+        let e = parse(derivative, Stage::Fragment).unwrap_err();
+        assert!(e.contains("dFdx"), "{e}");
+
+        let while_loop = "void main() { while (true) {} }";
+        let e = parse(while_loop, Stage::Vertex).unwrap_err();
+        assert!(e.contains("`while`"), "{e}");
 
         let pp = "#ifdef GL_ES\nvoid main() {}\n#else\nvoid main() {}\n#endif";
         let e = parse(pp, Stage::Vertex).unwrap_err();
@@ -1667,6 +1849,17 @@ mod tests {
         assert!((out.clip[1] + 0.25).abs() < 1e-6, "{:?}", out.clip);
         assert_eq!(out.varyings.len(), 1);
         assert_eq!(out.varyings[0].to_vec4()[0], 0.25);
+    }
+
+    #[test]
+    fn evaluates_bounded_for_loops() {
+        let src = "precision mediump float; void main() { float acc = 0.0; \
+                   for (int i = 0; i < 4; i++) { acc += 1.0; } gl_FragColor = vec4(acc); }";
+        let unit = parse(src, Stage::Fragment).unwrap();
+        let out = run_fragment(&unit, &[], &[], &[], [0.0; 4], &NoTextures)
+            .unwrap()
+            .expect("not discarded");
+        assert!((out[0] - 4.0).abs() < 1e-6, "{out:?}");
     }
 
     #[test]

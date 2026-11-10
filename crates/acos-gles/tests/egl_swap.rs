@@ -353,3 +353,124 @@ fn unknown_entry_points_are_reported_not_silent() {
     );
     egl::reset();
 }
+
+#[test]
+fn client_side_vertex_arrays_draw_without_a_buffer() {
+    let _g = lock();
+    let host = Arc::new(egl::RecordedWindowHost::default());
+    host.add_window(WINDOW as u64, SIZE, SIZE);
+    let ctx = setup(&host);
+    let program = program(
+        "attribute vec2 a_pos; void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }",
+        "void main() { gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); }",
+    );
+    unsafe {
+        // No ARRAY_BUFFER is bound: the pointer is a client-side host array.
+        let vertices: [f32; 6] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0];
+        let attr = {
+            let n = CString::new("a_pos").unwrap();
+            ffi::gl_get_attrib_location(program, n.as_ptr() as usize)
+        };
+        ffi::gl_enable_vertex_attrib_array(attr as u32);
+        ffi::gl_vertex_attrib_pointer(
+            attr as u32,
+            2,
+            c::FLOAT,
+            0,
+            0,
+            vertices.as_ptr() as usize,
+        );
+        ffi::gl_clear_color(0.0, 0.0, 0.0, 1.0);
+        ffi::gl_clear(c::COLOR_BUFFER_BIT);
+        ffi::gl_draw_arrays(c::TRIANGLES, 0, 3);
+        assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "client array draw");
+        assert_eq!(ffi::egl_swap_buffers(ctx.display, ctx.surface), egl::EGL_TRUE);
+    }
+    let frame = host.last_frame().expect("frame");
+    let px = |x: u32, y: u32| -> [u8; 4] {
+        let i = ((y * SIZE + x) * 4) as usize;
+        [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]]
+    };
+    assert_eq!(px(0, SIZE - 1), [0, 255, 0, 255], "client triangle drawn");
+    egl::reset();
+}
+
+#[test]
+fn copy_tex_image_and_generate_mipmap_sample_without_error() {
+    let _g = lock();
+    let host = Arc::new(egl::RecordedWindowHost::default());
+    host.add_window(WINDOW as u64, SIZE, SIZE);
+    let ctx = setup(&host);
+    let program = program(
+        "attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv; \
+         void main() { v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }",
+        "precision mediump float; uniform sampler2D u_tex; varying vec2 v_uv; \
+         void main() { gl_FragColor = texture2D(u_tex, v_uv); }",
+    );
+    unsafe {
+        // Void out the old error state, then clear the draw buffer to a
+        // distinctive colour and copy it into a texture.
+        let _ = ffi::gl_get_error();
+        ffi::gl_clear_color(0.2, 0.4, 0.8, 1.0);
+        ffi::gl_clear(c::COLOR_BUFFER_BIT);
+        let mut texture = 0u32;
+        ffi::gl_gen_textures(1, &mut texture as *mut u32 as usize);
+        ffi::gl_bind_texture(c::TEXTURE_2D, texture);
+        ffi::gl_copy_tex_image2d(
+            c::TEXTURE_2D,
+            0,
+            c::RGBA as i32,
+            0,
+            0,
+            SIZE as i32,
+            SIZE as i32,
+            0,
+        );
+        ffi::gl_generate_mipmap(c::TEXTURE_2D);
+        ffi::gl_tex_parameteri(
+            c::TEXTURE_2D,
+            c::TEXTURE_MIN_FILTER,
+            c::LINEAR_MIPMAP_LINEAR as i32,
+        );
+        ffi::gl_tex_parameteri(c::TEXTURE_2D, c::TEXTURE_MAG_FILTER, c::LINEAR as i32);
+        assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "copy + mipmap");
+
+        let vertices: [f32; 24] = [
+            -1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0,
+            -1.0, 1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        ];
+        let mut buffer = 0u32;
+        ffi::gl_gen_buffers(1, &mut buffer as *mut u32 as usize);
+        ffi::gl_bind_buffer(c::ARRAY_BUFFER, buffer);
+        ffi::gl_buffer_data(
+            c::ARRAY_BUFFER,
+            (vertices.len() * 4) as i32,
+            vertices.as_ptr() as usize,
+            c::STATIC_DRAW,
+        );
+        let pos = {
+            let n = CString::new("a_pos").unwrap();
+            ffi::gl_get_attrib_location(program, n.as_ptr() as usize)
+        };
+        let uv = {
+            let n = CString::new("a_uv").unwrap();
+            ffi::gl_get_attrib_location(program, n.as_ptr() as usize)
+        };
+        ffi::gl_enable_vertex_attrib_array(pos as u32);
+        ffi::gl_vertex_attrib_pointer(pos as u32, 2, c::FLOAT, 0, 16, 0);
+        ffi::gl_enable_vertex_attrib_array(uv as u32);
+        ffi::gl_vertex_attrib_pointer(uv as u32, 2, c::FLOAT, 0, 16, 8);
+        ffi::gl_draw_arrays(c::TRIANGLES, 0, 6);
+        assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "textured draw");
+        assert_eq!(ffi::egl_swap_buffers(ctx.display, ctx.surface), egl::EGL_TRUE);
+    }
+    let frame = host.last_frame().expect("frame");
+    let px = |x: u32, y: u32| -> [u8; 4] {
+        let i = ((y * SIZE + x) * 4) as usize;
+        [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]]
+    };
+    // The copied colour survives mip generation and is sampled everywhere.
+    assert_eq!(px(0, 0), [51, 102, 204, 255]);
+    assert_eq!(px(SIZE - 1, SIZE - 1), [51, 102, 204, 255]);
+    egl::reset();
+}

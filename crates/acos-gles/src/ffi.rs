@@ -527,38 +527,38 @@ pub unsafe extern "C" fn gl_flush() {
 }
 
 /// `glStencilFunc`.
-pub unsafe extern "C" fn gl_stencil_func(_func: u32, _r: i32, _m: u32) {
-    gl_ctx("glStencilFunc", (), |gl| gl.stencil_noop("glStencilFunc"));
+pub unsafe extern "C" fn gl_stencil_func(func: u32, r: i32, m: u32) {
+    gl_ctx("glStencilFunc", (), |gl| gl.stencil_func(func, r, m));
 }
 
 /// `glStencilFuncSeparate`.
-pub unsafe extern "C" fn gl_stencil_func_separate(_face: u32, _func: u32, _r: i32, _m: u32) {
+pub unsafe extern "C" fn gl_stencil_func_separate(face: u32, func: u32, r: i32, m: u32) {
     gl_ctx("glStencilFuncSeparate", (), |gl| {
-        gl.stencil_noop("glStencilFuncSeparate")
+        gl.stencil_func_separate(face, func, r, m)
     });
 }
 
 /// `glStencilMask`.
-pub unsafe extern "C" fn gl_stencil_mask(_mask: u32) {
-    gl_ctx("glStencilMask", (), |gl| gl.stencil_noop("glStencilMask"));
+pub unsafe extern "C" fn gl_stencil_mask(mask: u32) {
+    gl_ctx("glStencilMask", (), |gl| gl.stencil_mask(mask));
 }
 
 /// `glStencilMaskSeparate`.
-pub unsafe extern "C" fn gl_stencil_mask_separate(_face: u32, _mask: u32) {
+pub unsafe extern "C" fn gl_stencil_mask_separate(face: u32, mask: u32) {
     gl_ctx("glStencilMaskSeparate", (), |gl| {
-        gl.stencil_noop("glStencilMaskSeparate")
+        gl.stencil_mask_separate(face, mask)
     });
 }
 
 /// `glStencilOp`.
-pub unsafe extern "C" fn gl_stencil_op(_sf: u32, _dp: u32, _dpp: u32) {
-    gl_ctx("glStencilOp", (), |gl| gl.stencil_noop("glStencilOp"));
+pub unsafe extern "C" fn gl_stencil_op(sf: u32, dp: u32, dpp: u32) {
+    gl_ctx("glStencilOp", (), |gl| gl.stencil_op(sf, dp, dpp));
 }
 
 /// `glStencilOpSeparate`.
-pub unsafe extern "C" fn gl_stencil_op_separate(_face: u32, _sf: u32, _dp: u32, _dpp: u32) {
+pub unsafe extern "C" fn gl_stencil_op_separate(face: u32, sf: u32, dp: u32, dpp: u32) {
     gl_ctx("glStencilOpSeparate", (), |gl| {
-        gl.stencil_noop("glStencilOpSeparate")
+        gl.stencil_op_separate(face, sf, dp, dpp)
     });
 }
 
@@ -997,20 +997,38 @@ pub unsafe extern "C" fn gl_vertex_attrib_pointer(
     stride: i32,
     pointer: usize,
 ) {
-    let has_buffer = egl::with_current_state(|gl| gl.array_buffer != 0).unwrap_or(false);
-    if !has_buffer && pointer >= 4096 {
-        unsupported(
-            "glVertexAttribPointer",
-            "client-side vertex arrays are not supported; bind an ARRAY_BUFFER",
-        );
-        gl_ctx("glVertexAttribPointer", (), |gl| {
-            gl.set_error(c::INVALID_OPERATION)
-        });
-        return;
-    }
+    // A client-side array keeps the guest pointer; the bytes are copied by
+    // `prepare_client_arrays` at draw time through the checked `bytes` reader.
     gl_ctx("glVertexAttribPointer", (), |gl| {
-        gl.vertex_attrib_pointer(index, size, ty, normalized != 0, stride, pointer as i32)
+        gl.vertex_attrib_pointer(index, size, ty, normalized != 0, stride, pointer)
     });
+}
+
+/// Copy the guest bytes the enabled client-side vertex arrays need into the GL
+/// context, so `gl.rs` never touches a guest pointer.
+fn prepare_client_arrays(max_index: u32, call: &'static str) {
+    let reqs = match egl::with_current_state(|gl| gl.client_array_requirements(max_index)) {
+        Some(r) => r,
+        None => return,
+    };
+    for (slot, ptr, len) in reqs {
+        match unsafe { bytes(ptr, len) } {
+            Some(b) => {
+                let owned = b.to_vec();
+                gl_ctx(call, (), |gl| gl.set_client_array(slot, owned));
+            }
+            None => {
+                unsupported(
+                    call,
+                    format!(
+                        "client-side attribute {slot} range {ptr:#x}..+{len} is not a readable \
+                         guest address"
+                    ),
+                );
+                gl_ctx(call, (), |gl| gl.set_error(c::INVALID_OPERATION));
+            }
+        }
+    }
 }
 
 /// `glEnableVertexAttribArray`.
@@ -1069,6 +1087,9 @@ attrib_array_fn!(gl_vertex_attrib4fv, "glVertexAttrib4fv", 4);
 
 /// `glDrawArrays`.
 pub unsafe extern "C" fn gl_draw_arrays(mode: u32, first: i32, count: i32) {
+    if first >= 0 && count > 0 {
+        prepare_client_arrays((first + count - 1) as u32, "glDrawArrays");
+    }
     gl_draw("glDrawArrays", (), |gl, fb| {
         gl.draw_arrays(fb, mode, first, count)
     });
@@ -1076,6 +1097,14 @@ pub unsafe extern "C" fn gl_draw_arrays(mode: u32, first: i32, count: i32) {
 
 /// `glDrawElements`.
 pub unsafe extern "C" fn gl_draw_elements(mode: u32, count: i32, ty: u32, indices: usize) {
+    if count > 0 {
+        let max_index =
+            egl::with_current_state(|gl| gl.max_element_index(count, ty, indices as i32))
+                .flatten();
+        if let Some(max_index) = max_index {
+            prepare_client_arrays(max_index, "glDrawElements");
+        }
+    }
     gl_draw("glDrawElements", (), |gl, fb| {
         gl.draw_elements(fb, mode, count, ty, indices as i32)
     });
@@ -1301,21 +1330,44 @@ pub unsafe extern "C" fn gl_compressed_tex_sub_image2d(
 
 /// `glCopyTexSubImage2D`.
 pub unsafe extern "C" fn gl_copy_tex_sub_image2d(
-    _target: u32,
-    _level: i32,
-    _x: i32,
-    _y: i32,
-    _sx: i32,
-    _sy: i32,
-    _w: i32,
-    _h: i32,
+    target: u32,
+    level: i32,
+    xoffset: i32,
+    yoffset: i32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
 ) {
-    unsupported(
-        "glCopyTexSubImage2D",
-        "framebuffer-to-texture copies are not implemented; use glReadPixels",
-    );
-    gl_ctx("glCopyTexSubImage2D", (), |gl| {
-        gl.set_error(c::INVALID_OPERATION)
+    gl_draw("glCopyTexSubImage2D", (), |gl, fb| {
+        gl.copy_tex_sub_image_2d(fb, target, level, xoffset, yoffset, x, y, width, height)
+    });
+}
+
+/// `glCopyTexImage2D`.
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn gl_copy_tex_image2d(
+    target: u32,
+    level: i32,
+    internal_format: i32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    border: i32,
+) {
+    gl_draw("glCopyTexImage2D", (), |gl, fb| {
+        gl.copy_tex_image_2d(
+            fb,
+            target,
+            level,
+            internal_format,
+            x,
+            y,
+            width,
+            height,
+            border,
+        )
     });
 }
 
@@ -1744,6 +1796,7 @@ pub fn table() -> &'static [(&'static str, usize)] {
             "glCompressedTexImage2D" => gl_compressed_tex_image2d,
             "glCompressedTexSubImage2D" => gl_compressed_tex_sub_image2d,
             "glCopyTexSubImage2D" => gl_copy_tex_sub_image2d,
+            "glCopyTexImage2D" => gl_copy_tex_image2d,
             "glEGLImageTargetTexture2DOES" => gl_egl_image_target_texture2d_oes,
             "glTexStorage2D" => gl_tex_storage2d,
             // --- GLES2: framebuffers ---
