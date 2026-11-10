@@ -20,6 +20,34 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(c, "addressSize", "()I", address_size);
         vm.register_native(c, "pageSize", "()I", page_size);
         vm.register_native(c, "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", allocate_instance);
+        vm.register_native(c, "allocateMemory", "(J)J", allocate_memory);
+        vm.register_native(c, "freeMemory", "(J)V", free_memory);
+        vm.register_native(c, "reallocateMemory", "(JJ)J", reallocate_memory);
+        vm.register_native(c, "setMemory", "(JJB)V", set_memory_addr);
+        vm.register_native(c, "setMemory", "(Ljava/lang/Object;JJB)V", set_memory_obj);
+        vm.register_native(c, "copyMemory", "(JJJ)V", copy_memory_addr);
+        vm.register_native(c, "copyMemory", "(Ljava/lang/Object;JLjava/lang/Object;JJ)V", copy_memory_obj);
+        // `jdk.internal.misc.Unsafe.copyMemory(Object,long,Object,long,long)`
+        // funnels through this private native.
+        vm.register_native(c, "copyMemory0", "(Ljava/lang/Object;JLjava/lang/Object;JJ)V", copy_memory_obj);
+        vm.register_native(c, "copyMemoryFromPrimitiveArray", "(Ljava/lang/Object;JJJ)V", copy_from_array);
+        vm.register_native(c, "copyMemoryToPrimitiveArray", "(JLjava/lang/Object;JJ)V", copy_to_array);
+        // Raw-address (long) get/put family used by `java.nio.Bits` and
+        // `DirectByteBuffer`. Byte order is native little-endian.
+        vm.register_native(c, "getByte", "(J)B", get_byte_addr);
+        vm.register_native(c, "putByte", "(JB)V", put_byte_addr);
+        vm.register_native(c, "getShort", "(J)S", get_short_addr);
+        vm.register_native(c, "putShort", "(JS)V", put_short_addr);
+        vm.register_native(c, "getChar", "(J)C", get_char_addr);
+        vm.register_native(c, "putChar", "(JC)V", put_char_addr);
+        vm.register_native(c, "getInt", "(J)I", get_int_addr);
+        vm.register_native(c, "putInt", "(JI)V", put_int_addr);
+        vm.register_native(c, "getLong", "(J)J", get_long_addr);
+        vm.register_native(c, "putLong", "(JJ)V", put_long_addr);
+        vm.register_native(c, "getFloat", "(J)F", get_float_addr);
+        vm.register_native(c, "putFloat", "(JF)V", put_float_addr);
+        vm.register_native(c, "getDouble", "(J)D", get_double_addr);
+        vm.register_native(c, "putDouble", "(JD)V", put_double_addr);
         vm.register_native(c, "getInt", "(Ljava/lang/Object;J)I", get_int);
         vm.register_native(c, "putInt", "(Ljava/lang/Object;JI)V", put_int);
         vm.register_native(c, "getIntVolatile", "(Ljava/lang/Object;J)I", get_int);
@@ -247,8 +275,8 @@ fn set_array_slot_u32(a: &mut ArrayObj, offset: i64, v: u32) {
 fn get_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
-    let v = get_slot(vm, obj, off);
-    vm.ret_i32(ctx, v as i32);
+    let v = obj_read(vm, obj, off, 4)? as i32;
+    vm.ret_i32(ctx, v);
     Ok(())
 }
 
@@ -256,16 +284,14 @@ fn put_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_i32(ctx, 2);
-    set_slot(vm, obj, off, v as u32);
-    Ok(())
+    obj_write(vm, obj, off, 4, v as u32 as u64)
 }
 
 fn get_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
-    let lo = get_slot(vm, obj, off) as u64;
-    let hi = get_slot(vm, obj, off + 4) as u64;
-    vm.ret_i64(ctx, (lo | (hi << 32)) as i64);
+    let v = obj_read(vm, obj, off, 8)? as i64;
+    vm.ret_i64(ctx, v);
     Ok(())
 }
 
@@ -273,14 +299,14 @@ fn put_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_i64(ctx, 2) as u64;
-    set_slot(vm, obj, off, v as u32);
-    set_slot(vm, obj, off + 4, (v >> 32) as u32);
-    Ok(())
+    obj_write(vm, obj, off, 8, v)
 }
 
 fn get_byte(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
-    vm.ret_i32(ctx, (v as i8) as i32);
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 1)? as i8;
+    vm.ret_i32(ctx, v as i32);
     Ok(())
 }
 
@@ -288,13 +314,14 @@ fn put_byte(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_i32(ctx, 2);
-    set_slot(vm, obj, off, (v as i8) as i32 as u32);
-    Ok(())
+    obj_write(vm, obj, off, 1, (v as i8) as i32 as u32 as u64)
 }
 
 fn get_boolean(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
-    vm.ret_bool(ctx, v != 0);
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 1)? != 0;
+    vm.ret_bool(ctx, v);
     Ok(())
 }
 
@@ -302,13 +329,14 @@ fn put_boolean(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_bool(ctx, 2);
-    set_slot(vm, obj, off, v as u32);
-    Ok(())
+    obj_write(vm, obj, off, 1, v as u64)
 }
 
 fn get_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
-    vm.ret_i32(ctx, (v as u16) as i32);
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 2)? as u16;
+    vm.ret_i32(ctx, v as i32);
     Ok(())
 }
 
@@ -316,13 +344,14 @@ fn put_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_i32(ctx, 2);
-    set_slot(vm, obj, off, (v as u16) as u32);
-    Ok(())
+    obj_write(vm, obj, off, 2, (v as u16) as u64)
 }
 
 fn get_short(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
-    vm.ret_i32(ctx, (v as i16) as i32);
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 2)? as i16;
+    vm.ret_i32(ctx, v as i32);
     Ok(())
 }
 
@@ -330,12 +359,13 @@ fn put_short(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_i32(ctx, 2);
-    set_slot(vm, obj, off, (v as i16) as i32 as u32);
-    Ok(())
+    obj_write(vm, obj, off, 2, (v as i16) as i32 as u32 as u64)
 }
 
 fn get_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 4)? as u32;
     vm.ret_f32(ctx, f32::from_bits(v));
     Ok(())
 }
@@ -344,16 +374,14 @@ fn put_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_f32(ctx, 2);
-    set_slot(vm, obj, off, v.to_bits());
-    Ok(())
+    obj_write(vm, obj, off, 4, v.to_bits() as u64)
 }
 
 fn get_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
-    let lo = get_slot(vm, obj, off) as u64;
-    let hi = get_slot(vm, obj, off + 4) as u64;
-    vm.ret_f64(ctx, f64::from_bits(lo | (hi << 32)));
+    let v = obj_read(vm, obj, off, 8)?;
+    vm.ret_f64(ctx, f64::from_bits(v));
     Ok(())
 }
 
@@ -361,13 +389,13 @@ fn put_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_f64(ctx, 2).to_bits();
-    set_slot(vm, obj, off, v as u32);
-    set_slot(vm, obj, off + 4, (v >> 32) as u32);
-    Ok(())
+    obj_write(vm, obj, off, 8, v)
 }
 
 fn get_object(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let v = get_slot(vm, vm.arg_ref(ctx, 0), vm.arg_i64(ctx, 1));
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let v = obj_read(vm, obj, off, 4)? as u32;
     vm.ret_ref(ctx, v);
     Ok(())
 }
@@ -376,8 +404,7 @@ fn put_object(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let v = vm.arg_ref(ctx, 2);
-    set_slot(vm, obj, off, v);
-    Ok(())
+    obj_write(vm, obj, off, 4, v as u64)
 }
 
 fn cas_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -385,10 +412,10 @@ fn cas_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let off = vm.arg_i64(ctx, 1);
     let expect = vm.arg_i32(ctx, 2);
     let update = vm.arg_i32(ctx, 3);
-    let old = get_slot(vm, obj, off) as i32;
+    let old = obj_read(vm, obj, off, 4)? as i32;
     let ok = old == expect;
     if ok {
-        set_slot(vm, obj, off, update as u32);
+        obj_write(vm, obj, off, 4, update as u32 as u64)?;
     }
     vm.ret_bool(ctx, ok);
     Ok(())
@@ -399,14 +426,10 @@ fn cas_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let off = vm.arg_i64(ctx, 1);
     let expect = vm.arg_i64(ctx, 2);
     let update = vm.arg_i64(ctx, 3);
-    let lo = get_slot(vm, obj, off) as u64;
-    let hi = get_slot(vm, obj, off + 4) as u64;
-    let old = (lo | (hi << 32)) as i64;
+    let old = obj_read(vm, obj, off, 8)? as i64;
     let ok = old == expect;
     if ok {
-        let u = update as u64;
-        set_slot(vm, obj, off, u as u32);
-        set_slot(vm, obj, off + 4, (u >> 32) as u32);
+        obj_write(vm, obj, off, 8, update as u64)?;
     }
     vm.ret_bool(ctx, ok);
     Ok(())
@@ -417,10 +440,10 @@ fn cas_object(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let off = vm.arg_i64(ctx, 1);
     let expect = vm.arg_ref(ctx, 2);
     let update = vm.arg_ref(ctx, 3);
-    let old = get_slot(vm, obj, off);
+    let old = obj_read(vm, obj, off, 4)? as u32;
     let ok = old == expect;
     if ok {
-        set_slot(vm, obj, off, update);
+        obj_write(vm, obj, off, 4, update as u64)?;
     }
     vm.ret_bool(ctx, ok);
     Ok(())
@@ -430,8 +453,8 @@ fn get_and_add_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let delta = vm.arg_i32(ctx, 2);
-    let old = get_slot(vm, obj, off) as i32;
-    set_slot(vm, obj, off, old.wrapping_add(delta) as u32);
+    let old = obj_read(vm, obj, off, 4)? as i32;
+    obj_write(vm, obj, off, 4, old.wrapping_add(delta) as u32 as u64)?;
     vm.ret_i32(ctx, old);
     Ok(())
 }
@@ -440,12 +463,8 @@ fn get_and_add_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let delta = vm.arg_i64(ctx, 2);
-    let lo = get_slot(vm, obj, off) as u64;
-    let hi = get_slot(vm, obj, off + 4) as u64;
-    let old = (lo | (hi << 32)) as i64;
-    let nv = old.wrapping_add(delta) as u64;
-    set_slot(vm, obj, off, nv as u32);
-    set_slot(vm, obj, off + 4, (nv >> 32) as u32);
+    let old = obj_read(vm, obj, off, 8)? as i64;
+    obj_write(vm, obj, off, 8, old.wrapping_add(delta) as u64)?;
     vm.ret_i64(ctx, old);
     Ok(())
 }
@@ -454,8 +473,8 @@ fn get_and_set_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let nv = vm.arg_i32(ctx, 2);
-    let old = get_slot(vm, obj, off) as i32;
-    set_slot(vm, obj, off, nv as u32);
+    let old = obj_read(vm, obj, off, 4)? as i32;
+    obj_write(vm, obj, off, 4, nv as u32 as u64)?;
     vm.ret_i32(ctx, old);
     Ok(())
 }
@@ -464,11 +483,8 @@ fn get_and_set_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let nv = vm.arg_i64(ctx, 2) as u64;
-    let lo = get_slot(vm, obj, off) as u64;
-    let hi = get_slot(vm, obj, off + 4) as u64;
-    let old = (lo | (hi << 32)) as i64;
-    set_slot(vm, obj, off, nv as u32);
-    set_slot(vm, obj, off + 4, (nv >> 32) as u32);
+    let old = obj_read(vm, obj, off, 8)? as i64;
+    obj_write(vm, obj, off, 8, nv)?;
     vm.ret_i64(ctx, old);
     Ok(())
 }
@@ -477,8 +493,274 @@ fn get_and_set_object(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
     let off = vm.arg_i64(ctx, 1);
     let nv = vm.arg_ref(ctx, 2);
-    let old = get_slot(vm, obj, off);
-    set_slot(vm, obj, off, nv);
+    let old = obj_read(vm, obj, off, 4)? as u32;
+    obj_write(vm, obj, off, 4, nv as u64)?;
     vm.ret_ref(ctx, old);
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Object (array / instance) byte access
+// ---------------------------------------------------------------------------
+
+/// Byte offset within a Java array's backing store for an `Unsafe` array
+/// offset (`arrayBaseOffset + index * arrayIndexScale`).
+fn array_byte_offset(offset: i64) -> usize {
+    (offset - ARRAY_BASE as i64).max(0) as usize
+}
+
+fn is_array(vm: &Vm, obj: crate::heap::Handle) -> bool {
+    matches!(vm.heap.get(obj), Some(Object::Array(_)))
+}
+
+/// Read `n` (1/2/4/8) little-endian bytes from an array element or an
+/// instance field slot. Array accesses are bounds-checked and raise a Java
+/// `ArrayIndexOutOfBoundsException` on overflow.
+fn obj_read(vm: &mut Vm, obj: crate::heap::Handle, off: i64, n: usize) -> VmResult<u64> {
+    if is_array(vm, obj) {
+        let bytes = super::native_mem::array_read_bytes(vm, obj, array_byte_offset(off), n)?;
+        let mut v = 0u64;
+        for (i, b) in bytes.iter().enumerate() {
+            v |= (*b as u64) << (8 * i);
+        }
+        Ok(v)
+    } else if n == 8 {
+        let lo = get_slot(vm, obj, off) as u64;
+        let hi = get_slot(vm, obj, off + 4) as u64;
+        Ok(lo | (hi << 32))
+    } else {
+        Ok(get_slot(vm, obj, off) as u64)
+    }
+}
+
+fn obj_write(vm: &mut Vm, obj: crate::heap::Handle, off: i64, n: usize, v: u64) -> VmResult<()> {
+    if is_array(vm, obj) {
+        let bytes: Vec<u8> = (0..n).map(|i| (v >> (8 * i)) as u8).collect();
+        super::native_mem::array_write_bytes(vm, obj, array_byte_offset(off), &bytes)
+    } else if n == 8 {
+        set_slot(vm, obj, off, v as u32);
+        set_slot(vm, obj, off + 4, (v >> 32) as u32);
+        Ok(())
+    } else {
+        set_slot(vm, obj, off, v as u32);
+        Ok(())
+    }
+}
+
+/// Read `len` bytes from an array/native object (used by `setMemory`/`copyMemory`).
+fn obj_read_bytes(vm: &mut Vm, obj: crate::heap::Handle, off: i64, len: usize) -> VmResult<Vec<u8>> {
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+    if is_array(vm, obj) {
+        return super::native_mem::array_read_bytes(vm, obj, array_byte_offset(off), len);
+    }
+    let mut out = Vec::with_capacity(len);
+    let mut i = 0usize;
+    while i < len {
+        let chunk = (len - i).min(4);
+        out.extend_from_slice(&get_slot(vm, obj, off + i as i64).to_le_bytes()[..chunk]);
+        i += chunk;
+    }
+    Ok(out)
+}
+
+/// Write `bytes` to an array/native object (used by `setMemory`/`copyMemory`).
+fn obj_write_bytes(vm: &mut Vm, obj: crate::heap::Handle, off: i64, bytes: &[u8]) -> VmResult<()> {
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    if is_array(vm, obj) {
+        return super::native_mem::array_write_bytes(vm, obj, array_byte_offset(off), bytes);
+    }
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let chunk = (bytes.len() - i).min(4);
+        let mut w = [0u8; 4];
+        w[..chunk].copy_from_slice(&bytes[i..i + chunk]);
+        set_slot(vm, obj, off + i as i64, u32::from_le_bytes(w));
+        i += chunk;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Raw-address (`long`) access and memory management
+// ---------------------------------------------------------------------------
+
+fn len_of(vm: &mut Vm, n: i64) -> VmResult<usize> {
+    if n < 0 {
+        return Ok(0);
+    }
+    let n = n as usize;
+    let cap = super::native_mem::cap_bytes();
+    if n > cap {
+        return Err(super::native_mem::MemError::CapExceeded.throw(vm));
+    }
+    Ok(n)
+}
+
+fn allocate_memory(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let n = len_of(vm, vm.arg_i64(ctx, 0))?;
+    let addr = super::native_mem::alloc(n, false).map_err(|e| e.throw(vm))?;
+    vm.ret_i64(ctx, addr);
+    Ok(())
+}
+
+fn free_memory(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    super::native_mem::free(vm.arg_i64(ctx, 0));
+    Ok(())
+}
+
+fn reallocate_memory(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let n = len_of(vm, vm.arg_i64(ctx, 1))?;
+    let new = super::native_mem::realloc(addr, n).map_err(|e| e.throw(vm))?;
+    vm.ret_i64(ctx, new);
+    Ok(())
+}
+
+fn set_memory_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let n = len_of(vm, vm.arg_i64(ctx, 1))?;
+    let v = vm.arg_i32(ctx, 2) as u8;
+    let bytes = vec![v; n];
+    super::native_mem::write_bytes_at(vm, addr, &bytes)
+}
+
+fn set_memory_obj(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let obj = vm.arg_ref(ctx, 0);
+    let off = vm.arg_i64(ctx, 1);
+    let n = len_of(vm, vm.arg_i64(ctx, 2))?;
+    let v = vm.arg_i32(ctx, 3) as u8;
+    let bytes = vec![v; n];
+    obj_write_bytes(vm, obj, off, &bytes)
+}
+
+fn copy_memory_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let src = vm.arg_i64(ctx, 0);
+    let dst = vm.arg_i64(ctx, 1);
+    let n = len_of(vm, vm.arg_i64(ctx, 2))?;
+    let bytes = super::native_mem::read_bytes_at(vm, src, n)?;
+    super::native_mem::write_bytes_at(vm, dst, &bytes)
+}
+
+fn copy_memory_obj(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let src_obj = vm.arg_ref(ctx, 0);
+    let src_off = vm.arg_i64(ctx, 1);
+    let dst_obj = vm.arg_ref(ctx, 2);
+    let dst_off = vm.arg_i64(ctx, 3);
+    let n = len_of(vm, vm.arg_i64(ctx, 4))?;
+    let bytes = if src_obj == NULL {
+        super::native_mem::read_bytes_at(vm, src_off, n)?
+    } else {
+        obj_read_bytes(vm, src_obj, src_off, n)?
+    };
+    if dst_obj == NULL {
+        super::native_mem::write_bytes_at(vm, dst_off, &bytes)
+    } else {
+        obj_write_bytes(vm, dst_obj, dst_off, &bytes)
+    }
+}
+
+fn copy_from_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let src = vm.arg_ref(ctx, 0);
+    let src_off = vm.arg_i64(ctx, 1);
+    let dst = vm.arg_i64(ctx, 2);
+    let n = len_of(vm, vm.arg_i64(ctx, 3))?;
+    let bytes = obj_read_bytes(vm, src, src_off, n)?;
+    super::native_mem::write_bytes_at(vm, dst, &bytes)
+}
+
+fn copy_to_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let src = vm.arg_i64(ctx, 0);
+    let dst = vm.arg_ref(ctx, 1);
+    let dst_off = vm.arg_i64(ctx, 2);
+    let n = len_of(vm, vm.arg_i64(ctx, 3))?;
+    let bytes = super::native_mem::read_bytes_at(vm, src, n)?;
+    obj_write_bytes(vm, dst, dst_off, &bytes)
+}
+
+fn get_byte_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_i8(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_i32(ctx, v as i32);
+    Ok(())
+}
+
+fn put_byte_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_i32(ctx, 1) as i8;
+    super::native_mem::write_i8(vm, addr, v)
+}
+
+fn get_short_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_i16(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_i32(ctx, v as i32);
+    Ok(())
+}
+
+fn put_short_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_i32(ctx, 1) as i16;
+    super::native_mem::write_i16(vm, addr, v)
+}
+
+fn get_char_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_i16(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_i32(ctx, v as u16 as i32);
+    Ok(())
+}
+
+fn put_char_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_i32(ctx, 1) as u16 as i16;
+    super::native_mem::write_i16(vm, addr, v)
+}
+
+fn get_int_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_i32(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_i32(ctx, v);
+    Ok(())
+}
+
+fn put_int_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_i32(ctx, 1);
+    super::native_mem::write_i32(vm, addr, v)
+}
+
+fn get_long_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_i64(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_i64(ctx, v);
+    Ok(())
+}
+
+fn put_long_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_i64(ctx, 1);
+    super::native_mem::write_i64(vm, addr, v)
+}
+
+fn get_float_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_f32(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_f32(ctx, v);
+    Ok(())
+}
+
+fn put_float_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_f32(ctx, 1);
+    super::native_mem::write_f32(vm, addr, v)
+}
+
+fn get_double_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = super::native_mem::read_f64(vm, vm.arg_i64(ctx, 0))?;
+    vm.ret_f64(ctx, v);
+    Ok(())
+}
+
+fn put_double_addr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let addr = vm.arg_i64(ctx, 0);
+    let v = vm.arg_f64(ctx, 1);
+    super::native_mem::write_f64(vm, addr, v)
 }

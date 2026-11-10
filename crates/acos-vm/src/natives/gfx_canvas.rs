@@ -61,6 +61,10 @@ impl RecCanvas {
 
 thread_local! {
     static REC: RefCell<HandleTable<RecCanvas>> = RefCell::new(HandleTable::new());
+    /// Opaque handles for raster `Canvas` objects. They exist only so
+    /// `android.view.Surface`'s `CompatibleCanvas` can be constructed; no draw
+    /// op resolves here, so raster drawing stays unsupported.
+    static RASTER: RefCell<HandleTable<()>> = RefCell::new(HandleTable::new());
 }
 
 fn rec<R>(h: i64, f: impl FnOnce(&mut RecCanvas) -> R) -> Option<R> {
@@ -116,6 +120,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     // --- Canvas state ---
     vm.register_native(C, "nGetNativeFinalizer", "()J", ret_zero_long);
+    // `Canvas()` calls `nInitRaster` to wrap a raster target. ACOS supports the
+    // recording path only, but `android.view.Surface` constructs a
+    // `CompatibleCanvas` in its constructor, so the compatibility handle must
+    // exist. Returning the null raster handle lets `Surface`/`Surface.copyFrom`
+    // work; every raster draw op still resolves through the recording table and
+    // fails as stale, so nothing is silently rendered. W22-B edit (T-29).
+    vm.register_native(C, "nInitRaster", "(J)J", c_init_raster);
     vm.register_native(C, "nFreeCaches", "()V", noop);
     vm.register_native(C, "nFreeTextLayoutCaches", "()V", noop);
     vm.register_native(C, "nGetSaveCount", "(J)I", c_save_count);
@@ -245,6 +256,17 @@ fn ret_false(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 fn noop(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    Ok(())
+}
+
+/// `Canvas.nInitRaster(J)J`: return a non-null compatibility handle for the
+/// raster canvas. ACOS has no raster drawing path, so the handle is an empty
+/// staged canvas: constructing it (which `android.view.Surface` always does)
+/// succeeds, but every draw op still fails as a stale/empty canvas rather than
+/// silently dropping pixels.
+fn c_init_raster(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = RASTER.with(|t| t.borrow_mut().insert(()));
+    vm.ret_i64(ctx, h.to_jlong());
     Ok(())
 }
 fn unsupported_bitmap_canvas(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {

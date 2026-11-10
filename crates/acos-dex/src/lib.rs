@@ -54,6 +54,7 @@
 #![warn(missing_debug_implementations)]
 
 pub mod annotation;
+pub mod cache;
 pub mod classdata;
 pub mod code;
 pub mod decode;
@@ -68,6 +69,7 @@ pub mod reader;
 pub mod verify;
 
 pub use annotation::{Annotation, AnnotationsDirectory};
+pub use cache::{shared_dex, BootCache};
 pub use classdata::{ClassData, EncodedField, EncodedMethod};
 pub use code::{CatchHandler, CodeItem, TryItem, TypeAddrPair};
 pub use decode::{
@@ -82,8 +84,37 @@ pub use opcode::{defined_opcodes, Format, Opcode};
 pub use reader::Reader;
 pub use verify::{verify, VerifyReport};
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::OnceLock;
+
+/// Monotonic identity assigned to every parsed [`DexFile`].
+///
+/// It is stable for the lifetime of the value and unique within a process, so
+/// process-global caches (decoded method bodies, class indices) can key on it
+/// without hashing the file bytes again. Parsing the same bytes twice yields
+/// two ids; sharing one parsed file (see [`cache::shared_dex`]) shares one id.
+static NEXT_DEX_ID: AtomicU64 = AtomicU64::new(1);
+
+fn next_dex_id() -> u64 {
+    NEXT_DEX_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+/// FNV-1a hash of a class descriptor, used by the compact class index.
+///
+/// The index stores only `hash -> class_defs index`, never a cloned descriptor
+/// string, so it costs ~17 B per class instead of ~90 B. A hash collision is
+/// resolved by comparing the candidate's descriptor and (rarely) a linear scan,
+/// so it is a pure acceleration of the exact match, never a different answer.
+fn descriptor_hash(descriptor: &str) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for b in descriptor.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
 
 /// Little-endian endian tag written into every standard DEX file.
 pub const ENDIAN_CONSTANT: u32 = 0x1234_5678;
@@ -309,6 +340,7 @@ impl FieldRef<'_> {
 /// A parsed DEX file.
 #[derive(Clone, Debug)]
 pub struct DexFile {
+    id: u64,
     bytes: Arc<[u8]>,
     header: Header,
     /// Lazily-decoded string table. `parse` only records the `string_data_offs`;
@@ -326,6 +358,9 @@ pub struct DexFile {
     hiddenapi: Option<HiddenApiClassData>,
     /// Lazily-computed SHA-1 signature validity (see [`DexFile::signature_valid`]).
     signature_check: OnceLock<bool>,
+    /// Lazily-built compact `descriptor hash -> class_defs` index. Shared by
+    /// every VM that uses this parsed file (a pure function of the DEX bytes).
+    class_index: OnceLock<HashMap<u64, usize>>,
 }
 
 fn section_start(
@@ -820,6 +855,7 @@ impl DexFile {
         }
 
         Ok(DexFile {
+            id: next_dex_id(),
             bytes,
             header,
             strings: OnceLock::new(),
@@ -834,7 +870,13 @@ impl DexFile {
             map,
             hiddenapi,
             signature_check,
+            class_index: OnceLock::new(),
         })
+    }
+
+    /// Process-unique identity of this parsed file (see [`next_dex_id`]).
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Parse a DEX file from disk.
@@ -1059,11 +1101,54 @@ impl DexFile {
         }
     }
 
+    /// Lazily-built compact class index, shared by every caller of one parsed
+    /// file. Malformed descriptors are skipped; use
+    /// [`DexFile::class_descriptor`] to observe the error.
+    pub fn class_index(&self) -> &HashMap<u64, usize> {
+        self.class_index.get_or_init(|| {
+            let mut index = HashMap::with_capacity(self.class_defs.len());
+            for (def_idx, def) in self.class_defs.iter().enumerate() {
+                if let Ok(desc) = self.class_descriptor(def) {
+                    // First definition wins, matching `find_class`'s linear scan.
+                    index.entry(descriptor_hash(desc)).or_insert(def_idx);
+                }
+            }
+            index
+        })
+    }
+
+    /// Find the `class_defs` index for a descriptor without a linear scan.
+    ///
+    /// A hash miss is definitive (no class with that name). A hash hit compares
+    /// the actual descriptor; a mismatch means a hash collision, resolved by a
+    /// linear scan so the result is exactly the linear-scan result.
+    pub fn find_class_index(&self, descriptor: &str) -> Option<usize> {
+        match self.class_index().get(&descriptor_hash(descriptor)) {
+            None => None,
+            Some(&def_idx) => {
+                let matches = self
+                    .class_defs
+                    .get(def_idx)
+                    .and_then(|def| self.class_descriptor(def).ok())
+                    .map(|desc| desc == descriptor)
+                    .unwrap_or(false);
+                if matches {
+                    Some(def_idx)
+                } else {
+                    self.class_defs.iter().position(|def| {
+                        self.class_descriptor(def)
+                            .map(|desc| desc == descriptor)
+                            .unwrap_or(false)
+                    })
+                }
+            }
+        }
+    }
+
     /// Find a class by descriptor (`Lcom/example/Foo;`).
     pub fn find_class(&self, descriptor: &str) -> Option<&ClassDef> {
-        self.class_defs
-            .iter()
-            .find(|d| self.class_descriptor(d).map(|s| s == descriptor).unwrap_or(false))
+        self.find_class_index(descriptor)
+            .and_then(|i| self.class_defs.get(i))
     }
 
     /// Parse the `class_data_item` for a class, if present.

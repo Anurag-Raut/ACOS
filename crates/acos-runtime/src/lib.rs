@@ -26,9 +26,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
 
+pub mod apk_loader;
 pub mod atms_boot;
 pub mod bind_app;
 pub mod boot;
+pub mod client_transaction;
+pub mod input_java;
 pub mod lifecycle;
 pub mod pms_java;
 pub mod settings_java;
@@ -101,6 +104,9 @@ impl Runtime {
             FIXTURE_UID,
             FIXTURE_PID,
         )));
+        // The real `InputEventReceiver` ack path (`nativeFinishInputEvent`)
+        // forwards to the service input dispatcher.
+        crate::input_java::install();
         Ok(Self { vm, host })
     }
 

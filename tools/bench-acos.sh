@@ -65,7 +65,7 @@ done
 if [ ${#METRICS[@]} -eq 0 ]; then
     # Every metric whose inputs exist in today's engine. Order matters: cheap
     # ones first so a broken metric fails fast.
-    METRICS=(process-start boot-attach bind-app idle-rss sessions idle-cpu interpreter)
+    METRICS=(process-start boot-attach bind-app idle-rss sessions sessions-shared idle-cpu interpreter)
 fi
 
 mkdir -p "$RESULTS"
@@ -230,7 +230,7 @@ hmp() { awk -F': ' "/^$1:/{print \$2; exit}" /proc/meminfo | awk '{print $1}'; }
 
 mem_args() {
     case "$1" in
-        sessions|idle-cpu) echo "--mem 6G --time 900" ;;
+        sessions|sessions-shared|idle-cpu) echo "--mem 6G --time 900" ;;
         *) echo "--mem 4G --time 300" ;;
     esac
 }
@@ -356,6 +356,20 @@ if r:
             gates["sessions.incremental_n5_mib.p50"] = {
                 "p50": row.get("incremental_miB_per_session")}
 
+r = result_of("sessions-shared")
+if r:
+    for row in r.get("sessions", []):
+        if row.get("n") == 20:
+            add_gate("sessions-shared.n20.anon_plus_shmem_kib.p50", row.get("anon_plus_shmem_kib"))
+    for row in r.get("marginal", []):
+        if row.get("from_n") == 10:
+            gates["sessions-shared.marginal_n10_to_n20_mib.p50"] = {
+                "p50": row.get("marginal_miB_per_session")}
+    for row in r.get("incremental", []):
+        if row.get("n") == 5:
+            gates["sessions-shared.incremental_n5_mib.p50"] = {
+                "p50": row.get("incremental_miB_per_session")}
+
 r = result_of("idle-cpu")
 if r:
     add_gate("idle-cpu.cpu_ticks.p50", r.get("cpu_ticks"))
@@ -432,6 +446,9 @@ if r:
 r = res("sessions")
 if r:
     acos["sessions"] = r
+r = res("sessions-shared")
+if r:
+    acos["sessions-shared"] = r
 r = res("idle-cpu")
 if r:
     acos["idle-cpu"] = r
@@ -444,6 +461,7 @@ def mib(kib):
 
 idle = acos.get("idle-rss", {})
 sess = acos.get("sessions", {})
+sess_shared = acos.get("sessions-shared", {})
 interp = acos.get("interpreter", {})
 
 def session_row(n, field="incremental_miB_per_session"):
@@ -477,7 +495,7 @@ ROWS = [
      "78.7 MiB (v9) / 33.2 MiB (W2 opt-in)",
      "anon+shmem, warm",
      f"{session_row(5)} MiB/session at N=5" if sess else None, None,
-     "in-process sequential sessions; private pages only (no DEX mmap, nothing shareable)"),
+     "in-process sequential sessions; immutable boot DEX, parsed DexFiles and decoded method bodies are Arc-shared through the process-global BootCache (no mmap; see results/bench/MEMORY_PROFILE.md)"),
     ("M3", "Cold start -> first correct frame", "3.620 s (v12)", "wall, cold",
      None, "not-measurable", "needs acos-render bound to the graphics natives"),
     ("M4", "Worker create -> correct frame", "1.251-1.343 s p50", "wall, warm",
@@ -644,6 +662,20 @@ if sess:
     for row in sess.get("marginal", []):
         w(f"| marginal N={row['from_n']}->N={row['to_n']} | {row['marginal_miB_per_session']} "
           "MiB/session | anon+shmem | fresh process |")
+if sess_shared:
+    for row in sess_shared.get("sessions", []):
+        def p50(x):
+            b = row.get(x)
+            return "-" if not isinstance(b, dict) else b.get("p50")
+        w(f"| N={row['n']} sessions (shared boot): PSS / anon+shmem / private / shared | "
+          f"{p50('pss_kib')} / {p50('anon_plus_shmem_kib')} / {p50('private_kib')} / "
+          f"{p50('shared_kib')} KiB (p50) | mixed, labelled | fresh process per N |")
+    for row in sess_shared.get("incremental", []):
+        w(f"| incremental N={row['n']} (shared boot) | "
+          f"{row['incremental_miB_per_session']} MiB/session | anon+shmem | fresh process |")
+    for row in sess_shared.get("marginal", []):
+        w(f"| marginal N={row['from_n']}->N={row['to_n']} (shared boot) | "
+          f"{row['marginal_miB_per_session']} MiB/session | anon+shmem | fresh process |")
 r = res("idle-cpu")
 if r:
     w(f"| idle CPU, parked/blocked | {fmt(r['cpu_ticks'])} ticks over {r['window_secs']} s "

@@ -99,7 +99,11 @@ pub(crate) fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
 }
 
 /// Materialise a real `android.content.pm.ActivityInfo`.
-fn activity_info(vm: &mut Vm, app: &AppInfo, act: &PmsActivityInfo) -> JResult<Handle> {
+pub(crate) fn activity_info(
+    vm: &mut Vm,
+    app: &AppInfo,
+    act: &PmsActivityInfo,
+) -> JResult<Handle> {
     let h = vm
         .new_instance_ctor("android.content.pm.ActivityInfo", "()V", &[])
         .map_err(err)?;

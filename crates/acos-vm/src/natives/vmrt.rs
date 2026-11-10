@@ -432,7 +432,11 @@ fn new_array_of(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn address_of(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 0);
-    vm.ret_i64(ctx, obj as i64);
+    // A live synthetic address that aliases the array's backing store. Direct
+    // byte buffers are `newNonMovableArray(byte.class, n)` plus `addressOf`,
+    // then read/written through `libcore.io.Memory`; the alias keeps those
+    // accesses pointed at the real heap array.
+    vm.ret_i64(ctx, super::native_mem::array_address(obj));
     Ok(())
 }
 

@@ -14,7 +14,7 @@
 //! depends on.
 
 use std::collections::VecDeque;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::{Arc, Mutex};
 
 use crate::error::{Result, WmError};
@@ -26,7 +26,7 @@ pub trait ChannelEnd: Send + Sync + std::fmt::Debug {
     /// Receive one framed message, or `None` if none is pending.
     fn recv(&self) -> Result<Option<Vec<u8>>>;
     /// The descriptor the native layer can hand to Java, if any.
-    fn fd(&self) -> Option<RawFd>;
+    fn fd(&self) -> Option<BorrowedFd<'_>>;
 }
 
 /// A bidirectional channel between the dispatcher and one window.
@@ -67,10 +67,20 @@ impl Channel {
     }
 
     /// The client descriptor (for `InputChannel`/`InputEventReceiver`), if this
-    /// channel is fd-backed.
+    /// channel is fd-backed. The borrow is tied to `self`, so the caller can
+    /// duplicate it into a `Parcel` without owning the raw descriptor.
     #[must_use]
-    pub fn client_fd(&self) -> Option<RawFd> {
+    pub fn client_fd(&self) -> Option<BorrowedFd<'_>> {
         self.app.fd()
+    }
+
+    /// A duplicated client descriptor (the caller owns it). This is what the
+    /// WMS writes into the `InputChannel` reply parcel: the app owns its own
+    /// descriptor while the dispatcher keeps the channel's server end.
+    #[must_use]
+    pub fn duplicate_client_fd(&self) -> Option<OwnedFd> {
+        let fd = self.app.fd()?;
+        rustix::io::dup(fd).ok()
     }
 }
 
@@ -123,7 +133,7 @@ impl ChannelEnd for InMemoryChannel {
             .pop_front())
     }
 
-    fn fd(&self) -> Option<RawFd> {
+    fn fd(&self) -> Option<BorrowedFd<'_>> {
         None
     }
 }
@@ -178,8 +188,8 @@ impl ChannelEnd for FdChannel {
         }
     }
 
-    fn fd(&self) -> Option<RawFd> {
-        Some(self.fd.as_raw_fd())
+    fn fd(&self) -> Option<BorrowedFd<'_>> {
+        Some(self.fd.as_fd())
     }
 }
 

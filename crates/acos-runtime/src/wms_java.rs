@@ -31,10 +31,12 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::os::fd::AsFd;
 
 use acos_parcel::binder::BinderId;
 use acos_parcel::{Parcel, ParcelError};
 use acos_services::wms::WmsState;
+use acos_vm::natives::binder::BinderDelivery;
 use acos_vm::natives::fwk_surface::{install_backend, presented_frames, SurfaceBackend, SurfaceOp};
 use acos_wm::codec::{
     ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
@@ -51,6 +53,45 @@ thread_local! {
 /// Run `f` with the process-global WMS state.
 pub fn with_wms<R>(f: impl FnOnce(&mut WmsState) -> R) -> R {
     WMS.with(|w| f(&mut w.borrow_mut()))
+}
+
+/// Drain the outgoing `IWindow` callbacks queued by the last WMS operation
+/// (T-37) and turn each into a oneway `BinderDelivery` for the app's
+/// `IWindow$Stub`.
+///
+/// The callback queue is populated by `addToDisplayAsUser` (visibility, focus,
+/// insets) and `relayout` (resized, insets) in the measured order; this is the
+/// system -> app half of the WMS wire.
+pub fn take_deliveries() -> Result<Vec<BinderDelivery>, String> {
+    with_wms(|s| {
+        let mut out = Vec::new();
+        while let Some(pc) = s.wm.callbacks.pop() {
+            // API 34's `IWindow` has no `windowFocusChanged` transaction
+            // (`TRANSACTION_windowFocusChanged` was removed from the AIDL), so
+            // putting code 17 on the wire would make the real `Stub` throw.
+            // ACOS keeps the callback model for the replay harness but never
+            // fakes a transaction the framework does not define.
+            if matches!(
+                pc.callback,
+                acos_wm::callbacks::WmCallback::WindowFocusChanged { .. }
+            ) {
+                continue;
+            }
+            let data = pc.callback.to_parcel().map_err(|e| {
+                format!(
+                    "wms_java: callback {} encode: {e}",
+                    pc.callback.method()
+                )
+            })?;
+            out.push(BinderDelivery {
+                target: pc.window,
+                code: pc.callback.code(),
+                flags: 1,
+                data,
+            });
+        }
+        Ok(out)
+    })
 }
 
 /// True when `descriptor` is answered by this module.
@@ -97,10 +138,33 @@ impl Args {
     }
 }
 
+/// The effective request wire ops for `method`.
+///
+/// The API-34 derived table for `addToDisplay`/`addToDisplayAsUser` carries one
+/// trailing `I32` too many: the real server stub reads 3 / 4 ints (userId,
+/// viewVisibility, displayId[, requestedVisibleTypes]) before the `InputChannel`
+/// out-param. Reading the phantom int made the real `Stub$Proxy` request fail
+/// at end-of-parcel, so it is trimmed here rather than faked.
+fn effective_args(method: &acos_aidl::MethodInfo) -> Vec<acos_aidl::WireOp> {
+    use acos_aidl::WireOp;
+    let mut ops = method.args.clone();
+    let trim = match method.name.as_str() {
+        "addToDisplay" | "addToDisplayWithoutInputChannel" | "addToDisplayAsUser" => 1,
+        _ => 0,
+    };
+    for _ in 0..trim {
+        if matches!(ops.last(), Some(WireOp::I32)) {
+            ops.pop();
+        }
+    }
+    ops
+}
+
 fn decode_args(method: &acos_aidl::MethodInfo, p: &mut Parcel) -> WResult<Args> {
     use acos_aidl::WireOp;
     let mut out = Args::default();
-    for op in &method.args {
+    let ops = effective_args(method);
+    for op in &ops {
         match op {
             WireOp::Binder { .. } => out.binders.push(p.read_strong_binder().map_err(perr)?),
             WireOp::I32 => out.ints.push(p.read_int32().map_err(perr)?),
@@ -188,6 +252,32 @@ fn present<T: ParcelCodec>(p: &mut Parcel, v: Option<&T>) -> WResult<()> {
     }
 }
 
+/// Encode the `out InputChannel` parameter exactly as the real framework does.
+///
+/// The AIDL layer writes the presence marker (`1`/`0`); when present it then
+/// calls `InputChannel.writeToParcel`, whose whole body is
+/// `nativeWriteToParcel(Parcel, mPtr)`. ACOS's native counterpart
+/// (`fwk_input::ic_write_to_parcel`) writes `String16 name`, a file descriptor
+/// and the token binder, and `nativeReadFromParcel` reads exactly that. The
+/// descriptor is a *duplicate* of the client end of the window's real
+/// socketpair, so the app can install an `InputEventReceiver` while the WMS
+/// keeps the dispatcher end.
+fn encode_input_channel(add: &acos_wm::wms::AddWindowResult, p: &mut Parcel) -> WResult<()> {
+    let handle = add.input_channel.channel_handle;
+    let fd = with_wms(|s| s.wm.channels.get(handle).and_then(|c| c.duplicate_client_fd()));
+    let Some(fd) = fd else {
+        // No fd-backed channel (unit-test in-memory pair): write an absent
+        // channel rather than a bogus descriptor.
+        p.write_int32(0);
+        return Ok(());
+    };
+    p.write_int32(1);
+    p.write_string16_opt(Some(&add.input_channel.name)).map_err(perr)?;
+    p.write_file_descriptor(fd.as_fd()).map_err(perr)?;
+    p.write_strong_binder_opt(add.input_channel.token);
+    Ok(())
+}
+
 fn encode_add_result(
     result: i32,
     add: Option<&acos_wm::wms::AddWindowResult>,
@@ -196,7 +286,7 @@ fn encode_add_result(
     p.write_int32(result);
     match add {
         Some(a) if result == ADD_OKAY => {
-            present(p, Some(&a.input_channel))?;
+            encode_input_channel(a, p)?;
             present(p, Some(&a.insets_state))?;
             present(p, Some(&a.insets_controls))?;
             present(p, Some(&a.out_frame))?;
@@ -319,6 +409,10 @@ fn handle_session(
                 .ok_or_else(|| err("addToDisplayAsUser: missing LayoutParams"))?;
             let window = window.ok_or_else(|| err("addToDisplayAsUser: null IWindow"))?;
             let result = with_wms(|s| s.add_to_display_as_user(window, params, 0)).map_err(err)?;
+            if result.result == ADD_OKAY {
+                crate::input_java::install_window_writer(result.window)
+                    .map_err(|e| err(format!("input writer: {e}")))?;
+            }
             encode_add_result(result.result, Some(&result), reply)?;
         }
         "addToDisplayWithoutInputChannel" => {
@@ -328,6 +422,10 @@ fn handle_session(
                 .ok_or_else(|| err("addToDisplayWithoutInputChannel: missing LayoutParams"))?;
             let window = window.ok_or_else(|| err("null IWindow"))?;
             let result = with_wms(|s| s.add_to_display_as_user(window, params, 0)).map_err(err)?;
+            if result.result == ADD_OKAY {
+                crate::input_java::install_window_writer(result.window)
+                    .map_err(|e| err(format!("input writer: {e}")))?;
+            }
             encode_add_result(result.result, Some(&result), reply)?;
         }
         "relayout" => {

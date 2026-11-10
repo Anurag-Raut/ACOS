@@ -45,6 +45,7 @@ pub mod display;
 pub mod error;
 pub mod exception;
 pub mod host;
+pub mod input;
 pub mod misc;
 pub mod parcelable;
 pub mod pms;

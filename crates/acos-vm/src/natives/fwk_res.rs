@@ -124,7 +124,12 @@ fn internal(msg: impl Into<String>) -> VmError {
     VmError::Internal(msg.into())
 }
 
-fn map_path_roots(boot: &Path, path: &str) -> PathBuf {
+fn map_path_roots(boot: &Path, root: &Path, path: &str) -> PathBuf {
+    // Installed app APKs live under the writable session sandbox; the guest
+    // path is the same path the framework sees in `ApplicationInfo.sourceDir`.
+    if path.starts_with("/data/") {
+        return root.join(path.trim_start_matches('/'));
+    }
     if let Some(rest) = path.strip_prefix("/system/") {
         return match rest {
             "framework/framework-res.apk" => boot.join("framework-res.apk"),
@@ -517,6 +522,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JJ[I[I[I)Z",
         am_retrieve_attributes,
     );
+    // The real `AssetManager.<clinit>` wraps `Theme` handles in a
+    // `NativeAllocationRegistry.createMalloced(..., nativeGetThemeFreeFunction())`.
+    // ACOS themes are Rust handles owned by the engine's table; a null free
+    // function is the honest "no native allocation to free" answer.
+    reg(vm, am, "nativeGetThemeFreeFunction", "()J", am_theme_free_function);
     reg(vm, am, "nativeThemeCreate", "(J)J", am_theme_create);
     reg(
         vm,
@@ -766,7 +776,7 @@ fn am_set_apk_assets(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             };
             match &entry.kind {
                 ApkKind::Path(path) => {
-                    let host = map_path_roots(&boot, path);
+                    let host = map_path_roots(&boot, vm.vfs.root(), path);
                     if let Ok(a) = ApkAssets::open(&host) {
                         apks.push(a);
                     }
@@ -1293,6 +1303,11 @@ fn am_retrieve_attributes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+fn am_theme_free_function(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i64(ctx, 0);
+    Ok(())
+}
+
 fn am_theme_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
     let h = REG.with(|r| {
@@ -1508,7 +1523,7 @@ fn apk_load(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let path = vm
         .string_to_rust(vm.arg_ref(ctx, 1))
         .unwrap_or_default();
-    let host = map_path_roots(vm.vfs.boot_root(), &path);
+    let host = map_path_roots(vm.vfs.boot_root(), vm.vfs.root(), &path);
     let handle = match ApkAssets::open(&host) {
         Ok(a) => REG.with(|r| {
             let mut reg = r.borrow_mut();

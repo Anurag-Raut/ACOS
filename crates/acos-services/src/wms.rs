@@ -90,6 +90,10 @@ pub struct WmsState {
     /// Number of real buffer submissions published through the compositor
     /// backend. `finishDrawing` alone never increments this.
     pub frames_published: u64,
+    /// Service-side input dispatcher (T-36). The runtime installs the
+    /// per-window frame writers; this state owns hit-testing, sequencing and
+    /// ack accounting.
+    pub input: crate::input::InputDispatcher,
 }
 
 impl Default for WmsState {
@@ -111,6 +115,7 @@ impl WmsState {
             session_binder,
             finish_drawing_count: 0,
             frames_published: 0,
+            input: crate::input::InputDispatcher::new(),
         }
     }
 
@@ -141,12 +146,16 @@ impl WmsState {
         params: LayoutParams,
         sync_seq: i32,
     ) -> WmResult<RelayoutResult> {
-        self.wm.relayout(self.session, window, params, sync_seq)
+        let r = self.wm.relayout(self.session, window, params, sync_seq)?;
+        self.input.update_frame(window, r.frames.frame);
+        Ok(r)
     }
 
     /// `IWindowSession.remove`.
     pub fn remove(&mut self, window: WindowId) -> WmResult<()> {
-        self.wm.remove(window)
+        self.wm.remove(window)?;
+        self.input.remove_window(window);
+        Ok(())
     }
 
     /// `IWindowSession.finishDrawing`: records the drawing callback. It does

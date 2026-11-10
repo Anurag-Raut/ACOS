@@ -4,7 +4,7 @@
 //! (DEX or native) runs in a [`Frame`] on a VM-managed per-thread stack. Each
 //! frame keeps a parallel reference bitmap so GC roots are exact.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::class::{ClassId, MethodCode, MethodId};
 use crate::heap::Handle;
@@ -14,7 +14,7 @@ use crate::heap::Handle;
 pub struct Frame {
     pub method: MethodId,
     pub class: ClassId,
-    pub code: Rc<MethodCode>,
+    pub code: Arc<MethodCode>,
     /// Current code-unit address (used for try tables and line numbers).
     pub pc: u32,
     /// Index into `code.insns`.
@@ -41,7 +41,7 @@ impl Frame {
     pub fn new(
         method: MethodId,
         class: ClassId,
-        code: Rc<MethodCode>,
+        code: Arc<MethodCode>,
         regs_size: usize,
     ) -> Frame {
         Frame {

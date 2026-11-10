@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use acos_render::geom::RectF;
 use acos_render::path::Path;
-use acos_render::text::fonts::FontCollection;
+use acos_render::text::fonts::{FontCollection, FontRef};
 use acos_render::text::layout::{BreakStrategy, LineBreak, LineBreaker, ParagraphConstraints};
 use acos_render::text::{FontMetricsInt, TextEngine, TextStyle};
 
@@ -32,11 +32,18 @@ use crate::natives::gfx_handles::{Handle, HandleTable};
 use crate::vm::Vm;
 
 /// A native `Typeface` record.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// `font` carries a concrete resolved face when the framework built the
+/// typeface from real `android.graphics.fonts.Font` objects (`nativeCreateFromArray`)
+/// rather than from a family name string; `gfx_text::style` then uses that face
+/// directly instead of resolving `family` through `fonts.xml`. A typeface built
+/// from a name (`Typeface.create("sans-serif", …)`) has `font == None`.
+#[derive(Clone, Debug)]
 pub struct TypefaceRec {
     pub family: Option<String>,
     pub weight: i32,
     pub italic: bool,
+    pub font: Option<FontRef>,
 }
 
 impl TypefaceRec {
@@ -131,6 +138,7 @@ impl TextShared {
                 family: Some("sans-serif".to_string()),
                 weight: 400,
                 italic: false,
+                font: None,
             })
             .to_jlong();
         TextShared {
@@ -161,14 +169,17 @@ impl TextShared {
             )
         })?;
         let tf = self.tf(attrs.typeface)?;
-        let font = fonts
-            .resolve_typeface(tf.family.as_deref(), tf.weight.clamp(1, 1000) as u16, tf.italic)
-            .ok_or_else(|| {
-                VmError::unsupported_api(
-                    format!("Typeface family {:?} not present", tf.family),
-                    "acos-render FontCollection::resolve_typeface",
-                )
-            })?;
+        let font = match tf.font.clone() {
+            Some(f) => f,
+            None => fonts
+                .resolve_typeface(tf.family.as_deref(), tf.weight.clamp(1, 1000) as u16, tf.italic)
+                .ok_or_else(|| {
+                    VmError::unsupported_api(
+                        format!("Typeface family {:?} not present", tf.family),
+                        "acos-render FontCollection::resolve_typeface",
+                    )
+                })?,
+        };
         Ok(TextStyle {
             font,
             family: tf.family,
@@ -323,8 +334,14 @@ pub fn new_typeface(family: Option<String>, weight: i32, italic: bool) -> i64 {
             family,
             weight,
             italic,
+            font: None,
         };
-        if rec == (t.typefaces.get(Handle::from_jlong(t.default_typeface)).expect("default").clone()) {
+        let default = t
+            .typefaces
+            .get(Handle::from_jlong(t.default_typeface))
+            .expect("default")
+            .clone();
+        if rec.family == default.family && rec.weight == default.weight && rec.italic == default.italic {
             return t.default_typeface;
         }
         t.typefaces.insert(rec).to_jlong()

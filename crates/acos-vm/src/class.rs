@@ -6,7 +6,7 @@
 //! came from.
 
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::error::{VmError, VmResult};
 use crate::heap::Handle;
@@ -46,7 +46,7 @@ pub struct TryEntry {
     pub catch_all: Option<u32>,
 }
 
-/// Pre-decoded method body. Shared through `Rc` so a frame can hold it without
+/// Pre-decoded method body. Shared through `Arc` so a frame can hold it without
 /// borrowing the owning class.
 #[derive(Debug)]
 pub struct MethodCode {
@@ -133,7 +133,7 @@ pub enum MethodImpl {
     Dex {
         dex: u32,
         method_idx: u32,
-        code: Option<Rc<MethodCode>>,
+        code: Option<Arc<MethodCode>>,
     },
     /// A Rust native.
     Native(NativeFn),

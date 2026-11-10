@@ -293,3 +293,308 @@ an `InputStream` over the bundle bytes (the fallback `ICUData.getStream` path
   `/system/apex/com.android.i18n` (real devices use `/apex/com.android.i18n`)
   because the VFS currently maps `/apex` only for tzdata; this is a declared
   divergence, not a hidden one.
+
+---
+
+# W21a session — Rust-owned native memory, `map0`, and the ICU `.dat` path
+
+**Status: the ICU data path now runs end to end; the block moved out of ICU
+into font construction.** `bindApplication` is still delivered and
+`app_created=false`, but `Typeface.<clinit>` gets past
+`ULocale.addLikelySubtags` / `ICUBinary.getDataFromFile` (the entire reason
+W19h existed) and the M2 block is now
+
+```
+android.graphics.fonts.Font$Builder.nInitBuilder()J  [not implemented]
+  at android.graphics.fonts.FontListParser.readFont / Typeface.<clinit>
+```
+
+Lifecycle probe (`--corelib real`, release): `classes=690`,
+`bind=true app=false tx=false`, first structured blocker
+`Landroid/graphics/fonts/Font$Builder;->nInitBuilder()J`.
+
+## What actually changed
+
+| file | change |
+|---|---|
+| `crates/acos-vm/src/natives/native_mem.rs` (**new**) | Rust-owned native-memory region table. Synthetic 64-bit addresses `(region_id << 32) \| offset` (`region_id == 0` is null); heap-array aliases set `0x8000_0000` in the region id so `VMRuntime.addressOf` yields a *live* address for a Java array. Bounds/liveness/read-only checked; OOB/use-after-free becomes a Java `IndexOutOfBoundsException`/`IllegalStateException`, never UB. Global cap 256 MiB (`ACOS_NATIVE_MEM_MAX`). Implements all `libcore.io.Memory` peek/poke natives (`peekByte`/`peekInt`/`peekShort`/`peekLong`, the `*Native` variants, `peek*Array`/`poke*Array` with byte-swap flags, `memmove`). Unit tests cover round-trip, bounds, read-only, cap and realloc. |
+| `crates/acos-vm/src/natives/unsafe.rs` | Full long-address `Unsafe`/`jdk.internal.misc.Unsafe` surface: `get/put Byte/Short/Char/Int/Long/Float/Double(J)`, `allocateMemory`/`freeMemory`/`reallocateMemory`, `setMemory(JJB)`/`setMemory(Object,JJB)`, `copyMemory(JJJ)`/`copyMemory(Object,J,Object,J,J)`/`copyMemory0`/`copyMemoryFrom/ToPrimitiveArray`. The `(Object,J)` forms now bounds-check array access through `native_mem` (the old `/4` slot math was wrong for `long[]`/`char[]`/`short[]`). |
+| `crates/acos-vm/src/natives/fwk_m2_filechannel.rs` | `FileChannelImpl.map0(IJJ)J` copies the VFS-resolved file bytes into a region (read-only for `MAP_RO`, private copy otherwise) and returns its address; `unmap0(JJ)I` frees it; `FileDispatcherImpl.size0(fd)J` reads the VFS `fstat` (`size()` needs it before `map`); `NativeThread.current()J`/`signal(J)V`. |
+| `crates/acos-vm/src/natives/icu.rs` | **Root-cause fix**: `CharsetDecoderICU`/`CharsetEncoderICU` read `data[0]`/`data[1]` as *absolute* array offsets and then `setPosition` adds them to the buffer position, so the native must write back per-call **consumed/produced counts** (AOSP's JNI subtracts the starting offsets). ACOS wrote absolute offsets back, which produced `CoderMalfunctionError: Bad position 8192/8189` once `map0` worked. |
+| `crates/acos-vm/src/natives/vmrt.rs` | `VMRuntime.addressOf(Object)` returns a live heap-array alias (see above) instead of the raw handle, so `ByteBuffer.allocateDirect` (`newNonMovableArray(byte.class, n)` + `addressOf`) reads/writes the real array through `Memory`. |
+| `crates/acos-vm/src/vm.rs` | `make_thread` initialises `Thread.blockerLock` (a field initializer a VM-constructed green thread never runs; without it `AbstractInterruptibleChannel.begin` NPEs) **and** roots the in-construction thread across that allocation. The un-rooted allocation was a latent GC bug: under `ACOS_GC_STRESS=1` the GC collected the half-built `Thread` and the new lock reused its slot, so a later `iget` indexed a 2-field object at offset 28. This fixed the pre-existing `res_natives_gc_stress` panic too. |
+| `crates/acos-vm/src/natives/mod.rs` | two registration lines (`mod native_mem;`, `native_mem::install_memory(vm)?;`) — the only edit outside the owned files, listed here. |
+| `crates/acos-vm/tests/native_mem.rs` + `tests/java/NativeMemMain.java` + `tests/java/native_mem_stubs/` (**new**) | Java-level acceptance: `ByteBuffer.allocateDirect` typed round-trip, `Unsafe` allocate/put/get/set/copy/free, `libcore.io.Memory` peek/poke (scalar + byte array), a freed region raising `IllegalStateException`, and read-only `FileChannel.map` (full + sub-range) over a VFS file. |
+| `tools/extract-bootclasspath.sh` | extracts `com.android.i18n` and `com.android.tzdata` `/etc/icu/*.dat` into `$OUT/apex/<apex>/etc/icu/` (the paths the VFS maps), so a forced `--force` re-extraction keeps `icudt72l.dat` and the tzdata data. The old `.cache/boot/extract-icu-w19h.sh` scratch script is no longer needed. |
+
+## Evidence
+
+Native-memory Java case (real corelib, `cargo test -p acos-vm --test native_mem`):
+
+```
+direct.int=1020304  direct.long=1122334455667788  direct.short=a0b  direct.byte=7f
+direct.double=1.5   direct.float=2.5              direct.char=41
+unsafe.long=102030405060708  unsafe.int=deadbeef  unsafe.byte=9a  unsafe.short=f0e
+unsafe.float=3.25  unsafe.double=6.5  unsafe.set=5a5a5a5a5a5a5a5a  unsafe.copy=5a5a5a5a5a5a5a5a
+mem.int=7f6e5d4c  mem.byte=33  mem.bytes=146  freed=IllegalStateException
+map.full=1001  map.sub=50044  map.size=16,8  map.remain=16  done
+```
+
+`cargo test -p acos-vm`: all suites green except
+`surface_control_natives_on_the_real_framework` (another agent's in-progress
+`fwk_surface.rs`: `SurfaceControl.mNativeObject` is null after `release()`).
+`res_natives` is green again after the GC root fix.
+
+`tools/diff-dexprogs.sh --corelib real` and
+`tools/diff-dexprogs.sh --gc-stress --corelib real` (clean worktree at HEAD +
+this session's files, so the tree compiles): **23 pass / 2 fail / 0 unsupported**
+in both modes. The two failures are pre-existing and unrelated:
+`24_zip_roundtrip` (the HEAD commit records “zip fixtures 24/25 pending”) and
+`25_security_digest` (`Unable to configure default providers`, already in
+`results/vm/dexprogs-real-normal.json`).
+
+## Blocker chain (each step verified by the probe)
+
+1. `Thread.blockerLock == null` in a VM-constructed thread →
+   `AbstractInterruptibleChannel.begin` NPE at `Thread.blockedOn` → the
+   `FileChannelImpl.size` catch handler's `remove(-1)` masked it as
+   `ArrayIndexOutOfBoundsException: Index -1 out of bounds for length 2`.
+   Fixed by initialising/rooting `blockerLock`.
+2. `FileDispatcherImpl.size0` unimplemented → implemented from `Vfs::fstat`.
+3. `FileChannelImpl.map0` unimplemented → region copy of the VFS file.
+4. `DirectByteBuffer` reads through `libcore.io.Memory`/`Unsafe` → the whole
+   native-memory substrate above; `ByteBuffer.allocateDirect` needs the live
+   `addressOf` alias.
+5. `ICUBinary.getDataFromFile` then decoded chunks via
+   `CharsetDecoderICU`; the absolute-vs-delta offset bug surfaced as
+   `CoderMalfunctionError: Bad position 8192/8189`. Fixed in `icu.rs`.
+6. New blocker, out of scope: `Font$Builder.nInitBuilder()J` (and the
+   `nAddAxis`/`nSetSource`/`nGetFont` family). This needs a real TTF/font
+   parser; a fake handle would be a hack, so it is left as the structured
+   `UNSUPPORTED_JAVA_API` it is. `Typeface.<clinit>` is the next gate.
+
+## Honesty
+
+* No fakes: the font block is a structured `UNSUPPORTED_JAVA_API`, not a stub
+  handle. `MAP_RW`/`MAP_PV` maps are private copies (no write-back), a declared
+  divergence from a live `mmap`.
+* The M2 gate test remains red/ignored (`app_created=false`); no Application or
+  Activity callback is claimed.
+* `VMRuntime.addressOf` mines a live alias into the Java array rather than a
+  host pointer; that is the honest equivalent in a `#![forbid(unsafe_code)]`
+  VM.
+
+
+## W24-A — conscrypt boot classpath + `NativeCrypto` (fixture 25 green)
+
+**Status: `25_security_digest` now passes `--corelib real` byte-for-byte, normal
+and `ACOS_GC_STRESS=1`; `Security.getProviders()` returns the four Android
+providers.** The `java.security` provider chain is no longer a blocker for M2.
+
+### Boot classpath
+
+`conscrypt.jar` (the `com.android.org.conscrypt` provider classes) lives in the
+`com.android.conscrypt` APEX, not the ART/system boot jars. It is now merged
+into `.cache/boot/android-34/BOOTCLASSPATH` by `tools/extract-bootclasspath.sh`
+from the APEX's `etc/classpaths/bootclasspath.pb` (placed after the ART core
+jars, so the lazy boot-jar loader finds `OpenSSLProvider`/`NativeCrypto` before
+parsing `framework.jar`). The cached `BOOTCLASSPATH` was updated in place.
+
+`java.security.Security.<clinit>` reads `java/security/security.properties`
+from `core-oj.jar`; ART's fallback `Security.initializeStatic()` hardcodes the
+identical four providers, so the fixture does not depend on boot-jar resource
+lookup. (Verified from the real `Security` bytecode: the resource-null path
+still yields `AndroidOpenSSL`, `CertPathProvider`, `BC`, `HarmonyJSSE` in that
+order.)
+
+### `NativeCrypto` (`natives/fwk_conscrypt.rs`, new)
+
+Audited pure-Rust RustCrypto primitives only, no host OpenSSL, no home-grown
+crypto: `md-5`, `sha1`, `sha2` (via `digest::DynDigest`), `hmac`, `aes`
+(ECB/CBC block transform + CTR keystream), `getrandom` for `RAND_bytes`. The
+OpenSSL `EVP_*`/`HMAC_CTX` handle table preserves the `NativeRef` object
+identity that conscrypt relies on. `EVP_MD_CTX_copy_ex`,
+`EVP_DigestSign/Verify*`, TLS/SSL `SSL_*`, `EVP_PKEY_*`, `RSA_*`, `EC_*`,
+`X509_*` and AES-GCM (conscrypt's AEAD path) stay structured
+`UNSUPPORTED_JAVA_API`, never faked. `NativeCryptoJni.init()`'s
+`System.loadLibrary("javacrypto")` is satisfied by the framework-native loader
+(`fwk_jni.rs`), exactly as the other framework JNI libraries are.
+
+### Reflection needed by `Provider$Service.newInstance`
+
+`sun.security.jca.GetInstance` instantiates providers through
+`Class.getConstructor(Class[0]).newInstance(Object[0])`. `natives::reflect`
+returned an empty constructor array and `null` for the internal lookup, so the
+provider chain failed with `NoSuchMethodException` even with conscrypt present.
+`fwk_reflect.rs` now materialises real `java.lang.reflect.Constructor` mirrors
+for `Class.getDeclaredConstructorInternal(Class[])` and implements the no-arg
+`Constructor.newInstance0(Object[])` (a non-empty argument list is a structured
+`UNSUPPORTED_JAVA_API`). This is a general VM capability, listed here as an
+out-of-owned-file edit.
+
+### Fixture 25 extension (tier: NIST-verified)
+
+`fixtures/dexprogs/25_security_digest/Main.java` gained SHA-224/384/512,
+HmacSHA1 and AES-128/256-ECB, AES-128-CBC, AES-128-CTR lines. Their expected
+values are the published FIPS 180-4 / FIPS 197 / NIST SP 800-38A / RFC 2202
+vectors, independently reproduced with Python `hashlib`/`hmac`; these added
+lines are marked **NIST-verified, not ART-captured**. The original
+prefix (providers/digests/HmacSHA256/Base64) is unchanged and remains the ART
+reference. `fixtures/expected-art/dexprogs/25_security_digest.stdout` is
+updated accordingly; `tests/conscrypt_natives.rs` asserts the match in normal
+and GC-stress modes plus the vector integrity.
+
+### Verification
+
+```
+cargo test -p acos-vm --test conscrypt_natives   # 3 passed
+cargo test -p acos-vm --lib fwk_conscrypt        # 4 passed
+cargo test -p acos-vm --test dexprogs            # 2 passed
+tools/diff-dexprogs.sh --corelib real            # 25 PASS; 24 pre-existing FAIL
+ACOS_GC_STRESS=1 ... 25_security_digest           # byte-identical to expected-art
+```
+
+`cargo clippy -D warnings` on `fwk_conscrypt.rs`/`fwk_reflect.rs` is clean (the
+remaining `acos-vm` warnings are pre-existing, in `fwk_input.rs`).
+
+### Lifecycle probe
+
+The probe described above could not be re-run: the shared tree currently does
+not compile (`fwk_dexfile.rs`, another agent's in-flight file) and the clean
+worktree at `HEAD` does not contain the uncommitted M2 runtime. Security
+providers are, however, no longer a blocker for the M2 attach path: the
+`Security`/provider/`MessageDigest`/`Mac` chain executes end to end. The first
+M2 blocker remains `android.graphics.Typeface.<clinit>` ->
+`PatternNative.compileImpl` (ICU regex / font config), unchanged.
+
+### Edits outside the owned files (listed)
+
+* `crates/acos-vm/src/natives/fwk_reflect.rs` — minimal constructor reflection.
+* `crates/acos-vm/src/natives/mod.rs` — one-line module registration (as agreed).
+
+---
+
+# W23-A session — the `android.graphics.fonts.*` native surface; the font block is cleared
+
+**Status: `Typeface.<clinit>` + `loadPreinstalledSystemFontMap` now build the
+system font map from real `/system/etc/fonts.xml` and real
+`/system/fonts/*.ttf`.** The M2 block moved out of the font path entirely.
+Before this session the first structured blocker was
+
+```
+android.graphics.fonts.Font$Builder.nInitBuilder()J  [not implemented]
+  at android.graphics.fonts.SystemFonts.createFontFamily / Typeface.<clinit>
+```
+
+After it, the debug probe's first blocker is `Landroid/hardware/OverlayProperties;->nGetDestructor()J`
+(classes 690 -> 735) and the release probe on the concurrently-moving tree
+runs to `java.lang.RuntimeException: bad array lengths` (classes 748) — both
+after the whole `Typeface`/system-font-map path has completed.
+
+## What runs now
+
+`handleBindApplication` -> `Typeface.setSystemFontMap(null)` ->
+`loadPreinstalledSystemFontMap()`:
+
+1. `SystemFonts.getSystemPreinstalledFontConfig` -> `FontListParser.parse`
+   (real `fonts.xml`; unchanged).
+2. `SystemFonts.buildSystemFallback`/`createFontFamily`:
+   `FontChannel.map0` copies each font file into
+   [`natives::native_mem`], then `Font$Builder.nBuild` reads that buffer back,
+   resolves the face in `acos-render`'s `FontCollection`, and stores a
+   `FontRec`; `FontFamily$Builder.nBuild` stores the `FontFamilyRec`.
+3. `SystemFonts.buildSystemTypefaces` -> `Typeface.initSystemDefaultTypefaces`
+   -> `createFromFamilies` -> `nativeCreateFromArray`, which materialises a
+   `TypefaceRec` carrying the concrete `FontRef` in `gfx_text`'s handle table.
+4. `Typeface.setSystemFontMap` -> `nativeForceSetStaticFinalField`, which
+   actually writes `DEFAULT`/`DEFAULT_BOLD`/`SANS_SERIF`/`SERIF`/`MONOSPACE`
+   into the real `Landroid/graphics/Typeface;` class statics.
+
+`native-tail` from the release probe (end of the run) proves the path executed:
+
+```
+Landroid/graphics/Typeface;->nativeGetWeight(J)I
+Landroid/graphics/Typeface;->nativeCreateWeightAlias(JI)J
+Landroid/graphics/Typeface;->nativeSetDefault(J)V
+Landroid/graphics/Typeface;->nativeForceSetStaticFinalField(Ljava/lang/String;Landroid/graphics/Typeface;)V
+Landroid/graphics/Typeface;->nativeCreateFromTypeface(JI)J
+Landroid/graphics/Typeface;->nativeRegisterGenericFamily(Ljava/lang/String;J)V
+```
+
+A temporary instrumentation run of the same probe logged **384**
+`Font$Builder.nBuild` calls, every one `resolved=true` against the real
+collection (all `Roboto-Regular.ttf`, weights 100..900 + the fallback
+families). The instrumentation was removed before the final build.
+
+## Java-level acceptance (real corelib)
+
+`cargo test -p acos-vm --test font_natives` compiles
+`tests/java/FontNativesMain.java` (with `tests/java/font_stubs` supplying the
+hidden `Typeface.loadPreinstalledSystemFontMap` at compile time only —
+`getDeclaredMethodInternal` is still `null`, so reflection cannot reach it) and
+runs it on `--corelib real` with the ICU roots seeded. Output:
+
+```
+default.present=true
+default.family=sans-serif
+default.style=0
+bold.present=true
+bold.style=1
+measure.24=57.0
+measure.48=113.0
+family.size=1
+font.weight=700
+font.index=0
+font.file=Roboto-Regular.ttf
+font.axes=0
+font.ascent=-44.53125
+font.descent=11.71875
+glyph.advance=21.28125
+glyph.rect=true,true
+done
+```
+
+The test asserts `Typeface.DEFAULT` is non-null with family `sans-serif`,
+`Typeface.create("sans-serif", BOLD)` has style 1, `Paint.measureText("Hello")`
+at 24/48 px is positive and scales, and the 24 px width agrees with
+`acos-render`'s `TextEngine` to within 1 px (Minikin quantises per-glyph
+advances to 1/64 px; acos-render keeps the float sum). The `Font`/
+`FontFamily` natives (`getMetrics`, `getGlyphBounds`, `getStyle`, `getFile`,
+`getAxes`) are exercised directly and produce a real ascent/descent/advance.
+
+## Files
+
+| file | change |
+|---|---|
+| `crates/acos-vm/src/natives/fwk_fonts.rs` (**new**) | Font/Font$Builder/FontFamily/FontFamily$Builder registries and natives; `Typeface.nativeCreateFromArray`, `nativeForceSetStaticFinalField`, `nativeGetSupportedAxes`; buffer->`acos-render` face resolution. |
+| `crates/acos-vm/src/natives/gfx_text.rs` | `TypefaceRec` gained `font: Option<FontRef>`; `style()` uses the concrete face when present; `new_typeface` compares family/weight/italic. No native signature changed. |
+| `crates/acos-vm/src/natives/mod.rs` | `mod fwk_fonts;` + one `fwk_fonts::install(vm)?;` after `gfx_text` (the two `Typeface` natives override the W19-B placeholders). |
+| `crates/acos-vm/Cargo.toml` | added `ttf-parser = "0.25"` (already in the workspace lock via acos-render) for glyph advances/bounds and variable-axis tags. |
+| `crates/acos-vm/tests/font_natives.rs`, `tests/java/FontNativesMain.java`, `tests/java/font_stubs/android/graphics/Typeface.java` (**new**) | Java-level acceptance + compile-time hidden-API stub. |
+
+The extractor already emits `fonts/` (`fonts.xml` + `*.ttf`/`*.otf`); no change
+was needed. `tools/diff-dexprogs.sh --corelib real` on the current
+(concurrently-moving) tree: **24 pass / 1 fail / 0 unsupported of 25** — the
+only failure is the pre-existing `25_security_digest` provider issue. The
+delta from W21-A's 23 pass is the concurrently-landed zip fixture
+(`24_zip_roundtrip` now passes), not this session: fonts are not on the console
+`run-dex` path.
+
+## Honesty / divergences
+
+* `Font.nNewByteBuffer`, `Typeface.nativeReadTypefaces`, `Typeface.nativeWriteTypefaces`
+  remain structured `UNSUPPORTED_JAVA_API` — ACOS cannot synthesise a
+  `DirectByteBuffer` over an arbitrary native address from a native, and the
+  serialised font-map transport is unused by the preinstalled path. No fake
+  handle is returned.
+* `FontFamily`'s custom/default-fallback flags are accepted and discarded (the
+  Java `FontFamily` surface never reads them back).
+* Variable-font axes are stored (`getAxes`) and reported
+  (`getSupportedAxes`); `rustybuzz` applies them to shaping, while the FreeType
+  A8 mask path still renders the default instance (pre-existing ADR-0019
+  limitation, unchanged).
+* `cargo clippy -D warnings` is clean on the three files touched; the
+  crate-wide run is currently blocked by warnings in the concurrent
+  `fwk_conscrypt.rs`, not by this session.
+* The M2 gate is still red: `app_created=false`, `tx_delivered=false`; no
+  Application/Activity callback is claimed.

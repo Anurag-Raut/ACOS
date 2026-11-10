@@ -257,9 +257,13 @@ profile, 20 samples/metric (memory: 5 fresh processes per N), host 32 threads /
 | first blocker after bind | `Ljava/util/MissingResourceException;: Could not find the bundle android/icu/impl/data/icudt72b/likelySubtags` | structured | — | `result.bind-app.first_blocker` |
 | fixed idle core (Vm only, zero tasks) | 26 780 KiB anon+shmem / 30 637 KiB PSS / 34 472 KiB RSS (p50) | anon+shmem, PSS, RSS (separate) | settled | `result.idle-rss.variants.vm` |
 | fixed idle core (framework booted) | 158 744 KiB anon+shmem (155.0 MiB) / 163 983 KiB PSS (160.1 MiB) / 167 864 KiB RSS | anon+shmem, PSS, RSS (separate) | settled | `result.idle-rss.variants.booted` |
-| per-session incremental N=1/2/5/10 | 155.0 / 154.3 / 153.8 / 153.7 MiB per session | anon+shmem | fresh process per N | `result.sessions.incremental` |
-| marginal N=1→2 / 2→5 / 5→10 | 153.5 / 153.5 / 153.5 MiB per session | anon+shmem | fresh process per N | `result.sessions.marginal` |
-| N=10 total | 1 573 576 KiB anon+shmem (1536.7 MiB), shared pages flat 5.0–5.1 MiB | anon+shmem + private/shared | fresh process | `result.sessions.sessions` |
+| per-session incremental N=1/2/5/10 | 157.6 / 86.1 / 43.0 / 28.7 MiB per session | anon+shmem | fresh process per N | `result.sessions.incremental` |
+| marginal N=1→2 / 2→5 / 5→10 | 14.6 / 14.3 / 14.3 MiB per session | anon+shmem | fresh process per N | `result.sessions.marginal` |
+| per-session N=1/2/5/10/20 (`sessions-shared`) | 157.6 / 86.1 / 43.0 / 28.7 / 21.5 MiB per session | anon+shmem | fresh process per N | `result.sessions-shared.incremental` |
+| marginal N=10→20 (`sessions-shared`) | 14.33 MiB per session | anon+shmem | fresh process | `result.sessions-shared.marginal` |
+| N=10 total | 293 640 KiB anon+shmem (286.7 MiB), shared pages flat 5.0 MiB | anon+shmem + private/shared | fresh process | `result.sessions.sessions` |
+| N=20 total (`sessions-shared`) | 440 376 KiB anon+shmem (430.0 MiB), 20 separate heaps, shared pages flat 5.0 MiB | anon+shmem + private/shared | fresh process | `result.sessions-shared.sessions` |
+| boot-classpath sharing | 50.2 MiB raw DEX + 25.4 MiB parsed + 9.2 MiB decoded code held **once** per process; per-session marginal ≈ 14.3 MiB | structural bytes + process | warm in-process | `results/bench/MEMORY_PROFILE.md` |
 | idle CPU, parked/blocked | 0 ticks over 5 s in all 20 windows (0.0 % of one core) | CPU window | parked | `result.idle-cpu` |
 | interpreter `02_int_arith` | 22.823 / 22.988 ms, 62 380 insns, 2.73 M insn/s | wall + counters | cold | `result.interpreter` |
 | interpreter `05_branches_loops` | 22.663 / 22.905 ms, 49 732 insns, 2.19 M insn/s | wall + counters | cold | `result.interpreter` |
@@ -270,7 +274,7 @@ profile, 20 samples/metric (memory: 5 fresh processes per N), host 32 threads /
 | Row | Legacy | ACOS | Verdict |
 |---|---|---|---|
 | M1 fixed idle core | 206.0 MiB (W1) / 303.9 MiB (v9) anon+shmem | 155.0 MiB anon+shmem booted; 26.2 MiB Vm-only | **better** (−24.8 % vs W1); states differ (see note) |
-| M2 per-session at N=5 | 78.7 MiB (v9) anon+shmem | 153.8 MiB/session | **worse** (+95.5 %) |
+| M2 per-session at N=5 | 78.7 MiB (v9) anon+shmem | 43.0 MiB/session | **better** (−45.3 %) |
 | M3 cold → first correct frame | 3.620 s | not measured | `not-yet-measurable` (no renderer) |
 | M4 worker create → frame | 1.251–1.343 s | not measured | `not-yet-measurable` (no worker path) |
 | M5 fresh screenshot | 0.066–0.067 s | not measured | `not-yet-measurable` |
@@ -282,7 +286,7 @@ profile, 20 samples/metric (memory: 5 fresh processes per N), host 32 threads /
 | M11 tasks / GiB-minute | not published | not measured | `not-yet-measurable` |
 | bare core (P2c) | 278 MiB anon | 26.2 MiB Vm-only anon+shmem | **better** (−90.4 %), different state (lazy classpath) |
 | per-session N=1 (v9) | 130.3 MiB | 155.0 MiB | **worse** (+19.0 %) |
-| marginal N=5→10 (v5) | ~99.3 MiB workset | 153.5 MiB anon+shmem | **worse** (+54.6 %); not the same metric type |
+| marginal N=5→10 (v5) | ~99.3 MiB workset | 14.3 MiB anon+shmem | **better** (−85.6 %); not the same metric type |
 | guest `boot_completed` (v10) | 1.517 s | 0.608 s attach handshake | not comparable (no guest boot) |
 | parked idle CPU | 3.86–5.94 % (legacy: unreliable) | 0.0 % | **better** |
 | process spawn → VM ready | no legacy metric | 20.841 ms | `no-legacy-baseline` |
@@ -291,18 +295,20 @@ profile, 20 samples/metric (memory: 5 fresh processes per N), host 32 threads /
 
 ### 8.3 Worse than legacy — explicit, with plan
 
-1. **M2 / per-session memory (+95.5 % at N=5; +19.0 % at N=1; +54.6 % marginal
-   N=5→10).** One in-process session costs ~154 MiB anon+shmem and the marginal
-   cost is flat (153.5 MiB at every step), i.e. **nothing is shared**. Root
-   cause, measured: the boot classpath and app DEX are read with
-   `std::fs::read` and parsed into the VM heap — there is no `mmap`, so DEX
-   pages are private anonymous pages. Shared pages stay at 5.0–5.1 MiB from
-   N=1 to N=10 (that is the binary + libs only). Plan: (a) `mmap` boot-classpath
-   and app DEX file-backed and share one parsed class table per process
-   (the legacy engine's main lever), (b) copy-on-write session state instead of
-   a full second VM, (c) re-measure with this harness; the gate rows
-   `sessions.*` exist so a regression is caught, and the win will show up as a
-   falling `sessions.marginal_n5_to_n10_mib`.
+1. **RESOLVED for N≥2: per-session memory.** The immutable boot classpath is
+   now shared through `acos_dex::cache::BootCache` (raw bytes + parsed
+   `DexFile` + compact class index, keyed by file fingerprint) and
+   `acos_vm::codecache` (decoded `MethodCode`, keyed by `DexFile::id` +
+   `code_off`), both process-global `Arc` caches. Measured: N=5 incremental
+   **43.0 MiB/session vs 78.7 MiB legacy (−45.3 %, better)**, marginal N=5→10
+   **14.3 vs ~99.3 MiB (−85.6 %, better)**, N=20 total **430.0 MiB** for 20
+   independent heaps (21.5 MiB/session). The first session still costs
+   **157.6 MiB (+21 % vs legacy N=1)** because it pays the whole boot classpath;
+   the remaining ~14.3 MiB marginal is per-VM DEX handle caches (~9.6 MiB) plus
+   class/method/type tables. Full profile and the isolation trade-off (processes
+   remain the isolation unit; in-process sharing is for trusted agent-owned
+   sessions; zygote-like template proposed for untrusted N):
+   `results/bench/MEMORY_PROFILE.md`.
 2. **Vm-only core is not comparable to the legacy bare core as a like-for-like
    claim.** ACOS parses boot-classpath DEX lazily (40 classes at `Vm` ready), so
    its 26.2 MiB is a leaner state than a legacy core that had its image loaded.

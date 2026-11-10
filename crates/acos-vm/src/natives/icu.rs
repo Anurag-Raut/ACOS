@@ -276,6 +276,7 @@ fn encode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             }
         }
     }
+    // `CharsetEncoderICU.setPosition` uses absolute byte offsets.
     bo += out.len();
     write_offsets(vm, data, ci, bo);
     vm.ret_i32(ctx, if overflow { U_BUFFER_OVERFLOW } else { 0 });
@@ -340,20 +341,20 @@ fn decode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let out_end = vm.arg_i32(ctx, 4).max(0) as usize;
     let data = vm.arg_ref(ctx, 5);
     let charset = converter_name(vm, id);
-    let _ = charset;
 
     let bytes = byte_array(vm, input).unwrap_or_default();
-    let (mut bi, mut co) = read_offsets(vm, data);
+    let (start_bi, start_co) = read_offsets(vm, data);
+    let mut bi = start_bi.min(bytes.len());
+    let co = start_co;
     let limit_bytes = in_end.min(bytes.len());
-    let limit_chars = out_end;
     let mut out: Vec<u16> = Vec::new();
     let mut overflow = false;
     while bi < limit_bytes {
-        let ch = bytes[bi] as u8;
-        if co + out.len() >= limit_chars {
+        if co + out.len() >= out_end {
             overflow = true;
             break;
         }
+        let ch = bytes[bi] as u8;
         bi += 1;
         match charset.as_str() {
             "UTF-16LE" => {
@@ -378,8 +379,10 @@ fn decode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             }
         }
     }
-    co += out.len();
-    write_offsets(vm, data, bi, co);
+    // `CharsetDecoderICU.setPosition` adds `data[i]` to the buffer position, so
+    // these are the *counts* consumed/produced in this call, not absolute
+    // array offsets (AOSP's JNI binding subtracts the starting offsets).
+    write_offsets(vm, data, bi - start_bi, out.len());
     vm.ret_i32(ctx, if overflow { U_BUFFER_OVERFLOW } else { 0 });
     Ok(())
 }

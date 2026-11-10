@@ -146,6 +146,21 @@ impl Default for ParcelStore {
     }
 }
 
+impl ParcelStore {
+    /// Map a Java `IBinder` handle to its wire [`BinderId`].
+    ///
+    /// Exposed so the `view.input` natives can serialise an `InputChannel`
+    /// token through the same binder sink the Parcel natives use.
+    pub(crate) fn binder_id_of(&mut self, h: Handle) -> Option<BinderId> {
+        self.sink.binder_id(h)
+    }
+
+    /// Resolve a wire [`BinderId`] back to its Java `IBinder` handle.
+    pub(crate) fn binder_object_of(&mut self, id: BinderId) -> Option<Handle> {
+        self.sink.binder_object(id)
+    }
+}
+
 thread_local! {
     static STORE: RefCell<ParcelStore> = RefCell::new(ParcelStore::default());
 }

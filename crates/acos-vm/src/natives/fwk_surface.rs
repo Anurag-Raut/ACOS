@@ -294,6 +294,29 @@ pub fn presented_frames() -> u64 {
     STATE.with(|s| s.borrow().presented_frames)
 }
 
+/// The `SurfaceControl` layer handle a `Surface` wraps, if the surface and its
+/// layer are still live. Used by the HWUI frame handoff to address the compositor
+/// layer bound by the WMS backend.
+#[must_use]
+pub fn surface_layer(surface: u64) -> Option<u64> {
+    STATE.with(|s| {
+        let st = s.borrow();
+        st.surfaces.get(&surface).map(|r| r.layer)
+    })
+}
+
+/// The buffer size of the layer a `Surface` wraps, if both are still live.
+#[must_use]
+pub fn surface_size(surface: u64) -> Option<(i32, i32)> {
+    STATE.with(|s| {
+        let st = s.borrow();
+        st.surfaces
+            .get(&surface)
+            .and_then(|r| st.layers.get(&r.layer))
+            .map(|l| (l.width, l.height))
+    })
+}
+
 /// Number of live layer records (test helper).
 #[must_use]
 pub fn live_layers() -> usize {
@@ -383,7 +406,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let surface = "Landroid/view/Surface;";
     vm.register_native(surface, "nativeIsValid", "(J)Z", surface_is_valid);
     vm.register_native(surface, "nativeCreateFromSurfaceControl", "(J)J", surface_from_control);
-    vm.register_native(surface, "nativeGetFromSurfaceControl", "(JJ)J", surface_from_control);
+    vm.register_native(surface, "nativeGetFromSurfaceControl", "(JJ)J", surface_get_from_control);
     vm.register_native(surface, "nativeGetFromBlastBufferQueue", "(JJ)J", surface_from_queue);
     vm.register_native(surface, "nativeGetWidth", "(J)I", surface_width);
     vm.register_native(surface, "nativeGetHeight", "(J)I", surface_height);
@@ -440,8 +463,12 @@ fn apply_free_function(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             FREE_TRANSACTION => {
                 st.transactions.remove(&ptr);
             }
-            // Some other native object's finalizer: not ours, leave it alone.
-            _ => {}
+            // DisplayEventReceiver's finalizer is registered here because the
+            // framework routes every `NativeAllocationRegistry` free through
+            // this one native; the vsync module owns the receiver table.
+            _ => {
+                let _ = crate::natives::fwk_vsync::free_receiver(vm, ptr);
+            }
         });
     }
     Ok(())
@@ -1482,6 +1509,37 @@ fn surface_is_valid(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn surface_from_control(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let control = vm.arg_i64(ctx, 0) as u64;
+    let handle = with_state(|st| {
+        if !st.layers.get(&control).is_some_and(|l| l.alive) {
+            return None;
+        }
+        let handle = st.alloc();
+        st.surfaces.insert(
+            handle,
+            SurfaceRecord {
+                id: handle,
+                layer: control,
+                valid: true,
+            },
+        );
+        Some(handle)
+    });
+    match handle {
+        Some(handle) => {
+            vm.ret_i64(ctx, handle as i64);
+            Ok(())
+        }
+        None => Err(stale_error(vm, control)),
+    }
+}
+
+/// `Surface.nativeGetFromSurfaceControl(J surfacePtr, J controlPtr)J`.
+///
+/// Unlike `nativeCreateFromSurfaceControl(J)`, the control handle is the
+/// **second** argument (the first is the `Surface.mNativeObject` being
+/// populated), so this cannot share [`surface_from_control`].
+fn surface_get_from_control(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let control = vm.arg_i64(ctx, 1) as u64;
     let handle = with_state(|st| {
         if !st.layers.get(&control).is_some_and(|l| l.alive) {
             return None;

@@ -37,7 +37,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd, RawFd};
 
 use rustix::event::epoll::EventFlags;
 use rustix::net::{RecvFlags, SendFlags};
@@ -49,6 +49,7 @@ use crate::javabridge::JavaValue;
 use crate::vm::Vm;
 
 use super::looper::{handle_for_ptr, LooperHandle};
+use super::parcel::with_store;
 
 /// `MotionEvent.ACTION_DOWN`.
 pub const ACTION_DOWN: i32 = 0;
@@ -226,31 +227,33 @@ impl InputFrame {
     /// Decode a record produced by [`InputFrame::encode`].
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
         let mut r = FrameReader { b: bytes, o: 0 };
-        let mut f = InputFrame::default();
-        f.kind = r.i32()?;
-        f.seq = r.i32()?;
-        f.action = r.i32()?;
-        f.flags = r.i32()?;
-        f.edge_flags = r.i32()?;
-        f.source = r.i32()?;
-        f.device_id = r.i32()?;
-        f.display_id = r.i32()?;
-        f.meta_state = r.i32()?;
-        f.button_state = r.i32()?;
-        f.classification = r.i32()?;
-        f.action_button = r.i32()?;
-        f.key_code = r.i32()?;
-        f.scan_code = r.i32()?;
-        f.repeat = r.i32()?;
-        f.unicode_char = r.i32()?;
-        f.down_time = r.i64()?;
-        f.event_time = r.i64()?;
-        f.x_offset = r.f32()?;
-        f.y_offset = r.f32()?;
-        f.x_precision = r.f32()?;
-        f.y_precision = r.f32()?;
+        let mut f = InputFrame {
+            kind: r.i32()?,
+            seq: r.i32()?,
+            action: r.i32()?,
+            flags: r.i32()?,
+            edge_flags: r.i32()?,
+            source: r.i32()?,
+            device_id: r.i32()?,
+            display_id: r.i32()?,
+            meta_state: r.i32()?,
+            button_state: r.i32()?,
+            classification: r.i32()?,
+            action_button: r.i32()?,
+            key_code: r.i32()?,
+            scan_code: r.i32()?,
+            repeat: r.i32()?,
+            unicode_char: r.i32()?,
+            down_time: r.i64()?,
+            event_time: r.i64()?,
+            x_offset: r.f32()?,
+            y_offset: r.f32()?,
+            x_precision: r.f32()?,
+            y_precision: r.f32()?,
+            pointers: Vec::new(),
+        };
         let n = r.i32()?;
-        if n < 0 || n > 256 {
+        if !(0..=256).contains(&n) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "bad pointer count"));
         }
         for _ in 0..n {
@@ -381,6 +384,8 @@ struct ChannelState {
     fd: OwnedFd,
     /// Frames the sender could not write because the seqpacket queue was full.
     pending: VecDeque<Vec<u8>>,
+    /// Cached `android.os.Binder` token returned by `nativeGetToken`.
+    token: Option<Handle>,
 }
 
 #[derive(Debug)]
@@ -403,14 +408,16 @@ struct Pools {
     channels: BTreeMap<u64, ChannelState>,
     receivers: BTreeMap<u64, ReceiverState>,
     senders: BTreeMap<u64, SenderState>,
-    /// Receiver-side dispatch sequence (never reused).
-    next_dispatch_seq: i32,
     /// Local ack counter used when no [`InputHost`] is installed.
     finished: u64,
     /// Frames actually dispatched through `dispatchInputEvent`.
     dispatched: u64,
     /// Times the looper poll hook observed a ready input fd.
     wake_polls: u64,
+    /// Native `MotionEvent` structs allocated.
+    motion_created: u64,
+    /// Native `MotionEvent` structs disposed.
+    motion_disposed: u64,
     /// Per-native invocation counters, for the T-36 acceptance evidence.
     hits: BTreeMap<&'static str, u64>,
 }
@@ -496,6 +503,18 @@ pub fn dispatched_frames() -> u64 {
 #[must_use]
 pub fn wake_polls() -> u64 {
     POOLS.with(|p| p.borrow().wake_polls)
+}
+
+/// Native `MotionEvent` structs allocated so far (test helper).
+#[must_use]
+pub fn motion_created() -> u64 {
+    POOLS.with(|p| p.borrow().motion_created)
+}
+
+/// Native `MotionEvent` structs disposed so far (test helper).
+#[must_use]
+pub fn motion_disposed() -> u64 {
+    POOLS.with(|p| p.borrow().motion_disposed)
 }
 
 fn unsupported(api: &str) -> VmError {
@@ -698,6 +717,7 @@ fn me_initialize(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         let mut p = p.borrow_mut();
         let id = if ptr != 0 { ptr } else { p.alloc_id() };
         p.motions.insert(id, state);
+        p.motion_created += 1;
         id
     });
     vm.ret_i64(ctx, new_ptr as i64);
@@ -722,7 +742,10 @@ fn me_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeDispose");
     let ptr = vm.arg_i64(ctx, 0) as u64;
     POOLS.with(|p| {
-        p.borrow_mut().motions.remove(&ptr);
+        let mut p = p.borrow_mut();
+        if p.motions.remove(&ptr).is_some() {
+            p.motion_disposed += 1;
+        }
     });
     Ok(())
 }
@@ -757,10 +780,7 @@ fn me_add_batch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let event_time = vm.arg_i64(ctx, 1);
     let coords = vm.arg_ref(ctx, 2);
     let _meta_state = vm.arg_i32(ctx, 3);
-    let n = match read_motion(ptr, |s| s.pointers.len()) {
-        Some(n) => n,
-        None => 0,
-    };
+    let n: usize = read_motion(ptr, |s| s.pointers.len()).unwrap_or_default();
     let mut sample = Vec::with_capacity(n);
     for i in 0..n {
         let mut p = Pointer::default();
@@ -1238,16 +1258,6 @@ fn key_code_to_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// The single ACOS virtual keyboard is QWERTY.
 const KEYBOARD_QWERTY: i32 = 1;
 
-fn kcm_alloc(vm: &mut Vm, ctx: NativeCtx, keyboard_type: i32) -> VmResult<()> {
-    let id = POOLS.with(|p| {
-        let mut p = p.borrow_mut();
-        let id = p.alloc_id();
-        p.key_maps.insert(id, KeyMapState { keyboard_type });
-        id
-    });
-    vm.ret_i64(ctx, id as i64);
-    Ok(())
-}
 
 fn kcm_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeDispose");
@@ -1410,6 +1420,7 @@ fn register_channel(name: String, fd: OwnedFd) -> u64 {
                 name,
                 fd,
                 pending: VecDeque::new(),
+                token: None,
             },
         );
         id
@@ -1458,17 +1469,20 @@ fn ic_get_token(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.ret_ref(ctx, crate::heap::NULL);
         return Ok(());
     }
-    // A real `android.os.Binder` object; the token identity is the channel ptr.
-    match vm.new_instance("android/os/Binder") {
-        Ok(h) => {
-            vm.ret_ref(ctx, h);
-            Ok(())
-        }
-        Err(e) => Err(match e {
-            crate::javabridge::BridgeError::Vm(e) => e,
-            other => VmError::Internal(other.to_string()),
-        }),
+    if let Some(h) = POOLS.with(|p| p.borrow().channels.get(&ptr).and_then(|c| c.token)) {
+        vm.ret_ref(ctx, h);
+        return Ok(());
     }
+    // A real `android.os.Binder` object; the token identity is the channel ptr.
+    let h = vm.new_instance("android/os/Binder").map_err(bridge_err)?;
+    vm.root_handle(h);
+    POOLS.with(|p| {
+        if let Some(c) = p.borrow_mut().channels.get_mut(&ptr) {
+            c.token = Some(h);
+        }
+    });
+    vm.ret_ref(ctx, h);
+    Ok(())
 }
 
 fn ic_dup(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1494,9 +1508,12 @@ fn ic_dup(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn ic_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeDispose");
     let ptr = vm.arg_i64(ctx, 0) as u64;
-    POOLS.with(|p| {
-        p.borrow_mut().channels.remove(&ptr);
-    });
+    let removed = POOLS.with(|p| p.borrow_mut().channels.remove(&ptr));
+    if let Some(c) = removed {
+        if let Some(t) = c.token {
+            vm.release_bridge_root(t);
+        }
+    }
     Ok(())
 }
 
@@ -1506,15 +1523,119 @@ fn ic_get_finalizer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn ic_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let _ = vm.arg_ref(ctx, 0);
-    Err(unsupported("InputChannel.nativeReadFromParcel"))
+/// The `Parcel.mNativePtr` handle of a Java `Parcel` object.
+fn parcel_ptr(vm: &mut Vm, obj: Handle) -> VmResult<u64> {
+    // `ParcelTable` handle 0 is the first live slot, so 0 is a valid handle.
+    match vm.get_field(obj, "mNativePtr") {
+        Ok(JavaValue::Long(v)) => Ok(v as u64),
+        _ => Err(unsupported("InputChannel: null or dead Parcel")),
+    }
 }
 
+fn parcel_err(e: impl std::fmt::Display) -> VmError {
+    VmError::Internal(format!("InputChannel parcel: {e}"))
+}
+
+fn parcel_flat<T>(
+    r: Result<Result<T, acos_parcel::ParcelError>, acos_parcel::ParcelError>,
+) -> VmResult<T> {
+    match r {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(e)) | Err(e) => Err(parcel_err(e)),
+    }
+}
+
+/// `nativeReadFromParcel(Parcel)J`: rebuild a channel from the name + fd +
+/// token written by [`ic_write_to_parcel`].
+fn ic_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeReadFromParcel");
+    let parcel_obj = vm.arg_ref(ctx, 0);
+    let handle = parcel_ptr(vm, parcel_obj)?;
+    let name = with_store(|s| {
+        s.table
+            .with_parcel(handle, acos_parcel::Parcel::read_string16_lenient)
+    })
+    .unwrap_or_default();
+    let raw = match with_store(|s| {
+        s.table
+            .with_parcel(handle, acos_parcel::Parcel::read_file_descriptor)
+    }) {
+        Ok(Ok(Some(raw))) => raw,
+        Ok(Ok(None)) => 0,
+        Ok(Err(e)) | Err(e) => return Err(parcel_err(e)),
+    };
+    let token_id = match with_store(|s| {
+        s.table
+            .with_parcel(handle, acos_parcel::Parcel::read_strong_binder)
+    }) {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) | Err(e) => return Err(parcel_err(e)),
+    };
+    let token = token_id.and_then(|id| with_store(|s| s.binder_object_of(id)));
+    if let Some(t) = token {
+        vm.root_handle(t);
+    }
+    if raw == 0 {
+        return Err(unsupported("InputChannel.nativeReadFromParcel: no fd"));
+    }
+    // Duplicate the parcel-owned descriptor into a channel ACOS owns.
+    let fd = with_store(|s| {
+        s.table.with_parcel(handle, |p| {
+            p.borrowed_file_descriptor(raw)
+                .and_then(|b| b.try_clone_to_owned().ok())
+        })
+    })
+    .ok()
+    .flatten()
+    .ok_or_else(|| unsupported("InputChannel.nativeReadFromParcel: dead fd"))?;
+    let id = POOLS.with(|p| {
+        let mut p = p.borrow_mut();
+        let id = p.alloc_id();
+        p.channels.insert(
+            id,
+            ChannelState {
+                name: name.unwrap_or_default(),
+                fd,
+                pending: VecDeque::new(),
+                token,
+            },
+        );
+        id
+    });
+    vm.ret_i64(ctx, id as i64);
+    Ok(())
+}
+
+/// `nativeWriteToParcel(Parcel, J)V`: write name + duplicated fd + token.
 fn ic_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let _ = vm.arg_ref(ctx, 0);
-    let _ = vm.arg_i64(ctx, 1);
-    Err(unsupported("InputChannel.nativeWriteToParcel"))
+    me_hit(ctx, "nativeWriteToParcel");
+    let parcel_obj = vm.arg_ref(ctx, 0);
+    let ptr = vm.arg_i64(ctx, 1) as u64;
+    let handle = parcel_ptr(vm, parcel_obj)?;
+    let (name, dup, token) = POOLS.with(|p| {
+        let p = p.borrow();
+        let c = p.channels.get(&ptr)?;
+        Some((
+            c.name.clone(),
+            rustix::io::dup(&c.fd).ok()?,
+            c.token,
+        ))
+    })
+    .ok_or_else(|| unsupported("InputChannel.nativeWriteToParcel: dead channel"))?;
+    parcel_flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_string16_opt(Some(&name)))
+    }))?;
+    parcel_flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_file_descriptor(dup.as_fd()))
+    }))?;
+    let token_id = token.and_then(|h| with_store(|s| s.binder_id_of(h)));
+    let _ = with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_strong_binder_opt(token_id))
+    });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1685,11 +1806,11 @@ fn send_to_channel(channel: u64, frame: &InputFrame) -> io::Result<()> {
             Ok(_) => Err(io::Error::new(io::ErrorKind::WriteZero, "short channel send")),
             // A full seqpacket queue is not an error: queue the frame and flush
             // it once the receiver has drained, exactly like the real sender.
-            Err(rustix::io::Errno::AGAIN) | Err(rustix::io::Errno::WOULDBLOCK) => {
+            Err(rustix::io::Errno::AGAIN) => {
                 c.pending.push_back(bytes);
                 Ok(())
             }
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            Err(e) => Err(io::Error::other(e.to_string())),
         }
     })
 }
@@ -1881,11 +2002,13 @@ fn drain_receiver(vm: &mut Vm, receiver: u64) -> VmResult<usize> {
     let Some(weak) = weak else {
         return Ok(0);
     };
+    // The receiver has now drained the socket; push any queued frames back in
+    // so the fd stays readable and the next looper poll keeps dispatching.
+    flush_pending();
     let mut frames = Vec::new();
     for bytes in bytes_list {
-        match InputFrame::decode(&bytes) {
-            Ok(f) => frames.push(f),
-            Err(_) => {}
+        if let Ok(f) = InputFrame::decode(&bytes) {
+            frames.push(f);
         }
     }
     if frames.is_empty() {

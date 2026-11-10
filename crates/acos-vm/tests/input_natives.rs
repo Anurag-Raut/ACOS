@@ -188,19 +188,13 @@ fn motion_event_round_trips_and_receiver_finishes() {
         return;
     };
     fwk_input::reset_hits();
-    let Some((_vm, code, stdout, stderr, err)) = run(&dex, "InputMain") else {
+    let Some((_vm, code, stdout, _stderr, err)) = run(&dex, "InputMain") else {
         return;
     };
     assert_eq!(code, 0, "run failed: {err:?}\nstdout={stdout}");
     assert!(err.is_none(), "{err:?}");
     assert_eq!(field(&stdout, "sent1"), "true");
     assert_eq!(field(&stdout, "sent2"), "true");
-    eprintln!(
-        "DEBUG dispatched={} wake_polls={} finished={}",
-        fwk_input::dispatched_frames(),
-        fwk_input::wake_polls(),
-        fwk_input::finished_events()
-    );
     assert_eq!(field(&stdout, "received"), "2", "stdout:\n{stdout}");
     assert_eq!(field(&stdout, "finished"), "2", "stdout:\n{stdout}");
     assert_eq!(field(&stdout, "downAction"), "0");
@@ -315,7 +309,37 @@ fn thousand_events_leak_no_handles_or_fds() {
     assert_eq!(code, 0, "run failed: {err:?}\nstderr={stderr}\nstdout={stdout}");
     assert_eq!(field(&stdout, "received"), "1000", "stdout:\n{stdout}");    assert_eq!(field(&stdout, "finished"), "1000", "stdout:\n{stdout}");
     // Every native struct/channel/receiver was disposed by the Java program.
-    assert_eq!(fwk_input::live_motion_events(), 0, "MotionEvent structs leaked");
+    // The channel descriptors and the native receivers are owned by ACOS and
+    // are released by the Java program's `dispose()` calls: strictly zero.
     assert_eq!(fwk_input::live_channels(), 0, "InputChannels leaked");
     assert_eq!(fwk_input::live_receivers(), 0, "InputEventReceivers leaked");
+    // `MotionEvent` native structs are owned by the framework's
+    // `NativeAllocationRegistry` (freed by the finalizer), and the Java
+    // recycler pool reuses a bounded number of objects (MAX_RECYCLED = 10), so
+    // 1000 events must not grow the live set proportionally.
+    assert_eq!(fwk_input::motion_created(), 2000, "expected 2 x 1000 events");
+    assert!(
+        fwk_input::live_motion_events() <= 16,
+        "MotionEvent structs grew with the event count: {}",
+        fwk_input::live_motion_events()
+    );
+}
+
+#[test]
+fn input_channel_round_trips_through_a_parcel() {
+    let Some(dex) = compile_cases(&["InputParcelMain"]) else {
+        eprintln!("SKIP input natives: javac/d8/android.jar unavailable");
+        return;
+    };
+    let Some((_vm, code, stdout, stderr, err)) = run(&dex, "InputParcelMain") else {
+        return;
+    };
+    assert_eq!(
+        code, 0,
+        "run failed: {err:?}\nstderr={stderr}\nstdout={stdout}"
+    );
+    assert_eq!(field(&stdout, "name"), "acos-parcel-test (client)");
+    assert_eq!(field(&stdout, "readName"), "acos-parcel-test (client)");
+    assert_eq!(field(&stdout, "sent"), "true");
+    assert_eq!(field(&stdout, "received"), "1", "stdout:\n{stdout}");
 }

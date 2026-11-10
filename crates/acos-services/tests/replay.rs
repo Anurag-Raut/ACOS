@@ -594,6 +594,20 @@ fn replay_all_measured_outgoing_calls() {
     );
 }
 
+/// T-36 acceptance: the recorded `acos-wm` binder replay produces byte-identical
+/// outcomes across two independent runs (no hidden clock/order state).
+#[test]
+fn wm_replay_is_deterministic_across_runs() {
+    let first = acos_wm::replay::run_default_replays().expect("first replay");
+    let second = acos_wm::replay::run_default_replays().expect("second replay");
+    assert_eq!(first, second, "replay diverged between runs");
+    assert!(
+        first.count(|s| matches!(s, acos_wm::replay::ReplayStatus::Ok)) >= 40,
+        "replay covered too few rows: {}",
+        first.count(|s| matches!(s, acos_wm::replay::ReplayStatus::Ok))
+    );
+}
+
 #[test]
 fn replay_launch_sequence_is_order_stable() {
     // The measured order is exactly the order of `launch_cases`; re-running it

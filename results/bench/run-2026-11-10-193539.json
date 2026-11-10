@@ -1,0 +1,469 @@
+{
+  "schema": "acos-bench-run/v1",
+  "timestamp": "2026-11-10T19:35:58",
+  "commit": "ced0d70",
+  "samples_per_metric": 3,
+  "profile": "release",
+  "methodology": "BENCHMARKS.md \u00a72: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric",
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "threads": 32,
+    "kernel": "7.2.11-arch1-1",
+    "ram_total_kib": 63394528,
+    "ram_available_at_start_kib": 42366868,
+    "zram_swap_total_kib": 20971516,
+    "loadavg1": "1.89",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "fixture": {
+    "path": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+    "sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+    "package": "com.example.helloviews",
+    "api_level": 34,
+    "abi": "x86_64"
+  },
+  "metric_status": {
+    "sessions": "pass"
+  },
+  "gates": {
+    "sessions.n10.anon_plus_shmem_kib.p50": {
+      "p50": 1573616.0,
+      "p95": 1573624.0
+    },
+    "sessions.marginal_n5_to_n10_mib.p50": {
+      "p50": 153.522
+    },
+    "sessions.incremental_n5_mib.p50": {
+      "p50": 153.825
+    }
+  },
+  "envelopes": {
+    "sessions": {
+      "request_id": "bench_553ca_18e6b42190aede2c",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "apk_sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+        "cold_or_warm": "fresh process per N; sessions are in-process and sequential",
+        "corelib": "real",
+        "definition": "per-session incremental (loaded-bare)/N and marginal (total(high)-total(low))/(high-low) memory of the current boot path",
+        "fixture": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+        "incremental": [
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 158780.0,
+            "incremental_miB_per_session": 155.059,
+            "n": 1
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157980.0,
+            "incremental_miB_per_session": 154.277,
+            "n": 2
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157516.8,
+            "incremental_miB_per_session": 153.825,
+            "n": 5
+          },
+          {
+            "incremental_anon_plus_shmem_kib_per_session": 157361.6,
+            "incremental_miB_per_session": 153.673,
+            "n": 10
+          }
+        ],
+        "limit": "Runtime::with_host installs the process-global Binder transport, so N live runtimes are a memory experiment, not a working multi-session configuration",
+        "marginal": [
+          {
+            "from_n": 1,
+            "marginal_anon_plus_shmem_kib_per_session": 157180.0,
+            "marginal_miB_per_session": 153.496,
+            "to_n": 2
+          },
+          {
+            "from_n": 2,
+            "marginal_anon_plus_shmem_kib_per_session": 157208.0,
+            "marginal_miB_per_session": 153.523,
+            "to_n": 5
+          },
+          {
+            "from_n": 5,
+            "marginal_anon_plus_shmem_kib_per_session": 157206.4,
+            "marginal_miB_per_session": 153.522,
+            "to_n": 10
+          }
+        ],
+        "metric": "sessions",
+        "sessions": [
+          {
+            "anon_plus_shmem_kib": {
+              "max": 158784.0,
+              "mean": 158776.0,
+              "min": 158764.0,
+              "p50": 158780.0,
+              "p95": 158784.0,
+              "raw": [
+                158764.0,
+                158780.0,
+                158784.0
+              ],
+              "samples": 3
+            },
+            "miB_anon_plus_shmem_p50": 155.059,
+            "n": 1,
+            "private_kib": {
+              "max": 162796.0,
+              "mean": 162777.333,
+              "min": 162764.0,
+              "p50": 162772.0,
+              "p95": 162796.0,
+              "raw": [
+                162764.0,
+                162772.0,
+                162796.0
+              ],
+              "samples": 3
+            },
+            "pss_kib": {
+              "max": 164123.0,
+              "mean": 164105.0,
+              "min": 164089.0,
+              "p50": 164103.0,
+              "p95": 164123.0,
+              "raw": [
+                164089.0,
+                164103.0,
+                164123.0
+              ],
+              "samples": 3
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 158764.0,
+              "anonymous_kib": 158764.0,
+              "private_clean_kib": 0.0,
+              "private_dirty_kib": 162764.0,
+              "private_kib": 162764.0,
+              "pss_anon_kib": 158764.0,
+              "pss_file_kib": 5325.0,
+              "pss_kib": 164089.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 158764.0,
+              "rss_file_kib": 9212.0,
+              "rss_kib": 167976.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 2592.0,
+              "shared_dirty_kib": 2620.0,
+              "shared_kib": 5212.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9296.0,
+              "mean": 9240.0,
+              "min": 9212.0,
+              "p50": 9212.0,
+              "p95": 9296.0,
+              "raw": [
+                9212.0,
+                9212.0,
+                9296.0
+              ],
+              "samples": 3
+            },
+            "samples": 3,
+            "shared_kib": {
+              "max": 5280.0,
+              "mean": 5238.667,
+              "min": 5212.0,
+              "p50": 5224.0,
+              "p95": 5280.0,
+              "raw": [
+                5212.0,
+                5224.0,
+                5280.0
+              ],
+              "samples": 3
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 315968.0,
+              "mean": 315962.667,
+              "min": 315960.0,
+              "p50": 315960.0,
+              "p95": 315968.0,
+              "raw": [
+                315960.0,
+                315960.0,
+                315968.0
+              ],
+              "samples": 3
+            },
+            "miB_anon_plus_shmem_p50": 308.555,
+            "n": 2,
+            "private_kib": {
+              "max": 319960.0,
+              "mean": 319922.667,
+              "min": 319892.0,
+              "p50": 319916.0,
+              "p95": 319960.0,
+              "raw": [
+                319892.0,
+                319916.0,
+                319960.0
+              ],
+              "samples": 3
+            },
+            "pss_kib": {
+              "max": 321255.0,
+              "mean": 321239.333,
+              "min": 321225.0,
+              "p50": 321238.0,
+              "p95": 321255.0,
+              "raw": [
+                321225.0,
+                321238.0,
+                321255.0
+              ],
+              "samples": 3
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 315960.0,
+              "anonymous_kib": 315960.0,
+              "private_clean_kib": 0.0,
+              "private_dirty_kib": 319916.0,
+              "private_kib": 319916.0,
+              "pss_anon_kib": 315960.0,
+              "pss_file_kib": 5278.0,
+              "pss_kib": 321238.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 315960.0,
+              "rss_file_kib": 9268.0,
+              "rss_kib": 325228.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 2700.0,
+              "shared_dirty_kib": 2612.0,
+              "shared_kib": 5312.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9268.0,
+              "mean": 9212.0,
+              "min": 9160.0,
+              "p50": 9208.0,
+              "p95": 9268.0,
+              "raw": [
+                9160.0,
+                9208.0,
+                9268.0
+              ],
+              "samples": 3
+            },
+            "samples": 3,
+            "shared_kib": {
+              "max": 5312.0,
+              "mean": 5252.0,
+              "min": 5216.0,
+              "p50": 5228.0,
+              "p95": 5312.0,
+              "raw": [
+                5216.0,
+                5228.0,
+                5312.0
+              ],
+              "samples": 3
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 787596.0,
+              "mean": 787586.667,
+              "min": 787580.0,
+              "p50": 787584.0,
+              "p95": 787596.0,
+              "raw": [
+                787580.0,
+                787584.0,
+                787596.0
+              ],
+              "samples": 3
+            },
+            "miB_anon_plus_shmem_p50": 769.125,
+            "n": 5,
+            "private_kib": {
+              "max": 791608.0,
+              "mean": 791558.667,
+              "min": 791500.0,
+              "p50": 791568.0,
+              "p95": 791608.0,
+              "raw": [
+                791500.0,
+                791568.0,
+                791608.0
+              ],
+              "samples": 3
+            },
+            "pss_kib": {
+              "max": 792907.0,
+              "mean": 792860.333,
+              "min": 792775.0,
+              "p50": 792899.0,
+              "p95": 792907.0,
+              "raw": [
+                792775.0,
+                792899.0,
+                792907.0
+              ],
+              "samples": 3
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 787580.0,
+              "anonymous_kib": 787580.0,
+              "private_clean_kib": 0.0,
+              "private_dirty_kib": 791568.0,
+              "private_kib": 791568.0,
+              "pss_anon_kib": 787580.0,
+              "pss_file_kib": 5319.0,
+              "pss_kib": 792899.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 787580.0,
+              "rss_file_kib": 9204.0,
+              "rss_kib": 796784.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 2584.0,
+              "shared_dirty_kib": 2632.0,
+              "shared_kib": 5216.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9256.0,
+              "mean": 9180.0,
+              "min": 9080.0,
+              "p50": 9204.0,
+              "p95": 9256.0,
+              "raw": [
+                9080.0,
+                9204.0,
+                9256.0
+              ],
+              "samples": 3
+            },
+            "samples": 3,
+            "shared_kib": {
+              "max": 5232.0,
+              "mean": 5208.0,
+              "min": 5176.0,
+              "p50": 5216.0,
+              "p95": 5232.0,
+              "raw": [
+                5176.0,
+                5216.0,
+                5232.0
+              ],
+              "samples": 3
+            }
+          },
+          {
+            "anon_plus_shmem_kib": {
+              "max": 1573624.0,
+              "mean": 1573604.0,
+              "min": 1573572.0,
+              "p50": 1573616.0,
+              "p95": 1573624.0,
+              "raw": [
+                1573572.0,
+                1573616.0,
+                1573624.0
+              ],
+              "samples": 3
+            },
+            "miB_anon_plus_shmem_p50": 1536.734,
+            "n": 10,
+            "private_kib": {
+              "max": 1577640.0,
+              "mean": 1577613.333,
+              "min": 1577572.0,
+              "p50": 1577628.0,
+              "p95": 1577640.0,
+              "raw": [
+                1577572.0,
+                1577628.0,
+                1577640.0
+              ],
+              "samples": 3
+            },
+            "pss_kib": {
+              "max": 1578984.0,
+              "mean": 1578942.333,
+              "min": 1578899.0,
+              "p50": 1578944.0,
+              "p95": 1578984.0,
+              "raw": [
+                1578899.0,
+                1578944.0,
+                1578984.0
+              ],
+              "samples": 3
+            },
+            "raw": {
+              "anon_plus_shmem_kib": 1573616.0,
+              "anonymous_kib": 1573616.0,
+              "private_clean_kib": 0.0,
+              "private_dirty_kib": 1577640.0,
+              "private_kib": 1577640.0,
+              "pss_anon_kib": 1573616.0,
+              "pss_file_kib": 5368.0,
+              "pss_kib": 1578984.0,
+              "pss_shmem_kib": 0.0,
+              "rss_anon_kib": 1573616.0,
+              "rss_file_kib": 9356.0,
+              "rss_kib": 1582972.0,
+              "rss_shmem_kib": 0.0,
+              "shared_clean_kib": 2676.0,
+              "shared_dirty_kib": 2656.0,
+              "shared_kib": 5332.0,
+              "swap_kib": 0.0
+            },
+            "rss_file_kib": {
+              "max": 9356.0,
+              "mean": 9308.0,
+              "min": 9280.0,
+              "p50": 9288.0,
+              "p95": 9356.0,
+              "raw": [
+                9280.0,
+                9288.0,
+                9356.0
+              ],
+              "samples": 3
+            },
+            "samples": 3,
+            "shared_kib": {
+              "max": 5332.0,
+              "mean": 5298.667,
+              "min": 5276.0,
+              "p50": 5288.0,
+              "p95": 5332.0,
+              "raw": [
+                5276.0,
+                5288.0,
+                5332.0
+              ],
+              "samples": 3
+            }
+          }
+        ],
+        "sharing": {
+          "consequence": "nothing is shareable between sessions today: private pages grow with N and shared pages are flat (see private_kib/rss_file_kib per N)",
+          "dex_mmap": false,
+          "evidence": "the boot classpath and app DEX are read with std::fs::read and parsed into the VM heap; no mmap is used, so their pages are private anonymous pages"
+        },
+        "type": "anon+shmem (RssAnon+RssShmem) with PSS and private/shared reported separately",
+        "unit": "KiB (MiB convenience columns)"
+      },
+      "metrics": {
+        "wall_ms": 18375
+      }
+    }
+  }
+}

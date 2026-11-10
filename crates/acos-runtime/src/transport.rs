@@ -145,19 +145,34 @@ impl BinderTransport for ServiceTransport {
         // WMS (T-29) is routed here: it owns the `acos-wm` policy state and the
         // DEX-derived parcelable codecs, which the generic `Value` codec cannot
         // express (`MergedConfiguration` has three inline `Configuration`s).
-        let (result, pending) = if crate::wms_java::owns(descriptor.as_deref()) {
-            (
-                crate::wms_java::transact(binder, code, data, reply, flags),
-                Vec::new(),
-            )
-        } else {
-            let mut host = self.host.borrow_mut();
-            let result = host
-                .transact(binder, code, data, reply, flags)
-                .map_err(|e| e.to_string());
-            let pending = host.take_deliveries();
-            (result, pending)
-        };
+        let (result, deliveries): (Result<(), String>, Vec<BinderDelivery>) =
+            if crate::wms_java::owns(descriptor.as_deref()) {
+                let result = crate::wms_java::transact(binder, code, data, reply, flags);
+                // T-37: the outgoing `IWindow` callbacks queued by this
+                // transaction are the system -> app oneway deliveries.
+                let deliveries = if result.is_ok() {
+                    crate::wms_java::take_deliveries().unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                (result, deliveries)
+            } else {
+                let mut host = self.host.borrow_mut();
+                let result = host
+                    .transact(binder, code, data, reply, flags)
+                    .map_err(|e| e.to_string());
+                let pending = host.take_deliveries();
+                let deliveries = pending
+                    .into_iter()
+                    .map(|d| BinderDelivery {
+                        target: d.target.0,
+                        code: d.code,
+                        flags: 0,
+                        data: d.data,
+                    })
+                    .collect();
+                (result, deliveries)
+            };
         pop_calling_identity();
 
         // PMS replies are real framework Java objects: the framework marshals
@@ -182,15 +197,6 @@ impl BinderTransport for ServiceTransport {
             }
         }
 
-        let deliveries = pending
-            .into_iter()
-            .map(|d| BinderDelivery {
-                target: d.target.0,
-                code: d.code,
-                flags: 0,
-                data: d.data,
-            })
-            .collect();
         result.map(|()| deliveries)
     }
 

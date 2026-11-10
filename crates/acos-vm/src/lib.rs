@@ -13,6 +13,7 @@
 
 pub mod bridge;
 pub mod class;
+pub mod codecache;
 pub mod corelib;
 mod dispatch;
 pub mod error;

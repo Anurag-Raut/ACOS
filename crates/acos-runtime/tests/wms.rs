@@ -21,8 +21,8 @@ use acos_parcel::Parcel;
 use acos_runtime::wms_java;
 use acos_vm::natives::fwk_surface::SurfaceBackend;
 use acos_wm::codec::{
-    ClientWindowFrames, InsetsSourceControlArray, InsetsState, InputChannelParcel, LayoutParams,
-    MergedConfiguration, ParcelCodec, SurfaceControlInfo,
+    ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
+    ParcelCodec, SurfaceControlInfo,
 };
 use acos_wm::geom::RectI;
 
@@ -68,6 +68,19 @@ fn read_cond<T: ParcelCodec>(p: &mut Parcel) -> Option<T> {
     }
 }
 
+/// Decode the `addToDisplayAsUser` `out InputChannel` exactly like the real
+/// `InputChannel.nativeReadFromParcel`: the AIDL presence marker, then the
+/// native `String16 name`, file descriptor and token binder.
+fn read_wms_input_channel(p: &mut Parcel) -> Option<(String, std::os::fd::RawFd, Option<BinderId>)> {
+    if p.read_int32().unwrap() == 0 {
+        return None;
+    }
+    let name = p.read_string16_lenient().unwrap_or_default();
+    let fd = p.read_file_descriptor().unwrap().unwrap_or(-1);
+    let token = p.read_strong_binder().unwrap();
+    Some((name, fd, token))
+}
+
 fn simple(interface: &str, name: &str, write_args: impl FnOnce(&mut Parcel), flags: u32) -> Parcel {
     let m = method(interface, name);
     let mut data = Parcel::new();
@@ -111,13 +124,18 @@ fn window_manager_scalars_and_open_session() {
 
 #[test]
 fn add_to_display_as_user_returns_reference_frame_and_insets() {
-    let mut reply = call(IWS, "addToDisplayAsUser", 5);
+    let mut reply = call(IWS, "addToDisplayAsUser", 4);
     assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
     assert_eq!(reply.read_int32().unwrap(), 0, "ADD_OKAY");
 
-    let channel: InputChannelParcel = read_cond(&mut reply).expect("input channel");
-    assert!(channel.present);
-    assert_eq!(channel.channel_handle, 0);
+    let (channel_name, channel_fd, channel_token) =
+        read_wms_input_channel(&mut reply).expect("input channel");
+    assert!(
+        channel_name.contains("client"),
+        "channel name {channel_name}"
+    );
+    assert!(channel_fd >= 0, "no real client fd in the reply");
+    assert!(channel_token.is_some(), "channel token binder");
 
     let insets: InsetsState = read_cond(&mut reply).expect("insets state");
     assert_eq!(insets.visible_insets_for(0).top, 128, "status bar");
@@ -138,7 +156,7 @@ fn add_to_display_as_user_returns_reference_frame_and_insets() {
 
 #[test]
 fn relayout_returns_a_valid_surface_control_and_reference_frames() {
-    let _ = call(IWS, "addToDisplayAsUser", 5);
+    let _ = call(IWS, "addToDisplayAsUser", 4);
     let mut reply = call(IWS, "relayout", 6);
     assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
     let result = reply.read_int32().unwrap();
@@ -178,7 +196,7 @@ fn relayout_returns_a_valid_surface_control_and_reference_frames() {
 
 #[test]
 fn finish_drawing_is_recorded_but_never_publishes_a_frame() {
-    let _ = call(IWS, "addToDisplayAsUser", 5);
+    let _ = call(IWS, "addToDisplayAsUser", 4);
     let mut relayout = call(IWS, "relayout", 6);
     let _ = relayout.read_int32().unwrap();
     let _ = relayout.read_int32().unwrap();
@@ -239,6 +257,55 @@ fn wms_java_stub_proxy_matches_the_reference() {
     ];
     let actual: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
     assert_eq!(actual, expected, "WMS Java golden\nstdout:\n{stdout}");
+}
+
+/// W20-A deferred acceptance: the real `IWindowSession$Stub$Proxy` drives
+/// `addToDisplayAsUser` -> `relayout`; the reply's `InputChannel`
+/// (`nativeReadFromParcel`) and `SurfaceControl` (`nativeReadFromParcel`) must
+/// materialise, `Surface.copyFrom` must produce a valid surface, and the
+/// incoming `IWindow` callbacks must reach the app stub.
+#[test]
+fn wms_java_session_add_and_relayout_are_accepted() {
+    let Some(dex) = common::compile_case(&["WmsSessionMain"]) else {
+        eprintln!("SKIP wms_java_session_add_and_relayout_are_accepted: toolchain unavailable");
+        return;
+    };
+    let Some(stdout) = common::run_ok(
+        &dex,
+        "android.view.WmsSessionMain",
+        "WmsSessionMain",
+    ) else {
+        return;
+    };
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
+    let get = |key: &str| {
+        lines
+            .iter()
+            .find_map(|l| l.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("missing {key} in\n{stdout}"))
+    };
+    assert_eq!(get("addResult"), "0", "ADD_OKAY\n{stdout}");
+    let surface_ok = get("surfaceValid") == "true";
+    let copied_ok = get("surfaceIsValid") == "true";
+    assert!(surface_ok, "SurfaceControl.isValid()\n{stdout}");
+    assert!(copied_ok, "Surface.copyFrom(SurfaceControl)\n{stdout}");
+    assert_eq!(
+        get("frame"),
+        "Rect(0, 128 - 1080, 2337)",
+        "outFrames.frame\n{stdout}"
+    );
+    assert_eq!(
+        get("displayFrame"),
+        "Rect(0, 0 - 1080, 2400)",
+        "outFrames.displayFrame\n{stdout}"
+    );
+    let relayout: i32 = get("relayoutResult").parse().unwrap();
+    assert_ne!(relayout & wms_java::relayout_first_time(), 0);
+    assert_ne!(relayout & wms_java::relayout_surface_changed(), 0);
+    assert!(get("visibilityCalls").parse::<i32>().unwrap() >= 1);
+    assert!(get("insetsCalls").parse::<i32>().unwrap() >= 1);
+    assert!(get("resizedCalls").parse::<i32>().unwrap() >= 1);
+    assert!(lines.contains(&"wmssession=ok"), "{stdout}");
 }
 
 #[test]

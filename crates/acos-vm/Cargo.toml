@@ -11,8 +11,27 @@ acos-dex = { path = "../acos-dex" }
 acos-framework-natives = { path = "../acos-framework-natives" }
 acos-render = { path = "../acos-render" }
 acos-parcel = { path = "../acos-parcel" }
+# Direct TTF/OTF parsing for the android.graphics.fonts.Font native surface
+# (glyph advances/bounds + variable-font axes). Already in the workspace lock
+# via acos-render.
+ttf-parser = "0.25"
+# Audited pure-Rust RustCrypto primitives backing the `com.android.org.conscrypt`
+# (`natives/fwk_conscrypt.rs`) digest/MAC/cipher/SecureRandom surface. No
+# hand-rolled crypto; anything not covered here stays a structured
+# UNSUPPORTED_JAVA_API.
+sha1 = "0.10"
+sha2 = "0.10"
+md-5 = "0.10"
+hmac = "0.12"
+digest = { version = "0.10", features = ["alloc"] }
+aes = "0.8"
+cbc = "0.1"
+ctr = "0.9"
+aes-gcm = "0.10"
+getrandom = "0.2"
 rustix = { version = "1.1", features = ["event", "time", "pipe", "net", "fs"] }
 flate2 = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -67,6 +67,8 @@ pub enum Metric {
     IdleRss,
     /// Per-session incremental and marginal memory at the requested N values.
     Sessions,
+    /// Per-session total + marginal memory with process-shared boot data, N=1..20.
+    SessionsShared,
     /// Steady CPU of the parked/blocked runtime over a wall window.
     IdleCpu,
     /// Interpreter micro benchmarks (wall, instructions, instructions/second).
@@ -102,6 +104,7 @@ impl Metric {
             Metric::BindApp => "bind-app",
             Metric::IdleRss => "idle-rss",
             Metric::Sessions => "sessions",
+            Metric::SessionsShared => "sessions-shared",
             Metric::IdleCpu => "idle-cpu",
             Metric::Interpreter => "interpreter",
             Metric::All => "all",
@@ -293,19 +296,19 @@ pub fn run(args: BenchArgs) -> std::process::ExitCode {
 
 /// A structured bench failure (maps 1:1 onto an [`ErrorCode`]).
 #[derive(Debug, Clone)]
-struct BenchFailure {
+pub(crate) struct BenchFailure {
     code: ErrorCode,
     message: String,
 }
 
 impl BenchFailure {
-    fn new(code: ErrorCode, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         BenchFailure {
             code,
             message: message.into(),
         }
     }
-    fn internal(message: impl Into<String>) -> Self {
+    pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Internal, message)
     }
     fn unsupported(message: impl Into<String>) -> Self {
@@ -392,6 +395,7 @@ fn measure_one(metric: Metric, args: &BenchArgs) -> Result<Value, BenchFailure> 
         Metric::BindApp => bench_bind_app(args),
         Metric::IdleRss => bench_idle_rss(args),
         Metric::Sessions => bench_sessions(args),
+        Metric::SessionsShared => super::bench_sessions::run(args),
         Metric::IdleCpu => bench_idle_cpu(args),
         Metric::Interpreter => bench_interpreter(args),
         _ => Err(BenchFailure::internal("unreachable metric dispatch")),
@@ -547,8 +551,15 @@ fn bench_boot_attach(args: &BenchArgs) -> Result<Value, BenchFailure> {
     let mut boot_total = Vec::new();
     let mut per_stage: Vec<Vec<f64>> = Vec::new();
     let mut stage_names: Vec<String> = Vec::new();
+    // The very first Vm in this process is the only cold one: from then on the
+    // process-global boot cache (raw DEX + parsed files + decoded bodies) serves
+    // every later sample. Recorded explicitly so the cold cost is never hidden.
+    let mut first_cold: Option<(f64, f64)> = None;
     for i in 0..(args.runs + args.warmup) {
         let probe = boot_probe(&apk, args, false, false)?;
+        if i == 0 {
+            first_cold = Some((probe.vm_ready_ms, probe.boot_ms));
+        }
         if i < args.warmup {
             continue;
         }
@@ -615,11 +626,15 @@ fn bench_boot_attach(args: &BenchArgs) -> Result<Value, BenchFailure> {
         "definition": "Vm::new + boot_app_process stages through IActivityManager.attachApplication",
         "unit": "ms",
         "type": "wall",
-        "cold_or_warm": "cold per sample (fresh Vm, fresh boot classpath parse)",
+        "cold_or_warm": "first Vm in the process is cold; the reported in-process samples reuse the \
+                         process-global boot cache (warm). See results/bench/MEMORY_PROFILE.md",
         "corelib": args.corelib,
         "fixture": apk.display().to_string(),
         "apk_sha256": file_sha256(&apk),
         "samples": boot_total.len(),
+        "first_vm_in_process": first_cold.map(|(v, b)| json!({
+            "vm_ready_ms": round3(v), "boot_ms": round3(b), "note": "cold (empty BootCache)"
+        })).unwrap_or(Value::Null),
         "vm_ready_ms": stats(&vm_ready),
         "boot_ms": stats(&boot_total),
         "stages": stages,
@@ -984,7 +999,9 @@ fn bench_interpreter(args: &BenchArgs) -> Result<Value, BenchFailure> {
         "definition": "interpreted DEX program wall time and interpreted instructions",
         "unit": "ms, instructions, instructions/second",
         "type": "wall + VM counters",
-        "cold_or_warm": "cold per sample (fresh Vm per sample, bootstrap core library)",
+        "cold_or_warm": "fresh Vm per sample; the first sample in the process parses the boot \
+                         classpath, later samples reuse the process-global boot cache (warm). \
+                         See results/bench/MEMORY_PROFILE.md",
         "corelib": args.corelib,
         "programs": rows,
         "note": "ACOS-only: legacy ACVM published no interpreter micro benchmarks, so these rows \
@@ -1300,6 +1317,7 @@ fn child_body(mode: &str, args: &BenchArgs) -> Result<Value, BenchFailure> {
             drop(rt);
             Ok(json!({"mode": "idle-rss", "variant": variant, "memory": memory}))
         }
+        "sessions-shared" => super::bench_sessions::child_body(args),
         "sessions" => {
             let mut runtimes = Vec::new();
             for _ in 0..args.n {
@@ -1357,7 +1375,7 @@ fn child_body(mode: &str, args: &BenchArgs) -> Result<Value, BenchFailure> {
     }
 }
 
-fn build_runtime(corelib: &str) -> Result<acos_runtime::Runtime, BenchFailure> {
+pub(crate) fn build_runtime(corelib: &str) -> Result<acos_runtime::Runtime, BenchFailure> {
     let corelib = parse_corelib(corelib)?;
     acos_runtime::Runtime::standard_with(acos_vm::VmOptions {
         corelib,
@@ -1368,13 +1386,13 @@ fn build_runtime(corelib: &str) -> Result<acos_runtime::Runtime, BenchFailure> {
 
 /// Boot the framework app process (attach handshake), discarding the report's
 /// detail: the memory/CPU probes only need the resulting live state.
-fn boot_only(rt: &mut acos_runtime::Runtime, apk: &Path) -> Result<(), BenchFailure> {
+pub(crate) fn boot_only(rt: &mut acos_runtime::Runtime, apk: &Path) -> Result<(), BenchFailure> {
     rt.boot_app_process(apk)
         .map(|_| ())
         .map_err(|e| BenchFailure::internal(format!("boot_app_process: {e}")))
 }
 
-fn spawn_child(extra: &[&str]) -> Result<Value, BenchFailure> {
+pub(crate) fn spawn_child(extra: &[&str]) -> Result<Value, BenchFailure> {
     let exe = std::env::current_exe()
         .map_err(|e| BenchFailure::internal(format!("current_exe: {e}")))?;
     let output = Command::new(&exe)
@@ -1413,7 +1431,7 @@ fn parse_probe(line: &str) -> Result<Value, BenchFailure> {
         .map_err(|e| BenchFailure::internal(format!("probe JSON: {e}")))
 }
 
-fn settle(ms: u64) {
+pub(crate) fn settle(ms: u64) {
     if ms > 0 {
         std::thread::sleep(Duration::from_millis(ms));
     }
@@ -1425,7 +1443,7 @@ fn settle(ms: u64) {
 
 /// Memory types read from `/proc/self/{smaps_rollup,status}`. Every field keeps
 /// its own label; nothing is summed across metric types.
-fn read_memory() -> Option<Value> {
+pub(crate) fn read_memory() -> Option<Value> {
     let rollup = std::fs::read_to_string("/proc/self/smaps_rollup").ok()?;
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
     let get = |name: &str| smaps_value(&rollup, name).unwrap_or(0.0);
@@ -1486,12 +1504,12 @@ fn cpu_ticks() -> Option<u64> {
     Some(utime + stime)
 }
 
-fn kib(mem: &Value, field: &str) -> f64 {
+pub(crate) fn kib(mem: &Value, field: &str) -> f64 {
     mem.get(field).and_then(Value::as_f64).unwrap_or(0.0)
 }
 
 /// The p50 of a `stats()` block, or the raw number when the field is scalar.
-fn kb_value(value: &Value, field: &str) -> f64 {
+pub(crate) fn kb_value(value: &Value, field: &str) -> f64 {
     let Some(block) = value.get(field) else {
         return 0.0;
     };
@@ -1506,7 +1524,7 @@ fn kb_value(value: &Value, field: &str) -> f64 {
 // statistics
 // ---------------------------------------------------------------------------
 
-fn stats(samples: &[f64]) -> Value {
+pub(crate) fn stats(samples: &[f64]) -> Value {
     if samples.is_empty() {
         return json!({"samples": 0});
     }
@@ -1541,11 +1559,11 @@ fn median(samples: &[f64]) -> f64 {
     percentile(&sorted, 0.50)
 }
 
-fn round3(v: f64) -> f64 {
+pub(crate) fn round3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
 }
 
-fn parse_session_counts(text: &str) -> Result<Vec<usize>, BenchFailure> {
+pub(crate) fn parse_session_counts(text: &str) -> Result<Vec<usize>, BenchFailure> {
     let mut out = Vec::new();
     for part in text.split(',') {
         let part = part.trim();
@@ -1609,7 +1627,7 @@ fn resolve_programs(args: &BenchArgs) -> Result<Vec<Program>, BenchFailure> {
     Ok(out)
 }
 
-fn resolve_apk(args: &BenchArgs) -> Result<PathBuf, BenchFailure> {
+pub(crate) fn resolve_apk(args: &BenchArgs) -> Result<PathBuf, BenchFailure> {
     let apk = if args.apk.is_absolute() {
         args.apk.clone()
     } else {
@@ -1633,7 +1651,7 @@ fn resolve_apk(args: &BenchArgs) -> Result<PathBuf, BenchFailure> {
     Ok(apk)
 }
 
-fn file_sha256(path: &Path) -> String {
+pub(crate) fn file_sha256(path: &Path) -> String {
     // A hash is evidence metadata, not a benchmark input: use `sha256sum` when
     // present and report `unavailable` instead of inventing a value.
     match Command::new("sha256sum").arg(path).output() {

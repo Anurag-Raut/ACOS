@@ -153,7 +153,7 @@ pub fn deliver_bind_application(
 /// `display.txt`): locale `en-US`, density 420, 411x842 dp portrait. The locale
 /// list must be non-empty — `handleBindApplication` calls
 /// `LocaleList.setDefault(config.getLocales())`, which rejects an empty list.
-fn build_config(vm: &mut Vm) -> Result<Handle, BindAppError> {
+pub(crate) fn build_config(vm: &mut Vm) -> Result<Handle, BindAppError> {
     let config = vm.new_instance_ctor("android.content.res.Configuration", "()V", &[])?;
     let tag = infostr(vm, "en-US")?;
     let locales = obj(vm.call_static(

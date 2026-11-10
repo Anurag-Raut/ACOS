@@ -1,0 +1,25 @@
+payload_len=300
+payload_ascii=ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACO
+crc32=460098515
+crc32_bytewise=460098515
+crc32_match=true
+adler32=3374345346
+deflate_level_0_adler=-920621950
+inflate_level_0_ok=true
+inflate_level_0_adler=-920621950
+deflate_level_1_adler=-920621950
+inflate_level_1_ok=true
+inflate_level_1_adler=-920621950
+deflate_level_6_adler=-920621950
+inflate_level_6_ok=true
+inflate_level_6_adler=-920621950
+deflate_level_9_adler=-920621950
+inflate_level_9_ok=true
+inflate_level_9_adler=-920621950
+raw_deflate_ok=true
+gzip_ok=true
+gzip_output_len=300
+zip_entry=first.txt len=300 crc=460098515 ascii=ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACOS zip roundtrip payload ACO
+zip_entry=second.txt len=12 crc=3770673971 ascii=second entry
+zip_entry_count=2
+done

@@ -4,6 +4,7 @@
 //! Unimplemented subcommands deliberately do not exist yet.
 
 mod bench;
+mod bench_sessions;
 mod verify;
 
 use std::path::PathBuf;

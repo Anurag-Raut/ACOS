@@ -33,6 +33,7 @@ use acos_vm::vm::ThreadStatus;
 use acos_vm::{Vm, VmError};
 
 use crate::bind_app::{self, BindAppError};
+use crate::client_transaction::ClientTransactionError;
 use crate::boot::BootError;
 use crate::Runtime;
 
@@ -53,7 +54,11 @@ pub struct LifecycleReport {
     /// `ActivityThread.mInitialApplication` was non-null after the bind phase
     /// (i.e. `Application.attach` + `Application.onCreate` ran).
     pub app_created: bool,
-    /// The launch/resume `ClientTransaction` was delivered.
+    /// `IApplicationThread.scheduleTransaction` accepted the launch/resume
+    /// `ClientTransaction` (the real app thread posted `H.EXECUTE_TRANSACTION`).
+    pub transaction_scheduled: bool,
+    /// The transaction ran far enough that `ActivityThread.mActivities` holds a
+    /// record with a live `Activity` (i.e. `Activity.onCreate` returned).
     pub transaction_delivered: bool,
     /// The main looper was asked to `quitSafely()` and returned.
     pub looper_quit: bool,
@@ -79,6 +84,9 @@ pub enum LifecycleError {
     /// `bindApplication` delivery failed.
     #[error("bindApplication: {0}")]
     Bind(#[from] BindAppError),
+    /// Building/delivering the launch `ClientTransaction` failed.
+    #[error("client transaction: {0}")]
+    ClientTransaction(#[from] ClientTransactionError),
     /// A bridge call failed.
     #[error(transparent)]
     Bridge(#[from] BridgeError),
@@ -113,6 +121,7 @@ impl Runtime {
             classes_loaded: 0,
             bind_delivered: false,
             app_created: false,
+            transaction_scheduled: false,
             transaction_delivered: false,
             looper_quit: false,
             error: None,
@@ -121,7 +130,13 @@ impl Runtime {
             Ok(app_thread) => {
                 let _ = app_thread;
             }
-            Err(e) => report.error = Some(e.to_string()),
+            Err(e) => {
+                report.error = Some(format!(
+                    "{e}\n  java-tail: {}\n  native-tail: {}",
+                    java_tail(self.vm()),
+                    native_tail(self.vm())
+                ));
+            }
         }
         report.events = fixture_log();
         report.classes_loaded = self.vm().classes.len();
@@ -135,7 +150,11 @@ impl Runtime {
         report: &mut LifecycleReport,
     ) -> Result<Handle, LifecycleError> {
         let boot = self.boot_app_process(apk_path)?;
-        let app = app_info_for(apk_path)?;
+        let mut app = app_info_for(apk_path)?;
+        // The framework's `LoadedApk`/`PathClassLoader`/`AssetManager` must see
+        // a guest path, not the host fixture path. Stage it before the bind.
+        crate::apk_loader::stage(self.vm(), apk_path, &mut app)
+            .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(e)))?;
         let thread = boot.activity_thread;
 
         // Enter the real `Looper.loop()` under the interpreter scheduler: it
@@ -152,9 +171,10 @@ impl Runtime {
         report.app_created = initial_application_non_null(self.vm_mut(), thread);
 
         // --- ClientTransaction (launch + resume) -----------------------------
-        deliver_launch_transaction(self.vm_mut(), app_thread, &app, thread)?;
-        report.transaction_delivered = true;
+        let tx = deliver_launch_transaction(self.vm_mut(), app_thread, &app, thread, apk_path)?;
+        report.transaction_scheduled = true;
         run_phase(self.vm_mut())?;
+        report.transaction_delivered = activity_created(self.vm_mut(), thread, tx.token);
 
         // --- bounded shutdown ------------------------------------------------
         quit_main_looper(self.vm_mut())?;
@@ -232,6 +252,23 @@ fn native_tail(vm: &Vm) -> String {
     format!("\n    {}", lines.join("\n    "))
 }
 
+/// The last 20 Java frames on the main thread, innermost first.
+fn java_tail(vm: &Vm) -> String {
+    let Some(thread) = vm.threads.first() else {
+        return "(no thread)".to_string();
+    };
+    let start = thread.frames.len().saturating_sub(20);
+    let lines: Vec<String> = thread.frames[start..]
+        .iter()
+        .rev()
+        .map(|f| {
+            let m = &vm.methods[f.method as usize];
+            format!("{}.{}{}", vm.class_desc(m.class), m.name, m.sig)
+        })
+        .collect();
+    format!("\n    {}", lines.join("\n    "))
+}
+
 fn initial_application_non_null(vm: &mut Vm, thread: Handle) -> bool {
     matches!(
         vm.get_field(thread, "mInitialApplication"),
@@ -265,27 +302,37 @@ fn quit_main_looper(vm: &mut Vm) -> Result<(), LifecycleError> {
 
 /// Deliver the launch + resume `ClientTransaction` for the fixture activity.
 ///
-/// The real flow is `IActivityManager.finishAttachApplication` (called at the
-/// end of `handleBindApplication`) scheduling a `ClientTransaction` through
-/// `IApplicationThread.scheduleTransaction`.
-///
-/// This is **not** wired yet. The previous implementation returned `Ok(())`,
-/// which made the caller record `transaction_delivered = true` without a
-/// transaction ever reaching the app (advisor finding, `docs/FINDINGS.md`
-/// 2026-11-10). Until the real `ClientTransaction` + `LaunchActivityItem` /
-/// `ResumeActivityItem` objects are built and delivered, this returns a
-/// structured [`LifecycleError::Unsupported`] so the report can never claim
-/// delivery. The prerequisites are the ATMS-side builder (T-23) and the
-/// `ActivityInfo`/`Intent`/token materialisation it needs.
+/// This is the real T-23 path: a `ClientTransaction` carrying a
+/// `LaunchActivityItem` callback and a `ResumeActivityItem` lifecycle request is
+/// built as real framework objects and handed to the real
+/// `ApplicationThread.scheduleTransaction` bytecode. See
+/// [`crate::client_transaction`].
 fn deliver_launch_transaction(
-    _vm: &mut Vm,
-    _app_thread: Handle,
-    _app: &AppInfo,
+    vm: &mut Vm,
+    app_thread: Handle,
+    app: &AppInfo,
     _thread: Handle,
-) -> Result<(), LifecycleError> {
-    Err(LifecycleError::Unsupported(
-        "ClientTransaction launch/resume not wired (T-23): no real \
-         LaunchActivityItem/ResumeActivityItem + ApplicationThread.scheduleTransaction yet"
-            .to_string(),
-    ))
+    apk_path: &Path,
+) -> Result<crate::client_transaction::LaunchTransaction, LifecycleError> {
+    Ok(crate::client_transaction::deliver_launch(
+        vm, app_thread, app, apk_path,
+    )?)
+}
+
+/// True when `ActivityThread.mActivities` has a record for `token` whose
+/// `activity` field was set (i.e. `Activity.onCreate` completed).
+fn activity_created(vm: &mut Vm, thread: Handle, token: Handle) -> bool {
+    let record = match vm.call_method(
+        thread,
+        "getActivityClient",
+        "(Landroid/os/IBinder;)Landroid/app/ActivityThread$ActivityClientRecord;",
+        &[JavaValue::Object(token)],
+    ) {
+        Ok(JavaValue::Object(h)) if h != NULL => h,
+        _ => return false,
+    };
+    matches!(
+        vm.get_field(record, "activity"),
+        Ok(JavaValue::Object(h)) if h != NULL
+    )
 }

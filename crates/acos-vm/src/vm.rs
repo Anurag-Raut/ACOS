@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use acos_dex::{DexFile, EncodedValue};
@@ -20,7 +20,7 @@ use crate::limits::HostGuard;
 /// Per-DEX lazy caches. Indices are the DEX's own id indices.
 #[derive(Debug)]
 pub struct DexCtx {
-    pub file: Rc<DexFile>,
+    pub file: Arc<DexFile>,
     pub string_cache: Vec<Option<Handle>>,
     pub field_cache: Vec<Option<ResolvedField>>,
     pub method_cache: Vec<Option<MethodId>>,
@@ -487,10 +487,10 @@ impl Vm {
                 .collect();
             dexs.sort();
             for p in dexs {
-                let bytes = std::fs::read(&p)
-                    .map_err(|e| VmError::Load(format!("read {}: {e}", p.display())))?;
-                let dex = DexFile::parse(bytes)?;
-                let idx = self.add_dex(dex);
+                // One parse per process, shared by every Vm (acos_dex::cache).
+                let dex = acos_dex::cache::shared_dex(&p)
+                    .map_err(VmError::Load)?;
+                let idx = self.add_shared_dex(dex);
                 self.boot_dexs.push(idx);
             }
         }
@@ -528,11 +528,10 @@ impl Vm {
             dexs.sort();
             let mut found = false;
             for p in dexs {
-                let bytes = std::fs::read(&p)
-                    .map_err(|e| VmError::Load(format!("read {}: {e}", p.display())))?;
-                let dex = DexFile::parse(bytes)?;
-                found |= dex.find_class(desc).is_some();
-                let idx = self.add_dex(dex);
+                let dex = acos_dex::cache::shared_dex(&p)
+                    .map_err(VmError::Load)?;
+                found |= dex.find_class_index(desc).is_some();
+                let idx = self.add_shared_dex(dex);
                 self.boot_dexs.push(idx);
             }
             if found {
@@ -794,7 +793,7 @@ impl Vm {
         access: u32,
         dex: u32,
         method_idx: u32,
-        code: Option<Rc<MethodCode>>,
+        code: Option<Arc<MethodCode>>,
     ) -> MethodId {
         self.add_method(
             class,
@@ -966,13 +965,9 @@ impl Vm {
         }
         if desc.starts_with('L') && desc.ends_with(';') {
             for di in 0..self.dexs.len() {
-                let file = self.dexs[di].file.clone();
-                if let Some(def) = file.find_class(desc) {
-                    let def_idx = file
-                        .class_defs()
-                        .iter()
-                        .position(|d| std::ptr::eq(d, def))
-                        .unwrap_or(0);
+                // The shared class index avoids decoding every class descriptor
+                // on each miss (and is built once per parsed file, not per Vm).
+                if let Some(def_idx) = self.dexs[di].file.find_class_index(desc) {
                     return self.load_dex_class(di as u32, def_idx);
                 }
             }
@@ -999,6 +994,25 @@ impl Vm {
         Ok(id)
     }
 
+    /// Load `desc` from one specific DEX provider (the `DexFile` cookie's
+    /// provider), as `DexFile.defineClassNative` must.
+    ///
+    /// An already loaded class is returned as-is: ART's `defineClassNative`
+    /// also returns the previously defined `Class` for a repeat request. A
+    /// class that this provider does not declare is reported as unsupported so
+    /// the caller can return null (the Java `DexFile.defineClass` wrapper then
+    /// records a `NoClassDefFoundError`).
+    pub(crate) fn load_class_from_dex(&mut self, dex_idx: u32, desc: &str) -> VmResult<ClassId> {
+        if let Some(&id) = self.class_by_desc.get(desc) {
+            return Ok(id);
+        }
+        let def_idx = self.dexs[dex_idx as usize]
+            .file
+            .find_class_index(desc)
+            .ok_or_else(|| VmError::unsupported_api(desc.to_string(), String::new()))?;
+        self.load_dex_class(dex_idx, def_idx)
+    }
+
     fn load_dex_class(&mut self, dex_idx: u32, def_idx: usize) -> VmResult<ClassId> {
         let file = self.dexs[dex_idx as usize].file.clone();
         let def = &file.class_defs()[def_idx];
@@ -1021,7 +1035,7 @@ impl Vm {
 
     fn load_dex_class_body(
         &mut self,
-        file: &Rc<DexFile>,
+        file: &Arc<DexFile>,
         dex_idx: u32,
         def_idx: usize,
         desc: &str,
@@ -1138,7 +1152,7 @@ impl Vm {
 
     fn add_dex_method_from(
         &mut self,
-        file: Rc<DexFile>,
+        file: Arc<DexFile>,
         dex_idx: u32,
         class: ClassId,
         method_idx: u32,
@@ -1154,7 +1168,11 @@ impl Vm {
         let ret_id = self.intern_type(&ret);
         let code = if code_off != 0 {
             let ci = file.code_item(code_off)?;
-            let code = self.decode_method(&file, &ci)?;
+            // Decoded bodies are a pure function of the DEX bytes, so share one
+            // copy per process instead of one per session.
+            let code = crate::codecache::get_or_decode(&file, code_off, || {
+                self.decode_method(&file, &ci)
+            })?;
             // Intern the method's string constants eagerly so that later
             // `const-string` never has to allocate (critical after OOM).
             for insn in &code.insns {
@@ -1162,7 +1180,7 @@ impl Vm {
                     self.dex_string(dex_idx, insn.index)?;
                 }
             }
-            Some(Rc::new(code))
+            Some(code)
         } else {
             None
         };
@@ -1243,13 +1261,20 @@ impl Vm {
 
     /// Register a DEX image as a class provider.
     pub fn add_dex(&mut self, file: DexFile) -> usize {
+        self.add_shared_dex(Arc::new(file))
+    }
+
+    /// Register an already-parsed, process-shared DEX image as a class
+    /// provider. The per-VM caches stay per-VM; only the immutable parse is
+    /// shared.
+    pub fn add_shared_dex(&mut self, file: Arc<DexFile>) -> usize {
         let strings = file.strings().len();
         let fields = file.field_ids().len();
         let methods = file.method_ids().len();
         let types = file.type_ids().len();
         let idx = self.dexs.len();
         self.dexs.push(DexCtx {
-            file: Rc::new(file),
+            file,
             string_cache: vec![None; strings],
             field_cache: vec![None; fields],
             method_cache: vec![None; methods],
@@ -1992,16 +2017,29 @@ impl Vm {
         self.next_thread_id += 1;
         if self.corelib == CoreLib::Real {
             let obj = self.alloc_instance(self.c_thread)?;
+            // Any further allocation (including the `blockerLock` below) may run
+            // a GC; keep the in-construction thread reachable until it is
+            // published into `threads`.
+            self.native_roots.push(obj);
             self.set_instance_field_by_name(obj, "name", name_h);
             self.set_instance_field_by_name(obj, "priority", 5);
             self.set_instance_field_by_name(obj, "daemon", 0);
             self.set_instance_field_by_name(obj, "tid", id);
+            // `Thread.blockerLock` is a field initializer (`new Object()`) that
+            // a VM-constructed green thread never runs. `Thread.blockedOn`
+            // monitor-enters it (`AbstractInterruptibleChannel.begin`), so
+            // without it every FileChannel operation NPEs.
+            if self.c_object != 0 {
+                let lock = self.alloc_instance(self.c_object)?;
+                self.set_instance_field_by_name(obj, "blockerLock", lock);
+            }
             if self.main_thread_group != NULL {
                 self.set_instance_field_by_name(obj, "group", self.main_thread_group);
             }
             if target != NULL {
                 self.set_instance_field_by_name(obj, "target", target);
             }
+            self.native_roots.pop();
             return Ok(obj);
         }
         let obj = self.alloc(Object::Builtin {

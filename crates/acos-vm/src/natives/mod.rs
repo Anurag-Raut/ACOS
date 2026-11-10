@@ -14,7 +14,11 @@
 
 pub mod binder;
 mod character;
+mod fwk_conscrypt;
 mod fwk_debug;
+mod fwk_dexfile;
+mod fwk_display;
+mod fwk_fonts;
 pub mod fwk_graphics;
 pub mod fwk_input;
 pub mod gfx_bitmap;
@@ -41,6 +45,7 @@ mod lang;
 pub mod looper;
 mod math;
 mod memintarray;
+mod native_mem;
 mod os_clock;
 mod parcel;
 pub mod os_log;
@@ -68,16 +73,24 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     zip::install(vm)?;
     vmrt::install(vm)?;
     math::install(vm)?;
+    native_mem::install_memory(vm)?;
     reflect::install(vm)?;
     fwk_reflect::install(vm)?;
     fwk_res::install(vm)?;
     fwk_debug::install(vm)?;
+    // `com.android.org.conscrypt.NativeCrypto`: the security provider surface.
+    fwk_conscrypt::install(vm)?;
+    fwk_dexfile::install(vm)?;
     fwk_graphics::install(vm)?;
     fwk_input::install(vm)?;
     gfx_paint::install(vm)?;
     gfx_path::install(vm)?;
     gfx_matrix::install(vm)?;
     gfx_text::install(vm)?;
+    // After `gfx_text`: the real `android.graphics.fonts.*` natives, and two
+    // `Typeface` natives that override the placeholder set.
+    fwk_display::install(vm)?;
+    fwk_fonts::install(vm)?;
     gfx_node::install(vm)?;
     gfx_canvas::install(vm)?;
     gfx_bitmap::install(vm)?;

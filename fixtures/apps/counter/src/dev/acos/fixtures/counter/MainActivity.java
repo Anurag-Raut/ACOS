@@ -25,6 +25,15 @@ public class MainActivity extends Activity {
     private TextView countView;
     private int count = 0;
 
+    /**
+     * Static test hook used by the ACOS class-loader acceptance test: the
+     * method must be executed from the APK's own {@code classes.dex}, after a
+     * real {@code PathClassLoader} resolved the class.
+     */
+    public static int probe() {
+        return 4242;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

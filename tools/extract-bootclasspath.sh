@@ -191,6 +191,7 @@ APEX_NAMES=(
     com.android.i18n.apex
     com.android.runtime.apex
     com.google.android.conscrypt.apex
+    com.android.tzdata.apex
 )
 mkdir -p "$WORK/apex"
 APEX_LIST="$("$DEBUGFS" -R 'ls -l /system/apex' "$SYSIMG" 2>/dev/null | awk '{print $NF}')"
@@ -217,13 +218,29 @@ for apex in "${APEX_NAMES[@]}"; do
 
     # javalib/*.jar -> jars/
     JAVALIB="$("$DEBUGFS" -R 'ls -l /javalib' "$payload" 2>/dev/null || true)"
-    [ -n "$JAVALIB" ] || { log "  (no /javalib in $apex)"; continue; }
-    while read -r name; do
-        [ -n "$name" ] || continue
-        case "$name" in
-            *.jar) debugfs_dump "$payload" "/javalib/$name" "$OUT/jars/$name" ;;
-        esac
-    done < <(printf '%s\n' "$JAVALIB" | awk '{print $NF}' | grep -E '\.jar$' | sort -u)
+    if [ -n "$JAVALIB" ]; then
+        while read -r name; do
+            [ -n "$name" ] || continue
+            case "$name" in
+                *.jar) debugfs_dump "$payload" "/javalib/$name" "$OUT/jars/$name" ;;
+            esac
+        done < <(printf '%s\n' "$JAVALIB" | awk '{print $NF}' | grep -E '\.jar$' | sort -u)
+    else
+        log "  (no /javalib in $apex)"
+    fi
+
+    # etc/icu/*.dat -> apex/<apex>/etc/icu/ (ICU data: i18n icudt72l.dat,
+    # tzdata *.dat). The VFS maps `/system/apex/<apex>/**` here, so a forced
+    # re-extraction keeps `ICUBinary.getDataFromFile` working.
+    ICU_LIST="$("$DEBUGFS" -R 'ls -l /etc/icu' "$payload" 2>/dev/null || true)"
+    if [ -n "$ICU_LIST" ]; then
+        while read -r name; do
+            [ -n "$name" ] || continue
+            case "$name" in
+                *.dat) debugfs_dump "$payload" "/etc/icu/$name" "$OUT/apex/${apex%.apex}/etc/icu/$name" ;;
+            esac
+        done < <(printf '%s\n' "$ICU_LIST" | awk '{print $NF}' | grep -E '\.dat$' | sort -u)
+    fi
 
     # etc/classpaths/*.pb -> work/classpaths/
     CLASSROOM="$("$DEBUGFS" -R 'ls -l /etc/classpaths' "$payload" 2>/dev/null || true)"
@@ -238,7 +255,11 @@ for apex in "${APEX_NAMES[@]}"; do
 done
 
 # --- 4. BOOTCLASSPATH in real order -----------------------------------------
-# ART APEX bootclasspath.pb first, then /system/etc/classpaths/bootclasspath.pb.
+# `derive_classpath` merges the per-APEX and system classpath configs. The ART
+# APEX holds the core Java boot jars; `/system/etc/classpaths` holds the
+# framework jars; the conscrypt APEX contributes `conscrypt.jar` (the
+# `com.android.org.conscrypt` provider classes that `java.security.Security`
+# instantiates from `security.properties`).
 log "deriving BOOTCLASSPATH order"
 debugfs_dump "$SYSIMG" "/system/etc/classpaths/bootclasspath.pb" "$WORK/classpaths/bootclasspath_pb"
 
@@ -247,8 +268,9 @@ import os, re, sys
 cpdir, jardir = sys.argv[1], sys.argv[2]
 # Source files in the order they appear on the real boot classpath.
 sources = [
-    os.path.join(cpdir, "com.google.android.art_bootclasspath.pb"),  # ART APEX boot jars
-    os.path.join(cpdir, "bootclasspath_pb"),                         # /system/etc/classpaths
+    os.path.join(cpdir, "com.google.android.art_bootclasspath.pb"),      # ART APEX boot jars
+    os.path.join(cpdir, "com.android.conscrypt_bootclasspath.pb"),        # conscrypt APEX
+    os.path.join(cpdir, "bootclasspath_pb"),                             # /system/etc/classpaths
 ]
 order = []
 seen = set()

@@ -280,7 +280,12 @@ impl WindowManager {
             layer
         );
         let id = window.0;
-        let channel = Channel::in_memory(format!("{name} client"), 0);
+        // A real fd-backed pair so the app's `InputChannel.nativeReadFromParcel`
+        // can install a real `InputEventReceiver`; fall back to the in-memory
+        // pair (unit tests without fds) if the socketpair cannot be created.
+        let channel_name = format!("{name} client");
+        let channel = Channel::socketpair(channel_name.clone(), 0)
+            .unwrap_or_else(|_| Channel::in_memory(channel_name, 0));
         let channel_handle = self.channels.register(channel);
         let insets_state = reference_insets_state(&self.display, false);
         let insets_controls = reference_insets_controls(&self.display, layer);
