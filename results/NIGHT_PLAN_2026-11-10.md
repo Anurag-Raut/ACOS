@@ -25,3 +25,11 @@ Rule: don't get stuck on one approach. If a track stalls for more than ~45 min o
 
 ## Integration loop (orchestrator)
 On each finish: cargo check + diff-dexprogs; selective commit + push; dispatch the next item from the queue.
+
+## Standing rules (full text: docs/OPERATING_DIRECTIVES.md; re-read both after any compaction)
+- Never stop, not even after the working version. Keep improving: harder apps, the Gaten app (/home/Qui/Projects/gaten, read-only), phone parity, speed, memory, dogfooding, honesty re-audits.
+- Keep Claude usage low. Do not poll. Implementation goes to DeepSeek V4.1 `pi` subagents only. Ask the advisor (codex gpt-6.1-sol) when unsure.
+- Run many agents in parallel (6-8+ while RAM ≤85%; never above 90%). Free scratch dirs promptly.
+- Commit verified work and push (no attribution lines). Verified = cargo check green + diff-dexprogs --corelib real all pass.
+- Safety: nothing outside ~/Projects/acos, no sudo, never touch /home/Qui/Work/android-container, phone adb ZA222WGJPP: only our fixture apps, no setting changes.
+- Don't block on the user and don't get stuck on one idea (45-minute rule).
