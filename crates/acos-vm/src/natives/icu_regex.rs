@@ -127,7 +127,6 @@ enum Pred {
     Alpha,
     Upper,
     Lower,
-    Numeric,
     Alnum,
     Punct,
     Graph,
@@ -135,7 +134,6 @@ enum Pred {
     Blank,
     Cntrl,
     XDigit,
-    WhiteSpace,
     Latin,
     Greek,
     JavaLower,
@@ -162,9 +160,9 @@ fn pred_match(p: Pred, c: u32) -> bool {
         None => return false,
     };
     match p {
-        Pred::Digit | Pred::Numeric => ch.is_numeric(),
+        Pred::Digit => ch.is_numeric(),
         Pred::Word => is_word_cp(c),
-        Pred::Space | Pred::WhiteSpace => ch.is_whitespace(),
+        Pred::Space => ch.is_whitespace(),
         Pred::Horiz => matches!(c, 0x09 | 0x20 | 0xA0 | 0x1680 | 0x180E | 0x202F | 0x205F | 0x3000)
             || (0x2000..=0x200A).contains(&c),
         Pred::Vert => matches!(c, 0x0A | 0x0B | 0x0C | 0x0D | 0x85 | 0x2028 | 0x2029),
@@ -277,17 +275,6 @@ impl Parser {
         }
     }
 
-    fn starts_with(&self, s: &str) -> bool {
-        let mut p = self.pos;
-        for ch in s.chars() {
-            if self.pat.get(p) != Some(&ch) {
-                return false;
-            }
-            p += 1;
-        }
-        true
-    }
-
     fn expect(&mut self, c: char) -> Result<(), PErr> {
         if self.eat(c) {
             Ok(())
@@ -308,12 +295,14 @@ impl Parser {
         self.group_count
     }
 
-    fn parse(mut self) -> Result<Pattern, PErr> {
-        let mut flags = F_DEFAULT_FLAGS_FOR_PARSER;
+    fn parse(mut self, initial_flags: u32) -> Result<Pattern, PErr> {
+        let mut flags = initial_flags;
         let main = self.parse_alt(&mut flags)?;
         if self.pos < self.pat.len() {
             return Err(PErr::Syntax("Unmatched closing ')'".to_string(), self.pos));
         }
+        let mut main = main;
+        main.push(Inst::Match);
         self.programs[0] = main;
         Ok(Pattern {
             programs: self.programs,
@@ -395,7 +384,7 @@ impl Parser {
                 None | Some('|') | Some(')') => break,
                 _ => {
                     let atom = self.parse_quantified(flags)?;
-                    buf.extend(atom);
+                    splice(&mut buf, atom);
                 }
             }
         }
@@ -1143,8 +1132,6 @@ struct Quant {
     kind: QKind,
 }
 
-const F_DEFAULT_FLAGS_FOR_PARSER: u32 = 0;
-
 fn splice(buf: &mut Vec<Inst>, mut body: Vec<Inst>) {
     let base = buf.len() as u32;
     for inst in body.iter_mut() {
@@ -1747,7 +1734,7 @@ fn compile_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         .unwrap_or_default();
     let pattern_str = String::from_utf16_lossy(&units);
     let flags = vm.arg_i32(ctx, 1) as u32;
-    let parsed = Parser::new(pattern_str.chars().collect()).parse();
+    let parsed = Parser::new(pattern_str.chars().collect()).parse(flags);
     match parsed {
         Ok(p) => {
             let mut reg = registry().lock().unwrap_or_else(|p| p.into_inner());
@@ -1989,18 +1976,17 @@ fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
         Some(m) => m,
         None => return (false, Vec::new(), false, false),
     };
-    let (search_cp, require_end, prev) = match mode {
+    let (search_cp, _require_end, prev) = match mode {
         Mode::Find(start_u16) => {
             let s = m
                 .input
                 .u16_to_cp
                 .get(start_u16)
                 .copied()
-                .unwrap_or(m.input.cps.len())
-                .min(m.region_end);
+                .unwrap_or(m.input.cps.len());
             (s, false, s)
         }
-        Mode::FindNext => (m.next_search_cp.min(m.region_end), false, m.prev_match_end),
+        Mode::FindNext => (m.next_search_cp, false, m.prev_match_end),
         Mode::Matches => (m.region_start, true, m.region_start),
         Mode::LookingAt => (m.region_start, false, m.region_start),
     };
@@ -2017,10 +2003,12 @@ fn exec_match(mh: u64, mode: Mode) -> (bool, Vec<i32>, bool, bool) {
     m.require_end = req;
     match r {
         Some((end, caps)) => {
-            let offs = offsets_for(&m.input, &pat, &caps, search_cp, end);
-            m.last = Some((search_cp, end));
-            m.prev_match_end = end;
-            m.next_search_cp = if end > search_cp { end } else { search_cp + 1 };
+            let mstart = caps.first().copied().flatten().unwrap_or(search_cp);
+            let mend = caps.get(1).copied().flatten().unwrap_or(end);
+            let offs = offsets_for(&m.input, &pat, &caps, mstart, mend);
+            m.last = Some((mstart, mend));
+            m.prev_match_end = mend;
+            m.next_search_cp = if mend > mstart { mend } else { mstart + 1 };
             (true, offs, hit, req)
         }
         None => {
@@ -2097,7 +2085,7 @@ mod tests {
     }
 
     fn compile(pat: &str, flags: u32) -> Pattern {
-        Parser::new(pat.chars().collect()).parse().unwrap_or_else(|e| {
+        Parser::new(pat.chars().collect()).parse(flags).unwrap_or_else(|e| {
             panic!("pattern {pat:?} failed to parse: {e:?}");
         })
     }
@@ -2134,6 +2122,8 @@ mod tests {
         assert_eq!(caps[3], Some(3));
         assert_eq!(caps[4], Some(3));
         assert_eq!(caps[5], Some(6));
+        assert_eq!(group_text(&input, &caps, 1).as_deref(), Some("aaa"));
+        assert_eq!(group_text(&input, &caps, 2).as_deref(), Some("bbb"));
     }
 
     #[test]

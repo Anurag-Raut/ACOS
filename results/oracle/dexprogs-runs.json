@@ -18,5 +18,8 @@
   "17_generics_collections": {"exit": 0, "nondeterministic": false, "runs": 3},
   "18_string_format_misc": {"exit": 0, "nondeterministic": false, "runs": 3},
   "19_threads_sync": {"exit": 0, "nondeterministic": false, "runs": 3},
-  "20_uncaught": {"exit": 1, "nondeterministic": false, "runs": 3}
+  "20_uncaught": {"exit": 1, "nondeterministic": false, "runs": 3},
+  "21_regex_basic": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "22_regex_advanced": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "23_regex_split_replace": {"exit": 0, "nondeterministic": false, "runs": 3}
 }

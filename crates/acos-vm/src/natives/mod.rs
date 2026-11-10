@@ -18,9 +18,11 @@ mod fwk_debug;
 pub mod fwk_graphics;
 pub mod fwk_jni;
 mod fwk_reflect;
+mod fwk_res;
 mod icu;
 mod icu_regex;
 mod io;
+mod io_linux;
 pub mod jni_glue;
 mod lang;
 pub mod looper;
@@ -46,10 +48,14 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     icu::install(vm)?;
     icu_regex::install(vm)?;
     io::install(vm)?;
+    // Registered after `io`: the file-I/O natives replace the std-stream stubs
+    // and own every path/descriptor operation.
+    io_linux::install(vm);
     vmrt::install(vm)?;
     math::install(vm)?;
     reflect::install(vm)?;
     fwk_reflect::install(vm)?;
+    fwk_res::install(vm)?;
     fwk_debug::install(vm)?;
     fwk_graphics::install(vm)?;
     fwk_jni::install(vm)?;

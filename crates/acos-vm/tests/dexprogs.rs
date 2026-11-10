@@ -48,6 +48,18 @@ fn expected(name: &str, ext: &str) -> String {
     std::fs::read_to_string(p).unwrap_or_default()
 }
 
+/// Programs that can only run against the real Android 14 boot classpath.
+///
+/// The bootstrap corelib does not implement `java.util.regex`; the regex corpus
+/// exercises the ICU-backed `Pattern`/`Matcher` (`com.android.icu.util.regex.*`)
+/// and is verified against real ART by `tools/diff-dexprogs.sh --corelib real`
+/// (expectations in `fixtures/expected-art/dexprogs`).
+const REAL_CORELIB_ONLY: &[&str] = &[
+    "21_regex_basic",
+    "22_regex_advanced",
+    "23_regex_split_replace",
+];
+
 #[test]
 fn dexprogs_match_jvm_reference() {
     let names = fixture_names();
@@ -61,6 +73,9 @@ fn dexprogs_match_jvm_reference() {
     let mut executed = [0u64; 256];
     let mut failures = Vec::new();
     for name in &names {
+        if REAL_CORELIB_ONLY.contains(&name.as_str()) {
+            continue;
+        }
         let (vm, code, stdout) = run_one(name, false, true);
         let want_stdout = expected(name, "stdout");
         let want_exit: i32 = expected(name, "exit").trim().parse().unwrap_or(0);
@@ -101,7 +116,7 @@ fn dexprogs_pass_gc_stress() {
     }
     let mut failures = Vec::new();
     for name in &names {
-        if name == "19_threads_sync" {
+        if name == "19_threads_sync" || REAL_CORELIB_ONLY.contains(&name.as_str()) {
             continue;
         }
         let (_vm, code, stdout) = run_one(name, true, false);

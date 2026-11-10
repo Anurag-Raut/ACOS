@@ -348,6 +348,9 @@ pub struct Vm {
     /// Hard host-side RSS and wall-clock ceilings (`ACOS_HOST_RSS_MAX` /
     /// `ACOS_WALL_MAX_SECS`), independent of the guest heap limit.
     pub host: HostGuard,
+    /// The per-process virtual filesystem: sandboxed guest paths, the open-fd
+    /// table and the per-session write quota.
+    pub vfs: crate::vfs::Vfs,
 }
 
 impl Vm {
@@ -413,6 +416,7 @@ impl Vm {
             count_opcodes: false,
             max_frames: 2048,
             host: HostGuard::from_env(),
+            vfs: crate::vfs::Vfs::new(crate::vfs::VfsConfig::from_env()),
         };
         match options.corelib {
             CoreLib::Bootstrap => {
@@ -422,6 +426,7 @@ impl Vm {
                 crate::natives::install(&mut vm)?;
                 let dir = default_boot_dir(options.boot_dir.as_deref())
                     .ok_or_else(|| boot_classpath_missing(Path::new(".cache/boot/android-34"), "cache directory not found"))?;
+                vm.vfs.set_boot_root(&dir);
                 vm.load_boot_classpath(&dir)?;
                 vm.crate_fast_classes()?;
             }

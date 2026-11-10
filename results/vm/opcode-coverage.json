@@ -19,7 +19,10 @@
     "17_generics_collections",
     "18_string_format_misc",
     "19_threads_sync",
-    "20_uncaught"
+    "20_uncaught",
+    "21_regex_basic",
+    "22_regex_advanced",
+    "23_regex_split_replace"
   ],
   "executed": [
     {

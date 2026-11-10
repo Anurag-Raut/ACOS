@@ -1795,6 +1795,16 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     // a function call on every static invoke after the class is initialised.
     if is_static && !matches!(vm.classes[mclass as usize].init, crate::class::InitState::Init) {
         vm.initialize_class(mclass)?;
+        // A static initializer may throw and an outer frame may catch the
+        // exception, unwinding this call site's frame (or resuming it at a
+        // handler). In that case the invoke must be abandoned: `fi` is stale
+        // and building a callee frame would read a different method's
+        // registers.
+        if vm.threads[t].frames.len() <= fi
+            || vm.threads[t].frames[fi].pending_exception != NULL
+        {
+            return Ok(());
+        }
     }
 
     let list = if range { &insn.regs[..0] } else { &insn.regs[..count] };

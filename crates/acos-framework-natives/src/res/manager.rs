@@ -740,6 +740,19 @@ impl AssetManager {
         }
     }
 
+    /// `nativeThemeCopy` across two `AssetManager` instances: clone the source
+    /// theme (which may live in a different manager) into `dst` on `self`.
+    /// Used by `AssetManager.setThemeTo(dst, srcAsset, srcTheme)`.
+    pub fn import_theme_from(&mut self, dst: u64, src: &AssetManager, src_theme: u64) -> bool {
+        match src.themes.get(&src_theme).cloned() {
+            Some(theme) => {
+                self.themes.insert(dst, theme);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Resolve an attribute through a theme (helper for reference chasing).
     pub fn theme_resolve_attr(&self, handle: u64, attr_id: u32) -> Option<ResValue> {
         let theme = self.themes.get(&handle)?;
