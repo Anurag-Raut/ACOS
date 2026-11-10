@@ -41,6 +41,7 @@ pub mod fwk_surface;
 pub mod fwk_vsync;
 mod fwk_reflect;
 mod fwk_res;
+mod fwk_sqlite;
 mod icu;
 mod icu_regex;
 mod io;
@@ -85,6 +86,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     reflect::install(vm)?;
     fwk_reflect::install(vm)?;
     fwk_res::install(vm)?;
+    fwk_sqlite::install(vm)?;
     fwk_debug::install(vm)?;
     // `com.android.org.conscrypt.NativeCrypto`: the security provider surface.
     fwk_conscrypt::install(vm)?;

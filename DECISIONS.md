@@ -530,3 +530,47 @@ Status: accepted (2026-11-10), based on research/render-fidelity/REPORT.md.
 - Decision: keep the Rust renderer (acos-render), replace glyph rasterisation with FreeType (FT_LOAD_NO_HINTING | FT_LOAD_RENDER, grayscale A8 masks) shaped by rustybuzz (HarfBuzz port), blit masks in acos-render. Fix Paint::default().anti_alias (Android's Paint() has ANTI_ALIAS_FLAG; current default renders text with 2 grey levels).
 - Keep revisiting if shadows/layers/filters parity (non-text) becomes the dominant error; then re-evaluate a pinned Skia CPU path.
 - Licence: FreeType under FTL, HarfBuzz MIT.
+
+## ADR-0020 — SQLite engine boundary: vendored `rusqlite` in a new `acos-sqlite` crate
+
+Status: accepted (W49-A, 2026-11-10), supersedes no previous decision.
+
+- **Context.** The `android.database.sqlite` framework path
+  (`SQLiteDatabase` → `SQLiteConnectionPool` → `SQLiteConnection.native*`,
+  plus `CursorWindow.native*`) is pure Java over a C engine. G-03 in
+  `results/dogfood/GAPS.md` records that ACOS had no SQLite code at all, so the
+  `sqlite-crud` fixture and any DB-using app stopped at the first native.
+- **Decision.** Link the SQLite C amalgamation through the audited
+  `rusqlite` wrapper (feature `bundled`, crate `rusqlite = "0.37"`), isolated
+  in the new `crates/acos-sqlite`. `acos-vm` keeps `#![forbid(unsafe_code)]`;
+  the FFI unsafe lives only in the external `rusqlite` / `libsqlite3-sys`
+  dependencies, and `acos-sqlite`'s own code is also
+  `#![forbid(unsafe_code)]`. No ACOS crate other than `acos-sqlite` links
+  SQLite. Licences: SQLite is public domain; `rusqlite` is MIT.
+- **Why not directly in `acos-vm`.** `rusqlite::Statement` borrows its
+  `Connection`, so statement lifetime would force self-referential or raw
+  pointer handling inside the interpreter crate. The facade keeps the FFI and
+  its lifetime rules in one place and exposes an owned, statement-oriented API.
+- **Sandbox.** Database paths are accepted only through the guest VFS mapping
+  (`/data/user/<n>/…`, `/data/user_de/…`, `/data/data/…` → `<Vfs::root>/…`);
+  the parent is canonicalised and must stay under the sandbox root, so a
+  symlink planted in app data cannot reach the host. `:memory:` is passed
+  through. There is no host-path escape and no separate `-wal`/`-shm` policy
+  beyond SQLite's own journal mode (WAL is not forced).
+- **Fidelity.** Error messages reproduce Android 14's `throw_sqlite3_exception`
+  format exactly, including the extended code and symbolic name
+  (`UNIQUE constraint failed: notes.body (code 2067 SQLITE_CONSTRAINT_UNIQUE)`)
+  and the `": , while compiling: <sql>"` suffix on prepare errors. The result
+  code selects the same `SQLiteException` subclass (`SQLiteConstraintException`,
+  `SQLiteReadOnlyDatabaseException`, `SQLiteFullException`, …). Unregistered
+  natives (`nativeExecuteForBlobFileDescriptor`, `nativeRegisterCustom*`,
+  parcel/`SQLiteDebug` paths) stay structured `UNSUPPORTED_JAVA_API` — never a
+  faked result.
+- **Evidence.** `crates/acos-vm/tests` + `fixtures/dexprogs/28_sqlite_basic`
+  (create/insert/query/update/delete, commit/rollback, UNIQUE/NOT NULL,
+  BLOB/type/NULL, BINARY/NOCASE). Captured from the real API-34 x86_64 ART
+  (`app_process`, because the framework natives are registered by
+  `AndroidRuntime` and not by `dalvikvm64`):
+  `fixtures/expected-art/dexprogs/28_sqlite_basic.stdout` is byte-identical to
+  the ACOS run, over three deterministic ART runs.
+  `tools/diff-dexprogs.sh --corelib real` = 28 pass / 0 fail / 0 unsupported.

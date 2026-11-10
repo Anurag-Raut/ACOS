@@ -1,0 +1,17 @@
+[package]
+name = "acos-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Safe Rust SQLite engine facade for the ACOS android.database.sqlite native layer."
+
+[dependencies]
+# `bundled` vendors the SQLite C amalgamation and compiles it with `cc`.
+# The unsafe FFI lives entirely inside rusqlite/libsqlite3-sys; this crate's
+# own code stays `#![forbid(unsafe_code)]` (see ADR-0020 note in DECISIONS.md).
+rusqlite = { version = "0.37", features = ["bundled", "collation"] }
+
+[lib]
+name = "acos_sqlite"
+path = "src/lib.rs"

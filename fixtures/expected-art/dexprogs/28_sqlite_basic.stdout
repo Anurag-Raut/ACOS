@@ -1,0 +1,25 @@
+opened=ok
+create=ok
+insert_ids=1,2,3
+count=3
+rows=1:alpha|2:beta|3:gamma
+updated=1
+after_update=alpha-1
+deleted=1
+after_delete=2
+cursor_count=2
+first_id=1
+last_id=3
+tx_count=4
+rollback_count=4
+unique=SQLiteConstraintException: UNIQUE constraint failed: notes.body (code 2067 SQLITE_CONSTRAINT_UNIQUE)
+notnull=SQLiteConstraintException: NOT NULL constraint failed: notes.body (code 1299 SQLITE_CONSTRAINT_NOTNULL)
+blob_type=4
+blob_len=4
+blob_hex=00ff10ab
+types=1,2,3,4,0
+type_values=42,3.5,text,3,true,null
+binary=Beta,Gamma,alpha
+nocase=alpha,Beta,Gamma
+closed=ok
+done

@@ -11,6 +11,8 @@ acos-dex = { path = "../acos-dex" }
 acos-framework-natives = { path = "../acos-framework-natives" }
 acos-render = { path = "../acos-render" }
 acos-parcel = { path = "../acos-parcel" }
+# Safe SQLite engine (rusqlite + vendored C). See ADR-0020 note in DECISIONS.md.
+acos-sqlite = { path = "../acos-sqlite" }
 # Direct TTF/OTF parsing for the android.graphics.fonts.Font native surface
 # (glyph advances/bounds + variable-font axes). Already in the workspace lock
 # via acos-render.
