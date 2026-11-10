@@ -1,0 +1,5 @@
+name: flutter_hello
+description: Minimal ACOS Flutter fixture (raw dart:ui, no package:flutter).
+publish_to: none
+environment:
+  sdk: ">=3.13.0 <4.0.0"
