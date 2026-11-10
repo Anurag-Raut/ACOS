@@ -12,8 +12,10 @@ use crate::frame::Frame;
 use crate::heap::{ArrayData, Handle, Object, NULL};
 use crate::vm::{InvokeKind, ThreadStatus, Vm};
 
-fn empty_code() -> Rc<MethodCode> {
-    Rc::new(MethodCode {
+thread_local! {
+    /// Shared empty body for native frames: avoids an `Rc` allocation on every
+    /// native invocation.
+    static EMPTY_CODE: Rc<MethodCode> = Rc::new(MethodCode {
         registers_size: 0,
         ins_size: 0,
         outs_size: 0,
@@ -23,11 +25,75 @@ fn empty_code() -> Rc<MethodCode> {
         tries: Vec::new(),
         line_table: Vec::new(),
         source_file: None,
-    })
+    });
+}
+
+fn empty_code() -> Rc<MethodCode> {
+    EMPTY_CODE.with(|c| c.clone())
+}
+
+/// Take a frame from the per-thread pool (or allocate one), reset it and size
+/// its register file. Reusing the `regs`/`refs` buffers removes two heap
+/// allocations per Java/native call from the hot invoke path.
+fn acquire_frame(
+    vm: &mut Vm,
+    t: usize,
+    method: MethodId,
+    class: ClassId,
+    code: Rc<MethodCode>,
+    regs_size: usize,
+) -> Frame {
+    let mut frame = match vm.threads[t].frame_pool.pop() {
+        Some(mut f) => {
+            // Set the length to exactly the method's register size. Native
+            // handlers (`ctx_this`/`param_off`) derive the frame base from
+            // `regs.len()`, so an oversized pooled buffer would corrupt them.
+            // `truncate`/`resize` keep the allocation, so reuse still avoids
+            // the two per-call heap allocations.
+            if f.regs.len() < regs_size {
+                f.regs.resize(regs_size, 0);
+            } else {
+                f.regs.truncate(regs_size);
+            }
+            if f.refs.len() < regs_size {
+                f.refs.resize(regs_size, false);
+            } else {
+                f.refs.truncate(regs_size);
+            }
+            f.regs.fill(0);
+            f.refs.fill(false);
+            f
+        }
+        None => Frame::new(method, class, code.clone(), regs_size),
+    };
+    frame.method = method;
+    frame.class = class;
+    frame.code = code;
+    frame.pc = 0;
+    frame.insn_index = 0;
+    frame.pending_result = 0;
+    frame.pending_result_is_ref = false;
+    frame.has_pending_result = false;
+    frame.pending_exception = NULL;
+    frame.monitor = None;
+    frame.advance_on_return = false;
+    frame
+}
+
+/// Return a popped frame's register buffers to the pool (bounded).
+#[inline]
+fn release_frame(vm: &mut Vm, t: usize, f: Frame) {
+    const POOL_CAP: usize = 128;
+    if vm.threads[t].frame_pool.len() < POOL_CAP {
+        // Keep the body reference; the slot is overwritten on reuse and the
+        // pool is capped, so at most POOL_CAP bodies are retained.
+        vm.threads[t].frame_pool.push(f);
+    }
 }
 
 /// Top-level scheduler: runs all runnable green threads to completion.
 pub fn run(vm: &mut Vm) -> VmResult<()> {
+    let mut next_yield: u64 = 8192;
     loop {
         if vm.pending_exception != NULL {
             break;
@@ -50,14 +116,77 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
             continue;
         }
         vm.threads[t].status = ThreadStatus::Running;
-        step(vm)?;
-        vm.metrics.instructions += 1;
-        if vm.threads.len() > 1 && vm.metrics.instructions.is_multiple_of(8192) {
+        let n = run_batch(vm, t, 0, true)?;
+        vm.metrics.instructions += n;
+        if vm.threads.len() > 1 && vm.metrics.instructions >= next_yield {
             vm.threads[t].status = ThreadStatus::Runnable;
             let _ = pick_runnable(vm);
+            next_yield = vm.metrics.instructions + 8192;
         }
     }
     Ok(())
+}
+
+/// Run the current thread as a batch: repeated runs of frame-local opcodes
+/// (through [`crate::dispatch::fast_run`]) interleaved with single general-path
+/// instructions (invoke, return, native, field resolution, allocation, ...).
+///
+/// Staying inside one call instead of bouncing out to the scheduler for every
+/// invoke/return removed most of the per-call overhead in call-heavy code.
+/// Stops at the batch cap, at `stop_depth`, when the thread blocks/finishes, or
+/// when an uncaught exception is pending. Returns the instructions executed.
+fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> VmResult<u64> {
+    // Opcode histograms need the general path so every opcode is counted.
+    if vm.count_opcodes {
+        exec_one(vm, t)?;
+        return Ok(1);
+    }
+    let cap = crate::dispatch::FAST_CAP;
+    let mut count = 0u64;
+    while count < cap {
+        if vm.threads[t].frames.len() <= stop_depth {
+            break;
+        }
+        if vm.pending_exception != NULL {
+            break;
+        }
+        // The scheduler must yield when a thread blocks/goes to sleep. A
+        // synchronous nested Java call (`call_method` from a native) must not:
+        // it has to run to completion on the host stack, exactly as the old
+        // `step`-based `run_current_until` did.
+        if yield_on_block
+            && matches!(
+                vm.threads[t].status,
+                ThreadStatus::Sleeping
+                    | ThreadStatus::Waiting
+                    | ThreadStatus::BlockedMonitor(_)
+                    | ThreadStatus::Finished
+            )
+        {
+            break;
+        }
+        let fi = vm.threads[t].frames.len() - 1;
+        let is_dex = matches!(
+            &vm.methods[vm.threads[t].frames[fi].method as usize].imp,
+            MethodImpl::Dex { code: Some(_), .. }
+        );
+        if is_dex {
+            // Fast opcodes never push/pop frames, allocate, or resolve
+            // references, so `fi` and the frame pointer stay valid for the
+            // whole run and the frame lookup is paid once.
+            let Vm { threads, heap, .. } = &mut *vm;
+            let f = &mut threads[t].frames[fi];
+            count += crate::dispatch::fast_run(f, heap, cap - count);
+        }
+        if count >= cap || vm.threads[t].frames.len() <= stop_depth {
+            break;
+        }
+        // Exactly one general-path instruction: native, invoke, return,
+        // field/class resolution, allocation, monitor, throw, ...
+        exec_one(vm, t)?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 fn finish_thread(vm: &mut Vm, t: usize) {
@@ -131,8 +260,8 @@ fn monitor_owner(vm: &Vm, h: Handle) -> Option<usize> {
     vm.monitors.get(&h).map(|(o, _)| *o)
 }
 
-fn step(vm: &mut Vm) -> VmResult<()> {
-    let t = vm.current_thread;
+/// Execute exactly one instruction on the current thread (general path).
+fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
     if vm.threads[t].frames.is_empty() {
         return Ok(());
     }
@@ -197,6 +326,7 @@ fn step(vm: &mut Vm) -> VmResult<()> {
     }
 }
 
+#[inline]
 fn pop_frame(vm: &mut Vm, t: usize) {
     let f = vm.threads[t].frames.pop().unwrap();
     if let Some(m) = f.monitor {
@@ -217,6 +347,7 @@ fn pop_frame(vm: &mut Vm, t: usize) {
             caller.insn_index += 1;
         }
     }
+    release_frame(vm, t, f);
 }
 
 /// Pop a frame without transferring a result (used when an exception is
@@ -226,6 +357,7 @@ fn pop_frame_quiet(vm: &mut Vm, t: usize) {
         if let Some(m) = f.monitor {
             exit_monitor(vm, m);
         }
+        release_frame(vm, t, f);
     }
 }
 
@@ -479,8 +611,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         }
         0x1c => {
             let dex = frame_dex(vm, t, fi);
-            let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-            let cid = vm.load_class(&desc)?;
+            let cid = cached_class(vm, dex, insn.index)?;
             let h = vm.class_object(cid)?;
             set_ref(vm, t, fi, r0, h);
             advance(vm, t, fi, insn.size);
@@ -518,12 +649,15 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let v = reg(vm, t, fi, r0);
             if v != NULL {
                 let dex = frame_dex(vm, t, fi);
-                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-                let target = vm.load_class(&desc)?;
+                let target = cached_class(vm, dex, insn.index)?;
                 let from = vm
                     .class_of_object(v)
                     .ok_or_else(|| VmError::Internal("check-cast non-object".into()))?;
                 if !vm.is_assignable(from, target)? {
+                    let desc = vm.dexs[dex as usize]
+                        .file
+                        .type_descriptor(insn.index)?
+                        .to_string();
                     let name = crate::vm::descriptor_to_dotted(&desc);
                     let msg = format!("class {} cannot be cast to class {}", vm.class_desc_of_id(from), name);
                     return Err(vm.throw_new("Ljava/lang/ClassCastException;", Some(&msg)));
@@ -537,8 +671,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                 0
             } else {
                 let dex = frame_dex(vm, t, fi);
-                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-                let target = vm.load_class(&desc)?;
+                let target = cached_class(vm, dex, insn.index)?;
                 let from = vm
                     .class_of_object(v)
                     .ok_or_else(|| VmError::Internal("instance-of non-object".into()))?;
@@ -566,9 +699,10 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         }
         0x22 => {
             let dex = frame_dex(vm, t, fi);
-            let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-            let cid = vm.load_class(&desc)?;
-            vm.initialize_class(cid)?;
+            let cid = cached_class(vm, dex, insn.index)?;
+            if !matches!(vm.classes[cid as usize].init, crate::class::InitState::Init) {
+                vm.initialize_class(cid)?;
+            }
             let h = vm.builtin_instance(cid)?;
             set_ref(vm, t, fi, r0, h);
             advance(vm, t, fi, insn.size);
@@ -970,6 +1104,27 @@ fn const_string(vm: &mut Vm, dex: u32, index: u32) -> VmResult<Handle> {
     vm.dex_string(dex, index)
 }
 
+/// Resolve a DEX type index to a class id, cached per DEX. `new-instance`,
+/// `const-class`, `check-cast` and `instance-of` used to build a descriptor
+/// `String` and run a global `HashMap` lookup on every execution even though
+/// `DexCtx::class_cache` existed for exactly this.
+fn cached_class(vm: &mut Vm, dex: u32, type_idx: u32) -> VmResult<ClassId> {
+    if let Some(cid) = vm.dexs[dex as usize]
+        .class_cache
+        .get(type_idx as usize)
+        .copied()
+        .flatten()
+    {
+        return Ok(cid);
+    }
+    let desc = vm.dexs[dex as usize].file.type_descriptor(type_idx)?.to_string();
+    let cid = vm.load_class(&desc)?;
+    if let Some(slot) = vm.dexs[dex as usize].class_cache.get_mut(type_idx as usize) {
+        *slot = Some(cid);
+    }
+    Ok(cid)
+}
+
 // ---------------------------------------------------------------------------
 // Arrays
 // ---------------------------------------------------------------------------
@@ -1248,7 +1403,7 @@ fn convert(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) {
 // Arithmetic
 // ---------------------------------------------------------------------------
 
-fn div_int(a: i32, b: i32) -> Result<i32, ()> {
+pub(crate) fn div_int(a: i32, b: i32) -> Result<i32, ()> {
     if b == 0 {
         Err(())
     } else if a == i32::MIN && b == -1 {
@@ -1258,7 +1413,7 @@ fn div_int(a: i32, b: i32) -> Result<i32, ()> {
     }
 }
 
-fn rem_int(a: i32, b: i32) -> Result<i32, ()> {
+pub(crate) fn rem_int(a: i32, b: i32) -> Result<i32, ()> {
     if b == 0 {
         Err(())
     } else if a == i32::MIN && b == -1 {
@@ -1268,7 +1423,7 @@ fn rem_int(a: i32, b: i32) -> Result<i32, ()> {
     }
 }
 
-fn div_long(a: i64, b: i64) -> Result<i64, ()> {
+pub(crate) fn div_long(a: i64, b: i64) -> Result<i64, ()> {
     if b == 0 {
         Err(())
     } else if a == i64::MIN && b == -1 {
@@ -1278,7 +1433,7 @@ fn div_long(a: i64, b: i64) -> Result<i64, ()> {
     }
 }
 
-fn rem_long(a: i64, b: i64) -> Result<i64, ()> {
+pub(crate) fn rem_long(a: i64, b: i64) -> Result<i64, ()> {
     if b == 0 {
         Err(())
     } else if a == i64::MIN && b == -1 {
@@ -1543,7 +1698,11 @@ fn arith_lit8(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
 
 fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     let (kind, range) = invoke_kind(insn.op);
-    let dex = frame_dex(vm, t, fi);
+    // Inlined `frame_dex`: this runs on every call.
+    let dex = match &vm.methods[vm.threads[t].frames[fi].method as usize].imp {
+        MethodImpl::Dex { dex, .. } => *dex,
+        _ => 0,
+    };
     let count = insn.reg_count as usize;
     // Argument word registers: a 35c invoke lists one register per argument
     // *word* (a wide argument contributes two entries); a range invoke uses
@@ -1580,19 +1739,31 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             }
         }
         // Static/direct/super targets are resolved through the DEX method
-        // cache, so this is a single Vec index after the first call.
-        _ => match vm.resolve_method_ref(dex, insn.index, kind) {
-            Ok(m) => m,
-            Err(_) => return Err(unsupported_call_site(vm, dex, insn.index, t, fi)),
-        },
+        // cache. Probe it inline (the common case is a cached hit) and only
+        // fall back to the general resolver on a miss.
+        _ => {
+            let cached = vm.dexs[dex as usize]
+                .method_cache
+                .get(insn.index as usize)
+                .copied()
+                .flatten();
+            match cached {
+                Some(m) => m,
+                None => match vm.resolve_method_ref(dex, insn.index, kind) {
+                    Ok(m) => m,
+                    Err(_) => return Err(unsupported_call_site(vm, dex, insn.index, t, fi)),
+                },
+            }
+        }
     };
 
     let (ins_size, is_static, is_synchronized, mclass) = {
         let m = &vm.methods[method as usize];
         (m.ins_size, m.is_static(), m.is_synchronized(), m.class)
     };
-    // Class initialization for static calls.
-    if is_static {
+    // Class initialization for static calls; the inlined `Init` check avoids
+    // a function call on every static invoke after the class is initialised.
+    if is_static && !matches!(vm.classes[mclass as usize].init, crate::class::InitState::Init) {
         vm.initialize_class(mclass)?;
     }
 
@@ -1677,6 +1848,7 @@ fn invoke_kind(op: u8) -> (InvokeKind, bool) {
 /// explicit argument words. `count` is the number of argument words. No
 /// `Method` clone and no per-call `Vec` are allocated here (both used to be on
 /// the hot call path).
+#[inline]
 fn build_frame(
     vm: &mut Vm,
     method: MethodId,
@@ -1702,7 +1874,7 @@ fn build_frame(
     let t = vm.current_thread;
     let base_slot = regs_size - ins_size;
     let n = ins_size.min(count);
-    let mut frame = Frame::new(method, class_id, code, regs_size);
+    let mut frame = acquire_frame(vm, t, method, class_id, code, regs_size);
     frame.advance_on_return = true;
     {
         let caller_regs = &vm.threads[t].frames.last().unwrap().regs;
@@ -1745,7 +1917,8 @@ pub fn push_frame_values(
         MethodImpl::Dex { code: Some(c), .. } => (c.registers_size as usize, c.clone()),
         _ => (m.ins_size as usize, empty_code()),
     };
-    let mut frame = Frame::new(method, m.class, code, regs_size);
+    let t = vm.current_thread;
+    let mut frame = acquire_frame(vm, t, method, m.class, code, regs_size);
     let base = regs_size - m.ins_size as usize;
     let mut pos = base;
     if !m.is_static() {
@@ -1775,8 +1948,8 @@ pub fn push_frame_values(
 pub fn run_current_until(vm: &mut Vm, base_depth: usize) -> VmResult<()> {
     let t = vm.current_thread;
     while vm.threads[t].frames.len() > base_depth {
-        step(vm)?;
-        vm.metrics.instructions += 1;
+        let n = run_batch(vm, t, base_depth, false)?;
+        vm.metrics.instructions += n;
     }
     if vm.pending_exception != NULL {
         let h = vm.pending_exception;

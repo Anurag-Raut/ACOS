@@ -61,8 +61,16 @@ fn main() {
         0.0
     };
     println!(
-        "{:<20} best={:8.2} ms  insns={:>13}  {:6.2} M/s  invokes={:>10}  allocs={:>10}  gc={}",
-        main_class, best, m.instructions, mips, m.invokes, m.allocations, m.gc_count
+        "{:<20} best={:8.2} ms  insns={:>13}  {:6.2} M/s  invokes={:>10}  allocs={:>10}  gc={} gc_ms={} peak_mb={:.1}",
+        main_class,
+        best,
+        m.instructions,
+        mips,
+        m.invokes,
+        m.allocations,
+        m.gc_count,
+        m.gc_ms,
+        m.heap_peak_bytes as f64 / (1024.0 * 1024.0)
     );
     if show_ops {
         let mut ops: Vec<(usize, u64)> = last_ops

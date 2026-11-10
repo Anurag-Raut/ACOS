@@ -42,6 +42,10 @@ pub struct ThreadRT {
     pub status: ThreadStatus,
     pub joiners: Vec<usize>,
     pub wake_at: Option<Instant>,
+    /// Reusable register buffers for popped frames. Java calls happen in tight
+    /// loops in real framework code; allocating a fresh `regs`/`refs` pair for
+    /// every call dominated invoke cost. The pool is per-thread and capped.
+    pub(crate) frame_pool: Vec<Frame>,
 }
 
 impl ThreadRT {
@@ -52,6 +56,7 @@ impl ThreadRT {
             status: ThreadStatus::Runnable,
             joiners: Vec::new(),
             wake_at: None,
+            frame_pool: Vec::new(),
         }
     }
 
@@ -201,7 +206,7 @@ impl Vm {
             throwable_stacks: HashMap::new(),
             pending_exception: NULL,
             gc_stress: options.gc_stress,
-            gc_threshold: (options.heap_max_bytes / 4).max(1 << 20),
+            gc_threshold: (options.heap_max_bytes / 16).max(1 << 20),
             oom_object: NULL,
             stack_overflow_object: NULL,
             c_object: 0,
@@ -970,7 +975,9 @@ impl Vm {
         self.heap.gc_count += 1;
         self.heap.gc_nanos += start.elapsed().as_nanos() as u64;
         self.metrics.gc_count = self.heap.gc_count;
-        self.gc_threshold = (self.heap.live_bytes * 2).max(1 << 20);
+        self.gc_threshold = (self.heap.live_bytes * 2)
+            .max(self.heap.max_bytes / 16)
+            .max(1 << 20);
     }
 
     // ---- class objects ---------------------------------------------------

@@ -13,6 +13,7 @@
 
 pub mod class;
 pub mod corelib;
+mod dispatch;
 pub mod error;
 pub mod format;
 pub mod frame;

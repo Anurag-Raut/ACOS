@@ -61,35 +61,68 @@ impl Frame {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn reg(&self, r: u16) -> u32 {
         self.regs[r as usize]
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn set_reg(&mut self, r: u16, v: u32) {
         self.regs[r as usize] = v;
-        self.refs[r as usize] = false;
+        // Guarded clear: for the common integer write the slot is already
+        // non-reference, so the store is skipped (branch predicted).
+        if self.refs[r as usize] {
+            self.refs[r as usize] = false;
+        }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn set_reg_ref(&mut self, r: u16, v: Handle) {
         self.regs[r as usize] = v;
-        self.refs[r as usize] = true;
+        if !self.refs[r as usize] {
+            self.refs[r as usize] = true;
+        }
     }
 
     /// Set a 64-bit value into two adjacent slots.
-    #[inline]
+    #[inline(always)]
     pub fn set_reg_wide(&mut self, r: u16, v: u64) {
         self.regs[r as usize] = v as u32;
         self.regs[r as usize + 1] = (v >> 32) as u32;
-        self.refs[r as usize] = false;
-        self.refs[r as usize + 1] = false;
+        if self.refs[r as usize] {
+            self.refs[r as usize] = false;
+        }
+        if self.refs[r as usize + 1] {
+            self.refs[r as usize + 1] = false;
+        }
     }
 
     /// Read a 64-bit value from two adjacent slots.
-    #[inline]
+    #[inline(always)]
     pub fn reg_wide(&self, r: u16) -> u64 {
         (self.regs[r as usize] as u64) | ((self.regs[r as usize + 1] as u64) << 32)
+    }
+
+    /// Advance past the current instruction.
+    #[inline(always)]
+    pub fn advance(&mut self, size: u8) {
+        self.pc += size as u32;
+        self.insn_index += 1;
+    }
+
+    /// Redirect execution to a code-unit address, resolving it to an
+    /// instruction index. Returns `false` (leaving state untouched) when the
+    /// target is not a valid instruction boundary; the caller then reports the
+    /// structured internal error through the general path.
+    #[inline(always)]
+    pub fn branch_to(&mut self, target_pc: u32) -> bool {
+        match self.code.pc_to_idx.get(target_pc as usize).copied() {
+            Some(i) if i != u32::MAX => {
+                self.pc = target_pc;
+                self.insn_index = i as usize;
+                true
+            }
+            _ => false,
+        }
     }
 }
