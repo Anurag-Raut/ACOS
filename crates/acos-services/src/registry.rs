@@ -19,22 +19,16 @@ pub const NOT_OWNED: &[(&str, &str)] = &[
     ("android.view.IWindowSession", "acos-wm"),
     ("android.view.IWindow", "acos-wm"),
     ("android.view.IWindowSessionCallback", "acos-wm"),
-    ("com.android.internal.view.IInputMethodManager", "acos-wm"),
-    (
-        "com.android.internal.inputmethod.IInputMethodSession",
-        "acos-wm",
-    ),
-    (
-        "com.android.internal.inputmethod.IImeTracker",
-        "acos-wm",
-    ),
+    // IME app-side objects: these are *delivered* to the app by the VM, they
+    // are not services (`IInputMethodManager`/`IInputMethodSession`/`IImeTracker`
+    // are served by `acos-services::ime`).
     (
         "com.android.internal.inputmethod.IRemoteInputConnection",
-        "acos-wm",
+        "acos-vm (delivery)",
     ),
     (
         "com.android.internal.inputmethod.IInputMethodClient",
-        "acos-wm",
+        "acos-vm (delivery)",
     ),
 ];
 
@@ -93,6 +87,28 @@ pub const NAMES: &[(&str, &str)] = &[
     ("settings", "android.content.IContentProvider"),
     ("input", "android.hardware.input.IInputManager"),
     (
+        "input_method",
+        "com.android.internal.view.IInputMethodManager",
+    ),
+    (
+        "ime_session",
+        "com.android.internal.inputmethod.IInputMethodSession",
+    ),
+    (
+        "ime_tracker",
+        "com.android.internal.inputmethod.IImeTracker",
+    ),
+    ("clipboard", "android.content.IClipboard"),
+    ("user", "android.os.IUserManager"),
+    ("notification", "android.app.INotificationManager"),
+    (
+        "statusbar",
+        "com.android.internal.statusbar.IStatusBarService",
+    ),
+    ("permission", "android.permission.IPermissionManager"),
+    ("appops", "com.android.internal.app.IAppOpsService"),
+    ("connectivity", "android.net.IConnectivityManager"),
+    (
         "androidfuture",
         "com.android.internal.infra.IAndroidFuture",
     ),
@@ -145,6 +161,14 @@ pub fn install(host: &mut ServiceHost) {
     let contentcapture = Arc::new(Mutex::new(crate::misc::ContentCaptureState::new()));
     let voice = Arc::new(Mutex::new(crate::misc::VoiceState::new()));
     let future = Arc::new(Mutex::new(crate::misc::FutureState::new()));
+    let ime = Arc::new(Mutex::new(crate::ime::ImeState::new()));
+    let clipboard = crate::clipboard::shared();
+    let appops = Arc::new(Mutex::new(crate::declared::AppOpsState::new()));
+    let permission = Arc::new(Mutex::new(crate::declared::PermissionState::new()));
+    let users = Arc::new(Mutex::new(crate::declared::UserState::new()));
+    let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
+    let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
+    let connectivity = Arc::new(Mutex::new(crate::declared::ConnectivityState::new()));
 
     // ATMS shares one state across the three interfaces.
     let atms_am = Arc::clone(&atms);
@@ -273,6 +297,93 @@ pub fn install(host: &mut ServiceHost) {
     host.register("input", "android.hardware.input.IInputManager", move |_w| {
         Box::new(crate::misc::InputService::new(Arc::clone(&input))) as Box<dyn ServiceObject>
     });
+
+    // T-38: the null in-process IME. `IInputMethodSession`/`IImeTracker` are
+    // auxiliary binders a real IME would hold; registering them keeps the
+    // decoded transactions routable instead of silently missing.
+    host.register_aux("com.android.internal.inputmethod.IInputMethodSession");
+    host.register_aux("com.android.internal.inputmethod.IImeTracker");
+    let ime_manager = Arc::clone(&ime);
+    host.register(
+        "input_method",
+        "com.android.internal.view.IInputMethodManager",
+        move |_w| {
+            Box::new(crate::ime::ImeService::new(Arc::clone(&ime_manager)))
+                as Box<dyn ServiceObject>
+        },
+    );
+    let ime_session = Arc::clone(&ime);
+    host.register(
+        "ime_session",
+        "com.android.internal.inputmethod.IInputMethodSession",
+        move |_w| {
+            Box::new(crate::ime::ImeSessionService::new(Arc::clone(&ime_session)))
+                as Box<dyn ServiceObject>
+        },
+    );
+    let ime_tracker = Arc::clone(&ime);
+    host.register(
+        "ime_tracker",
+        "com.android.internal.inputmethod.IImeTracker",
+        move |_w| {
+            Box::new(crate::ime::ImeTrackerService::new(Arc::clone(&ime_tracker)))
+                as Box<dyn ServiceObject>
+        },
+    );
+
+    // T-39: clipboard + the declared service set.
+    host.register("clipboard", "android.content.IClipboard", move |_w| {
+        Box::new(crate::clipboard::ClipboardService::new(Arc::clone(&clipboard)))
+            as Box<dyn ServiceObject>
+    });
+    host.register(
+        "appops",
+        "com.android.internal.app.IAppOpsService",
+        move |_w| {
+            Box::new(crate::declared::AppOpsService::new(Arc::clone(&appops)))
+                as Box<dyn ServiceObject>
+        },
+    );
+    host.register(
+        "permission",
+        "android.permission.IPermissionManager",
+        move |_w| {
+            Box::new(crate::declared::PermissionService::new(Arc::clone(
+                &permission,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    host.register("user", "android.os.IUserManager", move |_w| {
+        Box::new(crate::declared::UserService::new(Arc::clone(&users)))
+            as Box<dyn ServiceObject>
+    });
+    host.register(
+        "notification",
+        "android.app.INotificationManager",
+        move |_w| {
+            Box::new(crate::declared::NotificationService::new(Arc::clone(
+                &notification,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    host.register(
+        "statusbar",
+        "com.android.internal.statusbar.IStatusBarService",
+        move |_w| {
+            Box::new(crate::declared::StatusBarService::new(Arc::clone(
+                &statusbar,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    host.register(
+        "connectivity",
+        "android.net.IConnectivityManager",
+        move |_w| {
+            Box::new(crate::declared::ConnectivityService::new(Arc::clone(
+                &connectivity,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
 
     // IActivityClientController and IContentProvider are addressed through the
     // aux binders but still need dispatch objects.

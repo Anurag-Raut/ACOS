@@ -70,15 +70,25 @@ pub fn write_no_exception(reply: &mut Parcel) {
 
 /// Write an AIDL exception header.
 ///
-/// For `EX_SERVICE_SPECIFIC` the framework's `Parcel.readException` reads a
-/// `String16` message followed by an `int` error code (see
-/// `Parcel.writeException`/`readException` asymmetry in AOSP; ACOS mirrors it
-/// exactly), so those extra fields are emitted here.
+/// AOSP's `Parcel.writeException` writes the code, then the message, then the
+/// remote stack-trace payload size (`0` when `sParcelExceptionStackTrace` is
+/// off), and finally any code-specific extra. The framework's
+/// `Parcel.readException` reads exactly that sequence (`readString()` then an
+/// `int` in `readException(int, String)`), so a message-less header would
+/// desynchronise the reply. ACOS mirrors the format for every code; the
+/// remote-stack payload is always `0` and `EX_SERVICE_SPECIFIC` carries an
+/// extra error-code `int`.
+///
+/// `NO_EXCEPTION` is written by [`write_no_exception`]; this function only
+/// handles the failing codes.
 pub fn write_exception(reply: &mut Parcel, code: i32, message: &str) -> Result<(), ParcelError> {
     reply.write_int32(code);
-    if code == EX_SERVICE_SPECIFIC {
+    if code != NO_EXCEPTION {
         reply.write_string16(message)?;
-        reply.write_int32(0);
+        reply.write_int32(0); // remote stack-trace payload: none
+        if code == EX_SERVICE_SPECIFIC {
+            reply.write_int32(0); // ServiceSpecificException.errorCode
+        }
     }
     Ok(())
 }
@@ -106,7 +116,8 @@ mod tests {
         p.set_data_position(0);
         assert_eq!(read_exception(&mut p).unwrap(), EX_SERVICE_SPECIFIC);
         assert_eq!(p.read_string16().unwrap().as_deref(), Some("nope"));
-        assert_eq!(p.read_int32().unwrap(), 0);
+        assert_eq!(p.read_int32().unwrap(), 0); // remote stack size
+        assert_eq!(p.read_int32().unwrap(), 0); // ServiceSpecificException code
     }
 
     #[test]
@@ -116,8 +127,12 @@ mod tests {
             write_exception(&mut p, code, "msg").unwrap();
             p.set_data_position(0);
             assert_eq!(read_exception(&mut p).unwrap(), code);
+            // Every failure code carries the message and the (empty) remote
+            // stack-trace payload, exactly as `Parcel.writeException` writes
+            // and `Parcel.readException` reads.
+            assert_eq!(p.read_string16().unwrap().as_deref(), Some("msg"));
+            assert_eq!(p.read_int32().unwrap(), 0);
             if code == EX_SERVICE_SPECIFIC {
-                assert_eq!(p.read_string16().unwrap().as_deref(), Some("msg"));
                 assert_eq!(p.read_int32().unwrap(), 0);
             }
         }

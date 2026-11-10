@@ -40,11 +40,14 @@
 #![forbid(unsafe_code)]
 
 pub mod atms;
+pub mod clipboard;
+pub mod declared;
 pub mod codec;
 pub mod display;
 pub mod error;
 pub mod exception;
 pub mod host;
+pub mod ime;
 pub mod input;
 pub mod misc;
 pub mod parcelable;

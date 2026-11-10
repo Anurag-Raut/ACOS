@@ -16,10 +16,12 @@ Captured with `tools/oracle/capture-device-reference.sh`.
 - **Locale:** en-US, font scale 1.0
 - **ABI:** arm64-v8a (arm64-v8a,armeabi-v7a,armeabi)
 - **Rotation settings:** the device was already in sensor-driven portrait when the
-  capture started; the pre-existing default `user_rotation=null` was observed
-  before the first manual smoke test and restored at the end (`user_rotation=null`,
-  `accelerometer_rotation=1`). The capture run itself recorded `user_rotation=1`
-  at start, because that smoke test had set it.
+  capture started. The pre-existing default was `user_rotation=null`
+  (`accelerometer_rotation=1`); the capture run recorded `user_rotation=1` at
+  start because an earlier manual smoke test had set it. The capture script
+  restores the rotation settings it observed and finishes with
+  `agent-device orientation auto`; the device was left in sensor-driven portrait
+  (`user_rotation=0`, `accelerometer_rotation=1`, display 1080x2400).
 
 ## Why the numbers differ from `fixtures/reference/<app>/art-api34-x86_64`
 

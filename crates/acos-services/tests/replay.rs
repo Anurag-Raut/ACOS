@@ -496,22 +496,35 @@ fn interaction_cases() -> Vec<Case> {
             args: vec![],
         },
         Case {
-            name: "IInputMethodManager.reportPerceptibleAsync (acos-wm)",
+            name: "IInputMethodManager.reportPerceptibleAsync",
             interface: "com.android.internal.view.IInputMethodManager",
             method: "reportPerceptibleAsync",
-            args: vec![],
+            args: vec![Value::Binder(None), Value::Bool(true)],
         },
         Case {
-            name: "IInputMethodSession.updateSelection (acos-wm)",
+            name: "IInputMethodSession.updateSelection",
             interface: "com.android.internal.inputmethod.IInputMethodSession",
             method: "updateSelection",
-            args: vec![],
+            args: vec![
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(-1),
+                Value::Int(-1),
+            ],
         },
         Case {
-            name: "IImeTracker.onProgress (acos-wm)",
+            name: "IImeTracker.onProgress",
             interface: "com.android.internal.inputmethod.IImeTracker",
             method: "onProgress",
-            args: vec![],
+            args: vec![
+                Value::TypedObject(P::ordered(
+                    "android.view.inputmethod.ImeTracker$Token",
+                    vec![Value::Binder(None), Value::Int(1)],
+                )),
+                Value::Int(1),
+            ],
         },
     ]
 }

@@ -71,10 +71,16 @@ fn not_owned_interfaces_name_the_owner() {
         "android.view.IWindowManager",
         "android.view.IWindowSession",
         "android.view.IWindow",
-        "com.android.internal.view.IInputMethodManager",
     ] {
         assert_eq!(registry::owner_of(descriptor), Some("acos-wm"));
     }
+    // T-38: the IME is served by `acos-services::ime`; only the app-side
+    // delivery targets stay with the VM.
+    assert_eq!(registry::owner_of("com.android.internal.view.IInputMethodManager"), None);
+    assert_eq!(
+        registry::owner_of("com.android.internal.inputmethod.IInputMethodClient"),
+        Some("acos-vm (delivery)")
+    );
     assert_eq!(registry::owner_of("android.app.IActivityManager"), None);
 }
 

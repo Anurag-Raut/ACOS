@@ -148,6 +148,8 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str8, // sourceDir
             FieldOp::Str8, // publicSourceDir
             FieldOp::Str8, // dataDir
+            FieldOp::Str8, // deviceProtectedDataDir
+            FieldOp::Str8, // credentialProtectedDataDir
             FieldOp::Str8, // nativeLibraryDir
             FieldOp::Int,  // uid
             FieldOp::Int,  // flags

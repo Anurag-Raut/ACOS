@@ -268,6 +268,25 @@ pub fn subset_interfaces(rows: &[SubsetRow]) -> BTreeSet<String> {
     rows.iter().map(|r| r.interface.clone()).collect()
 }
 
+/// Service interfaces ACOS **declares** beyond the measured hello-views trace.
+///
+/// The launch/interaction trace only exercises the calls the reference apps
+/// make. The service layer must also answer the interfaces an app can reach
+/// through `ServiceManager` later (clipboard, users, permissions, app-ops, ...).
+/// Their transaction codes are *still* decoded from the boot classpath `$Stub`
+/// — this list only says which interfaces to decode, never their layout.
+pub const DECLARED_INTERFACES: &[&str] = &[
+    "android.content.IClipboard",
+    "android.os.IUserManager",
+    "android.app.INotificationManager",
+    "com.android.internal.statusbar.IStatusBarService",
+    "android.permission.IPermissionManager",
+    "com.android.internal.app.IAppOpsService",
+    "com.android.internal.app.IBatteryStats",
+    "android.hardware.ISensorPrivacyManager",
+    "android.net.IConnectivityManager",
+];
+
 /// `(interface -> AIDL method names)` referenced by the measured work-lists.
 pub fn subset_methods(rows: &[SubsetRow]) -> BTreeMap<String, BTreeSet<String>> {
     let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -287,7 +306,11 @@ pub fn scan_default(
 ) -> (Vec<InterfaceInfo>, Vec<(String, String)>) {
     let mut out = Vec::new();
     let mut errors = Vec::new();
-    for iface in subset_interfaces(rows) {
+    let mut wanted = subset_interfaces(rows);
+    for extra in DECLARED_INTERFACES {
+        wanted.insert((*extra).to_string());
+    }
+    for iface in wanted {
         match scanner.decode_interface(&iface) {
             Some(info) => out.push(info),
             None => errors.push((iface.clone(), "no $Stub in boot classpath".to_string())),

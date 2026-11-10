@@ -124,6 +124,12 @@ struct HwuiState {
     proxies: HandleTable<Proxy>,
     next_window: u64,
     drawing_enabled: bool,
+    /// Shader/skia disk-cache paths requested by
+    /// `HardwareRenderer.setupShadersDiskCache`. ACOS has no native GPU/Skia
+    /// shader cache, so these back no files (a declared divergence); they are
+    /// recorded for introspection by later rendering work.
+    shaders_disk_cache: Option<String>,
+    skia_disk_cache: Option<String>,
 }
 
 impl HwuiState {
@@ -132,8 +138,22 @@ impl HwuiState {
             proxies: HandleTable::new(),
             next_window: 1,
             drawing_enabled: true,
+            shaders_disk_cache: None,
+            skia_disk_cache: None,
         }
     }
+}
+
+/// The disk-cache paths the framework handed to HWUI, if
+/// `HardwareRenderer.setupShadersDiskCache` has run.
+pub fn disk_cache_paths() -> Option<(String, String)> {
+    HWUI.with(|s| {
+        let s = s.borrow();
+        match (&s.shaders_disk_cache, &s.skia_disk_cache) {
+            (Some(shaders), Some(skia)) => Some((shaders.clone(), skia.clone())),
+            _ => None,
+        }
+    })
 }
 
 fn proxy(vm: &Vm, ctx: NativeCtx) -> VmResult<Handle> {
@@ -196,9 +216,30 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetFrameCommitCallback", "(JLandroid/graphics/HardwareRenderer$FrameCommitCallback;)V", h_set_frame_commit_callback);
     vm.register_native(H, "nAddObserver", "(JJ)V", h_noop);
     vm.register_native(H, "nRemoveObserver", "(JJ)V", h_noop);
+    // `setupShadersDiskCache` is a static native (API 34). On a device it
+    // points the HWUI/Skia shader caches at the two paths; ACOS has no native
+    // shader compiler or cache, so the paths are recorded and the call is a
+    // declared no-op (shaders are never persisted).
+    vm.register_native(
+        H,
+        "setupShadersDiskCache",
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        h_setup_shaders_disk_cache,
+    );
     const O: &str = "Landroid/graphics/HardwareRendererObserver;";
     vm.register_native(O, "nCreateObserver", "(Ljava/lang/ref/WeakReference;Z)J", h_create_observer);
     vm.register_native(O, "nGetNextBuffer", "(J[J)I", h_ret_zero_int);
+    Ok(())
+}
+
+fn h_setup_shaders_disk_cache(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let shaders = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    let skia = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
+    HWUI.with(|s| {
+        let mut s = s.borrow_mut();
+        s.shaders_disk_cache = Some(shaders);
+        s.skia_disk_cache = Some(skia);
+    });
     Ok(())
 }
 
