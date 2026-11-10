@@ -43,7 +43,7 @@ const MAGIC: [u8; 8] = *b"ACOSBIMG";
 /// Fixed header length in bytes (magic, format, key, len, checksum, ver-len).
 const HEADER_LEN: usize = 8 + 4 + 8 + 8 + 8 + 4;
 /// On-disk header format version. Bump on any layout change.
-pub const CACHE_FORMAT_VERSION: u32 = 1;
+pub const CACHE_FORMAT_VERSION: u32 = 2;
 /// Hard ceiling on a cache file read into memory; larger files are refused.
 pub const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// Default total budget for the cache directory before LRU eviction.

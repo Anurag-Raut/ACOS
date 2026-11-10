@@ -425,6 +425,112 @@ pub fn note_vm_footprint(vm: &Vm) {
     set_note("vm_method_meta_bytes", method_meta_bytes);
     set_note("vm_class_meta_bytes", class_meta_bytes);
     set_note("vm_rss_bytes", rss_bytes());
+    note_rss_by_mapping();
+}
+
+/// Roll `RSS` up by mapping category from `/proc/self/smaps` (W111-A).
+///
+/// The VM's own counters account for the guest heap, raw DEX bytes and decoded
+/// code. The remaining RSS is host-side: mmap'd system fonts, the framework
+/// resource APK/table, the on-disk boot-image bytes and the allocator's
+/// anonymous arenas. This names those categories so the residual is not a
+/// single "unaccounted" number. Best-effort: procfs may be unavailable (then
+/// no notes are added) and the parser only sums the `Rss:` lines.
+#[cfg(target_os = "linux")]
+fn note_rss_by_mapping() {
+    let Ok(text) = std::fs::read_to_string("/proc/self/smaps") else {
+        return;
+    };
+    let mut fonts: u64 = 0;
+    let mut apk: u64 = 0;
+    let mut dex_jar: u64 = 0;
+    let mut anon: u64 = 0;
+    let mut code: u64 = 0;
+    let mut other: u64 = 0;
+    let mut current = MappingKind::Other;
+    for line in text.lines() {
+        // A mapping header starts with `start-end` (both hex, 8+ digits).
+        let is_header = line.split_whitespace().next().is_some_and(|range| {
+            range
+                .split_once('-')
+                .is_some_and(|(a, b)| {
+                    a.len() >= 8
+                        && b.len() >= 8
+                        && a.bytes().all(|c| c.is_ascii_hexdigit())
+                        && b.bytes().all(|c| c.is_ascii_hexdigit())
+                })
+        });
+        if is_header {
+            current = classify_mapping(line);
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("Rss:") else {
+            continue;
+        };
+        let kb = rest
+            .split_whitespace()
+            .next()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        let bytes = kb * 1024;
+        match current {
+            MappingKind::Fonts => fonts += bytes,
+            MappingKind::Apk => apk += bytes,
+            MappingKind::DexJar => dex_jar += bytes,
+            MappingKind::Anon => anon += bytes,
+            MappingKind::Code => code += bytes,
+            MappingKind::Other => other += bytes,
+        }
+    }
+    set_note("rss_fonts_bytes", fonts);
+    set_note("rss_apk_bytes", apk);
+    set_note("rss_dex_jar_bytes", dex_jar);
+    set_note("rss_anon_bytes", anon);
+    set_note("rss_code_bytes", code);
+    set_note("rss_other_bytes", other);
+}
+
+#[cfg(not(target_os = "linux"))]
+fn note_rss_by_mapping() {}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum MappingKind {
+    Fonts,
+    Apk,
+    DexJar,
+    Anon,
+    Code,
+    Other,
+}
+
+#[cfg(target_os = "linux")]
+fn classify_mapping(header: &str) -> MappingKind {
+    // Header form: `start-end perms offset dev inode [path]`.
+    let path = header.split_whitespace().nth(5).unwrap_or("");
+    let exec = header.split_whitespace().nth(1).is_some_and(|p| p.contains('x'));
+    if path.is_empty() || path.starts_with("[anon") || path == "[heap]" || path == "[stack]" {
+        MappingKind::Anon
+    } else if path.ends_with(".ttf")
+        || path.ends_with(".otf")
+        || path.ends_with(".ttc")
+        || path.contains("/fonts/")
+    {
+        MappingKind::Fonts
+    } else if path.contains("framework-res") || path.ends_with(".apk") {
+        MappingKind::Apk
+    } else if path.ends_with(".dex")
+        || path.ends_with(".jar")
+        || path.ends_with(".oat")
+        || path.ends_with(".vdex")
+        || path.ends_with(".img")
+    {
+        MappingKind::DexJar
+    } else if exec {
+        MappingKind::Code
+    } else {
+        MappingKind::Other
+    }
 }
 
 

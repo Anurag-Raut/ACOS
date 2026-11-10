@@ -57,7 +57,100 @@ use acos_vm::natives::binder::install_transport;
 use acos_vm::vm::{CoreLib, RunOutcome, Vm, VmOptions};
 use acos_vm::VmError;
 
+use acos_vm::class::InitState;
+
 use crate::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
+
+// ---------------------------------------------------------------------------
+// Deterministic framework `<clinit>` priming (W111-A)
+// ---------------------------------------------------------------------------
+
+/// Framework classes whose `<clinit>` is a pure function of the device image:
+/// it reads only the boot classpath, system properties and `/system` files, and
+/// captures no per-app, per-session or per-launch state.
+///
+/// Their initialisation is therefore lifted out of the per-launch
+/// `bindApplication` into the framework-init template snapshot. A launch that
+/// restores the template finds these classes already `Init`, so
+/// `initialize_class` returns immediately and the cost is paid once when the
+/// template is booted (and never again when it is restored from the on-disk
+/// boot cache).
+///
+/// `Typeface` is deliberately **not** here: its `<clinit>` populates the
+/// process-global font handle tables (`natives::fwk_fonts` / `gfx_text`), which
+/// the `ACOSSNAP` stream does not carry, so a cross-process restore would leave
+/// dangling native handles (see `results/perf/LAUNCH_PROFILE.md`). It is left to
+/// the per-launch path.
+///
+/// A candidate is included only after it initialises successfully during the
+/// template boot; a failure reverts the class to `NotInit` so the launch-time
+/// first use behaves exactly as it did before priming.
+pub const DETERMINISTIC_CLINIT_CLASSES: &[&str] = &[
+    "Landroid/content/pm/PackagePartitions;",
+    "Lsun/security/jca/Providers;",
+    "Landroid/app/SystemServiceRegistry;",
+    // NOTE: `android.provider.Settings$Global` is intentionally excluded: its
+    // `<clinit>` installs an `android.provider.$Proxy0` dynamic proxy class.
+    // The snapshot can carry it but `Vm::restore` cannot relink a class that
+    // has no boot-DEX body, so priming it makes every warm restore fail.
+    "Landroid/content/res/Configuration;",
+    "Landroid/os/LocaleList;",
+    "Ljava/util/Locale;",
+];
+
+/// Initialise the deterministic framework classes in [`DETERMINISTIC_CLINIT_CLASSES`].
+///
+/// Returns the descriptors that ended `Init`. A class that fails to load or
+/// initialise is reverted to `NotInit` and omitted, so priming can never make a
+/// class permanently `Failed` where the unprimed launch would still try.
+fn prime_deterministic_classes(vm: &mut Vm) -> Vec<String> {
+    // Benchmark/AB escape hatch: `ACOS_CLINIT_PRIME=0` disables priming so a
+    // single binary can measure the before/after in interleaved rounds.
+    if std::env::var("ACOS_CLINIT_PRIME")
+        .is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("off"))
+    {
+        return Vec::new();
+    }
+    let trace = std::env::var_os("ACOS_BOOT_TRACE").is_some();
+    let mut primed = Vec::new();
+    for &desc in DETERMINISTIC_CLINIT_CLASSES {
+        let cid = match vm.load_class(desc) {
+            Ok(c) => c,
+            Err(e) => {
+                if trace {
+                    eprintln!("[prime] {desc} load failed: {e}");
+                }
+                continue;
+            }
+        };
+        if vm.classes[cid as usize].init == InitState::Init {
+            primed.push(desc.to_string());
+            continue;
+        }
+        match vm.initialize_class(cid) {
+            Ok(()) if vm.classes[cid as usize].init == InitState::Init => {
+                if trace {
+                    eprintln!("[prime] {desc} initialised");
+                }
+                primed.push(desc.to_string());
+            }
+            Ok(()) => {
+                if trace {
+                    eprintln!("[prime] {desc} left {:?}", vm.classes[cid as usize].init);
+                }
+            }
+            Err(e) => {
+                // Revert so the first launch-time use sees `NotInit`, exactly
+                // as it would without priming.
+                vm.classes[cid as usize].init = InitState::NotInit;
+                if trace {
+                    eprintln!("[prime] {desc} failed: {e}");
+                }
+            }
+        }
+    }
+    primed
+}
 use crate::boot_image_cache::{BootImageCache, LoadResult};
 use crate::transport::ServiceTransport;
 use crate::{Runtime, FIXTURE_UID};
@@ -1011,6 +1104,8 @@ pub struct RuntimeTemplate {
     snapshot_ms: f64,
     classes: usize,
     from_cache: bool,
+    /// Deterministic classes successfully primed before the snapshot.
+    primed: Arc<[String]>,
 }
 
 impl RuntimeTemplate {
@@ -1046,7 +1141,15 @@ impl RuntimeTemplate {
 
         if let (Some(cache), Some(key)) = (cache, cache_key) {
             let started = Instant::now();
-            if let Some(template) = Self::cached_hit(cache, key, started) {
+            let hit = Self::cached_hit(cache, key, started);
+            if std::env::var_os("ACOS_BOOT_TRACE").is_some() {
+                eprintln!(
+                    "[cache] key={key:016x} hit={} dir={}",
+                    hit.is_some(),
+                    cache.dir().display()
+                );
+            }
+            if let Some(template) = hit {
                 return Ok(template);
             }
             // Only one cold process should pay the boot; the losers wait.
@@ -1090,6 +1193,10 @@ impl RuntimeTemplate {
             )));
         }
 
+        // Lift deterministic framework `<clinit>` into the snapshot so every
+        // launch restoring this template skips it.
+        let primed = prime_deterministic_classes(rt.vm_mut());
+
         let boot_ms = started.elapsed().as_secs_f64() * 1000.0;
         // Capture the binder id layout *before* the snapshot bytes leave the
         // process: the restored heap references these raw ids.
@@ -1128,6 +1235,7 @@ impl RuntimeTemplate {
             snapshot_ms,
             classes,
             from_cache: false,
+            primed: Arc::from(primed),
         })
     }
 
@@ -1138,7 +1246,15 @@ impl RuntimeTemplate {
         started: Instant,
     ) -> Option<RuntimeTemplate> {
         match cache.load(key) {
-            LoadResult::Hit(bytes) => Self::from_cached(bytes, started).ok(),
+            LoadResult::Hit(bytes) => match Self::from_cached(bytes, started) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    if std::env::var_os("ACOS_BOOT_TRACE").is_some() {
+                        eprintln!("[cache] from_cached failed: {e}");
+                    }
+                    None
+                }
+            },
             LoadResult::Invalid(_) => {
                 // A rejected (corrupt/version-mismatched) entry is removed so
                 // the next process does not retry it. The snapshot's own
@@ -1190,6 +1306,7 @@ impl RuntimeTemplate {
             snapshot_ms: load_ms,
             classes,
             from_cache: true,
+            primed: Arc::from(Vec::new()),
         })
     }
 
@@ -1197,6 +1314,25 @@ impl RuntimeTemplate {
     #[must_use]
     pub fn from_cache(&self) -> bool {
         self.from_cache
+    }
+
+    /// The deterministic classes primed into the snapshot (empty for a
+    /// template loaded from an older on-disk entry).
+    #[must_use]
+    pub fn primed_classes(&self) -> &[String] {
+        &self.primed
+    }
+
+    /// Correctness guard: whether `desc` is `Init` in a fresh restore of this
+    /// template. Used by the priming fidelity test to prove that a restored
+    /// template carries the deterministic `<clinit>` state, not merely the
+    /// bytes that would let it re-run.
+    pub fn restored_class_initialised(&self, desc: &str) -> Result<bool, PoolError> {
+        let vm = Vm::restore(&self.snapshot).map_err(PoolError::Restore)?;
+        Ok(match vm.find_class(desc) {
+            Some(cid) => vm.classes[cid as usize].init == InitState::Init,
+            None => false,
+        })
     }
 
     /// The template boot wall time (paid once).

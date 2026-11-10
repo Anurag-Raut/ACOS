@@ -1,0 +1,24 @@
+{
+  "wave": "W111-A",
+  "metric": "after-priming",
+  "walls_ms": [
+    755,
+    750,
+    750,
+    775,
+    774
+  ],
+  "peak_rss_bytes": [
+    548798464,
+    548724736,
+    548741120,
+    548896768,
+    548696064
+  ],
+  "p50_wall_ms": 755,
+  "p50_rss_bytes": 548741120,
+  "fixture": "counter.apk",
+  "profile": "release",
+  "corelib": "real",
+  "note": "5 fresh-process warm-boot-cache launches"
+}

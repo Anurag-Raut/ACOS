@@ -132,6 +132,37 @@ fn template_cache_hit_skips_the_framework_boot() {
     let _rt = second.restore_runtime().expect("restore from cached template");
 }
 
+/// The deterministic-class priming (W111-A) survives the snapshot: every class
+/// reported primed is `Init` in a fresh restore, so the launch does not re-run
+/// its `<clinit>`. The primed set must contain at least `PackagePartitions`,
+/// the largest deterministic class on the launch path.
+#[test]
+fn restored_template_carries_deterministic_clinit() {
+    let Some(options) = real_options() else {
+        eprintln!("SKIP restored_template_carries_deterministic_clinit: no boot classpath");
+        return;
+    };
+    let dir = TempDir::new("primed");
+    let cache = BootImageCache::with_dir(dir.path()).expect("cache");
+    let first = RuntimeTemplate::boot_with_options(options, Some(&cache)).expect("template boot");
+    assert!(
+        first
+            .primed_classes()
+            .iter()
+            .any(|c| c == "Landroid/content/pm/PackagePartitions;"),
+        "PackagePartitions must be primed into the template, got {:?}",
+        first.primed_classes()
+    );
+    for desc in first.primed_classes() {
+        assert!(
+            first
+                .restored_class_initialised(desc)
+                .expect("restore for init check"),
+            "{desc} must be Init after a restore (priming must survive the snapshot)"
+        );
+    }
+}
+
 /// A corrupt entry is rejected, the real boot runs, and the entry is repaired.
 #[test]
 fn corrupt_template_entry_falls_back_and_reboots() {

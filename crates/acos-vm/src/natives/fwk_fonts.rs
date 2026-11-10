@@ -35,10 +35,11 @@
 //!   (`rustybuzz` variation coordinates), while the FreeType A8 mask path still
 //!   renders the default instance (a pre-existing ADR-0019 limitation).
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use acos_render::text::fonts::{FontCollection, FontRef};
+use acos_render::text::fonts::{FontCollection, FontFile, FontRef};
 use acos_render::text::{FontMetrics, TextEngine, TextStyle};
 
 use crate::class::NativeCtx;
@@ -632,24 +633,52 @@ fn resolve_font_ref(
     italic: bool,
     axes: &[(u32, f32)],
 ) -> Option<FontRef> {
+    let _ = ttc_index;
+    let base = Path::new(path).file_name().and_then(|s| s.to_str())?;
+    let (file, family_key) = resolve_font_file(base)?;
+    Some(make_font_ref(file, family_key, weight, italic, axes))
+}
+
+/// Process-wide cache from font file basename to its collection entry.
+///
+/// `Typeface.<clinit>` builds 384 `Font`s over ~200 files; without the cache
+/// each build linearly scans every family in `fonts.xml`. The collection is
+/// immutable for the process, so a basename resolves once.
+/// Basename -> `(font file, family index)` in the immutable collection.
+type FontFileEntry = (std::sync::Arc<FontFile>, usize);
+type FontFileCache = Mutex<HashMap<String, Option<FontFileEntry>>>;
+
+fn font_file_cache() -> &'static FontFileCache {
+    static C: OnceLock<FontFileCache> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn resolve_font_file(base: &str) -> Option<(std::sync::Arc<FontFile>, usize)> {
+    if let Ok(m) = font_file_cache().lock() {
+        if let Some(v) = m.get(base) {
+            return v.clone();
+        }
+    }
     let fc = FontCollection::shared()?;
-    let base = Path::new(path).file_name().and_then(|s| s.to_str());
-    if let Some(base) = base {
-        for (idx, fam) in fc.families.iter().enumerate() {
-            if let Some(entry) = fam.fonts.iter().find(|e| {
-                e.file
-                    .path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|n| n == base)
-                    .unwrap_or(false)
-            }) {
-                return Some(make_font_ref(entry.file.clone(), idx, weight, italic, axes));
+    let mut found = None;
+    'outer: for (idx, fam) in fc.families.iter().enumerate() {
+        for entry in &fam.fonts {
+            if entry
+                .file
+                .path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| n == base)
+            {
+                found = Some((entry.file.clone(), idx));
+                break 'outer;
             }
         }
     }
-    let _ = ttc_index;
-    None
+    if let Ok(mut m) = font_file_cache().lock() {
+        m.insert(base.to_string(), found.clone());
+    }
+    found
 }
 
 fn make_font_ref(

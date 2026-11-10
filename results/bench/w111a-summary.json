@@ -1,0 +1,61 @@
+{
+  "wave": "W111-A",
+  "date": "2026-11-11",
+  "commit": "2c9fdb8",
+  "task": "deterministic clinit -> template snapshot + RSS accounting",
+  "profile": "release",
+  "corelib": "real",
+  "fixture": "fixtures/build/apps/counter.apk",
+  "primed_classes": [
+    "Landroid/content/pm/PackagePartitions;",
+    "Lsun/security/jca/Providers;",
+    "Landroid/app/SystemServiceRegistry;",
+    "Landroid/content/res/Configuration;",
+    "Landroid/os/LocaleList;",
+    "Ljava/util/Locale;"
+  ],
+  "rejected_classes": {
+    "Landroid/provider/Settings$Global;": "dynamic proxy class android.provider.$Proxy0 cannot be relinked on restore"
+  },
+  "warm_cache_profile": {
+    "clinit_count_before": 445,
+    "clinit_count_after": 284,
+    "clinit_ns_before": 535.6,
+    "clinit_ns_after": 292.6,
+    "instructions_before": 26637480,
+    "instructions_after": 23536564,
+    "typeface_ns": 244.9,
+    "nBuild_ns_after": 59.9
+  },
+  "ab_unprofiled_p50": {
+    "wall_ms_before": 797,
+    "wall_ms_after": 765,
+    "rss_mib_before": 513.8,
+    "rss_mib_after": 523.4,
+    "snapshot_bytes_before": 224423,
+    "snapshot_bytes_after": 1657752
+  },
+  "rss_smaps_warm_mib": {
+    "anon": 443.1,
+    "apk": 65.8,
+    "code": 10.9,
+    "other": 3.7,
+    "fonts": 0.0,
+    "dex_jar": 0.0
+  },
+  "vm_counters_mib": {
+    "dex_bytes": 63.1,
+    "code_bytes": 29.9,
+    "heap_live": 11.4,
+    "method_meta": 1.9,
+    "class_meta": 0.4
+  },
+  "gates": {
+    "boot_image_cache_tests": "6/6",
+    "clippy_vm_runtime": "0 warnings",
+    "check_workspace_all_targets": "pass",
+    "diff_dexprogs_real_normal": "27/27",
+    "diff_dexprogs_real_gc_stress": "27/27"
+  },
+  "behaviour": "bind/app/client_transaction ladder unchanged; same ResourcesNotFound blocker"
+}
