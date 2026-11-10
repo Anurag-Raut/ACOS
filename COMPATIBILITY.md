@@ -1,78 +1,93 @@
 # ACOS — Compatibility ledger
 
 **Live ledger.** Every cell starts at **`none`** and may only advance when a
-reproducible evidence artifact exists under `results/` (or a merged test that
-prints it) and is reviewed. **No claim may precede evidence.** This file is the
-single source of truth for what ACOS can and cannot do.
+reproducible evidence artifact exists (a committed test, a `results/` file, or a
+run recorded in `EXPERIMENTS.md`). **No claim may precede evidence.** This file is
+the single source of truth for what ACOS can and cannot do.
 
 Status values:
 
 | Status | Meaning |
 |---|---|
 | `none` | no implementation and no evidence |
-| `partial` | some cases work; failures/limits are enumerated |
-| `verified` | a defined fixture set passes under a stated fidelity level, with negative cases detected |
+| `partial` | some cases work; failures/limits enumerated in the evidence pointer |
+| `verified` | a defined fixture set passes, with negative cases detected |
 
-Every non-`none` row must record: **evidence pointer**, **fidelity** (`host-proof`
-/ `preview-only` / `real-apk-native-runtime` / `jvm-reference` / `art-reference`),
-**API level**, **ABI**, and the **date**.
+Every non-`none` row records the **evidence pointer**, **fidelity**, **API
+level**, **ABI** and **date**. `verified` on *decode* is not `verified` on
+*execute*. The legacy ACVM results are **not** ACOS results and are not recorded
+here.
 
-> The legacy ACVM results are *not* ACOS results and are not recorded in this
-> ledger. They are baseline/oracle inputs only (`BENCHMARKS.md`,
-> `docs/reference/ACVM_INVENTORY.md`).
+> **As of 2026-11-10: static DEX/APK analysis is verified on the committed
+> fixture corpus; nothing executes.** All execute/verify rows are `none`.
 
 ---
 
 ## 1. DEX format and opcode families
 
-Per ADR-0002 the parser declares DEX **035–039** as accepted *parse* versions.
-"Accepted to parse" is not "verified to execute".
+Fidelity for all `verified` decode rows: **`static-analysis`**. API 34 fixture
+context; x86_64 host. Date 2026-11-10.
 
-| Area | Parse/verify | Execute | Evidence |
-|---|---|---|---|
-| DEX versions 035–039 | none | none | — |
-| Header/checksum/signature validation | none | n/a | — |
-| String / type / proto / field / method / class tables | none | n/a | — |
-| `class_data` / `code_item` / debug_info / annotations | none | n/a | — |
-| Move family (`move`, `move/from16`, `move/16`, `move-wide`, `move-object`, result variants) | none | none | — |
-| Constants (`const`, `const/4..16`, `const-string`, `const-class`, `const-wide`, …) | none | none | — |
-| Arithmetic/logic (`add/sub/mul/div/rem/and/or/xor/shl/shr/ushr`, `neg`, `not`, …) incl. `-wide`, `-float`, `-double`, `lit*`, `2addr` | none | none | — |
-| Branches (`if-*`, `if-eqz`, `goto`, `goto/16`, `goto/32`) | none | none | — |
-| Switch (`packed-switch`, `sparse-switch`) | none | none | — |
-| Invokes (`invoke-virtual/super/direct/static/interface`, `/range`, `/polymorphic`, `/custom`) | none | none | — |
-| Instance/static fields (`iget`/`iput`/`sget`/`sput`, `-wide`/`-object`/`-boolean`/…) | none | none | — |
-| Arrays (`new-array`, `filled-new-array`, `array-length`, `aget`/`aput` families) | none | none | — |
-| Checks/casts/instance checks (`check-cast`, `instance-of`, `int-to-*`, `*to-*`) | none | none | — |
-| Object creation (`new-instance`, `new-array`) | none | none | — |
-| Monitors (`monitor-enter`, `monitor-exit`) | none | none | — |
-| Exceptions / `try`/`catch` | none | none | — |
-| Payloads, `nop`, `throw`, `return*`, `filled-new-array/range` | none | none | — |
-| Verification against Android verifier (valid/invalid fixtures) | none | n/a | — |
-| Opcode coverage report | none | none | — |
+| Area | Parse/verify | Decode | Execute | Evidence |
+|---|---|---|---|---|
+| DEX versions 035–039 | verified | verified | n/a | `crates/acos-dex/tests/{fixtures,corruption}.rs`; the three checked-in dex (incl. api19 = 035) |
+| Header / Adler-32 / SHA-1 | verified (Adler enforced; SHA-1 recorded, accepted by default per ADR-0017) | n/a | n/a | `crates/acos-dex/src/lib.rs` (`ParseOptions`, `signature_valid`); `hash.rs` |
+| String / type / proto / field / method / class tables | verified | verified | n/a | `diff_dexdump.sh` → 380 methods / 4,253 instructions / 0 mismatches |
+| `class_data` / `code_item` / debug_info / annotations | partial | partial | n/a | decoder covers `code_item`/annotations; debug_info partial |
+| `hiddenapi_class_data_item` (`0xF000`) | partial | n/a | n/a | `crates/acos-dex/src/hiddenapi.rs` (uncommitted, in progress) |
+| Move family | verified | verified | none | `diff_dexdump.sh` |
+| Constants (`const*`, `const-string`, `const-class`, …) | verified | verified | none | `diff_dexdump.sh` |
+| Arithmetic/logic incl. `-wide`/`-float`/`-double`/`lit*`/`2addr` | verified | verified | none | `diff_dexdump.sh` |
+| Branches (`if-*`, `goto*`) | verified | verified | none | `diff_dexdump.sh` |
+| Switch (`packed`/`sparse`) | verified | verified | none | `diff_dexdump.sh` |
+| Invokes (`invoke-*`, `/range`, `/polymorphic`, `/custom`) | verified | verified | none | `diff_dexdump.sh`; `fixtures_invokecustom.dex` |
+| Instance/static fields (`iget`/`iput`/`sget`/`sput*`) | verified | verified | none | `diff_dexdump.sh` |
+| Arrays (`new-array`, `filled-new-array`, `array-length`, `aget`/`aput`) | verified | verified | none | `diff_dexdump.sh` |
+| Checks/casts/instance checks (`check-cast`, `instance-of`, conversions) | verified | verified | none | `diff_dexdump.sh` |
+| Object creation (`new-instance`) | verified | verified | none | `diff_dexdump.sh` |
+| Monitors (`monitor-enter`/`exit`) | verified | verified | none | `diff_dexdump.sh`; `Sync.java` fixture |
+| Exceptions / `try`/`catch` | verified | verified | none | `diff_dexdump.sh`; `TryCatch.java` fixture |
+| Payloads, `nop`, `throw`, `return*` | verified | verified | none | `diff_dexdump.sh` |
+| Verification agreement with the Android verifier | none | n/a | n/a | structural verifier only; no differential vs ART verifier |
+| Opcode coverage report | none | none | none | not produced |
+
+---
+
+## 1b. APK ingest
+
+Fidelity **`static-analysis`** (ADR all `none`); date 2026-11-10.
+
+| Area | Status | Evidence |
+|---|---|---|
+| ZIP central directory / entry inventory | verified | `crates/acos-apk/src/apk.rs`; `tests/fixture_apk.rs` |
+| Binary `AndroidManifest.xml` (AXML) DOM + typed manifest model | verified | `tests/differential_aapt2.rs` (vs `aapt2 dump badging` + `dump xmltree`) |
+| `resources.arsc` parsing | partial | `crates/acos-apk/src/arsc.rs` |
+| Signature-scheme detection | verified (detection only) | `crates/acos-apk/src/signing.rs` |
+| ABI / native-lib / asset inventory | partial | `crates/acos-apk/src/apk.rs` |
 
 ---
 
 ## 2. Java core-library surface
 
-Strategy per ADR-0006: hand-written Rust intrinsics first, real core-library DEX
-later (licence review pending).
+Strategy: ADR-0007 (real core-library DEX + Rust natives). The `acos-vm`
+built-ins are a temporary bootstrap (`none` for runtime verification).
 
 | Package / area | Status | Evidence |
 |---|---|---|
-| `java.lang.Object` (identity, `equals`/`hashCode`/`toString`, monitors) | none | — |
-| `java.lang.String` / `StringBuilder` | none | — |
-| primitive wrappers, `Number`, `Math` (exact arithmetic) | none | — |
-| `java.lang.Class` / reflection (`reflect`, annotations) | none | — |
-| `java.lang.Throwable` / exceptions / stack traces | none | — |
-| `java.lang.Thread` / `Runnable` / thread-local / `synchronized` semantics (JMM) | none | — |
-| `java.lang.ref` (weak/soft/phantom, `ReferenceQueue`) | none | — |
-| `java.util` collections (List/Map/Set) | none | — |
+| `java.lang.Object` / `String` / wrappers / `Math` | none (bootstrap only, unverified) | `crates/acos-vm/src/corelib/` |
+| `java.lang.Class` / reflection | none | — |
+| `Throwable` / exceptions / stack traces | none | — |
+| Threads / JMM / `synchronized` | none | — |
+| `java.lang.ref` | none | — |
+| `java.util` collections | none | — |
 | `java.util.concurrent` | none | — |
-| `java.io` (streams, files) | none | — |
-| `java.nio` | none | — |
-| `javax.*` as required by fixtures | none | — |
-| class initialization ordering / static init | none | — |
-| `ClassLoader` hierarchy / `findClass` / multi-DEX resolution | none | — |
+| `java.io` / `java.nio` | none | — |
+| `javax.*` | none | — |
+| class initialization / `ClassLoader` / multi-DEX | none | — |
+
+**Tier note.** The 20 `dexprogs` have `jvm-reference` expected outputs under
+`fixtures/expected/dexprogs/` (weak tier, ADR-0005). Matching them is **not**
+Android verification.
 
 ---
 
@@ -80,89 +95,82 @@ later (licence review pending).
 
 | Area | Status | Evidence |
 |---|---|---|
-| `JavaVM` / `JNIEnv` function tables in Rust | none | — |
+| `JavaVM` / `JNIEnv` tables in Rust | none | `acos-jni` planned |
 | `JNI_OnLoad` / `RegisterNatives` | none | — |
-| local/global/weak references | none | — |
-| strings (`GetStringUTFChars`, `NewStringUTF`, …) | none | — |
-| arrays (primitive/object, `Get/Release*ArrayElements`) | none | — |
-| field/method ID lookup and call-in/call-out | none | — |
+| local/global/weak refs | none | — |
+| strings / arrays / field & method IDs | none | — |
 | exception propagation across the boundary | none | — |
 | native thread attach/detach | none | — |
-| JNI version negotiation | none | — |
-| ELF loading, relocations, symbol resolution, Bionic behaviours | none | — |
-| ABI translation (ARM-only guests on x86_64) | none (deferred, ADR-0002) | — |
+| ELF loading / relocations / symbol resolution | none (scaffold) | `crates/acos-native-loader/` |
+| ABI translation (ARM-only on x86_64) | none (`WRONG_ABI`, ADR-0002/0014) | — |
 
 ---
 
 ## 4. Android API surface
 
-| Area | Status | Evidence |
-|---|---|---|
-| app/Activity lifecycle + Task/back stack | none | — |
-| `Intent` / explicit + implicit resolution | none | — |
-| resources / `resources.arsc` / configuration (density, theme, locale, font scale) | none | — |
-| storage: files, `SharedPreferences`, SQLite | none | — |
-| permissions (query/grant/deny/prompt) | none | — |
-| Binder/services/content providers/broadcast | none | — |
-| `View` system + layout + measurement | none | — |
-| rendering (offscreen surface, text, images, frame lifecycle) | none | — |
-| input (touch/key/gesture/IME/focus) | none | — |
-| WebView | none | — |
-| notifications / alarms / jobs / background restrictions | none | — |
-| network (DNS/TLS/sockets) | none | — |
-| media/camera/sensors/HALs | none | — |
-| GMS / DRM / Play Integrity | none (licence/device-gated; expected `REQUIRES_GMS`/`NEEDS_REAL_DEVICE`) | — |
+All `none`. See ADR-0007/0008 — the real framework bytecode will supply most of
+this, with the Rust in-process service layer replacing system_server/Binder.
+
+| Area | Status |
+|---|---|
+| app/Activity lifecycle + Task/back stack | none |
+| `Intent` / resolution | none |
+| resources / configuration | none |
+| storage (files, `SharedPreferences`, SQLite) | none |
+| permissions | none |
+| Binder/services/providers/broadcast | none |
+| View system / layout / measurement | none |
+| rendering (offscreen, text, images, frame lifecycle) | none |
+| input (touch/key/gesture/IME/focus) | none |
+| WebView | none |
+| notifications / alarms / jobs | none |
+| network (DNS/TLS/sockets) | none |
+| media/camera/sensors/HALs | none |
+| GMS / DRM / Play Integrity | none (licence/device-gated) |
 
 ---
 
 ## 5. App classes
 
-| App class | Status | Evidence |
-|---|---|---|
-| Plain Java/Kotlin View app (Activity) | none | — |
-| Compose app | none | — |
-| Flutter app | none | — |
-| React Native app | none | — |
-| WebView app | none | — |
-| NDK/JNI app (x86_64 `.so`) | none | — |
-| ARM-only native app | none (deferred) | — |
-| Split APK / multiple DEX | none | — |
-| Multi-process app (providers/services) | none | — |
-| SurfaceView/OpenGL/Vulkan | none | — |
-| Apps relying on GMS/DRM/integrity/OEM | none — expected unsupported on native path | — |
+All `none`.
+
+| App class | Status |
+|---|---|
+| Plain Java/Kotlin View app | none |
+| Compose app | none |
+| Flutter / React Native / WebView | none |
+| NDK/JNI app | none |
+| ARM-only native app | none (deferred) |
+| Split APK / multi-DEX | none |
+| Multi-process app | none |
+| SurfaceView/OpenGL/Vulkan | none |
+| GMS/DRM/integrity/OEM-dependent | none — expected unsupported on native path |
 
 ---
 
 ## 6. Fixture corpus ledger
 
-ACOS starts with no fixtures. The legacy corpus is inventoried in
-`docs/reference/ACVM_INVENTORY.md` §3, but its third-party APKs are **not in that
-repo** and its helper APKs use a research platform key. New fixtures are
-self-authored, licensable and built with SDK build tools (ADR-0004).
+ACOS authors its own licensable fixtures (Apache-2.0). No third-party APKs are
+redistributed.
 
-| Fixture | Class | Source | Status | Evidence |
-|---|---|---|---|---|
-| *(none yet)* | — | — | — | — |
-
-Minimum corpus to target (from `docs/handoff/01`): Java Views Activity; background
-worker; app lifecycle/process death; Compose navigation + Material + fonts +
-animations; Flutter; React Native; WebView; multi-process + provider + receiver;
-NDK JNI (x86_64 and ARM-only); multimedia/SurfaceView/GL/Vulkan; camera/mic
-permission flows; launch modes/affinities/document mode/noHistory; split APKs /
-multi-DEX. Each needs a known-good and a seeded-wrong variant with an
-independent oracle.
+| Fixture | Class | Status | Evidence |
+|---|---|---|---|
+| `fixtures/dexprogs/01..20` (Java console programs) | pure-Java semantics | **present**; execution not verified | sources + `jvm-reference` expected outputs; build via `tools/build-fixtures.sh` |
+| `fixtures/apps/hello-views` (`dev.acos.fixtures.helloviews`) | Views Activity | **present** (APK built, debug-signed); not executed | `fixtures/apps/README.md`; `tools/build-apps.sh` |
+| `fixtures/apps/hello-jni` (`dev.acos.fixtures.hellojni`) | NDK JNI (x86_64 + arm64-v8a) | **present** (APK built); not executed | `fixtures/apps/README.md` |
+| Seeded-wrong variants (wrong text / crash / missing symbol) | negative/false-pass | **not built** | planned for V1 §4 |
+| ART-reference captures | oracle | **empty** | `fixtures/expected-art/`, `fixtures/reference/` |
 
 ---
 
 ## 7. How to advance a cell
 
-1. Add a fixture (own source, licence recorded) and a stated fidelity level.
-2. Implement the smallest slice that executes it on **real compiled DEX**.
-3. Add a differential/oracle test (`jvm-reference` first; `art-reference` only
-   when authorised) and a negative case.
-4. Run it, capture a reproducible artifact under `results/`.
-5. Update exactly one ledger row with status, evidence pointer, fidelity, API
-   level, ABI and date. Record negative results in `EXPERIMENTS.md` too.
+1. Add a fixture (own source, licence recorded) and state the fidelity level.
+2. Implement the smallest slice that exercises it on **real input**.
+3. Add a differential/oracle test and a negative case.
+4. Run it and capture a reproducible artifact under `results/` or a committed test.
+5. Update exactly one row with status, evidence pointer, fidelity, API level, ABI
+   and date. Record negative results in `EXPERIMENTS.md`/`docs/FINDINGS.md`.
 
 A `verified` cell requires the negative case to be detected. A launch that does
 not crash is **not** functional compatibility.

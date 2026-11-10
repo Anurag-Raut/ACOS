@@ -108,5 +108,99 @@ subject.
 
 ---
 
-*No other ACOS experiment has been run. The next entry must be a real execution
-artifact, not a plan.*
+## E1.1 — acos-dex disassembly differential vs the official `dexdump` — MEASURED
+
+- **Date / commit:** 2026-11-10; `5945a57` (Wave 1).
+- **Question / goal:** does the Rust DEX decoder produce the same instruction
+  stream as the reference tool, so the VM can trust it?
+- **Method:** `crates/acos-dex/tests/diff_dexdump.sh` compares per-method
+  instruction counts and opcode mnemonic sequences against SDK
+  `dexdump -d` (`/home/Qui/Android/Sdk/build-tools/35.0.0/dexdump`). Re-run with
+  the prebuilt example binary because the working tree was mid-edit by a
+  concurrent subagent (`acos-dex` lazy-table edits did not compile at the time).
+- **Inputs:** `fixtures.dex`, `fixtures_api19.dex`, `fixtures_invokecustom.dex`.
+- **Result:** `files=3 methods=380 instructions=4253 mismatches=0`.
+- **Finding:** the decoder is instruction-exact on the committed fixture corpus.
+  (Opcode families `move`/`const`/arith/branch/switch/invoke/fields/arrays/
+  checks/new-instance/monitor/try-catch/payloads are all covered.)
+- **Fidelity / evidence:** `static-analysis`; `docs/FINDINGS.md` F-0004;
+  `crates/acos-dex/tests/diff_dexdump.sh`.
+- **Regression / false pass:** none; 0 mismatches.
+- **Conclusion / next:** DEX decode is trusted for fixtures. Boot-classpath
+  coverage is env-gated (`ACOS_BOOT_JARS`, `boot_jars.rs`) and pending; the
+  working tree must compile again before commit.
+
+## E1.2 — acos-apk manifest/AXML differential vs `aapt2` — MEASURED
+
+- **Date / commit:** 2026-11-10; `5945a57`.
+- **Question / goal:** does the Rust APK/manifest model agree with the SDK?
+- **Method:** `cargo test -p acos-apk --test differential_aapt2` compares the
+  ACOS manifest model against `aapt2 dump badging` and the AXML DOM against
+  `aapt2 dump xmltree --file AndroidManifest.xml` over the fixture APKs (and the
+  read-only legacy APKs when present).
+- **Inputs:** `crates/acos-apk/tests/data/{hello-views,hello-jni}.apk`.
+- **Result:** `1 passed; 0 failed` (aapt2 found via SDK path).
+- **Finding:** static APK ingest agrees with the reference tool on the fixtures;
+  `acos inspect --json` emits a correct typed report (package, versionCode/Name,
+  minSdk 26, targetSdk 34, launcher activity, `classes.dex`).
+- **Fidelity / evidence:** `static-analysis`; `crates/acos-apk/tests/differential_aapt2.rs`;
+  `crates/acos-cli/tests/cli.rs`.
+- **Regression / false pass:** none.
+- **Conclusion / next:** `resources.arsc` and ABI inventory remain `partial` in
+  `COMPATIBILITY.md`; extend the differential before claiming them verified.
+
+## E1.3 — R-API: real Android framework DEX feasibility spike — READ-ONLY / MEASURED
+
+- **Date / commit:** 2026-11-10; `1da205f` (research).
+- **Question / goal:** can ACOS execute the *real* Android 14 framework instead
+  of reimplementing it, and how big is the native work-list?
+- **Method:** extracted the boot-classpath jars unprivileged from the installed
+  API 34 x86_64 system image (`dd`/`lpunpack`/`debugfs`/APEX ZIP); measured DEX
+  inventory and ran a conservative call-graph closure (`dexclosure.py`) at two
+  dispatch approximations (`VIRT=0` declared-only, `VIRT=1` CHA). No emulator,
+  container, sudo, mount, download or write to the legacy repo.
+- **Inputs:** 17 boot dex / 55.5 MiB; `services.jar` (system_server) separately.
+- **Result:** 41,829 classes / 328,352 methods / **5,607 natives**; all boot dex
+  v039, no cdex, not dex-stripped. `println` **152** natives (39 classes) lower /
+  **663** (79) upper. Minimal Activity **612** (105) lower / **2,270** (300)
+  upper; of 612: 175 core, 419 `android.*`, 18 other. ~10 AIDL interfaces on the
+  launch path, all satisfiable by in-process Rust stubs for a deterministic task.
+  layoutlib (real framework on a JVM, 66 `*_Delegate`) is prior art.
+- **Finding:** executing the real framework on the Rust VM with Rust natives is
+  feasible and bounded; the decisive risk is dynamic native coverage and
+  system-server coupling, not bytecode availability.
+- **Fidelity / evidence:** `research/framework-dex/REPORT.md`;
+  `research/framework-dex/data/*`; `docs/FINDINGS.md` F-0002/F-0003.
+- **Regression / false pass:** none (static analysis).
+- **Conclusion / next:** ADR-0007/0008 accepted. Recommend implementing the
+  `println` native work-list first, then the Activity closure, reporting the
+  first `unsupported` native per fixture as the progress metric.
+
+## E1.4 — Boot-classpath DEX SHA-1 signatures do not validate — MEASURED (finding)
+
+- **Date / commit:** 2026-11-10; in progress at reading.
+- **Question / goal:** why did every boot-classpath dex fail to parse?
+- **Method:** parse + structural verify of the extracted boot dex with
+  `acos-dex` (`ACOS_BOOT_JARS=… cargo test -p acos-dex --test boot_jars`); inspect
+  `ParseOptions`/`signature_valid`.
+- **Result:** every boot dex had a stored SHA-1 signature that did not match the
+  computed one → `DEX_BAD_SIGNATURE` on the default path. Android does not verify
+  the DEX SHA-1 signature at load time (platform hiddenapi tooling rewrites boot
+  dex without updating it).
+- **Finding:** rejecting on SHA-1 mismatch is stricter than Android and blocks
+  the real boot classpath. `acos-dex` now enforces **Adler-32** but records and
+  accepts the **SHA-1** mismatch by default (`signature_valid=false`), with
+  `ParseOptions::STRICT` to enforce it.
+- **Fidelity / evidence:** `crates/acos-dex/src/lib.rs` (`ParseOptions`,
+  `signature_valid`); `crates/acos-dex/tests/boot_jars.rs`
+  (`signature_mismatches_accepted`); ADR-0017; `docs/FINDINGS.md` F-0005.
+- **Regression / false pass:** none, but the policy must be explicit in results
+  (`signature_valid=false` reported, never hidden).
+- **Conclusion / next:** ADR-0017. Ensure the boot-classpath test is green and
+  committed once the working tree compiles.
+
+---
+
+*No execution experiment has been run yet: no DEX is interpreted on the real
+core library, no Activity runs, no frame is rendered. The next entry must be a
+real execution artifact (the E2.1 C1 gate), not a plan.*

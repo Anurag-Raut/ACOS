@@ -1,170 +1,99 @@
-# ACOS — Tasks and phases
+# ACOS — Tasks and plan
 
-**Status:** P0 in progress. Phases P1–P9 are planned. This file is the work
-backlog; `STATUS.md` is the dated truth and `EXPERIMENTS.md` is the history.
+**Status:** P0–P1 partially complete. Planning is now driven by the **V1
+definition** (`docs/V1.md`) and owner directives D1–D4 (`SPEC.md`). `STATUS.md`
+is the dated truth; `EXPERIMENTS.md` is history; `docs/FINDINGS.md` is the
+append-only findings log.
 
-A phase completes only when it demonstrates an observable, correctly classified
-capability on **real executable input**, passes its dedicated differential tests,
-and reports measured resources against the reference. Architecture and synthetic
-demos do not complete a phase.
+Owners are named **`subagent`** (implementation is done by parallel subagents
+per D4). The lead takes decisions and commits verified work locally (no push).
 
----
-
-## P0 — Reference inventory, benchmark foundation, workspace **(IN PROGRESS)**
-
-| # | Task | Owner | Status |
-|---|---|---|---|
-| P0.1 | Read the full handoff package (`docs/handoff/00`–`06`, kickoff) | docs owner | done |
-| P0.2 | Read-only inventory of legacy ACVM; reconcile claims vs. tree/commits | docs owner | done → `docs/reference/ACVM_INVENTORY.md` |
-| P0.3 | Record ADRs 0001–0006 and host-safety rules | docs owner | done → `DECISIONS.md` |
-| P0.4 | Write SPEC / ARCHITECTURE / COMPATIBILITY / BENCHMARKS / TASKS / STATUS / EXPERIMENTS | docs owner | done |
-| P0.5 | Clean Rust workspace with an executable CLI + typed JSON contracts + tests | other agents | **in progress** (`crates/acos-dex` scaffolded; `acos-apk`, `acos-cli` pending) |
-| P0.6 | Define the benchmark method record and the fixed T01–T12 task suite | other agents + docs | **next** (schema in `BENCHMARKS.md` §2.1/§4.1) |
-| P0.7 | Build a licensable fixture corpus (Java/Kotlin/NDK; good + seeded-wrong variants) | other agents | **next** |
-| P0.8 | Measure the legacy ACVM/emulator reference on equivalent tasks under resource limits, before any "speedup" | other agents | blocked on authorisation/RAM (H4) |
-
-**P0 gate:** baseline reproducible; constraints and user stories defined; legacy
-repo unchanged. Gate is **not yet met** (P0.5–P0.8 outstanding).
+A stage/gate is passed only with a reproducible artifact; a claim without one is
+not progress. The honest progress metric on the framework path is the **first
+`unsupported` native hit per fixture** (`research/framework-dex/REPORT.md` §e).
 
 ---
 
-## P1 — Real APK and DEX loading in Rust
+## V1 critical path (ordered, each arrow is a gate)
 
-| # | Task | Gate/evidence |
+| # | Stage | Gate (must pass before the next) | Owner | Status |
+|---|---|---|---|---|
+| C1 | VM interpreter executes the 20 `dexprogs` on DEX with the **temporary** Rust bootstrap built-ins | 20/20 stdout+exit match `fixtures/expected/dexprogs`; GC-stress passes | subagent | in progress |
+| C2 | Boot the **real core library** and run the `println` path (ADR-0007) | `System.out.println` matches `jvm-reference`; first `unsupported` native reported | subagent | not started |
+| C3 | Boot the **real framework** + in-process Rust service layer (ADR-0008) | framework `<clinit>` completes; only structured `unsupported` for unbound services | subagent | not started |
+| C4 | Activity launch (hello-views) | lifecycle order matches ART-reference; first meaningful frame | subagent | not started |
+| C5 | Bind `acos-render` to `android.graphics` natives (ADR-0011) | real rendered frame + UI tree; unsupported ops recorded | subagent | not started |
+| C6 | Input + UI tree | tap/type/back drive state; tree has text/ids/bounds/classes | subagent | not started |
+| C7 | `acos-jni` + `acos-native-loader` (ADR-0014) | hello-jni: load `.so`, both directions, `RegisterNatives`, `ThrowNew` | subagent | not started |
+| C8 | `acos verify` / scenario runner | `acos verify --apk … --scenario … --json --artifacts …` produces the V1 verdict | subagent | not started |
+| C9 | Snapshot/restore (ADR-0010) | both gates pass (init time; correct restore) or the architecture is revisited | subagent | not started |
+| C10 | Concurrency N=1/2/5/10/20 | independent state/input, no leakage, memory/worker reported | subagent | not started |
+| C11 | Benchmarks vs legacy baseline (D2) | every tracked metric reported ≥20 reps p50/p95; every worse metric listed with a plan | subagent | not started |
+
+---
+
+## Parallel workstreams (can run alongside the critical path)
+
+| ID | Workstream | Output | Owner | Status |
+|---|---|---|---|---|
+| W-DEX | DEX parse/verify/decode hardening + boot-classpath coverage | boot-classpath env-gated test green; coverage report | subagent | in progress |
+| W-APK | APK ingest hardening + `aapt2` differential | zero `aapt2` mismatches on fixtures; fuzz/mutation clean | subagent | in progress |
+| W-VM | `acos-vm` interpreter, heap, GC, bootstrap built-ins | C1 gate; unit tests exist (currently 0) | subagent | in progress |
+| W-NAT | `acos-native-loader` ELF/Bionic loader (x86_64) | loads a real NDK `.so`; structured missing-symbol errors | subagent | in progress (scaffold) |
+| W-REND | `acos-render` software 2D (tiny-skia + shaping + fonts.xml) | renders a scene fixture with frame id/hash; op-support report | subagent | in progress (scaffold) |
+| W-ORA | ART oracle tooling (ADR-0015) | `fixtures/expected-art/` populated for hello-views/hello-jni/dexprogs; `results/oracle/jvm-vs-art.md` | subagent | in progress |
+| W-FIX | Fixtures (hello-views, hello-jni, 20 dexprogs, seeded-wrong variants) | V1 fixtures + negative variants built and hashed | subagent | partial (fixtures built; negatives not) |
+| W-V1 | V1 test harness (C1–C11 gates) | one command per gate, artifacts under `results/` | subagent | not started |
+| W-BOOT | Boot-classpath extraction + reproducibility | `.cache/boot/android-34` reproducible from the image; manifest recorded | subagent | in progress |
+
+---
+
+## Phase history (P0–P9)
+
+The phase framing from `docs/handoff/04` is retained as a coarse map; V1 is a
+slice of P1–P5.
+
+| Phase | Meaning | Status |
 |---|---|---|
-| P1.1 | APK/split-APK ZIP + binary `AndroidManifest.xml` (AXML) + `resources.arsc` parsing | parse corpus, no silent omission |
-| P1.2 | Signature/ABI/native-dependency inventory | classify supported vs `WRONG_ABI` |
-| P1.3 | DEX 035–039 header/tables/class_data/code_item parse | valid/invalid fixtures |
-| P1.4 | DEX verification (register/type/control-flow/bytecode) | agreement with Android verifier |
-| P1.5 | Decode actual DEX bytecode **compiled from Java/Kotlin** (not a custom IR) | decode report |
-| P1.6 | Execute that bytecode with arithmetic, branches, methods, objects, exceptions | real compiled app DEX runs and is reproducibly correct |
-| P1.7 | Differential comparison vs. reference; structured reject of invalid DEX | `jvm-reference` first (ADR-0005) |
-
-**P1 gate:** a real compiled test app's DEX runs through the Rust engine and is
-reproducibly correct. Parsing APKs alone is insufficient.
+| P0 | reference inventory, workspace, docs | **mostly done** (docs + inventory written; workspace committed) |
+| P1 | real APK/DEX loading in Rust | **partial** — parse/verify/decode + static APK inspect verified; execution not |
+| P2 | managed runtime | in progress (`acos-vm` scaffold) |
+| P3 | JNI/ELF/native | scaffolding (`acos-native-loader`); `acos-jni` planned |
+| P4 | app lifecycle + minimal APIs | not started |
+| P5 | offscreen rendering + observation | rendering scaffold only |
+| P6–P9 | concurrency/isolation, ecosystem, performance, distribution | not started |
 
 ---
 
-## P2 — Rust Android-compatible managed runtime
+## Immediate next tasks (concrete, ordered)
 
-| # | Task | Gate/evidence |
-|---|---|---|
-| P2.1 | class loaders, class initialization ordering, multi-DEX | fixture behaviour matches reference |
-| P2.2 | object model, method dispatch, arrays, fields | property-based tests |
-| P2.3 | GC + roots + weak/global refs + finalizers as required | stress, no leaks |
-| P2.4 | threads, monitors, exceptions, Java memory model, stack traces | multithreaded fixtures |
-| P2.5 | expand DEX opcode coverage toward the full spec for API 34 | opcode coverage report + perf counters |
-| P2.6 | optional JIT/AOT spike (Cranelift) **after** interpreter correctness | measured improvement, W^X/security recorded |
-
-**P2 gate:** complex JVM/DEX fixtures and multithreaded app logic pass with
-correct JNI-independent behaviour and no engine leaks.
-
----
-
-## P3 — Rust JNI, ELF and native compatibility
-
-| # | Task | Gate/evidence |
-|---|---|---|
-| P3.1 | Rust `JavaVM`/`JNIEnv` tables; refs, strings, arrays, calls, `RegisterNatives`, version negotiation, attached threads, exceptions | ABI-correct behaviour |
-| P3.2 | ELF loading/linking, relocations, symbol resolution, Bionic behaviours, JNI `dlopen` | real ELF JNI test |
-| P3.3 | opt-in ABI translation for ARM-only guests on x86_64 (deferred) | `WRONG_ABI` until then |
-
-**P3 gate:** a real NDK app loads a `.so` and calls both directions correctly;
-fuzz symbols and boundary cases. No native-support claim before this.
+1. `[subagent]` Make the working tree compile again (`acos-dex` lazy-table
+   work-in-progress); commit when green.
+2. `[subagent]` Add `acos-vm` unit tests and pass C1 (20 dexprogs on DEX) with a
+   recorded artifact.
+3. `[subagent]` Populate `fixtures/expected-art/` from the ART oracle (boot the
+   emulator headless, capture, shut down) and record `results/oracle/jvm-vs-art.md`.
+4. `[subagent]` Author the V1 scenario file(s) and reconcile the V1 assertion
+   strings with the fixture source (`Hello, World!`/`clicks: 1` vs the fixture's
+   `Hello ACOS`/`clicks: 0` — see `docs/V1.md` §1.9 note).
+5. `[subagent]` Finish `acos-native-loader` (`lib.rs`, `build.rs`) and load a real
+   x86_64 `.so` with structured missing-symbol errors.
+6. `[subagent]` Make `acos-render` render a scene with frame id/cause/hash and an
+   op-support report.
+7. `[docs]` Keep `COMPATIBILITY.md`/`BENCHMARKS.md`/`STATUS.md`/`FINDINGS.md`
+   current as evidence lands; advance one ledger row per verified artifact.
 
 ---
 
-## P4 — App lifecycle and minimal useful Android APIs
+## Standing gates (apply to every task)
 
-| # | Task | Gate/evidence |
-|---|---|---|
-| P4.1 | Activity/Task basics, intents, configuration handling, storage, permissions baseline | lifecycle oracle |
-| P4.2 | start an actual APK's Activity; reach a meaningful UI/event state; back/forward | authentic Views APK launch + input + lifecycle |
-
-**P4 gate:** an authentic Java/Kotlin Views APK launches, responds to input, has
-correct lifecycle and produces native or explicitly reference-verified output.
-
----
-
-## P5 — Offscreen rendering and direct agent observation
-
-| # | Task | Gate/evidence |
-|---|---|---|
-| P5.1 | offscreen surface on demand; font/layout/resources | parity across density/theme |
-| P5.2 | text/semantics tree (text/content-desc/ids/roles/bounds/visibility) | semantic oracle |
-| P5.3 | input injection + routing | action→state oracle |
-| P5.4 | request-sequenced frame freshness (sequence, causal request, hash) | no stale frame possible |
-| P5.5 | distinguish meaningful frame from black placeholder | seeded black/defect detection |
-
-**P5 gate:** agent code-change → built APK → native run → interaction →
-verifiable screenshot + assertions → cleanup, without full Android boot.
-
----
-
-## P6 — Real parallel workloads and isolation
-
-| # | Task | Gate/evidence |
-|---|---|---|
-| P6.1 | `shared-task`, separate process, per-app data namespaces, resets | isolation oracles |
-| P6.2 | independent input/event routing, focus per surface | no leakage |
-| P6.3 | budget enforcement + capacity planning | correct admission |
-| P6.4 | bench N=1/2/5/10/20 separate apps and same-app | real capacity reported |
-
-**P6 gate:** multiple real apps concurrently receive the right input, produce
-independent frames/traces, and do not compromise host security.
-
----
-
-## P7 — Broader app ecosystem
-
-Compose, Flutter, React Native, WebView, native graphics, background services,
-notifications, media, camera, sensors on demand; split APKs; 32/64-bit and ARM
-strategy; permission/security fidelity; lifecycle stress.
-
-**P7 gate:** reproducible class-by-class compatibility score and a realistic
-agent dev loop on representative apps.
-
----
-
-## P8 — High-compatibility / performance engineering
-
-Broader SDK/NDK surface; JIT/AOT; profile-driven class sharing and app templates;
-efficient offscreen graphics; cheap reset/park; sandbox hardening; validated
-complex apps and appropriate CTS subsets. Full CTS is a separate question.
-
-**P8 gate:** measured end-to-end performance, explicit coverage, stable
-regressions, no silent false positives.
-
----
-
-## P9 — Optional production-grade distribution
-
-CI artefacts, reproducible builds, signed releases, SDK/MCP packages,
-IDE/language-server integration, Linux host install, capacity planner,
-observability, sustained-run safety — only after live compatibility, threat
-model, incident recovery and licence compliance are credible.
-
----
-
-## Immediate next tasks (concrete)
-
-Ordered; `[docs]` = docs-owner scope, `[impl]` = other agents.
-
-1. `[impl]` Land `acos-apk` + `acos-cli` scaffolds and make `acos inspect
-   <apk> --json` parse a real APK to a typed report (no execution).
-2. `[impl]` Land `acos-dex` parse + decode for DEX 035–039 with a
-   valid/invalid fixture and a coverage report skeleton.
-3. `[impl]` Self-author the minimal fixture trio (Views Activity, arithmetic/
-   state dependency, seeded-wrong variant) and build them with the SDK tools
-   (ADR-0004); record tool versions + hashes.
-4. `[docs]` Freeze the benchmark method record and the T01–T12 manifest
-   template once impl picks the first task family.
-5. `[docs]` Keep `COMPATIBILITY.md` at `none` until evidence exists; advance one
-   row per verified artifact.
-6. `[impl]` Produce the first `jvm-reference` differential harness for pure-Java
-   semantics (ADR-0005 tier 1), explicitly labelled weak.
-7. `[lead]` Decide the H4/art-reference authorisation + RAM budget before any
-   emulator/ACVM oracle run.
-
-No task may start an emulator, download >2 GB, use `sudo`, or touch the legacy
-repo.
+- **D2 acceptance gates:** every tracked benchmark metric is a gate; regressions
+  and gaps are reported, never hidden; correctness and **zero false passes** gate
+  every speed claim.
+- **No fake success:** unimplemented behaviour is `unsupported`/`escalated`.
+- **Fidelity label** on every result; JVM match ≠ Android-verified.
+- **Host safety:** 85 % RAM guard; the ART oracle emulator is ≤2 GiB, one
+  instance, always shut down (ADR-0015); no privileged containers; no `sudo`; no
+  >2 GB downloads without authorisation; legacy repo read-only.
+- **Measurement:** no fixed sleeps; state the metric type; ≥20 reps p50/p95;
+  interleaved A/B; artifacts under `results/` (`BENCHMARKS.md`).

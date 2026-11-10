@@ -129,7 +129,8 @@ manifest. (Recommended: yes, record version + hash per fixture.)
 
 ## ADR-0005 — Oracle tiers and mandatory fidelity labels
 
-**Status:** accepted (tier 2 deferred pending RAM/authorisation check).
+**Status:** accepted; **updated 2026-11-10** — tier 2 (`art-reference`) is now
+authorised on the installed API 34 x86_64 emulator image (see ADR-0015).
 
 **Context.** Correctness must be judged against a reference. The legacy engine
 and the API-34 system image are available but heavy; the host has OpenJDK 17.
@@ -141,9 +142,11 @@ The host is an actively used workstation with a 60 GiB RAM and an 85 % guard.
    source. Valid only for pure-Java semantics (arithmetic, data structures,
    standard-library behaviour). It does **not** model ART, Android framework,
    resources, JNI or rendering.
-2. **`art-reference` (authoritative):** real ART on Android 34 (emulator or the
-   frozen legacy ACVM core). Deferred until host RAM and explicit authorisation
-   are checked.
+2. **`art-reference` (authoritative):** real ART on Android 34. **Authorised
+   2026-11-10**: a dedicated headless oracle emulator built from the installed
+   `android-34/google_apis/x86_64` image, started on demand under the RAM guard
+   (≤2 GiB guest RAM, one instance, always shut down). The frozen legacy ACVM
+   core remains a secondary reference backend. See ADR-0015.
 
 **Rules.**
 - Every result must carry a fidelity label.
@@ -161,14 +164,17 @@ classic "it matched the JVM, therefore it is Android-correct" error.
 so. Pure-Java semantic fixtures are the first differential target; framework/
 resource/JNI/rendering behaviour stays unverified until tier 2.
 
-**Open question.** Whether tier 2 will be a booted emulator, the frozen ACVM
-core, or a hosted device — pending RAM and authorisation.
+**Open question.** Resolved by ADR-0015 (the emulator is the authoritative
+oracle tier; the legacy ACVM core stays a secondary reference). ADR-0015 also
+governs which JVM-vs-ART differences must be recorded.
 
 ---
 
 ## ADR-0006 — Core-library strategy is OPEN (hand-written intrinsics first)
 
-**Status:** accepted as an ordering recommendation; the licence question is open.
+**Status:** accepted as an ordering recommendation; **resolved 2026-11-10 by
+ADR-0007 as option (b)** — execute the real core-library DEX on the Rust VM with
+Rust natives. The licence question remains open (ADR-0016).
 
 **Context.** Executing real DEX requires `java.lang`/`java.util`/`javax.*` (and
 eventually `android.*`) semantics. Two options:
@@ -177,7 +183,12 @@ eventually `android.*`) semantics. Two options:
 - **(b) Later load real core-library DEX** (e.g. AOSP `core-oj`/libcore) and
   execute it with the Rust VM plus Rust natives.
 
-**Decision.** **Recommend (a) now → (b) as the scalable path.** Start with
+**Decision (updated 2026-11-10).** ADR-0007 superseded the (a)-now ordering:
+ACOS goes straight to **(b)** — real core-library DEX on the Rust VM with Rust
+natives — because reimplementing the framework is infeasible and fidelity-
+critical. The original recommendation below is kept for history.
+
+**Recommend (a) now → (b) as the scalable path.** Start with
 hand-written Rust intrinsics for the smallest `java.lang`/`java.util` subset
 needed by the first DEX proof. Design the class-loader/intrinsic boundary so
 that (b) can replace or supplement intrinsics later.
@@ -198,6 +209,264 @@ core-library DEX and reviewing licences.
 
 ---
 
+## ADR-0007 — Do NOT reimplement the Android framework; execute the real boot-classpath bytecode
+
+**Status:** accepted (2026-11-10). Resolves ADR-0006 as option (b).
+
+**Decision.** ACOS executes the **REAL Android 14 (API 34) boot-classpath
+bytecode** on the Rust VM and supplies Rust implementations of the `native`
+methods. The boot classpath is:
+`core-oj`, `core-libart`, `okhttp`, `bouncycastle`, `apache-xml`, `framework`,
+`framework-graphics`, `ext`, `telephony-common`, `voip-common`, `ims-common`,
+`core-icu4j` — in the order given by the image's bootclasspath config (see
+`research/framework-dex/REPORT.md` §Q2 and
+`.cache/boot/android-34/BOOTCLASSPATH`).
+
+**Rationale.**
+- **Fidelity:** apps, AndroidX and Compose depend on exact framework behaviour,
+  including internals reached by reflection. A rewrite would differ.
+- **Size:** the boot classpath is **41,829 classes / 328,352 methods / 5,607
+  `native` methods**. Reimplementing it is years of work and never exact.
+- **Maintenance:** one implementation per API level, not a parallel universe.
+- **No false results for the agent:** the real framework means real semantics.
+
+**Evidence pointer.** `research/framework-dex/REPORT.md`: static native work-list
+— `println` **152 natives lower bound / 663 CHA upper bound**; minimal Activity
+**612 lower / 2,270 upper**; ~10 system services on the launch path; real DEX
+v039 obtainable unprivileged from the installed image.
+
+**Consequences.**
+- The hand-written Rust core-library built-ins in `acos-vm` are a **TEMPORARY
+  bootstrap** for the 20-program fixture corpus only; they will be replaced by
+  the real core-library DEX + true natives.
+- Selective Rust replacement of individual framework methods is allowed **only
+  as a measured optimisation verified equal to the original** (same observable
+  behaviour, differential-tested).
+- The VM must load, verify and execute large platform DEX (boot classpath),
+  with hiddenapi flags parsed (already supported by `acos-dex`).
+
+---
+
+## ADR-0008 — Replace everything below and around the framework with thin Rust
+
+**Status:** accepted (2026-11-10).
+
+**Decision.** No `system_server`, no Binder kernel driver, no SurfaceFlinger, no
+HWUI/Skia, no zygote. The system-service interfaces reached by the app process —
+`IActivityManager`, `IActivityTaskManager`, `IPackageManager`,
+`IWindowManager`/`IWindowSession`, `IDisplayManager`, `IInputMethodManager`,
+`IAccessibilityManager`, … — are answered **in-process by a Rust service layer
+that starts only what a task needs**.
+
+**Rationale.** The legacy fixed cost (206–322 MiB bare core) and per-session
+cost (~88 MiB native heap/session, mostly the renderer) lived **there**, not in
+the framework Java code. Executing the real framework on the Rust VM (ADR-0007)
+plus a thin Rust service/rendering layer keeps the framework fidelity while
+removing the legacy fixed overhead.
+
+**Evidence pointer.** `research/framework-dex/REPORT.md` §Q4 (the reachable AIDL
+interfaces and which are satisfiable by an in-process Rust stub);
+`docs/reference/ACVM_INVENTORY.md` §2 (legacy memory split).
+
+**Consequences.** ABI/Binder boundary semantics that an app can observe must be
+modeled honestly; anything the Rust layer cannot answer is a structured
+`unsupported`, never a silent stub that changes observable behaviour.
+
+---
+
+## ADR-0009 — VM design for the metrics
+
+**Status:** accepted (2026-11-10).
+
+**Decision.**
+- Object references are **32-bit handles into a VM-owned arena heap** (enables
+  compaction, JNI handle tables, and whole-heap snapshot/restore).
+- Java calls use an **explicit VM-managed frame stack** — no host recursion;
+  `StackOverflowError` is catchable; threads are VM-scheduled.
+- **Precise GC** with a **GC-stress mode** that must pass the entire corpus.
+- Classes come from **DEX or Rust built-ins behind one provider interface**.
+- Natives are bound via a **registry keyed by `(class, name, signature)`**.
+
+**Rationale.** These are the mechanical prerequisites for compaction, JNI
+handles, snapshot/restore (ADR-0010), and accurate memory metrics. Handles +
+arena make references relocatable; a VM frame stack makes overflow catchable and
+decouples Java threads from host threads.
+
+**Consequences.** The interpreter must never recurse into the host stack for a
+Java call; JNI sees opaque handles (ADR-0014). GC-stress is a standing corpus
+gate.
+
+---
+
+## ADR-0010 — Start-up and reset strategy = snapshot/restore
+
+**Status:** **PLANNED, UNPROVEN** (2026-11-10).
+
+**Decision.** Initialise the boot classpath (and later an app) once, snapshot the
+heap + class state, and start/reset workers by restoring it (copy-on-write
+sharing across workers). This is the planned answer to cold-start,
+reset-to-ready and per-session memory targets.
+
+**Gates (both must pass):**
+1. framework initialisation time on the interpreter (measurable), and
+2. correct restore of an initialised state (observable behaviour identical).
+
+If either makes the cold-start or interaction targets unreachable, the
+architecture is revisited — including the alternative in ADR-0012.
+
+**Rationale.** Snapshot/restore is the only mechanism that plausibly reaches
+reset-to-ready ≤0.75 s and per-session memory while starting from the real
+framework. The handle/arena design (ADR-0009) is what makes it possible.
+
+**Evidence pointer.** None yet (planned). Measurement will be recorded in
+`results/` and `EXPERIMENTS.md`.
+
+---
+
+## ADR-0011 — Rendering: Rust software 2D backend
+
+**Status:** accepted (2026-11-10).
+
+**Decision.** A Rust software 2D backend (`crate acos-render`: tiny-skia
+rasteriser + Rust text shaping, Android `fonts.xml`/typeface resolution,
+`RenderNode`/display-list model, frame sequence + cause id + content hash,
+damage tracking) is bound to the framework's `android.graphics` natives.
+**No GPU, no display unless a task asks**; headless tasks allocate no surface.
+Unsupported draw ops are **recorded per frame, never silently skipped**.
+
+**Rationale.** The legacy renderer (SwiftShader/Vulkan ICD) was the dominant
+per-session cost and forced a surface on every app. A software backend can
+render offscreen on demand and produce a semantic tree plus pixels. Recording
+unsupported ops keeps evidence honest (no black frames labelled success).
+
+**Evidence pointer.** `research/framework-dex/REPORT.md` §Q3 (the `android.*`
+graphics native work-list: `RenderNode` 54, `Paint` 23, `Canvas` 17,
+`HardwareRenderer` 16 …); `docs/reference/ACVM_INVENTORY.md` §2 (renderer cost).
+
+---
+
+## ADR-0012 — Rejected for now: embedding Google's C++ ART (`libart`)
+
+**Status:** rejected for now (2026-11-10); revisit trigger defined.
+
+**Decision.** ACOS does **not** embed Google's C++ `libart` with a Rust system
+layer.
+
+**Rationale.** It would reach app compatibility sooner, but gives up control of
+heap layout, sharing and snapshotting — which are exactly the levers for the
+memory/start/reset metrics that are ACOS's reason to exist.
+
+**Revisit trigger.** The gates in ADR-0010 fail, **or** interpreter interaction
+latency cannot meet targets even with the JIT plan in ADR-0013.
+
+---
+
+## ADR-0013 — Performance plan for interpreted framework code
+
+**Status:** accepted (2026-11-10).
+
+**Decision.** In order: (1) pre-decoded instructions + resolved-reference
+caches; (2) snapshot to avoid init cost (ADR-0010); (3) Rust intrinsics for hot
+leaf methods **proven equal**; (4) JIT/AOT (Cranelift candidate) **only after
+interpreter correctness**. Raw compute speed versus ART is a known gap to be
+**measured and reported, not hidden**.
+
+**Rationale.** The framework is large; correctness first, then measured
+optimisation. The metrics are dominated by start/reset/memory, but interaction
+latency still needs a plan.
+
+---
+
+## ADR-0014 — Native code: Rust loader/ABI, structured unsupported
+
+**Status:** accepted (2026-11-10).
+
+**Decision.** Guest NDK libraries (Bionic-targeted ELF, **x86_64 first**) are
+loaded by a Rust loader (`crate acos-native-loader`) with an explicit,
+auditable Bionic-compat symbol table. Missing symbols are a structured
+`UNSUPPORTED_NATIVE_SYMBOL` error, **never a silent stub**. `JNIEnv`/`JavaVM`
+tables are implemented in Rust against the VM (`crate acos-jni`, planned).
+**ARM-only libraries are `WRONG_ABI` for now**; translation deferred.
+
+**Rationale.** ADR-0007 requires real `native` behaviour for the real framework;
+ADR-0009's handle design makes the JNI reference tables tractable. Silent stubs
+would create false results.
+
+**Evidence pointer.** `fixtures/apps/hello-jni` (the V1 JNI fixture:
+`NewStringUTF`, array access, callbacks, `RegisterNatives`, `ThrowNew`).
+
+---
+
+## ADR-0015 — Oracle: real ART on the installed API 34 x86_64 emulator
+
+**Status:** accepted; lead-authorized 2026-11-10.
+
+**Decision.** Authoritative expectations come from **real ART on the installed
+API 34 x86_64 emulator image** (`fixtures/expected-art`, `fixtures/reference`),
+started **headless on demand** under the RAM guard (lead-authorized: **≤2 GiB
+guest RAM, one instance, always shut down**). Host-JVM outputs remain the weak
+**`jvm-reference`** tier (ADR-0005). JVM-vs-ART differences are recorded in
+`results/oracle/jvm-vs-art.md`.
+
+**Evidence pointer.** `tools/oracle/emulator.sh`; `results/oracle/*`. The
+emulator was booted once (22 s) during the spike and is shut down.
+
+**Rationale.** The real framework may behave differently from the JVM in ways
+apps depend on; only real ART can adjudicate. The emulator is available with no
+download and fits the RAM guard at 2 GiB.
+
+---
+
+## ADR-0016 — Boot-classpath sourcing and licence posture
+
+**Status:** accepted for development; **OPEN for human/legal review before any
+distribution**.
+
+**Decision.** ACOS **never bundles or redistributes** Android/OpenJDK bytecode.
+It loads **unmodified jars extracted from the user's own installed SDK system
+image at runtime** (`tools/extract-bootclasspath.sh` → `.cache/boot/android-34`,
+gitignored).
+
+**Licence facts (not legal advice).** `framework` is Apache-2.0; `core-oj`
+contains GPLv2 **+ Classpath-exception** OpenJDK material; ICU/okhttp/
+bouncycastle/conscrypt are per their licences.
+
+**OPEN for human/legal review before any distribution:**
+1. whether supplying **replacement `native` implementations** interacts with the
+   Classpath exception (ACOS supplies natives for the very classes it loads), and
+2. the fact that production (`user`) images may ship **dex-stripped** boot jars;
+   only a `userdebug` image was tested here.
+
+**Rationale.** A runtime-only, user-provided-image posture avoids ACOS
+triggering redistribution obligations today, while flagging the two genuine
+uncertainties. Does **not** block development.
+
+**Evidence pointer.** `research/framework-dex/REPORT.md` §Q1/§Q5.
+
+---
+
+## ADR-0017 — DEX loading follows Android load semantics, not stricter
+
+**Status:** accepted (2026-11-10); fix in progress at time of writing.
+
+**Decision.** ACOS follows **Android load semantics** in `acos-dex`: a **SHA-1
+signature mismatch is accepted by default** and reported as
+`signature_valid=false`; **Adler-32 is enforced**; a **strict mode** exists
+(`ParseOptions::STRICT`).
+
+**Rationale / finding that motivated it.** Android does not verify the DEX SHA-1
+signature at load time, and platform hiddenapi tooling rewrites boot dex without
+updating it. `acos-dex` initially rejected every boot-classpath dex with
+`DEX_BAD_SIGNATURE`; matching Android's actual behaviour is required to load the
+real boot classpath at all.
+
+**Evidence pointer.** `crates/acos-dex/src/lib.rs` (`ParseOptions`,
+`signature_valid`) and `crates/acos-dex/tests/boot_jars.rs`
+(`signature_mismatches_accepted`); finding recorded in
+`docs/FINDINGS.md` and `EXPERIMENTS.md`.
+
+---
+
 ## Cross-cutting host-safety decision (applies to all ADRs)
 
 - **RAM guard 85 %.** Never exceed 85 % of physical RAM; admission checks and
@@ -209,3 +478,10 @@ core-library DEX and reviewing licences.
   paths). The legacy repo is read-only.
 - **No fake success.** Unimplemented behaviour is `unsupported`/`escalated`,
   never pass.
+- **Autonomy (owner directive D4, 2026-11-10).** The lead takes all decisions
+  autonomously; implementation is done by subagents in parallel; decisions and
+  findings are recorded in the repo; **verified work is committed locally (no
+  push)**.
+- **One consumer (owner directive D1, 2026-11-10).** ACOS has exactly one
+  consumer: an AI coding agent. No human-facing UX. Machine-first JSON/MCP,
+  structured errors, stable ids. See `SPEC.md` "Owner directives".

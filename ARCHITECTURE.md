@@ -1,209 +1,207 @@
 # ACOS — Architecture
 
-**Status:** clean-sheet design; implementation has just begun. This document
-describes the intended subsystem map, the *actual* current crate layout, and the
-data flow from APK to evidence. It is not a claim that any of it works.
-See `DECISIONS.md` for the rationale and `STATUS.md` for the dated truth.
+**Status:** clean-sheet; the first crates are committed, the rest are in
+progress. This document is kept in line with the repo. It is not a claim that any
+execution capability works — see `STATUS.md` for the dated truth and
+`docs/V1.md` for the V1 definition.
+
+Owner directives D1–D4 (`SPEC.md`) and ADR-0007…ADR-0017 govern this design. The
+handoff architecture is **not** binding (D3); what is fixed is the outcome: APKs
+behave as on Android and an agent can close the verification loop as fast as
+possible.
 
 ---
 
-## 1. Conceptual architecture
+## 1. Layering (authoritative)
 
 ```text
-Agent / IDE / CI / MCP clients
-        |
-   ACOS typed control plane  (acos CLI, library, JSON, MCP)
-        |
-   Task planner + capability resolver + fidelity policy
-        |
-   Job dispatcher & evidence recorder
-        |
-   Shared ACOS core (one per compatible runtime/API/ABI variant)
-   |-- Rust DEX loader/verifier + Android-compatible managed VM
-   |-- Rust GC, class loader, interpreter, JIT/AOT cache, native JNI ABI
-   |-- immutable Android API libraries/resources and framework metadata
-   |-- capability registry, lazy services, IPC broker
-   |-- optional offscreen compositor & input/event router
-   |-- app/session orchestrator and memory/budget manager
-        |
-    app/task workers (many)
-    |-- shared-task worker (same process/app data, explicitly allowed)
-    |-- separate app process, optional display
-    |-- isolated filesystem/credentials/process/net namespaces
-    |-- separate core/VM fallback when required
-        |
-    structured UI/events/frames/crashes/profiling/evidence
-        |
-  task verdict + hashes + reproducible traces + resource report
+        Agent / CI / MCP client  (the only consumer — D1)
+                    │  machine-first JSON / MCP, stable ids, structured errors
+                    ▼
+        acos-cli  +  acos-protocol           [acos-cli committed; protocol planned]
+                    │
+                    ▼
+        Job / task runner: scenario, isolation, evidence, metrics
+        acos-verify (planned), acos-bench (planned)
+                    │
+     ┌──────────────┴───────────────────────────────────────────────┐
+     │                    REAL Android 14 framework                 │
+     │   the boot-classpath bytecode (ADR-0007), executed by:       │
+     │                                                              │
+     │   acos-vm  ── interpreter │ handle/arena heap │ precise GC   │
+     │             │ one class provider: DEX or Rust built-in       │
+     │             │ native registry keyed by (class,name,sig)      │
+     │             │ explicit VM frame stack (no host recursion)    │
+     └──────────────┬───────────────────────────────────────────────┘
+                    │  native methods                     native methods
+        ┌───────────┼───────────────────────────┬────────────────────┐
+        ▼           ▼                           ▼                    ▼
+  acos-render   Rust in-process           acos-jni +          Rust core-library
+  (ADR-0011)    service layer             acos-native-loader  natives
+  software 2D   (ADR-0008): no            (ADR-0014):         (ADR-0007), later
+  rasteriser,   system_server, no         JNIEnv/JavaVM       replaced by real
+  text shaping, Binder kernel driver,     tables in Rust;     core DEX where
+  RenderNode/   no SurfaceFlinger,        ELF/Bionic loader;  possible
+  display list  no HWUI/Skia, no zygote   UNSUPPORTED_NATIVE_
+                                          SYMBOL on gaps
+                    │
+                    ▼
+        Evidence: fresh frame (seq/cause/hash), UI tree, events, crashes,
+        metrics → results/                       [acos-observe planned]
+                    │
+                    ▼
+        Verdict: status/backend/fidelity/isolation + artifacts + resource report
 ```
 
-This is a proposed implementation. Android framework behaviour and native
-libraries are major engineering efforts and are not implied by the diagram.
+**Fixed reference tiers (oracle, not execution):** real ART on the installed API
+34 x86_64 emulator (`art-reference`, ADR-0015) and host OpenJDK 17
+(`jvm-reference`, weak, ADR-0005). These are launched on demand for comparison
+only; they are never on the `acos verify` execution path.
+
+### 1.1 What each layer owns
+
+| Layer | Owns | Explicitly *not* here |
+|---|---|---|
+| `acos-cli` / protocol | typed JSON envelope, commands, stable ids | app semantics |
+| verify/bench runner | scenario, isolation, artifacts, metrics, verdict | Android internals |
+| **`acos-vm`** | real framework bytecode execution, object model, GC, frames, natives registry | system services, rendering, JNI host ABI |
+| Rust service layer (planned) | the ~10 AIDL interfaces on the app path, in-process | real Binder, system_server |
+| `acos-render` | software 2D raster, text shaping, display-list model, frame identity | GPU, HWUI/Skia |
+| `acos-jni` + `acos-native-loader` | JNI ABI tables, ELF/Bionic loading, symbol binding | JIT, translation (deferred) |
+| `acos-apk` | ZIP/AXML/`resources.arsc`/signing/ABI ingest | policy/trust decisions |
+| `acos-dex` | DEX 035–039 parse/verify/decode | execution |
 
 ---
 
-## 2. Subsystem map and status
+## 2. Crate map and current status
 
-Status legend: **planned** (no code), **in progress** (active scaffolding/code),
-**implemented** (works and is tested). At this date **no subsystem is
-implemented**; the three listed as in progress are being scaffolded by other
-agents concurrently.
+**Read from the repo on 2026-11-10.** Status: `committed+verified`,
+`in progress`, `planned`. "Verified" means a committed test/artifact exists; it
+is not a claim of V1 capability.
 
-| Subsystem | Responsibility | Status | Evidence required to claim "implemented" |
+| Crate | State | What is actually there | Evidence |
 |---|---|---|---|
-| APK ingest (`acos-apk`) | APK/split-APK manifest, permissions, signatures, ABI, assets, resources, DEX location | **in progress** | parse a legal corpus and classify it with no silent omission |
-| DEX verifier (`acos-dex`) | DEX 035–039 formats, methods, register layouts, type/prototype resolution, control-flow and bytecode validation | **in progress** | agreement with the Android verifier on valid/invalid fixtures |
-| Managed VM (`acos-vm`) | DEX register machine; dispatch; methods, classes, fields, arrays, exceptions, monitors, threads, class init | planned | real compiled DEX tests + differential Android results |
-| Managed heap / GC (`acos-gc`) | object layout, roots, weak/global refs, STW/concurrent strategies, finalizers as required | planned | stress + JNI cross-boundary correctness |
-| JIT/AOT (`acos-jit`) | DEX IR, profile-guided compilation, code-cache lifecycle, W^X, shared read-only caches | planned | measured improvement beyond interpreter on real workloads |
-| JNI bridge (`acos-jni`) | Rust implementation of `JavaVM`/`JNIEnv` ABI; local/global/weak refs, calls, arrays, strings, thread attach, exceptions, `RegisterNatives` | planned | real NDK `.so` tests against reference |
-| Native loader (`acos-native-loader`) | ELF loading/linking, relocations, symbol resolution, Bionic behaviours, JNI `dlopen`, ABI translation | planned | real ELF JNI tests incl. ARM-only via a supported translator |
-| Android API layer (`acos-framework`) | Java/Kotlin framework semantics, resources, system services, intents, lifecycle, package/permission behaviour | planned | differential tests against reference |
-| IPC / broker | service discovery, transport, caller identity, limits, lifecycle | planned | correct calls and isolation across sessions |
-| Renderer (`acos-render`) | no-display or offscreen surfaces, layouts, text, images, touch targets, frame lifecycle | planned | pixel/semantic parity and direct capture |
-| Input / control (`acos-input`) | key/touch/gesture/IME/accessibility semantics, focus per surface | planned | ≥2 concurrent interactive apps with no leakage |
-| Isolation (`acos-sandbox`) | cgroup v2, user/mount/pid/net namespaces, UID/data policy, seccomp, limits | planned | red-team tests; distinct state and signatures |
-| Observability (`acos-observe`) | typed tree with text/roles/ids, crash/ANR, frame times, heaps, JIT stats | planned | deterministic evidence, no stale screenshots |
-| Scheduler (`acos-engine` + `acos-protocol`) | shared-core reuse, capabilities, per-task limits, pooling, pause/resume/reset | planned | N-scaling and correct budget enforcement |
-| CLI (`acos-cli`) | typed JSON contract; one object per command | **in progress** | `acos inspect`/`verify` end-to-end on a real APK |
+| `acos-dex` | **committed (5945a57) + verified decoder; in progress** | DEX 035–039 parse, full Dalvik opcode decode, structural verifier, disassembler, `hiddenapi` parser (uncommitted), env-gated boot-classpath test (uncommitted) | `crates/acos-dex/`; `tests/diff_dexdump.sh` → 380 methods / 4,253 instructions / 0 mismatches (`docs/FINDINGS.md` F-0004) |
+| `acos-apk` | **committed (5945a57) + verified** | ZIP, binary `AndroidManifest.xml` (AXML), `resources.arsc`, signing-scheme detection, ABI/native/asset inventory; `aapt2` differential test | `crates/acos-apk/`; `tests/differential_aapt2.rs` |
+| `acos-cli` | **committed (5945a57) + verified** | `acos inspect <apk> --json` with the JSON envelope (`ok/status/backend/fidelity/request_id/…`) | `crates/acos-cli/`; `tests/cli.rs`; live run of the prebuilt binary produced a correct static report |
+| `acos-vm` | **in progress** (untracked) | DEX interpreter, handle/arena heap, precise mark-sweep GC, class model, **temporary core-library built-ins** (bootstrap only, ADR-0007), cooperative threads. ~8.5k LOC; **0 `#[test]` at time of writing** | `crates/acos-vm/` |
+| `acos-native-loader` | **in progress** (untracked) | ELF (`.so`) reader and dynamic-info scaffolding; incomplete (`lib.rs`/`build.rs` referenced by `Cargo.toml` not yet present) | `crates/acos-native-loader/` |
+| `acos-render` | **in progress** (untracked) | Placeholder `lib.rs`; dependencies declared (`tiny-skia`, `rustybuzz`, `ttf-parser`, `unicode-bidi`, `png`, `jpeg-decoder`, `image-webp`, `roxmltree`, `xxhash-rust`, `sha2`) | `crates/acos-render/` |
+| Oracle tooling | **in progress** (untracked) | `tools/oracle/emulator.sh` (headless ART oracle, ≤2 GiB, one instance); `tools/extract-bootclasspath.sh`; `results/oracle/` captured a single 22 s boot; `fixtures/expected-art/`, `fixtures/reference/` empty | `tools/oracle/`, `results/oracle/`, `.cache/boot/android-34/` |
+| `acos-jni` | **planned** | JNIEnv/JavaVM tables in Rust against the VM (ADR-0014) | — |
+| Rust service layer | **planned** | in-process stubs for the AIDL interfaces on the app path (ADR-0008) | — |
+| verify / scenario runner | **planned** | `acos verify --apk … --scenario … --json --artifacts …` (V1) | — |
+| snapshot / restore | **planned, UNPROVEN** | heap + class-state snapshot, CoW worker start/reset (ADR-0010) | — |
+| `acos-observe`, isolation/`acos-sandbox`, scheduler | **planned** | evidence, isolation, concurrency (V1 items 5–6) | — |
 
-Per ADR-0003 the workspace starts with the **smallest cohesive crate set**
-(`acos-dex`, `acos-apk`, `acos-vm`, `acos-cli`) and splits further only when
-interfaces stabilise. The full list above is the *target* map, not an initial
-scaffold; do not create placeholder crates merely to fill the diagram.
+> **Working-tree note (2026-11-10):** concurrent agents have uncommitted edits to
+> `acos-dex` (`src/lib.rs`, `src/verify.rs`, `src/annotation.rs`,
+> `examples/dexdump.rs`, tests) plus new `acos-vm`, `acos-native-loader`,
+> `acos-render`, and oracle tools. At the moment of reading, the working tree
+> **did not compile** (`acos-dex` lazy-table edits, 14 errors), so the committed
+> state is the verified one. This is expected mid-flight and is reported, not
+> hidden.
+
+### 2.1 Workspace
+
+`Cargo.toml` is a workspace with `members = ["crates/*"]`, edition 2021,
+rust-version 1.90, Apache-2.0. There is no `acos-protocol`/`acos-verify` crate
+yet; the V1 CLI surface is parsed in `acos-cli`.
 
 ---
 
-## 3. Current crate layout vs. planned
-
-**Actual, as of this writing** (`ls crates/`, read-only check):
+## 3. Data flow: APK → DEX → VM → evidence
 
 ```text
-~/Projects/acos/
-  Cargo.toml                  # workspace (resolver 2, edition 2021, rust 1.90)
-  crates/
-    acos-dex/                 # scaffolded: Cargo.toml only (in progress)
-  docs/
-    handoff/                  # product specification (00..06 + kickoff)
-    reference/ACVM_INVENTORY.md
-  fixtures/                   # empty
-  research/                   # empty
-  results/                    # empty
-  tools/                      # empty
+ APK / split APK
+   │ acos-apk: ZIP, AXML manifest, resources.arsc, signature schemes,
+   │           ABI/native/asset inventory, classes*.dex discovery
+   │ acos-dex: DEX 035–039 header/tables/class_data/code_item, hiddenapi,
+   │           instruction decode, structural verification
+   ▼
+ class provider (ADR-0009): DEX or Rust built-in behind one interface
+   │
+   ▼
+ acos-vm: load real boot-classpath bytecode (ADR-0007)
+   │   handle/arena heap + precise GC + VM frame stack + native registry
+   │   ── invokes native (class,name,sig) ──►
+   │        ├─ acos-render (android.graphics: RenderNode/Canvas/Paint/…)
+   │        ├─ Rust service layer (IActivityManager/IPackageManager/…)
+   │        ├─ Rust core-library natives (java.lang/… in the bootstrap)
+   │        └─ acos-jni + acos-native-loader (guest .so)
+   ▼
+ framework code drives lifecycle, layout, draw
+   │
+   ▼
+ evidence: fresh frame (sequence, cause id, content hash), UI tree
+ (text/id/role/bounds), events, crash/ANR, metrics
+   │
+   ▼
+ verdict envelope: status/backend/fidelity/isolation + artifacts + resources
 ```
 
-`acos-apk` and `acos-cli` are named as in-progress first-crate targets but were
-not yet present on disk when this document was written; they are owned by
-concurrent agents and this doc will be corrected as they land.
+Invariants:
 
-**Planned initial workspace** (ADR-0003):
-
-```text
-crates/
-  acos-cli/        # binary `acos`, typed JSON CLI
-  acos-apk/        # ZIP/APK, AndroidManifest.xml (AXML), resources.arsc, signature/ABI
-  acos-dex/        # DEX parse + verify + decode (035–039)
-  acos-vm/         # interpreter + heap + object model (added when dex/apk interfaces stabilise)
-```
-
-**Planned later splits** (only when justified by stable interfaces): `acos-gc`,
-`acos-jit`, `acos-jni`, `acos-native-loader`, `acos-framework`,
-`acos-capabilities`, `acos-lifecycle`, `acos-render`, `acos-observe`,
-`acos-input`, `acos-sandbox`, `acos-bench`, `acos-oracle`.
-
-Directory intent: `fixtures/` (licensable Java/Kotlin/NDK sample apps),
-`scenarios/` (task definitions), `docs/` (ADRs + ledgers), `results/`
-(reproducible artefacts), `research/` (bounded spikes, including negative
-findings).
+- **Real inputs only.** Real DEX compiled from Java/Kotlin; real boot-classpath
+  bytecode; real guest ELF `.so`.
+- **Verify before execute.** `acos-dex` rejects invalid DEX with structured
+  errors. DEX SHA-1 is lenient by default per Android semantics (ADR-0017).
+- **One class provider.** A class is either loaded from DEX or supplied by a Rust
+  built-in; the bootstrap built-ins are temporary (ADR-0007).
+- **Natives are explicit.** Registry keyed by `(class, name, signature)`; an
+  unbound native is a structured error, never a silent stub.
+- **Frames are addressable.** A frame names the request/cause that produced it;
+  a stale frame is impossible.
+- **Fidelity is attached, not assumed.**
 
 ---
 
-## 4. Data flow: APK → DEX → VM → evidence
+## 4. Boot classpath and the in-process service layer
 
-```text
- APK / split APK / .apk + .apks
-   │
-   ├─ acos-apk: ZIP central directory, AndroidManifest.xml (binary AXML),
-   │            resources.arsc + resource table, permissions, min/target SDK,
-   │            signature blocks, native ABI inventory, asset inventory,
-   │            classes*.dex discovery (multi-DEX order), split-APK merge plan
-   │
-   ├─ acos-dex: DEX magic/version (035–039), header/checksum/signature,
-   │            string/type/proto/field/method/class tables, class_data,
-   │            code_items, instruction decode, register/type verification,
-   │            exception handlers, debug info, try/catch, annotations
-   │
-   ├─ acos-vm (planned): class loader hierarchy + method/field resolution,
-   │            `java.*`/`javax.*`/`android.*` intrinsics, object model,
-   │            interpreter dispatch, exceptions, monitors, threads,
-   │            class initialization ordering, JIT/AOT later
-   │
-   ├─ acos-jni + acos-native-loader (planned): Rust `JNIEnv`/`JavaVM` tables,
-   │            ELF/Bionic symbol resolution for guest `.so`, ABI translation
-   │
-   ├─ acos-framework + capabilities + lifecycle (planned):
-   │            Activity/Task, intents, resources, storage, permissions,
-   │            system-service semantics implemented or explicitly refused
-   │
-   ├─ acos-render + acos-input (planned): offscreen surface on demand,
-   │            layout/text/images, frame lifecycle, input routing, IME
-   │
-   └─ acos-observe + engine (planned): typed UI tree (text/id/role/bounds),
-                request-sequenced fresh frames, crash/ANR, metrics
-                    │
-                    ▼
-     Result envelope: job/session/request IDs, status, backend, fidelity,
-     isolation, capabilities_used, frame{sequence,fresh_after_request,sha256},
-     evidence paths, metrics{wall,peak_rss,cpu}
-                    │
-                    ▼
-     Verdict + hashes + reproducible traces + resource report
-```
-
-Invariants across the flow:
-
-- **Real inputs only.** The VM executes compiled DEX from real Java/Kotlin; the
-  native path executes real ELF `.so` through the Rust JNI ABI.
-- **Verify before execute.** `acos-dex` must reject invalid DEX with structured
-  errors before any instruction runs.
-- **Freshness is end-to-end.** A rendered frame is linked to the request/action
-  that caused it; a stale frame is impossible.
-- **Fidelity is attached to the result, not assumed.**
-- **Every stage can refuse.** Missing API, ABI, symbol, resource or isolation
-  guarantee produces a structured `unsupported`/`escalated` result.
+- Boot classpath order (from the image config, `.cache/boot/android-34/BOOTCLASSPATH`):
+  `core-oj, core-libart, okhttp, bouncycastle, apache-xml, framework,
+  framework-graphics, ext, telephony-common, voip-common, ims-common,
+  core-icu4j`.
+- The boot classpath is **41,829 classes / 328,352 methods / 5,607 natives**
+  (ADR-0007). Native work-list targets: `println` 152 natives; minimal Activity
+  612 (lower bound) of which **419 are `android.*`** and 175 core (ADR-0007
+  evidence).
+- **No `system_server`, Binder kernel driver, SurfaceFlinger, HWUI/Skia or
+  zygote** (ADR-0008). The app process's service calls are answered in-process by
+  a Rust layer that starts only what a task needs.
+- Boot jars are extracted at runtime from the user's installed SDK image into
+  `.cache/boot/android-34/` (gitignored); ACOS never redistributes them
+  (ADR-0016). ADR-0016 flags two open legal questions before distribution.
 
 ---
 
-## 5. Memory and capability model (design)
+## 5. Memory, snapshot and capability model
 
-- Track, separately: shared fixed runtime; per-process private managed heap;
-  native heap; graphics buffers; app data/cache; kernel/page tables; code cache;
-  isolate overhead.
-- Share immutable executable/resource pages and precompiled code across workers
-  via file-backed/CoW mechanisms **when safe**.
-- Never share mutable statics, permissions, credentials, JNI local state,
-  database handles, or app singleton state between independent sandboxes.
-- Evaluate process-template strategies only after reliable independent
-  instances and safe JNI/GC interactions exist.
-- A parked state may compress/evict cold pages only if resume correctly
-  restores timers, native threads and app lifecycle semantics.
-- Measure both `anon+shmem` and cgroup `memory.current`, PSS/USS where
-  permitted, host `MemAvailable`, GPU allocations and zram footprint. Never
-  compare mixed metric types.
-
-Capability modules are declared with explicit providers, dependencies, startup
-policy and unload conditions; an off switch must not silently change behaviour.
-Many Android APIs rely on process-global/service-global state, so modularity is
-only real when the dependency graph, startup order, per-task state, cleanup and
-failure semantics are implemented.
+- Object references are 32-bit handles into a VM arena; Java calls use a VM frame
+  stack (ADR-0009). This enables compaction, JNI handle tables, and heap
+  snapshot/restore.
+- **Snapshot/restore (ADR-0010, PLANNED, UNPROVEN)** is the intended answer to
+  cold start / reset-to-ready / per-session memory: initialise the boot classpath
+  (and later an app) once, snapshot heap + class state, start/reset workers by CoW
+  restore. Gate 1: framework init time on the interpreter. Gate 2: correct
+  restore of an initialised state. If either fails the cold/interaction targets,
+  the architecture is revisited (ADR-0012 alternative).
+- **Rendering (ADR-0011):** Rust software 2D; no GPU; no surface unless asked;
+  unsupported draw ops recorded per frame.
+- **Native code (ADR-0014):** x86_64 first; missing symbol → structured
+  `UNSUPPORTED_NATIVE_SYMBOL`; ARM-only → `WRONG_ABI`.
+- Measure both `anon+shmem` and cgroup `memory.current`, PSS where permitted,
+  host `MemAvailable`, GPU allocations and zram; never mix metric types
+  (`BENCHMARKS.md`).
 
 ---
 
-## 6. Security posture (design)
+## 6. Security posture
 
-- Untrusted APKs run only behind an audited boundary (planned `acos-sandbox` /
-  `vm`), never with host-root-equivalent privilege.
-- All isolation boundaries are explicit and independently reviewed.
-- Signing/trust checks precede execution at every level, including build scripts
-  (they execute code).
-- No silent API faking: unimplemented behaviour is refused or escalated.
+- Untrusted APKs never run with host-root-equivalent privilege; privileged
+  containers are rejected as an execution boundary.
+- All isolation boundaries explicit and reviewed; `sandbox` hardening beyond
+  process separation is out of scope for V1.
+- Signing/trust checks precede execution; no silent API faking.
+- Host safety: 85 % RAM guard, no `sudo`, no global host changes, no >2 GB
+  downloads without authorisation, legacy repo read-only.

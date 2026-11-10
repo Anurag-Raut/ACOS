@@ -9,6 +9,38 @@ the legacy inventory in `docs/reference/ACVM_INVENTORY.md`.
 
 ---
 
+## Owner directives, 2026-11-10
+
+These four directives are binding on the whole project and override any earlier
+handoff wording they conflict with. They are reflected in every ACOS document.
+
+**D1 — One consumer: an AI coding agent. No human-facing UX.** ACOS is not a
+product for a person to click. Its interface is machine-first: JSON and MCP,
+structured errors with stable machine codes, and stable ids (job/session/
+request/frame). There is no GUI requirement, no human-centric CLI ergonomics
+target, and no feature whose value is only for a human operator.
+
+**D2 — The legacy benchmark metrics must be the best in ACOS, as acceptance
+gates.** Every metric the legacy ACVM benchmarks track is an **acceptance gate
+for every capability** in ACOS, measured against the legacy baseline. A
+regression or a coverage gap must be **reported, never hidden**. Correctness and
+**zero false passes gate every speed claim**. See `BENCHMARKS.md` §5.
+
+**D3 — The handoff architecture is NOT binding; outcomes are.** The architecture
+described in `docs/handoff/02` (including the all-Rust mandate) may change
+whenever a change **improves the metrics substantially**. What is fixed is the
+outcome:
+- APKs behave **as on Android**, and
+- an agent can do everything it needs with the app to **close the verification
+  loop as fast as possible**.
+
+**D4 — Lead autonomy and recording.** The lead takes all decisions
+autonomously; all implementation is done by subagents in parallel; decisions and
+findings are recorded in the repo (this file set); verified work is committed
+locally (**no push**).
+
+---
+
 ## 1. Product contract
 
 An AI coding agent should be able to change Android app code, build an APK, run

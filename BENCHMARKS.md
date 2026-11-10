@@ -151,7 +151,60 @@ notes/regressions: ...
 
 ---
 
-## 5. Baseline comparisons still to obtain
+## 5. V1 metric acceptance table (owner directive D2)
+
+Every tracked metric is an **acceptance gate for every capability**
+(`SPEC.md` D2). Each metric below must be reported against the legacy ACVM
+baseline with **≥20 repetitions, p50/p95**, the metric type stated and the
+cold/warm state stated. Every metric where ACOS is **worse than legacy must be
+listed explicitly with a plan** — regressions and gaps are reported, never
+hidden. Correctness and **zero false passes** gate every speed claim.
+
+Legacy values are reference only (`docs/reference/ACVM_INVENTORY.md` §2); they
+are one frozen host/image set and are not directly comparable across metric
+types. ACOS column: **no row is measured yet.**
+
+| # | Metric | Definition (type) | Legacy baseline (ACVM) | ACOS (empty) | Gate |
+|---|---|---|---|---|---|
+| M1 | Fixed idle core memory | settled core, anon+shmem (also `memory.current`, PSS) | W1 206.0 / v9 303.9 MiB; reads span 259–322 MiB across host states | — | V1 §6.1 |
+| M2 | Incremental memory per session at N=5 | `(loaded−bare)/5`, anon+shmem | 78.7 MiB (v9); 33.2 MiB (W2 opt-in) | — | V1 §6.1 |
+| M3 | Cold start → first correct frame | engine start → correct fresh frame, wall, cold | 3.620 s (v12); 4.198 s (v11) | — | V1 §1.1, §6.1 |
+| M4 | Worker create → correct frame | create request → correct fresh frame, wall, warm | 1.251–1.343 s p50 | — | V1 §1.1, §6.1 |
+| M5 | Fresh screenshot | request-sequenced frame retrieval, wall, warm | 0.066–0.067 s p50 | — | V1 §1.3 |
+| M6 | Reset-to-ready | `reset --app` cmd and → first frame, wall, warm | 110.3 ms cmd / 748.1 ms → frame p50 | — | V1 §1.8 |
+| M7 | UI tree with text | one tree dump with text, wall, warm | one-shot 538–768 ms; persistent 4.1 ms; structure 14–87 ms | — | V1 §1.4 |
+| M8 | Action-to-state latency | tap/type/scroll issue → observed state, wall, warm | not cleanly published (U1 step-5 747 ms incl. tree) | — | V1 §1.5 |
+| M9 | Concurrent workloads | N with independent state/input, count | N=5 scorecard, N=10 measured; 10 extra displays | — | V1 §5.1 |
+| M10 | End-to-end verify wall time | build→install→launch→assert→evidence→reset→cleanup | U2 dev loop install-bound (~19 s `adb install -r` = 74–81 % of loop); no direct equivalent | — | V1 §6.1 |
+| M11 | Verified tasks / GiB-minute | correct tasks ÷ ∫(job GiB × min) | not published as such (task-first plan proposed it) | — | V1 §6.3 |
+
+Additional required reporting: false-pass count (must be 0), fallback/escalation
+count, peak and integrated job memory, CPU, and the exact fixture/image/toolchain
+versions. See `docs/V1.md` §6 and §4.1 method record.
+
+---
+
+## 6. Measurement tooling constraints (verified 2026-11-10)
+
+- **`/usr/bin/time` is not installed** on this host; use `/proc`
+  (`/proc/<pid>/status`, `/proc/<pid>/stat`, cgroup v2 files) or shell builtins.
+  Any tool that shells out to `/usr/bin/time` will fail (`docs/FINDINGS.md`
+  F-0006).
+- **`/tmp` is a 31 GiB tmpfs** (RAM-backed); large/generated artifacts must go
+  to `.cache/` or `fixtures/build/` (both gitignored), not `/tmp`
+  (`docs/FINDINGS.md` F-0007).
+- **RAM guard 85 %**; unit/host-only runs use `ulimit -v 3000000`; the ART oracle
+  emulator is ≤2 GiB guest RAM, one instance, always shut down (ADR-0015).
+- No fixed sleeps in a timed path; completion is proven by a request-sequenced
+  fresh frame (V1 §1.3).
+
+> **Note:** the existing legacy benchmark harness (`bench/compare.py`) encodes
+> the legacy must-have metric set; ACOS must implement its own runner for M1–M11.
+> Until then, **no ACOS benchmark row or speed claim exists.**
+
+---
+
+## 7. Baseline comparisons still to obtain
 
 1. An **ACOS-native** H0 run (APK/DEX parse) on the fixture corpus.
 2. The first **H2** execution of a real compiled DEX fixture vs. `jvm-reference`,
