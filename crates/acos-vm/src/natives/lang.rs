@@ -5,12 +5,14 @@
 //! `count`/`hash` fields through the interpreter's shadow-field path. Every
 //! entry here is a method declared `native` in the real Android 14 core library.
 
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::class::NativeCtx;
+use crate::class::{MethodImpl, NativeCtx};
 use crate::error::VmResult;
 use crate::heap::{ArrayData, ArrayObj, Handle, Object, NULL};
-use crate::vm::{ThreadStatus, Vm};
+use crate::vm::{descriptor_to_dotted, ThreadStatus, Vm};
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     object(vm);
@@ -1070,23 +1072,131 @@ fn throwable(vm: &mut Vm) {
     vm.register_native(c, "nativeGetStackTrace", "(Ljava/lang/Object;)[Ljava/lang/StackTraceElement;", thr_get_stack_trace);
 }
 
+/// One frame captured at `Throwable` construction time. Names are resolved
+/// eagerly so a later `getStackTrace()` does not depend on the stack that has
+/// since unwound.
+struct CapturedFrame {
+    class_desc: String,
+    method_name: String,
+    file_name: Option<String>,
+    line: i32,
+}
+
+thread_local! {
+    /// Live `nativeFillInStackTrace` captures, keyed by the `long[]` token
+    /// handed to the `Throwable` as its `backtrace`.
+    static BACKTRACES: RefCell<HashMap<u64, Vec<CapturedFrame>>> =
+        RefCell::new(HashMap::new());
+    static BACKTRACE_IDS: Cell<u64> = const { Cell::new(1) };
+}
+
+/// Snapshot the Java (non-native) frames of `thread`, innermost first.
+fn thread_frames(vm: &Vm, thread: usize) -> Vec<CapturedFrame> {
+    let mut out = Vec::new();
+    let Some(t) = vm.threads.get(thread) else {
+        return out;
+    };
+    for fr in t.frames.iter().rev() {
+        let m = &vm.methods[fr.method as usize];
+        // `VMStack`/`Thread` runtime frames are not part of a Java stack trace.
+        if matches!(m.imp, MethodImpl::Native(_)) {
+            continue;
+        }
+        let (file_name, line) = match &m.imp {
+            MethodImpl::Dex {
+                code: Some(code), ..
+            } => (code.source_file.clone(), code.line_for_pc(fr.pc) as i32),
+            _ => (vm.classes[fr.class as usize].source_file.clone(), -1),
+        };
+        out.push(CapturedFrame {
+            class_desc: vm.class_desc(fr.class).to_string(),
+            method_name: m.name.clone(),
+            file_name,
+            line,
+        });
+    }
+    out
+}
+
+/// Snapshot the frames of the calling native's thread.
+fn capture_frames(vm: &Vm, ctx: NativeCtx) -> Vec<CapturedFrame> {
+    thread_frames(vm, ctx.thread)
+}
+
+/// Materialise captured frames as a real `java.lang.StackTraceElement[]`.
+fn build_stack_elements(vm: &mut Vm, frames: &[CapturedFrame]) -> VmResult<Handle> {
+    let ste = vm.load_class("Ljava/lang/StackTraceElement;")?;
+    let roots_base = vm.native_roots.len();
+    let mut elems: Vec<Handle> = Vec::with_capacity(frames.len());
+    let built = (|| -> VmResult<()> {
+        for f in frames {
+            let class_h = vm.new_string(&descriptor_to_dotted(&f.class_desc))?;
+            vm.native_roots.push(class_h);
+            let method_h = vm.new_string(&f.method_name)?;
+            vm.native_roots.push(method_h);
+            let file_h = match &f.file_name {
+                Some(s) => {
+                    let h = vm.new_string(s)?;
+                    vm.native_roots.push(h);
+                    h
+                }
+                None => NULL,
+            };
+            let obj = vm.alloc_instance(ste)?;
+            vm.native_roots.push(obj);
+            vm.set_instance_field_by_name(obj, "declaringClass", class_h);
+            vm.set_instance_field_by_name(obj, "methodName", method_h);
+            vm.set_instance_field_by_name(obj, "fileName", file_h);
+            vm.set_instance_field_by_name(obj, "lineNumber", f.line as u32);
+            elems.push(obj);
+        }
+        Ok(())
+    })();
+    if let Err(e) = built {
+        vm.native_roots.truncate(roots_base);
+        return Err(e);
+    }
+    let arr = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: "Ljava/lang/StackTraceElement;".to_string(),
+        data: ArrayData::Ref(elems),
+    }))?;
+    vm.native_roots.truncate(roots_base);
+    Ok(arr)
+}
+
 fn thr_fill_in(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    // A non-null opaque token signals that a stack was captured; the ACOS
-    // printer renders the VM stack directly.
+    // Capture the real VM stack now: `getOurStackTrace` may be called long
+    // after the stack unwound (Kotlin's `Intrinsics.sanitizeStackTrace`).
+    let frames = capture_frames(vm, ctx);
+    let id = BACKTRACE_IDS.with(|c| {
+        let v = c.get();
+        c.set(v + 1);
+        v
+    });
+    BACKTRACES.with(|m| m.borrow_mut().insert(id, frames));
+    // `Throwable.backtrace` is opaque to Java; a real `long[]` matches ART.
     let h = vm.alloc(Object::Array(ArrayObj {
-        elem_desc: "B".to_string(),
-        data: ArrayData::Byte(Vec::new()),
+        elem_desc: "J".to_string(),
+        data: ArrayData::Long(vec![id as i64]),
     }))?;
     vm.ret_ref(ctx, h);
     Ok(())
 }
 
 fn thr_get_stack_trace(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let h = vm.alloc(Object::Array(ArrayObj {
-        elem_desc: "Ljava/lang/StackTraceElement;".to_string(),
-        data: ArrayData::Ref(Vec::new()),
-    }))?;
-    vm.ret_ref(ctx, h);
+    let token = vm.arg_ref(ctx, 0);
+    let id = match vm.heap.get(token) {
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Long(v),
+            ..
+        })) => v.first().copied().unwrap_or(0) as u64,
+        _ => 0,
+    };
+    let frames = BACKTRACES
+        .with(|m| m.borrow_mut().remove(&id))
+        .unwrap_or_default();
+    let arr = build_stack_elements(vm, &frames)?;
+    vm.ret_ref(ctx, arr);
     Ok(())
 }
 
@@ -1202,17 +1312,58 @@ fn vms_calling_class_loader(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+/// Map a live `java.lang.Thread` object to its VM thread slot.
+fn thread_index_of(vm: &Vm, thread_obj: Handle) -> Option<usize> {
+    vm.threads.iter().position(|t| t.object == thread_obj)
+}
+
+/// `VMStack.fillStackTraceElements(Thread, StackTraceElement[])`: fill the
+/// caller-supplied array with as many frames as fit and return the count.
 fn vms_fill_stack(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    vm.ret_i32(ctx, 0);
+    let thread_obj = vm.arg_ref(ctx, 0);
+    let arr = vm.arg_ref(ctx, 1);
+    let cap = match vm.heap.get(arr) {
+        Some(Object::Array(a)) if matches!(a.data, ArrayData::Ref(_)) => a.len(),
+        _ => {
+            vm.ret_i32(ctx, 0);
+            return Ok(());
+        }
+    };
+    let idx = thread_index_of(vm, thread_obj).unwrap_or(vm.current_thread);
+    let frames = thread_frames(vm, idx);
+    let take = frames.len().min(cap);
+    let source = build_stack_elements(vm, &frames[..take])?;
+    let elems = match vm.heap.get(source) {
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Ref(v), ..
+        })) => v.clone(),
+        _ => Vec::new(),
+    };
+    if let Some(Object::Array(ArrayObj {
+        data: ArrayData::Ref(dst), ..
+    })) = vm.heap.get_mut(arr)
+    {
+        for (i, h) in elems.into_iter().enumerate() {
+            if i < dst.len() {
+                dst[i] = h;
+            }
+        }
+    }
+    vm.ret_i32(ctx, take as i32);
     Ok(())
 }
 
+/// `VMStack.getThreadStackTrace(Thread)`: the real `Thread.getStackTrace()`
+/// implementation. Returning an empty array here made Kotlin's
+/// `Intrinsics.createParameterIsNullExceptionMessage` index `[0]` of a
+/// zero-length trace and throw a spurious `ArrayIndexOutOfBoundsException`
+/// (W88-A blocker 4).
 fn vms_thread_stack(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let h = vm.alloc(Object::Array(ArrayObj {
-        elem_desc: "Ljava/lang/StackTraceElement;".to_string(),
-        data: ArrayData::Ref(Vec::new()),
-    }))?;
-    vm.ret_ref(ctx, h);
+    let thread_obj = vm.arg_ref(ctx, 0);
+    let idx = thread_index_of(vm, thread_obj).unwrap_or(vm.current_thread);
+    let frames = thread_frames(vm, idx);
+    let arr = build_stack_elements(vm, &frames)?;
+    vm.ret_ref(ctx, arr);
     Ok(())
 }
 

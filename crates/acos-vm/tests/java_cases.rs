@@ -155,3 +155,90 @@ fn exception_floor_rethrows_at_the_rust_call_base() {
     );
     assert_eq!(outcome.stdout, "eie:boom\nncdfe\ndone\n");
 }
+
+// ---------------------------------------------------------------------------
+// W95-A React-Native blockers 3 & 4: static reflection and thread stack traces
+// ---------------------------------------------------------------------------
+
+fn real_boot_dir() -> PathBuf {
+    repo_root().join(".cache/boot/android-34")
+}
+
+/// Run a case against the real Android 14 boot classpath (where
+/// `java.lang.reflect.Field` and `dalvik.system.VMStack` exist).
+fn run_real(dex: &Path, main: &str, gc_stress: bool, ir: bool) -> acos_vm::RunOutcome {
+    acos_vm::exec::set_enabled(Some(ir));
+    let mut vm = Vm::new(VmOptions {
+        heap_max_bytes: 256 * 1024 * 1024,
+        gc_stress,
+        corelib: acos_vm::CoreLib::Real,
+        boot_dir: Some(real_boot_dir()),
+        ..VmOptions::default()
+    })
+    .unwrap();
+    vm.add_dex(DexFile::parse(std::fs::read(dex).unwrap()).unwrap());
+    let outcome = vm.run(main, &[]);
+    acos_vm::exec::set_enabled(None);
+    outcome
+}
+
+fn real_corelib_available() -> bool {
+    real_boot_dir().join("BOOTCLASSPATH").is_file()
+}
+
+/// W88-A blocker 3: `Field.set` on a static field must initialise the class
+/// first, so `<clinit>` cannot clobber the value a later compiled `getstatic`
+/// observes. Checked on both tiers and under GC stress.
+#[test]
+fn reflection_static_set_survives_compiled_getstatic() {
+    let Some(dex) = compile_case("ReflectStaticInitMain") else {
+        eprintln!("SKIP reflection_static_set_survives_compiled_getstatic: javac/d8 unavailable");
+        return;
+    };
+    if !real_corelib_available() {
+        eprintln!("SKIP reflection_static_set_survives_compiled_getstatic: real boot classpath absent");
+        return;
+    }
+    for (ir, stress) in [(true, false), (false, false), (true, true), (false, true)] {
+        let outcome = run_real(&dex, "ReflectStaticInitMain", stress, ir);
+        assert_eq!(
+            outcome.exit_code, 0,
+            "ir={ir} gc_stress={stress}: {}",
+            outcome.stderr
+        );
+        assert_eq!(
+            outcome.stdout, "true\ntrue\ntrue\ntrue\n",
+            "ir={ir} gc_stress={stress}"
+        );
+    }
+}
+
+/// W88-A blocker 4: `Thread.getStackTrace()` / `Throwable.getStackTrace()` must
+/// return real frames under the real corelib. An empty array made Kotlin's
+/// `Intrinsics.createParameterIsNullExceptionMessage` index `[0]` and throw a
+/// spurious `ArrayIndexOutOfBoundsException`.
+#[test]
+fn thread_stack_traces_are_non_empty_under_real_corelib() {
+    let Some(dex) = compile_case("VmStackMain") else {
+        eprintln!("SKIP thread_stack_traces_are_non_empty_under_real_corelib: javac/d8 unavailable");
+        return;
+    };
+    if !real_corelib_available() {
+        eprintln!(
+            "SKIP thread_stack_traces_are_non_empty_under_real_corelib: real boot classpath absent"
+        );
+        return;
+    }
+    for (ir, stress) in [(true, false), (false, false), (true, true)] {
+        let outcome = run_real(&dex, "VmStackMain", stress, ir);
+        assert_eq!(
+            outcome.exit_code, 0,
+            "ir={ir} gc_stress={stress}: {}",
+            outcome.stderr
+        );
+        assert_eq!(
+            outcome.stdout, "true\ntrue\ntrue\n",
+            "ir={ir} gc_stress={stress}"
+        );
+    }
+}
