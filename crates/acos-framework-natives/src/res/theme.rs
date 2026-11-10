@@ -188,6 +188,15 @@ impl AssetManager {
             }
         }
         let n = attrs.len().min(out_values.len() / STYLE_NUM_ENTRIES);
+        // `TypedArray`s are pooled and `mData` is reused across tags. Clear
+        // every slot before filling: `TypedArray.getValueAt` treats any
+        // non-zero `STYLE_TYPE` as "present", so a slot an earlier tag wrote
+        // (e.g. `android:width`) would otherwise be read back as this tag's
+        // attribute. `apply_style`/`fill_outputs(zero_missing = true)` already
+        // does this.
+        for slot in &mut out_values[..n * STYLE_NUM_ENTRIES] {
+            *slot = 0;
+        }
         // `TypedArray` layout: `mIndices[0]` is the count of found attributes
         // and `mIndices[1..=count]` are the **request/styleable indices** of
         // those attributes (what `getIndex(at)` returns). `mData` stays indexed

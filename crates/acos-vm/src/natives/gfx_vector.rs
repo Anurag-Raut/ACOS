@@ -337,7 +337,7 @@ fn n_create_tree(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_create_tree_from_copy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let old = Handle::from_jlong(vm.arg_i64(ctx, 0));
     let root = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let mut t = trees().get(old).map(|t| t.clone()).unwrap_or_else(|_| VTree::from_root(root));
+    let mut t = trees().get(old).cloned().unwrap_or_else(|_| VTree::from_root(root));
     t.root = root;
     let h = trees().insert(t);
     vm.ret_i64(ctx, h.to_jlong());
@@ -465,7 +465,7 @@ fn n_set_path_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_path_data(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let node = Handle::from_jlong(vm.arg_i64(ctx, 0));
     let pd = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let path = path_data().get(pd).map(|p| p.clone()).map_err(node_err)?;
+    let path = path_data().get(pd).cloned().map_err(node_err)?;
     let mut table = nodes();
     let n = table.get_mut(node).map_err(node_err)?;
     match &mut n.kind {
@@ -998,7 +998,7 @@ fn pp_create_from_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn pp_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = Handle::from_jlong(vm.arg_i64(ctx, 0));
-    let p = path_data().get(src).map(|p| p.clone()).unwrap_or_default();
+    let p = path_data().get(src).cloned().unwrap_or_default();
     let h = path_data().insert(p);
     vm.ret_i64(ctx, h.to_jlong());
     Ok(())
@@ -1007,7 +1007,7 @@ fn pp_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn pp_create_path(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let out = vm.arg_i64(ctx, 0);
     let src = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let p = path_data().get(src).map(|p| p.clone()).map_err(node_err)?;
+    let p = path_data().get(src).cloned().map_err(node_err)?;
     crate::natives::gfx_path::replace_path(out, p)?;
     Ok(())
 }
@@ -1029,7 +1029,7 @@ fn pp_parse_string_for_path(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn pp_set_path_data(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let out = Handle::from_jlong(vm.arg_i64(ctx, 0));
     let src = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let p = path_data().get(src).map(|p| p.clone()).map_err(node_err)?;
+    let p = path_data().get(src).cloned().map_err(node_err)?;
     let mut table = path_data();
     *table.get_mut(out).map_err(node_err)? = p;
     Ok(())
@@ -1366,6 +1366,7 @@ fn parse_path_string(s: &str) -> Result<Path, String> {
 /// Convert an SVG elliptical arc to cubic Bézier segments and append them to
 /// `p`. The `phi` rotation is applied to the ellipse, unlike the axis-aligned
 /// `Path.arcTo` helper.
+#[allow(clippy::too_many_arguments)]
 fn arc_to_cubic(
     p: &mut Path,
     x1: f32,

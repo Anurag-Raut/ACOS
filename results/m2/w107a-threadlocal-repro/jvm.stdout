@@ -1,0 +1,10 @@
+suppliedNonNull=true
+supplied=LookupStack(7)
+supplierCalls=1
+sameInstance=true
+supplierCallsAfter2=1
+plainInit=41
+setGet=set-value
+afterRemove=null
+currentThreadNonNull=true
+nullInit=null

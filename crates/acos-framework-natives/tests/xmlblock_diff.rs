@@ -396,3 +396,80 @@ fn retrieve_attributes_resolves_framework_color_reference() {
     assert_eq!(out_indices, vec![2, 0, 1]);
     eprintln!("retrieveAttributes resolved @0x01060035 -> #ff161c20");
 }
+
+/// Regression (W107-A): `nativeRetrieveAttributes` must clear the
+/// `TypedArray.mData` slots of attributes that are absent from the current
+/// start tag. The framework pools `TypedArray`s and reuses `mData` across
+/// tags; `TypedArray.getValueAt` treats any non-zero `STYLE_TYPE` as
+/// "present", so a stale slot from a previous tag is read back as this tag's
+/// attribute. On the real `counter.apk` launch this made
+/// `VectorDrawable$VFullPath` read the parent `<vector>`'s `android:width`
+/// (24dp, `TYPE_DIMENSION`) as `VectorDrawablePath_fillColor`, so
+/// `ResourcesImpl.loadComplexColor` dereferenced a null `TypedValue.string`
+/// and the launch died with
+/// `Resources$NotFoundException: ... ic_ab_back_material`.
+///
+/// `framework-res.apk:res/drawable/ic_ab_back_material.xml` has
+/// `<vector width="24dp" height="24dp">` and a `<path fillColor="@color/white"
+/// pathData="..."/>` child. Requesting `[height, fillColor, pathData]` on the
+/// `<path>` tag must zero the absent `height` slot and resolve `fillColor`
+/// (`@0x0106000b` = `color/white` = `#ffffffff`) to a color, never the stale
+/// `width` dimension.
+#[test]
+fn retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = acos_framework_natives::res::AssetManager::new();
+    mgr.add_apk_assets(ApkAssets::open(&apk_path).unwrap());
+    let bytes = mgr.sources()[0]
+        .read_entry("res/drawable/ic_ab_back_material.xml")
+        .expect("vector xml");
+    let block = mgr.create_xml_block(XmlBlock::from_bytes(&bytes, 0, bytes.len()).unwrap());
+    let state = mgr.create_parse_state(block, 0x0108_031e).unwrap();
+    // Advance past `<vector>` to the `<path>` START_TAG.
+    let mut seen = 0;
+    loop {
+        let ev = mgr.parse_next(state).unwrap();
+        assert_ne!(ev, END_DOCUMENT);
+        if ev == acos_framework_natives::res::START_TAG {
+            seen += 1;
+            if seen == 2 {
+                break;
+            }
+        }
+    }
+    // android:height (absent), android:fillColor, android:pathData.
+    let attrs = [0x0101_0155i32, 0x0101_0404, 0x0101_0405];
+    let mut out_values = vec![0i32; attrs.len() * 7];
+    let stale = [
+        0x05,        // TYPE_DIMENSION
+        0x1801,      // 24dp
+        -1,          // asset cookie
+        0x0101_0159, // resourceId = android:width
+        0x00,
+        0x00,
+        0x0101_0159, // sourceResourceId = android:width
+    ];
+    for i in 0..attrs.len() {
+        out_values[i * 7..(i + 1) * 7].copy_from_slice(&stale);
+    }
+    let mut out_indices = vec![-1i32; attrs.len() + 1];
+    assert!(mgr.retrieve_attributes(state, &attrs, &mut out_values, &mut out_indices));
+    // The absent `height` slot must be cleared, not read back as stale width.
+    assert_eq!(
+        out_values[0], 0,
+        "absent attribute STYLE_TYPE must be zero, not stale"
+    );
+    assert_eq!(out_values[3] as u32, 0, "absent resourceId must be zero");
+    // fillColor `@0x0106000b` (color/white) must resolve to an ARGB8 color.
+    assert_eq!(out_values[7], 0x1c, "fillColor type should be TYPE_INT_COLOR_ARGB8");
+    assert_eq!(out_values[8] as u32, 0xffff_ffff, "fillColor should be #ffffffff");
+    assert_eq!(out_values[10] as u32, 0x0106_000b, "fillColor resourceId");
+    // FillColor and pathData were found (request indices 1 and 2); the
+    // `mIndices` array is `len + 1` long, so the trailing slot stays -1.
+    assert_eq!(out_indices, vec![2, 1, 2, -1]);
+    eprintln!("retrieveAttributes cleared stale width slot; fillColor=#ffffffff");
+}

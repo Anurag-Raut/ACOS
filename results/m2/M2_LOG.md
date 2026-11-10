@@ -1864,3 +1864,88 @@ presence branches; it does not yet replace the stale `Configuration` spec.
   the `m2.rs` ignore reason. The W60-A/earlier work in the main checkout was not
   touched (an initial edit landed in the main checkout by mistake and was
   reverted; the changes live in the W65-A worktree only).
+
+# W107-A session — `TypedArray` stale-slot leak (the real NPE) + launch progress
+
+Worktree: clean HEAD `6409190`, `CARGO_TARGET_DIR=.cache/target-w107a`,
+`CARGO_PROFILE_DEV_DEBUG=0`. No commits.
+
+## What the blocker actually was (W68-A's ThreadLocal diagnosis was wrong)
+
+The launch died in `ResourcesImpl.loadDrawableForCookie` with
+`Resources$NotFoundException: ... ic_ab_back_material`, whose deepest cause was
+a frameless `NullPointerException` at `loadDrawableForCookie(909)`. W68-A read
+line 909 as the `finally { stack.pop(); }` and concluded `mLookupStack.get()`
+returned null.
+
+Temporary instrumentation (since removed) of `handle_exception_inner` and
+`Vm::capture_stack` showed:
+
+* at handler entry `v14` (the `LookupStack`) was **non-null** — the real
+  ThreadLocal path is fine; line 909 is a downstream `finally` that NPE'd while
+  wrapping the real exception;
+* the real root-cause chain (innermost first) is
+  `ResourcesImpl.loadComplexColor(1057)` -> `TypedArray.getComplexColor` ->
+  `VectorDrawable$VFullPath.updateStateFromTypedArray(2048)`;
+* `loadComplexColor(1057)` is `value.string.toString()`, and that `TypedValue`
+  had `type=5` (TYPE_DIMENSION), `data=0x1801` (24dp),
+  `resourceId=0x01010159` (`android:width`), `string=null` — i.e. the
+  `VectorDrawablePath_fillColor` slot held the parent `<vector>`'s
+  `android:width` value.
+
+A minimal dexprog (`ThreadLocal.withInitial(...)`, corpus-style) passes on
+`--corelib real` in both `ACOS_EXEC` modes and under `ACOS_GC_STRESS=1`,
+confirming the VM's ThreadLocal/ThreadLocalMap/lambda path is correct. Source
+and DEX are kept under `results/m2/w107a-threadlocal-repro/` (not added to the
+globbed `fixtures/dexprogs/` corpus so the 27/27 ART differential is unchanged).
+
+## Root cause and fix
+
+`android.content.res.TypedArray` is pooled and its `int[] mData` is reused.
+`nativeRetrieveAttributes` (used by `Resources.obtainAttributes` when the theme
+is null, e.g. `Drawable.obtainAttributes(... theme == null)` for the `<path>`
+tag) wrote only the attributes found on the current tag and left the other
+`mData` slots untouched. `TypedArray.getValueAt` treats any non-zero
+`STYLE_TYPE` as "present", so the stale `android:width` slot was read back as
+`fillColor`. `applyStyle` already cleared missing slots
+(`fill_outputs(zero_missing = true)`); `retrieveAttributes` did not.
+
+Fix (`crates/acos-framework-natives/src/res/theme.rs`): zero the first
+`n * STYLE_NUM_ENTRIES` `out_values` slots at the start of
+`AssetManager::retrieve_attributes`.
+
+## Evidence
+
+| Item | Result |
+|---|---|
+| Regression `retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array` | pass: pre-fills every slot with the width `TypedValue`, asserts the absent `height` slot is 0 and `fillColor` resolves to `#ffffffff` |
+| `cargo test -p acos-framework-natives` | all pass (xmlblock_diff 5/5) |
+| `cargo test -p acos-vm --lib` | 120/120 pass |
+| `cargo test -p acos-runtime --test m2` | 2 passed / 1 ignored |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean (also fixed 6 pre-existing lints in `gfx_vector.rs`) |
+| `cargo check --workspace --all-targets` | clean |
+| `diff-dexprogs.sh --corelib real` | 27/27 pass |
+| `diff-dexprogs.sh --corelib real --gc-stress` | 27/27 pass |
+| `acos launch fixtures/build/apps/counter.apk` | NPE gone; reaches `MainActivity.onCreate` -> `setContentView` -> `PhoneWindow.installDecor` -> `DecorView.onResourcesLoaded`; `ic_ab_back_material` now inflates |
+
+## New blocker (still `activity_on_create`)
+
+`VectorDrawable.applyTheme(636)` -> `ResourcesImpl.loadDrawable(696)` ->
+`loadComplexColorForCookie`: `java.lang.UnsupportedOperationException:
+Can't convert to ComplexColor: type=0x1`. The vector's
+`android:tint="?0x01010429"` (`attr/colorControlNormal` =
+`?attr/textColorSecondary`) is resolved and then loaded as an XML complex color,
+but `loadComplexColorForCookie` sees `value.string == null` (or the loaded tag
+is neither `selector` nor `gradient`). Next session: instrument
+`loadComplexColorForCookie` / `nativeResolveAttrs` to see which `TypedValue`
+reaches it; `Theme.resolveAttributes` (`am_resolve_attrs`) does not chase a
+resolved `TYPE_REFERENCE` to its concrete color the way `fill_outputs` does.
+
+## Caveats
+
+* The `m2.rs` gate stays `#[ignore]`d; its reason now names the new blocker.
+* No `VectorDrawable`/ThreadLocal VM bug was found: the W68-A ThreadLocal
+  hypothesis was a mis-read of the stack.
+* The `gfx_vector.rs` clippy fixes are mechanical
+  (`map(|x| x.clone())` -> `cloned()`, one
+  `#[allow(clippy::too_many_arguments)]`) and behaviour-neutral.
