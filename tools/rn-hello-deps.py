@@ -35,10 +35,17 @@ EXTRA_DIRS = [d for d in [os.environ.get("ACOS_RN_AAR_DIR", "")] if d]
 # dependency, so it is listed here explicitly as a root; otherwise the APK's DEX
 # omits `com.facebook.jni.*` and `libfbjni.so`'s `JNI_OnLoad` cannot run (see
 # results/rn/FIRST_RUN.md).
+#
+# `javax.inject:javax.inject` is likewise `optional` in `react-android`'s POM,
+# but RN's `MainReactPackage` desugared `invokedynamic` providers implement the
+# `javax.inject.Provider` interface at runtime. Without it the DEX has only a
+# type reference, and loading `MainReactPackage` fails with
+# `NoClassDefFoundError: javax.inject.Provider` (W88-A).
 ROOTS = [
     ("com.facebook.react", "react-android", "0.81.4"),
     ("com.facebook.react", "hermes-android", "0.81.4"),
     ("com.facebook.fbjni", "fbjni", "0.7.0"),
+    ("javax.inject", "javax.inject", "1"),
     ("androidx.appcompat", "appcompat", "1.7.0"),
     ("androidx.swiperefreshlayout", "swiperefreshlayout", "1.1.0"),
     ("com.facebook.soloader", "soloader", "0.12.1"),

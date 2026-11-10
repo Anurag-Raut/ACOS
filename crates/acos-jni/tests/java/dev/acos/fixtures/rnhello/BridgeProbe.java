@@ -1,0 +1,575 @@
+// W88-A: harness Java entry that drives the *real* React Native legacy (Paper)
+// bridge inside the ACOS VM, so the Hermes bundle runs past
+// `__fbBatchedBridgeConfig` and issues its first UIManager batch.
+//
+// This is the W84-A `HermesProbe` approach extended from "call the merged
+// natives" to "construct real RN bridge objects":
+//
+//   1. load the fixture `.so`s + merged `OpenSourceMergedSoMapping` onloads,
+//   2. build a minimal native-module registry (real `UIManagerModule`,
+//      `AndroidInfoModule` (PlatformConstants), `DeviceInfoModule`,
+//      `ExceptionsManagerModule`, `TimingModule`, `AppStateModule`) with our
+//      real view managers,
+//   3. construct `CatalystInstanceImpl` (its private ctor calls native
+//      `initializeBridge`, which installs the JSI bridge globals),
+//   4. `runJSBundle()`, then `AppRegistry.runApplication` to mount the tree,
+//   5. emit every JS-originated UIManager op as `ACOS_RN_OP {...}`.
+//
+// Every stage prints an `ACOS_RN_BRIDGE {...}` (or op) line so the first
+// failing stage survives a crash and the Rust test can parse/assert it.
+
+package dev.acos.fixtures.rnhello;
+
+import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.pm.ApplicationInfo;
+import android.content.res.Resources;
+import android.os.Bundle;
+import android.util.DisplayMetrics;
+
+import com.facebook.hermes.reactexecutor.HermesExecutorFactory;
+import com.facebook.react.NativeModuleRegistryBuilder;
+import com.facebook.react.ReactPackage;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.BridgeReactContext;
+import com.facebook.react.bridge.CatalystInstanceImpl;
+import com.facebook.react.bridge.DefaultJSExceptionHandler;
+import com.facebook.react.bridge.JSBundleLoader;
+import com.facebook.react.bridge.JavaScriptExecutor;
+import com.facebook.react.bridge.ModuleHolder;
+import com.facebook.react.bridge.NativeModule;
+import com.facebook.react.bridge.NativeModuleRegistry;
+import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.queue.ReactQueueConfigurationSpec;
+import com.facebook.react.modules.appstate.AppStateModule;
+import com.facebook.react.modules.core.ExceptionsManagerModule;
+import com.facebook.react.modules.core.TimingModule;
+import com.facebook.react.modules.deviceinfo.DeviceInfoModule;
+import com.facebook.react.modules.systeminfo.AndroidInfoModule;
+import com.facebook.react.soloader.OpenSourceMergedSoMapping;
+import com.facebook.soloader.SoLoader;
+import com.facebook.react.views.text.ReactRawTextManager;
+import com.facebook.react.views.text.ReactTextViewManager;
+import com.facebook.react.views.text.ReactVirtualTextViewManager;
+import com.facebook.react.views.view.ReactViewManager;
+import com.facebook.react.uimanager.DisplayMetricsHolder;
+import com.facebook.react.uimanager.UIManagerModule;
+import com.facebook.react.uimanager.ViewManager;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public final class BridgeProbe {
+
+  public static Object PROBE_STATIC;
+  public static Object[] PROBE_ARR;
+  public static volatile Object PROBE_VOL;
+
+  private static final String TAG = "ACOS_RN_BRIDGE ";
+  private static final String OP = "ACOS_RN_OP ";
+
+  static void emit(String json) {
+    System.out.println(TAG + json);
+    System.out.flush();
+  }
+
+  static void emitOp(String json) {
+    System.out.println(OP + json);
+    System.out.flush();
+  }
+
+  static void stage(String phase, String detail) {
+    emit("{\"phase\":\"" + phase + "\",\"detail\":\"" + esc(detail) + "\"}");
+  }
+
+  static String esc(String s) {
+    if (s == null) {
+      return "";
+    }
+    return s.replace("\\", "\\\\").replace("\"", "'").replace("\n", " ").replace("\r", " ");
+  }
+
+  /** Print the full cause chain + frames so the first failing frame is evidence. */
+  static void dump(Throwable t) {
+    int depth = 0;
+    while (t != null && depth < 6) {
+      emit("{\"phase\":\"exception\",\"depth\":" + depth + ",\"class\":\"" + esc(t.getClass().getName()) + "\",\"message\":\"" + esc(t.getMessage()) + "\"}");
+      StackTraceElement[] frames = t.getStackTrace();
+      for (int i = 0; i < frames.length && i < 24; i++) {
+        emit("{\"phase\":\"frame\",\"depth\":" + depth + ",\"frame\":\"" + esc(frames[i].toString()) + "\"}");
+      }
+      t = t.getCause();
+      depth++;
+    }
+  }
+
+  private static void load(String name) throws Throwable {
+    System.loadLibrary(name);
+    stage("load", name);
+  }
+
+  interface ManagerFactory {
+    ViewManager create() throws Throwable;
+  }
+
+  private static void tryAddViewManager(
+      List<ViewManager> out, String name, ManagerFactory factory) {
+    try {
+      out.add(factory.create());
+      stage("vm", name + " ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"vm-skip\",\"name\":\"" + name + "\",\"error\":\"" + esc(t.toString()) + "\"}");
+    }
+  }
+
+  interface ModuleFactory {
+    NativeModule create() throws Throwable;
+  }
+
+  private static void putModule(
+      Map<String, ModuleHolder> out, String name, ModuleFactory factory) {
+    try {
+      ModuleHolder holder = new ModuleHolder(factory.create());
+      out.put(name, holder);
+      stage("module", name + " ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"module-skip\",\"name\":\"" + name + "\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+  }
+
+  /** A context that stands in for the host Activity/Application. */
+  public static final class ProbeContext extends ContextWrapper {
+    private final String libDir;
+    private final String apkPath;
+
+    public ProbeContext(String libDir, String apkPath) {
+      super(null);
+      this.libDir = libDir;
+      this.apkPath = apkPath;
+    }
+
+    @Override
+    public Context getApplicationContext() {
+      return this;
+    }
+
+    @Override
+    public Resources getResources() {
+      return Resources.getSystem();
+    }
+
+    @Override
+    public String getPackageName() {
+      return "dev.acos.fixtures.rnhello";
+    }
+
+    @Override
+    public ClassLoader getClassLoader() {
+      return BridgeProbe.class.getClassLoader();
+    }
+
+    @Override
+    public ApplicationInfo getApplicationInfo() {
+      ApplicationInfo ai = new ApplicationInfo();
+      ai.packageName = getPackageName();
+      ai.sourceDir = apkPath;
+      ai.publicSourceDir = apkPath;
+      ai.nativeLibraryDir = libDir;
+      ai.metaData = new Bundle();
+      ai.flags = 0;
+      return ai;
+    }
+  }
+
+  /**
+   * `SoLoader` file loader backed by the VM's own `System.loadLibrary` path:
+   * every `.so` is already mapped, so this is a de-duplicated no-op. It exists
+   * only to let `SoLoader.init` skip loading its own native `libsoloader`.
+   */
+  public static final class ProbeSoFileLoader
+      implements com.facebook.soloader.SoFileLoader {
+    @Override
+    public void load(String path, int flags) {
+      String name = path;
+      int slash = name.lastIndexOf('/');
+      if (slash >= 0) {
+        name = name.substring(slash + 1);
+      }
+      if (name.startsWith("lib")) {
+        name = name.substring(3);
+      }
+      if (name.endsWith(".so")) {
+        name = name.substring(0, name.length() - 3);
+      }
+      System.loadLibrary(name);
+      stage("soloader-load", name);
+    }
+
+    @Override
+    public void loadBytes(
+        String path, com.facebook.soloader.ElfByteChannel channel, int flags) {
+      throw new UnsupportedOperationException("loadBytes");
+    }
+  }
+
+  /**
+   * Real `UIManagerModule` subclass: records every JS-originated op as a
+   * structured JSON line, then forwards to the real implementation. Forwarding
+   * is what proves the native module environment is real; the log is what the
+   * test asserts.
+   */
+  public static final class LoggingUIManagerModule extends UIManagerModule {
+    private final List<String> ops = new ArrayList<>();
+    private boolean forward = true;
+
+    LoggingUIManagerModule(
+        BridgeReactContext context, List<ViewManager> viewManagers, int minTimeLeftInFrame) {
+      super(context, viewManagers, minTimeLeftInFrame);
+    }
+
+    private void log(String op) {
+      synchronized (ops) {
+        ops.add(op);
+      }
+      emitOp(op);
+    }
+
+    public List<String> ops() {
+      synchronized (ops) {
+        return new ArrayList<>(ops);
+      }
+    }
+
+    @Override
+    public void createView(int tag, String className, int rootTag, ReadableMap props) {
+      log("{\"op\":\"createView\",\"tag\":" + tag + ",\"class\":\"" + className + "\",\"rootTag\":" + rootTag + ",\"props\":" + json(props) + "}");
+      if (forward) {
+        super.createView(tag, className, rootTag, props);
+      }
+    }
+
+    @Override
+    public void updateView(int tag, String className, ReadableMap props) {
+      log("{\"op\":\"updateView\",\"tag\":" + tag + ",\"class\":\"" + className + "\",\"props\":" + json(props) + "}");
+      if (forward) {
+        super.updateView(tag, className, props);
+      }
+    }
+
+    @Override
+    public void setChildren(int viewTag, ReadableArray childrenTags) {
+      log("{\"op\":\"setChildren\",\"tag\":" + viewTag + ",\"children\":" + json(childrenTags) + "}");
+      if (forward) {
+        super.setChildren(viewTag, childrenTags);
+      }
+    }
+
+    @Override
+    public void manageChildren(
+        int viewTag,
+        ReadableArray moveFrom,
+        ReadableArray moveTo,
+        ReadableArray addChildTags,
+        ReadableArray addAtIndices,
+        ReadableArray removeFrom) {
+      log("{\"op\":\"manageChildren\",\"tag\":" + viewTag + ",\"add\":" + json(addChildTags) + "}");
+      if (forward) {
+        super.manageChildren(viewTag, moveFrom, moveTo, addChildTags, addAtIndices, removeFrom);
+      }
+    }
+
+    @Override
+    public void removeRootView(int rootViewTag) {
+      log("{\"op\":\"removeRootView\",\"tag\":" + rootViewTag + "}");
+      if (forward) {
+        super.removeRootView(rootViewTag);
+      }
+    }
+  }
+
+  private static String json(ReadableMap m) {
+    if (m == null) {
+      return "null";
+    }
+    try {
+      WritableMap copy = Arguments.createMap();
+      com.facebook.react.bridge.ReadableMapKeySetIterator it = m.keySetIterator();
+      while (it.hasNextKey()) {
+        String k = it.nextKey();
+        switch (m.getType(k)) {
+          case String:
+            copy.putString(k, m.getString(k));
+            break;
+          case Number:
+            copy.putDouble(k, m.getDouble(k));
+            break;
+          case Boolean:
+            copy.putBoolean(k, m.getBoolean(k));
+            break;
+          case Null:
+            copy.putNull(k);
+            break;
+          default:
+            copy.putString(k, "<" + m.getType(k) + ">");
+        }
+      }
+      return copy.toString();
+    } catch (Throwable t) {
+      return "\"<unreadable:" + esc(t.toString()) + ">\"";
+    }
+  }
+
+  private static String json(ReadableArray a) {
+    if (a == null) {
+      return "null";
+    }
+    try {
+      StringBuilder sb = new StringBuilder("[");
+      for (int i = 0; i < a.size(); i++) {
+        if (i > 0) {
+          sb.append(',');
+        }
+        switch (a.getType(i)) {
+          case Number:
+            sb.append(a.getDouble(i));
+            break;
+          case String:
+            sb.append('"').append(esc(a.getString(i))).append('"');
+            break;
+          case Boolean:
+            sb.append(a.getBoolean(i));
+            break;
+          default:
+            sb.append("\"<").append(a.getType(i)).append(">\"");
+        }
+      }
+      return sb.append(']').toString();
+    } catch (Throwable t) {
+      return "\"<unreadable:" + esc(t.toString()) + ">\"";
+    }
+  }
+
+  private static void loadNativeStack() throws Throwable {
+    for (String n :
+        new String[] {"c++_shared", "jsi", "fbjni", "hermes", "reactnative", "hermestooling"}) {
+      load(n);
+    }
+    OpenSourceMergedSoMapping m = OpenSourceMergedSoMapping.INSTANCE;
+    // Sub-libraries whose folded JNI_OnLoad the SoLoader invokes. Names that
+    // are not built into the OSS merged libs (jsinspector/mapbufferjni) are
+    // skipped by catching UnsatisfiedLinkError, exactly like SoLoader.
+    String[] merged = {
+      "fabricjni", "react_devsupportjni", "react_featureflagsjni", "react_newarchdefaults",
+      "reactnativeblob", "reactnativejni", "reactnativejni_common", "rninstance",
+      "turbomodulejsijni", "uimanagerjni", "yoga", "hermes_executor", "hermesinstancejni",
+      "jsijniprofiler",
+    };
+    for (String lib : merged) {
+      try {
+        m.invokeJniOnload(lib);
+        stage("merged", lib + " ok");
+      } catch (Throwable t) {
+        stage("merged-skip", lib + ": " + esc(t.toString()));
+      }
+    }
+  }
+
+  /**
+   * The RN classes loaded below (`ReactNativeFeatureFlags`, view managers)
+   * call `SoLoader.loadLibrary`, which asserts `SoLoader.init()` ran. We loaded
+   * every `.so` ourselves through `System.loadLibrary`, so prime SoLoader's
+   * static state directly instead of running its `Context`-based SoSource
+   * discovery (which would re-map the libraries and needs a real app context).
+   */
+  @SuppressWarnings("unchecked")
+  private static void primeSoLoader(Context context) throws Throwable {
+    // `SoLoader.init` discovers SoSources by opening the APK with
+    // `java.util.zip.ZipFile`, whose native `open` the VM does not implement
+    // (W88-A blocker). Every `.so` is already mapped through the confined
+    // `System.loadLibrary` path, so satisfy SoLoader's static state directly.
+    java.lang.reflect.Field soSources = SoLoader.class.getDeclaredField("sSoSources");
+    soSources.setAccessible(true);
+    if (soSources.get(null) == null) {
+      // Empty but non-null: `assertInitialized()` / `isInitialized()` only test
+      // for null. All real libraries are already mapped.
+      Object empty =
+          java.lang.reflect.Array.newInstance(soSources.getType().getComponentType(), 0);
+      soSources.set(null, empty);
+      stage("soloader-set", empty == null ? "null" : "wrote");
+    }
+    stage("soloader-readback", String.valueOf(soSources.get(null) != null));
+    java.lang.reflect.Field loaded = SoLoader.class.getDeclaredField("sLoadedLibraries");
+    loaded.setAccessible(true);
+    Object set = loaded.get(null);
+    if (set instanceof java.util.Set) {
+      java.util.Set<Object> s = (java.util.Set<Object>) set;
+      for (String n :
+          new String[] {
+            "libc++_shared.so",
+            "libjsi.so",
+            "libfbjni.so",
+            "libhermes.so",
+            "libreactnative.so",
+            "libhermestooling.so",
+          }) {
+        s.add(n);
+      }
+    }
+    stage("soloader", "primed");
+    stage("soloader-isinit", String.valueOf(SoLoader.isInitialized()));
+    stage("soloader-class-isinit", String.valueOf(com.facebook.soloader.SoLoader.isInitialized()));
+  }
+
+  public static void main(String[] args) {
+    emit("{\"phase\":\"begin\"}");
+    String bundlePath = args.length > 0 ? args[0] : "";
+    String libDir = args.length > 1 ? args[1] : "";
+    String apkPath = args.length > 2 ? args[2] : bundlePath;
+    try {
+      loadNativeStack();
+    } catch (Throwable t) {
+      emit("{\"phase\":\"load-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      return;
+    }
+
+    BridgeReactContext reactContext = null;
+    LoggingUIManagerModule uiManager = null;
+    CatalystInstanceImpl catalyst = null;
+    try {
+      java.lang.reflect.Field pf = BridgeProbe.class.getDeclaredField("PROBE_STATIC");
+      pf.setAccessible(true);
+      pf.set(null, "set-by-reflection");
+      stage("reflect-static-self", String.valueOf(PROBE_STATIC));
+      java.lang.reflect.Field paf = BridgeProbe.class.getDeclaredField("PROBE_ARR");
+      paf.setAccessible(true);
+      paf.set(null, new Object[] {"x"});
+      stage("reflect-static-arr", String.valueOf(PROBE_ARR != null && PROBE_ARR.length == 1));
+      java.lang.reflect.Field pvf = BridgeProbe.class.getDeclaredField("PROBE_VOL");
+      pvf.setAccessible(true);
+      pvf.set(null, "vol-set");
+      stage("reflect-static-vol", String.valueOf(PROBE_VOL));
+      java.lang.reflect.Field tagf = SoLoader.class.getDeclaredField("TAG");
+      tagf.setAccessible(true);
+      stage("reflect-tag", String.valueOf(tagf.get(null)) + "/" + SoLoader.TAG);
+      primeSoLoader(new ProbeContext(libDir, apkPath));
+      // Deterministic display metrics: avoids a full Resources/AssetManager
+      // dependency for the UIManagerModule constructor while still giving it
+      // real, non-zero metrics.
+      DisplayMetrics dm = new DisplayMetrics();
+      dm.widthPixels = 1080;
+      dm.heightPixels = 1920;
+      dm.density = 3.0f;
+      dm.scaledDensity = 3.0f;
+      dm.densityDpi = 480;
+      dm.xdpi = 480;
+      dm.ydpi = 480;
+      DisplayMetricsHolder.setWindowDisplayMetrics(dm);
+      DisplayMetricsHolder.setScreenDisplayMetrics(dm);
+      stage("metrics", "ok");
+
+      reactContext = new BridgeReactContext(new ProbeContext(libDir, apkPath));
+      stage("context", "ok");
+
+      // Only the view managers the hello tree needs. Calling
+      // `MainReactPackage.createViewManagers` eagerly constructs every manager,
+      // including the Fresco image managers whose static init wants
+      // `SoLoader.init()` (W88-A blocker). The real classes are still the APK's.
+      List<ViewManager> viewManagers = new ArrayList<>();
+      // Registered view managers are optional for capturing the JS-originated
+      // commands: `LoggingUIManagerModule` records every call before the real
+      // `UIImplementation` resolves the view manager. W88-A records why the real
+      // ones cannot be constructed here (SoLoader feature-flag accessor +
+      // under-resolved fixture deps, see results/rn/W88A_BRIDGE.md).
+      stage("viewmanagers", "count=" + viewManagers.size());
+
+      uiManager = new LoggingUIManagerModule(reactContext, viewManagers, 0);
+      stage("uimanager", "ok");
+
+      final BridgeReactContext rc = reactContext;
+      final LoggingUIManagerModule um = uiManager;
+      Map<String, ModuleHolder> modules = new HashMap<>();
+      putModule(modules, "UIManager", () -> um);
+      putModule(modules, "PlatformConstants", () -> new AndroidInfoModule(rc));
+      putModule(modules, "DeviceInfo", () -> new DeviceInfoModule(rc));
+      putModule(modules, "ExceptionsManager", () -> new ExceptionsManagerModule(null));
+      putModule(modules, "Timing", () -> new TimingModule(rc, null));
+      putModule(modules, "AppState", () -> new AppStateModule(rc));
+      stage("modules", "count=" + modules.size());
+
+      NativeModuleRegistry registry = new NativeModuleRegistry(reactContext, modules);
+      JavaScriptExecutor jsExecutor = new HermesExecutorFactory().create();
+      stage("executor", "ok");
+
+      JSBundleLoader loader =
+          JSBundleLoader.createFileLoader(bundlePath, bundlePath, /* loadSynchronously */ true);
+      stage("loader", "ok");
+
+      ReactQueueConfigurationSpec spec = ReactQueueConfigurationSpec.createDefault();
+      catalyst =
+          new CatalystInstanceImpl.Builder()
+              .setReactQueueConfigurationSpec(spec)
+              .setJSExecutor(jsExecutor)
+              .setRegistry(registry)
+              .setJSBundleLoader(loader)
+              .setJSExceptionHandler(new DefaultJSExceptionHandler())
+              .build();
+      stage("catalyst", "ok");
+
+      reactContext.initializeWithInstance(catalyst);
+      stage("initializeWithInstance", "ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"bridge-error\",\"at\":\"build\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+      return;
+    }
+
+    try {
+      catalyst.runJSBundle();
+      stage("runJSBundle", "ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"bridge-error\",\"at\":\"runJSBundle\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+      return;
+    }
+
+    // Mount the registered component. ReactRootView does exactly this:
+    //   getJSModule(AppRegistry.class).runApplication(name, {rootTag, initialProps})
+    try {
+      WritableMap params = Arguments.createMap();
+      params.putInt("rootTag", 0xACE5);
+      params.putMap("initialProps", Arguments.createMap());
+      com.facebook.react.bridge.WritableArray appParams = Arguments.createArray();
+      appParams.pushString("rnhello");
+      appParams.pushMap(params);
+      catalyst.callFunction("AppRegistry", "runApplication", (com.facebook.react.bridge.NativeArray) appParams);
+      stage("runApplication", "ok");
+    } catch (Throwable t) {
+      emit("{\"phase\":\"bridge-error\",\"at\":\"runApplication\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+
+    // Run the native-modules/JS queues for a bounded number of turns so the
+    // bridge can flush its first batch. The VM's scheduler runs the green
+    // threads; each `callFunction` above is asynchronous, so we give the queues
+    // a chance by invoking a no-op JS flush on the JS queue through another
+    // call. A plain Thread.sleep parks the host thread and lets the VM pump.
+    try {
+      for (int i = 0; i < 20; i++) {
+        Thread.sleep(10);
+      }
+      stage("drain", "ok");
+    } catch (Throwable t) {
+      stage("drain-error", esc(t.toString()));
+    }
+
+    if (uiManager != null) {
+      stage("ops", "count=" + uiManager.ops().size());
+    }
+    emit("{\"phase\":\"end\"}");
+  }
+}
