@@ -359,7 +359,7 @@
       "rx": 10,
       "ry": 10,
       "paint": {
-       "color": "#FFE7E7EA",
+       "color": "#FFD6D7D7",
        "antiAlias": true
       }
      },
@@ -390,7 +390,7 @@
       "rx": 10,
       "ry": 10,
       "paint": {
-       "color": "#FFEDEDF0",
+       "color": "#FFE9EAEC",
        "antiAlias": true
       }
      },
@@ -415,8 +415,8 @@
       "rect": [
        60,
        587,
-       110,
-       637
+       107,
+       634
       ],
       "rx": 2,
       "ry": 2,
@@ -454,11 +454,11 @@
      {
       "op": "text",
       "text": "Checked box",
-      "x": 128,
-      "y": 613,
+      "x": 126,
+      "y": 625,
       "paint": {
        "color": "#FF1A1A1A",
-       "textSize": 42,
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -469,10 +469,10 @@
      {
       "op": "roundRect",
       "rect": [
-       60,
-       671,
-       110,
-       721
+       61,
+       672,
+       106,
+       717
       ],
       "rx": 2,
       "ry": 2,
@@ -486,11 +486,11 @@
      {
       "op": "text",
       "text": "Unchecked box",
-      "x": 128,
-      "y": 697,
+      "x": 126,
+      "y": 709,
       "paint": {
        "color": "#FF1A1A1A",
-       "textSize": 42,
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -501,10 +501,10 @@
      {
       "op": "roundRect",
       "rect": [
-       200,
-       750,
-       313,
-       795
+       232,
+       754,
+       317,
+       790
       ],
       "rx": 22.5,
       "ry": 22.5,
@@ -515,9 +515,9 @@
      },
      {
       "op": "circle",
-      "cx": 287.5,
-      "cy": 772.5,
-      "r": 25.5,
+      "cx": 289,
+      "cy": 772,
+      "r": 30,
       "paint": {
        "color": "#FF006488",
        "antiAlias": true
@@ -526,11 +526,11 @@
      {
       "op": "text",
       "text": "Switch on",
-      "x": 42,
-      "y": 786,
+      "x": 41,
+      "y": 787,
       "paint": {
        "color": "#FF1A1A1A",
-       "textSize": 42,
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -541,23 +541,23 @@
      {
       "op": "roundRect",
       "rect": [
-       200,
-       821,
-       313,
-       866
+       216,
+       826,
+       300,
+       862
       ],
       "rx": 22.5,
       "ry": 22.5,
       "paint": {
-       "color": "#FFE0E0E0",
+       "color": "#FFB8B9BC",
        "antiAlias": true
       }
      },
      {
       "op": "circle",
-      "cx": 225.5,
-      "cy": 843.5,
-      "r": 22.5,
+      "cx": 242,
+      "cy": 844,
+      "r": 28,
       "paint": {
        "color": "#FFECECEC",
        "antiAlias": true
@@ -566,11 +566,11 @@
      {
       "op": "text",
       "text": "Switch off",
-      "x": 42,
-      "y": 857,
+      "x": 41,
+      "y": 858,
       "paint": {
        "color": "#FF1A1A1A",
-       "textSize": 42,
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -582,19 +582,19 @@
       "op": "circle",
       "cx": 83.5,
       "cy": 920.5,
-      "r": 22,
+      "r": 24,
       "paint": {
        "color": "#FF00668B",
        "antiAlias": true,
        "style": "stroke",
-       "strokeWidth": 5
+       "strokeWidth": 4
       }
      },
      {
       "op": "circle",
       "cx": 83.5,
       "cy": 920.5,
-      "r": 10,
+      "r": 14,
       "paint": {
        "color": "#FF00668B",
        "antiAlias": true
@@ -603,8 +603,8 @@
      {
       "op": "text",
       "text": "Radio A",
-      "x": 129,
-      "y": 933,
+      "x": 126,
+      "y": 937,
       "paint": {
        "color": "#FF1A1A1A",
        "textSize": 42,
@@ -619,19 +619,19 @@
       "op": "circle",
       "cx": 83.5,
       "cy": 1004.5,
-      "r": 22,
+      "r": 24,
       "paint": {
        "color": "#FF40484D",
        "antiAlias": true,
        "style": "stroke",
-       "strokeWidth": 3
+       "strokeWidth": 4
       }
      },
      {
       "op": "text",
       "text": "Radio B",
-      "x": 129,
-      "y": 1017,
+      "x": 126,
+      "y": 1021,
       "paint": {
        "color": "#FF1A1A1A",
        "textSize": 42,
@@ -688,8 +688,8 @@
      {
       "op": "text",
       "text": "Enter text",
-      "x": 42,
-      "y": 1153,
+      "x": 52,
+      "y": 1165,
       "paint": {
        "color": "#FF606061",
        "textSize": 47.5,
@@ -752,7 +752,7 @@
      {
       "op": "text",
       "text": "italic",
-      "x": 120,
+      "x": 124,
       "y": 1348,
       "paint": {
        "color": "#FF70777C",
@@ -767,7 +767,7 @@
      {
       "op": "text",
       "text": "normal",
-      "x": 217,
+      "x": 211,
       "y": 1348,
       "paint": {
        "color": "#FF70777C",

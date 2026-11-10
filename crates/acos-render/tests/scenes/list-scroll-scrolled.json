@@ -347,441 +347,476 @@
      1080,
      2400
     ],
-    "ops": [
+    "children": [
      {
-      "op": "text",
-      "text": "Row 7",
-      "x": 42,
-      "y": 354,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 5",
-      "x": 42,
-      "y": 445,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
+      "name": "selected",
+      "bounds": [
        42,
-       494,
+       317,
        1038,
-       497
+       368
       ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 6",
-      "x": 42,
-      "y": 574,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
+      "ops": [
+       {
+        "op": "text",
+        "text": "Nothing selected",
+        "x": 0,
+        "y": 38,
+        "paint": {
+         "color": "#FF70777C",
+         "textSize": 36.75,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
        }
-      }
+      ]
      },
      {
-      "op": "rect",
-      "rect": [
+      "name": "list",
+      "bounds": [
        42,
-       623,
+       368,
        1038,
-       626
+       2295
       ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 7",
-      "x": 42,
-      "y": 703,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
+      "clipToBounds": true,
+      "ops": [
+       {
+        "op": "text",
+        "text": "Row 12",
+        "x": 43,
+        "y": -7,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         40,
+         996,
+         43
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 13",
+        "x": 43,
+        "y": 122,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         169,
+         996,
+         172
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 14",
+        "x": 43,
+        "y": 251,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         298,
+         996,
+         301
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 15",
+        "x": 43,
+        "y": 380,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         427,
+         996,
+         430
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 16",
+        "x": 43,
+        "y": 509,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         556,
+         996,
+         559
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 17",
+        "x": 43,
+        "y": 638,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         685,
+         996,
+         688
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 18",
+        "x": 43,
+        "y": 767,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         814,
+         996,
+         817
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 19",
+        "x": 43,
+        "y": 896,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         943,
+         996,
+         946
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 20",
+        "x": 43,
+        "y": 1025,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1072,
+         996,
+         1075
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 21",
+        "x": 43,
+        "y": 1154,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1201,
+         996,
+         1204
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 22",
+        "x": 43,
+        "y": 1283,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1330,
+         996,
+         1333
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 23",
+        "x": 43,
+        "y": 1412,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1459,
+         996,
+         1462
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 24",
+        "x": 43,
+        "y": 1541,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1588,
+         996,
+         1591
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 25",
+        "x": 43,
+        "y": 1670,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1717,
+         996,
+         1720
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 26",
+        "x": 43,
+        "y": 1799,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1846,
+         996,
+         1849
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
+       },
+       {
+        "op": "text",
+        "text": "Row 27",
+        "x": 43,
+        "y": 1928,
+        "paint": {
+         "color": "#FF1A1A1A",
+         "textSize": 42,
+         "typeface": {
+          "family": "sans-serif",
+          "weight": 400,
+          "italic": false
+         }
+        }
+       },
+       {
+        "op": "rect",
+        "rect": [
+         0,
+         1975,
+         996,
+         1978
+        ],
+        "paint": {
+         "color": "#FFE4E5E7"
+        }
        }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       752,
-       1038,
-       755
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 8",
-      "x": 42,
-      "y": 832,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       881,
-       1038,
-       884
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 9",
-      "x": 42,
-      "y": 961,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1010,
-       1038,
-       1013
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 10",
-      "x": 42,
-      "y": 1090,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1139,
-       1038,
-       1142
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 11",
-      "x": 42,
-      "y": 1219,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1268,
-       1038,
-       1271
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 12",
-      "x": 42,
-      "y": 1348,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1397,
-       1038,
-       1400
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 13",
-      "x": 42,
-      "y": 1477,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1526,
-       1038,
-       1529
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 14",
-      "x": 42,
-      "y": 1606,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1655,
-       1038,
-       1658
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 15",
-      "x": 42,
-      "y": 1735,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1784,
-       1038,
-       1787
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 16",
-      "x": 42,
-      "y": 1864,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       1913,
-       1038,
-       1916
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 17",
-      "x": 42,
-      "y": 1993,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       2042,
-       1038,
-       2045
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 18",
-      "x": 42,
-      "y": 2122,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       2171,
-       1038,
-       2174
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
-     },
-     {
-      "op": "text",
-      "text": "Row 19",
-      "x": 42,
-      "y": 2251,
-      "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
-       "typeface": {
-        "family": "sans-serif",
-        "weight": 400,
-        "italic": false
-       }
-      }
-     },
-     {
-      "op": "rect",
-      "rect": [
-       42,
-       2300,
-       1038,
-       2303
-      ],
-      "paint": {
-       "color": "#FFE0E0E0",
-       "antiAlias": true
-      }
+      ]
      }
     ]
    }

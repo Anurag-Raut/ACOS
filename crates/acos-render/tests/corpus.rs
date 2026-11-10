@@ -76,37 +76,37 @@ const CASES: &[Case] = &[
     Case {
         app: "form-validation",
         reference: "fixtures/reference/form-validation/art-api34-x86_64/screenshot_initial.png",
-        max_mae: 1.3,
-        min_mean_ssim: 0.983,
-        max_differing: 3.0,
+        max_mae: 0.9,
+        min_mean_ssim: 0.987,
+        max_differing: 2.5,
     },
     Case {
         app: "form-validation-error",
         reference: "fixtures/reference/form-validation/art-api34-x86_64/screenshot_after_empty.png",
-        max_mae: 3.0,
-        min_mean_ssim: 0.968,
-        max_differing: 8.0,
+        max_mae: 1.45,
+        min_mean_ssim: 0.980,
+        max_differing: 3.5,
     },
     Case {
         app: "list-scroll",
         reference: "fixtures/reference/list-scroll/art-api34-x86_64/screenshot_initial.png",
-        max_mae: 4.0,
-        min_mean_ssim: 0.950,
-        max_differing: 5.5,
+        max_mae: 1.15,
+        min_mean_ssim: 0.984,
+        max_differing: 2.0,
     },
     Case {
         app: "list-scroll-scrolled",
         reference: "fixtures/reference/list-scroll/art-api34-x86_64/screenshot_scrolled.png",
-        max_mae: 5.0,
-        min_mean_ssim: 0.908,
-        max_differing: 8.0,
+        max_mae: 1.2,
+        min_mean_ssim: 0.984,
+        max_differing: 2.2,
     },
     Case {
         app: "text-input",
-        reference: "fixtures/reference/text-input/art-api34-x86_64/screenshot_typed.png",
-        max_mae: 5.5,
-        min_mean_ssim: 0.930,
-        max_differing: 7.0,
+        reference: "fixtures/reference/text-input/art-api34-x86_64/screenshot_initial.png",
+        max_mae: 0.9,
+        min_mean_ssim: 0.985,
+        max_differing: 2.0,
     },
     // W85-A: real AlertDialog geometry (28dp radius, #F0F0F3 panel), an
     // elevation shadow calibrated to the reference profile, scrim inserted on
@@ -122,11 +122,32 @@ const CASES: &[Case] = &[
     Case {
         app: "widget-gallery",
         reference: "fixtures/reference/widget-gallery/art-api34-x86_64/screenshot_initial.png",
-        max_mae: 4.0,
-        min_mean_ssim: 0.948,
-        max_differing: 6.5,
+        max_mae: 2.4,
+        min_mean_ssim: 0.965,
+        max_differing: 4.5,
     },
 ];
+
+/// Blank the SystemUI chrome bands (status bar `0..128`, navigation bar
+/// `2337..2400` at 1080x2400) in both images so the app-renderer SSIM is not
+/// charged for the clock/wifi/battery or the gesture-pill shade. Both images
+/// get the same constant, so the masked region contributes a perfect 1.0.
+fn mask_systemui(img: &mut image::DecodedImage) {
+    const STATUS_H: usize = 128;
+    const NAV_TOP: usize = 2337;
+    let w = img.width as usize;
+    let h = img.height as usize;
+    if w == 0 {
+        return;
+    }
+    for (y0, y1) in [(0usize, STATUS_H), (NAV_TOP, h)] {
+        let a = y0.min(h) * w;
+        let b = y1.min(h) * w;
+        if a < b {
+            img.pixels[a..b].fill(0);
+        }
+    }
+}
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -179,8 +200,18 @@ fn fixture_scenes_match_art_reference() {
         let got = image::decode_png(&candidate_bytes).expect("decode candidate");
         let report = diff::diff(&reference, &got, &diff::DiffOptions::default()).expect("diff");
 
+        // SystemUI chrome (clock/wifi/battery in the status bar, the gesture
+        // pill in the nav bar) is not drawn by the app and differs between
+        // capture sessions; mask it out and report the app-only SSIM too.
+        let mut masked_ref = reference.clone();
+        let mut masked_got = got.clone();
+        mask_systemui(&mut masked_ref);
+        mask_systemui(&mut masked_got);
+        let masked = diff::diff(&masked_ref, &masked_got, &diff::DiffOptions::default())
+            .expect("masked diff");
+
         eprintln!(
-            "{:<14} mean={:.4} rmse={:.4} psnr={:.2} differing={:.3}% ssim(mean={:.4} global={:.4}) blocks={:.2}%",
+            "{:<14} mean={:.4} rmse={:.4} psnr={:.2} differing={:.3}% ssim(mean={:.4} global={:.4} masked={:.4}) blocks={:.2}%",
             case.app,
             report.mean_abs_error,
             report.rmse,
@@ -188,6 +219,7 @@ fn fixture_scenes_match_art_reference() {
             report.differing_fraction * 100.0,
             report.mean_ssim,
             report.global_ssim,
+            masked.mean_ssim,
             report.blocks.changed_fraction * 100.0,
         );
 
@@ -206,6 +238,8 @@ fn fixture_scenes_match_art_reference() {
             "differingFraction": report.differing_fraction,
             "meanSsim": report.mean_ssim,
             "globalSsim": report.global_ssim,
+            "maskedMeanSsim": masked.mean_ssim,
+            "maskedMae": masked.mean_abs_error,
             "blocksChangedFraction": report.blocks.changed_fraction,
             "changedBbox": report.changed_bbox,
             "thresholds": {

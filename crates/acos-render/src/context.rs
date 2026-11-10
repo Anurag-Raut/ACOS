@@ -40,6 +40,41 @@ fn force_text_path() -> bool {
     *FLAG.get_or_init(|| std::env::var_os("ACOS_RENDER_FORCE_TEXT_PATH").is_some())
 }
 
+/// Number of subpixel buckets per pixel for horizontal glyph positioning.
+/// `ACOS_TEXT_SUBPIXEL` selects it (`0` = integer pen, the default). Android's
+/// Canvas path positions glyphs on a fractional pen, and the 4/16-bucket sweep
+/// in W90-A measured a small corpus gain (`list-scroll` +0.0011), but it
+/// regressed the `text_coverage` per-glyph golden (0.0243 > 0.020), so the
+/// integer pen stays the shipped default and the knob remains for experiments.
+fn text_subpixel_steps() -> u32 {
+    static STEPS: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *STEPS.get_or_init(|| {
+        std::env::var("ACOS_TEXT_SUBPIXEL")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0)
+            .min(64)
+    })
+}
+
+/// Split a fractional pen x into its integer pixel and the subpixel offset
+/// handed to FreeType. With `ACOS_TEXT_SUBPIXEL=0` this is a plain round, the
+/// pre-subpixel behaviour.
+fn split_subpixel(pen_x: f32) -> (i32, f32) {
+    let steps = text_subpixel_steps();
+    if steps == 0 || !pen_x.is_finite() {
+        return (pen_x.round() as i32, 0.0);
+    }
+    let base = pen_x.floor();
+    let mut bucket = ((pen_x - base) * steps as f32).round() as i64;
+    let mut int = base;
+    if bucket >= steps as i64 {
+        bucket -= steps as i64;
+        int += 1.0;
+    }
+    (int as i32, bucket as f32 / steps as f32)
+}
+
 /// Node properties snapshotted for rendering (avoids holding a borrow on the
 /// node table while rasterising).
 #[derive(Clone)]
@@ -1867,19 +1902,22 @@ impl RenderContext {
                     crate::text::effective_variations(&run.font, &style.variations);
                 let run_coords = crate::text::freetype::VariationCoords::new(&run_variations);
                 for g in &run.glyphs {
-                    match crate::text::freetype::rasterize_coords(
+                    let gx = pen_x + g.x_offset;
+                    // Android (Skia) positions Canvas text on a subpixel grid:
+                    // the integer part selects the pixel and the fractional
+                    // part is baked into the rasterised mask. `steps == 0`
+                    // reproduces the legacy integer-pen behaviour.
+                    let (pen_int, subpixel_x) = split_subpixel(ts.tx + gx);
+                    match crate::text::freetype::rasterize_subpixel_coords(
                         &run.font,
                         g.glyph_id,
                         style.size,
                         &run_coords,
+                        subpixel_x,
                     ) {
                         Some(mask) if !mask.is_empty() => {
-                            // Android's unhinted grid places each mask on an
-                            // integer pixel; the accumulated advances stay
-                            // fractional (matching the PoC's `hb_nohint`).
-                            let gx = pen_x + g.x_offset;
                             let gy = y + g.y_offset - style.skew_x * pen_x;
-                            let dev_x = (ts.tx + gx).round() as i32 + mask.left;
+                            let dev_x = pen_int + mask.left;
                             let dev_y = (ts.ty + gy).round() as i32 - mask.top;
                             placed.push((mask, dev_x, dev_y));
                         }

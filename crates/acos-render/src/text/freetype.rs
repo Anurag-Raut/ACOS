@@ -129,6 +129,23 @@ struct MaskKey {
     /// The variable-font instance, so masks for different weights/styles are
     /// cached separately (ADR-0019 `T-33`).
     variations: VariationCoords,
+    /// Horizontal subpixel pen offset quantised to 1/64 px (`0..=63`), so a
+    /// glyph rendered at a fractional pen position is cached separately from
+    /// the same glyph at an integer position.
+    subpixel: u8,
+    /// FreeType load target (`0` = no hinting, `1` = `FT_LOAD_TARGET_LIGHT`).
+    hint: u8,
+}
+
+/// FreeType load target selected by `ACOS_TEXT_HINT` (`none` default, `light`
+/// for `FT_LOAD_TARGET_LIGHT`). Android's rasteriser is normally the light
+/// target; the fidelity corpus measures both instead of assuming.
+fn text_hint_target() -> u8 {
+    static HINT: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
+    *HINT.get_or_init(|| match std::env::var("ACOS_TEXT_HINT").as_deref() {
+        Ok("light") | Ok("slight") => 1,
+        _ => 0,
+    })
 }
 
 struct Rasterizer {
@@ -203,6 +220,8 @@ impl Rasterizer {
         glyph_id: u16,
         char_size: i64,
         variations: &VariationCoords,
+        subpixel: u8,
+        hint: u8,
     ) -> Option<GlyphMask> {
         let library = self.library;
         let face = self.face_for(file)?;
@@ -263,13 +282,36 @@ impl Rasterizer {
             return None;
         }
 
-        // SAFETY: `face.raw` is live. `FT_LOAD_NO_HINTING` matches Android's
-        // unhinted grayscale rasterisation; `FT_LOAD_RENDER` asks FreeType to
-        // render the glyph into `glyph.bitmap` in the same call. `FT_LOAD_COLOR`
-        // asks FreeType to synthesise a premultiplied BGRA bitmap for a colour
-        // glyph (COLRv0/CPAL, CBDT/CBLC, sbix); it is a no-op for ordinary
-        // outline glyphs, which stay grayscale A8.
-        let flags = ft::FT_LOAD_NO_HINTING | ft::FT_LOAD_RENDER | ft::FT_LOAD_COLOR;
+        // Subpixel positioning: translate the unhinted outline by the
+        // fractional pen offset before rasterising, exactly the mechanism
+        // Skia's FreeType scaler uses when `kSubpixelPositioning` is set. A
+        // null matrix keeps the size; only the 26.6 delta is applied. The
+        // transform is re-set on every load (including a zero delta) so it
+        // never leaks between glyphs.
+        // `subpixel` is a 1/64-px bucket in 26.6 units (1 unit = 1/64 px), so
+        // the delta is the bucket value directly. Bitmap strikes keep an
+        // integer position (a translate would be resampled away below).
+        let mut delta = ft::FT_Vector {
+            x: if scalable { subpixel as ft::FT_Pos } else { 0 },
+            y: 0,
+        };
+        // SAFETY: `face.raw` is live; FT_Set_Transform only mutates the face's
+        // transform and returns void.
+        unsafe { ft::FT_Set_Transform(face.raw, ptr::null_mut(), &mut delta) };
+
+        // SAFETY: `face.raw` is live. `FT_LOAD_RENDER` asks FreeType to render
+        // the glyph into `glyph.bitmap` in the same call. `FT_LOAD_COLOR` asks
+        // it to synthesise a premultiplied BGRA bitmap for a colour glyph
+        // (COLRv0/CPAL, CBDT/CBLC, sbix); it is a no-op for ordinary outline
+        // glyphs, which stay grayscale A8. `hint` selects the rasteriser:
+        // unhinted (the historical / PoC-measured best) or `TARGET_LIGHT`
+        // (vertical-only hinting, Android's `SkPaint` default).
+        let target = if hint == 1 {
+            ft::FT_LOAD_TARGET_LIGHT
+        } else {
+            ft::FT_LOAD_NO_HINTING
+        };
+        let flags = target | ft::FT_LOAD_RENDER | ft::FT_LOAD_COLOR;
         let err = unsafe { ft::FT_Load_Glyph(face.raw, glyph_id as ft::FT_UInt, flags) };
         if err != 0 {
             return None;
@@ -465,6 +507,22 @@ pub fn rasterize_coords(
     size_px: f32,
     variations: &VariationCoords,
 ) -> Option<Arc<GlyphMask>> {
+    rasterize_subpixel_coords(font, glyph_id, size_px, variations, 0.0)
+}
+
+/// [`rasterize_coords`] with a horizontal subpixel pen offset in pixels
+/// (`subpixel_x` in `0.0..1.0`). The offset is quantised to 1/64 px, applied to
+/// the unhinted outline with `FT_Set_Transform`, and included in the mask cache
+/// key — the FreeType analogue of Skia's `kSubpixelPositioning` grid.
+/// `subpixel_x == 0.0` is exactly the integer-pen path [`rasterize_coords`]
+/// uses.
+pub fn rasterize_subpixel_coords(
+    font: &FontRef,
+    glyph_id: u16,
+    size_px: f32,
+    variations: &VariationCoords,
+    subpixel_x: f32,
+) -> Option<Arc<GlyphMask>> {
     if !size_px.is_finite() || size_px <= 0.0 {
         return None;
     }
@@ -472,11 +530,18 @@ pub fn rasterize_coords(
     if char_size <= 0 {
         return None;
     }
+    let subpixel = if subpixel_x.is_finite() {
+        ((subpixel_x.rem_euclid(1.0)) * 64.0).round().clamp(0.0, 63.0) as u8
+    } else {
+        0
+    };
     let key = MaskKey {
         font_id: font.file.id,
         glyph_id,
         char_size,
         variations: variations.clone(),
+        subpixel,
+        hint: text_hint_target(),
     };
     let mut guard = rasterizer()?.lock().ok()?;
     if let Some(cached) = guard.masks.get(&key) {
@@ -488,6 +553,8 @@ pub fn rasterize_coords(
         glyph_id,
         char_size,
         &variation_coords,
+        key.subpixel,
+        key.hint,
     )?);
     if guard.masks.len() >= MASK_CACHE_CAPACITY {
         guard.masks.clear();

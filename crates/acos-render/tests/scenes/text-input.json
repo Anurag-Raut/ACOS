@@ -350,11 +350,11 @@
     "ops": [
      {
       "op": "text",
-      "text": "Hello",
-      "x": 42,
-      "y": 379,
+      "text": "Type something",
+      "x": 50,
+      "y": 392,
       "paint": {
-       "color": "#FF1A1A1A",
+       "color": "#99000000",
        "textSize": 47.5,
        "typeface": {
         "family": "sans-serif",
@@ -387,7 +387,7 @@
       "rx": 10,
       "ry": 10,
       "paint": {
-       "color": "#FFE7E7EA",
+       "color": "#FFD6D7D7",
        "antiAlias": true
       }
      },
@@ -395,7 +395,7 @@
       "op": "text",
       "text": "Save",
       "x": 157.5,
-      "y": 513,
+      "y": 511,
       "paint": {
        "color": "#FF1A1A1A",
        "textSize": 36.75,
@@ -411,10 +411,10 @@
       "op": "text",
       "text": "Nothing saved yet",
       "x": 42,
-      "y": 596,
+      "y": 599,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,

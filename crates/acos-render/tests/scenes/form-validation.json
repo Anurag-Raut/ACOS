@@ -351,8 +351,8 @@
      {
       "op": "text",
       "text": "Name",
-      "x": 42,
-      "y": 379,
+      "x": 52,
+      "y": 393,
       "paint": {
        "color": "#FF606061",
        "textSize": 47.5,
@@ -379,8 +379,8 @@
      {
       "op": "text",
       "text": "Email",
-      "x": 42,
-      "y": 497,
+      "x": 52,
+      "y": 512,
       "paint": {
        "color": "#FF606061",
        "textSize": 47.5,

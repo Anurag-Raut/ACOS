@@ -351,8 +351,8 @@
      {
       "op": "text",
       "text": "Name",
-      "x": 42,
-      "y": 379,
+      "x": 52,
+      "y": 393,
       "paint": {
        "color": "#FF606061",
        "textSize": 47.5,
@@ -379,8 +379,8 @@
      {
       "op": "text",
       "text": "Email",
-      "x": 42,
-      "y": 497,
+      "x": 52,
+      "y": 512,
       "paint": {
        "color": "#FF606061",
        "textSize": 47.5,
@@ -439,10 +439,10 @@
       "op": "text",
       "text": "Name is required",
       "x": 42,
-      "y": 719,
+      "y": 717,
       "paint": {
-       "color": "#FF1A1A1A",
-       "textSize": 42,
+       "color": "#FF70777C",
+       "textSize": 36.75,
        "typeface": {
         "family": "sans-serif",
         "weight": 400,
@@ -453,33 +453,33 @@
      {
       "op": "roundRect",
       "rect": [
-       258,
-       1780,
-       762,
-       1876
+       313,
+       2096,
+       766,
+       2210
       ],
       "rx": 48,
       "ry": 48,
       "paint": {
-       "color": "#FFF7F2F7",
+       "color": "#FFF8F9FC",
        "antiAlias": true
       }
      },
      {
       "op": "circle",
-      "cx": 322,
-      "cy": 1828,
+      "cx": 386,
+      "cy": 2152,
       "r": 30,
       "paint": {
-       "color": "#FF3B6EA5",
+       "color": "#FF00668B",
        "antiAlias": true
       }
      },
      {
       "op": "text",
       "text": "Name is required",
-      "x": 372,
-      "y": 1843,
+      "x": 444,
+      "y": 2166,
       "paint": {
        "color": "#FF1A1A1A",
        "textSize": 36.75,
