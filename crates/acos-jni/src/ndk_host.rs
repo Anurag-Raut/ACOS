@@ -40,8 +40,11 @@ use acos_native_loader::{
 use acos_vm::natives::ndk_substrate as substrate;
 use acos_vm::{JavaValue, Vm};
 
-/// `mNativePtr` on `android.content.res.AssetManager` / `android.graphics.Bitmap`.
+/// `mNativePtr` on `android.graphics.Bitmap`.
 const NATIVE_PTR_FIELD: &str = "mNativePtr";
+/// `mObject` on `android.content.res.AssetManager` (the API 34 field holding
+/// the `nativeCreate` handle).
+const ASSET_MANAGER_FIELD: &str = "mObject";
 /// `mNativeObject` on `android.view.Surface` (and `SurfaceControl`).
 const NATIVE_OBJECT_FIELD: &str = "mNativeObject";
 
@@ -275,8 +278,12 @@ pub fn install_forced() {
 impl NdkHost for ProductionNdkHost {
     // --- assets ----------------------------------------------------------
     fn asset_manager_from_java(&self, _env: usize, manager: usize) -> NdkResult<u64> {
-        let ptr = read_native_handle(manager, NATIVE_PTR_FIELD)
-            .ok_or("AAssetManager_fromJava: object has no readable mNativePtr")?;
+        // API 34 moved the `nativeCreate` handle to `mObject`; accept both so a
+        // framework build using either name resolves. The manager registry is
+        // the real `fwk_res` engine table, so the handle must be live.
+        let ptr = read_native_handle(manager, ASSET_MANAGER_FIELD)
+            .or_else(|| read_native_handle(manager, NATIVE_PTR_FIELD))
+            .ok_or("AAssetManager_fromJava: object has no readable native handle")?;
         if !substrate::asset_manager_exists(ptr) {
             return Err(format!(
                 "AAssetManager_fromJava: mNativePtr {ptr:#x} is not a live AssetManager"

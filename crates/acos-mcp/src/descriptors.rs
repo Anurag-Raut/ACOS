@@ -284,9 +284,10 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "native": {
                     "type": "boolean",
                     "description": "Run the APK's lib/<abi>/*.so under the ADR-0022 confinement. \
-                                    The server process must already be confined; otherwise \
-                                    the first System.loadLibrary fails closed with \
-                                    CONFINEMENT_UNAVAILABLE."
+                                    The multi-threaded MCP server re-execs a fresh, \
+                                    single-threaded child session process that enters the \
+                                    sandbox before launching; later observe/action calls are \
+                                    proxied to that confined child."
                 }
             })),
         ),

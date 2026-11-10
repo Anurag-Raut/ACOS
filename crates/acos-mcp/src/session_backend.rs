@@ -17,6 +17,10 @@
 //! new one. This mirrors the CLI's process-local session.
 
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -50,6 +54,12 @@ pub struct SessionBackend {
     cli: CliBackend,
     sessions: Mutex<HashMap<String, AgentSession>>,
     limits: SessionOptions,
+    /// Confined child MCP servers holding native sessions (one per session id).
+    native_children: Mutex<HashMap<String, ConfinedChild>>,
+    /// The `acos-mcp` binary to re-exec as a confined child.
+    child_binary: PathBuf,
+    /// Monotonic counter for per-child VFS roots.
+    next_child: AtomicU64,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -70,6 +80,9 @@ impl SessionBackend {
             cli: CliBackend::new(config),
             sessions: Mutex::new(HashMap::new()),
             limits,
+            native_children: Mutex::new(HashMap::new()),
+            child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
+            next_child: AtomicU64::new(0),
         }
     }
 
@@ -79,7 +92,17 @@ impl SessionBackend {
             cli,
             sessions: Mutex::new(HashMap::new()),
             limits,
+            native_children: Mutex::new(HashMap::new()),
+            child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
+            next_child: AtomicU64::new(0),
         }
+    }
+
+    /// Override the binary re-exec'd as the confined native session child.
+    #[must_use]
+    pub fn with_native_child_binary(mut self, path: PathBuf) -> Self {
+        self.child_binary = path;
+        self
     }
 
     /// The CLI backend used for non-session commands.
@@ -98,6 +121,86 @@ impl SessionBackend {
     fn remove_session(&self, id: &str) -> bool {
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.remove(id).is_some()
+    }
+
+    /// Whether `id` is held by a confined child process.
+    fn has_native_child(&self, id: &str) -> bool {
+        self.native_children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(id)
+    }
+
+    /// Forward one session tool call to the confined child that holds `id`.
+    fn forward_native(&self, id: &str, tool: &str, args: &Value) -> Option<Envelope> {
+        let mut children = self.native_children.lock().unwrap_or_else(|e| e.into_inner());
+        let child = children.get_mut(id)?;
+        Some(child.call_tool(tool, args))
+    }
+
+    /// Drop a confined child, returning whether one existed.
+    fn remove_native_child(&self, id: &str) -> bool {
+        let mut children = self.native_children.lock().unwrap_or_else(|e| e.into_inner());
+        children.remove(id).is_some_and(|mut child| {
+            child.shutdown();
+            true
+        })
+    }
+
+    /// Launch a native session in a freshly re-exec'd, confined child process.
+    ///
+    /// The child enters the ADR-0022 sandbox before it creates any thread, then
+    /// runs the session commands over the MCP stdio protocol. This process keeps
+    /// the child (and therefore the session and its `FrameStore`) alive for
+    /// later `acos_observe`/`acos_action`/... calls.
+    fn launch_native_child(
+        &self,
+        request_id: &str,
+        id: &str,
+        apk: &std::path::Path,
+        limits: &SessionOptions,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let _ = self.remove_native_child(id);
+        let _ = self.remove_session(id);
+
+        let root = native_session_root(self.next_child.fetch_add(1, Ordering::SeqCst));
+        if let Err(e) = std::fs::create_dir_all(root.join("data/user/0")) {
+            return native_child_error(
+                request_id,
+                id,
+                "CONFINEMENT_UNAVAILABLE",
+                &format!("cannot create native session root {}: {e}", root.display()),
+            );
+        }
+        let mut read_only: Vec<PathBuf> = ctx.allowed_roots.clone();
+        if let Some(boot) = native_boot_root() {
+            read_only.push(boot);
+        }
+        if let Some(parent) = apk.parent() {
+            read_only.push(parent.to_path_buf());
+        }
+
+        let mut child = match ConfinedChild::spawn(&self.child_binary, &root, &read_only) {
+            Ok(child) => child,
+            Err(e) => {
+                return native_child_error(request_id, id, "CONFINEMENT_UNAVAILABLE", &e);
+            }
+        };
+        let launch_args = json!({
+            "apk": apk.display().to_string(),
+            "native": true,
+            "timeout_ms": limits.wall_secs.saturating_mul(1000),
+            "base": {"request_id": request_id, "session_id": id},
+        });
+        let envelope = child.call_tool("acos_launch", &launch_args);
+        // Keep the child even when the ladder is blocked: the native evidence
+        // (FrameStore) is still live and `acos_observe` must see it.
+        self.native_children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.to_string(), child);
+        envelope
     }
 
     fn call_run(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
@@ -119,9 +222,13 @@ impl SessionBackend {
         }
         // Opt-in native code (`acos_launch { native: true }`). The JNI loader
         // requires an active process confinement and fails closed with
-        // `CONFINEMENT_UNAVAILABLE` otherwise; this server never enters a
-        // sandbox mid-flight.
+        // `CONFINEMENT_UNAVAILABLE` otherwise. This server is multi-threaded and
+        // cannot enter seccomp itself, so it re-execs a confined child session
+        // process instead of failing (or confining mid-flight).
         limits.native = args.get("native").and_then(Value::as_bool).unwrap_or(false);
+        if limits.native && !acos_sandbox::confinement_active() {
+            return self.launch_native_child(request_id, &id, &apk, &limits, ctx);
+        }
         // Replace any prior session for this id so a second launch is a clean
         // task (the process-global transport/surface seams tolerate only one
         // live runtime).
@@ -147,6 +254,11 @@ impl SessionBackend {
 
     fn call_observe(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_observe", args) {
+                return env;
+            }
+        }
         let tree = args.get("tree").and_then(Value::as_bool).unwrap_or(true);
         let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
         self.with_session(&id, |session| {
@@ -199,6 +311,11 @@ impl SessionBackend {
         _ctx: &CallContext,
     ) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_observe_tree", args) {
+                return env;
+            }
+        }
         let max_nodes = args
             .get("max_nodes")
             .and_then(Value::as_u64)
@@ -239,6 +356,11 @@ impl SessionBackend {
 
     fn call_action(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_action", args) {
+                return env;
+            }
+        }
         let action = args.get("action").cloned().unwrap_or(Value::Null);
         let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
         self.with_session(&id, |session| match kind {
@@ -295,6 +417,11 @@ impl SessionBackend {
 
     fn call_reset(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_reset", args) {
+                return env;
+            }
+        }
         self.with_session(&id, |session| match session.reset() {
             Ok(state) => Envelope::pass(
                 request_id,
@@ -318,7 +445,9 @@ impl SessionBackend {
 
     fn call_destroy(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
-        let destroyed = self.remove_session(&id);
+        let local = self.remove_session(&id);
+        let native = self.remove_native_child(&id);
+        let destroyed = local || native;
         Envelope::pass(
             request_id,
             ProtocolBackend::AcosNative,
@@ -362,6 +491,11 @@ impl SessionBackend {
 
     fn call_logs(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_logs", args) {
+                return env;
+            }
+        }
         self.with_session(&id, |session| match session.logs() {
             Ok(lines) => {
                 let records: Vec<Value> = lines
@@ -395,6 +529,11 @@ impl SessionBackend {
 
     fn call_status(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.has_native_child(&id) {
+            if let Some(env) = self.forward_native(&id, "acos_status", args) {
+                return env;
+            }
+        }
         self.with_session(&id, |session| match session.status() {
             Ok(state) => Envelope::pass(
                 request_id,
@@ -671,6 +810,190 @@ fn unsupported(request_id: &str, capability: &str, message: &str) -> Envelope {
             .with_details(json!({"capability": capability})),
         Metrics::wall_ms(0),
     )
+}
+
+/// A re-exec'd `acos-mcp --confined-child` process that owns one native
+/// session. It entered the ADR-0022 confinement before creating any thread, so
+/// the JNI loader's `confinement_active()` gate is satisfied.
+struct ConfinedChild {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    next_id: i64,
+    /// The VFS root created for this child (removed on shutdown).
+    root: PathBuf,
+}
+
+impl ConfinedChild {
+    /// Spawn and initialize a confined child with the given VFS root and read
+    /// roots. The child confines itself before serving.
+    fn spawn(
+        binary: &std::path::Path,
+        read_write: &std::path::Path,
+        read_only: &[PathBuf],
+    ) -> Result<Self, String> {
+        let mut command = Command::new(binary);
+        command.arg("--confined-child").arg("--rw").arg(read_write);
+        for path in read_only {
+            command.arg("--ro").arg(path);
+        }
+        command
+            .env("ACOS_MCP_QUIET", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        let mut child = command.spawn().map_err(|e| {
+            format!(
+                "spawn confined child {}: {e}",
+                binary.display()
+            )
+        })?;
+        let stdin = child.stdin.take().ok_or("confined child has no stdin")?;
+        let stdout = child.stdout.take().ok_or("confined child has no stdout")?;
+        let mut this = ConfinedChild {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout),
+            next_id: 0,
+            root: read_write.to_path_buf(),
+        };
+        this.request(
+            "initialize",
+            json!({
+                "protocolVersion": crate::LATEST_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "acos-mcp-parent", "version": crate::SERVER_VERSION},
+            }),
+        )?;
+        this.notify("notifications/initialized", json!({}));
+        Ok(this)
+    }
+
+    fn notify(&mut self, method: &str, params: Value) {
+        let frame = json!({"jsonrpc": "2.0", "method": method, "params": params});
+        let _ = writeln!(self.stdin, "{frame}");
+        let _ = self.stdin.flush();
+    }
+
+    fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        self.next_id += 1;
+        let id = self.next_id;
+        let frame = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+        writeln!(self.stdin, "{frame}").map_err(|e| format!("write to confined child: {e}"))?;
+        self.stdin
+            .flush()
+            .map_err(|e| format!("flush confined child: {e}"))?;
+        loop {
+            let mut line = String::new();
+            let n = self
+                .stdout
+                .read_line(&mut line)
+                .map_err(|e| format!("read from confined child: {e}"))?;
+            if n == 0 {
+                return Err("confined child closed stdout".to_string());
+            }
+            let value: Value = serde_json::from_str(&line)
+                .map_err(|e| format!("confined child sent invalid JSON: {e}"))?;
+            if value.get("id").and_then(Value::as_i64) == Some(id) {
+                return Ok(value);
+            }
+        }
+    }
+
+    fn call_tool(&mut self, name: &str, args: &Value) -> Envelope {
+        let request_id = request_id(args);
+        let id = session_id(args);
+        let response = match self.request(
+            "tools/call",
+            json!({"name": name, "arguments": args}),
+        ) {
+            Ok(response) => response,
+            Err(e) => return native_child_error(&request_id, &id, "INTERNAL", &e),
+        };
+        let envelope = response
+            .pointer("/result/structuredContent")
+            .cloned()
+            .or_else(|| {
+                response
+                    .pointer("/result/content/0/text")
+                    .and_then(Value::as_str)
+                    .and_then(|text| serde_json::from_str(text).ok())
+            });
+        match envelope.map(serde_json::from_value::<Envelope>) {
+            Some(Ok(envelope)) => envelope,
+            Some(Err(e)) => {
+                native_child_error(&request_id, &id, "INTERNAL", &format!("bad child envelope: {e}"))
+            }
+            None => native_child_error(
+                &request_id,
+                &id,
+                "INTERNAL",
+                "confined child returned no ACOS envelope",
+            ),
+        }
+    }
+
+    fn shutdown(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+fn native_child_error(
+    request_id: &str,
+    session_id: &str,
+    code: &str,
+    message: &str,
+) -> Envelope {
+    let code = ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal);
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(code, message.to_string()),
+        Metrics::wall_ms(0),
+    )
+    .with_session_id(session_id.to_string())
+}
+
+/// The VFS root for one native child. `ACOS_SESSION_ROOT` wins so a caller can
+/// pin it; otherwise a deterministic per-child path is used.
+fn native_session_root(seq: u64) -> PathBuf {
+    if let Some(root) = std::env::var_os("ACOS_SESSION_ROOT") {
+        return PathBuf::from(root);
+    }
+    std::env::temp_dir().join(format!("acos-mcp-native-{}-{seq}", std::process::id()))
+}
+
+/// The boot-classpath cache directory (`ACOS_BOOT_DIR`, then walking up from
+/// the working directory, then `~/.cache/acos/boot/android-34`). Mirrors
+/// `acos_vm::default_boot_dir` so the child's Landlock rule names the real
+/// resolved tree.
+fn native_boot_root() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("ACOS_BOOT_DIR") {
+        let path = PathBuf::from(dir);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        let candidate = dir.join(".cache/boot/android-34");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let candidate = PathBuf::from(home).join(".cache/acos/boot/android-34");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

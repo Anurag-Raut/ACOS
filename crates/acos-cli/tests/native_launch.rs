@@ -90,13 +90,12 @@ fn native_hello_loads_and_runs_apk_library() {
         "native String must reach Java; events: {events:#?}\nerror: {:#?}",
         value["error"]
     );
-    // The AAssetManager path is exercised. The product runtime does not yet
-    // register the app APK's AssetManager native handle, so the fixture reports
-    // `asset=no-manager`; the byte semantics of `AAssetManager_*` themselves are
-    // asserted by `crates/acos-native-loader/tests/ndk.rs` against a live host.
+    // The app's AssetManager `mObject` handle is registered by the real
+    // `nativeCreate`, so `AAssetManager_fromJava` resolves the live fwk_res
+    // manager and the native code reads the APK's `assets/hello.txt` bytes.
     assert!(
-        has("asset="),
-        "the AAssetManager code path must run; events: {events:#?}"
+        has("asset=hello-acos!!"),
+        "AAsset_read must return the APK asset bytes; events: {events:#?}"
     );
     assert!(
         has("bitmapPixels=12"),
@@ -105,6 +104,17 @@ fn native_hello_loads_and_runs_apk_library() {
     assert!(
         has("bitmapPixel11=ff112233"),
         "Java Bitmap.getPixel must see the native pixels; events: {events:#?}"
+    );
+    // Java passed a real Surface; the native ANativeWindow lock/fill/post went
+    // through the production NDK host into the compositor's FrameStore.
+    assert!(
+        has("frame=1"),
+        "ANativeWindow_unlockAndPost must publish a frame; events: {events:#?}"
+    );
+    assert_eq!(
+        stage_status(&value, "first_frame"),
+        "ok",
+        "a FrameStore frame must be observable through the frame API; events: {events:#?}"
     );
 
     // `Application.onCreate` ran, so the native bridge works even though the

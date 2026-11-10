@@ -88,6 +88,7 @@ version = "0.1.0"
 dependencies = [
  "acos-protocol",
  "acos-runtime",
+ "acos-sandbox",
  "libc",
  "serde",
  "serde_json",

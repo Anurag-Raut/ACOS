@@ -14,6 +14,8 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <android/bitmap.h>
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -79,4 +81,48 @@ Java_dev_acos_fixtures_nativehello_NativeHelloApp_fillBitmap(JNIEnv *env, jobjec
         return -3;
     }
     return (jint) (info.width * info.height);
+}
+
+/*
+ * Java passes a real `android.view.Surface` (wrapping a SurfaceControl layer).
+ * `ANativeWindow_fromSurface` resolves `Surface.mNativeObject` through the
+ * production NDK host; `unlockAndPost` submits the RGBA8888 buffer to the
+ * compositor's FrameStore, so `acos observe` sees a completed frame.
+ */
+JNIEXPORT jint JNICALL
+Java_dev_acos_fixtures_nativehello_NativeHelloApp_postFrame(JNIEnv *env, jobject thiz, jobject surface) {
+    (void) thiz;
+    if (surface == NULL) {
+        return -1;
+    }
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    if (window == NULL) {
+        return -2;
+    }
+    if (ANativeWindow_setBuffersGeometry(window, 8, 4, WINDOW_FORMAT_RGBA_8888) != 0) {
+        ANativeWindow_release(window);
+        return -3;
+    }
+    ANativeWindow_Buffer buffer;
+    memset(&buffer, 0, sizeof(buffer));
+    if (ANativeWindow_lock(window, &buffer, NULL) != 0) {
+        ANativeWindow_release(window);
+        return -4;
+    }
+    uint8_t *base = (uint8_t *) buffer.bits;
+    for (int32_t y = 0; y < buffer.height; y++) {
+        for (int32_t x = 0; x < buffer.width; x++) {
+            uint8_t *p = base + (size_t) y * (size_t) buffer.stride * 4 + (size_t) x * 4;
+            p[0] = (uint8_t) (x * 16);
+            p[1] = (uint8_t) (y * 32);
+            p[2] = 0x7f;
+            p[3] = 0xff;
+        }
+    }
+    if (ANativeWindow_unlockAndPost(window) != 0) {
+        ANativeWindow_release(window);
+        return -5;
+    }
+    ANativeWindow_release(window);
+    return 1;
 }
