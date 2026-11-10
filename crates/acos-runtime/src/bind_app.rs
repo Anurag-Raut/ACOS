@@ -83,20 +83,34 @@ pub fn deliver_bind_application(
     vm: &mut Vm,
     activity_thread: Handle,
     app: &AppInfo,
+    providers: &[(String, String)],
 ) -> Result<Handle, BindAppError> {
     let thread = app_thread(vm, activity_thread)?;
 
     // ApplicationInfo is materialised by the same code the PMS reply path uses.
     let info = pms_java::application_info(vm, app).map_err(BindAppError::Materialize)?;
 
-    // ProviderInfoList.fromList(new ArrayList()) — `bindApplication` calls
-    // `providerList.getList()` unconditionally, so this must not be null.
-    let providers = vm.new_instance_ctor("java.util.ArrayList", "()V", &[])?;
+    // `ProviderInfoList.fromList(list)` — `handleBindApplication` calls
+    // `providerList.getList()` unconditionally, so this must not be null. Each
+    // entry is a real `ProviderInfo` for a provider the app declares; the real
+    // `ActivityThread.installContentProviders` then instantiates the provider
+    // class and reports it through `AMS.publishContentProviders`.
+    let providers_list = vm.new_instance_ctor("java.util.ArrayList", "()V", &[])?;
+    for (class, authority) in providers {
+        let provider = crate::ams_java::app_provider_info(vm, &app.package_name, class, authority)
+            .map_err(BindAppError::Materialize)?;
+        vm.call_method(
+            providers_list,
+            "add",
+            "(Ljava/lang/Object;)Z",
+            &[JavaValue::Object(provider)],
+        )?;
+    }
     let provider_list = obj(vm.call_static(
         "android.content.pm.ProviderInfoList",
         "fromList",
         "(Ljava/util/List;)Landroid/content/pm/ProviderInfoList;",
-        &[JavaValue::Object(providers)],
+        &[JavaValue::Object(providers_list)],
     )?)?;
 
     // Default CompatibilityInfo (its <clinit> must have run).

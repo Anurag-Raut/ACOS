@@ -82,6 +82,8 @@ impl IntentFilter {
 pub struct Component {
     pub kind: ComponentKind,
     pub name: String,
+    /// `android:authorities` (`<provider>` only), split on `;`.
+    pub authorities: Vec<String>,
     pub exported: Option<bool>,
     pub launch_mode: Option<String>,
     pub process: Option<String>,
@@ -264,9 +266,20 @@ fn parse_components(parent: &XmlNode, kind: ComponentKind, package: &str) -> Vec
         for f in node.children_named("intent-filter") {
             intent_filters.push(parse_intent_filter(f));
         }
+        let authorities = attr_string(node, "authorities")
+            .map(|value| {
+                value
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|part| !part.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
         out.push(Component {
             kind,
             name: fq_name(package, &raw_name),
+            authorities,
             exported: attr_bool(node, "exported"),
             launch_mode: attr_string(node, "launchMode"),
             process: attr_string(node, "process"),

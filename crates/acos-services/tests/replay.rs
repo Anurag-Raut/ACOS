@@ -291,7 +291,10 @@ fn launch_cases() -> Vec<Case> {
             args: vec![
                 Value::Parcelable(Parcelable::ordered(
                     "android.net.Uri",
-                    vec![Value::Str(Some("content://settings/system".into()))],
+                    vec![
+                        Value::Int(3), // HierarchicalUri
+                        Value::Str8(Some("content://settings/system".into())),
+                    ],
                 )),
                 Value::Bool(false),
                 b(0x7000),
@@ -418,7 +421,10 @@ fn interaction_cases() -> Vec<Case> {
                 Value::Bundle(None),
                 Value::TypedObject(P::ordered("android.app.assist.AssistStructure", vec![Value::Int(0)])),
                 Value::TypedObject(P::ordered("android.app.assist.AssistContent", vec![Value::Int(0)])),
-                Value::TypedObject(P::ordered("android.net.Uri", vec![Value::Str(None)])),
+                Value::TypedObject(P::ordered(
+                    "android.net.Uri",
+                    vec![Value::Int(0), Value::Str8(None)],
+                )),
             ],
         },
         Case {

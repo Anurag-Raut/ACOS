@@ -449,6 +449,7 @@ mod tests {
         // --- frame: a real buffer submission reaches the sink ----------------
         #[derive(Default)]
         struct Shared {
+            #[allow(clippy::type_complexity)]
             calls: std::sync::Mutex<Vec<(u64, u32, u32, Vec<u8>, i64)>>,
             seq: std::sync::atomic::AtomicU64,
         }

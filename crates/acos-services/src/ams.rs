@@ -399,7 +399,13 @@ impl PackageRecord {
                 .map(|c| DeclaredProvider {
                     package: manifest.package.clone(),
                     class: acos_apk::manifest::fq_name(&manifest.package, &c.name),
-                    authority: c.name.clone(),
+                    // `android:authorities` is the real key; the class name is
+                    // only a last-resort fallback for a malformed manifest.
+                    authority: c
+                        .authorities
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| c.name.clone()),
                     exported: c.exported.unwrap_or(false),
                 })
                 .collect(),
@@ -1185,6 +1191,58 @@ fn synthesize_receiver_binder(package: &str, class: &str) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
+// AIDL argument indices
+// ---------------------------------------------------------------------------
+
+/// The argument positions of a `startActivity*` transaction, pinned against the
+/// Android 14 bytecode (`.cache/boot/android-34/dex/framework/classes.dex`,
+/// `IActivityManager$Stub$Proxy`/`IActivityTaskManager$Stub$Proxy`).
+///
+/// `IActivityManager.startActivity` writes, in order: caller, callingPackage,
+/// `Intent`, resolvedType, resultTo, resultWho, **requestCode**, **startFlags**,
+/// profilerInfo, bOptions. `IActivityManager.startActivityWithFeature` inserts
+/// `callingFeatureId` after `callingPackage`; `IActivityTaskManager.startActivity`
+/// already has that field. The proxy disassembly in the evidence command
+/// `dexdump .../framework/classes.dex` shows `writeInt` (requestCode)
+/// immediately followed by `writeInt` (startFlags), which is what these
+/// indices encode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StartActivityArgs {
+    /// `Intent` argument (a `writeTypedObject`).
+    pub intent: usize,
+    /// `resultTo` (`IBinder`).
+    pub result_to: usize,
+    /// `requestCode` (`int`).
+    pub request_code: usize,
+    /// `startFlags` (`int`).
+    pub flags: usize,
+}
+
+/// Argument positions for `startActivity`/`startActivityWithFeature`/
+/// `startActivityAsUser` on either activity-manager interface.
+///
+/// Returns `None` for any other method.
+#[must_use]
+pub fn start_activity_args(interface: &str, method: &str) -> Option<StartActivityArgs> {
+    let method_offset = match method {
+        "startActivity" | "startActivityAsUser" => 0,
+        // `startActivityWithFeature` inserts `String callingFeatureId` after
+        // `String callingPackage` on `IActivityManager` only.
+        "startActivityWithFeature" => 1,
+        _ => return None,
+    };
+    // `IActivityTaskManager` carries `callingFeatureId` on every start.
+    let interface_offset = usize::from(interface.ends_with("IActivityTaskManager"));
+    let base = method_offset + interface_offset;
+    Some(StartActivityArgs {
+        intent: 2 + base,
+        result_to: 4 + base,
+        request_code: 6 + base,
+        flags: 7 + base,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 
@@ -1212,20 +1270,22 @@ pub fn dispatch(
 
     let reply = match method.name.as_str() {
         "startActivity" | "startActivityWithFeature" | "startActivityAsUser" => {
-            let (intent_index, flags_index, result_index, request_index) =
-                match method.name.as_str() {
-                    "startActivity" => (2, 6, 4, 5),
-                    "startActivityWithFeature" => (3, 7, 5, 6),
-                    // `startActivityAsUser(IApplicationThread, String, Intent, ...)`
-                    _ => (2, 6, 4, 5),
-                };
-            let intent = intent(intent_index)?;
-            let flags = value(flags_index).and_then(Value::as_int).unwrap_or(0);
-            let result_to = value(result_index)
+            let positions = start_activity_args(interface, &method.name).ok_or_else(|| {
+                ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: method.name.clone(),
+                    detail: "no startActivity argument layout".into(),
+                }
+            })?;
+            let intent = intent(positions.intent)?;
+            let flags = value(positions.flags).and_then(Value::as_int).unwrap_or(0);
+            let result_to = value(positions.result_to)
                 .and_then(Value::as_binder)
                 .map(|b| b.0)
                 .unwrap_or(0);
-            let request_code = value(request_index).and_then(Value::as_int).unwrap_or(0);
+            let request_code = value(positions.request_code)
+                .and_then(Value::as_int)
+                .unwrap_or(0);
             let code = match state.start_activity(&intent, flags, result_to, request_code) {
                 Ok(code) => code,
                 Err(ServiceError::IllegalState { .. }) => START_NOT_FOUND,
@@ -1306,9 +1366,10 @@ pub fn dispatch(
             vec![Value::Int(count)]
         }
         "getContentProvider" | "getContentProviderExternal" => {
-            let authority = value(if method.name == "getContentProvider" { 1 } else { 1 })
-                .and_then(Value::as_str)
-                .unwrap_or_default();
+            // `getContentProvider(IApplicationThread, String callingPackage,
+            // String name, ...)` and `getContentProviderExternal(String name, ...)`
+            // both carry the authority as arg 1.
+            let authority = value(1).and_then(Value::as_str).unwrap_or_default();
             match state.get_content_provider(authority) {
                 Some(provider) => vec![Value::TypedObject(provider_holder_parcelable(&provider))],
                 None => vec![Value::TypedObject(Parcelable::Null)],
@@ -1626,6 +1687,128 @@ mod tests {
         );
         let err = state.start_activity(&intent, 0x0000_0020, 0, 0).expect_err("flags");
         assert!(matches!(err, ServiceError::UnsupportedAndroidApi { .. }));
+    }
+
+    /// W74-A: the `startActivity*` argument index map, pinned against the
+    /// Android 14 `IActivityManager`/`IActivityTaskManager` proxy bytecode
+    /// (`.cache/boot/android-34/dex/framework/classes.dex`). The proxy writes
+    /// `requestCode` immediately before `startFlags`; the table below is the
+    /// reference, and the `acos_aidl` layout is checked alongside it.
+    #[test]
+    fn start_activity_argument_indices_match_android_14_aidl() {
+        use acos_aidl::WireOp;
+        // (interface, method, intent, resultTo, requestCode, startFlags)
+        let expected = [
+            ("android.app.IActivityManager", "startActivity", 2, 4, 6, 7),
+            (
+                "android.app.IActivityManager",
+                "startActivityWithFeature",
+                3,
+                5,
+                7,
+                8,
+            ),
+            ("android.app.IActivityManager", "startActivityAsUser", 2, 4, 6, 7),
+            (
+                "android.app.IActivityTaskManager",
+                "startActivity",
+                3,
+                5,
+                7,
+                8,
+            ),
+            (
+                "android.app.IActivityTaskManager",
+                "startActivityWithFeature",
+                4,
+                6,
+                8,
+                9,
+            ),
+            (
+                "android.app.IActivityTaskManager",
+                "startActivityAsUser",
+                3,
+                5,
+                7,
+                8,
+            ),
+        ];
+        for (interface, method, intent, result_to, request_code, flags) in expected {
+            let got = start_activity_args(interface, method).expect("layout");
+            assert_eq!(
+                (got.intent, got.result_to, got.request_code, got.flags),
+                (intent, result_to, request_code, flags),
+                "{interface}.{method}"
+            );
+            // `IActivityTaskManager.startActivityWithFeature` has no proxy in
+            // the API-34 framework DEX (only `IActivityManager` has the
+            // `*WithFeature` variant), so the table cannot cross-check that one
+            // row; its indices still follow the same insertion rule.
+            let Some(layout) = acos_aidl::lookup_by_name(interface, method) else {
+                continue;
+            };
+            assert!(
+                matches!(
+                    &layout.args[got.intent],
+                    WireOp::TypedObject { class, .. } if class == "android.content.Intent"
+                ),
+                "{interface}.{method}: arg {} is not the Intent",
+                got.intent
+            );
+            assert!(
+                matches!(&layout.args[got.result_to], WireOp::Binder { .. }),
+                "{interface}.{method}: arg {} is not resultTo",
+                got.result_to
+            );
+            assert_eq!(layout.args[got.request_code], WireOp::I32);
+            assert_eq!(layout.args[got.flags], WireOp::I32);
+            assert_eq!(got.flags, got.request_code + 1, "requestCode then startFlags");
+        }
+        assert!(start_activity_args("android.app.IActivityManager", "startService").is_none());
+    }
+
+    /// Behavioural pin: `IActivityTaskManager.startActivity` (feature-id layout)
+    /// must read requestCode from arg 7, not startFlags/resultWho. A wrong map
+    /// would either reject `flags=0x20` (a non-zero startFlags) or record the
+    /// wrong request code on the pending launch.
+    #[test]
+    fn dispatch_start_activity_reads_request_code_and_flags_at_the_atms_indices() {
+        let mut state = AmsState::new();
+        state.manifests = db_with_fixture();
+        let method =
+            acos_aidl::lookup_by_name("android.app.IActivityTaskManager", "startActivity")
+                .expect("decoded");
+        let intent = IntentFacts::explicit(
+            "dev.acos.fixtures.svcprovider",
+            "dev.acos.fixtures.svcprovider.MainActivity",
+        );
+        let args = vec![
+            Value::Binder(None),                  // 0 caller
+            Value::Str(None),                     // 1 callingPackage
+            Value::Str(None),                     // 2 callingFeatureId
+            Value::TypedObject(intent.to_parcelable()), // 3 Intent
+            Value::Str(None),                     // 4 resolvedType
+            Value::Binder(None),                  // 5 resultTo
+            Value::Str(Some("who".into())),       // 6 resultWho
+            Value::Int(42),                       // 7 requestCode
+            Value::Int(0),                        // 8 startFlags
+            Value::TypedObject(Parcelable::Null), // 9 profilerInfo
+            Value::TypedObject(Parcelable::Null), // 10 bOptions
+        ];
+        let result = dispatch(
+            &mut state,
+            "android.app.IActivityTaskManager",
+            method,
+            &args,
+        )
+        .expect("dispatch")
+        .expect("handled");
+        assert_eq!(result.reply, vec![Value::Int(START_SUCCESS)]);
+        let launches = state.take_pending_launches();
+        assert_eq!(launches.len(), 1);
+        assert_eq!(launches[0].request_code, 42);
+        assert_eq!(launches[0].class, "dev.acos.fixtures.svcprovider.MainActivity");
     }
 
     #[test]

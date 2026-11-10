@@ -1429,7 +1429,7 @@ fn boot_probe(
         .push_static_call("android.os.Looper", "loop", "()V", &[])
         .map_err(|e| BenchFailure::internal(format!("Looper.loop: {e}")))?;
     let t = Instant::now();
-    acos_runtime::bind_app::deliver_bind_application(rt.vm_mut(), thread, &app)
+    acos_runtime::bind_app::deliver_bind_application(rt.vm_mut(), thread, &app, &[])
         .map_err(|e| BenchFailure::internal(format!("bindApplication: {e}")))?;
     probe.bind_ms = t.elapsed().as_secs_f64() * 1000.0;
     probe.bind_delivered = true;

@@ -88,28 +88,28 @@ pub struct BinderDelivery {
 /// threaded and owned by the same runtime).
 pub trait BinderTransport {
     /// Allocate a fresh local binder id (`Binder.getNativeBBinderHolder`).
-    fn new_local_binder(&mut self, vm: &mut Vm) -> u64 {
+    fn new_local_binder(&self, vm: &mut Vm) -> u64 {
         let _ = vm;
         next_fallback_id()
     }
 
     /// The binder returned by `BinderInternal.getContextObject()`, or `0`.
-    fn context_object(&mut self, vm: &mut Vm) -> u64 {
+    fn context_object(&self, vm: &mut Vm) -> u64 {
         let _ = vm;
         0
     }
 
     /// Map a Java `IBinder` handle to the id written into a `Parcel`.
-    fn binder_id_of(&mut self, vm: &mut Vm, obj: Handle) -> Option<BinderId>;
+    fn binder_id_of(&self, vm: &mut Vm, obj: Handle) -> Option<BinderId>;
 
     /// Map a `BinderId` back to a Java `IBinder` handle.
-    fn binder_object(&mut self, vm: &mut Vm, id: BinderId) -> Option<Handle>;
+    fn binder_object(&self, vm: &mut Vm, id: BinderId) -> Option<Handle>;
 
     /// Dispatch one transaction. Returns the `system -> app` deliveries the
     /// handler produced (empty for a normal synchronous reply).
     #[allow(clippy::too_many_arguments)]
     fn transact(
-        &mut self,
+        &self,
         vm: &mut Vm,
         binder: BinderId,
         code: u32,
@@ -119,18 +119,18 @@ pub trait BinderTransport {
     ) -> Result<Vec<BinderDelivery>, String>;
 
     /// The interface descriptor of a binder (`BinderProxy.getInterfaceDescriptor`).
-    fn descriptor(&mut self, id: BinderId) -> Option<String>;
+    fn descriptor(&self, id: BinderId) -> Option<String>;
 
     /// `BinderProxy.isBinderAlive` / `pingBinder`.
-    fn is_alive(&mut self, id: BinderId) -> bool;
+    fn is_alive(&self, id: BinderId) -> bool;
 
     /// `linkToDeath`. ACOS binders never die; recorded but never fired.
-    fn link_to_death(&mut self, _id: BinderId, _recipient: Handle) -> bool {
+    fn link_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
 
     /// `unlinkToDeath`.
-    fn unlink_to_death(&mut self, _id: BinderId, _recipient: Handle) -> bool {
+    fn unlink_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
 }
@@ -141,7 +141,36 @@ thread_local! {
     static FALLBACK: RefCell<FallbackSink> = RefCell::new(FallbackSink::default());
     /// `Binder.clearCallingIdentity` tokens, one stack per host thread.
     static IDENTITY: RefCell<Vec<IdentityToken>> = const { RefCell::new(Vec::new()) };
+    /// Local Java `IBinder` handles by binder id.
+    ///
+    /// `binder_object` is called from inside `BinderTransport::transact` while
+    /// the transport `RefCell` is already mutably borrowed (a reply parcelable
+    /// carrying a local binder is read during dispatch). Looking the handle up
+    /// here first keeps that path re-entrancy safe without changing the
+    /// transport contract.
+    static LOCAL_OBJECTS: RefCell<HashMap<u64, Handle>> = RefCell::new(HashMap::new());
+    /// Nesting depth of `Binder.execTransact` on this host thread.
+    ///
+    /// `Binder.isDirectlyHandlingTransaction()` is what `AttributionSource`'s
+    /// `Parcel` constructor consults to decide whether to verify the calling
+    /// uid/pid or throw `SecurityException`.
+    static TRANSACTION_DEPTH: Cell<u32> = const { Cell::new(0) };
     static NEXT_ID: Cell<u64> = const { Cell::new(1) };
+}
+
+fn enter_transaction() {
+    TRANSACTION_DEPTH.with(|d| d.set(d.get().saturating_add(1)));
+}
+
+fn exit_transaction() {
+    TRANSACTION_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+}
+
+/// Record a local binder handle so a re-entrant `binder_object` can resolve it.
+pub fn register_local_object(id: u64, handle: Handle) {
+    LOCAL_OBJECTS.with(|m| {
+        m.borrow_mut().insert(id, handle);
+    });
 }
 
 /// Install the process Binder transport. Replaces any previous transport.
@@ -160,11 +189,10 @@ pub fn has_transport() -> bool {
     TRANSPORT.with(|t| t.borrow().is_some())
 }
 
-fn with_transport<R>(f: impl FnOnce(&mut dyn BinderTransport) -> R) -> Option<R> {
-    TRANSPORT.with(|t| {
-        let mut slot = t.borrow_mut();
-        slot.as_mut().map(|b| f(b.as_mut()))
-    })
+fn with_transport<R>(f: impl FnOnce(&dyn BinderTransport) -> R) -> Option<R> {
+    // A shared borrow lets a nested `BinderProxy.transactNative` (for example
+    // a provider's `ContentResolver.notifyChange`) re-enter the transport.
+    TRANSPORT.with(|t| t.borrow().as_ref().map(|b| f(b.as_ref())))
 }
 
 fn next_fallback_id() -> u64 {
@@ -242,6 +270,13 @@ fn binder_id_of(vm: &mut Vm, obj: Handle) -> Option<BinderId> {
 fn binder_object(vm: &mut Vm, id: BinderId) -> Option<Handle> {
     if id.is_null() {
         return None;
+    }
+    // A local binder written by this process: resolve without borrowing the
+    // transport (see `LOCAL_OBJECTS`).
+    if let Some(obj) = LOCAL_OBJECTS.with(|m| m.borrow().get(&id.0).copied()) {
+        if obj != NULL {
+            return Some(obj);
+        }
     }
     if let Some(obj) = with_transport(|t| t.binder_object(vm, id)).flatten() {
         return Some(obj);
@@ -392,7 +427,10 @@ fn deliver(vm: &mut Vm, mut d: BinderDelivery) -> VmResult<()> {
             reply_handle,
             d.flags as u64,
         ];
-        crate::interp::call_method(vm, mid, target, &words)?;
+        enter_transaction();
+        let result = crate::interp::call_method(vm, mid, target, &words);
+        exit_transaction();
+        result?;
         Ok(())
     })();
     super::parcel::with_store(|s| {
@@ -410,6 +448,52 @@ fn deliver(vm: &mut Vm, mut d: BinderDelivery) -> VmResult<()> {
 // ---------------------------------------------------------------------------
 // `Binder` natives
 // ---------------------------------------------------------------------------
+
+/// Dispatch one transaction to a **local** Java `Binder` and return its reply.
+///
+/// This is the same path as a `system -> app` [`BinderDelivery`], but for a
+/// synchronous in-process call: the caller (the ACOS transport) holds the Java
+/// `IBinder` target — for example a `ContentProvider.Transport` — and wants the
+/// real `Binder.execTransact` to run. Nothing about the transaction is
+/// re-implemented here; the Java stub parses the request and writes the reply.
+pub fn dispatch_local_binder(
+    vm: &mut Vm,
+    target: Handle,
+    code: u32,
+    data: Parcel,
+    flags: u32,
+) -> VmResult<Parcel> {
+    if target == NULL {
+        return Err(VmError::Internal(
+            "dispatch_local_binder: null target".into(),
+        ));
+    }
+    let data_handle = super::parcel::with_store(|s| s.table.create_with(data));
+    let reply_handle = super::parcel::with_store(|s| s.table.create());
+    let result = (|| -> VmResult<()> {
+        let cid = vm
+            .class_of_object(target)
+            .ok_or_else(|| VmError::Internal("Binder.execTransact on a dead target".into()))?;
+        let mid = vm.find_method(cid, "execTransact", "(IJJI)Z", crate::vm::InvokeKind::Direct)?;
+        let words = [code as u64, data_handle, reply_handle, flags as u64];
+        enter_transaction();
+        let result = crate::interp::call_method(vm, mid, target, &words);
+        exit_transaction();
+        result?;
+        Ok(())
+    })();
+    let reply = super::parcel::with_store(|s| {
+        s.table
+            .with_parcel_shared(reply_handle, Clone::clone)
+            .unwrap_or_default()
+    });
+    super::parcel::with_store(|s| {
+        let _ = s.table.free(data_handle);
+        let _ = s.table.free(reply_handle);
+    });
+    result?;
+    Ok(reply)
+}
 
 fn get_native_bbinder_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let id = with_transport(|t| t.new_local_binder(vm)).unwrap_or_else(next_fallback_id);
@@ -485,6 +569,12 @@ fn get_thread_strict_mode_policy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn set_thread_strict_mode_policy_native(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     set_thread_strict_mode_policy(vm.arg_i32(ctx, 0));
+    Ok(())
+}
+
+fn is_directly_handling_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handling = TRANSACTION_DEPTH.with(Cell::get) > 0;
+    vm.ret_bool(ctx, handling);
     Ok(())
 }
 
@@ -656,7 +746,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     );
     vm.register_native(binder, "flushPendingCommands", "()V", noop);
     vm.register_native(binder, "hasExplicitIdentity", "()Z", ret_false);
-    vm.register_native(binder, "isDirectlyHandlingTransaction", "()Z", ret_false);
+    vm.register_native(
+        binder,
+        "isDirectlyHandlingTransaction",
+        "()Z",
+        is_directly_handling_transaction,
+    );
     vm.register_native(binder, "blockUntilThreadAvailable", "()V", noop);
     vm.register_native(binder, "forceDowngradeToSystemStability", "()V", noop);
     vm.register_native(binder, "markVintfStability", "()V", noop);

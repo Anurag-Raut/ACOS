@@ -148,6 +148,9 @@ enum Arg {
     Intent(Option<IntentFacts>),
     Filter(Vec<String>, Vec<String>),
     Strings(#[allow(dead_code)] Vec<Option<String>>),
+    /// `publishContentProviders`' `List<ContentProviderHolder>` (real Java
+    /// objects read with the framework `CREATOR`, one presence marker each).
+    Holders(Vec<Handle>),
     /// A decoded argument this module consumes but does not interpret.
     Other,
 }
@@ -218,6 +221,26 @@ fn decode_args(vm: &mut Vm, method: &acos_aidl::MethodInfo, data: &mut Parcel) -
             acos_aidl::WireOp::Bundle => {
                 let _ = crate::parcel_java::read_typed_object(vm, data, "android.os.Bundle")?;
                 Arg::Other
+            }
+            // `publishContentProviders(IApplicationThread, List<ContentProviderHolder>)`
+            // is decoded from the decoded `writeTypedList` op: the table records
+            // the list type (`java.util.List`), not the element type, so the
+            // element class comes from the method contract.
+            acos_aidl::WireOp::TypedList { .. }
+                if method.name == "publishContentProviders" && out.len() == 1 =>
+            {
+                let count = data.read_int32().map_err(err)?;
+                let mut holders = Vec::with_capacity(count.max(0) as usize);
+                for _ in 0..count.max(0) {
+                    if let Some(holder) = crate::parcel_java::read_typed_object(
+                        vm,
+                        data,
+                        "android.app.ContentProviderHolder",
+                    )? {
+                        holders.push(holder);
+                    }
+                }
+                Arg::Holders(holders)
             }
             other => {
                 return Err(err(format!(
@@ -538,6 +561,29 @@ fn provider_info(
     Ok(h)
 }
 
+/// A `ProviderInfo` for an app-declared provider (bind-time install).
+///
+/// The shared [`provider_info`] builder targets the `settings` provider and
+/// therefore carries the settings read/write permissions. An app provider's
+/// manifest declares none, so clear them: `ContentProvider.Transport` calls
+/// `enforceReadPermission`/`enforceWritePermission` for every CRUD call, and a
+/// leaked `READ_SETTINGS` would make the app fail its own provider access.
+pub(crate) fn app_provider_info(
+    vm: &mut Vm,
+    package: &str,
+    class: &str,
+    authority: &str,
+) -> JResult<Handle> {
+    let h = provider_info(vm, package, class, authority)?;
+    vm.set_field(h, "readPermission", JavaValue::Null)
+        .map_err(err)?;
+    vm.set_field(h, "writePermission", JavaValue::Null)
+        .map_err(err)?;
+    vm.set_field(h, "exported", JavaValue::Boolean(true))
+        .map_err(err)?;
+    Ok(h)
+}
+
 /// Materialise a real `ContentProviderHolder` carrying a real `ProviderInfo`
 /// and (when known) a real `android.content.ContentProviderProxy` for the
 /// provider.
@@ -595,6 +641,32 @@ fn set_int(vm: &mut Vm, obj: Handle, field: &str, value: i32) -> JResult<()> {
 
 fn set_bool(vm: &mut Vm, obj: Handle, field: &str, value: bool) -> JResult<()> {
     vm.set_field(obj, field, JavaValue::Boolean(value)).map_err(err)
+}
+
+/// The binder id carried by a real `IBinder`.
+///
+/// A `BinderProxy` (a system service) keeps it in `mNativeData`; a local
+/// `Binder` (what a same-process `ContentProvider.Transport` resolves to) keeps
+/// it in `mObject`. Both are the ids the ACOS `Parcel` writes.
+fn binder_id_of(vm: &mut Vm, binder: Handle) -> JResult<u64> {
+    for field in ["mNativeData", "mObject"] {
+        match vm.get_field(binder, field) {
+            Ok(JavaValue::Long(v)) => return Ok(u64::try_from(v).unwrap_or(0)),
+            Ok(JavaValue::Int(v)) => return Ok(u32::try_from(v).unwrap_or(0) as u64),
+            Ok(_) | Err(_) => {}
+        }
+    }
+    Err(err(format!(
+        "binder handle {binder} carries neither mNativeData nor mObject"
+    )))
+}
+
+/// Read a `String` field (`None` when the field is null).
+fn field_string(vm: &mut Vm, obj: Handle, field: &str) -> JResult<Option<String>> {
+    match vm.get_field(obj, field).map_err(err)? {
+        JavaValue::Object(h) if h != NULL => Ok(Some(vm.java_string_to_rust(h).map_err(err)?)),
+        _ => Ok(None),
+    }
 }
 
 /// Re-build a real `android.content.Intent` from typed facts.
@@ -736,15 +808,14 @@ pub fn transact(
 
     with_state(|state| match method.name.as_str() {
         "startActivity" | "startActivityWithFeature" | "startActivityAsUser" => {
-            let (intent_i, result_i, request_i, flags_i) = match method.name.as_str() {
-                "startActivity" => (2, 4, 6, 7),
-                "startActivityWithFeature" => (3, 5, 7, 8),
-                _ => (2, 4, 6, 7),
-            };
-            let intent = intent_at(&args, intent_i)?;
-            let flags = args.get(flags_i).map(Arg::int).unwrap_or(0);
-            let result_to = args.get(result_i).map(Arg::binder).unwrap_or(0);
-            let request_code = args.get(request_i).map(Arg::int).unwrap_or(0);
+            // The positions come from the shared, bytecode-pinned table so the
+            // runtime and `acos-services` cannot drift apart (W74-A).
+            let positions = acos_services::ams::start_activity_args(&descriptor, &method.name)
+                .ok_or_else(|| err(format!("no startActivity layout for {}", method.name)))?;
+            let intent = intent_at(&args, positions.intent)?;
+            let flags = args.get(positions.flags).map(Arg::int).unwrap_or(0);
+            let result_to = args.get(positions.result_to).map(Arg::binder).unwrap_or(0);
+            let request_code = args.get(positions.request_code).map(Arg::int).unwrap_or(0);
             let code = match state.start_activity(&intent, flags, result_to, request_code) {
                 Ok(code) => code,
                 Err(acos_services::ServiceError::IllegalState { .. }) => {
@@ -845,10 +916,63 @@ pub fn transact(
             }
             Ok(Vec::new())
         }
-        "publishContentProviders" => Err(err(
-            "publishContentProviders: the app-side List<ContentProviderHolder> is not decoded \
-             yet (W51-A owns the provider parcel fix)",
-        )),
+        "publishContentProviders" => {
+            // `ActivityThread.installContentProviders` reports every provider it
+            // created for this process. Decode the real holders and record the
+            // authority -> (class, binder) mapping so a later
+            // `getContentProvider` returns the provider the app actually owns.
+            let holders = match args.get(1) {
+                Some(Arg::Holders(holders)) => holders.clone(),
+                Some(Arg::Other) | None => Vec::new(),
+                _ => {
+                    return Err(err(
+                        "publishContentProviders: arg 1 is not a List<ContentProviderHolder>",
+                    ))
+                }
+            };
+            let mut records = Vec::with_capacity(holders.len());
+            for holder in holders {
+                let info = match vm.get_field(holder, "info").map_err(err)? {
+                    JavaValue::Object(h) if h != NULL => h,
+                    _ => {
+                        return Err(err(
+                            "publishContentProviders: holder.info is null",
+                        ))
+                    }
+                };
+                let authority = field_string(vm, info, "authority")?
+                    .ok_or_else(|| err("publishContentProviders: ProviderInfo.authority is null"))?;
+                let class = field_string(vm, info, "name")?
+                    .ok_or_else(|| err("publishContentProviders: ProviderInfo.name is null"))?;
+                let package = field_string(vm, info, "packageName")?
+                    .unwrap_or_else(|| "".to_string());
+                let binder = match vm.get_field(holder, "provider").map_err(err)? {
+                    JavaValue::Object(provider) if provider != NULL => {
+                        match vm
+                            .call_method(
+                                provider,
+                                "asBinder",
+                                "()Landroid/os/IBinder;",
+                                &[],
+                            )
+                            .map_err(err)?
+                        {
+                            JavaValue::Object(b) if b != NULL => binder_id_of(vm, b)?,
+                            _ => 0,
+                        }
+                    }
+                    _ => 0,
+                };
+                records.push(acos_services::ams::ProviderRecord {
+                    authority,
+                    package,
+                    class,
+                    binder,
+                });
+            }
+            state.publish_content_providers(records);
+            Ok(Vec::new())
+        }
         other => Err(err(format!("unhandled owned method {other}"))),
     })
 }

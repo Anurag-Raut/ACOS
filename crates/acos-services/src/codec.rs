@@ -15,6 +15,19 @@ use crate::parcelable;
 use crate::value::{Bundle, DynamicValue, Parcelable, RawFdValue, Value};
 
 /// Read a request argument list in decoded order.
+/// Element class of a decoded typed array/list parameter.
+///
+/// `[Landroid.net.Uri;` -> `android.net.Uri`; an already-dotted element class is
+/// returned unchanged.
+fn element_class(class: &str) -> String {
+    let trimmed = class.trim_start_matches('[');
+    trimmed
+        .strip_prefix('L')
+        .map(|rest| rest.strip_suffix(';').unwrap_or(rest))
+        .unwrap_or(trimmed)
+        .replace('/', ".")
+}
+
 pub fn read_args(
     parcel: &mut Parcel,
     ops: &[WireOp],
@@ -156,10 +169,22 @@ pub fn read_op(parcel: &mut Parcel, op: &WireOp) -> Result<Value> {
             Value::Map(Some(out))
         }
         WireOp::TypedArray { class } | WireOp::TypedList { class } => {
+            // The decoded table records the parameter type, so a typed array of
+            // `Uri` arrives as `[Landroid.net.Uri` rather than the element
+            // class. Normalise to the element descriptor the parcelable codec
+            // knows (`android.net.Uri`).
+            let element = element_class(class);
             let n = parcel.read_int32()?;
             let mut out = Vec::new();
             for _ in 0..n.max(0) {
-                out.push(Value::Parcelable(parcelable::read_payload(class, parcel)?));
+                // AIDL writes each element with `writeTypedObject`, i.e. an
+                // explicit presence marker before the payload.
+                let present = parcel.read_int32()?;
+                if present == 0 {
+                    out.push(Value::Parcelable(Parcelable::Null));
+                } else {
+                    out.push(Value::Parcelable(parcelable::read_payload(&element, parcel)?));
+                }
             }
             Value::List(Some(out))
         }

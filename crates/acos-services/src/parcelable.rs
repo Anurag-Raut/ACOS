@@ -501,7 +501,11 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     ParcelableSpec {
         class: "android.net.Uri",
-        fields: &[FieldOp::Str16],
+        // `Uri.writeToParcel`: an int type tag (StringUri=1, Opaque=2,
+        // Hierarchical=3) followed by `writeString8(toString())`. Verified in
+        // `.cache/boot/android-34/dex/framework/classes.dex`
+        // (`Landroid/net/Uri$HierarchicalUri;->writeToParcel`).
+        fields: &[FieldOp::Int, FieldOp::Str8],
         verification: Verification::Curated,
     },
     ParcelableSpec {

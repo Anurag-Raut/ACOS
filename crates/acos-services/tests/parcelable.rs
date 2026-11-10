@@ -282,7 +282,14 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::List(None),
             ],
         ),
-        "android.net.Uri" => Parcelable::ordered(class, vec![Value::Str(Some("content://settings/system".into()))]),
+        // `Uri.writeToParcel`: type tag then String8.
+        "android.net.Uri" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(3), // HierarchicalUri
+                Value::Str8(Some("content://settings/system".into())),
+            ],
+        ),
         _ => return None,
     })
 }

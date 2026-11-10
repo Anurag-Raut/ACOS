@@ -36,9 +36,13 @@ pub struct ServiceTransport {
     uid: u32,
     pid: i32,
     /// App-side Java `Binder` handles, keyed by their `mObject` id.
-    locals: HashMap<u64, Handle>,
+    ///
+    /// Interior mutability keeps `BinderTransport` `&self`-based, which is what
+    /// lets a nested binder transaction (a provider calling
+    /// `notifyChange`, for example) re-enter the transport.
+    locals: RefCell<HashMap<u64, Handle>>,
     /// Materialised `BinderProxy` objects, so identity round-trips.
-    proxies: HashMap<u64, Handle>,
+    proxies: RefCell<HashMap<u64, Handle>>,
 }
 
 impl core::fmt::Debug for ServiceTransport {
@@ -47,8 +51,8 @@ impl core::fmt::Debug for ServiceTransport {
             .field("context", &self.context)
             .field("uid", &self.uid)
             .field("pid", &self.pid)
-            .field("locals", &self.locals.len())
-            .field("proxies", &self.proxies.len())
+            .field("locals", &self.locals.borrow().len())
+            .field("proxies", &self.proxies.borrow().len())
             .finish()
     }
 }
@@ -63,14 +67,14 @@ impl ServiceTransport {
             context,
             uid,
             pid,
-            locals: HashMap::new(),
-            proxies: HashMap::new(),
+            locals: RefCell::new(HashMap::new()),
+            proxies: RefCell::new(HashMap::new()),
         }
     }
 }
 
 impl BinderTransport for ServiceTransport {
-    fn new_local_binder(&mut self, _vm: &mut Vm) -> u64 {
+    fn new_local_binder(&self, _vm: &mut Vm) -> u64 {
         // Bind it into the same registry the service binders use, so local and
         // service ids can never collide.
         self.host
@@ -80,11 +84,11 @@ impl BinderTransport for ServiceTransport {
             .0
     }
 
-    fn context_object(&mut self, _vm: &mut Vm) -> u64 {
+    fn context_object(&self, _vm: &mut Vm) -> u64 {
         self.context.0
     }
 
-    fn binder_id_of(&mut self, vm: &mut Vm, obj: Handle) -> Option<BinderId> {
+    fn binder_id_of(&self, vm: &mut Vm, obj: Handle) -> Option<BinderId> {
         if obj == NULL {
             return None;
         }
@@ -95,21 +99,25 @@ impl BinderTransport for ServiceTransport {
         // A local `Binder` carries its `BBinder` id in `mObject`.
         if let Ok(JavaValue::Long(v)) = vm.get_field(obj, "mObject") {
             let id = BinderId(v as u64);
-            self.locals.insert(id.0, obj);
+            self.locals.borrow_mut().insert(id.0, obj);
             vm.root_handle(obj);
+            // Keep a re-entrancy-safe mirror for reply parcelables read while
+            // this transport is already borrowed (e.g. a published provider
+            // holder's binder).
+            acos_vm::natives::binder::register_local_object(id.0, obj);
             return Some(id);
         }
         None
     }
 
-    fn binder_object(&mut self, vm: &mut Vm, id: BinderId) -> Option<Handle> {
+    fn binder_object(&self, vm: &mut Vm, id: BinderId) -> Option<Handle> {
         if id.is_null() {
             return None;
         }
-        if let Some(&h) = self.locals.get(&id.0) {
+        if let Some(&h) = self.locals.borrow().get(&id.0) {
             return Some(h);
         }
-        if let Some(&h) = self.proxies.get(&id.0) {
+        if let Some(&h) = self.proxies.borrow().get(&id.0) {
             return Some(h);
         }
         // A service binder becomes a real `android.os.BinderProxy` whose
@@ -122,12 +130,12 @@ impl BinderTransport for ServiceTransport {
                 &[JavaValue::Long(id.0 as i64)],
             )
             .ok()?;
-        self.proxies.insert(id.0, proxy);
+        self.proxies.borrow_mut().insert(id.0, proxy);
         Some(proxy)
     }
 
     fn transact(
-        &mut self,
+        &self,
         vm: &mut Vm,
         binder: BinderId,
         code: u32,
@@ -184,6 +192,30 @@ impl BinderTransport for ServiceTransport {
                 let result = crate::user_java::transact(vm, binder, code, data, reply, flags)
                     .map(|_| ());
                 (result, Vec::new())
+            } else if descriptor.as_deref() == Some("android.content.IContentProvider")
+                && self.locals.borrow().contains_key(&binder.0)
+            {
+                // An app-published provider binder. The app's own
+                // `ContentProvider.Transport` is a local Java `Binder`; running
+                // its real `execTransact` means the framework's own
+                // `ContentProviderNative.onTransact` parses the request and
+                // marshals the reply (including `Cursor` ->
+                // `BulkCursorDescriptor`). No CRUD payload is hand-written.
+                let target = *self
+                    .locals
+                    .borrow()
+                    .get(&binder.0)
+                    .expect("checked above");
+                let request = data.clone();
+                match acos_vm::natives::binder::dispatch_local_binder(
+                    vm, target, code, request, flags,
+                ) {
+                    Ok(handler_reply) => {
+                        *reply = handler_reply;
+                        (Ok(()), Vec::new())
+                    }
+                    Err(e) => (Err(format!("IContentProvider local dispatch: {e}")), Vec::new()),
+                }
             } else if crate::ams_java::owns(descriptor.as_deref())
                 && code_owns_method(descriptor.as_deref(), code, crate::ams_java::owns_method)
             {
@@ -222,9 +254,12 @@ impl BinderTransport for ServiceTransport {
         // Java bridge, overriding the generic prefix codec.
         if result.is_ok() && flags & 1 == 0 {
             if let Some(descriptor) = descriptor.as_deref() {
-                if descriptor == "android.content.IContentProvider" {
+                if descriptor == "android.content.IContentProvider"
+                    && !self.locals.borrow().contains_key(&binder.0)
+                {
                     // The framework instantiates the generation `MemoryIntArray`
                     // through its static `CREATOR`; make sure `<clinit>` ran.
+                    // App providers do not return that reply.
                     crate::settings_java::prepare_settings_reply(vm)
                         .map_err(|e| format!("settings_java: {e}"))?;
                 }
@@ -254,27 +289,27 @@ impl BinderTransport for ServiceTransport {
         result.map(|()| deliveries)
     }
 
-    fn descriptor(&mut self, id: BinderId) -> Option<String> {
+    fn descriptor(&self, id: BinderId) -> Option<String> {
         if let Some(d) = self.host.borrow().descriptor_of(id) {
             return Some(d.to_string());
         }
-        if self.locals.contains_key(&id.0) {
+        if self.locals.borrow().contains_key(&id.0) {
             return Some("android.os.Binder".to_string());
         }
         None
     }
 
-    fn is_alive(&mut self, id: BinderId) -> bool {
+    fn is_alive(&self, id: BinderId) -> bool {
         id == self.context
-            || self.locals.contains_key(&id.0)
+            || self.locals.borrow().contains_key(&id.0)
             || self.host.borrow().descriptor_of(id).is_some()
     }
 
-    fn link_to_death(&mut self, _id: BinderId, _recipient: Handle) -> bool {
+    fn link_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
 
-    fn unlink_to_death(&mut self, _id: BinderId, _recipient: Handle) -> bool {
+    fn unlink_to_death(&self, _id: BinderId, _recipient: Handle) -> bool {
         true
     }
 }

@@ -40,11 +40,11 @@ use acos_vm::{CoreLib, Vm, VmError, VmOptions};
 struct NoServices;
 
 impl BinderTransport for NoServices {
-    fn context_object(&mut self, _vm: &mut Vm) -> u64 {
+    fn context_object(&self, _vm: &mut Vm) -> u64 {
         1
     }
 
-    fn binder_id_of(&mut self, vm: &mut Vm, obj: acos_vm::heap::Handle) -> Option<BinderId> {
+    fn binder_id_of(&self, vm: &mut Vm, obj: acos_vm::heap::Handle) -> Option<BinderId> {
         if let Ok(JavaValue::Long(v)) = vm.get_field(obj, "mNativeData") {
             return Some(BinderId(v as u64));
         }
@@ -55,7 +55,7 @@ impl BinderTransport for NoServices {
     }
 
     fn binder_object(
-        &mut self,
+        &self,
         vm: &mut Vm,
         id: BinderId,
     ) -> Option<acos_vm::heap::Handle> {
@@ -67,7 +67,7 @@ impl BinderTransport for NoServices {
     }
 
     fn transact(
-        &mut self,
+        &self,
         _vm: &mut Vm,
         _binder: BinderId,
         _code: u32,
@@ -84,11 +84,11 @@ impl BinderTransport for NoServices {
         Ok(Vec::new())
     }
 
-    fn descriptor(&mut self, _id: BinderId) -> Option<String> {
+    fn descriptor(&self, _id: BinderId) -> Option<String> {
         None
     }
 
-    fn is_alive(&mut self, _id: BinderId) -> bool {
+    fn is_alive(&self, _id: BinderId) -> bool {
         false
     }
 }

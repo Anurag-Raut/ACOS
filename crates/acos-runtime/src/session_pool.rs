@@ -1072,7 +1072,7 @@ fn launch_loaded_inner(
 
     let t = Instant::now();
     let app_thread =
-        crate::bind_app::deliver_bind_application(rt.vm_mut(), activity_thread, app)
+        crate::bind_app::deliver_bind_application(rt.vm_mut(), activity_thread, app, &[])
             .map_err(|e| format!("bindApplication: {e}"))?;
     report.bind_ms = t.elapsed().as_secs_f64() * 1000.0;
 

@@ -174,8 +174,9 @@ impl Runtime {
             .push_static_call("android.os.Looper", "loop", "()V", &[])?;
 
         // --- bindApplication -------------------------------------------------
+        let providers = provider_specs(apk_path)?;
         let app_thread =
-            bind_app::deliver_bind_application(self.vm_mut(), thread, &app)?;
+            bind_app::deliver_bind_application(self.vm_mut(), thread, &app, &providers)?;
         report.bind_delivered = true;
         run_phase(self.vm_mut())?;
         report.app_created = initial_application_non_null(self.vm_mut(), thread);
@@ -211,6 +212,29 @@ fn app_info_for(apk_path: &Path) -> Result<AppInfo, LifecycleError> {
         .manifest()
         .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(format!("manifest: {e}"))))?;
     Ok(AppInfo::from_manifest(&manifest, apk_path, FIXTURE_UID))
+}
+
+/// The `(class, authority)` pairs of the app's manifest-declared providers.
+///
+/// `bindApplication`'s `ProviderInfoList` is what makes the real
+/// `ActivityThread.installContentProviders` instantiate them; without it no
+/// provider ever exists in the app process.
+fn provider_specs(apk_path: &Path) -> Result<Vec<(String, String)>, LifecycleError> {
+    let apk = Apk::open(apk_path).map_err(|e| LifecycleError::Boot(BootError::Apk(e)))?;
+    let manifest = apk
+        .manifest()
+        .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(format!("manifest: {e}"))))?;
+    Ok(manifest
+        .providers
+        .iter()
+        .filter_map(|c| {
+            let authority = c.authorities.first()?.clone();
+            Some((
+                acos_apk::manifest::fq_name(&manifest.package, &c.name),
+                authority,
+            ))
+        })
+        .collect())
 }
 
 /// Run the interpreter until no green thread is runnable (the main looper has
