@@ -145,7 +145,7 @@ fn run_case() -> Result<String, String> {
     // `.dat` through `AndroidDataFiles.generateIcuDataPath()`. This mirrors
     // `acos-runtime`'s `seed_device_environment()`.
     if std::env::var_os("ANDROID_I18N_ROOT").is_none() {
-        std::env::set_var("ANDROID_I18N_ROOT", "/system/apex/com.android.i18n");
+        std::env::set_var("ANDROID_I18N_ROOT", "/apex/com.android.i18n");
     }
     if std::env::var_os("ANDROID_TZDATA_ROOT").is_none() {
         std::env::set_var("ANDROID_TZDATA_ROOT", "/apex/com.android.tzdata");

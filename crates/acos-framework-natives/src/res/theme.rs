@@ -185,15 +185,23 @@ impl AssetManager {
             }
         }
         let n = attrs.len().min(out_values.len() / STYLE_NUM_ENTRIES);
+        // `TypedArray` layout: `mIndices[0]` is the count of found attributes
+        // and `mIndices[1..=count]` are the **request/styleable indices** of
+        // those attributes (what `getIndex(at)` returns). `mData` stays indexed
+        // by request index (`getValueAt(request_index)`).
+        let mut count = 0i32;
         for i in 0..n {
             let attr = attrs[i] as u32;
             match map.get(&attr) {
-                Some((value, idx)) => {
+                Some((value, _idx)) => {
                     let tv = TypedValueOut {
                         data_type: value.data_type,
                         data: value.data,
                         asset_cookie: -1,
-                        resource_id: attr,
+                        // A `@resid` carries its target in `STYLE_RESOURCE_ID`
+                        // so `TypedArray.getResourceId` returns the referenced
+                        // resource, not the attribute id.
+                        resource_id: if value.is_reference() { value.data } else { attr },
                         changing_configurations: 0,
                         density: 0,
                         source_resource_id: attr,
@@ -201,16 +209,17 @@ impl AssetManager {
                         string: None,
                     };
                     tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
-                    if i < out_indices.len() {
-                        out_indices[i] = *idx;
+                    let slot = count as usize + 1;
+                    if slot < out_indices.len() {
+                        out_indices[slot] = i as i32;
                     }
+                    count += 1;
                 }
-                None => {
-                    if i < out_indices.len() {
-                        out_indices[i] = -1;
-                    }
-                }
+                None => {}
             }
+        }
+        if !out_indices.is_empty() {
+            out_indices[0] = count;
         }
         true
     }
@@ -265,7 +274,7 @@ impl AssetManager {
             sources.push(t.values.clone());
         }
 
-        self.fill_outputs(attrs, &sources, out_values, out_indices, true);
+        self.fill_outputs(theme, attrs, &sources, out_values, out_indices, true);
     }
 
     /// `nativeResolveAttrs`: resolve each `values[i]` (`?attr`) through the
@@ -307,6 +316,7 @@ impl AssetManager {
         };
         // Build the per-attr requested list from `in_values` when present.
         let mut out_values_direct = vec![0i32; attrs.len() * STYLE_NUM_ENTRIES];
+        let mut out_count = 0i32;
         let n = attrs.len();
         for i in 0..n {
             let attr = attrs[i] as u32;
@@ -327,7 +337,7 @@ impl AssetManager {
                     data_type: value.data_type,
                     data: value.data,
                     asset_cookie: -1,
-                    resource_id: attr,
+                    resource_id: if value.is_reference() { value.data } else { attr },
                     changing_configurations: 0,
                     density: config.density,
                     source_resource_id: attr,
@@ -335,20 +345,25 @@ impl AssetManager {
                     string: None,
                 };
                 tv.write_style(&mut out_values_direct[i * STYLE_NUM_ENTRIES..]);
-                if i < out_indices.len() {
-                    out_indices[i] = i as i32;
+                let slot = out_count as usize + 1;
+                if slot < out_indices.len() {
+                    out_indices[slot] = i as i32;
                 }
-            } else if i < out_indices.len() {
-                out_indices[i] = -1;
+                out_count += 1;
             }
+        }
+        if !out_indices.is_empty() {
+            out_indices[0] = out_count;
         }
         let copy = out_values.len().min(out_values_direct.len());
         out_values[..copy].copy_from_slice(&out_values_direct[..copy]);
         true
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn fill_outputs(
         &self,
+        theme: u64,
         attrs: &[i32],
         sources: &[HashMap<u32, ResValue>],
         out_values: &mut [i32],
@@ -356,6 +371,7 @@ impl AssetManager {
         zero_missing: bool,
     ) {
         let n = attrs.len().min(out_values.len() / STYLE_NUM_ENTRIES);
+        let mut count = 0i32;
         for i in 0..n {
             let attr = attrs[i] as u32;
             let mut found = None;
@@ -365,30 +381,52 @@ impl AssetManager {
                     break;
                 }
             }
-            if let Some((src_index, value)) = found {
-                let tv = TypedValueOut {
-                    data_type: value.data_type,
-                    data: value.data,
-                    asset_cookie: -1,
-                    resource_id: attr,
-                    changing_configurations: 0,
-                    density: 0,
-                    source_resource_id: attr,
-                    flags: 0,
-                    string: None,
+            if let Some((_src_index, value)) = found {
+                // A `@resid` reference (from the XML or a style) must be chased
+                // to its resource so the `TypedArray` carries the right asset
+                // cookie and pooled string; `build_typed_value` does both.
+                // Concrete XML values keep the `-1` cookie that routes string
+                // reads through the parser's own `StringBlock`.
+                let built = if value.is_reference() {
+                    self.resolve_references(value.data, true)
+                } else if value.data_type == TYPE_ATTRIBUTE {
+                    self.theme(theme)
+                        .and_then(|t| t.get(value.data))
+                        .filter(|v| v.is_reference())
+                        .and_then(|v| self.resolve_references(v.data, true))
+                } else {
+                    None
+                }
+                .and_then(|(si, entry, fid)| self.build_typed_value(si, &entry, attr, fid, 0));
+                let tv = match built {
+                    Some((_cookie, tv)) => tv,
+                    None => TypedValueOut {
+                        data_type: value.data_type,
+                        data: value.data,
+                        asset_cookie: -1,
+                        resource_id: if value.is_reference() { value.data } else { attr },
+                        changing_configurations: 0,
+                        density: 0,
+                        source_resource_id: attr,
+                        flags: 0,
+                        string: None,
+                    },
                 };
                 tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
-                if i < out_indices.len() {
-                    out_indices[i] = src_index as i32;
+                let slot = count as usize + 1;
+                if slot < out_indices.len() {
+                    out_indices[slot] = i as i32;
                 }
-            } else if i < out_indices.len() {
-                out_indices[i] = -1;
-                if zero_missing {
-                    for slot in &mut out_values[i * STYLE_NUM_ENTRIES..(i + 1) * STYLE_NUM_ENTRIES] {
-                        *slot = 0;
-                    }
+                count += 1;
+            } else if zero_missing {
+                for slot in &mut out_values[i * STYLE_NUM_ENTRIES..(i + 1) * STYLE_NUM_ENTRIES] {
+                    *slot = 0;
                 }
             }
         }
+        if !out_indices.is_empty() {
+            out_indices[0] = count;
+        }
     }
+
 }

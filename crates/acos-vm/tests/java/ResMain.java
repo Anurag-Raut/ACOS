@@ -45,8 +45,20 @@ public class ResMain {
         Resources.Theme theme = res.newTheme();
         theme.applyStyle(android.R.style.Theme_DeviceDefault, true);
         TypedValue tv = new TypedValue();
+        // `Theme.DeviceDefault` does not define `android:attr/textColor` (only
+        // the `textColorPrimary`/`textColorSecondary` family), so a faithful
+        // `Theme.resolveAttribute` must report `false` and leave the
+        // `TypedValue` untouched. Verified against real ART on the API-35
+        // device and the API-34 `framework-res.apk` bag chain.
         boolean resolved = theme.resolveAttribute(android.R.attr.textColor, tv, true);
         System.out.println("resolve=" + resolved + " type=" + tv.type);
+        // `colorBackground` *is* defined by the applied theme chain, as a
+        // reference to a color resource, and must resolve with `resolve=true`.
+        boolean bg = theme.resolveAttribute(android.R.attr.colorBackground, tv, true);
+        System.out.println("bg=" + bg + " type=" + tv.type);
+        // `textColorPrimary` is defined directly by `Theme.Material`.
+        boolean primary = theme.resolveAttribute(android.R.attr.textColorPrimary, tv, true);
+        System.out.println("primary=" + primary + " type=" + tv.type);
 
         int layoutId = res.getIdentifier("main", "layout", pkg);
         XmlResourceParser parser = res.getXml(layoutId);

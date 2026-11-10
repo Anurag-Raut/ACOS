@@ -330,7 +330,8 @@ fn retrieve_attributes_through_manager() {
     assert_eq!(mgr.parse_state(state).unwrap().get_source_res_id(), 0x7f020000);
     let attrs = [0x0101_00c4i32, 0x0101_00d5, 0x0101_00f4, 0x0101_00f5];
     let mut out_values = vec![0i32; attrs.len() * 7];
-    let mut out_indices = vec![-1i32; attrs.len()];
+    // `TypedArray.mIndices` is `len + 1` long: `[count, styleable_index...]`.
+    let mut out_indices = vec![-1i32; attrs.len() + 1];
     assert!(mgr.retrieve_attributes(state, &attrs, &mut out_values, &mut out_indices));
     // orientation = int 1
     assert_eq!(out_values[0], 0x10);
@@ -341,8 +342,8 @@ fn retrieve_attributes_through_manager() {
     // layout_width = -1 (MATCH_PARENT)
     assert_eq!(out_values[14], 0x10);
     assert_eq!(out_values[15], -1);
-    // Out-of-range/missing attributes get -1; here all four exist and are
-    // reported at their index within the XML start tag.
-    assert_eq!(out_indices, vec![0, 1, 2, 3]);
+    // `out_indices[0]` is the count of found attributes; the following entries
+    // are their request/styleable indices (what `TypedArray.getIndex` returns).
+    assert_eq!(out_indices, vec![4, 0, 1, 2, 3]);
     eprintln!("retrieveAttributes: orientation=1 padding=16dp layout_width=-1");
 }

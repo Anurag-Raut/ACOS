@@ -246,9 +246,19 @@ impl AssetManager {
         id: u32,
         resolve_refs: bool,
     ) -> Option<(usize, ResolvedEntry, u32)> {
+        self.resolve_references_with(id, &self.config, resolve_refs)
+    }
+
+    /// Resolve a reference chain under an explicit configuration.
+    fn resolve_references_with(
+        &self,
+        id: u32,
+        requested: &ResConfig,
+        resolve_refs: bool,
+    ) -> Option<(usize, ResolvedEntry, u32)> {
         let mut cur = id;
         for _ in 0..MAX_REFERENCE_DEPTH {
-            let hit = self.lookup(cur)?;
+            let hit = self.lookup_with(cur, requested)?;
             let value = hit.entry.value;
             match value.data_type {
                 crate::res::value::TYPE_REFERENCE | crate::res::value::TYPE_DYNAMIC_REFERENCE
@@ -277,7 +287,7 @@ impl AssetManager {
     }
 
     #[allow(clippy::field_reassign_with_default)]
-    fn build_typed_value(
+    pub(crate) fn build_typed_value(
         &self,
         source_index: usize,
         entry: &ResolvedEntry,
@@ -291,14 +301,17 @@ impl AssetManager {
         out.data_type = entry.value.data_type;
         out.data = entry.value.data;
         out.asset_cookie = cookie;
-        out.resource_id = requested_id;
+        // `STYLE_RESOURCE_ID` is the resource the value was loaded from (the
+        // resolved target of a `@resid`, not the requested attribute id).
+        // `TypedArray.getResourceId` reads this slot.
+        out.resource_id = final_id;
+        out.source_resource_id = requested_id;
         out.changing_configurations = entry.changing_configurations as i32;
         out.density = if density_override != 0 {
             density_override
         } else {
             entry.config.density
         };
-        out.source_resource_id = final_id;
         if entry.value.data_type == crate::res::value::TYPE_STRING {
             if let Some(table) = src.resource_table() {
                 out.string = table.global_string(src.resource_bytes()?, entry.value.data);
@@ -788,6 +801,23 @@ impl AssetManager {
     ) -> Option<(i32, TypedValueOut)> {
         let value = self.themes.get(&theme)?.get(attr_id)?;
         let requested = self.themes.get(&theme).map(|t| &t.config).unwrap_or(&self.config);
+        // With `resolve = true`, real ART resolves a `TYPE_REFERENCE` theme value
+        // to the concrete resource (e.g. `colorBackground` -> ARGB8,
+        // `textColorPrimary` -> the ColorStateList file path string). Only the
+        // `Attr` chain (`?attr`) is followed while merging the style; `@resid`
+        // references are resolved here, at query time.
+        if value.is_reference() && resolve && value.data != 0 {
+            if let Some((source_index, entry, final_id)) =
+                self.resolve_references_with(value.data, requested, true)
+            {
+                return self
+                    .build_typed_value(source_index, &entry, attr_id, final_id, requested.density)
+                    .map(|(c, mut v)| {
+                        v.density = requested.density;
+                        (c, v)
+                    });
+            }
+        }
         // Find the entry that provided the value so we can report a cookie.
         let (source_index, final_id) = if value.is_reference() && resolve {
             self.lookup_with(value.data, requested)

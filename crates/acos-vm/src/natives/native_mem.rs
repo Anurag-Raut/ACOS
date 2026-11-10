@@ -339,6 +339,14 @@ pub(crate) fn array_address(handle: u32) -> i64 {
     (((ARRAY_TAG | (handle & 0x7fff_ffff)) as u64) << 32) as i64
 }
 
+/// The heap-array handle a synthetic `VMRuntime.addressOf` address aliases.
+///
+/// `nativeApplyStyle` receives `TypedArray.mDataAddress`/`mIndicesAddress` as
+/// raw `J` arguments; the shim writes the output arrays through this.
+pub(crate) fn array_handle_from_address(addr: i64) -> Option<u32> {
+    array_parts(addr).map(|(handle, _)| handle)
+}
+
 fn array_parts(addr: i64) -> Option<(u32, usize)> {
     let raw = addr as u64;
     let id = (raw >> 32) as u32;

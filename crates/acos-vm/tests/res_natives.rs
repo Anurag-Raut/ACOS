@@ -180,7 +180,16 @@ fn assert_reference(out: &str) {
         "title=Hello ACOS",
         "app=Hello Views",
         "missing=0",
-        "resolve=true",
+        // `Theme.DeviceDefault` does not define `android:attr/textColor`, so a
+        // faithful `Theme.resolveAttribute` reports `false` (verified against
+        // real ART: API-35 device, and the API-34 `framework-res` bag chain).
+        "resolve=false type=0",
+        // `colorBackground` is defined by the theme as a `@color` reference and
+        // resolves to a concrete ARGB8 value (type 29) with `resolve=true`.
+        "bg=true type=29",
+        // `textColorPrimary` resolves through the theme to a ColorStateList
+        // resource; its compiled value is the file-path string (type 3).
+        "primary=true type=3",
         "orientation=1",
         "width=-1",
         "height=-1",

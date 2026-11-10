@@ -1303,3 +1303,93 @@ recorded `IActivityManager.getContentProvider` case was corrected to the real
   vs expected `resolve=true`), untouched and pre-existing.
 * The shared tree did not compile at the time of writing (W39-A `exec.rs` WIP).
   All evidence was collected in the clean worktree.
+
+---
+
+# W43-A session — resources/layout inflation (`AssetManager`/`TypedArray`)
+
+**Status: the `res_natives` gate is green and real `LayoutInflater` now
+inflates a compiled fixture layout under the VM. A full `*`-fixture pass is
+blocked by two non-res subsystems (`EditText`'s ICU break-iterator data and
+`Button`'s framework drawable XML).** All work is on a clean `git worktree` of
+HEAD `66e4232`; the diff was copied back only after `git apply --check` passed.
+
+## What changed
+
+| file | change |
+|---|---|
+| `crates/acos-framework-natives/src/res/theme.rs` | `TypedArray` output was rewritten to the **real native layout**. `mIndices[0]` is now the count of found attributes and `mIndices[1..=count]` are their **request/styleable indices** (what `TypedArray.getIndex` returns), replacing the old raw per-request XML indices. `nativeApplyStyle` now resolves `@resid` references and `?attr` attributes to the concrete resource (via `build_typed_value`, so the asset cookie/pooled string are right) — without this `getDimension`/`getColor` throw `type=0x1`. `STYLE_RESOURCE_ID` is set to the referenced target so `TypedArray.getResourceId` returns the resource, not the attribute id. |
+| `crates/acos-framework-natives/src/res/manager.rs` | `theme_get_attribute_value` resolves `TYPE_REFERENCE` when `resolve=true`; `build_typed_value` sets `resource_id = final_id` / `source_resource_id = requested_id`; new config-aware `resolve_references_with` helper. |
+| `crates/acos-vm/src/natives/fwk_res.rs` | `nativeApplyStyle`'s `outValues`/`outIndices` are `TypedArray.mDataAddress`/`mIndicesAddress` (`VMRuntime.addressOf` synthetic addresses), not heap handles: decode them with `array_handle_from_address` before reading/writing. Without this every `applyStyle` output was silently dropped. |
+| `crates/acos-vm/src/natives/native_mem.rs` | new `array_handle_from_address(addr)` (the inverse of `array_address`). |
+| `crates/acos-vm/tests/res_natives.rs`, `tests/java/ResMain.java` | corrected to real ART semantics + stronger theme checks. `Theme.DeviceDefault` does **not** define `android:attr/textColor`, so `resolveAttribute(textColor, tv, true)` correctly reports `false` (verified on the physical API-35 device and from the API-34 `framework-res` bag chain). Added `colorBackground` -> `true type=29` and `textColorPrimary` -> `true type=3`. |
+| `crates/acos-framework-natives/tests/xmlblock_diff.rs` | `retrieve_attributes_through_manager` updated to the `[count, styleable_index...]` layout. |
+| `crates/acos-vm/tests/inflate_layout.rs` (**new**) + `tests/java/InflateMain.java` + `tests/java/inflate_stubs/` | the LayoutInflater acceptance test (below). |
+
+## The inflation test
+
+`crates/acos-vm/tests/inflate_layout.rs` compiles `InflateMain.java` with the
+host `javac`/`d8` and runs it on the real core library + framework DEX. It
+builds a real `Resources`/`Theme` over a fixture APK, a `Context` backed by
+those resources, and inflates the APK's compiled `res/layout/main.xml` through
+the real `com.android.internal.policy.PhoneLayoutInflater`. It asserts the
+resulting view tree's class names, ids, text and dimension units.
+
+The test uses `fixtures/build/apps/canvas-shapes.apk` (a real fixture APK whose
+layout has a `LinearLayout`, a `TextView` with `android:padding="8dp"` and
+`android:text="@string/status_idle"`, and a custom `ShapeView`). Its output:
+
+```
+view=android.widget.LinearLayout id=0 pad=0
+  view=android.widget.TextView id=canvas_status pad=21
+    text=tap the canvas
+  view=dev.acos.fixtures.canvasshapes.ShapeView id=shape
+```
+
+`pad=21` is the real `8dp` dimension at density 2.625; the id text is resolved
+through `TypedArray.getResourceId` -> `AssetManager.nativeGetResourceEntryName`;
+`android:text` is the resolved `@string` reference.
+
+`android.test.mock.MockContext` (real framework test double, loaded from
+`.cache/boot/android-34/dex/android.test.mock/classes.dex`) supplies the
+abstract `Context`; the test overrides the resource/theme/layout entry points and
+returns real `MockPackageManager`. A minimal `BinderTransport` makes
+`ServiceManager` answer `null` for absent services instead of NPE-ing. The ICU
+break-iterator roots are seeded like `acos-runtime`'s
+`seed_device_environment`.
+
+## Honest blockers (not faked)
+
+* **`hello-views`/`multi-activity`/`form-validation` (`EditText`)**: the
+  `Editor` loads ICU break-iterator bundles (`brkitr/en_US.res`) through the
+  `/apex/com.android.i18n` VFS root, which the VM does not map (the same ICU
+  substrate blocker as W19h). The bundle lookup raises a real
+  `MissingResourceException`.
+* **`counter`/`todo-list` (`Button`)**: `Widget.Button`'s background is the
+  framework `btn_default_material.xml` ripple/selector, whose nested drawable
+  references (`@drawable/btn_default_mtrl_shape` -> a `TYPE_REFERENCE` with no
+  concrete path) are not resolvable by the current `Resources.loadDrawable`
+  path. It raises a real `Resources$NotFoundException`.
+* Both are out of the `android.content.res` native surface (fonts/ICU and
+  graphics/drawable); nothing is stubbed to hide them.
+
+## Evidence
+
+```sh
+# clean worktree of HEAD 66e4232, CARGO_TARGET_DIR=.cache/target-w43a,
+# CARGO_PROFILE_DEV_DEBUG=0, via tools/guarded.sh
+cargo test -p acos-vm --test res_natives --test inflate_layout   # 2 + 1 pass
+cargo test -p acos-framework-natives                             # all pass
+cargo test -p acos-vm -- --skip thousand_events                  # 28 bins ok
+tools/diff-dexprogs.sh --corelib real                            # 27 pass / 0 fail / 0 unsupported
+```
+
+`diff-dexprogs --corelib real` is byte-identical to ART (27/27), unchanged.
+
+## Caveats
+
+* The `TypedArray` index-layout change is a **behavioural correction**; the
+  engine's own `xmlblock_diff` test had encoded the old raw-index layout and was
+  updated. No `res` consumer relied on the old layout.
+* `results/m2/M2_LOG.md` is the only artifact touched; no benchmark or
+  `results/vm/*.json` file is claimed by this session.

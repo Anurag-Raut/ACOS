@@ -1252,8 +1252,16 @@ fn am_apply_style(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let def_res = vm.arg_i32(ctx, 3) as u32;
     let pref = vm.arg_i64(ctx, 4) as u64;
     let attrs = read_ints(vm, vm.arg_ref(ctx, 5)).unwrap_or_default();
-    let ov_h = vm.arg_i64(ctx, 6) as Handle;
-    let oi_h = vm.arg_i64(ctx, 7) as Handle;
+    // `outValues`/`outIndices` are `TypedArray.mDataAddress`/
+    // `mIndicesAddress` (`VMRuntime.addressOf` synthetic addresses), not heap
+    // handles. Decode the aliased array so the output is written back into the
+    // `int[]` the framework will read.
+    let ov_h = super::native_mem::array_handle_from_address(vm.arg_i64(ctx, 6))
+        .map(|h| h as Handle)
+        .unwrap_or(NULL);
+    let oi_h = super::native_mem::array_handle_from_address(vm.arg_i64(ctx, 7))
+        .map(|h| h as Handle)
+        .unwrap_or(NULL);
     let mut ov = read_ints(vm, ov_h).unwrap_or_default();
     let mut oi = read_ints(vm, oi_h).unwrap_or_default();
     REG.with(|r| {
