@@ -48,6 +48,108 @@ const NATIVE_OBJECT_FIELD: &str = "mNativeObject";
 /// `WINDOW_FORMAT_RGBA_8888`.
 const WINDOW_FORMAT_RGBA_8888: i32 = 1;
 
+/// Absolute per-dimension ceiling for a software NDK buffer. Anything above
+/// this is a guest bug or an attempt to drive a huge host allocation (W67-A
+/// #6).
+const MAX_WINDOW_DIM: i32 = 16_384;
+
+/// Absolute pixel ceiling for one RGBA8888 buffer (16 Mi pixels = 64 MiB).
+/// The dimension ceiling alone is not enough: `16384x16384` would be 1 GiB.
+const MAX_WINDOW_PIXELS: u64 = 16_777_216;
+
+/// Bytes per pixel for the only software format the host supports.
+const RGBA_BYTES_PER_PIXEL: u64 = 4;
+
+/// Checked byte length of an RGBA8888 buffer with the given geometry.
+///
+/// `stride` is in pixels and must be at least `width` (a guest that asks for a
+/// smaller stride would have the buffer read/written out of bounds). Every
+/// multiplication is checked; the result is bounded by [`MAX_WINDOW_PIXELS`] and
+/// [`MAX_WINDOW_DIM`], so guest geometry can never size an unbounded host
+/// allocation.
+fn checked_buffer_len(width: i32, height: i32, stride: i32) -> NdkResult<usize> {
+    if width <= 0 || height <= 0 {
+        return Err(format!("bad geometry {width}x{height}"));
+    }
+    if width > MAX_WINDOW_DIM || height > MAX_WINDOW_DIM || stride > MAX_WINDOW_DIM {
+        return Err(format!(
+            "geometry {width}x{height} stride {stride} exceeds the {MAX_WINDOW_DIM}px dimension \
+             ceiling"
+        ));
+    }
+    if stride < width {
+        return Err(format!("stride {stride} is smaller than width {width}"));
+    }
+    let rows = (height as u64)
+        .checked_mul(stride as u64)
+        .ok_or_else(|| format!("geometry {width}x{height} stride {stride} overflows"))?;
+    if rows > MAX_WINDOW_PIXELS {
+        return Err(format!(
+            "geometry {width}x{height} stride {stride} is {rows} px, over the \
+             {MAX_WINDOW_PIXELS}px buffer ceiling"
+        ));
+    }
+    let bytes = rows
+        .checked_mul(RGBA_BYTES_PER_PIXEL)
+        .ok_or_else(|| format!("geometry {width}x{height} stride {stride} overflows bytes"))?;
+    usize::try_from(bytes).map_err(|_| format!("geometry {width}x{height} does not fit usize"))
+}
+
+/// Validate a window geometry/format and return its checked RGBA8888 size.
+fn checked_window_geometry(width: i32, height: i32, format: i32) -> NdkResult<usize> {
+    if format != WINDOW_FORMAT_RGBA_8888 {
+        return Err(format!(
+            "format {format} has no software layout (only WINDOW_FORMAT_RGBA_8888)"
+        ));
+    }
+    checked_buffer_len(width, height, width)
+}
+
+/// The largest window dimension accepted on a display of `configured` pixels.
+///
+/// A window buffer may legitimately be larger than the panel (a scaled surface),
+/// so the display bound is twice the physical size, but never above the fixed
+/// absolute ceiling. A zero/unknown configuration grants only the absolute
+/// ceiling, so the cap never disappears.
+fn display_dimension_limit(configured: i32) -> i32 {
+    if configured > 0 {
+        configured.saturating_mul(2).clamp(1, MAX_WINDOW_DIM)
+    } else {
+        MAX_WINDOW_DIM
+    }
+}
+
+/// Validate the layout of a `BitmapInfo` handed back by the substrate. The
+/// pixel count is bounded by [`MAX_WINDOW_PIXELS`] and every product is checked.
+fn checked_bitmap_layout(width: u32, height: u32, stride: u32) -> NdkResult<()> {
+    if width == 0 || height == 0 {
+        return Err(format!("bitmap geometry {width}x{height} is empty"));
+    }
+    if width > MAX_WINDOW_DIM as u32 || height > MAX_WINDOW_DIM as u32 {
+        return Err(format!(
+            "bitmap geometry {width}x{height} exceeds the {MAX_WINDOW_DIM}px dimension ceiling"
+        ));
+    }
+    let min_stride = (width as u64)
+        .checked_mul(RGBA_BYTES_PER_PIXEL)
+        .ok_or_else(|| format!("bitmap width {width} overflows its row stride"))?;
+    if (stride as u64) < min_stride {
+        return Err(format!(
+            "bitmap stride {stride} is smaller than width {width} x {RGBA_BYTES_PER_PIXEL} bytes"
+        ));
+    }
+    let pixels = (width as u64)
+        .checked_mul(height as u64)
+        .ok_or_else(|| format!("bitmap geometry {width}x{height} overflows"))?;
+    if pixels > MAX_WINDOW_PIXELS {
+        return Err(format!(
+            "bitmap geometry {width}x{height} is {pixels} px, over the {MAX_WINDOW_PIXELS}px \
+             ceiling"
+        ));
+    }
+    Ok(())
+}
+
 /// Run `f` with the VM bound to this host thread by the JNI runtime.
 fn with_vm<R>(f: impl FnOnce(&mut Vm) -> R) -> Option<R> {
     let p = crate::state::current_vm();
@@ -239,6 +341,8 @@ impl NdkHost for ProductionNdkHost {
         let handle = read_native_handle(bitmap, NATIVE_PTR_FIELD)
             .ok_or("AndroidBitmap_getInfo: object has no readable mNativePtr")?;
         let info = substrate::bitmap_info(handle as i64)?;
+        checked_bitmap_layout(info.width, info.height, info.stride)
+            .map_err(|e| format!("AndroidBitmap_getInfo: {e}"))?;
         Ok(BitmapInfo {
             width: info.width,
             height: info.height,
@@ -253,6 +357,8 @@ impl NdkHost for ProductionNdkHost {
         let handle = read_native_handle(bitmap, NATIVE_PTR_FIELD)
             .ok_or("AndroidBitmap_lockPixels: object has no readable mNativePtr")?;
         let info = substrate::bitmap_lock(handle as i64)?;
+        checked_bitmap_layout(info.width, info.height, info.stride)
+            .map_err(|e| format!("AndroidBitmap_lockPixels: {e}"))?;
         Ok(BitmapInfo {
             width: info.width,
             height: info.height,
@@ -327,15 +433,16 @@ impl NdkHost for ProductionNdkHost {
         height: i32,
         format: i32,
     ) -> NdkResult<()> {
-        if format != WINDOW_FORMAT_RGBA_8888 {
+        let bytes = checked_window_geometry(width, height, format)
+            .map_err(|e| format!("ANativeWindow_setBuffersGeometry: {e}"))?;
+        // Bound by the live display configuration as well as the fixed ceiling.
+        let cfg = substrate::configuration();
+        let max_w = display_dimension_limit(cfg.screen_width);
+        let max_h = display_dimension_limit(cfg.screen_height);
+        if width > max_w || height > max_h {
             return Err(format!(
-                "ANativeWindow_setBuffersGeometry: format {format} has no software layout \
-                 (only WINDOW_FORMAT_RGBA_8888)"
-            ));
-        }
-        if width <= 0 || height <= 0 {
-            return Err(format!(
-                "ANativeWindow_setBuffersGeometry: bad geometry {width}x{height}"
+                "ANativeWindow_setBuffersGeometry: geometry {width}x{height} exceeds the display \
+                 bound {max_w}x{max_h}"
             ));
         }
         WINDOWS.with(|w| {
@@ -347,7 +454,7 @@ impl NdkHost for ProductionNdkHost {
             rec.height = height;
             rec.format = format;
             rec.stride = width;
-            rec.buffer = vec![0u8; (width as usize) * (height as usize) * 4];
+            rec.buffer = vec![0u8; bytes];
             Ok(())
         })
     }
@@ -358,12 +465,10 @@ impl NdkHost for ProductionNdkHost {
             let rec = g
                 .get_mut(&window)
                 .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
-            if rec.width <= 0 || rec.height <= 0 {
-                return Err("ANativeWindow_lock: buffers have no geometry".into());
-            }
-            if rec.buffer.is_empty() {
-                rec.buffer =
-                    vec![0u8; (rec.width as usize) * (rec.height as usize) * 4];
+            let needed = checked_buffer_len(rec.width, rec.height, rec.stride)
+                .map_err(|e| format!("ANativeWindow_lock: {e}"))?;
+            if rec.buffer.len() < needed {
+                rec.buffer.resize(needed, 0);
             }
             rec.locked = true;
             Ok(WindowBuffer {
@@ -377,7 +482,7 @@ impl NdkHost for ProductionNdkHost {
     }
 
     fn window_unlock_and_post(&self, window: u64) -> NdkResult<()> {
-        let (layer, width, height, buffer) = WINDOWS.with(|w| {
+        let (layer, width, height, stride, buffer) = WINDOWS.with(|w| {
             let mut g = w.borrow_mut();
             let rec = g
                 .get_mut(&window)
@@ -386,9 +491,16 @@ impl NdkHost for ProductionNdkHost {
                 return Err("ANativeWindow_unlockAndPost: window was not locked".to_string());
             }
             rec.locked = false;
-            Ok((rec.layer, rec.width as u32, rec.height as u32, rec.buffer.clone()))
+            Ok((
+                rec.layer,
+                rec.width as u32,
+                rec.height as u32,
+                rec.stride,
+                rec.buffer.clone(),
+            ))
         })?;
-        let expected = (width as usize) * (height as usize) * 4;
+        let expected = checked_buffer_len(width as i32, height as i32, stride)
+            .map_err(|e| format!("ANativeWindow_unlockAndPost: {e}"))?;
         if buffer.len() < expected {
             return Err(format!(
                 "ANativeWindow_unlockAndPost: buffer {} bytes, expected {expected}",
@@ -443,5 +555,126 @@ impl NdkHost for ProductionNdkHost {
 
     fn choreographer_remove(&self, _token: u64) -> NdkResult<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn insert_window(id: u64, width: i32, height: i32) {
+        WINDOWS.with(|w| {
+            w.borrow_mut().insert(
+                id,
+                Window {
+                    surface: 1,
+                    layer: 1,
+                    width,
+                    height,
+                    format: WINDOW_FORMAT_RGBA_8888,
+                    stride: width,
+                    buffer: vec![0u8; (width * height * 4) as usize],
+                    locked: false,
+                },
+            );
+        });
+    }
+
+    fn remove_window(id: u64) {
+        WINDOWS.with(|w| {
+            w.borrow_mut().remove(&id);
+        });
+    }
+
+    #[test]
+    fn checked_geometry_accepts_reasonable_sizes() {
+        let bytes =
+            checked_window_geometry(1920, 1080, WINDOW_FORMAT_RGBA_8888).unwrap();
+        assert_eq!(bytes, 1920 * 1080 * 4);
+        assert_eq!(
+            checked_window_geometry(1, 1, WINDOW_FORMAT_RGBA_8888).unwrap(),
+            4
+        );
+    }
+
+    #[test]
+    fn checked_geometry_rejects_bad_format_and_empty_size() {
+        // Only RGBA_8888 has a software layout.
+        assert!(checked_window_geometry(16, 16, 4).is_err());
+        assert!(checked_window_geometry(0, 16, WINDOW_FORMAT_RGBA_8888).is_err());
+        assert!(checked_window_geometry(16, -1, WINDOW_FORMAT_RGBA_8888).is_err());
+    }
+
+    #[test]
+    fn checked_geometry_rejects_unbounded_guest_sizes() {
+        // The W67-A #6 example: 200000x200000 must be refused before a ~160 GB
+        // allocation is attempted.
+        let err = checked_window_geometry(200_000, 200_000, WINDOW_FORMAT_RGBA_8888)
+            .expect_err("200000x200000 must be rejected");
+        assert!(err.contains("ceiling"), "unexpected error: {err}");
+
+        // Arithmetic overflow on both i32 dimensions.
+        assert!(checked_window_geometry(i32::MAX, i32::MAX, WINDOW_FORMAT_RGBA_8888).is_err());
+
+        // Under the dimension ceiling but over the pixel ceiling.
+        assert!(checked_window_geometry(4097, 4096, WINDOW_FORMAT_RGBA_8888).is_err());
+
+        // The exact ceiling is accepted (4096 x 4096 x 4 = 64 MiB).
+        assert_eq!(
+            checked_window_geometry(4096, 4096, WINDOW_FORMAT_RGBA_8888).unwrap(),
+            4096 * 4096 * 4
+        );
+    }
+
+    #[test]
+    fn buffer_len_requires_stride_at_least_width() {
+        assert!(checked_buffer_len(16, 16, 15).is_err());
+        assert_eq!(checked_buffer_len(16, 16, 16).unwrap(), 16 * 16 * 4);
+        assert_eq!(checked_buffer_len(16, 16, 20).unwrap(), 16 * 20 * 4);
+        assert!(checked_buffer_len(16, 16, MAX_WINDOW_DIM + 1).is_err());
+    }
+
+    #[test]
+    fn bitmap_layout_is_bounded() {
+        assert!(checked_bitmap_layout(16, 16, 64).is_ok());
+        // stride is bytes: it may not be smaller than width * 4.
+        assert!(checked_bitmap_layout(16, 16, 32).is_err());
+        assert!(checked_bitmap_layout(0, 16, 64).is_err());
+        // A guest-sized bitmap is refused.
+        assert!(checked_bitmap_layout(200_000, 200_000, 800_000).is_err());
+    }
+
+    #[test]
+    fn window_set_geometry_caps_host_allocation() {
+        let host = ProductionNdkHost;
+        let id = alloc_window_id();
+        insert_window(id, 2, 2);
+
+        // Huge geometry returns a structured error instead of allocating.
+        let err = host
+            .window_set_geometry(id, 200_000, 200_000, WINDOW_FORMAT_RGBA_8888)
+            .expect_err("huge geometry must be rejected");
+        assert!(err.contains("ceiling"), "unexpected error: {err}");
+
+        // Unknown window handles are still an error.
+        assert!(host
+            .window_set_geometry(0xdead, 16, 16, WINDOW_FORMAT_RGBA_8888)
+            .is_err());
+
+        // A valid geometry allocates exactly width*height*4 and locks with a
+        // stride that is not smaller than the width.
+        host.window_set_geometry(id, 16, 16, WINDOW_FORMAT_RGBA_8888)
+            .unwrap();
+        WINDOWS.with(|w| {
+            let g = w.borrow();
+            let rec = g.get(&id).unwrap();
+            assert_eq!(rec.buffer.len(), 16 * 16 * 4);
+            assert_eq!(rec.stride, 16);
+        });
+        let buf = host.window_lock(id, None).unwrap();
+        assert_eq!((buf.width, buf.height, buf.stride), (16, 16, 16));
+        assert!(host.window_lock(0xdead, None).is_err());
+
+        remove_window(id);
     }
 }

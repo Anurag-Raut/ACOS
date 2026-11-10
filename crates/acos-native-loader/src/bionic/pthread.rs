@@ -31,6 +31,8 @@ struct ThreadStart {
 extern "C" {
     #[link_name = "pthread_attr_getdetachstate"]
     fn host_pthread_attr_getdetachstate(attr: *const libc::pthread_attr_t, state: *mut c_int) -> c_int;
+    #[link_name = "pthread_getattr_np"]
+    fn host_pthread_getattr_np(thread: libc::pthread_t, attr: *mut libc::pthread_attr_t) -> c_int;
 }
 
 extern "C" fn thread_trampoline(ptr: *mut c_void) -> *mut c_void {
@@ -222,6 +224,26 @@ pub unsafe extern "C" fn pthread_attr_getguardsize(a: usize, out: *mut usize) ->
     libc::pthread_attr_getguardsize(attr_ptr(a), out)
 }
 
+/// `pthread_getattr_np(thread, attr)`.
+///
+/// The guest `pthread_attr_t` is opaque bionic storage (8 B on LP64); glibc's
+/// is 56 B, so it must not be written directly. Fill the host attribute in the
+/// same address-keyed table the other `pthread_attr_*` shims use. For the FFI
+/// model the guest runs on the host thread, so the host stack it reports is the
+/// stack the guest is actually using.
+pub unsafe extern "C" fn pthread_getattr_np(thread: libc::pthread_t, attr: usize) -> c_int {
+    host_pthread_getattr_np(thread, attr_ptr(attr))
+}
+
+/// `pthread_attr_getstack(attr, addr, size)` against the host attribute box.
+pub unsafe extern "C" fn pthread_attr_getstack(
+    attr: usize,
+    stackaddr: *mut *mut c_void,
+    stacksize: *mut usize,
+) -> c_int {
+    libc::pthread_attr_getstack(attr_ptr(attr), stackaddr, stacksize)
+}
+
 // --- mutex/cond attributes (opaque handles; best-effort) --------------------
 
 pub unsafe extern "C" fn pthread_mutexattr_init(a: usize) -> c_int {
@@ -389,6 +411,8 @@ pub fn install(m: &mut HashMap<&'static str, Shim>) {
     shim!(m, "pthread_attr_getstacksize", pthread_attr_getstacksize);
     shim!(m, "pthread_attr_setguardsize", pthread_attr_setguardsize);
     shim!(m, "pthread_attr_getguardsize", pthread_attr_getguardsize);
+    shim!(m, "pthread_getattr_np", pthread_getattr_np);
+    shim!(m, "pthread_attr_getstack", pthread_attr_getstack);
     shim!(m, "pthread_mutexattr_init", pthread_mutexattr_init);
     shim!(m, "pthread_mutexattr_destroy", pthread_mutexattr_destroy);
     shim!(m, "pthread_mutexattr_settype", pthread_mutexattr_settype);

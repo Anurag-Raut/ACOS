@@ -26,3 +26,4 @@ cc = "1"
 acos-dex = { path = "../acos-dex" }
 serde_json = { workspace = true }
 acos-test-support = { path = "../acos-test-support" }
+acos-sandbox = { path = "../acos-sandbox" }
