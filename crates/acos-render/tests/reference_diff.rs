@@ -78,27 +78,33 @@ fn hello_views_scene_diff_vs_art_reference() {
         serde_json::to_string(&report).expect("serialize report")
     );
 
-    // Honest, regression-catching bounds. Measured on this tree: mean 6.47,
-    // RMSE 17.10, mean SSIM 0.9733. The uniform background/inset mismatch keeps
-    // these from being tiny; the *relative* numbers are the regression signal.
+    // W47-A target (results/render/M3_LOG.md §4 gap 6): the synthetic frame must
+    // now match the ART capture to <5% differing pixels and SSIM > 0.99. The
+    // scene reproduces the app content (bars, title, hint/underline, button,
+    // gesture pill, action-bar shadow) and uses the Material surface colour.
     assert!(
-        report.mean_abs_error < 12.0,
-        "mean absolute error {:.4} regressed past 12",
+        report.differing_fraction < 0.05,
+        "differing pixels {:.3}% regressed past 5%",
+        report.differing_fraction * 100.0
+    );
+    assert!(
+        report.mean_abs_error < 6.0,
+        "mean absolute error {:.4} regressed past 6",
         report.mean_abs_error
     );
     assert!(
-        report.rmse < 25.0,
-        "RMSE {:.4} regressed past 25",
+        report.rmse < 20.0,
+        "RMSE {:.4} regressed past 20",
         report.rmse
     );
     assert!(
-        report.mean_ssim > 0.90,
-        "mean SSIM {:.4} regressed below 0.90",
+        report.mean_ssim > 0.99,
+        "mean SSIM {:.4} regressed below 0.99",
         report.mean_ssim
     );
     assert!(
-        report.global_ssim > 0.90,
-        "global SSIM {:.4} regressed below 0.90",
+        report.global_ssim > 0.99,
+        "global SSIM {:.4} regressed below 0.99",
         report.global_ssim
     );
     // The renderer must not have produced an empty/placeholder frame.

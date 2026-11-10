@@ -55,41 +55,41 @@ Reference: `art-reference`, API-34 `google_apis` x86_64 emulator, 1080x2400 @
 | Metric | Value |
 |---|---:|
 | pixels | 2,592,000 (1080x2400) |
-| overall RGB mean absolute error | **6.4715** |
-| overall RGB RMSE | **17.1021** |
-| max RGB channel error | 255 |
-| PSNR | **23.47 dB** |
-| differing pixels (max channel delta > 2) | 2,526,160 (97.460%) |
-| changed bounding box | `[0,0,1080,2374]` |
-| mean windowed SSIM (11x11 Gaussian) | **0.9733** |
-| global (single-window) SSIM | **0.9763** |
-| min windowed SSIM | −15.80 (near-constant windows; noise) |
-| changed 32px blocks | 2502 / 2550 (98.12%) |
-| per-channel MAE (R/G/B/A) | 7.1013 / 7.2986 / 5.0146 / 0.0000 |
+| overall RGB mean absolute error | **0.4554** |
+| overall RGB RMSE | **8.1901** |
+| max RGB channel error | 230 |
+| PSNR | **29.86 dB** |
+| differing pixels (max channel delta > 2) | 20,329 (0.784%) |
+| changed bounding box | `[0,47,1080,2374]` |
+| mean windowed SSIM (11x11 Gaussian) | **0.9938** |
+| global (single-window) SSIM | **0.9941** |
+| min windowed SSIM | −0.24 (near-constant windows; noise) |
+| changed 32px blocks | 89 / 2550 (3.49%) |
+| per-channel MAE (R/G/B/A) | 0.4602 / 0.4520 / 0.4542 / 0.0000 |
 
 The same numbers come out of the frame-store path
-(`crates/acos-runtime/tests/frame_reference_diff.rs`): mean 6.4640, RMSE 17.0448,
-mean SSIM 0.9736, global SSIM 0.9765 — the compositor round-trip is
-pixel-faithful (the ~0.008 delta is the PNG encode/decode of the direct render,
-nothing else).
+(`crates/acos-runtime/tests/frame_reference_diff.rs`): the compositor round-trip
+is pixel-faithful (only the PNG encode/decode of the direct render differs).
 
 ### Reading the numbers honestly
 
-The diff is **dominated by an expected background/inset mismatch**, not by a
-wrong layout:
+The W47-A scene fix reproduces the ART capture's Material surface colour
+(`#FFF0F0F3`), system-bar colours (`#FF191C1E`, black nav bar), the action-bar
+elevation gradient, the navigation gesture pill, and the app widgets' real
+geometry (hint/underline, inset button). What remains is the system status-bar
+clock/icons, which are not part of the app's own draw list, plus AA/font noise:
+the synthetic scene is a layout reconstruction, not a framework render.
 
-* the scene uses `#FFF5F5F5` as its page background; the captured device
-  background is a slightly different grey, which alone puts ~2.6M pixels over the
-  >2 threshold and keeps the *changed-block* fraction near 98%;
-* the synthetic scene is a layout reconstruction (status/action/navigation
-  bars), not a framework render, so the status-bar/inset rows differ at the
-  edges (max error 255 is at those edges).
+The regression signal is the **structural** one: mean SSIM 0.9938 / global SSIM
+0.9941, with text advances already verified to 0.3% in
+`results/render/README.md`. `tests/reference_diff.rs` asserts the W47-A target
+(<5% differing pixels, mean/global SSIM > 0.99) so a real regression fails while
+a font/AA revision does not.
 
-The signal that matters for regression is the **structural** one: mean SSIM
-0.9733 / global SSIM 0.9763 with text advances already verified to 0.3% in
-`results/render/README.md`. `tests/reference_diff.rs` asserts generous bounds
-(mean < 12, RMSE < 25, mean SSIM > 0.90, global > 0.90) so a real regression
-fails while a font/AA revision does not.
+The windowed SSIM moments are accumulated in `f64` and use the standard
+`0.01*255` / `0.03*255` stabilisers (`diff.rs`); an earlier f32 accumulation
+lost the covariance at the `C2` scale and produced negative mean SSIM on
+near-identical frames.
 
 `counter` is **not** measured: no framework-bound counter frame exists yet
 (M2/M4), and the task makes it conditional on M2 reaching Application/Activity
@@ -123,6 +123,12 @@ from a framework-bound run (impossible today). "Impact" is for the View /
 `ViewRootImpl` draw path and the fixtures; everything unsupported raises a
 structured `UNSUPPORTED_JAVA_API` naming the method — nothing is silently
 skipped.
+
+**W47-A update.** Gaps **#1 (raster `Canvas(bitmap)`), #2
+(`nSaveUnclippedLayer`/`nRestoreUnclippedLayer`), #3 (`LineBreaker`
+BALANCED/HIGH_QUALITY), #4 (`Paint.nGetFillPath` stroke-to-fill) and #8
+(`clipRect`/`clipPath` `ReverseDifference`)** are now implemented, each with a
+unit test; the rows below are kept for history with their new state noted.
 
 | # | Gap | Site | Error / state | Impact | Why |
 |---|---|---|---|---|---|

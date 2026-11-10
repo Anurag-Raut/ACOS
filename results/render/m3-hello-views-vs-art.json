@@ -1,61 +1,72 @@
 {
-  "candidate": "results/render/hello-views.png",
-  "diff": {
-    "alpha": {
-      "max_abs_error": 0,
-      "mean_abs_error": 0.0,
-      "rmse": 0.0
+  "request_id": "req_17a35c_18e6c3ca983263ee",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "capabilities_used": [],
+  "result": {
+    "candidate": "results/render/hello-views.png",
+    "diff": {
+      "alpha": {
+        "max_abs_error": 0,
+        "mean_abs_error": 0.0,
+        "rmse": 0.0
+      },
+      "blocks": {
+        "block_size": 32,
+        "blocks_x": 34,
+        "blocks_y": 75,
+        "changed_blocks": 89,
+        "changed_fraction": 0.03490196078431373,
+        "max_block_mean_abs_error": 103.75716145833277
+      },
+      "blue": {
+        "max_abs_error": 225,
+        "mean_abs_error": 0.45415895061728395,
+        "rmse": 8.122289006413382
+      },
+      "changed_bbox": [
+        0,
+        47,
+        1080,
+        2374
+      ],
+      "differing_fraction": 0.007842978395061729,
+      "differing_pixels": 20329,
+      "global_ssim": 0.9941235263703678,
+      "green": {
+        "max_abs_error": 227,
+        "mean_abs_error": 0.45198109567901235,
+        "rmse": 8.170333856341127
+      },
+      "height": 2400,
+      "identical": false,
+      "luma": {
+        "max_abs_error": 228,
+        "mean_abs_error": 0.4521909722222222,
+        "rmse": 8.199640278356389
+      },
+      "max_abs_error": 230,
+      "mean_abs_error": 0.45544251543209874,
+      "mean_ssim": 0.9937926870839652,
+      "min_ssim": -0.23960266588405887,
+      "pixel_count": 2592000,
+      "pixel_threshold": 2,
+      "psnr_db": 29.864974772291344,
+      "red": {
+        "max_abs_error": 230,
+        "mean_abs_error": 0.4601875,
+        "rmse": 8.277037718596052
+      },
+      "rmse": 8.190142192962616,
+      "ssim_window": 11,
+      "width": 1080
     },
-    "blocks": {
-      "block_size": 32,
-      "blocks_x": 34,
-      "blocks_y": 75,
-      "changed_blocks": 2502,
-      "changed_fraction": 0.9811764705882353,
-      "max_block_mean_abs_error": 131.42382812499997
-    },
-    "blue": {
-      "max_abs_error": 255,
-      "mean_abs_error": 5.014572145061728,
-      "rmse": 16.92243587767289
-    },
-    "changed_bbox": [
-      0,
-      0,
-      1080,
-      2374
-    ],
-    "differing_fraction": 0.9745987654320988,
-    "differing_pixels": 2526160,
-    "global_ssim": 0.9763119973395353,
-    "green": {
-      "max_abs_error": 255,
-      "mean_abs_error": 7.298572145061728,
-      "rmse": 17.27232607586447
-    },
-    "height": 2400,
-    "identical": false,
-    "luma": {
-      "max_abs_error": 255,
-      "mean_abs_error": 7.1885308641975305,
-      "rmse": 17.206416672025526
-    },
-    "max_abs_error": 255,
-    "mean_abs_error": 6.471470807613168,
-    "mean_ssim": 0.9733316063831154,
-    "min_ssim": -15.796248308928446,
-    "pixel_count": 2592000,
-    "pixel_threshold": 2,
-    "psnr_db": 23.469814865226226,
-    "red": {
-      "max_abs_error": 255,
-      "mean_abs_error": 7.101268132716049,
-      "rmse": 17.10974492877605
-    },
-    "rmse": 17.102099828507573,
-    "ssim_window": 11,
-    "width": 1080
+    "heatmap": "results/render/m3-hello-views-vs-art.png",
+    "reference": "fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png"
   },
-  "heatmap": "results/render/m3-hello-views-vs-art.png",
-  "reference": "fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png"
+  "metrics": {
+    "wall_ms": 3156
+  }
 }

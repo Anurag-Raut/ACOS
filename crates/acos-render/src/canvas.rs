@@ -221,11 +221,8 @@ impl Canvas {
             .ok_or_else(|| RenderError::unsupported("Canvas perspective matrix"))
     }
 
-    /// Clip to a path. `op` selects intersect/difference/replace.
+    /// Clip to a path. `op` selects intersect/difference/replace/reverse-difference.
     pub fn clip_path(&mut self, path: &Path, op: ClipOp, aa: bool) -> RenderResult<()> {
-        if op == ClipOp::ReverseDifference {
-            return Err(RenderError::unsupported("Canvas.clipPath ReverseDifference"));
-        }
         let Some(sk) = path.build_tiny_skia() else {
             // An empty path with Intersect clips everything away.
             if op == ClipOp::Intersect {
@@ -246,9 +243,6 @@ impl Canvas {
 
     /// Clip to a rectangle.
     pub fn clip_rect(&mut self, rect: RectF, op: ClipOp, aa: bool) -> RenderResult<()> {
-        if op == ClipOp::ReverseDifference {
-            return Err(RenderError::unsupported("Canvas.clipRect ReverseDifference"));
-        }
         let path = rect_path(rect);
         let ts = self.affine()?;
         let mut m = Mask::new(self.width, self.height)
@@ -274,7 +268,16 @@ impl Canvas {
                     None => self.state.clip = Some(m),
                 }
             }
-            ClipOp::ReverseDifference => {}
+            ClipOp::ReverseDifference => {
+                // Result = new shape minus the existing clip. With no existing
+                // clip the result is just the new shape.
+                if let Some(existing) = &self.state.clip {
+                    let mut inv = existing.clone();
+                    inv.invert();
+                    intersect_masks(&mut m, &inv);
+                }
+                self.state.clip = Some(m);
+            }
         }
     }
 

@@ -25,12 +25,12 @@ use acos_render::canvas::ClipOp;
 use acos_render::geom::{Rect, RectF};
 use acos_render::handle::Handle as RHandle;
 use acos_render::matrix::Matrix3x3;
-use acos_render::render_node::DisplayOp;
+use acos_render::render_node::{DisplayOp, RenderNode};
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
 use crate::natives::gfx_handles::{Handle, HandleTable};
-use crate::natives::gfx_state::{rh, snapshot_paint, snapshot_path, stale, with_ctx};
+use crate::natives::gfx_state::{render_err, rh, snapshot_paint, snapshot_path, stale, with_ctx};
 use crate::vm::Vm;
 
 /// A recording canvas staged against a `RenderNode`.
@@ -41,8 +41,23 @@ struct RecCanvas {
     ops: Vec<DisplayOp>,
     /// Saved `(matrix, clip)` pairs, parallel to the `Save` ops.
     stack: Vec<(Matrix3x3, RectF)>,
+    /// Op indices of `SaveLayerAlpha` ops recorded by `nSaveUnclippedLayer`,
+    /// patched with the restore paint's alpha before the layer is popped.
+    unclipped: Vec<usize>,
     matrix: Matrix3x3,
     clip: RectF,
+    /// `Some` for a raster `Canvas`: every draw op is flushed immediately into
+    /// this bitmap. `None` is the recording `RecordingCanvas` path.
+    raster: Option<RasterTarget>,
+}
+
+/// A raster `Canvas` target. The display list accumulates on `node` and is
+/// replayed over the bitmap's current contents after each draw op.
+struct RasterTarget {
+    bitmap: i64,
+    /// Snapshot of the bitmap's pixels when it was bound; every flush replays
+    /// the whole display list over this base so ops are never double-applied.
+    base: Vec<u32>,
 }
 
 impl RecCanvas {
@@ -53,18 +68,22 @@ impl RecCanvas {
             height,
             ops: Vec::new(),
             stack: Vec::new(),
+            unclipped: Vec::new(),
             matrix: Matrix3x3::identity(),
             clip: RectF::new(0.0, 0.0, width.max(0) as f32, height.max(0) as f32),
+            raster: None,
         }
+    }
+
+    fn new_raster(node: RHandle, width: i32, height: i32, bitmap: i64, base: Vec<u32>) -> Self {
+        let mut c = RecCanvas::new(node, width, height);
+        c.raster = Some(RasterTarget { bitmap, base });
+        c
     }
 }
 
 thread_local! {
     static REC: RefCell<HandleTable<RecCanvas>> = RefCell::new(HandleTable::new());
-    /// Opaque handles for raster `Canvas` objects. They exist only so
-    /// `android.view.Surface`'s `CompatibleCanvas` can be constructed; no draw
-    /// op resolves here, so raster drawing stays unsupported.
-    static RASTER: RefCell<HandleTable<()>> = RefCell::new(HandleTable::new());
 }
 
 fn rec<R>(h: i64, f: impl FnOnce(&mut RecCanvas) -> R) -> Option<R> {
@@ -72,8 +91,45 @@ fn rec<R>(h: i64, f: impl FnOnce(&mut RecCanvas) -> R) -> Option<R> {
 }
 
 fn push(canvas: i64, op: DisplayOp) -> VmResult<()> {
-    rec(canvas, |c| c.ops.push(op)).ok_or_else(|| stale("RecordingCanvas", canvas))?;
+    let raster = rec(canvas, |c| {
+        c.ops.push(op);
+        c.raster.is_some()
+    })
+    .ok_or_else(|| stale("Canvas", canvas))?;
+    if raster {
+        flush_raster(canvas)?;
+    }
     Ok(())
+}
+
+/// Replay a raster canvas's full display list over its bitmap.
+fn flush_raster(canvas: i64) -> VmResult<()> {
+    let Some((bitmap, node, ops, base)) = rec(canvas, |c| {
+        c.raster
+            .as_ref()
+            .map(|r| (r.bitmap, c.node, c.ops.clone(), r.base.clone()))
+    })
+    .flatten()
+    else {
+        return Ok(());
+    };
+    if bitmap == 0 {
+        return Err(VmError::unsupported_api(
+            "Canvas draw before Canvas.setBitmap (raster canvas has no bitmap)",
+            "android.graphics.Canvas",
+        ));
+    }
+    with_ctx(|c| -> VmResult<()> {
+        if !c.bitmaps.contains(rh(bitmap)) {
+            return Err(stale("Bitmap", bitmap));
+        }
+        if let Some(n) = c.render_nodes.get_mut(node) {
+            n.set_display_list(ops);
+        }
+        c.bitmap_render_node_over(rh(bitmap), node, &base)
+            .map_err(|e| render_err("Canvas raster draw", e))?;
+        Ok(())
+    })
 }
 
 fn snap(paint: i64) -> VmResult<RHandle> {
@@ -120,12 +176,10 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     // --- Canvas state ---
     vm.register_native(C, "nGetNativeFinalizer", "()J", ret_zero_long);
-    // `Canvas()` calls `nInitRaster` to wrap a raster target. ACOS supports the
-    // recording path only, but `android.view.Surface` constructs a
-    // `CompatibleCanvas` in its constructor, so the compatibility handle must
-    // exist. Returning the null raster handle lets `Surface`/`Surface.copyFrom`
-    // work; every raster draw op still resolves through the recording table and
-    // fails as stale, so nothing is silently rendered. W22-B edit (T-29).
+    // `Canvas()` / `new Canvas(bitmap)` wrap a raster (bitmap-backed) target.
+    // The argument is the ACOS bitmap handle (`Bitmap.getNativeInstance`), or 0
+    // for a `Canvas()` that will receive `setBitmap` later. Raster draw ops are
+    // replayed over the bitmap's current pixels after each op.
     vm.register_native(C, "nInitRaster", "(J)J", c_init_raster);
     vm.register_native(C, "nFreeCaches", "()V", noop);
     vm.register_native(C, "nFreeTextLayoutCaches", "()V", noop);
@@ -151,9 +205,9 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(C, "nSaveLayer", "(JFFFFJ)I", c_save_layer);
     vm.register_native(C, "nSaveLayerAlpha", "(JFFFFI)I", c_save_layer_alpha);
     vm.register_native(C, "nSetDrawFilter", "(JJ)V", noop);
-    vm.register_native(C, "nSetBitmap", "(JJ)V", unsupported_bitmap_canvas);
-    vm.register_native(C, "nSaveUnclippedLayer", "(JIIII)I", unsupported_unclipped);
-    vm.register_native(C, "nRestoreUnclippedLayer", "(JIJ)V", unsupported_unclipped);
+    vm.register_native(C, "nSetBitmap", "(JJ)V", c_set_bitmap);
+    vm.register_native(C, "nSaveUnclippedLayer", "(JIIII)I", c_save_unclipped_layer);
+    vm.register_native(C, "nRestoreUnclippedLayer", "(JIJ)V", c_restore_unclipped_layer);
 
     // --- Draw ops (declared on both BaseCanvas and BaseRecordingCanvas) ---
     for class in [B, R] {
@@ -259,27 +313,154 @@ fn noop(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-/// `Canvas.nInitRaster(J)J`: return a non-null compatibility handle for the
-/// raster canvas. ACOS has no raster drawing path, so the handle is an empty
-/// staged canvas: constructing it (which `android.view.Surface` always does)
-/// succeeds, but every draw op still fails as a stale/empty canvas rather than
-/// silently dropping pixels.
+/// `Canvas.nInitRaster(J)J`: create a raster canvas. The argument is the ACOS
+/// bitmap handle for `new Canvas(bitmap)`, or 0 for `Canvas()` (followed by
+/// `nSetBitmap`). A render node backs the accumulating display list.
 fn c_init_raster(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let h = RASTER.with(|t| t.borrow_mut().insert(()));
-    vm.ret_i64(ctx, h.to_jlong());
+    let bitmap = vm.arg_i64(ctx, 0);
+    // `Canvas()` passes 0; `Surface`'s CompatibleCanvas may pass an opaque
+    // native pointer. Only bind when it resolves to a real bitmap, otherwise
+    // leave the canvas unbound so a later draw fails with a structured error.
+    let (w, h, base) = with_ctx(|c| {
+        c.bitmaps
+            .get(rh(bitmap))
+            .map(|b| (b.width() as i32, b.height() as i32, b.pixels().to_vec()))
+    })
+    .unwrap_or((1, 1, Vec::new()));
+    let bitmap = if w == 1 && h == 1 && base.is_empty() && bitmap != 0 {
+        // Unknown/non-bitmap pointer: keep it unbound rather than mis-binding.
+        0
+    } else {
+        bitmap
+    };
+    let node = with_ctx(|c| c.render_nodes.insert(RenderNode::new("raster-canvas")));
+    with_ctx(|c| {
+        if let Some(n) = c.render_nodes.get_mut(node) {
+            n.left = 0;
+            n.top = 0;
+            n.right = w;
+            n.bottom = h;
+        }
+    });
+    let hh = rec_handle(RecCanvas::new_raster(node, w, h, bitmap, base));
+    vm.ret_i64(ctx, hh);
     Ok(())
 }
-fn unsupported_bitmap_canvas(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Err(VmError::unsupported_api(
-        "Canvas.nSetBitmap (raster canvas)",
-        "android.graphics.Canvas",
-    ))
+
+fn rec_handle(c: RecCanvas) -> i64 {
+    REC.with(|t| Handle::to_jlong(t.borrow_mut().insert(c)))
 }
-fn unsupported_unclipped(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Err(VmError::unsupported_api(
-        "Canvas unclipped layer",
-        "android.graphics.Canvas",
-    ))
+
+/// `Canvas.nSetBitmap(J bitmap)`: bind a raster canvas to a bitmap (or unbind
+/// with 0), matching `Canvas.setBitmap`.
+fn c_set_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let canvas = canvas_handle(vm, ctx)?;
+    let bitmap = vm.arg_i64(ctx, 1);
+    if bitmap != 0 && !with_ctx(|c| c.bitmaps.contains(rh(bitmap))) {
+        return Err(stale("Bitmap", bitmap));
+    }
+    let node = rec(canvas, |c| {
+        let Some(r) = &mut c.raster else {
+            return None;
+        };
+        r.bitmap = bitmap;
+        r.base = if bitmap == 0 {
+            Vec::new()
+        } else {
+            with_ctx(|x| x.bitmaps.get(rh(bitmap)).map(|b| b.pixels().to_vec()))
+                .unwrap_or_default()
+        };
+        // `setBitmap` re-initialises the canvas state and clears the list.
+        c.ops.clear();
+        c.stack.clear();
+        c.unclipped.clear();
+        c.matrix = Matrix3x3::identity();
+        c.clip = RectF::new(0.0, 0.0, c.width.max(0) as f32, c.height.max(0) as f32);
+        if bitmap != 0 {
+            if let Some((bw, bh)) = with_ctx(|x| {
+                x.bitmaps.get(rh(bitmap)).map(|b| (b.width(), b.height()))
+            }) {
+                c.width = bw as i32;
+                c.height = bh as i32;
+                c.clip = RectF::new(0.0, 0.0, bw as f32, bh as f32);
+            }
+        }
+        Some((c.width, c.height, c.node))
+    })
+    .ok_or_else(|| stale("Canvas", canvas))?;
+    if let Some((w, h, node)) = node {
+        with_ctx(|c| {
+            if let Some(n) = c.render_nodes.get_mut(node) {
+                n.left = 0;
+                n.top = 0;
+                n.right = w;
+                n.bottom = h;
+            }
+        });
+    }
+    Ok(())
+}
+
+/// `Canvas.nSaveUnclippedLayer(int l, int t, int r, int b)`: save a layer that
+/// ignores the current clip. Implemented as a `Save`, a `clipRect(Replace,
+/// bounds)`, and a `SaveLayerAlpha`, so subsequent drawing sees a bare `bounds`
+/// clip and is composited as a group on restore.
+fn c_save_unclipped_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = canvas_handle(vm, ctx)?;
+    let bounds = RectF::new(
+        vm.arg_i32(ctx, 1) as f32,
+        vm.arg_i32(ctx, 2) as f32,
+        vm.arg_i32(ctx, 3) as f32,
+        vm.arg_i32(ctx, 4) as f32,
+    );
+    let n = rec(h, |c| {
+        c.stack.push((c.matrix, c.clip));
+        c.ops.push(DisplayOp::Save);
+        c.clip = bounds;
+        c.ops.push(DisplayOp::ClipRect(bounds, ClipOp::Replace, false));
+        c.ops.push(DisplayOp::SaveLayerAlpha(Some(bounds), 255));
+        c.unclipped.push(c.ops.len() - 1);
+        c.stack.len() as i32 + 1
+    })
+    .ok_or_else(|| stale("Canvas", h))?;
+    vm.ret_i32(ctx, n);
+    Ok(())
+}
+
+/// `Canvas.nRestoreUnclippedLayer(int saveCount, Paint paint)`: composite the
+/// unclipped layer using `paint`'s alpha, then restore the pre-save state.
+fn c_restore_unclipped_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = canvas_handle(vm, ctx)?;
+    let paint = vm.arg_i64(ctx, 2);
+    let alpha = if paint == 0 {
+        255u8
+    } else {
+        crate::natives::gfx_paint::paint_rec(paint)
+            .map(|p| (p.alpha & 0xff) as u8)
+            .unwrap_or(255)
+    };
+    rec(h, |c| {
+        // Patch the recorded layer's alpha; the restore paint is only known
+        // when the layer is popped.
+        if let Some(idx) = c.unclipped.pop() {
+            if let Some(DisplayOp::SaveLayerAlpha(_, a)) = c.ops.get_mut(idx) {
+                *a = alpha;
+            }
+        }
+        // Pop the unclipped-layer state, then the outer save.
+        if let Some((m, clip)) = c.stack.pop() {
+            c.matrix = m;
+            c.clip = clip;
+            c.ops.push(DisplayOp::Restore);
+        }
+        if let Some((m, clip)) = c.stack.pop() {
+            c.matrix = m;
+            c.clip = clip;
+            c.ops.push(DisplayOp::Restore);
+        }
+    })
+    .ok_or_else(|| stale("Canvas", h))?;
+    Ok(())
 }
 
 fn c_save_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -417,15 +598,16 @@ fn c_clip_rect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.arg_f32(ctx, 4),
     );
     let op = ClipOp::from_ordinal(vm.arg_i32(ctx, 5)).unwrap_or(ClipOp::Intersect);
-    if op == ClipOp::ReverseDifference {
-        return Err(VmError::unsupported_api(
-            "Canvas.clipRect ReverseDifference",
-            "android.graphics.Canvas",
-        ));
-    }
     rec(h, |c| {
         c.ops.push(DisplayOp::ClipRect(r, op, false));
-        c.clip = intersect(c.clip, r);
+        // Track the (rectangular) clip for quick-reject/getClipBounds. Only
+        // Intersect and Replace stay rectangular; Difference and
+        // ReverseDifference are left to the rasteriser's mask.
+        c.clip = match op {
+            ClipOp::Replace => r,
+            ClipOp::Intersect => intersect(c.clip, r),
+            ClipOp::Difference | ClipOp::ReverseDifference => c.clip,
+        };
     });
     vm.ret_bool(ctx, true);
     Ok(())

@@ -14,7 +14,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use acos_render::paint::ColorFilterSpec;
+use acos_render::paint::{ColorFilterSpec, PaintStyle, StrokeCap, StrokeJoin};
+use acos_render::path::Path;
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
@@ -367,7 +368,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nGetTextPath", "(JILjava/lang/String;IIFFJ)V", paint_text_path_string);
     vm.register_native(p, "nGetTextRunCursor", "(J[CIIIII)I", unsupported_text_cursor);
     vm.register_native(p, "nGetTextRunCursor", "(JLjava/lang/String;IIIII)I", unsupported_text_cursor);
-    vm.register_native(p, "nGetFillPath", "(JJJ)Z", unsupported_fill_path);
+    vm.register_native(p, "nGetFillPath", "(JJJ)Z", paint_get_fill_path);
 
     // `ColorSpace$Rgb` is constructed during `android.graphics` static init
     // (`new Paint()` transitively creates the sRGB colour space). ACOS models
@@ -837,11 +838,43 @@ fn unsupported_text_cursor(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
     ))
 }
 
-fn unsupported_fill_path(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Err(VmError::unsupported_api(
-        "Paint.nGetFillPath (stroke-to-fill conversion)",
-        "android.graphics.Paint",
-    ))
+/// `Paint.nGetFillPath(src, dst)`: apply stroking to `src` and write the
+/// resulting fill outline to `dst`. Mirrors Skia's `SkPaint::getFillPath`:
+/// `FILL` copies the source, `STROKE`/`FILL_AND_STROKE` converts the stroke to
+/// its fill outline. Returns true when the resulting path is non-empty.
+fn paint_get_fill_path(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let rec = paint_rec(vm.arg_i64(ctx, 0))?;
+    let src = crate::natives::gfx_path::path_clone(vm.arg_i64(ctx, 1))?;
+    let dst = vm.arg_i64(ctx, 2);
+    let stroked = matches!(
+        PaintStyle::from_ordinal(rec.style),
+        Some(PaintStyle::Stroke) | Some(PaintStyle::FillAndStroke)
+    );
+    let result = if stroked {
+        let cap = StrokeCap::from_ordinal(rec.stroke_cap).unwrap_or(StrokeCap::Butt);
+        let join = StrokeJoin::from_ordinal(rec.stroke_join).unwrap_or(StrokeJoin::Miter);
+        // A hairline (width 0) still outlines at 1px in Skia.
+        let width = if rec.stroke_width > 0.0 {
+            rec.stroke_width
+        } else {
+            1.0
+        };
+        src.stroke_to_fill(width, cap, join, rec.stroke_miter)
+    } else {
+        Some(src.clone())
+    };
+    match result {
+        Some(p) => {
+            let non_empty = !p.is_empty();
+            crate::natives::gfx_path::replace_path(dst, p)?;
+            vm.ret_bool(ctx, non_empty);
+        }
+        None => {
+            crate::natives::gfx_path::replace_path(dst, Path::new())?;
+            vm.ret_bool(ctx, false);
+        }
+    }
+    Ok(())
 }
 
 fn write_float_array(

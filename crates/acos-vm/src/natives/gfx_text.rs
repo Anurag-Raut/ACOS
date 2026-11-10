@@ -10,10 +10,9 @@
 //!
 //! # Documented divergences from Android/Minikin
 //!
-//! * Only the greedy (`BREAK_STRATEGY_SIMPLE`) line-breaking strategy is
-//!   implemented; `HIGH_QUALITY`/`BALANCED` are rejected as
-//!   `UNSUPPORTED_JAVA_API` rather than silently downgraded.
-//! * Hyphenation is always off (`HYPHENATION_FREQUENCY_NONE`).
+//! * All three `LineBreaker` break strategies (`SIMPLE`, `BALANCED`,
+//!   `HIGH_QUALITY`) are implemented; hyphenation is always off
+//!   (`HYPHENATION_FREQUENCY_NONE`).
 //! * Minikin's locale-list machinery is reduced to a single locale id; ACOS
 //!   resolves fonts by family name + weight/slant and falls back through the
 //!   `fonts.xml` document order (same rule as Minikin, minus locale tags).
@@ -86,6 +85,9 @@ impl Default for TextAttrs {
 #[derive(Clone, Debug)]
 pub struct LineBreakResult {
     pub lines: Vec<LineBreak>,
+    /// Strategy selected by `LineBreaker.Builder`, used when
+    /// `nComputeLineBreaks` omits one.
+    pub strategy: BreakStrategy,
 }
 
 /// A `MeasuredText` object (advances for a char slice).
@@ -536,13 +538,14 @@ fn linebreaker_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             "LineBreaker.nInit",
         )
     })?;
-    if !strat.is_supported() {
-        return Err(VmError::unsupported_api(
-            format!("LineBreaker strategy {strat:?} (only SIMPLE)"),
-            "LineBreaker.nInit",
-        ));
-    }
-    let h = with_text(|t| t.line_results.insert(LineBreakResult { lines: Vec::new() }).to_jlong());
+    let h = with_text(|t| {
+        t.line_results
+            .insert(LineBreakResult {
+                lines: Vec::new(),
+                strategy: strat,
+            })
+            .to_jlong()
+    });
     vm.ret_i64(ctx, h);
     Ok(())
 }
@@ -553,7 +556,9 @@ fn linebreaker_compute(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let _measured = vm.arg_i64(ctx, 2);
     let start = vm.arg_i32(ctx, 3).max(0) as usize;
     let width = vm.arg_f32(ctx, 4);
-    let _strategy = vm.arg_i32(ctx, 5);
+    // API 34 passes the strategy both to the builder and here; the builder
+    // value is the fallback when this argument is absent/unknown.
+    let requested = BreakStrategy::from_ordinal(vm.arg_i32(ctx, 5));
     let _hyphen = vm.arg_f32(ctx, 6);
     let text = char_array(vm, text_h)?;
     let slice: Vec<u16> = if start <= text.len() {
@@ -563,10 +568,21 @@ fn linebreaker_compute(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     };
     let attrs = TextAttrs::default();
     let breaks = with_text(|t| -> VmResult<Vec<LineBreak>> {
+        let stored = t
+            .line_results
+            .get(Handle::from_jlong(breaker))
+            .map(|r| r.strategy)
+            .unwrap_or(BreakStrategy::Simple);
+        let strategy = requested.unwrap_or(stored);
         let style = t.style(&attrs)?;
         let engine = t.engine_mut()?;
         let shaped = engine.shape(&slice, &style);
-        let lb = LineBreaker::default();
+        let lb = LineBreaker::new(strategy).map_err(|e| {
+            VmError::unsupported_api(
+                format!("LineBreaker ({}): {e}", e.code()),
+                "LineBreaker.nComputeLineBreaks",
+            )
+        })?;
         let constraints = ParagraphConstraints {
             width,
             first_width: width,

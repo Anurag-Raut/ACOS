@@ -7,8 +7,9 @@
 
 use crate::geom::{PointF, RectF};
 use crate::matrix::Matrix3x3;
+use crate::paint::{StrokeCap, StrokeJoin};
 use crate::RenderError;
-use tiny_skia::{FillRule, PathBuilder};
+use tiny_skia::{FillRule, PathBuilder, PathStroker};
 
 /// Android `Path.FillType`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
@@ -384,6 +385,48 @@ impl Path {
             }
         }
         b.finish()
+    }
+
+    /// Build our verb list from a tiny-skia path. Used to bring stroked
+    /// outlines (`Paint.getFillPath`, `PathMeasure`-style helpers) back into
+    /// the mutable verb model.
+    pub fn from_tiny_skia(sk: &tiny_skia::Path) -> Path {
+        let mut p = Path::new();
+        for seg in sk.segments() {
+            match seg {
+                tiny_skia::PathSegment::MoveTo(pt) => p.move_to(pt.x, pt.y),
+                tiny_skia::PathSegment::LineTo(pt) => p.line_to(pt.x, pt.y),
+                tiny_skia::PathSegment::QuadTo(a, b) => p.quad_to(a.x, a.y, b.x, b.y),
+                tiny_skia::PathSegment::CubicTo(a, b, c) => {
+                    p.cubic_to(a.x, a.y, b.x, b.y, c.x, c.y)
+                }
+                tiny_skia::PathSegment::Close => p.close(),
+            }
+        }
+        p
+    }
+
+    /// Android `Paint.getFillPath` stroke-to-fill: return the outline that
+    /// would be filled for `self` stroked with the given paint properties.
+    /// Returns `None` for an empty path.
+    pub fn stroke_to_fill(
+        &self,
+        width: f32,
+        cap: StrokeCap,
+        join: StrokeJoin,
+        miter: f32,
+    ) -> Option<Path> {
+        let sk = self.build_tiny_skia()?;
+        let stroke = tiny_skia::Stroke {
+            width: width.max(0.0),
+            miter_limit: if miter > 0.0 { miter } else { 4.0 },
+            line_cap: cap.to_skia(),
+            line_join: join.to_skia(),
+            dash: None,
+        };
+        let mut stroker = PathStroker::new();
+        let filled = stroker.stroke(&sk, &stroke, 1.0)?;
+        Some(Path::from_tiny_skia(&filled))
     }
 
     /// Android `Path.setPath`-style transform returning a new path.

@@ -2090,6 +2090,74 @@ impl RenderContext {
         Ok(seq)
     }
 
+    /// Rasterise a render node's display list **over** the current contents of
+    /// a bitmap. This is the backing store for `Canvas(bitmap)`: the bitmap is
+    /// copied into a scratch surface, the display list is replayed (without the
+    /// transparent clear `surface_render_node` performs), and the result is
+    /// copied back. Used by the raster-canvas natives.
+    pub fn bitmap_render_node(&mut self, bitmap: Handle, root: Handle) -> RenderResult<()> {
+        let base = self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .pixels()
+            .to_vec();
+        self.bitmap_render_node_over(bitmap, root, &base)
+    }
+
+    /// Like [`bitmap_render_node`](Self::bitmap_render_node), but seeds the
+    /// scratch surface from an explicit base snapshot instead of the bitmap's
+    /// live pixels. `Canvas(bitmap)` uses this so replaying the accumulating
+    /// display list never double-applies earlier ops.
+    pub fn bitmap_render_node_over(
+        &mut self,
+        bitmap: Handle,
+        root: Handle,
+        base: &[u32],
+    ) -> RenderResult<()> {
+        if !self.bitmaps.contains(bitmap) {
+            return Err(RenderError::BadHandle);
+        }
+        if !self.render_nodes.contains(root) {
+            return Err(RenderError::BadHandle);
+        }
+        let (w, h) = {
+            let b = self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?;
+            (b.width(), b.height())
+        };
+        let surface = self.surface_create(w, h, 1.0)?;
+        // Seed the scratch surface from the base snapshot so drawing composites
+        // over the bitmap's original content (Android `Canvas(bitmap)`).
+        {
+            let s = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
+            s.pixmap.fill(tiny_skia::Color::TRANSPARENT);
+            for (d, &word) in s.pixmap.pixels_mut().iter_mut().zip(base.iter()) {
+                *d = tiny_skia::PremultipliedColorU8::from_rgba(
+                    (word & 0xff) as u8,
+                    ((word >> 8) & 0xff) as u8,
+                    ((word >> 16) & 0xff) as u8,
+                    ((word >> 24) & 0xff) as u8,
+                )
+                .unwrap_or(tiny_skia::PremultipliedColorU8::TRANSPARENT);
+            }
+        }
+        let canvas = self.canvas_for_surface(surface)?;
+        self.surface_canvas_mut(surface)?.reset_state();
+        self.unsupported_ops.clear();
+        self.render_node_recursive(surface, root, 0)?;
+        {
+            let pm = &self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.pixmap;
+            self.bitmaps
+                .get_mut(bitmap)
+                .ok_or(RenderError::BadHandle)?
+                .from_pixmap_mut(pm);
+        }
+        // The scratch surface/canvas are transient.
+        let _ = self.surfaces.remove(surface);
+        let _ = self.canvases.remove(canvas);
+        Ok(())
+    }
+
     fn render_node_recursive(&mut self, surface: Handle, node: Handle, depth: usize) -> RenderResult<()> {
         if depth > 512 {
             return Err(RenderError::invalid("render node recursion too deep"));

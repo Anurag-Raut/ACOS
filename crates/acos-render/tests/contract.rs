@@ -340,3 +340,82 @@ fn png_encoding_round_trips() {
         assert_eq!(decoded.height, 120);
     }
 }
+
+// ---------------------------------------------------------------------------
+// W47-A: raster canvas backing store, ReverseDifference clip, stroke-to-fill.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bitmap_render_node_over_composites_onto_existing_bitmap() {
+    use acos_render::render_node::{DisplayOp, RenderNode};
+
+    let mut ctx = RenderContext::new();
+    let bmp = ctx.bitmap_create(16, 16, BitmapConfig::Rgba8888).unwrap();
+    ctx.bitmap_erase(bmp, 0xff10_2030).unwrap();
+    let base = ctx.bitmap_pixels(bmp).unwrap();
+
+    let paint = ctx.paint_create();
+    ctx.paint_set_color(paint, 0xffff_0000).unwrap();
+    let mut node = RenderNode::new("raster-canvas");
+    node.left = 0;
+    node.top = 0;
+    node.right = 16;
+    node.bottom = 16;
+    node.display_list
+        .push(DisplayOp::DrawRect(RectF::new(0.0, 0.0, 8.0, 8.0), paint));
+    let node = ctx.render_nodes.insert(node);
+
+    ctx.bitmap_render_node_over(bmp, node, &base).unwrap();
+    // The drawn rect wins inside its bounds...
+    assert_eq!(ctx.bitmap_get_pixel(bmp, 2, 2).unwrap(), 0xffff_0000);
+    // ...and the bitmap's pre-existing pixels survive outside it.
+    assert_eq!(ctx.bitmap_get_pixel(bmp, 12, 12).unwrap(), 0xff10_2030);
+}
+
+#[test]
+fn clip_rect_reverse_difference_is_new_minus_existing() {
+    let mut ctx = RenderContext::new();
+    let surface = ctx.surface_create(40, 40, 1.0).unwrap();
+    ctx.canvas_for_surface(surface).unwrap();
+    // Existing clip A = the left half; reverse-difference with B = [10,30)^2
+    // yields B - A = the part of B with x >= 20.
+    ctx.canvas_clip_rect(
+        surface,
+        RectF::new(0.0, 0.0, 20.0, 40.0),
+        ClipOp::Intersect,
+        false,
+    )
+    .unwrap();
+    ctx.canvas_clip_rect(
+        surface,
+        RectF::new(10.0, 10.0, 30.0, 30.0),
+        ClipOp::ReverseDifference,
+        false,
+    )
+    .unwrap();
+    ctx.canvas_draw_color(surface, 0xffff_0000).unwrap();
+    ctx.surface_present(surface, 1).unwrap();
+    let f = ctx.surface_capture(surface).unwrap().unwrap();
+    // Inside B but right of A is filled red...
+    assert_eq!(f.pixels.pixel(25, 20).unwrap().red(), 255);
+    // ...the left half (A) and the region outside B stay transparent.
+    assert_eq!(f.pixels.pixel(15, 20).unwrap().alpha(), 0);
+    assert_eq!(f.pixels.pixel(35, 20).unwrap().alpha(), 0);
+}
+
+#[test]
+fn stroke_to_fill_produces_a_filled_outline() {
+    use acos_render::paint::{StrokeCap, StrokeJoin};
+    use acos_render::path::Path;
+
+    let mut p = Path::new();
+    p.move_to(0.0, 0.0);
+    p.line_to(10.0, 0.0);
+    let filled = p
+        .stroke_to_fill(4.0, StrokeCap::Butt, StrokeJoin::Miter, 4.0)
+        .expect("line strokes to a fill outline");
+    let b = filled.compute_bounds().expect("bounds");
+    // A 4px-wide line centred on y=0 spans y in [-2, 2].
+    assert!(b.top <= -1.9 && b.bottom >= 1.9, "{b:?}");
+    assert!(b.right >= 9.9, "{b:?}");
+}

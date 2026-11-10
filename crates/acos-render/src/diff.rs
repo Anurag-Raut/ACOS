@@ -300,18 +300,18 @@ fn normalize_window(win: u32) -> usize {
 /// Separable Gaussian blur with **valid** convolution (no padding). Returns the
 /// blurred plane plus its dimensions. If the source is smaller than the kernel
 /// the source is returned unchanged (SSIM then falls back to the global value).
-fn blur_valid(src: &[f32], w: usize, h: usize, k: &[f32]) -> (Vec<f32>, usize, usize) {
+fn blur_valid(src: &[f64], w: usize, h: usize, k: &[f64]) -> (Vec<f64>, usize, usize) {
     let n = k.len();
     if w < n || h < n {
         return (src.to_vec(), w, h);
     }
     let ow = w - n + 1;
-    let mut tmp = vec![0f32; ow * h];
+    let mut tmp = vec![0f64; ow * h];
     for y in 0..h {
         let row = &src[y * w..y * w + w];
         let out = &mut tmp[y * ow..y * ow + ow];
         for (x, o) in out.iter_mut().enumerate() {
-            let mut acc = 0f32;
+            let mut acc = 0f64;
             for (i, &kv) in k.iter().enumerate() {
                 acc += kv * row[x + i];
             }
@@ -319,10 +319,10 @@ fn blur_valid(src: &[f32], w: usize, h: usize, k: &[f32]) -> (Vec<f32>, usize, u
         }
     }
     let oh = h - n + 1;
-    let mut out = vec![0f32; ow * oh];
+    let mut out = vec![0f64; ow * oh];
     for y in 0..oh {
         for x in 0..ow {
-            let mut acc = 0f32;
+            let mut acc = 0f64;
             for (i, &kv) in k.iter().enumerate() {
                 acc += kv * tmp[(y + i) * ow + x];
             }
@@ -332,7 +332,7 @@ fn blur_valid(src: &[f32], w: usize, h: usize, k: &[f32]) -> (Vec<f32>, usize, u
     (out, ow, oh)
 }
 
-fn gaussian_kernel(n: usize, sigma: f64) -> Vec<f32> {
+fn gaussian_kernel(n: usize, sigma: f64) -> Vec<f64> {
     let c = (n as f64 - 1.0) / 2.0;
     let mut k = vec![0f64; n];
     let mut sum = 0f64;
@@ -341,7 +341,7 @@ fn gaussian_kernel(n: usize, sigma: f64) -> Vec<f32> {
         *v = (-(x * x) / (2.0 * sigma * sigma)).exp();
         sum += *v;
     }
-    k.iter().map(|v| (v / sum) as f32).collect()
+    k.iter().map(|v| v / sum).collect()
 }
 
 /// Canonical windowed SSIM over luma. Returns `(mean, min)`.
@@ -351,26 +351,33 @@ fn ssim_luma(a: &[f32], b: &[f32], w: usize, h: usize, win: usize) -> (f64, f64)
         return (g, g);
     }
     let k = gaussian_kernel(win, 1.5);
-    let aa: Vec<f32> = a.iter().map(|v| v * v).collect();
-    let bb: Vec<f32> = b.iter().map(|v| v * v).collect();
-    let ab: Vec<f32> = a.iter().zip(b).map(|(x, y)| x * y).collect();
-    let (mu_a, ow, oh) = blur_valid(a, w, h, &k);
-    let (mu_b, _, _) = blur_valid(b, w, h, &k);
+    // The moments must be accumulated in f64: the covariance `mu_ab - mu_a*mu_b`
+    // is the difference of two ~1e4-scale quantities, and `C2` is ~1e-3, so an
+    // f32 blur would swamp the covariance with rounding noise and make the
+    // windowed SSIM meaningless (it went negative on near-identical frames).
+    let a64: Vec<f64> = a.iter().map(|v| *v as f64).collect();
+    let b64: Vec<f64> = b.iter().map(|v| *v as f64).collect();
+    let aa: Vec<f64> = a64.iter().map(|v| v * v).collect();
+    let bb: Vec<f64> = b64.iter().map(|v| v * v).collect();
+    let ab: Vec<f64> = a64.iter().zip(&b64).map(|(x, y)| x * y).collect();
+    let (mu_a, ow, oh) = blur_valid(&a64, w, h, &k);
+    let (mu_b, _, _) = blur_valid(&b64, w, h, &k);
     let (mu_aa, _, _) = blur_valid(&aa, w, h, &k);
     let (mu_bb, _, _) = blur_valid(&bb, w, h, &k);
     let (mu_ab, _, _) = blur_valid(&ab, w, h, &k);
 
-    const C1: f64 = 0.01 * 0.01;
-    const C2: f64 = 0.03 * 0.03;
+    // Standard SSIM stabilisers on the 0..255 luma scale.
+    const C1: f64 = (0.01 * 255.0) * (0.01 * 255.0);
+    const C2: f64 = (0.03 * 255.0) * (0.03 * 255.0);
     let n = ow * oh;
     let mut sum = 0f64;
     let mut min = f64::INFINITY;
     for i in 0..n {
-        let ma = mu_a[i] as f64;
-        let mb = mu_b[i] as f64;
-        let vaa = (mu_aa[i] as f64 - ma * ma).max(0.0);
-        let vbb = (mu_bb[i] as f64 - mb * mb).max(0.0);
-        let vab = mu_ab[i] as f64 - ma * mb;
+        let ma = mu_a[i];
+        let mb = mu_b[i];
+        let vaa = (mu_aa[i] - ma * ma).max(0.0);
+        let vbb = (mu_bb[i] - mb * mb).max(0.0);
+        let vab = mu_ab[i] - ma * mb;
         let s = ((2.0 * ma * mb + C1) * (2.0 * vab + C2))
             / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2));
         sum += s;
@@ -404,8 +411,9 @@ fn global_ssim_luma(a: &[f32], b: &[f32]) -> f64 {
     let vaa = (saa / n - ma * ma).max(0.0);
     let vbb = (sbb / n - mb * mb).max(0.0);
     let vab = sab / n - ma * mb;
-    const C1: f64 = 0.01 * 0.01;
-    const C2: f64 = 0.03 * 0.03;
+    // Standard SSIM stabilisers on the 0..255 luma scale.
+    const C1: f64 = (0.01 * 255.0) * (0.01 * 255.0);
+    const C2: f64 = (0.03 * 255.0) * (0.03 * 255.0);
     ((2.0 * ma * mb + C1) * (2.0 * vab + C2))
         / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2))
 }
