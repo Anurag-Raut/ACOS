@@ -1,0 +1,16 @@
+color=RED ordinal=0 name=RED code=r
+color=GREEN ordinal=1 name=GREEN code=g
+color=BLUE ordinal=2 name=BLUE code=b
+valueOf=GREEN
+RED.compareTo(BLUE)=-2
+describe=red!
+describe=green!
+describe=blue!
+op=ADD apply(6,3)=9
+op=SUB apply(6,3)=3
+op=MUL apply(6,3)=18
+set=[RED, BLUE] contains=true false
+color.class.isEnum=true
+RED.declaringClass=Color
+switchEnum=blue!
+values.length=3

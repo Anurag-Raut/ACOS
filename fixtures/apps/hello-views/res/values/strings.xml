@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hello Views</string>
+    <string name="title">Hello ACOS</string>
+    <string name="hint">Enter your name</string>
+    <string name="btn">Greet</string>
+    <string name="initial_result">clicks: 0</string>
+</resources>

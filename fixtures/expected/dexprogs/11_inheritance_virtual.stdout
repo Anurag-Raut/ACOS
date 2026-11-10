@@ -1,0 +1,17 @@
+shape=[Rect:6.0]
+shape=Square(16.0)
+shape=Circle:3.0
+describe=Rect area=6.0
+describe=Square area=16.0
+describe=Circle area=3.0
+perimeter=10.0
+perimeter=16.0
+perimeter=6.0
+rect.superToString=[Rect:6.0]
+up.area=25.0
+up instanceof Shape=true
+up instanceof Rect=true
+up instanceof Square=true
+up instanceof Circle=false
+up.class=Main$Square
+r.class=Main$Rect

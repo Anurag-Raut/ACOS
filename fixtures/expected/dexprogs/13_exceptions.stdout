@@ -1,0 +1,20 @@
+a.try
+a.no-throw
+a.finally
+b.try
+b.catch=b-boom
+b.finally
+inner.finally
+outer.catch=inner
+outer.finally
+nested=42
+div=5
+caught=java.lang.ArithmeticException
+caught=java.lang.NullPointerException
+caught=java.lang.ArrayIndexOutOfBoundsException
+caught=java.lang.ClassCastException
+caught=java.lang.NegativeArraySizeException
+caught=Main$MyRuntime msg=custom-runtime
+caught=Main$MyException msg=custom-checked
+wrapped=wrapped:rethrow
+done

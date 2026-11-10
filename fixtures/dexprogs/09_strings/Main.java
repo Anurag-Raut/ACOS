@@ -1,0 +1,52 @@
+public class Main {
+    public static void main(String[] args) {
+        String s = "Hello, ACOS";
+        System.out.println("concat=" + s + "!");
+        System.out.println("length=" + s.length());
+        System.out.println("charAt0=" + s.charAt(0));
+        System.out.println("charAtLast=" + s.charAt(s.length() - 1));
+        System.out.println("equals=" + s.equals("Hello, ACOS"));
+        System.out.println("equalsIgnoreCase=" + "hello".equalsIgnoreCase("HELLO"));
+        System.out.println("hashCode=" + s.hashCode());
+        System.out.println("hashCodeGiven=" + "abc".hashCode());
+        System.out.println("substring=" + s.substring(7));
+        System.out.println("substring2=" + s.substring(0, 5));
+        System.out.println("indexOf=" + s.indexOf('o'));
+        System.out.println("indexOfStr=" + s.indexOf("ACOS"));
+        System.out.println("lastIndexOf=" + s.lastIndexOf('o'));
+        System.out.println("startsWith=" + s.startsWith("Hello"));
+        System.out.println("endsWith=" + s.endsWith("ACOS"));
+        System.out.println("isEmpty=" + "".isEmpty());
+        System.out.println("toUpperCase=" + s.toUpperCase());
+        System.out.println("toLowerCase=" + s.toLowerCase());
+        System.out.println("trim=" + "  pad  ".trim());
+        System.out.println("replace=" + s.replace('l', 'L'));
+        System.out.println("replaceStr=" + s.replace("ACOS", "World"));
+        System.out.println("contains=" + s.contains("COS"));
+        System.out.println("compareTo=" + "apple".compareTo("banana"));
+        System.out.println("valueOfInt=" + String.valueOf(42));
+        System.out.println("valueOfBool=" + String.valueOf(true));
+        System.out.println("valueOfChar=" + String.valueOf('Z'));
+        StringBuilder sb = new StringBuilder();
+        sb.append("a").append(1).append(true).append('x').append(2.5);
+        System.out.println("sb=" + sb);
+        System.out.println("sb.rev=" + new StringBuilder("abcdef").reverse());
+        System.out.println("sb.capacity_ge16=" + (new StringBuilder("x").capacity() >= 16));
+        StringBuilder sb2 = new StringBuilder("start");
+        sb2.insert(0, "<<");
+        sb2.insert(sb2.length(), ">>");
+        System.out.println("sb2=" + sb2);
+        System.out.println("sb2.replace=" + new StringBuilder("foobar").replace(0, 3, "FOO"));
+        String nonAscii = "h\u00e9llo W\u00f6rld \u2014 \u00fcn\u00efcode \u2713 \u65e5\u672c\u8a9e";
+        System.out.println("nonAscii=" + nonAscii);
+        System.out.println("nonAscii.length=" + nonAscii.length());
+        System.out.println("nonAscii.charAt0=" + nonAscii.charAt(0));
+        System.out.println("nonAscii.charAt1=" + nonAscii.charAt(1));
+        System.out.println("nonAscii.codePoint0=" + nonAscii.codePointAt(0));
+        System.out.println("cjk.length=" + "\u65e5\u672c\u8a9e".length());
+        String[] parts = "a,b,,c".split(",");
+        System.out.println("split.len=" + parts.length);
+        System.out.println("split=" + String.join("|", parts));
+        System.out.println("join=" + String.join("-", "x", "y", "z"));
+    }
+}

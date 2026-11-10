@@ -1,0 +1,18 @@
+[package]
+name = "acos-dex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Clean-room parser, instruction decoder, and structural verifier for Dalvik DEX files"
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[[example]]
+name = "dexdump"
+path = "examples/dexdump.rs"

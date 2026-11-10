@@ -1,0 +1,23 @@
+list=[banana, apple, cherry, apple]
+list.size=4
+list.contains=true
+list.indexOf=1
+list.lastIndexOf=3
+list.get1=apple
+after.remove=[banana, cherry, apple]
+sorted=[apple, banana, cherry]
+max=9
+sorted.keys=[alpha, bravo, charlie, delta]
+entries=alpha=1 bravo=2 charlie=3 delta=4 
+map.get=3
+map.containsKey=false
+updated={alpha=11, bravo=2, charlie=3, delta=4}
+hash.get=1 size=1
+cache127=true
+cache128=false
+equals128=true
+unboxed=1000
+nums=[0, 1, 4, 9, 16]
+box=Box(hi) Box(42)
+empty=true
+toArray=[apple, banana, cherry]

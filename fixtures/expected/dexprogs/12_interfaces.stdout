@@ -1,0 +1,16 @@
+Dog: Dog barks
+Cat: Cat makes a sound
+Robot: beep
+kind=animal
+pet=hi from Dog
+pet=hi from pet
+cat.default=Cat makes a sound
+dog.default=hi from Dog
+dog instanceof Animal=true
+dog instanceof Pet=true
+dog instanceof Dog=true
+dog instanceof Cat=false
+iface.class.isInterface=true
+dog.name=Dog
+cat.name=Cat
+robot.name=Robot

@@ -1,0 +1,37 @@
+parseInt=12345
+parseIntNeg=-12345
+parseIntRadix=255
+toStringRadix=ff
+toHexString=ff
+toHexStringNeg=ffffffff
+toOctalString=100
+toBinaryString=1010
+toString=-42
+longToString=9223372036854775807
+intToLong=7
+abs=7 -2147483648
+max=9 min=3
+maxDouble=2.5
+sqrt144=12.0
+sqrt2=1.4142135623730951
+absDouble=2.5
+floor=2.0 ceil=3.0
+round=3 -2
+pow=256.0
+isDigit=true false
+isLetter=true false
+isWhitespace=true
+toUpperCase=Q
+toLowerCase=q
+getNumericValue=7
+digit=15
+forDigit=f
+compare=-1
+isUpperCase=true
+charHashCode=65
+minNegZero=-0.0
+hypot=5.0
+cbrt=3.0
+exp0=1.0
+log1=0.0
+signum=-1.0

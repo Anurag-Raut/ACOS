@@ -1,0 +1,15 @@
+[package]
+name = "acos-apk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "APK ingest for ACOS: zip container, binary AndroidManifest.xml (AXML), resources.arsc and signing-scheme detection."
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
