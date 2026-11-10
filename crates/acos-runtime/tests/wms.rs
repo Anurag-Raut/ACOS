@@ -309,6 +309,59 @@ fn wms_java_session_add_and_relayout_are_accepted() {
 }
 
 #[test]
+fn viewrootimpl_handlers_return_faithful_scalars() {
+    // `ViewRootImpl.dispatchFocusEvent`/`handleOutOfResourcesException`
+    // call `outOfMemory` and expect a boolean; ACOS has no memory-pressure
+    // signal, so the faithful answer is `false`.
+    let mut reply = simple(IWS, "outOfMemory", |p| {
+        p.write_strong_binder_opt(Some(BinderId(0x1111)))
+    }, 0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+    assert!(!reply.read_bool().unwrap(), "not out of memory");
+
+    // `ViewRootImpl.performTraversals` uses `cancelDraw` to drop a queued draw.
+    let mut reply = simple(IWS, "cancelDraw", |p| {
+        p.write_strong_binder_opt(Some(BinderId(0x1111)))
+    }, 0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+    assert!(!reply.read_bool().unwrap(), "no queued draw to cancel");
+
+    // Oneway calls from `ViewRootImpl`: accepted without a reply body.
+    for name in [
+        "clearTouchableRegion",
+        "performHapticFeedbackAsync",
+        "reportKeepClearAreasChanged",
+        "dragRecipientEntered",
+        "dragRecipientExited",
+        "reportDropResult",
+    ] {
+        let mut reply = simple(IWS, name, |p| {
+            p.write_strong_binder_opt(Some(BinderId(0x1111)));
+            // `performHapticFeedbackAsync` takes (int, bool); the drag calls
+            // take an `IWindow` and a bool/PointF; `reportKeepClearAreasChanged`
+            // takes two typed lists. The exact payload is not asserted here;
+            // the handler only needs to consume a well-formed request.
+            p.write_int32(0);
+            p.write_bool(false);
+            p.write_int32(-1);
+            p.write_int32(-1);
+        }, 0);
+        assert_eq!(reply.read_int32().unwrap(), 0, "{name}: no exception");
+    }
+
+    // `relayoutAsync` is the oneway form of `relayout`; the request carries the
+    // same `LayoutParams` + 6 ints. Add the window first, then consume it.
+    let mut add = call(IWS, "addToDisplayAsUser", 4);
+    assert_eq!(add.read_int32().unwrap(), 0, "add: no exception");
+    let (mut data, code) = build(IWS, "relayoutAsync", 6);
+    let mut reply = Parcel::new();
+    wms_java::transact(BinderId(0x9999), code, &mut data, &mut reply, 0)
+        .expect("relayoutAsync accepted");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+}
+
+#[test]
 fn wm_surface_backend_publishes_only_on_buffer_submission() {
     let mut backend = wms_java::WmSurfaceBackend::new().unwrap();
     let _layer = backend.create_layer(0x2000, "test-layer", 1080, 2209);

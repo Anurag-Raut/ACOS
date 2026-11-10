@@ -263,12 +263,110 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         "android.view.autofill.AutofillId" => {
             Parcelable::ordered(class, vec![Value::Int(1), Value::Int(2)])
         }
-        "android.window.SizeConfigurationBuckets" => {
-            Parcelable::ordered(class, vec![Value::IntArray(Some(vec![1, 2, 3]))])
-        }
-        "android.app.servertransaction.ClientTransaction" => {
-            Parcelable::ordered(class, vec![Value::IntArray(Some(vec![1, 2]))])
-        }
+        "android.window.SizeConfigurationBuckets" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Byte(0),
+                Value::IntArray(Some(vec![1080, 2400])),
+                Value::IntArray(Some(vec![2400, 1080])),
+                Value::IntArray(Some(vec![411])),
+                Value::IntArray(Some(vec![914])),
+            ],
+        ),
+        "android.app.servertransaction.ClientTransaction" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Bool(false),
+                Value::Binder(None),
+                Value::NamedParcelable(Parcelable::Null),
+                Value::Bool(false),
+                Value::List(None),
+            ],
+        ),
+        "android.os.LocaleList" => Parcelable::ordered(
+            class,
+            vec![Value::Str8(Some("en-US".into()))],
+        ),
+        "android.app.WindowConfiguration" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Parcelable(Parcelable::ordered(
+                    "android.graphics.Rect",
+                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                )),
+                Value::TypedObject(Parcelable::ordered(
+                    "android.graphics.Rect",
+                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                )),
+                Value::Parcelable(Parcelable::ordered(
+                    "android.graphics.Rect",
+                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                )),
+                Value::Int(1),
+                Value::Int(1),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(1),
+                Value::Int(0),
+            ],
+        ),
+        "android.content.res.Configuration" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Float(1.0),
+                Value::Int(0),  // mcc
+                Value::Int(0),  // mnc
+                Value::TypedObject(Parcelable::ordered(
+                    "android.os.LocaleList",
+                    vec![Value::Str8(Some("en-US".into()))],
+                )),
+                Value::Int(0),  // userSetLocale
+                Value::Int(0),  // touchscreen
+                Value::Int(0),  // keyboard
+                Value::Int(0),  // keyboardHidden
+                Value::Int(0),  // hardKeyboardHidden
+                Value::Int(0),  // navigation
+                Value::Int(0),  // navigationHidden
+                Value::Int(0),  // orientation
+                Value::Int(0),  // screenLayout
+                Value::Int(0),  // colorMode
+                Value::Int(0),  // uiMode
+                Value::Int(411), // screenWidthDp
+                Value::Int(914), // screenHeightDp
+                Value::Int(411), // smallestScreenWidthDp
+                Value::Int(420), // densityDpi
+                Value::Int(0),  // compatScreenWidthDp
+                Value::Int(0),  // compatScreenHeightDp
+                Value::Int(0),  // compatSmallestScreenWidthDp
+                Value::Parcelable(Parcelable::ordered(
+                    "android.app.WindowConfiguration",
+                    vec![
+                        Value::Parcelable(Parcelable::ordered(
+                            "android.graphics.Rect",
+                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                        )),
+                        Value::TypedObject(Parcelable::ordered(
+                            "android.graphics.Rect",
+                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                        )),
+                        Value::Parcelable(Parcelable::ordered(
+                            "android.graphics.Rect",
+                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                        )),
+                        Value::Int(1),
+                        Value::Int(1),
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1),
+                        Value::Int(0),
+                    ],
+                )),
+                Value::Int(0),  // assetsSeq
+                Value::Int(0),  // seq
+                Value::Int(0),  // fontWeightAdjustment
+                Value::Int(0),  // mGrammaticalGender
+            ],
+        ),
         "android.content.AttributionSource" => Parcelable::ordered(
             class,
             vec![

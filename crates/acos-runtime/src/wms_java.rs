@@ -492,6 +492,46 @@ fn handle_session(
                 with_wms(|s| s.finish_drawing(w.0, -1)).map_err(err)?;
             }
         }
+        // `ViewRootImpl.performTraversals`/`draw` call sites that only need a
+        // faithful scalar/oneway answer. The display is 1080x2400@420.
+        "outOfMemory" => {
+            // The real `WMS` returns false unless the system is under memory
+            // pressure; ACOS has no memory-pressure signal, so the honest
+            // answer is "not out of memory".
+            reply.write_bool(false);
+        }
+        "cancelDraw" => {
+            // `ViewRootImpl` uses this to discard a queued draw when a relayout
+            // arrives first; there is no queued draw to cancel in ACOS.
+            reply.write_bool(false);
+        }
+        "relayoutAsync" => {
+            // Oneway form of `relayout`. The app does not read a reply; keep the
+            // window state in sync by running the same relayout and dropping
+            // the result.
+            if let (Some(w), Some(params)) = (window, args.params.clone()) {
+                let sync_seq = args.ints.first().copied().unwrap_or(-1);
+                let _ = with_wms(|s| s.relayout(w.0, params, sync_seq)).map_err(err)?;
+            }
+        }
+        "clearTouchableRegion" => {
+            // Oneway; the WMS clears the window's touchable region. The V1
+            // window record has no separate touchable-region field, so touch
+            // the record (a missing window is not an error for a oneway).
+            if let Some(w) = window {
+                let _ = with_wms(|s| s.wm.windows.contains_key(&w.0));
+            }
+        }
+        "performHapticFeedbackAsync" => {
+            // Oneway; the launch path does not require a haptic device.
+        }
+        "reportKeepClearAreasChanged" => {
+            // Oneway; keep-clear areas are not modelled by the V1 compositor.
+        }
+        "dragRecipientEntered" | "dragRecipientExited" | "reportDropResult" => {
+            // Drag-and-drop is not on the first-frame launch path; accept the
+            // oneway calls without claiming a drag session.
+        }
         _ => {
             return Err(err(format!(
                 "UNSUPPORTED android.view.IWindowSession.{} (code {})",

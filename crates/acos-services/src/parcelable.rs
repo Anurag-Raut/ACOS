@@ -65,6 +65,16 @@ pub enum FieldOp {
     Binder,
     /// `writeTypedArray` (an int count then each element's payload).
     TypedArray(&'static str),
+    /// A nested `Parcelable` written as a bare payload (no class name and no
+    /// presence marker). The API-34 `Configuration.writeToParcel` calls
+    /// `windowConfiguration.writeToParcel(dest, flags)` directly, and
+    /// `WindowConfiguration.writeToParcel` calls `mBounds.writeToParcel` and
+    /// `mMaxBounds.writeToParcel` the same way; a `writeParcelable` /
+    /// `writeTypedObject` op would add the wrong marker/class name.
+    Nested(&'static str),
+    /// A `writeParcelableList` argument: an int count then each element's
+    /// class name + payload (`ClientTransaction.mCallbacks`).
+    ParcelableList(&'static str),
     /// A field ACOS does not model; reads/writes a `null` of the given kind.
     IgnoredNamed(&'static str),
     /// A field ACOS does not model; reads/writes a `false` presence marker.
@@ -317,31 +327,83 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Prefix,
     },
+    // `android.os.LocaleList.writeToParcel` is a single `writeString8`
+    // (`mStringRepresentation`); `Configuration` wraps it in
+    // `writeTypedObject`.
+    ParcelableSpec {
+        class: "android.os.LocaleList",
+        fields: &[FieldOp::Str8],
+        verification: Verification::Full,
+    },
+    // `android.app.WindowConfiguration.writeToParcel` (API 34):
+    //   mBounds.writeToParcel(dest, flags)
+    //   writeTypedObject(mAppBounds, flags)
+    //   mMaxBounds.writeToParcel(dest, flags)
+    //   writeInt(windowingMode/activityType/alwaysOnTop/rotation/
+    //            displayWindowingMode/displayRotation)
+    // The two `Rect` fields are direct `writeToParcel` calls, so they are
+    // modelled as [`FieldOp::Nested`].
+    ParcelableSpec {
+        class: "android.app.WindowConfiguration",
+        fields: &[
+            FieldOp::Nested("android.graphics.Rect"), // mBounds
+            FieldOp::Typed("android.graphics.Rect"),  // mAppBounds
+            FieldOp::Nested("android.graphics.Rect"), // mMaxBounds
+            FieldOp::Int, // windowingMode
+            FieldOp::Int, // activityType
+            FieldOp::Int, // alwaysOnTop
+            FieldOp::Int, // rotation
+            FieldOp::Int, // displayWindowingMode
+            FieldOp::Int, // displayRotation
+        ],
+        verification: Verification::Prefix,
+    },
+    // `android.content.res.Configuration.writeToParcel` (API 34), transcribed
+    // from `classes.dex:Landroid/content/res/Configuration;->writeToParcel`:
+    //   writeFloat(fontScale)
+    //   writeInt(mcc); writeInt(mnc)
+    //   fixUpLocaleList(); writeTypedObject(mLocaleList)
+    //   if (userSetLocale) writeInt(1) else writeInt(0)   [one op at runtime,
+    //     two static `writeInt` branches; the scanner sees both]
+    //   touchscreen, keyboard, keyboardHidden, hardKeyboardHidden,
+    //   navigation, navigationHidden, orientation, screenLayout, colorMode,
+    //   uiMode, screenWidthDp, screenHeightDp, smallestScreenWidthDp,
+    //   densityDpi, compatScreenWidthDp, compatScreenHeightDp,
+    //   compatSmallestScreenWidthDp
+    //   windowConfiguration.writeToParcel(dest, flags)
+    //   assetsSeq, seq, fontWeightAdjustment, mGrammaticalGender
     ParcelableSpec {
         class: "android.content.res.Configuration",
         fields: &[
-            FieldOp::Int,         // userSetLocale / fontSizeAdjustment
-            FieldOp::Str16,       // locale (curated: LocaleList as string)
-            FieldOp::Float,       // fontScale
-            FieldOp::Int,         // mcc
-            FieldOp::Int,         // mnc
-            FieldOp::Int,         // orientation
-            FieldOp::Int,         // touchscreen
-            FieldOp::Int,         // densityDpi
-            FieldOp::Int,         // keyboard
-            FieldOp::Int,         // keyboardHidden
-            FieldOp::Int,         // navigation
-            FieldOp::Int,         // navigationHidden
-            FieldOp::Int,         // screenLayout
-            FieldOp::Int,         // uiMode
-            FieldOp::Int,         // smallestScreenWidthDp
-            FieldOp::Int,         // screenWidthDp
-            FieldOp::Int,         // screenHeightDp
-            FieldOp::Str16,       // localeList (curated)
-            FieldOp::Int,         // colorMode
-            FieldOp::Int,         // grammaticalGender
+            FieldOp::Float,                            // fontScale
+            FieldOp::Int,                              // mcc
+            FieldOp::Int,                              // mnc
+            FieldOp::Typed("android.os.LocaleList"),    // mLocaleList
+            FieldOp::Int,                              // userSetLocale
+            FieldOp::Int,                              // touchscreen
+            FieldOp::Int,                              // keyboard
+            FieldOp::Int,                              // keyboardHidden
+            FieldOp::Int,                              // hardKeyboardHidden
+            FieldOp::Int,                              // navigation
+            FieldOp::Int,                              // navigationHidden
+            FieldOp::Int,                              // orientation
+            FieldOp::Int,                              // screenLayout
+            FieldOp::Int,                              // colorMode
+            FieldOp::Int,                              // uiMode
+            FieldOp::Int,                              // screenWidthDp
+            FieldOp::Int,                              // screenHeightDp
+            FieldOp::Int,                              // smallestScreenWidthDp
+            FieldOp::Int,                              // densityDpi
+            FieldOp::Int,                              // compatScreenWidthDp
+            FieldOp::Int,                              // compatScreenHeightDp
+            FieldOp::Int,                              // compatSmallestScreenWidthDp
+            FieldOp::Nested("android.app.WindowConfiguration"), // windowConfiguration
+            FieldOp::Int,                              // assetsSeq
+            FieldOp::Int,                              // seq
+            FieldOp::Int,                              // fontWeightAdjustment
+            FieldOp::Int,                              // mGrammaticalGender
         ],
-        verification: Verification::Curated,
+        verification: Verification::Prefix,
     },
     // Transcribed from API-34
     // `classes.dex:Landroid/app/ActivityManager$TaskDescription;->writeToParcel`:
@@ -374,10 +436,20 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Curated,
     },
+    // `android.window.SizeConfigurationBuckets.writeToParcel`:
+    //   writeByte(the single `mConfigurationChanged`/`mChanged` byte)
+    //   writeIntArray(mHorizontalDps); writeIntArray(mVerticalDps);
+    //   writeIntArray(mScreenWidthDps); writeIntArray(mScreenHeightDps)
     ParcelableSpec {
         class: "android.window.SizeConfigurationBuckets",
-        fields: &[FieldOp::IntArray],
-        verification: Verification::Curated,
+        fields: &[
+            FieldOp::Byte,
+            FieldOp::IntArray,
+            FieldOp::IntArray,
+            FieldOp::IntArray,
+            FieldOp::IntArray,
+        ],
+        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.view.autofill.AutofillId",
@@ -460,12 +532,22 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Str16],
         verification: Verification::Curated,
     },
-    // Curated ACOS-owned values used for deliveries/arguments whose real
-    // parcelable is not on the V1 service path.
+    // `android.app.servertransaction.ClientTransaction.writeToParcel`:
+    //   writeBoolean(mIsGlobal)
+    //   writeStrongBinder(mActivityToken)
+    //   writeParcelable(mLifecycleStateRequest)
+    //   writeBoolean(mIsReady)
+    //   writeParcelableList(mCallbacks)
     ParcelableSpec {
         class: "android.app.servertransaction.ClientTransaction",
-        fields: &[FieldOp::IntArray],
-        verification: Verification::Curated,
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::Binder,
+            FieldOp::Named("android.app.servertransaction.ActivityLifecycleItem"),
+            FieldOp::Bool,
+            FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+        ],
+        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.content.AttributionSource",
@@ -523,15 +605,36 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::StringArray],
         verification: Verification::Curated,
     },
+    // `android.app.ProfilerInfo.writeToParcel`:
+    //   writeString(profileFile)
+    //   if (profileFd != null) { writeInt(1); profileFd.writeToParcel(...) }
+    //   else writeInt(0)
+    //   writeInt(samplingInterval); writeInt(autoStopProfiler ? 1 : 0);
+    //   writeInt(streamingOutput ? 1 : 0); writeString(agent);
+    //   writeBoolean(attachAgentDuringBind); writeInt(clockType);
+    //   writeInt(profilerOutputVersion)
     ParcelableSpec {
         class: "android.app.ProfilerInfo",
-        fields: &[FieldOp::Int],
-        verification: Verification::Curated,
+        fields: &[
+            FieldOp::Str16,
+            FieldOp::Cond(&[FieldOp::Nested("android.os.ParcelFileDescriptor")]),
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Prefix,
     },
+    // `android.content.res.CompatibilityInfo.writeToParcel` (API 34):
+    //   writeInt(mCompatibilityFlags); writeInt(applicationDensity);
+    //   writeFloat(applicationScale); writeFloat(applicationInvertedScale)
     ParcelableSpec {
         class: "android.content.res.CompatibilityInfo",
-        fields: &[FieldOp::Int],
-        verification: Verification::Curated,
+        fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Float, FieldOp::Float],
+        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.content.AutofillOptions",
@@ -679,6 +782,34 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 Value::List(Some(out))
             }
         }
+        FieldOp::Nested(class) => Value::Parcelable(read_payload(class, parcel)?),
+        FieldOp::ParcelableList(class) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let name = parcel.read_string16()?;
+                    match name {
+                        None => out.push(Value::Parcelable(Parcelable::Null)),
+                        Some(actual) => {
+                            let _ = class;
+                            out.push(Value::Parcelable(read_payload(&actual, parcel)?));
+                        }
+                    }
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::Dynamic => Value::Dynamic(read_dynamic(parcel)?),
         FieldOp::Cond(fields) => {
             let present = parcel.read_int32()? != 0;
@@ -754,6 +885,33 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 }
             }
             _ => return Err(bad(format!("expected typed array, got {value:?}"))),
+        },
+        FieldOp::Nested(class) => {
+            let _ = class;
+            write_payload(parcel, expect_parcelable(value)?)?;
+        }
+        FieldOp::ParcelableList(_class) => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("parcelable list too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    match p {
+                        Parcelable::Null => parcel.write_string16_opt(None)?,
+                        Parcelable::Ordered { class, .. } => {
+                            let _ = class;
+                            parcel.write_string16(class)?;
+                            write_payload(parcel, p)?;
+                        }
+                        Parcelable::Fd(_) => {
+                            return Err(bad("parcelable list element is an fd"))
+                        }
+                    }
+                }
+            }
+            _ => return Err(bad(format!("expected parcelable list, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
         FieldOp::Cond(fields) => {
@@ -1342,6 +1500,8 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Fd => call == "writeFileDescriptor",
         FieldOp::Binder => call == "writeStrongBinder",
         FieldOp::TypedArray(_) => call == "writeTypedArray",
+        FieldOp::Nested(_) => call == "writeParcelable",
+        FieldOp::ParcelableList(_) => call == "writeParcelableList",
         FieldOp::Dynamic => call == "writeValue",
         // The presence marker is a `writeInt`; the branch body is invisible to a
         // linear scanner, so only the marker can be verified.
@@ -1470,6 +1630,11 @@ pub mod scan {
                             // `invoke-super`: inline the inherited field order.
                             flatten(dex, m.class, visited, out)?;
                         } else if m.name == "writeToParcel" {
+                            // A nested Parcelable written through its own
+                            // `writeToParcel` (not `Parcel.writeParcelable`).
+                            // Record it as a `writeParcelable` op so a spec's
+                            // `FieldOp::Nested` can verify the position.
+                            out.calls.push("writeParcelable".to_string());
                             out.delegates.push(m.class.to_string());
                         }
                     }

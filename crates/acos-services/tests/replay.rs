@@ -214,7 +214,13 @@ fn launch_cases() -> Vec<Case> {
                 b(token),
                 Value::TypedObject(Parcelable::ordered(
                     "android.window.SizeConfigurationBuckets",
-                    vec![Value::IntArray(Some(vec![]))],
+                    vec![
+                        Value::Byte(0),
+                        Value::IntArray(Some(vec![])),
+                        Value::IntArray(Some(vec![])),
+                        Value::IntArray(Some(vec![])),
+                        Value::IntArray(Some(vec![])),
+                    ],
                 )),
             ],
         },
