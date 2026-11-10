@@ -460,3 +460,182 @@ blockers.
   `w108a-frame-{i}.png`.
 * `crates/acos-jni/tests/data/flutter_probe_main.dart` — `onBeginFrame` /
   pointer heartbeat prints used as the diagnosis above.
+
+---
+
+# W113-A — where the primary frame task stops (looper/timerfd/clock evidence)
+
+**Date:** 2026-11-11 (wave W113-A). **Base:** clean worktree of `HEAD`
+(`71cec4e`, the commit the W108-A work sits on). Built with
+`CARGO_TARGET_DIR=.cache/target-w113a`, `CARGO_PROFILE_DEV_DEBUG=0`; applied
+back with `git apply --check`. Not committed. The wave is **diagnostic**: no
+frame was produced, and the changes shipped are an *inert-by-default* trace
+(`const TRACE: bool = false`, `const TIMER_TRACE: bool = false`) in
+`acos-native-loader`.
+
+## Result at a glance
+
+| stage | W108-A | W113-A |
+|---|---|---|
+| `libflutter.so` load/reloc/`JNI_OnLoad` | ok | ok (510/0, 32 962 relocs) |
+| Dart `main()` | ok | ok (`ACOS_DART_MAIN entered`) |
+| `AChoreographer_postFrameCallback` | 1 post, async via `ALooper` | same: **tid 2, looper 0x1**, delivered async from looper 0x1 |
+| engine fml loops (ui/raster/platform) | assumed | **measured: all 3 exist and poll** (`tid 2 looper 0x1 fd 5`, `tid 3 looper 0x2 fd 8`, `tid 4 looper 0x3 fd 11`) |
+| `timerfd_create/settime` + `read` | untested | **real**: `TFD_TIMER_ABSTIME` on `CLOCK_MONOTONIC`, `read` returns 8 B, `expirations=1` |
+| clock source | assumed | **same epoch**: `TimePoint::Now` → libc++ `steady_clock` → `clock_gettime(CLOCK_MONOTONIC)` (0x53cab4); shim forwards id 1 |
+| Dart `onBeginFrame`/`onDrawFrame`/pointer | no | **no** |
+| PNG / SSIM | no | no |
+| flaky crash in `VsyncWaiter::ScheduleSecondaryCallback` | not seen | **seen with tracing on** (`libflutter.so+0x9cffee`) |
+| tests / clippy / check / dexprogs | — | see §5 |
+
+## 1. Hypothesis (a) — "the engine's loops are not pumped" → **falsified, narrowed**
+
+The 400-line bounded looper trace (`W113A` log in
+`results/flutter/w113a-trace-run.log`) shows the engine's own
+`fml::MessageLoopAndroid` instances are alive and polling:
+
+```
+tid=2 prepare id=1 ; addfd looper=0x1 fd=5  ident=-2 events=1   (platform)
+tid=3 prepare id=2 ; addfd looper=0x2 fd=8  ident=-2 events=1   (ui)
+tid=4 prepare id=3 ; addfd looper=0x3 fd=11 ident=-2 events=1   (raster)
+tid=2/3/4 pollOnce(... -1) -> -2 fd=5/8/11 events=1             (steady)
+```
+
+So each runner has a working `ALooper` + `timerfd` + `ALooper_addFd` callback,
+and our shim dispatches readiness. The platform thread **is** the UI thread in
+this engine (Flutter 3.47 merged platform/UI threads): the single
+`AChoreographer_postFrameCallback` is made on `tid 2` with `looper=0x1` and the
+W108-A async delivery from that same looper still holds.
+
+## 2. Hypothesis (b) — "clock / timers are wrong" → **falsified**
+
+Disassembly facts (no source needed):
+
+* `fml::TimePoint::Now()` (`0x557526`) → libc++ `steady_clock::now()`
+  (`0x53cab4`) → `clock_gettime(1)` (`CLOCK_MONOTONIC`).
+* `fml::MessageLoopAndroid::WakeUp` (`0x559bb0`) → `TimerRearm` (`timerfd.cc:43`)
+  → `timerfd_settime(fd, TFD_TIMER_ABSTIME, …)`.
+* bionic and glibc agree on `CLOCK_MONOTONIC`=1, `TFD_TIMER_ABSTIME`=1 and
+  `struct itimerspec`/`struct timespec` layout on x86_64, so the forwarded
+  entries are ABI-identical.
+
+Measured with the timer trace:
+
+```
+tid=2 create clock=1 flags=526336 -> 5
+tid=2 settime fd=5 flags=1 value=35935.039218077 interval=35935.039218077 -> 0
+tid=2 read  fd=5 count=8 -> 8 expirations=1
+```
+
+The absolute deadline is `CLOCK_MONOTONIC` (~uptime), the arm succeeds, and the
+expiry is consumed. `timerfd`/`epoll`/`read` are functioning, not fake success.
+(The engine sets `it_interval == it_value`, i.e. a ~uptime-long period; the
+practical effect is one-shot.)
+
+## 3. What the evidence now says about the primary callback
+
+`Animator::RequestFrame` posts its `$_0` lambda to the **UI runner**
+(`task_runners_+0x30`, `animator.cc:263`); the lambda calls `Animator::AwaitVSync`
+→ `VsyncWaiter::AsyncWaitForVsync`, which early-returns if `callback_+0xa0` is
+already set (`vsync_waiter.cc:35-40`), otherwise stores `callback_` and calls
+`waiter->AwaitVSync()` (`+0x10`). `VsyncWaiterAndroid::AwaitVSync` then
+`RunNowOrPostTask(ui_runner)` → in merged mode this runs inline on tid 2 and
+posts `AChoreographer_postFrameCallback` (the single post we see).
+
+`FireCallback` (`0x9d0010`) then: moves `callback_` out, **pauses the Dart
+event-loop (secondary) task source** when `pause_rendering` is true
+(`vsync_waiter.cc:115`), and `PostTask`s the frame callback on the UI runner
+(`vsync_waiter.cc:129-131`). `TaskRunner::PostTask` → `MessageLoopImpl::PostTask`
+→ `RegisterTask(..., TaskSourceGrade=2)` (`0x554da8`), and grade 2 indexes the
+**primary** queue (`TaskSource+8`; `TaskSource` layout from DWARF:
+`primary_task_queue_` +8, `secondary_task_queue_` +0x40,
+`secondary_pause_requests_` +0x78). So the frame task is *primary* and should
+survive the secondary pause.
+
+The trace nonetheless shows that after delivery the platform timerfd is
+re-armed **to a stale absolute time that predates the post** and fires/reads in
+a tight loop:
+
+```
+read  fd=5 -> 8 expirations=1
+settime fd=5 value=<the same pre-post timestamp>   (repeats)
+```
+
+`RunExpiredTasksNow` (`0x554db4`) re-arms with `GetNextWakeTimeUnlocked()` =
+`PeekNextTaskUnlocked().task_time +0x40`; a task with that stale time is
+therefore at the head of the queue for the rest of the run, while the fresh
+frame task (posted later) never runs. This is a **head-of-line / re-arm loop**,
+not a timer or clock failure and not an unpumped runner. Whether
+`PeekNextTaskUnlocked` (`message_loop_task_queues.cc:363-393`) skips a
+`secondary_pause_requests_>0` source, and what the stale task is, cannot be
+settled from the dispatcher side; it needs the engine source or a breakpoint on
+`TaskSource::TopTask`/`TaskSource+0x78`.
+
+## 4. New: a timing-sensitive corruption in `ScheduleSecondaryCallback`
+
+With the trace compiled in (`TRACE/TIMER_TRACE = true`), the confined run
+intermittently dies in `VsyncWaiter::ScheduleSecondaryCallback`:
+
+```
+W103A_CRASH signal=11 pc=libflutter.so+0x9cffee fault=0x7f6e00000018
+```
+
+`0x9cffee` is `call *0x18(%rax)` with `rax = *(rbx)`, i.e. an object's vtable
+pointer read back as `0x7f6e_0000_0000` — **the low 32 bits zeroed**, a
+partial/torn 64-bit pointer write. It reproduced in 4 of 5 traced runs (and
+under gdb, at the same PC) and was **not** observed in 3/3 untraced runs of HEAD
+(15.3 s each, 2/2 tests), so it is a latent race exposed by timing, not a
+consequence of the trace logic itself. Because the single vsync post comes from
+the secondary-callback machinery, this is plausibly part of the same defect.
+The trace is therefore committed **off** (`const TRACE: bool = false`) and this
+is recorded as a real finding for the next wave.
+
+## 5. Acceptance (W113-A worktree of `71cec4e`)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-jni --test flutter_hello` | **pass 2/2**, three consecutive runs (untraced, 15.3 s) |
+| `cargo test -p acos-native-loader` | **pass** (6 + 1) |
+| `cargo clippy -p acos-jni -p acos-native-loader --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check --workspace --all-targets` | **clean** (`check=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+| confined flutter run | `confined:true`, exit 0, `error:null` |
+| PNG / `acos frame-diff` SSIM | **not reached** (no presented frame) |
+
+Files changed (worktree → applied with `git apply --check`):
+
+* `crates/acos-native-loader/src/bionic/ndk/ndk_looper.rs` — inert-by-default
+  `W113A` looper trace (`prepare`/`addFd`/`pollOnce` result/`epoll-ready`/
+  `wake`, with thread id and looper id).
+* `crates/acos-native-loader/src/bionic/engine_gaps.rs` — inert-by-default
+  `timerfd_create`/`timerfd_settime` trace shims (forwarding, no behaviour
+  change).
+* Evidence log: `results/flutter/w113a-trace-run.log`.
+
+## 6. Precise question
+
+**In `VsyncWaiter::FireCallback` → `PauseDartEventLoopTasks()` (merged
+platform/UI thread, `pause_rendering=true`), what keeps the freshly posted
+primary frame task from being popped while `RunExpiredTasksNow` keeps re-arming
+`fd=5` to an *earlier* pending task time?** Specifically:
+
+1. Does `MessageLoopTaskQueues::PeekNextTaskUnlocked` (`message_loop_task_queues.cc:363-393`)
+   exclude a `TaskSource` with `secondary_pause_requests_ > 0` (the
+   `GetNumPendingTasks` path at `task_source.cc:53-60` does), or can it return
+   that paused task's `task_time` and thereby pin `GetNextWakeTimeUnlocked` to a
+   stale deadline?
+2. If it does exclude it, then the stale head task at ≈39 ms of uptime (the
+   first `WakeUp` of the platform queue, before `Dart main` runs) is a *primary*
+   task that is never popped — what posts it (`TaskRunner::PostTask` from where,
+   `vsync_waiter.cc:84` tail?), and under what condition would it be
+   skipped?
+3. Is the `0x9cffee` vtable corruption (`call *0x18(%rax)`, low 32 bits zeroed)
+   a known engine race in `ScheduleSecondaryCallback` on merged threads, or
+   should we treat it as an ACOS shim/ABI bug (most likely candidate: a 32-bit
+   write into a 64-bit slot, e.g. a `TimePoint`/`TaskQueueId`/`std::function`
+   field)?
+
+A one-line pointer to the engine source for `vsync_waiter.cc:89-152`,
+`message_loop_task_queues.cc:340-400` and `task_source.cc:20-100` (or a note
+that `TopTask` ignores the pause depth) would let the next wave fix the re-arm
+loop instead of re-deriving it.

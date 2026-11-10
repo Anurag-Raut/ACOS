@@ -1,0 +1,10 @@
+# W93-A confined child — raw stderr (instrumented libapp, platform looper pumped)
+
+/tmp/flutter-child.err:[android-log 6] flutter: [ERROR:flutter/impeller/toolkit/android/proc_table.cc(39)] Impeller validation: Could not open Android libraries.
+/tmp/flutter-child.err:[android-log 6] flutter: [ERROR:flutter/shell/platform/android/android_shell_holder.cc(64)] Failed to set raster task runner priority
+/tmp/flutter-child.err:[android-log 4] flutter: [IMPORTANT:flutter/shell/common/shell.cc(528)] [Action Required]: Impeller opt-out deprecated.
+/tmp/flutter-child.err:    The application opted out of Impeller by either using the
+/tmp/flutter-child.err:    `io.flutter.embedding.android.EnableImpeller` `AndroidManifest.xml` entry.
+/tmp/flutter-child.err:ACOS UNSUPPORTED_NATIVE_SYMBOL: libandroid::AAssetManager_fromJava — AAssetManager_fromJava: object has no readable native handle (returning the documented error value; no fake success)
+/tmp/flutter-child.err:[android-log 4] flutter: ACOS_DART_MAIN entered
+/tmp/flutter-child.out:W93A_SUMMARY {"confined":true,"error":"JNI_NATIVE_FAULT: Call<Type>Method: io.flutter.embedding.engine.FlutterJNI.handlePlatformMessage(Ljava/lang/String;Ljava/nio/ByteBuffer;IJ)V argument 1: expected object, got object","exit_code":0,"flushjni_natives":42,"libraries":["libflutter.so"],"raw_blockers":[]}

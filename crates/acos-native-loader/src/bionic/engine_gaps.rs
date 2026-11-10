@@ -63,8 +63,6 @@ extern "C" {
     fn scalbnf();
     fn sendfile64();
     fn symlinkat();
-    fn timerfd_create();
-    fn timerfd_settime();
     fn wait();
     fn setbuf(stream: *mut libc::FILE, buf: *mut c_char);
     fn malloc_usable_size(ptr: *mut c_void) -> usize;
@@ -83,7 +81,7 @@ pub fn forwarded_table() -> Vec<(&'static str, *const c_void)> {
         gai_strerror, getaddrinfo, getifaddrs, getnameinfo, if_nametoindex, inet_aton,
         inet_ntop, inet_pton, inotify_add_watch, inotify_init1, inotify_rm_watch, llround,
         llroundf, mkdirat, posix_madvise, pthread_condattr_setclock, readlinkat, renameat,
-        rewinddir, scalbnf, sendfile64, symlinkat, timerfd_create, timerfd_settime, wait,
+        rewinddir, scalbnf, sendfile64, symlinkat, wait,
     )
 }
 
@@ -91,6 +89,60 @@ pub fn forwarded_table() -> Vec<(&'static str, *const c_void)> {
 /// address of glibc's `environ` slot, which itself holds the `char**`.
 pub fn environ_addr() -> *const c_void {
     std::ptr::addr_of!(libc::environ) as *const c_void
+}
+
+// --- W113-A timerfd trace (compiled, inert by default) ---------------------
+
+/// Flip to `true` to trace the engine's `timerfd_create`/`timerfd_settime`
+/// (deadline/it_value) with the calling thread id. Off in the committed
+/// configuration for the same timing reason as the looper trace; see
+/// `results/flutter/FIRST_FRAME.md` (W113-A §4).
+const TIMER_TRACE: bool = false;
+
+fn gap_trace(args: std::fmt::Arguments<'_>) {
+    if !TIMER_TRACE {
+        return;
+    }
+    use std::sync::atomic::AtomicUsize;
+    static N: AtomicUsize = AtomicUsize::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 200 {
+        eprintln!(
+            "ACOS W113A timer tid={:?} {args}",
+            std::thread::current().id()
+        );
+    }
+}
+
+/// `timerfd_create(clockid, flags)` with an inert-by-default trace.
+///
+/// # Safety
+/// Same contract as the libc entry.
+pub unsafe extern "C" fn acos_timerfd_create(clockid: c_int, flags: c_int) -> c_int {
+    let fd = libc::timerfd_create(clockid, flags);
+    gap_trace(format_args!("create clock={clockid} flags={flags} -> {fd}"));
+    fd
+}
+
+/// `timerfd_settime(fd, flags, new_value, old_value)` with an inert trace.
+///
+/// # Safety
+/// Same contract as the libc entry.
+pub unsafe extern "C" fn acos_timerfd_settime(
+    fd: c_int,
+    flags: c_int,
+    new_value: *const libc::itimerspec,
+    old_value: *mut libc::itimerspec,
+) -> c_int {
+    let r = libc::timerfd_settime(fd, flags, new_value, old_value);
+    if !new_value.is_null() {
+        let v = (*new_value).it_value;
+        let i = (*new_value).it_interval;
+        gap_trace(format_args!(
+            "settime fd={fd} flags={flags} value={}.{:09} interval={}.{:09} -> {r}",
+            v.tv_sec, v.tv_nsec, i.tv_sec, i.tv_nsec
+        ));
+    }
+    r
 }
 
 // --- translating shims -----------------------------------------------------
@@ -344,6 +396,14 @@ pub fn table() -> std::collections::HashMap<&'static str, super::Shim> {
     shim("feof", feof as *const () as *const c_void);
     shim("setbuf", setbuf_shim as *const () as *const c_void);
     shim("sigprocmask", sigprocmask as *const () as *const c_void);
+    shim(
+        "timerfd_create",
+        acos_timerfd_create as *const () as *const c_void,
+    );
+    shim(
+        "timerfd_settime",
+        acos_timerfd_settime as *const () as *const c_void,
+    );
     shim("fork", fork as *const () as *const c_void);
     shim("execvp", execvp as *const () as *const c_void);
     #[cfg(target_arch = "x86_64")]
@@ -499,8 +559,6 @@ mod tests {
             "setjmp",
             "sigprocmask",
             "symlinkat",
-            "timerfd_create",
-            "timerfd_settime",
             "wait",
             "OPENSSL_memory_alloc",
             "OPENSSL_memory_free",

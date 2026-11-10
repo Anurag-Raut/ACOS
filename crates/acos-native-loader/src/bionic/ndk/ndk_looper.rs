@@ -97,6 +97,30 @@ fn next_id() -> u64 {
     N.fetch_add(1, Ordering::SeqCst) as u64 + 1
 }
 
+/// W113-A looper/liveness trace, compiled but inert by default.
+///
+/// Flip to `true` to log every control-plane event (prepare/addFd/pollOnce
+/// non-timeout/wake with the thread id) to stderr. It is **off** in the
+/// committed configuration: the trace changes thread timing enough to expose a
+/// latent engine race in `VsyncWaiter::ScheduleSecondaryCallback`
+/// (`libflutter.so+0x9cffee`, a corrupted vtable pointer), recorded in
+/// `results/flutter/FIRST_FRAME.md` (W113-A §4).
+const TRACE: bool = false;
+
+/// Bounded diagnostic trace; names the thread and looper of every event.
+fn trace(args: std::fmt::Arguments<'_>) {
+    if !TRACE {
+        return;
+    }
+    static N: AtomicUsize = AtomicUsize::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 400 {
+        eprintln!(
+            "ACOS W113A looper tid={:?} {args}",
+            std::thread::current().id()
+        );
+    }
+}
+
 thread_local! {
     static THREAD_LOOPER: RefCell<Option<u64>> = const { RefCell::new(None) };
 }
@@ -155,6 +179,7 @@ pub unsafe extern "C" fn alooper_prepare(_opts: c_int) -> *mut c_void {
     }
     register(id, looper);
     THREAD_LOOPER.with(|t| *t.borrow_mut() = Some(id));
+    trace(format_args!("prepare id={id}"));
     super::handle(id)
 }
 
@@ -227,8 +252,18 @@ pub unsafe extern "C" fn alooper_addfd(
     }
     // SAFETY: valid epoll fd and event pointer.
     if unsafe { libc::epoll_ctl(l.epoll, libc::EPOLL_CTL_ADD, fd, &mut ev) } != 0 {
+        trace(format_args!(
+            "addfd FAIL looper={:#x} fd={fd} ident={ident} events={events} err={:?}",
+            l.id,
+            std::io::Error::last_os_error()
+        ));
         return -1;
     }
+    trace(format_args!(
+        "addfd looper={:#x} fd={fd} ident={ident} events={events} cb={}",
+        l.id,
+        callback.is_some()
+    ));
     l.sources
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -294,6 +329,11 @@ fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
             drain_wake(l);
             continue;
         }
+        let raw = ev.events;
+        trace(format_args!(
+            "epoll-ready looper={:#x} fd={fd} raw={raw:#x}",
+            l.id
+        ));
         ready.push((fd, out_events(ev.events)));
     }
     Ok(ready)
@@ -463,6 +503,12 @@ pub unsafe extern "C" fn alooper_pollonce(
     };
     let mut out = (0, 0, std::ptr::null_mut());
     let r = poll_once(&l, timeout_ms, &mut out);
+    if r != ALOOPER_POLL_TIMEOUT {
+        trace(format_args!(
+            "pollOnce looper={:#x} timeout={timeout_ms} -> {r} fd={} events={}",
+            l.id, out.0, out.1
+        ));
+    }
     if !out_fd.is_null() {
         out_fd.write(out.0);
     }
@@ -514,6 +560,7 @@ pub unsafe extern "C" fn alooper_pollall(
 /// `looper` must be a live `ALooper`.
 pub unsafe extern "C" fn alooper_wake(looper: *mut c_void) {
     let Some(l) = lookup(looper) else { return };
+    trace(format_args!("wake looper={:#x}", l.id));
     if l.wake < 0 {
         return;
     }
