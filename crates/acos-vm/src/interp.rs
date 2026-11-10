@@ -703,7 +703,14 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             if !matches!(vm.classes[cid as usize].init, crate::class::InitState::Init) {
                 vm.initialize_class(cid)?;
             }
-            let h = vm.builtin_instance(cid)?;
+            // DEX-defined classes skip the builtin-allocator `HashMap` probe
+            // (which `builtin_instance` would otherwise run for every
+            // `new-instance` miss).
+            let h = if vm.classes[cid as usize].is_builtin {
+                vm.builtin_instance(cid)?
+            } else {
+                vm.alloc_instance(cid)?
+            };
             set_ref(vm, t, fi, r0, h);
             advance(vm, t, fi, insn.size);
         }

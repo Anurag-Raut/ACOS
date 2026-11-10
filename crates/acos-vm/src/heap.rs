@@ -118,6 +118,11 @@ pub struct Heap {
     /// Slot 0 is permanently `None` (the `null` handle).
     pub(crate) objects: Vec<Option<Object>>,
     free: Vec<u32>,
+    /// Recycled small instance field arrays. Frameworks (and allocation
+    /// benchmarks) create many tiny instances in a loop; reusing their field
+    /// storage removes a `Vec` allocation per object. Untraced: contents are
+    /// zeroed on reuse.
+    field_pool: Vec<Vec<u32>>,
     /// Approximate live bytes reported as `heap_peak_bytes`.
     pub live_bytes: usize,
     pub peak_bytes: usize,
@@ -132,6 +137,7 @@ impl Heap {
         Heap {
             objects: vec![None],
             free: Vec::new(),
+            field_pool: Vec::new(),
             live_bytes: 0,
             peak_bytes: 0,
             max_bytes,
@@ -174,13 +180,33 @@ impl Heap {
         h
     }
 
-    /// Free a slot (used by the sweeper).
+    /// Free a slot (used by the sweeper). Small instance field arrays are
+    /// recycled instead of dropped.
     pub(crate) fn free_slot(&mut self, h: Handle) {
         if let Some(obj) = self.objects[h as usize].take() {
             let size = object_size(&obj);
             self.live_bytes = self.live_bytes.saturating_sub(size);
+            if let Object::Instance { fields, .. } = obj {
+                if fields.capacity() <= 64 && self.field_pool.len() < 4096 {
+                    self.field_pool.push(fields);
+                }
+            }
         }
         self.free.push(h);
+    }
+
+    /// Take a field array with room for `slots` zeroed words, from the pool if
+    /// possible (else a fresh allocation).
+    #[inline]
+    pub(crate) fn take_field_vec(&mut self, slots: usize) -> Vec<u32> {
+        match self.field_pool.pop() {
+            Some(mut v) => {
+                v.resize(slots, 0);
+                v.fill(0);
+                v
+            }
+            None => vec![0; slots],
+        }
     }
 
     pub fn oom_error(&self) -> VmError {

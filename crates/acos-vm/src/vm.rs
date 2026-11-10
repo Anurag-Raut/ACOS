@@ -827,10 +827,8 @@ impl Vm {
 
     pub fn alloc_instance(&mut self, class: ClassId) -> VmResult<Handle> {
         let slots = self.classes[class as usize].instance_slot_count as usize;
-        self.alloc(Object::Instance {
-            class,
-            fields: vec![0; slots],
-        })
+        let fields = self.heap.take_field_vec(slots);
+        self.alloc(Object::Instance { class, fields })
     }
 
     pub fn new_string_utf16(&mut self, units: Vec<u16>) -> VmResult<Handle> {
