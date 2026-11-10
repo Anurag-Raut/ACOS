@@ -132,25 +132,71 @@ impl InputService {
         Self { state }
     }
 
-    fn input_device() -> Parcelable {
+    /// The `KeyCharacterMap` payload for the ACOS virtual keyboard: the AOSP
+    /// generic full layout (`KeyCharacterMap.FULL`). The Java reader is the
+    /// `nativeReadFromParcel` native in `acos-vm`, which parses the layout name.
+    fn key_character_map() -> Parcelable {
+        Parcelable::ordered(
+            "android.view.KeyCharacterMap",
+            vec![Value::Int(4), Value::Str8(Some("Generic".into()))],
+        )
+    }
+
+    /// One synthetic `InputDevice`.
+    ///
+    /// `id = -1` is `KeyCharacterMap.VIRTUAL_KEYBOARD` and `id = 0` is the
+    /// built-in touchscreen. Both carry a real `KeyCharacterMap`, so
+    /// `KeyCharacterMap.load(deviceId)` (and its `VIRTUAL_KEYBOARD` fallback)
+    /// returns a usable map instead of throwing `UnavailableException`.
+    fn input_device(id: i32) -> Parcelable {
+        let virtual_keyboard = id < 0;
+        let name = if virtual_keyboard {
+            "ACOS Virtual Keyboard"
+        } else {
+            "ACOS Touch"
+        };
+        let descriptor = if virtual_keyboard {
+            "acos-virtual-keyboard"
+        } else {
+            "acos-touch"
+        };
+        let sources = if virtual_keyboard {
+            0x0000_0101 // SOURCE_KEYBOARD
+        } else {
+            0x1002 | 0x0001 // SOURCE_TOUCHSCREEN | SOURCE_KEYBOARD
+        };
+        let keyboard_type = if virtual_keyboard {
+            2 // InputDevice.KEYBOARD_TYPE_ALPHABETIC
+        } else {
+            0 // InputDevice.KEYBOARD_TYPE_NONE
+        };
         Parcelable::ordered(
             "android.view.InputDevice",
             vec![
-                Value::Int(0),                 // id
-                Value::Int(1),                 // generation
-                Value::Int(0),                 // controllerNumber
-                Value::Str8(Some("ACOS Touch".into())),
-                Value::Int(0x1002 | 0x0001),   // SOURCE_TOUCHSCREEN | SOURCE_KEYBOARD
-                Value::Int(0),                 // vendorId
-                Value::Int(0),                 // productId
-                Value::Int(0),                 // descriptor
-                Value::Int(0),                 // keyboardType
-                Value::Int(1),                 // hasMotionRangeX
-                Value::Int(1),                 // hasMotionRangeY
-                Value::Float(-1.0),
-                Value::Float(1080.0),
-                Value::Float(-1.0),
-                Value::Float(2400.0),
+                Value::Parcelable(Self::key_character_map()), // mKeyCharacterMap
+                Value::Int(id),                                // mId
+                Value::Int(1),                                 // mGeneration
+                Value::Int(0),                                 // mControllerNumber
+                Value::Str(Some(name.into())),                 // mName (writeString)
+                Value::Int(0),                                 // mVendorId
+                Value::Int(0),                                 // mProductId
+                Value::Str(Some(descriptor.into())),           // mDescriptor (writeString)
+                Value::Int(0),                                 // mIsExternal
+                Value::Int(sources),                           // mSources
+                Value::Int(keyboard_type),                     // mKeyboardType
+                Value::Str8(None),                             // mKeyboardLanguageTag
+                Value::Str8(None),                             // mKeyboardLayoutType
+                Value::Int(0),                                 // mHasVibrator
+                Value::Int(0),                                 // mHasMicrophone
+                Value::Int(0),                                 // mHasButtonUnderPad
+                Value::Int(0),                                 // mHasSensor
+                Value::Int(0),                                 // mHasBattery
+                Value::Parcelable(Parcelable::ordered(
+                    "android.hardware.input.HostUsiVersion",
+                    vec![Value::Int(-1), Value::Int(-1)],
+                )),                                            // mHostUsiVersion
+                Value::Int(-1),                                // mAssociatedDisplayId
+                Value::Int(0),                                 // numRanges
             ],
         )
     }
@@ -168,11 +214,14 @@ impl ServiceObject for InputService {
         let mut state = self.state.lock().unwrap();
         let reply = match method.name.as_str() {
             "getVelocityTrackerStrategy" => vec![Value::Str(Some("impulse".into()))],
-            "getInputDeviceIds" => vec![Value::IntArray(Some(vec![0]))],
+            // `InputManagerGlobal.populateInputDevicesLocked` builds its id
+            // set from this call, so the virtual keyboard (-1) must be listed
+            // or `getInputDevice(-1)` never reaches the service.
+            "getInputDeviceIds" => vec![Value::IntArray(Some(vec![0, -1]))],
             "getInputDevice" => {
                 let id = args.first().and_then(Value::as_int).unwrap_or(0);
-                if id == 0 {
-                    vec![Value::TypedObject(Self::input_device())]
+                if id == 0 || id == -1 {
+                    vec![Value::TypedObject(Self::input_device(id))]
                 } else {
                     vec![Value::TypedObject(Parcelable::Null)]
                 }

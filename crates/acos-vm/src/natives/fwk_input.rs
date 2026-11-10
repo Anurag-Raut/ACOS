@@ -44,10 +44,11 @@ use rustix::net::{RecvFlags, SendFlags};
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
-use crate::heap::Handle;
+use crate::heap::{ArrayData, Handle, Object};
 use crate::javabridge::JavaValue;
 use crate::vm::Vm;
 
+use super::kcm::{self, Kcm};
 use super::looper::{handle_for_ptr, LooperHandle};
 use super::parcel::with_store;
 
@@ -373,9 +374,14 @@ impl Default for MotionEventState {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct KeyMapState {
     keyboard_type: i32,
+    /// The layout name the services layer wrote into the `KeyCharacterMap`
+    /// parcel (`Generic` for ACOS's virtual keyboard).
+    layout: String,
+    /// The parsed map.
+    kcm: Kcm,
 }
 
 #[derive(Debug)]
@@ -1275,9 +1281,36 @@ fn key_code_to_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 // KeyCharacterMap natives
 // ---------------------------------------------------------------------------
 
-/// The single ACOS virtual keyboard is QWERTY.
-const KEYBOARD_QWERTY: i32 = 1;
+/// Layout name the services layer writes for ACOS's virtual keyboard.
+const GENERIC_LAYOUT: &str = "Generic";
 
+/// Resolve a layout name to a parsed map.
+///
+/// ACOS ships the AOSP generic layout; an unknown name is answered with that
+/// same map rather than invented per-layout data, and the requested name is
+/// kept in [`KeyMapState::layout`] so the mismatch is observable.
+fn kcm_for_layout(layout: &str) -> Kcm {
+    match layout {
+        "Generic" | "Virtual" | "generic" | "virtual" | "" => kcm::generic(),
+        _ => kcm::generic(),
+    }
+}
+
+/// Run `f` over the map behind native pointer `ptr`.
+fn kcm_lookup<R>(ptr: u64, f: impl FnOnce(&Kcm) -> R) -> Option<R> {
+    POOLS.with(|p| p.borrow().key_maps.get(&ptr).map(|k| f(&k.kcm)))
+}
+
+/// Read a Java `char[]` into a Rust `Vec<u16>`.
+fn java_char_array(vm: &Vm, h: Handle) -> Vec<u16> {
+    match vm.heap.get(h) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Char(v) => v.clone(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
 
 fn kcm_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeDispose");
@@ -1304,112 +1337,197 @@ fn kcm_get_keyboard_type(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             .key_maps
             .get(&ptr)
             .map(|k| k.keyboard_type)
-            .unwrap_or(KEYBOARD_QWERTY)
+            .unwrap_or(kcm::KEYBOARD_FULL)
     });
     vm.ret_i32(ctx, t);
     Ok(())
 }
 
-fn kcm_char(key_code: i32, meta_state: i32) -> u16 {
-    let shift = (meta_state & 0x1) != 0;
-    match key_code {
-        29..=54 => {
-            let base = b'a' + (key_code - 29) as u8;
-            if shift {
-                (base - b'a' + b'A') as u16
-            } else {
-                base as u16
-            }
-        }
-        7..=16 => {
-            let digits = [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'];
-            digits[(key_code - 7) as usize] as u16
-        }
-        62 if shift => b' ' as u16,
-        62 => b' ' as u16,
-        _ => 0,
-    }
-}
-
 fn kcm_get_character(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetCharacter");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
     let key_code = vm.arg_i32(ctx, 1);
     let meta_state = vm.arg_i32(ctx, 2);
-    vm.ret_u16(ctx, kcm_char(key_code, meta_state));
+    let ch = kcm_lookup(ptr, |k| k.character(key_code, meta_state)).unwrap_or(0);
+    vm.ret_u16(ctx, ch);
     Ok(())
 }
 
 fn kcm_get_display_label(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetDisplayLabel");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
     let key_code = vm.arg_i32(ctx, 1);
-    vm.ret_u16(ctx, kcm_char(key_code, 0));
+    let ch = kcm_lookup(ptr, |k| k.display_label(key_code)).unwrap_or(0);
+    vm.ret_u16(ctx, ch);
     Ok(())
 }
 
 fn kcm_get_number(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetNumber");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
     let key_code = vm.arg_i32(ctx, 1);
-    vm.ret_u16(ctx, kcm_char(key_code, 0));
+    let ch = kcm_lookup(ptr, |k| k.number(key_code)).unwrap_or(0);
+    vm.ret_u16(ctx, ch);
     Ok(())
 }
 
 fn kcm_get_match(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetMatch");
-    let _ptr = vm.arg_i64(ctx, 0);
+    let ptr = vm.arg_i64(ctx, 0) as u64;
     let key_code = vm.arg_i32(ctx, 1);
-    let _chars = vm.arg_ref(ctx, 2);
+    let chars_obj = vm.arg_ref(ctx, 2);
     let meta_state = vm.arg_i32(ctx, 3);
-    vm.ret_u16(ctx, kcm_char(key_code, meta_state));
+    let chars = java_char_array(vm, chars_obj);
+    let ch = kcm_lookup(ptr, |k| k.match_char(key_code, &chars, meta_state)).unwrap_or(0);
+    vm.ret_u16(ctx, ch);
     Ok(())
 }
 
 fn kcm_get_events(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetEvents");
-    let _ptr = vm.arg_i64(ctx, 0);
-    let _chars = vm.arg_ref(ctx, 1);
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let chars_obj = vm.arg_ref(ctx, 1);
+    let chars = java_char_array(vm, chars_obj);
+    // Resolve each character to its key-code/meta while the map is borrowed,
+    // then build the real `KeyEvent`s once the borrow is released.
+    let mut combos = Vec::with_capacity(chars.len());
+    POOLS.with(|p| {
+        if let Some(state) = p.borrow().key_maps.get(&ptr) {
+            for &c in &chars {
+                let Some(ch) = char::from_u32(c as u32) else {
+                    continue;
+                };
+                if let Some((code, meta)) = state.kcm.events_for(ch) {
+                    combos.push((code, meta));
+                }
+            }
+        }
+    });
+    let mut events = Vec::with_capacity(combos.len() * 2);
+    for (code, meta) in combos {
+        for action in [KEY_ACTION_DOWN, KEY_ACTION_UP] {
+            let ev = vm
+                .new_instance_ctor(
+                    "android/view/KeyEvent",
+                    "(JJIIII)V",
+                    &[
+                        JavaValue::Long(0),
+                        JavaValue::Long(0),
+                        JavaValue::Int(action),
+                        JavaValue::Int(code),
+                        JavaValue::Int(0),
+                        JavaValue::Int(meta),
+                    ],
+                )
+                .map_err(bridge_err)?;
+            events.push(JavaValue::Object(ev));
+        }
+    }
     let arr = vm
-        .new_array_empty("Landroid/view/KeyEvent;", 0)
-        .map_err(|e| match e {
-            crate::javabridge::BridgeError::Vm(e) => e,
-            other => VmError::Internal(other.to_string()),
-        })?;
+        .new_array("Landroid/view/KeyEvent;", &events)
+        .map_err(bridge_err)?;
     vm.ret_ref(ctx, arr);
     Ok(())
 }
 
 fn kcm_get_fallback(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeGetFallbackAction");
-    let _ = vm.arg_i64(ctx, 0);
-    let _ = vm.arg_i32(ctx, 1);
-    let _ = vm.arg_i32(ctx, 2);
-    let _ = vm.arg_ref(ctx, 3);
-    vm.ret_bool(ctx, false);
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let key_code = vm.arg_i32(ctx, 1);
+    let meta_state = vm.arg_i32(ctx, 2);
+    let out = vm.arg_ref(ctx, 3);
+    match kcm_lookup(ptr, |k| k.fallback(key_code, meta_state)).flatten() {
+        Some((code, meta)) => {
+            let _ = vm.set_field(out, "keyCode", JavaValue::Int(code));
+            let _ = vm.set_field(out, "metaState", JavaValue::Int(meta));
+            vm.ret_bool(ctx, true);
+        }
+        None => vm.ret_bool(ctx, false),
+    }
     Ok(())
 }
 
 fn kcm_obtain_empty(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeObtainEmptyKeyCharacterMap");
     let keyboard_type = vm.arg_i32(ctx, 0);
-    let obj = vm.new_instance("android/view/KeyCharacterMap").map_err(|e| match e {
-        crate::javabridge::BridgeError::Vm(e) => e,
-        other => VmError::Internal(other.to_string()),
-    })?;
-    // The real `KeyCharacterMap` has a private no-arg constructor; if the
-    // framework cannot materialise it, report a structured unsupported.
-    let _ = keyboard_type;
+    let id = POOLS.with(|p| {
+        let mut p = p.borrow_mut();
+        let id = p.alloc_id();
+        p.key_maps.insert(
+            id,
+            KeyMapState {
+                keyboard_type,
+                layout: GENERIC_LAYOUT.to_string(),
+                kcm: kcm::generic(),
+            },
+        );
+        id
+    });
+    let obj = vm
+        .new_instance_ctor(
+            "android/view/KeyCharacterMap",
+            "(J)V",
+            &[JavaValue::Long(id as i64)],
+        )
+        .map_err(bridge_err)?;
     vm.ret_ref(ctx, obj);
     Ok(())
 }
 
+/// `nativeReadFromParcel(Parcel)J`: read the `[keyboardType, layout]` payload
+/// written by [`kcm_write_to_parcel`]/the services codec, parse the layout and
+/// return the native pointer the Java constructor stores in `mPtr`.
 fn kcm_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let _ = vm.arg_ref(ctx, 0);
-    Err(unsupported("KeyCharacterMap.nativeReadFromParcel"))
+    me_hit(ctx, "nativeReadFromParcel");
+    let parcel_obj = vm.arg_ref(ctx, 0);
+    let handle = parcel_ptr(vm, parcel_obj)?;
+    let keyboard_type = parcel_flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, acos_parcel::Parcel::read_int32)
+    }))?;
+    let layout = parcel_flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, acos_parcel::Parcel::read_string8)
+    }))?
+    .unwrap_or_default();
+    let kcm = kcm_for_layout(&layout);
+    let id = POOLS.with(|p| {
+        let mut p = p.borrow_mut();
+        let id = p.alloc_id();
+        p.key_maps.insert(
+            id,
+            KeyMapState {
+                keyboard_type,
+                layout,
+                kcm,
+            },
+        );
+        id
+    });
+    vm.ret_i64(ctx, id as i64);
+    Ok(())
 }
 
+/// `nativeWriteToParcel(J, Parcel)V`: write the same payload back.
 fn kcm_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let _ = vm.arg_i64(ctx, 0);
-    let _ = vm.arg_ref(ctx, 1);
-    Err(unsupported("KeyCharacterMap.nativeWriteToParcel"))
+    me_hit(ctx, "nativeWriteToParcel");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let parcel_obj = vm.arg_ref(ctx, 1);
+    let handle = parcel_ptr(vm, parcel_obj)?;
+    let (keyboard_type, layout) = POOLS.with(|p| {
+        p.borrow()
+            .key_maps
+            .get(&ptr)
+            .map(|k| (k.keyboard_type, k.layout.clone()))
+    })
+    .unwrap_or((kcm::KEYBOARD_FULL, GENERIC_LAYOUT.to_string()));
+    with_store(|s| s.table.with_parcel(handle, |p| p.write_int32(keyboard_type)))
+        .map_err(parcel_err)?;
+    parcel_flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_string8_opt(Some(&layout)))
+    }))?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

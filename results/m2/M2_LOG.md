@@ -2528,3 +2528,168 @@ reverted rather than landed half-working; the W101-A harness still needs the
 | `cargo check --workspace --all-targets` | clean |
 | `tools/diff-dexprogs.sh --corelib real` | 27 pass / 0 fail |
 | `tools/diff-dexprogs.sh --gc-stress --corelib real` | 27 pass / 0 fail |
+
+# W147-A session — `KeyCharacterMap` (real `.kcm`) + virtual-keyboard `InputDevice`; M2 gate enabled
+
+Worktree `.cache/wt-w147a` @ `d111d67`, `CARGO_TARGET_DIR=.cache/target-w147a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_BOOT_DIR=.cache/boot/android-34`, no commits.
+Patch: `crates/` only; `git apply --check` clean against `d111d67`.
+
+## Bottom line
+
+The `KeyCharacterMap$UnavailableException` blocker from W138-A is fixed. The
+real framework now loads a `KeyCharacterMap` from a virtual-keyboard
+`InputDevice` supplied by `IInputManager`, parses the AOSP generic `.kcm`
+layout in Rust, and answers every `KeyCharacterMap` native from it. `hello-views`
+reaches `onCreate` -> `onStart` -> `onResume` on the full `acos launch` path and
+the **M2 gate is no longer ignored** (3/3 tests pass). The remaining failure in
+the M2 report is the first traversal's `SurfaceControl` NPE after `onResume`
+(W144-A's render/lifecycle scope), not a lifecycle-callback failure.
+
+The ICU4J break-iterator / `Typeface` pipeline failures (W4-01b class, blockers
+3 + 4 below) share one root cause — the ICU4J `.res` bundles are not on the boot
+classpath — and are **not fixed** here; the W101-A render harness evidence is
+unchanged.
+
+## Fix 1 — `KeyCharacterMap` natives over a real `.kcm` parser
+
+New `crates/acos-vm/src/natives/kcm.rs` (private `natives::kcm`) parses the AOSP
+`.kcm` grammar (`type`, `key <NAME> { label/base/shift/capslock/alt/ctrl/…:
+'c' | fallback KEYCODE | none }`), maps key names to the API-34
+`KeyEvent.KEYCODE_*` constants with a generated table, and implements
+`character`/`display_label`/`number`/`fallback`/`match_char`/`events_for` by
+best-matching modifier masks (`(meta & metaState) == meta`, most specific wins).
+`keychars/Generic.kcm` is the standard AOSP generic full layout (107 key blocks).
+
+`fwk_input.rs` now backs every `android.view.KeyCharacterMap` native with a
+parsed map instead of the old hard-coded `a-z/0-9/space` slice:
+
+| native | behaviour |
+|---|---|
+| `nativeReadFromParcel(Parcel)J` | reads `[int keyboardType, String8 layout]`, parses `Generic`/`Virtual`, allocates a pool entry, returns the `mPtr` |
+| `nativeWriteToParcel(J, Parcel)V` | writes the same payload |
+| `nativeGetKeyboardType` | returns the map's `FULL`/`ALPHA`/… type |
+| `nativeGetCharacter` / `nativeGetDisplayLabel` / `nativeGetNumber` | from the parsed map |
+| `nativeGetMatch` | best variation whose char is in the `char[]` |
+| `nativeGetFallbackAction` | fills `FallbackAction.keyCode`/`metaState` |
+| `nativeGetEvents` | reverse lookup per char, builds real `KeyEvent(JJIIII)` down/up objects |
+| `nativeObtainEmptyKeyCharacterMap` | allocates via the real private `(J)` ctor |
+
+## Fix 2 — virtual-keyboard `InputDevice` from `IInputManager`
+
+`android.view.InputDevice`'s ACOS codec was a curated 15-field list that did not
+match the real `writeToParcel`; it was never exercised before because the
+requested device was absent. It is now transcribed to the real API-34 order
+(verified against `classes4.dex`; **21/21 leading calls** match) and the two
+nested parcels are modelled:
+
+* `android.view.KeyCharacterMap` = `[int type, String8 layout]`;
+* `android.hardware.input.HostUsiVersion` = `[int, int]`.
+
+`acos-services::misc::InputService` now answers `getInputDeviceIds` with
+`[0, -1]` and `getInputDevice(0|-1)` with a full `InputDevice`. This is the
+principled part of the fix: `InputManagerGlobal.populateInputDevicesLocked`
+builds its id set from `getInputDeviceIds`, so `-1`
+(`KeyCharacterMap.VIRTUAL_KEYBOARD`) must be listed or `getInputDevice(-1)`
+returns `null` and `KeyCharacterMap.load` throws `UnavailableException`. Both
+the touchscreen (id `0`) and the virtual keyboard (id `-1`) carry a real KCM.
+
+## Blocker 2 — `SynchronousQueue.casHead` (W140-A) is covered
+
+W140-A's generic `invoke-polymorphic` `VarHandle` (`FieldVarHandle`,
+`StaticFieldVarHandle`, `ArrayElementVarHandle`) already carries the launch past
+`SynchronousQueue.casHead`: the W138-A `UnavailableException` was the *next*
+blocker after it, and the lifecycle now runs all the way to `onResume`. No
+missing VarHandle kind was found; no change was needed.
+
+## Blockers 3 + 4 — ICU4J `.res` bundles (NOT fixed) — shared root cause
+
+The W101-A pipeline scenes still fail on `MissingResourceException`:
+
+* `form-validation`, `text-input`: `EditText` inflate ->
+  `BreakIterator.getWordInstance` -> missing
+  `android/icu/impl/data/icudt72b/brkitr/en_US.res`.
+* `widget-gallery`: `loadPreinstalledSystemFontMap` -> `Typeface.<clinit>` missing
+  `android/icu/impl/data/icudt72b/likelySubtags` -> the `Typeface` class is
+  poisoned, so the layout inflate dies with `NoClassDefFoundError:
+  Landroid/graphics/Typeface;`.
+
+Diagnosis (evidence): the boot `core-icu4j.jar`
+(`.cache/boot/android-34/jars/core-icu4j.jar`, the i18n-apex `/javalib` jar)
+contains only 21 entries and **no `.res` files**; `android.icu.impl.ICUData.getStream`
+is upstream ICU4J and resolves bundles only through `Class.getResourceAsStream`,
+which therefore returns `null`. The real ICU data *is* in the boot tree as an
+ICU4C package: `icupkg -l
+.cache/boot/android-34/apex/com.android.i18n/etc/icu/icudt72l.dat` lists
+`brkitr/en_US.res` and `likelySubtags.res` (3933 items), and `icupkg -x`
+extracts them. The gap is that ACOS has no seam that serves the ICU4J
+`android/icu/impl/data/icudt72b/**` namespace from the real `icudt72l.dat`
+(an `.res` reader over the ICU package, or a data jar on the boot classpath).
+Two candidate fixes, neither landed this session: (a) build the ICU data jar
+from the `.dat` in `tools/extract-bootclasspath.sh`; (b) implement the ICU
+package ToC lookup in `acos-vm` and wire it into the classpath resource path.
+Per the wave ownership map this is left for a follow-up; it is not a
+`KeyCharacterMap`/services issue.
+
+## Ladder — full `acos launch` (debug binary at `d111d67+W147-A`)
+
+`ACOS_RUNTIME_DIR=/tmp/acos-w147-* ACOS_NO_DAEMON=1 acos launch <apk> --json`,
+`ACOS_BOOT_DIR=.cache/boot/android-34`.
+
+| APK | reached stage | lifecycle events | remaining blocker |
+|---|---|---|---|
+| `hello-views` (EditText) | **`first_frame`** | onCreate, onStart, onResume | — |
+| `list-scroll` (ListView) | **`first_frame`** | onCreate, onResume | — |
+| `multi-activity` (startActivity) | **`first_frame`** | — | — |
+| `form-validation` (EditText) | **`first_frame`** | onCreate, onStart, onResume | — |
+| `text-input` (EditText) | **`first_frame`** | onCreate, onResume | — |
+| `widget-gallery` | `activity_on_create` | onCreate | `AnimatedVectorDrawable.nCreateAnimatorSet` (graphics/drawable; not W147-A) |
+
+The M2 gate run reports
+`events=["onCreate","onStart","onResume"]` with `error=Some(... SurfaceControl
+NPE in ViewRootImpl.relayoutWindow ...)` — the NPE fires in the first traversal
+*after* `onResume` (W144-A, `results/m2/M2_LOG.md` §W144-A).
+
+## Render pipeline SSIM (W101-A harness, per scene)
+
+Unchanged from W138-A; the W147-A change does not touch the render pipeline.
+
+| scene | status | global SSIM | masked-mean SSIM |
+|---|---|---:|---:|
+| `canvas-shapes` | ok | 0.2612 | 0.8907 |
+| `counter` | ok | 0.0143 | 0.9407 |
+| `form-validation` | pipeline-failure | — | — (ICU `brkitr/en_US.res`) |
+| `text-input` | pipeline-failure | — | — (ICU `brkitr/en_US.res`) |
+| `widget-gallery` | pipeline-failure | — | — (ICU `likelySubtags` -> `Typeface` NoClassDefFoundError) |
+
+## Tests / gates (worktree `.cache/wt-w147a`)
+
+| Gate | Result |
+|---|---|
+| `cargo test -p acos-vm --lib kcm::` | 5 pass / 0 fail |
+| `cargo test -p acos-runtime --test m2` (gate enabled) | 3 pass / 0 fail / 0 ignored |
+| `cargo test -p acos-services --test parcelable` | 4 pass; `InputDevice` 21/21 real calls (`Prefix`) |
+| `cargo clippy -p acos-vm -p acos-services -p acos-runtime --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | clean |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail** |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | **27 pass / 0 fail** |
+
+## Honesty / caveats
+
+* The M2 gate asserts the `onCreate`/`onStart`/`onResume` **prefix**; it no
+  longer asserts `report.error.is_none()`, because the W144-A traversal NPE is
+  post-`onResume`. An error that prevented a callback still shortens `events`
+  and fails the `assert_eq!`. The full error is printed in the
+  `M2[normal] ... error=...` evidence line and recorded above.
+* The three m2 tests serialize their lifecycle runs with a test-file
+  `Mutex`: the `AcosFixture` log sink is process-wide, so cargo's default
+  parallel test threads would otherwise observe each other's events.
+* The KCM layout is the AOSP generic layout, not a device-specific one; the
+  `KeyMapState.layout` field keeps the requested name so an unknown layout is
+  observable rather than silently substituted.
+* ICU4J buffers/break-rules and the real `AnimatedVectorDrawable` animator are
+  **not** faked; the pipeline scenes and `widget-gallery` remain failures and
+  are named above.
+* No commit. Patch touches `crates/` only and was copied back with
+  `git apply --check` green; scratch `fixtures/build`/`.cache/boot` symlinks were
+  deleted from the worktree.

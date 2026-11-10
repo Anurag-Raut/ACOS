@@ -362,6 +362,50 @@ pub unsafe extern "C" fn pthread_attr_getguardsize(a: usize, out: *mut usize) ->
     libc::pthread_attr_getguardsize(attr_ptr(a), out)
 }
 
+/// The stack region containing the current stack pointer, read from
+/// `/proc/self/maps`.
+///
+/// glibc's `pthread_getattr_np` describes a spawned thread's stack from its own
+/// bookkeeping, but the process **main** thread has no `pthread` bookkeeping:
+/// glibc derives its bounds from `RLIMIT_STACK`/`__libc_stack_end`, which is not
+/// usable when the process runs on a sandbox-altered stack. The Dart VM
+/// (`os_thread.cc: GetStackBounds`) fatal-checks when those bounds come back
+/// empty, so fall back to the mapping that actually contains the stack pointer.
+fn current_thread_stack_region() -> Option<(*mut c_void, usize)> {
+    #[inline(never)]
+    fn stack_pointer() -> usize {
+        let marker = 0u8;
+        std::ptr::addr_of!(marker) as usize
+    }
+    let sp = stack_pointer();
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    for line in maps.lines() {
+        let mut fields = line.split_whitespace();
+        let range = fields.next()?;
+        let perms = fields.next()?;
+        let (start_s, end_s) = range.split_once('-')?;
+        let start = usize::from_str_radix(start_s, 16).ok()?;
+        let end = usize::from_str_radix(end_s, 16).ok()?;
+        if sp < start || sp >= end || !perms.starts_with("rw") {
+            continue;
+        }
+        // The stack is a private, writable, anonymous (or `[stack]`) mapping;
+        // skip the other writable mappings the SP can never be in.
+        let name = fields.next().unwrap_or("");
+        if matches!(name, "[heap]" | "[vvar]" | "[vdso]" | "[vsyscall]") {
+            continue;
+        }
+        return Some((start as *mut c_void, end - start));
+    }
+    None
+}
+
+/// Whether `thread` names the calling thread.
+fn is_current_thread(thread: libc::pthread_t) -> bool {
+    // SAFETY: `pthread_equal` is pure.
+    unsafe { libc::pthread_equal(thread, libc::pthread_self()) != 0 }
+}
+
 /// `pthread_getattr_np(thread, attr)`.
 ///
 /// The guest `pthread_attr_t` is opaque bionic storage (8 B on LP64); glibc's
@@ -369,8 +413,33 @@ pub unsafe extern "C" fn pthread_attr_getguardsize(a: usize, out: *mut usize) ->
 /// same address-keyed table the other `pthread_attr_*` shims use. For the FFI
 /// model the guest runs on the host thread, so the host stack it reports is the
 /// stack the guest is actually using.
+///
+/// When the host call cannot describe the calling thread's stack (the process
+/// main thread in particular), fall back to the `/proc/self/maps` region that
+/// contains the live stack pointer and encode it with
+/// `pthread_attr_setstack`, so `pthread_attr_getstack` returns usable bounds.
 pub unsafe extern "C" fn pthread_getattr_np(thread: libc::pthread_t, attr: usize) -> c_int {
-    host_pthread_getattr_np(thread, attr_ptr(attr))
+    let p = attr_ptr(attr);
+    let rc = host_pthread_getattr_np(thread, p);
+    let mut addr: *mut c_void = std::ptr::null_mut();
+    let mut size: usize = 0;
+    // SAFETY: `p` is an initialised host `pthread_attr_t`.
+    let got = unsafe { libc::pthread_attr_getstack(p, &mut addr, &mut size) };
+    let usable = rc == 0 && got == 0 && !addr.is_null() && size >= 16 * 1024;
+    if !usable && is_current_thread(thread) {
+        if let Some((base, len)) = current_thread_stack_region() {
+            // SAFETY: `p` is a live host attribute; `base`/`len` describe a
+            // mapped region that stays valid for the thread's lifetime.
+            if unsafe { libc::pthread_attr_setstack(p, base, len) } == 0 {
+                return 0;
+            }
+        }
+    }
+    if rc != 0 {
+        rc
+    } else {
+        got
+    }
 }
 
 /// `pthread_attr_getstack(attr, addr, size)` against the host attribute box.
@@ -807,6 +876,45 @@ mod tests {
             let ap = &a as *const i32 as usize;
             assert_eq!(pthread_condattr_setclock(ap, 99), libc::EINVAL);
         }
+    }
+
+    #[test]
+    fn getattr_np_reports_usable_main_thread_stack_bounds() {
+        // The process main thread has no pthread bookkeeping; this exercises the
+        // `/proc/self/maps` fallback the Dart VM needs.
+        let a = guest();
+        let ap = addr(&a);
+        // SAFETY: valid guest storage for an opaque bionic `pthread_attr_t`.
+        unsafe {
+            assert_eq!(pthread_getattr_np(libc::pthread_self(), ap), 0);
+            let mut base: *mut c_void = std::ptr::null_mut();
+            let mut size: usize = 0;
+            assert_eq!(pthread_attr_getstack(ap, &mut base, &mut size), 0);
+            assert!(!base.is_null(), "stack base must be set");
+            assert!(
+                size >= 16 * 1024,
+                "stack size must be usable, got {size}"
+            );
+            // The reported region must contain this function's own frame.
+            let marker = 0u8;
+            let sp = std::ptr::addr_of!(marker) as usize;
+            let lo = base as usize;
+            let hi = lo + size;
+            assert!(
+                sp >= lo && sp < hi,
+                "reported stack [{lo:#x},{hi:#x}) must cover sp {sp:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn stack_region_covers_the_live_stack_pointer() {
+        let (base, len) = current_thread_stack_region().expect("a stack mapping exists");
+        let marker = 0u8;
+        let sp = std::ptr::addr_of!(marker) as usize;
+        let lo = base as usize;
+        assert!(sp >= lo && sp < lo + len, "sp {sp:#x} outside [{lo:#x},{:#x})", lo + len);
+        assert!(len > 16 * 1024, "stack region too small: {len}");
     }
 
     #[test]

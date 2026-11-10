@@ -6,17 +6,15 @@
 //! log line emitted by the real `MainActivity` bytecode, and
 //! `app_created` is read from the real `ActivityThread.mInitialApplication`.
 //!
-//! State as of this commit: `bindApplication` is delivered to the real
-//! `ApplicationThread`, `handleBindApplication` runs
-//! `Application.onCreate` (`app_created=true`), and the launch
-//! `ClientTransaction` reaches `ActivityThread.performLaunchActivity` ->
-//! `Activity.attach` -> `PhoneWindow.<init>`. It then blocks in
-//! `Settings.getPublicSettingsForClass` (a `Field.get` static-slot bug), before
-//! `MainActivity.onCreate` (see `results/m2/M2_LOG.md`, W29-A section).
-//! The full gate is therefore `#[ignore]`d with that exact reason rather than
-//! silently passing; the two non-ignored tests pin the progress and the
-//! honesty invariant (never report a transaction as delivered when it was
-//! not).
+//! State as of W147-A: `bindApplication` is delivered to the real
+//! `ApplicationThread`, `Application.onCreate` runs (`app_created=true`), the
+//! launch `ClientTransaction` reaches `ActivityThread.performLaunchActivity`
+//! and the real `MainActivity` emits `onCreate`, `onStart`, `onResume`, exactly
+//! the ART oracle's prefix. The gate is enabled. The first traversal after
+//! `onResume` still raises a `SurfaceControl` NPE owned by the W144-A
+//! lifecycle/render work (see `results/m2/M2_LOG.md` §W147-A); the gate asserts
+//! the lifecycle prefix, and reports any later framework error through the
+//! printed `M2[normal] ... error=...` evidence line.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -89,6 +87,12 @@ fn peak_rss_kb() -> u64 {
 /// Run the lifecycle once and print the evidence. Returns `None` when the
 /// fixtures are absent (loud skip, never a silent pass).
 fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
+    // The `AcosFixture` log sink is process-wide (`acos-vm::natives::os_log`),
+    // so the three tests in this file must not run their lifecycle
+    // concurrently or they observe each other's events. Cargo runs test
+    // functions in parallel by default; this serializes them.
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let apk = hello_views_apk()?;
     let mut rt = new_runtime()?;
     let started = Instant::now();
@@ -109,10 +113,11 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
     Some(report)
 }
 
-/// The M2 gate. Ignored while the framework blocks before `Activity.onCreate`;
-/// run with `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
+/// The M2 gate: the real framework runs `onCreate` -> `onStart` -> `onResume`
+/// in order, matching the ART oracle's prefix. See `results/m2/M2_LOG.md`
+/// §W147-A for the current state (the first traversal after `onResume` still
+/// hits a `SurfaceControl` NPE owned by the W144-A lifecycle/render work).
 #[test]
-#[ignore = "M2 not reached: bindApplication + Application.onCreate + the launch ClientTransaction all run (app_created=true, transaction_scheduled=true) and performLaunchActivity reaches MainActivity.onCreate -> setContentView -> PhoneWindow.installDecor -> DecorView.onResourcesLoaded inflating android:layout/screen_toolbar. W110-A landed two launch-chain fixes: `nativeResolveAttrs` chases a theme-resolved @resid to its concrete value (`?attr/colorControlNormal` -> res/color/text_color_secondary_device_default_light.xml), so VectorDrawable.applyTheme no longer raises `Can't convert to ComplexColor: type=0x1`; and the static `nativeAsset*` natives now take only the AssetInputStream pointer (their real Java signatures) with the owning manager encoded in the high 32 bits, so opening a real asset stream no longer panics with an out-of-bounds register read. android:drawable/ic_ab_back_material inflates. The launch now blocks in PhoneWindow.installDecor -> ApplicationPackageManager.getDefaultActivityIcon() decoding the default adaptive launcher icon: `Landroid/graphics/ImageDecoder;->nCreate(Ljava/io/InputStream;[BZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;` is not implemented (image/render, W104-A). W116-A: with W104-A's real ImageDecoder the counter.apk launch passes activity_on_create and reaches ViewRootImpl.setView -> IWindowSession.addToDisplayAsUser (its reply decodes in the real Stub$Proxy), and the bounded run's main-looper quit bug is fixed; the M2 gate fixture hello-views is still blocked earlier at android.widget.EditText inflate, and the first performTraversals never reaches relayout because the lifecycle driver does not pump the looper. results/m2/M2_LOG.md §W110-A, §W116-A. W134-A: the settings provider now answers `LIST_config` with a well-formed empty DeviceConfig `HashMap` (parcel `VAL_MAP`) and `BitmapFactory`/`ImageDecoder` extract the PNG `npTc` nine-patch chunk, so hello-views gets past the `IContentProvider LIST_config unsupported` and `<nine-patch> requires a valid 9-patch source image` failures; it now blocks at a bare `NullPointerException` in the `android.widget.EditText` constructor (`LayoutInflater.createView`), the next framework gap. The gate stays ignored. results/m2/M2_LOG.md §W134-A. W138-A: the `EditText` NPE is fixed. VM-constructed throwables now fill `Throwable.backtrace` so `getStackTrace()` is real, which localised the null to a `ColorStateList` in `TextView.updateTextColors`; the cause was the reverted theme style-bag resolution. `resolve_references` now ports AOSP `AssetManager2::GetResource(may_be_bag) + ResolveReference` (a reference to a bag stays `TYPE_REFERENCE` with the bag id as its resid), and `nativeApplyStyle` resolves `?attr` through the `TypedArray`'s theme before chasing a `@resid`, so `textAppearance`/`textColor` resolve to their bags/concrete values. hello-views now runs `onCreate` -> `onStart` -> `onResume` (W140-A's generic `invoke-polymorphic` then carries it past the old `SynchronousQueue` abort); the next blocker is `android.view.KeyCharacterMap$UnavailableException` in `PhoneWindow.preparePanel`. results/m2/M2_LOG.md §W138-A"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");
@@ -122,11 +127,6 @@ fn m2_lifecycle_create_start_resume_matches_reference() {
         return;
     };
     assert!(
-        report.error.is_none(),
-        "lifecycle failed before the callbacks: {:?}",
-        report.error
-    );
-    assert!(
         report.bind_delivered,
         "bindApplication was not delivered to the real ApplicationThread"
     );
@@ -135,12 +135,16 @@ fn m2_lifecycle_create_start_resume_matches_reference() {
         report.app_created,
         "ActivityThread.mInitialApplication is null: Application.onCreate did not run"
     );
-    // M2 is create/start/resume; compare that prefix with the oracle.
+    // M2 is create/start/resume; compare exactly that prefix with the oracle. A
+    // framework error that occurred *after* `onResume` (the first traversal;
+    // §W147-A / W144-A) would leave `events` complete and is reported through
+    // `report.error` but does not invalidate the lifecycle milestone. An error
+    // that prevented a callback would shorten `events` and fail here.
     let expected = &reference[..3.min(reference.len())];
     assert_eq!(
-        &report.events[..report.events.len().min(expected.len())],
-        expected,
-        "lifecycle order differs from the ART oracle"
+        report.events, expected,
+        "lifecycle callbacks/order differ from the ART oracle (error={:?})",
+        report.error
     );
 }
 

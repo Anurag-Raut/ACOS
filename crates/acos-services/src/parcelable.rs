@@ -594,25 +594,50 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Dynamic],
         verification: Verification::Curated,
     },
+    // The real API-34 `InputDevice.writeToParcel` starts with the nested
+    // `KeyCharacterMap`, then the scalar fields. `mMotionRanges` is written as
+    // a trailing count + 7-field records; ACOS's synthetic devices carry zero
+    // ranges, so only the (zero) count is modelled. `mHostUsiVersion` is a
+    // nested two-int parcelable.
     ParcelableSpec {
         class: "android.view.InputDevice",
         fields: &[
-            FieldOp::Int,   // id
-            FieldOp::Int,   // generation
-            FieldOp::Int,   // controllerNumber
-            FieldOp::Str8,  // name
-            FieldOp::Int,   // sources
-            FieldOp::Int,   // vendorId
-            FieldOp::Int,   // productId
-            FieldOp::Int,   // descriptor
-            FieldOp::Int,   // keyboardType
-            FieldOp::Int,   // hasMotionRangeX
-            FieldOp::Int,   // hasMotionRangeY
-            FieldOp::Float, // motionRangeX min
-            FieldOp::Float, // motionRangeX max
-            FieldOp::Float, // motionRangeY min
-            FieldOp::Float, // motionRangeY max
+            FieldOp::Nested("android.view.KeyCharacterMap"), // mKeyCharacterMap
+            FieldOp::Int,    // mId
+            FieldOp::Int,    // mGeneration
+            FieldOp::Int,    // mControllerNumber
+            FieldOp::Str16,  // mName
+            FieldOp::Int,    // mVendorId
+            FieldOp::Int,    // mProductId
+            FieldOp::Str16,  // mDescriptor
+            FieldOp::Int,    // mIsExternal
+            FieldOp::Int,    // mSources
+            FieldOp::Int,    // mKeyboardType
+            FieldOp::Str8,   // mKeyboardLanguageTag
+            FieldOp::Str8,   // mKeyboardLayoutType
+            FieldOp::Int,    // mHasVibrator
+            FieldOp::Int,    // mHasMicrophone
+            FieldOp::Int,    // mHasButtonUnderPad
+            FieldOp::Int,    // mHasSensor
+            FieldOp::Int,    // mHasBattery
+            FieldOp::Nested("android.hardware.input.HostUsiVersion"),
+            FieldOp::Int,    // mAssociatedDisplayId
+            FieldOp::Int,    // numRanges
         ],
+        verification: Verification::Prefix,
+    },
+    // The private ACOS wire shape for a `KeyCharacterMap` payload: the
+    // keyboard type and the layout name. The Java reader is the
+    // `KeyCharacterMap.nativeReadFromParcel` native, so the bytes only have to
+    // agree with that native (and `nativeWriteToParcel`).
+    ParcelableSpec {
+        class: "android.view.KeyCharacterMap",
+        fields: &[FieldOp::Int, FieldOp::Str8],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.hardware.input.HostUsiVersion",
+        fields: &[FieldOp::Int, FieldOp::Int],
         verification: Verification::Curated,
     },
     ParcelableSpec {

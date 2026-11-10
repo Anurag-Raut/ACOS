@@ -48,6 +48,9 @@ mod fwk_res;
 mod fwk_sqlite;
 mod icu;
 pub(crate) mod icu_regex;
+// The `.kcm` key-character-map parser backing the `android.view.KeyCharacterMap`
+// natives (`fwk_input`).
+mod kcm;
 mod io;
 mod io_linux;
 pub mod jni_glue;
