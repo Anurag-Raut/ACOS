@@ -122,6 +122,47 @@ table!(attrs, AttrMap, libc::pthread_attr_t);
 table!(mutex_attrs, MutexAttrMap, libc::pthread_mutexattr_t);
 table!(cond_attrs, CondAttrMap, libc::pthread_condattr_t);
 
+/// Hard cap on each pthread side table (audit W123-A #6). A guest that hands a
+/// fresh address to every `pthread_*` call would otherwise grow this process
+/// without bound. On overflow one existing entry is evicted; the next access to
+/// that address lazily re-creates a fresh object. Normal callers hold far fewer
+/// than this, so eviction is only reachable from an adversarial pattern.
+const MAX_TABLE_ENTRIES: usize = 1 << 16;
+
+/// Insert-or-get for a boxed pthread object, bounded by [`MAX_TABLE_ENTRIES`].
+fn bounded_boxed<T>(
+    map: &Mutex<HashMap<usize, Box<T>>>,
+    guest: usize,
+    make: impl FnOnce() -> Box<T>,
+) -> *mut T {
+    let mut m = map.lock().unwrap_or_else(|e| e.into_inner());
+    if !m.contains_key(&guest) {
+        if m.len() >= MAX_TABLE_ENTRIES {
+            if let Some(&old) = m.keys().next() {
+                m.remove(&old);
+            }
+        }
+        m.insert(guest, make());
+    }
+    m.get_mut(&guest).expect("just inserted").as_mut()
+}
+
+/// Insert for a `Copy` pthread attribute state, bounded by
+/// [`MAX_TABLE_ENTRIES`].
+fn bounded_copy<T: Copy>(
+    map: &Mutex<HashMap<usize, T>>,
+    guest: usize,
+    value: T,
+) {
+    let mut m = map.lock().unwrap_or_else(|e| e.into_inner());
+    if !m.contains_key(&guest) && m.len() >= MAX_TABLE_ENTRIES {
+        if let Some(&old) = m.keys().next() {
+            m.remove(&old);
+        }
+    }
+    m.insert(guest, value);
+}
+
 /// Allocate a host mutex of the requested flavour.
 ///
 /// A zeroed glibc mutex is exactly `PTHREAD_MUTEX_INITIALIZER` (normal), so the
@@ -164,35 +205,23 @@ fn bionic_static_mutex_type(guest: usize) -> c_int {
 }
 
 fn mutex_ptr(guest: usize) -> *mut libc::pthread_mutex_t {
-    let mut g = mutexes().lock().unwrap_or_else(|e| e.into_inner());
-    g.entry(guest)
-        .or_insert_with(|| host_mutex(bionic_static_mutex_type(guest)))
-        .as_mut()
+    bounded_boxed(mutexes(), guest, || host_mutex(bionic_static_mutex_type(guest)))
 }
 
 fn cond_ptr(guest: usize) -> *mut libc::pthread_cond_t {
-    let mut g = conds().lock().unwrap_or_else(|e| e.into_inner());
-    g.entry(guest)
-        .or_insert_with(|| {
-            // SAFETY: zeroed glibc cond = PTHREAD_COND_INITIALIZER (realtime
-            // clock), which is also bionic's all-zero static initialiser.
-            Box::new(unsafe { std::mem::zeroed() })
-        })
-        .as_mut()
+    bounded_boxed(conds(), guest, || {
+        // SAFETY: zeroed glibc cond = PTHREAD_COND_INITIALIZER (realtime
+        // clock), which is also bionic's all-zero static initialiser.
+        Box::new(unsafe { std::mem::zeroed() })
+    })
 }
 
 fn rwlock_ptr(guest: usize) -> *mut libc::pthread_rwlock_t {
-    let mut g = rwlocks().lock().unwrap();
-    g.entry(guest)
-        .or_insert_with(|| Box::new(unsafe { std::mem::zeroed() }))
-        .as_mut()
+    bounded_boxed(rwlocks(), guest, || Box::new(unsafe { std::mem::zeroed() }))
 }
 
 fn attr_ptr(guest: usize) -> *mut libc::pthread_attr_t {
-    let mut g = attrs().lock().unwrap();
-    g.entry(guest)
-        .or_insert_with(|| Box::new(unsafe { std::mem::zeroed() }))
-        .as_mut()
+    bounded_boxed(attrs(), guest, || Box::new(unsafe { std::mem::zeroed() }))
 }
 
 // --- mutex ------------------------------------------------------------------
@@ -412,15 +441,13 @@ fn cond_attr_clock(attr: *const c_void) -> c_int {
 }
 
 pub unsafe extern "C" fn pthread_mutexattr_init(a: usize) -> c_int {
-    mutex_attrs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(
-            a,
-            MutexAttrState {
-                type_: MUTEX_NORMAL,
-            },
-        );
+    bounded_copy(
+        mutex_attrs(),
+        a,
+        MutexAttrState {
+            type_: MUTEX_NORMAL,
+        },
+    );
     write_guest_attr(a, MUTEX_NORMAL);
     0
 }
@@ -435,12 +462,13 @@ pub unsafe extern "C" fn pthread_mutexattr_settype(a: usize, t: c_int) -> c_int 
     if !(MUTEX_NORMAL..=MUTEX_ERRORCHECK).contains(&t) {
         return libc::EINVAL;
     }
-    mutex_attrs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(a, MutexAttrState { type_: t });
+    bound_copy_mutex_settype(a, t);
     write_guest_attr(a, t);
     0
+}
+
+fn bound_copy_mutex_settype(a: usize, t: c_int) {
+    bounded_copy(mutex_attrs(), a, MutexAttrState { type_: t });
 }
 pub unsafe extern "C" fn pthread_mutexattr_gettype(a: usize, out: *mut c_int) -> c_int {
     if out.is_null() {
@@ -452,15 +480,13 @@ pub unsafe extern "C" fn pthread_mutexattr_gettype(a: usize, out: *mut c_int) ->
 }
 
 pub unsafe extern "C" fn pthread_condattr_init(a: usize) -> c_int {
-    cond_attrs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(
-            a,
-            CondAttrState {
-                clock: libc::CLOCK_REALTIME,
-            },
-        );
+    bounded_copy(
+        cond_attrs(),
+        a,
+        CondAttrState {
+            clock: libc::CLOCK_REALTIME,
+        },
+    );
     write_guest_attr(a, libc::CLOCK_REALTIME);
     0
 }
@@ -481,10 +507,7 @@ pub unsafe extern "C" fn pthread_condattr_setclock(a: usize, clock: c_int) -> c_
         return libc::EINVAL;
     }
     trace(format_args!("pthread_condattr_setclock clock={clock}"));
-    cond_attrs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(a, CondAttrState { clock });
+    bounded_copy(cond_attrs(), a, CondAttrState { clock });
     write_guest_attr(a, clock);
     0
 }

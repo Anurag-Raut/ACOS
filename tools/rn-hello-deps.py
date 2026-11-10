@@ -49,6 +49,19 @@ ROOTS = [
     ("androidx.appcompat", "appcompat", "1.7.0"),
     ("androidx.swiperefreshlayout", "swiperefreshlayout", "1.1.0"),
     ("com.facebook.soloader", "soloader", "0.12.1"),
+    # `com.facebook.infer.annotation` is `optional` in react-android's POM, so a
+    # transitive walk skips it, but RN's bytecode calls its runtime helper
+    # `Assertions.assertNotNull` (not just the annotations). Without it the DEX
+    # keeps the reference and `CatalystInstanceImpl$Builder.build` aborts with
+    # UNSUPPORTED_JAVA_API (W123-A). A real Gradle app pulls it in as a direct
+    # dependency; list it here as an explicit root.
+    ("com.facebook.infer.annotation", "infer-annotation", "0.18.0"),
+    # Fresco is likewise `optional` in react-android's POM, but the RN bridge
+    # and image view managers reference it at runtime (`FLog`, the Drawee /
+    # ImagePipeline types). A real Gradle app adds these roots explicitly.
+    ("com.facebook.fresco", "fresco", "3.6.0"),
+    ("com.facebook.fresco", "imagepipeline-okhttp3", "3.6.0"),
+    ("com.facebook.fresco", "middleware", "3.6.0"),
 ]
 
 DEP_RE = re.compile(r"<dependency>(.*?)</dependency>", re.S)

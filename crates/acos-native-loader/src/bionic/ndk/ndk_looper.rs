@@ -65,6 +65,12 @@ struct PostedFrame {
     data: *mut c_void,
 }
 
+/// Hard cap on the posted-frame queue (audit W123-A #4). A guest that posts in
+/// a loop without polling must not grow host memory without bound; when full
+/// the oldest queued frame is dropped and a diagnostic counter advances.
+/// Delivery stays FIFO among the retained frames.
+const MAX_POSTED_FRAMES: usize = 4096;
+
 // SAFETY: the pointers are the guest's callback/data, tied to the looper's
 // lifetime; the queue is mutex-protected and only invoked on a polling thread.
 unsafe impl Send for PostedFrame {}
@@ -443,14 +449,25 @@ pub unsafe fn post_frame_callback(
             data
         );
     }
-    l.posted
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .push_back(PostedFrame {
+    {
+        let mut q = l.posted.lock().unwrap_or_else(|e| e.into_inner());
+        if q.len() >= MAX_POSTED_FRAMES {
+            q.pop_front();
+            static DROPPED: AtomicUsize = AtomicUsize::new(0);
+            let n = DROPPED.fetch_add(1, Ordering::Relaxed);
+            if n == 0 {
+                eprintln!(
+                    "ACOS ndk_looper: posted-frame queue reached {MAX_POSTED_FRAMES}; \
+                     dropping oldest frames"
+                );
+            }
+        }
+        q.push_back(PostedFrame {
             frame_time_nanos,
             cb,
             data,
         });
+    }
     // Wake a blocked poll so the frame is not delayed a full timeout.
     if l.wake >= 0 {
         let v = 1u64;

@@ -2217,6 +2217,10 @@ fn registry() -> &'static Mutex<Registry> {
 /// Stage a regex state decoded from a snapshot. Only a cold process (whose
 /// registry is not yet initialised) imports it; an in-process restore shares
 /// the live registry produced by the template boot.
+///
+/// The snapshot call sites are uncommitted at HEAD, so a clean HEAD build sees
+/// this as dead code; keep the attribute so `clippy -D warnings` stays green.
+#[allow(dead_code)]
 pub(crate) fn stage_regex_state(state: RegexState) {
     if REGISTRY.get().is_some() || state.patterns.is_empty() {
         return;
@@ -2226,6 +2230,7 @@ pub(crate) fn stage_regex_state(state: RegexState) {
 
 /// The live regex registry state, or the staged state when the registry has not
 /// been initialised yet. `Vm::snapshot` serialises this.
+#[allow(dead_code)]
 pub(crate) fn current_regex_state() -> RegexState {
     if let Some(m) = REGISTRY.get() {
         let reg = m.lock().unwrap_or_else(|e| e.into_inner());

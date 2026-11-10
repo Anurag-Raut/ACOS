@@ -242,3 +242,43 @@ fn thread_stack_traces_are_non_empty_under_real_corelib() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// W123-A: Android 14 `AtomicReference` is `VarHandle`-backed
+// ---------------------------------------------------------------------------
+
+/// Every `AtomicReference` accessor in the Android 14 core library is a
+/// signature-polymorphic `VarHandle` call (opcode `invoke-polymorphic`), which
+/// aborted the React Native bridge at `HermesExecutorFactory.create`
+/// (`AtomicReference.compareAndSet pc=2`, W120-A). The VM now supplies the
+/// `value` reference storage directly in `natives/vmrt.rs`; this pins the whole
+/// surface, including GC stress (the field is a traced reference).
+#[test]
+fn atomic_reference_varhandle_surface_under_real_corelib() {
+    let Some(dex) = compile_case("AtomicReferenceMain") else {
+        eprintln!("SKIP atomic_reference_varhandle_surface_under_real_corelib: javac/d8 unavailable");
+        return;
+    };
+    if !real_corelib_available() {
+        eprintln!(
+            "SKIP atomic_reference_varhandle_surface_under_real_corelib: real boot classpath absent"
+        );
+        return;
+    }
+    let expected = "get=a\ngetAndSet=a\nafter=b\ncas-ok=true\ncas-fail=false\nval=c\n\
+                    weak=true\nfinal=e\nnull=true\ncas-null=true\nn=z\n";
+    for (ir, stress) in [(true, false), (false, false), (true, true), (false, true)] {
+        let outcome = run_real(&dex, "AtomicReferenceMain", stress, ir);
+        assert!(
+            outcome.vm_error.is_none(),
+            "ir={ir} gc_stress={stress}: {:?}",
+            outcome.vm_error
+        );
+        assert_eq!(
+            outcome.exit_code, 0,
+            "ir={ir} gc_stress={stress}: {}",
+            outcome.stderr
+        );
+        assert_eq!(outcome.stdout, expected, "ir={ir} gc_stress={stress}");
+    }
+}

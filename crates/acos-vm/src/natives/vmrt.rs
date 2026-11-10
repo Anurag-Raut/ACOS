@@ -58,6 +58,115 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "addressOf", "(Ljava/lang/Object;)J", address_of);
     atomic_integer(vm);
     atomic_boolean(vm);
+    atomic_reference(vm);
+    Ok(())
+}
+
+/// `java.util.concurrent.atomic.AtomicReference`.
+///
+/// Android 14's real `<clinit>` builds a `VarHandle` through
+/// `MethodHandles.lookup().findVarHandle(...)`, and every accessor is a
+/// signature-polymorphic `VarHandle` call (opcode `invoke-polymorphic`). The
+/// VM implements the class's `value` reference storage directly instead,
+/// mirroring `AtomicInteger`/`AtomicLong`/`AtomicBoolean`. This is the first
+/// `invoke-polymorphic` hit on the React Native bridge path
+/// (`HermesExecutorFactory.create` -> `AtomicReference.compareAndSet`).
+///
+/// Any remaining polymorphic `VarHandle`/`MethodHandle.invoke(Exact)` use that
+/// is not covered by one of these storage shims still aborts with a structured
+/// `UNSUPPORTED_BYTECODE` naming the opcode and call site.
+fn atomic_reference(vm: &mut Vm) {
+    let c = "Ljava/util/concurrent/atomic/AtomicReference;";
+    vm.register_native(c, "<clinit>", "()V", ai_noop);
+    vm.register_native(c, "get", "()Ljava/lang/Object;", ar_get);
+    vm.register_native(c, "getPlain", "()Ljava/lang/Object;", ar_get);
+    vm.register_native(c, "getOpaque", "()Ljava/lang/Object;", ar_get);
+    vm.register_native(c, "getAcquire", "()Ljava/lang/Object;", ar_get);
+    vm.register_native(c, "set", "(Ljava/lang/Object;)V", ar_set);
+    vm.register_native(c, "lazySet", "(Ljava/lang/Object;)V", ar_set);
+    vm.register_native(c, "setPlain", "(Ljava/lang/Object;)V", ar_set);
+    vm.register_native(c, "setOpaque", "(Ljava/lang/Object;)V", ar_set);
+    vm.register_native(c, "setRelease", "(Ljava/lang/Object;)V", ar_set);
+    vm.register_native(c, "getAndSet", "(Ljava/lang/Object;)Ljava/lang/Object;", ar_get_and_set);
+    vm.register_native(c, "compareAndSet", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(c, "weakCompareAndSet", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(c, "weakCompareAndSetPlain", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(c, "weakCompareAndSetVolatile", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(c, "weakCompareAndSetAcquire", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(c, "weakCompareAndSetRelease", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(
+        c,
+        "compareAndExchange",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+        ar_compare_and_exchange,
+    );
+    vm.register_native(
+        c,
+        "compareAndExchangeAcquire",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+        ar_compare_and_exchange,
+    );
+    vm.register_native(
+        c,
+        "compareAndExchangeRelease",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+        ar_compare_and_exchange,
+    );
+}
+
+fn ar_value(vm: &Vm, this: crate::heap::Handle) -> crate::heap::Handle {
+    vm.get_instance_field_by_name(this, "value").unwrap_or(NULL)
+}
+
+fn ar_store(vm: &mut Vm, this: crate::heap::Handle, v: crate::heap::Handle) {
+    vm.set_instance_field_by_name(this, "value", v);
+}
+
+fn ar_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let v = ar_value(vm, this);
+    vm.ret_ref(ctx, v);
+    Ok(())
+}
+
+fn ar_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let v = vm.arg_ref(ctx, 0);
+    ar_store(vm, this, v);
+    Ok(())
+}
+
+fn ar_get_and_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let nv = vm.arg_ref(ctx, 0);
+    let old = ar_value(vm, this);
+    ar_store(vm, this, nv);
+    vm.ret_ref(ctx, old);
+    Ok(())
+}
+
+fn ar_cas(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let expect = vm.arg_ref(ctx, 0);
+    let update = vm.arg_ref(ctx, 1);
+    let old = ar_value(vm, this);
+    let ok = old == expect;
+    if ok {
+        ar_store(vm, this, update);
+    }
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+fn ar_compare_and_exchange(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let this = vm.ctx_this(ctx).unwrap_or(NULL);
+    let expect = vm.arg_ref(ctx, 0);
+    let update = vm.arg_ref(ctx, 1);
+    let old = ar_value(vm, this);
+    if old == expect {
+        ar_store(vm, this, update);
+    }
+    vm.ret_ref(ctx, old);
     Ok(())
 }
 

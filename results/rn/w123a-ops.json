@@ -1,0 +1,53 @@
+{
+  "summary": {
+    "confined": true,
+    "exit_code": 0,
+    "libraries": [
+      "libhermes.so",
+      "libhermestooling.so",
+      "libreactnative.so"
+    ],
+    "registered_natives": 45,
+    "error": null
+  },
+  "stages": [
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"begin\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"assets\",\"detail\":\"addAssetPath=true\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader\",\"detail\":\"init ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-isinit\",\"detail\":\"true\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-source\",\"detail\":\"ApplicationSoSource\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-source\",\"detail\":\"DirectorySoSource\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"reflect-static-self\",\"detail\":\"set-by-reflection\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"reflect-static-arr\",\"detail\":\"true\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"reflect-static-vol\",\"detail\":\"vol-set\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"metrics\",\"detail\":\"ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"context\",\"detail\":\"ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"viewmanagers\",\"detail\":\"count=0\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"uimanager\",\"detail\":\"ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module\",\"detail\":\"UIManager ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module\",\"detail\":\"PlatformConstants ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module\",\"detail\":\"DeviceInfo ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module\",\"detail\":\"ExceptionsManager ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module-skip\",\"name\":\"Timing\",\"error\":\"java.lang.IllegalStateException: ReactChoreographer needs to be initialized.\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"module\",\"detail\":\"AppState ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"modules\",\"detail\":\"count=5\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-load\",\"detail\":\"hermes\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-load\",\"detail\":\"hermestooling\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"executor\",\"detail\":\"ok\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"loader\",\"detail\":\"asset:index.android.bundle\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"soloader-load\",\"detail\":\"reactnative\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"bridge-error\",\"at\":\"build\",\"error\":\"java.lang.NullPointerException: getMainLooper(...) must not be null\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.createForMainThread(Unknown Source:148)\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.create(Unknown Source:136)\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"com.facebook.react.bridge.queue.ReactQueueConfigurationImpl$Companion.create(Unknown Source:45)\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"com.facebook.react.bridge.CatalystInstanceImpl.<init>(Unknown Source:137)\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"com.facebook.react.bridge.CatalystInstanceImpl$Builder.build(Unknown Source:700)\"}",
+    "W88A_PROBE ACOS_RN_BRIDGE {\"phase\":\"frame\",\"frame\":\"dev.acos.fixtures.rnhello.BridgeProbe.main(Unknown Source:528)\"}"
+  ],
+  "ops": [],
+  "blocker": {
+    "stage": "CatalystInstanceImpl.Builder.build -> ReactQueueConfigurationImpl.create -> MessageQueueThreadImpl.createForMainThread",
+    "error": "java.lang.NullPointerException: getMainLooper(...) must not be null",
+    "next": "prepare the main looper in BridgeProbe (Looper.prepareMainLooper) and call ReactChoreographer.initialize() before TimingModule; rebuild with tools/rn-bridge-probe.sh"
+  }
+}
