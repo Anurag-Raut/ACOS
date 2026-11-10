@@ -12,7 +12,7 @@ use crate::res::config::ResConfig;
 use crate::res::manager::{AssetManager, MAX_REFERENCE_DEPTH};
 use crate::res::value::{
     ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE, TYPE_DYNAMIC_REFERENCE,
-    TYPE_REFERENCE,
+    TYPE_NULL, TYPE_REFERENCE,
 };
 use crate::res::xmlblock::{XmlEvent, XmlParserState};
 
@@ -217,20 +217,7 @@ impl AssetManager {
                     };
                     let tv = match built {
                         Some((_cookie, tv)) => tv,
-                        None => TypedValueOut {
-                            data_type: value.data_type,
-                            data: value.data,
-                            asset_cookie: -1,
-                            // A `@resid` carries its target in `STYLE_RESOURCE_ID`
-                            // so `TypedArray.getResourceId` returns the referenced
-                            // resource, not the attribute id.
-                            resource_id: if value.is_reference() { value.data } else { attr },
-                            changing_configurations: 0,
-                            density: 0,
-                            source_resource_id: attr,
-                            flags: 0,
-                            string: None,
-                        },
+                        None => null_or_raw_typed_value(*value, attr),
                     };
                     tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
                     let slot = count as usize + 1;
@@ -424,17 +411,7 @@ impl AssetManager {
                 .and_then(|(si, entry, fid)| self.build_typed_value(si, &entry, attr, fid, 0));
                 let tv = match built {
                     Some((_cookie, tv)) => tv,
-                    None => TypedValueOut {
-                        data_type: value.data_type,
-                        data: value.data,
-                        asset_cookie: -1,
-                        resource_id: if value.is_reference() { value.data } else { attr },
-                        changing_configurations: 0,
-                        density: 0,
-                        source_resource_id: attr,
-                        flags: 0,
-                        string: None,
-                    },
+                    None => null_or_raw_typed_value(value, attr),
                 };
                 tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
                 let slot = count as usize + 1;
@@ -453,4 +430,42 @@ impl AssetManager {
         }
     }
 
+}
+
+/// The `TypedValue` for a raw style value that did not resolve.
+///
+/// `@null` / `?null` is a reference whose target id is `0`; the framework's
+/// `TypedArray.getDrawable`/`getColor` branch on `TYPE_REFERENCE` and would
+/// call `Resources.loadDrawable(value, 0, theme)`, which throws
+/// `Resources$NotFoundException: Unable to find resource ID #0x0`. A null
+/// reference must be materialised as `TYPE_NULL` instead (e.g.
+/// `windowContentOverlay=@null` in `ActionBarOverlayLayout.init`).
+fn null_or_raw_typed_value(value: ResValue, attr: u32) -> TypedValueOut {
+    if value.is_reference() && value.data == 0 {
+        return TypedValueOut {
+            data_type: TYPE_NULL,
+            data: 0,
+            asset_cookie: -1,
+            resource_id: 0,
+            changing_configurations: 0,
+            density: 0,
+            source_resource_id: attr,
+            flags: 0,
+            string: None,
+        };
+    }
+    TypedValueOut {
+        data_type: value.data_type,
+        data: value.data,
+        asset_cookie: -1,
+        // A `@resid` carries its target in `STYLE_RESOURCE_ID` so
+        // `TypedArray.getResourceId` returns the referenced resource, not the
+        // attribute id.
+        resource_id: if value.is_reference() { value.data } else { attr },
+        changing_configurations: 0,
+        density: 0,
+        source_resource_id: attr,
+        flags: 0,
+        string: None,
+    }
 }

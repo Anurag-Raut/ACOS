@@ -189,12 +189,19 @@ fn launch_cases() -> Vec<Case> {
                 Value::TypedObject(Parcelable::ordered(
                     "android.app.ActivityManager$TaskDescription",
                     vec![
-                        Value::Int(0),
-                        Value::Int(0),
-                        Value::Int(0),
-                        Value::Int(0),
-                        Value::Str(None),
-                        Value::Str(None),
+                        Value::Cond { present: false, values: vec![] }, // label
+                        Value::Cond { present: false, values: vec![] }, // icon
+                        Value::Int(0), // colorPrimary
+                        Value::Int(0), // colorBackground
+                        Value::Int(0), // statusBarColor
+                        Value::Int(0), // navigationBarColor
+                        Value::Bool(false), // ensureStatusBarContrast
+                        Value::Bool(false), // ensureNavigationBarContrast
+                        Value::Int(2), // resizeMode
+                        Value::Int(-1), // minWidth
+                        Value::Int(-1), // minHeight
+                        Value::Cond { present: false, values: vec![] }, // iconFilename
+                        Value::Int(0), // colorBackgroundFloating
                     ],
                 )),
             ],

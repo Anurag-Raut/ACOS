@@ -340,6 +340,29 @@ fn theme_device_default_light_dark_action_bar() {
 }
 
 #[test]
+fn null_theme_reference_becomes_type_null() {
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    if !apk_path.exists() {
+        return;
+    }
+    let mut mgr = build_manager(&apk_path);
+    let theme = mgr.theme_create();
+    mgr.theme_apply_style(theme, 0x0103_013f, false);
+    // `android:attr/windowContentOverlay` is `@null` in the device themes.
+    // `ActionBarOverlayLayout.init` reads it through `TypedArray.getDrawable`;
+    // a `TYPE_REFERENCE` to resource 0 makes `Resources.loadDrawable` throw
+    // `Unable to find resource ID #0x0`.
+    let attrs = [0x0101_0059i32];
+    let mut out_values = vec![0i32; 7];
+    let mut out_indices = vec![-1i32; 2];
+    mgr.apply_style(theme, 0, 0, 0, &attrs, &mut out_values, &mut out_indices);
+    let tv = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
+    assert_eq!(tv.data_type, 0x00, "@null must be TYPE_NULL");
+    assert_eq!(tv.data, 0);
+    assert_eq!(tv.resource_id, 0);
+}
+
+#[test]
 fn theme_copy_and_rebase() {
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
     if !apk_path.exists() {

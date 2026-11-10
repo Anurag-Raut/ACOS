@@ -128,6 +128,79 @@ fn framework_static_ints(
 }
 
 #[test]
+fn task_description_reads_the_api34_conditional_layout() {
+    // Regression (W60-A/W65-A): API-34 `TaskDescription.writeToParcel` writes
+    // `int labelPresent; [writeString label]`, `int iconPresent; [Icon]`, four
+    // colours, two contrast booleans, resizeMode/minWidth/minHeight, then
+    // `int iconFilenamePresent; [writeString iconFilename]`, then
+    // colorBackgroundFloating. The old linear six-field spec read the icon
+    // presence marker as a string length and failed with "String16 is not NUL
+    // terminated". This is the exact launch-path byte layout (Activity's default
+    // `new TaskDescription()` with only the status-bar colour set).
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(0); // labelPresent
+    parcel.write_int32(0); // iconPresent
+    parcel.write_int32(0); // colorPrimary
+    parcel.write_int32(0); // colorBackground
+    parcel.write_int32(0xff11_2233u32 as i32); // statusBarColor
+    parcel.write_int32(0); // navigationBarColor
+    parcel.write_bool(false); // ensureStatusBarContrastWhenTransparent
+    parcel.write_bool(false); // ensureNavigationBarContrastWhenTransparent
+    parcel.write_int32(2); // resizeMode
+    parcel.write_int32(-1); // minWidth
+    parcel.write_int32(-1); // minHeight
+    parcel.write_int32(0); // iconFilenamePresent
+    parcel.write_int32(0); // colorBackgroundFloating
+    parcel.set_data_position(0);
+    let decoded = parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
+        .expect("read the real API-34 TaskDescription payload");
+    parcel
+        .enforce_no_data_avail()
+        .expect("the conditional reader consumed the whole payload");
+    assert_eq!(decoded.field(0), Some(&Value::Cond { present: false, values: vec![] }));
+    assert_eq!(decoded.field(4), Some(&Value::Int(0xff11_2233u32 as i32)));
+    assert_eq!(decoded.field(8), Some(&Value::Int(2)));
+    assert_eq!(decoded.field(9), Some(&Value::Int(-1)));
+    assert_eq!(decoded.field(12), Some(&Value::Int(0)));
+
+    // Present branches: a label and an icon filename, no icon.
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(1);
+    parcel.write_string16_opt(Some("Counter")).unwrap();
+    parcel.write_int32(0); // iconPresent
+    parcel.write_int32(0);
+    parcel.write_int32(0);
+    parcel.write_int32(0);
+    parcel.write_int32(0);
+    parcel.write_bool(true);
+    parcel.write_bool(false);
+    parcel.write_int32(2);
+    parcel.write_int32(-1);
+    parcel.write_int32(-1);
+    parcel.write_int32(1);
+    parcel.write_string16_opt(Some("icon.png")).unwrap();
+    parcel.write_int32(0);
+    parcel.set_data_position(0);
+    let decoded = parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
+        .expect("read a TaskDescription with label + iconFilename");
+    parcel.enforce_no_data_avail().expect("consumed present branches");
+    assert_eq!(
+        decoded.field(0),
+        Some(&Value::Cond {
+            present: true,
+            values: vec![Value::Str(Some("Counter".into()))],
+        })
+    );
+    assert_eq!(
+        decoded.field(11),
+        Some(&Value::Cond {
+            present: true,
+            values: vec![Value::Str(Some("icon.png".into()))],
+        })
+    );
+}
+
+#[test]
 fn every_spec_round_trips_through_a_parcel() {
     for spec in parcelable::SPECS {
         let value = sample_for(spec.class);

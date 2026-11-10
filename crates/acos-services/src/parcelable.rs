@@ -71,6 +71,14 @@ pub enum FieldOp {
     IgnoredTyped(&'static str),
     /// A dynamic `writeValue`.
     Dynamic,
+    /// A conditional group: a `writeInt` presence marker, then the nested
+    /// fields when the marker is non-zero (API-34 `TaskDescription` writes its
+    /// label, icon and icon filename this way). The nested list must be empty
+    /// for an absent field.
+    Cond(&'static [FieldOp]),
+    /// A payload ACOS cannot model. Reading or writing it raises a structured
+    /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
+    Unsupported(&'static str),
 }
 
 /// How faithfully a spec covers the real method.
@@ -335,15 +343,34 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Curated,
     },
+    // Transcribed from API-34
+    // `classes.dex:Landroid/app/ActivityManager$TaskDescription;->writeToParcel`:
+    //   int labelPresent; if (labelPresent) writeString(label)
+    //   int iconPresent;  if (iconPresent)  Icon.writeToParcel
+    //   int colorPrimary; int colorBackground; int statusBarColor; int navBarColor
+    //   boolean ensureStatusBarContrast; boolean ensureNavBarContrast
+    //   int resizeMode; int minWidth; int minHeight
+    //   int iconFilenamePresent; if (iconFilenamePresent) writeString(iconFilename)
+    //   int colorBackgroundFloating
+    // The three presence branches are why this spec uses [`FieldOp::Cond`]; the
+    // old linear six-field layout read the icon-presence marker as a string
+    // length and rejected the parcel (W60-A blocker).
     ParcelableSpec {
         class: "android.app.ActivityManager$TaskDescription",
         fields: &[
-            FieldOp::Int,   // iconRes
-            FieldOp::Int,   // colorPrimary
-            FieldOp::Int,   // colorBackground
-            FieldOp::Int,   // colorSecondary
-            FieldOp::Str16, // label
-            FieldOp::Str16, // iconFilename
+            FieldOp::Cond(&[FieldOp::Str16]), // label
+            FieldOp::Cond(&[FieldOp::Unsupported("android.graphics.drawable.Icon")]), // icon
+            FieldOp::Int,  // colorPrimary
+            FieldOp::Int,  // colorBackground
+            FieldOp::Int,  // statusBarColor
+            FieldOp::Int,  // navigationBarColor
+            FieldOp::Bool, // ensureStatusBarContrastWhenTransparent
+            FieldOp::Bool, // ensureNavigationBarContrastWhenTransparent
+            FieldOp::Int,  // resizeMode
+            FieldOp::Int,  // minWidth
+            FieldOp::Int,  // minHeight
+            FieldOp::Cond(&[FieldOp::Str16]), // iconFilename
+            FieldOp::Int,  // colorBackgroundFloating
         ],
         verification: Verification::Curated,
     },
@@ -649,6 +676,17 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
         }
         FieldOp::Dynamic => Value::Dynamic(read_dynamic(parcel)?),
+        FieldOp::Cond(fields) => {
+            let present = parcel.read_int32()? != 0;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
+        FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Named(class) | FieldOp::IgnoredNamed(class) => {
             let name = parcel.read_string16()?;
             match name {
@@ -714,6 +752,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected typed array, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
+        FieldOp::Cond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected conditional, got {value:?}")));
+            };
+            parcel.write_int32(i32::from(*present));
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+        }
+        FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
             match p {
@@ -1282,6 +1339,10 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Binder => call == "writeStrongBinder",
         FieldOp::TypedArray(_) => call == "writeTypedArray",
         FieldOp::Dynamic => call == "writeValue",
+        // The presence marker is a `writeInt`; the branch body is invisible to a
+        // linear scanner, so only the marker can be verified.
+        FieldOp::Cond(_) => call == "writeInt",
+        FieldOp::Unsupported(_) => false,
     }
 }
 

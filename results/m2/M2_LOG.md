@@ -1667,3 +1667,200 @@ linear `FieldOp` list cannot represent the three presence branches. It is a
   is still not reached.
 * `cargo check --workspace --all-targets` and `diff-dexprogs` were run in the
   W60-A worktree and are reported in the session report.
+
+# W65-A session — conditional parcelable codec + `@null` theme reference
+
+Base: clean git worktree of HEAD `00a429b` (W47-A render landed; the brief's
+`fcfa346` base moved) at `.cache/wt-w65a`, with
+`CARGO_TARGET_DIR=.cache/target-w65a`, `CARGO_PROFILE_DEV_DEBUG=0`, via
+`tools/guarded.sh`. Two blockers were closed, both on the `counter` launch path.
+
+## What changed
+
+### Fix 1 — conditional-aware `FieldOp` for `ActivityManager$TaskDescription`
+
+`crates/acos-services/src/parcelable.rs` declared a stale **linear** six-field
+`TaskDescription` spec (`iconRes, colorPrimary, colorBackground, colorSecondary,
+label, iconFilename`). The real API-34 `writeToParcel` (disassembled from
+`classes.dex`, see `research/service-layer` scanner) is **conditional**:
+
+```
+int labelPresent;       if (labelPresent)       writeString(label)
+int iconPresent;        if (iconPresent)        Icon.writeToParcel
+int colorPrimary; int colorBackground;
+int statusBarColor; int navigationBarColor;
+boolean ensureStatusBarContrastWhenTransparent;
+boolean ensureNavigationBarContrastWhenTransparent;
+int resizeMode; int minWidth; int minHeight;
+int iconFilenamePresent; if (iconFilenamePresent) writeString(iconFilename)
+int colorBackgroundFloating
+```
+
+The old spec read the icon-presence marker (`0`) as a `String16` length, so
+`IActivityClientController.setTaskDescription` failed with
+`bad string: String16 is not NUL terminated` inside
+`DecorView.updateStatusBarColor -> Activity.setTaskDescription`.
+
+The linear `FieldOp` list could not express the three presence branches, so it
+gained a conditional form:
+
+* `FieldOp::Cond(&'static [FieldOp])` — a `writeInt` presence marker, then the
+  nested fields when the marker is non-zero; reads/writes `Value::Cond
+  { present, values }`.
+* `FieldOp::Unsupported(&'static str)` — a payload ACOS cannot model; raises a
+  structured `UnsupportedParcelable` rather than silently desynchronising the
+  parcel. The icon branch uses it (an `Icon` is not on the V1 launch path).
+
+The `TaskDescription` spec is now the real 13-slot conditional layout. This
+fixes the *expressiveness* class of problem, not just the one class.
+
+### Fix 2 — `@null` theme values must be `TYPE_NULL`, not `TYPE_REFERENCE` to 0
+
+After fix 1, the launch reached `DecorView.onResourcesLoaded`, which inflates
+`android:layout/screen_toolbar`. `ActionBarOverlayLayout.init` calls
+`context.getTheme().obtainStyledAttributes(ATTRS)` and then
+`TypedArray.getDrawable(1)` for `android:attr/windowContentOverlay`
+(`0x01010059`, `@null` in the device themes). `nativeApplyStyle` left the raw
+value as a `TYPE_REFERENCE` with target id `0`, so `Resources.loadDrawable`
+called `getResourceName(0)` and threw
+`Resources$NotFoundException: Unable to find resource ID #0x0`.
+
+`crates/acos-framework-natives/src/res/theme.rs` now materialises a reference
+whose target id is `0` (`@null`/`?null`) as `TYPE_NULL` in both the
+`applyStyle` (`fill_outputs`) and `retrieveAttributes` paths via
+`null_or_raw_typed_value`. A `TYPE_NULL` makes `Resources.loadDrawable` return
+`null`, exactly as the platform does.
+
+## Evidence
+
+Before (HEAD `00a429b`):
+
+```
+[    blocked] activity_on_create
+    JAVA_EXCEPTION: ... IActivityClientController::setTaskDescription: arg 1
+    (TypedObject(android.app.ActivityManager$TaskDescription, nullable=true)):
+    bad string: String16 is not NUL terminated
+```
+
+After fix 1 (W65-A tree) — the TaskDescription error is gone; the next blocker
+is the `@null` drawable:
+
+```
+[    blocked] activity_on_create
+    JAVA_EXCEPTION: ... InflateException: Binary XML file line #21 in
+    android:layout/screen_toolbar: Error inflating class
+    com.android.internal.widget.ActionBarOverlayLayout
+    caused by: Resources$NotFoundException: Unable to find resource ID #0x0
+      at android.content.res.ResourcesImpl.getResourceName(273)
+      at android.content.res.TypedArray.getDrawable(991)
+      at com.android.internal.widget.ActionBarOverlayLayout.init(182)
+```
+
+After fix 2 (`acos launch fixtures/build/apps/counter.apk`, W65-A tree):
+
+```
+launch: reached client_transaction (classes=1989, wall=5052ms)
+  [ok] apk_parsed  [ok] process_booted  [ok] bind_application
+  [ok] application_on_create  [ok] client_transaction
+  [blocked] activity_on_create
+      UNSUPPORTED_JAVA_API: Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J
+      is not implemented
+      at android.graphics.drawable.VectorDrawable$VGroup.<init>
+      at ...VectorDrawableState.<init>
+      at android.graphics.drawable.VectorDrawable.<init>
+      at android.graphics.drawable.DrawableInflater.inflateFromTag
+      at android.graphics.drawable.Drawable.createFromXmlForDensity
+      at android.content.res.ResourcesImpl.loadXmlDrawable
+      at android.content.res.Resources.loadDrawable
+      at android.content.res.TypedArray.getDrawable
+      at com.android.internal.widget.ToolbarWidgetWrapper.<init>
+      at com.android.internal.widget.ActionBarOverlayLayout...
+```
+
+So `MainActivity.onCreate -> setContentView -> PhoneWindow.installDecor ->
+DecorView.onResourcesLoaded -> screen_toolbar -> ToolbarWidgetWrapper` now
+completes all the resource/theme resolution; execution stops at the
+VectorDrawable native tree.
+
+## Tests
+
+* `crates/acos-services/tests/parcelable.rs` —
+  `task_description_reads_the_api34_conditional_layout` (new): decodes the exact
+  launch-path byte layout (label/icon absent) and a label + iconFilename-present
+  layout, asserting full consumption and field values.
+  `every_spec_round_trips_through_a_parcel` still passes.
+* `crates/acos-services/tests/replay.rs` — the
+  `IActivityClientController.setTaskDescription` row now uses the real 13-slot
+  conditional value; `replay_all_measured_outgoing_calls` passes.
+* `crates/acos-framework-natives/tests/theme_resolution.rs` —
+  `null_theme_reference_becomes_type_null` (new): applies
+  `Theme.DeviceDefault.Light.DarkActionBar` and asserts
+  `windowContentOverlay` resolves to `TYPE_NULL`/`data=0`/`resource_id=0`.
+* `crates/acos-framework-natives/tests/xmlblock_diff.rs` — 4 pass (the W60-A
+  `@resid` regression still holds).
+* `crates/acos-runtime/tests/m2.rs` — 2 pass, 1 ignored (the gate) with the
+  updated real blocker reason.
+* `cargo check --workspace --all-targets` — clean.
+* `tools/diff-dexprogs.sh --corelib real` — 27 pass / 0 fail / 0 unsupported.
+
+## Blocker table (furthest stage reached)
+
+| Stage | Status | Blocker |
+|---|---|---|
+| bind_application | ok | — |
+| application_on_create | ok | — |
+| client_transaction | ok | — |
+| activity_on_create | blocked | `VectorDrawable.nCreateGroup()J` unimplemented; `DecorView.onResourcesLoaded` -> `screen_toolbar` -> `ToolbarWidgetWrapper` inflates a VectorDrawable. W47-A render/gfx owns the VectorDrawable native tree; next chain file `fwk_m2_chain5.rs`. |
+| on_resume | not reached | after the VectorDrawable tree is constructed. |
+| first_frame | not reached | — |
+
+## Parcelable spec survey (ranked suspects)
+
+`cargo test -p acos-services --test parcelable -- --nocapture` diffs every spec
+against the real `writeToParcel` bytecode (`matched/spec`, `real` op count).
+Ranked by "used on the launch path and clearly stale":
+
+1. `android.app.ActivityManager$TaskDescription` — was 2/6, real=18. **Fixed**
+   (conditional layout).
+2. `android.content.res.Configuration` — Curated 0/20, real=27. The
+   `IWindowSession.addToDisplayAsUser` reply carries a `Configuration`; the
+   curated spec cannot express the API-34 field order. **Next parcelable fix.**
+3. `android.window.SizeConfigurationBuckets` — Curated 0/1, real=5.
+   `IActivityClientController.reportSizeConfigurations` argument.
+4. `android.app.servertransaction.ClientTransaction` — Curated 0/1, real=5
+   (known V1 gap; the framework's own `writeToParcel`).
+5. `android.content.pm.ProviderInfo` — Prefix 7/14, real=27 (the wire copy is
+   Java-bridged in `ams_java`; the table is still stale).
+6. `android.view.DisplayInfo` — Prefix 21/21, real=50 (replies Java-bridged in
+   `display_java`).
+7. `android.app.ContentProviderHolder` — Curated 0/3, real=5 (Java-bridged).
+8. `android.view.InputDevice` — Curated 3/15, real=26.
+9. `android.app.ActivityManager$RunningAppProcessInfo` — Curated 0/2, real=15.
+10. `android.content.res.CompatibilityInfo` — Curated 1/1, real=4.
+
+The general direction is the one the project invariant prefers: consume the
+framework class through its real `CREATOR` (as `pms_java`/`ams_java`/
+`display_java` already do for replies) or express the conditional wire form.
+The `Cond`/`Unsupported` extension makes the services codec able to express the
+presence branches; it does not yet replace the stale `Configuration` spec.
+
+## Handoff
+
+* The next launch blocker is **W47-A's**: `VectorDrawable` native peers
+  (`nCreateGroup`, `nCreateFullPath`, `nAddChild`, `nSetPathString`,
+  `nUpdatePath`, `nDraw`, ...) reached through `ToolbarWidgetWrapper`. A
+  faithful implementation belongs in `crates/acos-vm/src/natives/fwk_m2_chain5.rs`
+  (the chain file named for this session) or in `gfx_*` under W47-A.
+* `android.content.res.Configuration` is the next `acos-services` parcelable to
+  fix if the first-frame `addToDisplayAsUser` reply is reached before the
+  VectorDrawable tree lands.
+* `crates/acos-runtime/tests/m2.rs` remains `#[ignore]`d: `onResume` is still
+  not reached.
+
+## Caveats
+
+* This session edited `crates/acos-services/src/parcelable.rs`,
+  `crates/acos-framework-natives/src/res/theme.rs`, the corresponding tests, and
+  the `m2.rs` ignore reason. The W60-A/earlier work in the main checkout was not
+  touched (an initial edit landed in the main checkout by mistake and was
+  reverted; the changes live in the W65-A worktree only).
