@@ -9,14 +9,17 @@ and `struct JNIInvokeInterface` (5 entries + 3 reserved) against the JNI 1.6 spe
   enclosing native call aborts cleanly. The host process is never aborted and no default value is
   ever silently returned to Java.
 
-Total: 233 slots. implemented: 197; structured-unsupported: 36 (4 reserved slots are null pointers and are not listed as either).
+Total: 233 slots. implemented: 227; structured-unsupported: 6 (4 reserved slots are null pointers and are not listed as either).
 
-> Newly implemented in this change: `NewWeakGlobalRef`, `DeleteWeakGlobalRef`, `GetObjectRefType`
-> (weak refs), `NewDirectByteBuffer`/`GetDirectBufferAddress`/`GetDirectBufferCapacity`,
-> `GetStringCritical`/`ReleaseStringCritical`, `Get/Set<Type>ArrayRegion` bounds ->
-> `ArrayIndexOutOfBoundsException`, `PushLocalFrame`/`EnsureLocalCapacity` capacity limits, and a
-> corrected `IsSameObject` (cleared weak refs are `NULL`). `CallNonvirtual*` remain structured
-> unsupported (they need a distinct non-virtual dispatch + 33 C varargs shims).
+> Newly implemented in this change (W54-A): the whole `CallNonvirtual<Type>Method{,V,A}`
+> family (30 slots) now dispatches non-virtually on the `jclass` the method ID was
+> derived from (`Vm::call_nonvirtual`), with dedicated C varargs/jvalue/va_list
+> shims. The six remaining slots each carry a structured reason (see below).
+>
+> The previously implemented weak-global/direct-buffer/critical slots and the
+> new W54-A OS-thread attach surface (`AttachCurrentThread`/
+> `AttachCurrentThreadAsDaemon`/`DetachCurrentThread`/`GetEnv` from a
+> `pthread_create` thread) are described in the sections below.
 
 | # | slot | status | implementation | test |
 |---|------|--------|----------------|------|
@@ -84,36 +87,36 @@ Total: 233 slots. implemented: 197; structured-unsupported: 36 (4 reserved slots
 | 61 | `CallVoidMethod` | implemented | C varargs shim -> `jni.rs` | cargo test -p acos-jni (suite) |
 | 62 | `CallVoidMethodV` | implemented | C varargs shim -> `jni.rs` | cargo test -p acos-jni (suite) |
 | 63 | `CallVoidMethodA` | implemented | C varargs shim -> `jni.rs` | cargo test -p acos-jni (suite) |
-| 64 | `CallNonvirtualObjectMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 65 | `CallNonvirtualObjectMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 66 | `CallNonvirtualObjectMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 67 | `CallNonvirtualBooleanMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 68 | `CallNonvirtualBooleanMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 69 | `CallNonvirtualBooleanMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 70 | `CallNonvirtualByteMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 71 | `CallNonvirtualByteMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 72 | `CallNonvirtualByteMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 73 | `CallNonvirtualCharMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 74 | `CallNonvirtualCharMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 75 | `CallNonvirtualCharMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 76 | `CallNonvirtualShortMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 77 | `CallNonvirtualShortMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 78 | `CallNonvirtualShortMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 79 | `CallNonvirtualIntMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 80 | `CallNonvirtualIntMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 81 | `CallNonvirtualIntMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 82 | `CallNonvirtualLongMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 83 | `CallNonvirtualLongMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 84 | `CallNonvirtualLongMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 85 | `CallNonvirtualFloatMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 86 | `CallNonvirtualFloatMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 87 | `CallNonvirtualFloatMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 88 | `CallNonvirtualDoubleMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 89 | `CallNonvirtualDoubleMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 90 | `CallNonvirtualDoubleMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 91 | `CallNonvirtualVoidMethod` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 92 | `CallNonvirtualVoidMethodV` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
-| 93 | `CallNonvirtualVoidMethodA` | structured-unsupported | `traps.rs` | structured-unsupported: no test |
+| 64 | `CallNonvirtualObjectMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 65 | `CallNonvirtualObjectMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 66 | `CallNonvirtualObjectMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 67 | `CallNonvirtualBooleanMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 68 | `CallNonvirtualBooleanMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 69 | `CallNonvirtualBooleanMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 70 | `CallNonvirtualByteMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 71 | `CallNonvirtualByteMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 72 | `CallNonvirtualByteMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 73 | `CallNonvirtualCharMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 74 | `CallNonvirtualCharMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 75 | `CallNonvirtualCharMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 76 | `CallNonvirtualShortMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 77 | `CallNonvirtualShortMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 78 | `CallNonvirtualShortMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 79 | `CallNonvirtualIntMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 80 | `CallNonvirtualIntMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 81 | `CallNonvirtualIntMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 82 | `CallNonvirtualLongMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 83 | `CallNonvirtualLongMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 84 | `CallNonvirtualLongMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 85 | `CallNonvirtualFloatMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 86 | `CallNonvirtualFloatMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 87 | `CallNonvirtualFloatMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 88 | `CallNonvirtualDoubleMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 89 | `CallNonvirtualDoubleMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 90 | `CallNonvirtualDoubleMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 91 | `CallNonvirtualVoidMethod` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 92 | `CallNonvirtualVoidMethodV` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
+| 93 | `CallNonvirtualVoidMethodA` | implemented | C varargs shim -> `jni.rs` | jni_nonvirtual (A form); `jni_native_fixture` (varargs/A) |
 | 94 | `GetFieldID` | implemented | `jni.rs` | cargo test -p acos-jni (suite) |
 | 95 | `GetObjectField` | implemented | `jni.rs` | cargo test -p acos-jni (suite) |
 | 96 | `GetBooleanField` | implemented | `jni.rs` | cargo test -p acos-jni (suite) |
@@ -275,7 +278,9 @@ Android shared object. `crates/acos-jni/tests/jni_native_fixture.rs` loads it
 through `acos-native-loader` and calls `acos_jni_test_slots`, which exercises
 the newly implemented slots through the real `JNINativeInterface` C ABI:
 direct buffers, weak globals + `GetObjectRefType`, `IsSameObject`, string and
-primitive critical sections, array regions, local frames and monitors.
+primitive critical sections, array regions, local frames, monitors,
+`CallNonvirtual*Method` (varargs and `jvalue[]`) and native `pthread`
+attach/`GetEnv`/detach.
 
 **Isolation model.** The fixture is untrusted guest code with no host
 privileges. `acos-native-loader` maps and relocates the ELF, binds its imports
@@ -286,6 +291,43 @@ the `JNINativeInterface`/`JNIInvokeInterface` function tables that `acos-jni`
 installs, where every pointer is validated and every contract violation is
 recorded as a structured error. This is the same model used for
 `fixtures/apps/hello-jni`; no third-party APK `.so` is ever executed directly.
+
+## Native OS-thread attach/detach (W54-A)
+
+The JavaVM invoke interface now has real per-OS-thread attachment semantics:
+
+| entry | behaviour |
+|-------|-----------|
+| `GetEnv` | never attaches. The owning host thread always succeeds; a native thread that attached through the process-global slots succeeds; any other thread gets `JNI_EDETACHED` (`-2`). A bad version is `JNI_EVERSION` (`-3`). |
+| `AttachCurrentThread` / `AttachCurrentThreadAsDaemon` | the owning thread returns its thread-local environment; a `pthread_create` thread is recorded in a process-global `HashSet<ThreadId>` and receives the shared `JNIEnv` (the function table is stateless). A null `JNIEnv**` is `JNI_ERR`. |
+| `DetachCurrentThread` | removes a native thread's global attachment. Detaching the owning thread is owned by `JniRuntime` and is a no-op here. |
+
+`fixtures/jni/acos_jni_slots.c` creates a real `pthread`, asserts `GetEnv ==
+JNI_EDETACHED`, attaches, asserts `GetEnv == JNI_OK` with the same environment
+pointer, detaches, and asserts `GetEnv == JNI_EDETACHED` again (bit 10 of the
+fixture mask).
+
+**Scope and safety.** The VM remains **single-threaded and owner-bound**
+(`acos-vm` is `#![forbid(unsafe_code)]`). An attached native OS thread may use
+the process-global `JNIEnv` for the slots that do not touch the VM (attach
+bookkeeping, `Exception*` queries on its own thread), but every slot that needs
+the VM still reports `JNI_NO_VM` when called from such a thread because no
+`*mut Vm` is installed there. It never races the owner. Running Java callbacks
+from a native OS thread while the owner is inside a native call is **not**
+implemented; the brokered design for it is recorded in ADR-0021 and requires a
+VM safe-point/pump that does not exist yet. This is the honest boundary, not a
+silently faked result.
+
+### Remaining structured-unsupported slots (6)
+
+| slot | structured reason |
+|------|-------------------|
+| `DefineClass` | Defining a class from raw DEX bytes is rejected (`JNI_UNSUPPORTED`). ACOS has one flat class namespace populated by `Vm::add_dex`; honouring a caller-supplied `java.lang.ClassLoader` and redefinition semantics would be a fake. Support requires a real class-loader model. |
+| `FromReflectedMethod` | `jmethodID` is a stable pointer into `State::methods`, not a `java.lang.reflect.Method` instance; there is no reflect object to recover an ID from. |
+| `FromReflectedField` | same, for `jfieldID`/`java.lang.reflect.Field`. |
+| `ToReflectedMethod` | the VM's `java.lang.reflect.Method` support is a native stub; minting a fake object would be dishonest. |
+| `ToReflectedField` | same, for `java.lang.reflect.Field`. |
+| `FatalError` | ACOS never aborts the host process by policy; the call is recorded as a structured fault and the enclosing native call aborts cleanly. |
 
 ## Known test limitations (pre-existing VM issues, not JNI semantics)
 

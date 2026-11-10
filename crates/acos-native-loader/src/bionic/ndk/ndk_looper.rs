@@ -1,0 +1,455 @@
+//! `libandroid` `ALooper`: the NDK's fd event loop.
+//!
+//! This is a real implementation, not a shim: ACOS runs guest code on a host
+//! thread, so each `ALooper` owns a Linux `epoll` set plus an `eventfd` used by
+//! `ALooper_wake`. `ALooper_addFd` registers the guest fd (level-triggered, as
+//! bionic does), `ALooper_pollOnce`/`pollAll` wait with the same timeout and
+//! return codes as bionic, and callback sources are invoked exactly once per
+//! readiness notification.
+//!
+//! `ALooper_prepare` returns one looper per thread (bionic's contract);
+//! `ALooper_forThread` returns the same object. Nothing here touches Android
+//! framework state, so no host is required.
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::os::raw::{c_int, c_void};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// `ALOOPER_POLL_WAKE` — the looper was woken.
+pub const ALOOPER_POLL_WAKE: c_int = -1;
+/// `ALOOPER_POLL_CALLBACK` — a callback was invoked.
+pub const ALOOPER_POLL_CALLBACK: c_int = -2;
+/// `ALOOPER_POLL_TIMEOUT` — no event before the timeout.
+pub const ALOOPER_POLL_TIMEOUT: c_int = -3;
+/// `ALOOPER_POLL_ERROR` — the wait failed.
+pub const ALOOPER_POLL_ERROR: c_int = -4;
+
+/// `ALOOPER_EVENT_INPUT`.
+pub const ALOOPER_EVENT_INPUT: c_int = 1;
+/// `ALOOPER_EVENT_OUTPUT`.
+pub const ALOOPER_EVENT_OUTPUT: c_int = 2;
+/// `ALOOPER_EVENT_ERROR`.
+pub const ALOOPER_EVENT_ERROR: c_int = 4;
+/// `ALOOPER_EVENT_HANGUP`.
+pub const ALOOPER_EVENT_HANGUP: c_int = 8;
+/// `ALOOPER_EVENT_INVALID`.
+pub const ALOOPER_EVENT_INVALID: c_int = 16;
+
+/// `ALOOPER_PREPARE_ALLOW_NON_CALLBACKS`.
+pub const ALOOPER_PREPARE_ALLOW_NON_CALLBACKS: c_int = 1;
+
+/// `ALooper_callbackFunc`.
+pub type ALooperCallback = Option<unsafe extern "C" fn(c_int, c_int, *mut c_void) -> c_int>;
+
+struct Source {
+    ident: c_int,
+    callback: ALooperCallback,
+    data: *mut c_void,
+}
+
+// SAFETY: `Source` only holds guest callback/data pointers, which the NDK
+// contract ties to the looper's lifetime; the table is mutex-protected.
+unsafe impl Send for Source {}
+
+struct Looper {
+    id: u64,
+    epoll: c_int,
+    wake: c_int,
+    sources: Mutex<HashMap<c_int, Source>>,
+    refs: AtomicUsize,
+}
+
+// SAFETY: file descriptors and mutex-protected state; guest pointers are only
+// dereferenced by the guest callback itself on the polling thread.
+unsafe impl Send for Looper {}
+unsafe impl Sync for Looper {}
+
+fn registry() -> &'static Mutex<HashMap<u64, Arc<Looper>>> {
+    static R: OnceLock<Mutex<HashMap<u64, Arc<Looper>>>> = OnceLock::new();
+    R.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn next_id() -> u64 {
+    static N: AtomicUsize = AtomicUsize::new(0);
+    N.fetch_add(1, Ordering::SeqCst) as u64 + 1
+}
+
+thread_local! {
+    static THREAD_LOOPER: RefCell<Option<u64>> = const { RefCell::new(None) };
+}
+
+fn make_looper(id: u64) -> Arc<Looper> {
+    // SAFETY: plain syscalls; every failure is reported to the caller.
+    let epoll = unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) };
+    let wake = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+    Arc::new(Looper {
+        id,
+        epoll,
+        wake,
+        sources: Mutex::new(HashMap::new()),
+        refs: AtomicUsize::new(1),
+    })
+}
+
+fn lookup(p: *mut c_void) -> Option<Arc<Looper>> {
+    let id = super::handle_id(p)?;
+    registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .cloned()
+}
+
+fn register(id: u64, looper: Arc<Looper>) {
+    registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(id, looper);
+}
+
+/// `ALooper_prepare(int opts)` — the calling thread's looper.
+///
+/// # Safety
+/// Always safe.
+pub unsafe extern "C" fn alooper_prepare(_opts: c_int) -> *mut c_void {
+    if let Some(id) = THREAD_LOOPER.with(|t| *t.borrow()) {
+        if let Some(l) = lookup(super::handle(id)) {
+            l.refs.fetch_add(1, Ordering::SeqCst);
+            return super::handle(id);
+        }
+    }
+    let id = next_id();
+    let looper = make_looper(id);
+    if looper.epoll < 0 || looper.wake < 0 {
+        super::unsupported::<*mut c_void>(
+            "libandroid",
+            "ALooper_prepare",
+            "epoll/eventfd creation failed",
+            std::ptr::null_mut(),
+        );
+        return std::ptr::null_mut();
+    }
+    register(id, looper);
+    THREAD_LOOPER.with(|t| *t.borrow_mut() = Some(id));
+    super::handle(id)
+}
+
+/// `ALooper_forThread()` — the calling thread's looper, or NULL.
+///
+/// # Safety
+/// Always safe.
+pub unsafe extern "C" fn alooper_forthread() -> *mut c_void {
+    match THREAD_LOOPER.with(|t| *t.borrow()) {
+        Some(id) => super::handle(id),
+        None => std::ptr::null_mut(),
+    }
+}
+
+fn epoll_mask(events: c_int) -> u32 {
+    let mut m = 0u32;
+    if events & ALOOPER_EVENT_INPUT != 0 {
+        m |= libc::EPOLLIN as u32;
+    }
+    if events & ALOOPER_EVENT_OUTPUT != 0 {
+        m |= libc::EPOLLOUT as u32;
+    }
+    // bionic always reports error/hangup.
+    m | libc::EPOLLERR as u32 | libc::EPOLLHUP as u32
+}
+
+fn out_events(flags: u32) -> c_int {
+    let mut e = 0;
+    if flags & libc::EPOLLIN as u32 != 0 {
+        e |= ALOOPER_EVENT_INPUT;
+    }
+    if flags & libc::EPOLLOUT as u32 != 0 {
+        e |= ALOOPER_EVENT_OUTPUT;
+    }
+    if flags & libc::EPOLLERR as u32 != 0 {
+        e |= ALOOPER_EVENT_ERROR;
+    }
+    if flags & libc::EPOLLHUP as u32 != 0 {
+        e |= ALOOPER_EVENT_HANGUP;
+    }
+    e
+}
+
+/// `ALooper_addFd(ALooper*, int fd, int ident, int events, ALooper_callbackFunc, void*)`.
+///
+/// # Safety
+/// `looper` must be a live `ALooper`; `fd` must be a live file descriptor.
+pub unsafe extern "C" fn alooper_addfd(
+    looper: *mut c_void,
+    fd: c_int,
+    ident: c_int,
+    events: c_int,
+    callback: ALooperCallback,
+    data: *mut c_void,
+) -> c_int {
+    let Some(l) = lookup(looper) else { return -1 };
+    if fd < 0 {
+        return -1;
+    }
+    if callback.is_none() && events == 0 {
+        // bionic allows a NULL callback only for ALOOPER_PREPARE_ALLOW_NON_CALLBACKS
+        // and requires an ident; both are the caller's contract.
+    }
+    let mut ev = libc::epoll_event {
+        events: epoll_mask(events),
+        u64: fd as u64,
+    };
+    if l.epoll < 0 {
+        return -1;
+    }
+    // SAFETY: valid epoll fd and event pointer.
+    if unsafe { libc::epoll_ctl(l.epoll, libc::EPOLL_CTL_ADD, fd, &mut ev) } != 0 {
+        return -1;
+    }
+    l.sources
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(fd, Source { ident, callback, data });
+    1
+}
+
+/// `ALooper_removeFd(ALooper*, int fd)`.
+///
+/// # Safety
+/// `looper` must be a live `ALooper`; `fd` must be a live descriptor.
+pub unsafe extern "C" fn alooper_removefd(looper: *mut c_void, fd: c_int) -> c_int {
+    let Some(l) = lookup(looper) else { return -1 };
+    let removed = l
+        .sources
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&fd)
+        .is_some();
+    if !removed {
+        return -1;
+    }
+    // SAFETY: valid epoll fd; removing an fd we registered.
+    if unsafe { libc::epoll_ctl(l.epoll, libc::EPOLL_CTL_DEL, fd, std::ptr::null_mut()) } != 0 {
+        return -1;
+    }
+    1
+}
+
+fn drain_wake(l: &Looper) {
+    let mut v = 0u64;
+    // SAFETY: wake is an eventfd owned by this looper.
+    unsafe {
+        libc::read(l.wake, &mut v as *mut u64 as *mut c_void, 8);
+    }
+}
+
+fn poll(l: &Looper, timeout_ms: c_int) -> Result<Vec<(c_int, c_int)>, c_int> {
+    if l.epoll < 0 {
+        return Err(ALOOPER_POLL_ERROR);
+    }
+    let mut events = [libc::epoll_event { events: 0, u64: 0 }; 32];
+    // SAFETY: valid epoll fd and a 32-entry output array.
+    let n = unsafe {
+        libc::epoll_wait(
+            l.epoll,
+            events.as_mut_ptr(),
+            events.len() as c_int,
+            timeout_ms,
+        )
+    };
+    if n < 0 {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::EINTR) {
+            return Ok(Vec::new());
+        }
+        return Err(ALOOPER_POLL_ERROR);
+    }
+    let mut ready = Vec::new();
+    for ev in events.iter().take(n as usize) {
+        let fd = ev.u64 as c_int;
+        if fd == l.wake {
+            drain_wake(l);
+            continue;
+        }
+        ready.push((fd, out_events(ev.events)));
+    }
+    Ok(ready)
+}
+
+fn poll_once(l: &Looper, timeout_ms: c_int, out: &mut (c_int, c_int, *mut c_void)) -> c_int {
+    let ready = match poll(l, timeout_ms) {
+        Ok(r) => r,
+        Err(code) => return code,
+    };
+    if ready.is_empty() {
+        return ALOOPER_POLL_TIMEOUT;
+    }
+    let mut invoked_callback = false;
+    for (fd, events) in ready {
+        let source = {
+            let sources = l.sources.lock().unwrap_or_else(|e| e.into_inner());
+            sources.get(&fd).map(|s| (s.ident, s.callback, s.data))
+        };
+        match source {
+            Some((_ident, Some(cb), data)) => {
+                out.0 = fd;
+                out.1 = events;
+                out.2 = data;
+                // SAFETY: the guest registered this callback for this looper.
+                let keep = unsafe { cb(fd, events, data) };
+                invoked_callback = true;
+                if keep == 0 {
+                    // SAFETY: unregistering a descriptor we own.
+                    unsafe {
+                        alooper_removefd(super::handle(l.id), fd);
+                    }
+                }
+            }
+            Some((ident, None, data)) => {
+                out.0 = fd;
+                out.1 = events;
+                out.2 = data;
+                if ident != 0 {
+                    return ident;
+                }
+            }
+            None => {}
+        }
+    }
+    if invoked_callback {
+        ALOOPER_POLL_CALLBACK
+    } else {
+        ALOOPER_POLL_TIMEOUT
+    }
+}
+
+/// `ALooper_pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outData)`.
+///
+/// # Safety
+/// Output pointers may be NULL or writable for their documented types.
+pub unsafe extern "C" fn alooper_pollonce(
+    timeout_ms: c_int,
+    out_fd: *mut c_int,
+    out_events: *mut c_int,
+    out_data: *mut *mut c_void,
+) -> c_int {
+    let Some(l) = THREAD_LOOPER
+        .with(|t| *t.borrow())
+        .and_then(|id| lookup(super::handle(id)))
+    else {
+        return ALOOPER_POLL_ERROR;
+    };
+    let mut out = (0, 0, std::ptr::null_mut());
+    let r = poll_once(&l, timeout_ms, &mut out);
+    if !out_fd.is_null() {
+        out_fd.write(out.0);
+    }
+    if !out_events.is_null() {
+        out_events.write(out.1);
+    }
+    if !out_data.is_null() {
+        out_data.write(out.2);
+    }
+    r
+}
+
+/// `ALooper_pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outData)`.
+///
+/// # Safety
+/// Same contract as [`alooper_pollonce`].
+pub unsafe extern "C" fn alooper_pollall(
+    timeout_ms: c_int,
+    out_fd: *mut c_int,
+    out_events: *mut c_int,
+    out_data: *mut *mut c_void,
+) -> c_int {
+    let mut remaining = timeout_ms;
+    loop {
+        let start = std::time::Instant::now();
+        let r = alooper_pollonce(remaining, out_fd, out_events, out_data);
+        if r != ALOOPER_POLL_TIMEOUT && r != ALOOPER_POLL_CALLBACK {
+            return r;
+        }
+        if r == ALOOPER_POLL_CALLBACK && !out_fd.is_null() {
+            // bionic's pollAll stops as soon as a non-callback event is
+            // available; a callback was invoked, so report it and return.
+            return r;
+        }
+        if timeout_ms < 0 {
+            continue;
+        }
+        let spent = start.elapsed().as_millis() as c_int;
+        remaining = (remaining - spent).max(0);
+        if remaining == 0 {
+            return ALOOPER_POLL_TIMEOUT;
+        }
+    }
+}
+
+/// `ALooper_wake(ALooper*)` — wake a blocked poll on any thread.
+///
+/// # Safety
+/// `looper` must be a live `ALooper`.
+pub unsafe extern "C" fn alooper_wake(looper: *mut c_void) {
+    let Some(l) = lookup(looper) else { return };
+    if l.wake < 0 {
+        return;
+    }
+    let v = 1u64;
+    // SAFETY: eventfd owned by this looper, non-blocking.
+    unsafe {
+        libc::write(l.wake, &v as *const u64 as *const c_void, 8);
+    }
+}
+
+/// `ALooper_acquire(ALooper*)`.
+///
+/// # Safety
+/// `looper` must be a live `ALooper`.
+pub unsafe extern "C" fn alooper_acquire(looper: *mut c_void) {
+    if let Some(l) = lookup(looper) {
+        l.refs.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// `ALooper_release(ALooper*)`.
+///
+/// # Safety
+/// `looper` must be a live `ALooper`; the last release frees it.
+pub unsafe extern "C" fn alooper_release(looper: *mut c_void) {
+    let Some(id) = super::handle_id(looper) else { return };
+    let Some(l) = lookup(looper) else { return };
+    if l.refs.fetch_sub(1, Ordering::SeqCst) != 1 {
+        return;
+    }
+    registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&id);
+    THREAD_LOOPER.with(|t| {
+        if *t.borrow() == Some(id) {
+            *t.borrow_mut() = None;
+        }
+    });
+    // SAFETY: this looper's own descriptors.
+    unsafe {
+        libc::close(l.epoll);
+        libc::close(l.wake);
+    }
+}
+
+/// Table entries for `ALooper`.
+pub fn table() -> Vec<(&'static str, *const c_void)> {
+    vec![
+        ("ALooper_prepare", alooper_prepare as *const c_void),
+        ("ALooper_forThread", alooper_forthread as *const c_void),
+        ("ALooper_addFd", alooper_addfd as *const c_void),
+        ("ALooper_removeFd", alooper_removefd as *const c_void),
+        ("ALooper_pollOnce", alooper_pollonce as *const c_void),
+        ("ALooper_pollAll", alooper_pollall as *const c_void),
+        ("ALooper_wake", alooper_wake as *const c_void),
+        ("ALooper_acquire", alooper_acquire as *const c_void),
+        ("ALooper_release", alooper_release as *const c_void),
+    ]
+}

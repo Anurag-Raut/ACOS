@@ -581,10 +581,22 @@ pub fn inventory_file(path: &Path) -> Result<LibraryInventory, String> {
 }
 
 fn partial_note(name: &str) -> Option<String> {
-    PARTIAL_SYMBOLS
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, why)| (*why).to_string())
+    if let Some((_, why)) = PARTIAL_SYMBOLS.iter().find(|(n, _)| *n == name) {
+        return Some((*why).to_string());
+    }
+    // NDK entry points that resolve to a structured trap rather than an
+    // implementation: EGL/GLES (no GL yet), ASensor* (no sensor HAL) and the
+    // NDK input queue (input goes through the WMS InputChannel).
+    if bionic::ndk::ndk_gl::is_trapped(name) {
+        return Some("resolves to a reported UNSUPPORTED trap; no GL implementation".into());
+    }
+    if name.starts_with("ASensor") {
+        return Some("reports UNSUPPORTED; ACOS has no sensor HAL".into());
+    }
+    if name.starts_with("AInputQueue") {
+        return Some("reports UNSUPPORTED; input uses the WMS InputChannel".into());
+    }
+    None
 }
 
 /// Classify a symbol name against the bionic table.
@@ -684,7 +696,18 @@ mod tests {
         // Documented-but-incomplete shim.
         assert_eq!(classify("dladdr"), Provision::Partial);
         // Not provided at all: must stay missing (never silently stubbed).
-        assert_eq!(classify("AndroidBitmap_lockPixels"), Provision::Missing);
+        // NDK platform surface implemented in `bionic::ndk` (host-backed).
+        assert_eq!(classify("AndroidBitmap_lockPixels"), Provision::Provided);
+        assert_eq!(classify("AAssetManager_fromJava"), Provision::Provided);
+        assert_eq!(classify("AAsset_read"), Provision::Provided);
+        assert_eq!(classify("ANativeWindow_lock"), Provision::Provided);
+        assert_eq!(classify("ALooper_prepare"), Provision::Provided);
+        assert_eq!(classify("AConfiguration_new"), Provision::Provided);
+        assert_eq!(classify("__android_log_write"), Provision::Provided);
+        // EGL/GLES resolve, but only to a reported trap.
+        assert_eq!(classify("eglGetDisplay"), Provision::Partial);
+        assert_eq!(classify("glReadPixels"), Provision::Partial);
+        assert_eq!(classify("uprv_getICUData_core"), Provision::Missing);
         assert_eq!(classify("acos_definitely_missing_symbol"), Provision::Missing);
     }
 

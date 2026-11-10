@@ -93,11 +93,13 @@ dependencies = [
 name = "acos-native-loader"
 version = "0.1.0"
 dependencies = [
+ "acos-render",
  "cc",
  "libc",
  "serde",
  "serde_json",
  "thiserror",
+ "zip",
 ]
 
 [[package]]

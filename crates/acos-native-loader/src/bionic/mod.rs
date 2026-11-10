@@ -17,6 +17,7 @@ use std::os::raw::c_void;
 use std::sync::OnceLock;
 
 pub mod dl;
+pub mod ndk;
 pub mod pthread;
 pub mod shims;
 pub mod trap;
@@ -90,6 +91,8 @@ fn build_table() -> HashMap<&'static str, Shim> {
         fn __cxa_finalize();
         fn __cxa_thread_atexit_impl();
         fn __register_atfork();
+        fn feclearexcept();
+        fn fetestexcept();
     }
 
     macro_rules! fwd_extern {
@@ -102,6 +105,7 @@ fn build_table() -> HashMap<&'static str, Shim> {
         __strcat_chk, __strncat_chk, __sprintf_chk, __snprintf_chk, __vsnprintf_chk,
         __printf_chk, __fprintf_chk, __vprintf_chk, __vfprintf_chk, __stack_chk_fail,
         __cxa_atexit, __cxa_finalize, __cxa_thread_atexit_impl, __register_atfork,
+        feclearexcept, fetestexcept,
     );
 
     // glibc math/stdlib/stdio entries that the `libc` crate does not expose.
@@ -440,6 +444,20 @@ fn build_table() -> HashMap<&'static str, Shim> {
     // exported `__xpg_strerror_r` has the same (int, char*, size_t) -> int ABI.
     if let Some(xpg) = m.get("__xpg_strerror_r").copied() {
         m.insert("__gnu_strerror_r", Shim::forwarded("__gnu_strerror_r", xpg.ptr));
+    }
+
+    // NDK platform surface (libandroid / libjnigraphics / liblog / EGL-GLES).
+    // Every entry is backed by the installed `NdkHost` or reports a structured
+    // `UNSUPPORTED_NATIVE_SYMBOL`; see `ndk.rs`.
+    for (name, ptr) in ndk::ndk_asset::table()
+        .into_iter()
+        .chain(ndk::ndk_bitmap::table())
+        .chain(ndk::ndk_window::table())
+        .chain(ndk::ndk_looper::table())
+        .chain(ndk::ndk_misc::table())
+        .chain(ndk::ndk_gl::full_table())
+    {
+        m.insert(name, Shim::shimmed(name, ptr));
     }
 
     m.extend(shims::log_extra_table());

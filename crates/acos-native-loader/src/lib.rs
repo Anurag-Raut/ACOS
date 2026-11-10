@@ -36,6 +36,10 @@ pub mod report;
 pub mod testjni;
 pub mod tls;
 
+pub use bionic::ndk::{
+    clear_host as clear_ndk_host, install_host as install_ndk_host, ARect, BitmapInfo,
+    FrameCallback, NdkConfiguration, NdkHost, NdkResult, WindowBuffer, WindowInfo,
+};
 pub use error::{LibraryMissing, LoaderError, Result};
 pub use loader::{LibraryHandle, Loader, NativeLibrary};
 pub use report::Report;

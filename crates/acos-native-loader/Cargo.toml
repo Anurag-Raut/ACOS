@@ -22,3 +22,6 @@ cc = "1"
 
 [dev-dependencies]
 serde_json = { workspace = true }
+# NDK-surface integration test: a real `Bitmap` pixel store + a real APK zip.
+acos-render = { path = "../acos-render" }
+zip = { version = "2", default-features = false, features = ["deflate"] }

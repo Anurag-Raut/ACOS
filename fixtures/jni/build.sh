@@ -24,3 +24,11 @@ fi
 mkdir -p "$OUT"
 "$CLANG" -shared -fPIC -O2 -Wall -o "$OUT/libacosjni_slots.so" "$SRC"
 echo "build-jni-fixture: wrote $OUT/libacosjni_slots.so"
+
+# NDK platform surface (libandroid / libjnigraphics / EGL) fixture. Loaded by
+# `acos-native-loader`'s `tests/ndk.rs`; checked in under that crate's tests/data.
+CLANG29="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang"
+"$CLANG29" -shared -fPIC -O2 -Wall -o \
+    "$ROOT/crates/acos-native-loader/tests/data/libacosndk.so" \
+    "$ROOT/fixtures/jni/acos_ndk_surface.c" -llog -landroid -ljnigraphics -lEGL -lGLESv2
+echo "build-jni-fixture: wrote crates/acos-native-loader/tests/data/libacosndk.so"
