@@ -174,7 +174,7 @@ pub struct Vm {
     /// dynamic class, so it never needs invalidation (classes are never
     /// unloaded). This removes the per-call `name`/`sig` string allocations and
     /// `HashMap<String,_>` probes from virtual/interface dispatch.
-    pub dispatch_cache: HashMap<(u32, u32, ClassId), MethodId>,
+    pub(crate) dispatch_cache: HashMap<(u32, u32, ClassId), MethodId>,
 
     pub metrics: Metrics,
     /// Execution histogram for the 256 opcode bytes (populated when
