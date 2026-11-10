@@ -139,7 +139,7 @@ impl RenderContext {
     }
 
     /// Record or escalate an unsupported op.
-    fn unsupported(&mut self, op: impl Into<String>) -> RenderResult<()> {
+    pub fn unsupported(&mut self, op: impl Into<String>) -> RenderResult<()> {
         let op = op.into();
         if self.strict {
             return Err(RenderError::Strict { msg: op });
@@ -626,6 +626,7 @@ impl RenderContext {
             positions,
             tile,
             local: local.unwrap_or_default(),
+            focal: (cx, cy),
         });
         Ok(())
     }
@@ -1364,11 +1365,12 @@ impl RenderContext {
                 positions,
                 tile,
                 local,
+                focal,
             }) => {
                 let stops = make_stops(colors, positions.as_deref());
                 let ts = local.to_affine().unwrap_or(tiny_skia::Transform::identity());
                 if let Some(s) = tiny_skia::RadialGradient::new(
-                    tiny_skia::Point::from_xy(center.0, center.1),
+                    tiny_skia::Point::from_xy(focal.0, focal.1),
                     tiny_skia::Point::from_xy(center.0, center.1),
                     *radius,
                     stops,
@@ -1432,6 +1434,15 @@ impl RenderContext {
                         sk.shader = shader;
                     }
                 }
+            }
+            Some(ShaderSpec::Compose { .. }) => {
+                // `ComposeShader` is modelled and reachable through the
+                // framework natives; rasterising an arbitrary two-shader
+                // PorterDuff composition needs an offscreen shader blend that
+                // tiny-skia does not expose. Reported structurally rather than
+                // silently drawing only one operand.
+                self.unsupported("ComposeShader two-shader composition")
+                    .ok();
             }
         }
         sk

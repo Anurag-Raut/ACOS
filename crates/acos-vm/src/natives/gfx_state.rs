@@ -125,7 +125,16 @@ pub(crate) fn render_paint_from(rec: &PaintRec) -> Paint {
 /// the `jlong` of the frozen copy. Record-time capture, per the advisor review.
 pub(crate) fn snapshot_paint(paint: i64) -> VmResult<i64> {
     let rec = gfx_paint::paint_rec(paint)?;
-    let rendered = render_paint_from(&rec);
+    let mut rendered = render_paint_from(&rec);
+    if rec.shader != 0 {
+        match gfx_paint::shader_spec(rec.shader) {
+            Some(spec) => rendered.shader = Some(spec),
+            None => with_ctx(|c| {
+                c.unsupported("Paint shader handle did not resolve to a ShaderSpec")
+                    .ok();
+            }),
+        }
+    }
     Ok(with_ctx(|c| gj(c.paints.insert(rendered))))
 }
 

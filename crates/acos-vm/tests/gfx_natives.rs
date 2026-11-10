@@ -228,5 +228,10 @@ fn gfx_natives_on_the_real_framework() {
     assert_eq!(line_value(&out, "bounds"), Some("0.0,0.0,10.0,5.0"), "{out}");
     // Matrix map points.
     assert_eq!(line_value(&out, "mapped"), Some("6.0,9.0"), "{out}");
+    // Shaders (W75-A): gradient/bitmap/compose construction reaches
+    // `nativeCreate`; an unresolved native would abort the run above.
+    for key in ["linear", "radial", "sweep", "compose"] {
+        assert_eq!(line_value(&out, key), Some("true"), "{key}: {out}");
+    }
     assert!(out.lines().any(|l| l == "done"), "{out}");
 }

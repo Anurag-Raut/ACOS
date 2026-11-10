@@ -147,6 +147,9 @@ pub enum ShaderSpec {
         positions: Option<Vec<f32>>,
         tile: TileMode,
         local: Matrix3x3,
+        /// Two-point conical focal point; equals `center` for the classic
+        /// `RadialGradient(cx, cy, radius, ...)` constructor.
+        focal: (f32, f32),
     },
     Sweep {
         center: (f32, f32),
@@ -159,6 +162,14 @@ pub enum ShaderSpec {
         tile_x: TileMode,
         tile_y: TileMode,
         local: Matrix3x3,
+    },
+    /// `android.graphics.ComposeShader` — combines two shaders with a
+    /// PorterDuff / BlendMode operator. The sub-shaders are owned (cloned) so
+    /// the spec carries no external handle.
+    Compose {
+        a: Box<ShaderSpec>,
+        b: Box<ShaderSpec>,
+        mode: PorterDuffMode,
     },
 }
 

@@ -14,8 +14,12 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use acos_render::paint::{ColorFilterSpec, PaintStyle, StrokeCap, StrokeJoin};
+use acos_render::color::PorterDuffMode;
+use acos_render::matrix::Matrix3x3;
+use acos_render::paint::{ColorFilterSpec, PaintStyle, ShaderSpec, StrokeCap, StrokeJoin, TileMode};
 use acos_render::path::Path;
+
+use crate::heap::{ArrayData, Object};
 
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
@@ -140,6 +144,75 @@ fn paints() -> &'static Mutex<HandleTable<PaintRec>> {
 
 fn filters() -> &'static Mutex<HandleTable<ColorFilterSpec>> {
     FILTERS.get_or_init(|| Mutex::new(HandleTable::new()))
+}
+
+// W75-A: `android.graphics` shaders. A shader is a pure description, so the
+// handle table stores a `ShaderSpec` directly (no borrowed rasteriser state).
+// `gfx_state::snapshot_paint` resolves the `Paint`'s shader handle into the
+// frozen renderer paint at record time.
+static SHADERS: OnceLock<Mutex<HandleTable<ShaderSpec>>> = OnceLock::new();
+
+fn shaders() -> &'static Mutex<HandleTable<ShaderSpec>> {
+    SHADERS.get_or_init(|| Mutex::new(HandleTable::new()))
+}
+
+fn lock_shaders() -> VmResult<std::sync::MutexGuard<'static, HandleTable<ShaderSpec>>> {
+    shaders()
+        .lock()
+        .map_err(|_| VmError::Internal("Shader handle table poisoned".to_string()))
+}
+
+/// Resolve a shader `jlong` into its description (used by the paint snapshot).
+pub fn shader_spec(handle: i64) -> Option<ShaderSpec> {
+    shaders()
+        .lock()
+        .ok()
+        .and_then(|g| g.get(Handle::from_jlong(handle)).ok().cloned())
+}
+
+fn store_shader(spec: ShaderSpec) -> VmResult<i64> {
+    Ok(lock_shaders()?
+        .insert(spec)
+        .to_jlong())
+}
+
+fn tile_mode(ordinal: i32) -> TileMode {
+    TileMode::from_ordinal(ordinal).unwrap_or(TileMode::Clamp)
+}
+
+/// `Color.pack(int)` stores the ARGB word in the high 32 bits for sRGB.
+fn color_array(vm: &Vm, h: u32) -> VmResult<Vec<u32>> {
+    if h == 0 {
+        return Err(VmError::Internal("shader colours: null long[]".to_string()));
+    }
+    match vm.heap.get(h) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Long(v) => Ok(v.iter().map(|c| (*c >> 32) as u32).collect()),
+            _ => Err(VmError::Internal("shader colours: expected long[]".to_string())),
+        },
+        _ => Err(VmError::Internal("shader colours: expected long[]".to_string())),
+    }
+}
+
+fn optional_float_array(vm: &Vm, h: u32) -> VmResult<Option<Vec<f32>>> {
+    if h == 0 {
+        return Ok(None);
+    }
+    match vm.heap.get(h) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Float(v) => Ok(Some(v.clone())),
+            _ => Err(VmError::Internal("shader positions: expected float[]".to_string())),
+        },
+        _ => Ok(None),
+    }
+}
+
+fn local_matrix(h: i64) -> VmResult<Matrix3x3> {
+    if h == 0 {
+        return Ok(Matrix3x3::identity());
+    }
+    let values = super::gfx_matrix::matrix_values(h)?;
+    Ok(super::gfx_matrix::matrix_from_values(values))
 }
 
 fn bad(kind: &str, e: &HandleError) -> VmError {
@@ -370,6 +443,17 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nGetTextRunCursor", "(JLjava/lang/String;IIIII)I", unsupported_text_cursor);
     vm.register_native(p, "nGetFillPath", "(JJJ)Z", paint_get_fill_path);
 
+    // Shaders (W75-A): gradient, bitmap-tile and compose shaders. A shader
+    // handle is an `acos_render::paint::ShaderSpec`; `Paint.nSetShader` stores
+    // it and the record-time snapshot resolves it into the frozen render paint.
+    vm.register_native("Landroid/graphics/LinearGradient;", "nativeCreate", "(JFFFF[J[FIJ)J", lg_native_create);
+    vm.register_native("Landroid/graphics/RadialGradient;", "nativeCreate", "(JFFFFFF[J[FIJ)J", rg_native_create);
+    vm.register_native("Landroid/graphics/SweepGradient;", "nativeCreate", "(JFF[J[FJ)J", sg_native_create);
+    vm.register_native("Landroid/graphics/BitmapShader;", "nativeCreate", "(JJIIZZ)J", bs_native_create);
+    vm.register_native("Landroid/graphics/BitmapShader;", "nativeCreateWithMaxAniso", "(JJIIIZ)J", bs_native_create_aniso);
+    vm.register_native("Landroid/graphics/ComposeShader;", "nativeCreate", "(JJJI)J", cs_native_create);
+    vm.register_native("Landroid/graphics/Shader;", "nativeGetFinalizer", "()J", release_func);
+
     // `ColorSpace$Rgb` is constructed during `android.graphics` static init
     // (`new Paint()` transitively creates the sRGB colour space). ACOS models
     // it as an opaque handle: the renderer always works in sRGB/linear space,
@@ -479,6 +563,125 @@ fn take_handle(vm: &mut Vm, ctx: NativeCtx, field: fn(&mut PaintRec) -> &mut i64
 
 fn paint_set_shader(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     take_handle(vm, ctx, |r| &mut r.shader)
+}
+
+// ---------------------------------------------------------------------------
+// Shader natives (W75-A)
+// ---------------------------------------------------------------------------
+
+fn lg_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let x0 = vm.arg_f32(ctx, 1);
+    let y0 = vm.arg_f32(ctx, 2);
+    let x1 = vm.arg_f32(ctx, 3);
+    let y1 = vm.arg_f32(ctx, 4);
+    let colors = color_array(vm, vm.arg_ref(ctx, 5))?;
+    let positions = optional_float_array(vm, vm.arg_ref(ctx, 6))?;
+    let tile = tile_mode(vm.arg_i32(ctx, 7));
+    let spec = ShaderSpec::Linear {
+        start: (x0, y0),
+        end: (x1, y1),
+        colors,
+        positions,
+        tile,
+        local,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
+}
+
+fn rg_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let focal = (vm.arg_f32(ctx, 1), vm.arg_f32(ctx, 2));
+    let _focal_radius = vm.arg_f32(ctx, 3);
+    let center = (vm.arg_f32(ctx, 4), vm.arg_f32(ctx, 5));
+    let radius = vm.arg_f32(ctx, 6);
+    let colors = color_array(vm, vm.arg_ref(ctx, 7))?;
+    let positions = optional_float_array(vm, vm.arg_ref(ctx, 8))?;
+    let tile = tile_mode(vm.arg_i32(ctx, 9));
+    let spec = ShaderSpec::Radial {
+        center,
+        radius,
+        colors,
+        positions,
+        tile,
+        local,
+        focal,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
+}
+
+fn sg_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let cx = vm.arg_f32(ctx, 1);
+    let cy = vm.arg_f32(ctx, 2);
+    let colors = color_array(vm, vm.arg_ref(ctx, 3))?;
+    let positions = optional_float_array(vm, vm.arg_ref(ctx, 4))?;
+    let spec = ShaderSpec::Sweep {
+        center: (cx, cy),
+        colors,
+        positions,
+        local,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
+}
+
+fn bs_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let bitmap = vm.arg_i64(ctx, 1);
+    if !super::gfx_state::with_ctx(|c| c.bitmaps.contains(super::gfx_state::rh(bitmap))) {
+        return Err(super::gfx_state::stale("BitmapShader bitmap", bitmap));
+    }
+    let tile_x = tile_mode(vm.arg_i32(ctx, 2));
+    let tile_y = tile_mode(vm.arg_i32(ctx, 3));
+    let spec = ShaderSpec::Bitmap {
+        bitmap: super::gfx_state::rh(bitmap),
+        tile_x,
+        tile_y,
+        local,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
+}
+
+fn bs_native_create_aniso(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // `(local, bitmap, tileX, tileY, maxAniso, filtered)` — aniso is advisory.
+    let local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let bitmap = vm.arg_i64(ctx, 1);
+    if !super::gfx_state::with_ctx(|c| c.bitmaps.contains(super::gfx_state::rh(bitmap))) {
+        return Err(super::gfx_state::stale("BitmapShader bitmap", bitmap));
+    }
+    let tile_x = tile_mode(vm.arg_i32(ctx, 2));
+    let tile_y = tile_mode(vm.arg_i32(ctx, 3));
+    let spec = ShaderSpec::Bitmap {
+        bitmap: super::gfx_state::rh(bitmap),
+        tile_x,
+        tile_y,
+        local,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
+}
+
+fn cs_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let _local = local_matrix(vm.arg_i64(ctx, 0))?;
+    let a = vm.arg_i64(ctx, 1);
+    let b = vm.arg_i64(ctx, 2);
+    let mode = PorterDuffMode::from_ordinal(vm.arg_i32(ctx, 3))
+        .ok_or_else(|| VmError::unsupported_api("ComposeShader mode", format!("ordinal {}", vm.arg_i32(ctx, 3))))?;
+    let sa = shader_spec(a)
+        .ok_or_else(|| VmError::unsupported_api("ComposeShader shaderA", "unresolved shader handle"))?;
+    let sb = shader_spec(b)
+        .ok_or_else(|| VmError::unsupported_api("ComposeShader shaderB", "unresolved shader handle"))?;
+    let spec = ShaderSpec::Compose {
+        a: Box::new(sa),
+        b: Box::new(sb),
+        mode,
+    };
+    vm.ret_i64(ctx, store_shader(spec)?);
+    Ok(())
 }
 
 fn paint_set_mask_filter(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
