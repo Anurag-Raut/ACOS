@@ -1,0 +1,96 @@
+{
+  "fidelity": "art-reference",
+  "app": "hello-jni",
+  "device_dir": "art-api34-x86_64",
+  "apk": "build/apps/hello-jni.apk",
+  "apk_sha256": "c37a48e0620659fd8b68cb51f1b63d05a149d21fa3e14d9f3487bec102841018",
+  "artifacts": [
+    {
+      "path": "am_start_initial.txt",
+      "size": 184,
+      "sha256": "77945dbba5230bbf139af89db83c28c2670731897a55ecad935a140834e74fe2"
+    },
+    {
+      "path": "commands.txt",
+      "size": 1168,
+      "sha256": "e1e873b490c96990644fa589ef401869eb0b4211f6a19fc12d6e0d9403688a44"
+    },
+    {
+      "path": "device-config.json",
+      "size": 500,
+      "sha256": "6404cf16005f2909fbe114f8651fc7aaa6e373521c90affbe94521d3bde3d7f6"
+    },
+    {
+      "path": "display.txt",
+      "size": 18466,
+      "sha256": "16da01ea341f004a117400e3544f6cd643e978d4d868de623ebc30808ca1194c"
+    },
+    {
+      "path": "install.txt",
+      "size": 135,
+      "sha256": "83e06f1773402f424b8d6c4f8dd141ee4ad64b445be4612093061b9229207566"
+    },
+    {
+      "path": "logcat-summary.txt",
+      "size": 102,
+      "sha256": "7f7800c52b534cb1466c011497cfda9da60f6670684a9d9985bf196ce15250b6"
+    },
+    {
+      "path": "logcat_initial.txt",
+      "size": 229,
+      "sha256": "9efa2b9f791fc27e3a0de49f7bcd2c77e363f294ce6ce8311b147eb9883ddbcd"
+    },
+    {
+      "path": "meminfo_initial.txt",
+      "size": 2917,
+      "sha256": "19b6ef8eebf1609cf4956d92f510a0d7f64d273279605e39beb4efa3ffab2f3b"
+    },
+    {
+      "path": "observed-texts-initial.txt",
+      "size": 290,
+      "sha256": "e16cec8538e9f28e4c5e3422beb63dcb2ba43a30c1b2a2b3242a270bd8abed93"
+    },
+    {
+      "path": "screenshot_initial.png",
+      "size": 75367,
+      "sha256": "f05233658b37144da01e963b2057546eadd547edde4ea1ba31a87ab934a74011"
+    },
+    {
+      "path": "ui_initial.json",
+      "size": 2061,
+      "sha256": "3ac6b09db793cc1c270e535e6bfe8cfbae60efe8bb32ab50635dadbf5d4c532e"
+    },
+    {
+      "path": "ui_initial.xml",
+      "size": 3464,
+      "sha256": "5d2ee0a7b7cca2975b1358e732b8057ad52721e19a43db31c9315208cec56a3c"
+    }
+  ],
+  "commands": [
+    "$ adb -s emulator-5554 install -r -g fixtures/build/apps/hello-jni.apk",
+    "$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.hellojni",
+    "$ adb -s emulator-5554 shell logcat -c",
+    "$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.hellojni/.MainActivity -> am_start_initial.txt",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/screenshot_initial.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/ui_initial.xml",
+    "$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/display.txt",
+    "$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.hellojni > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/meminfo_initial.txt",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosJniFixture:I > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/logcat_initial.txt",
+    "$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK"
+  ],
+  "device_config": {
+    "resolution": "1080x2400",
+    "density_dpi": 420,
+    "locale": "en-US",
+    "font_scale": "1.0 (default; setting unset)",
+    "dark_light": "no",
+    "build_fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+    "api": "34",
+    "abi": "x86_64",
+    "serial": "emulator-5554",
+    "emulator": "qemu-system-x86_64-headless, KVM, 2048 MB RAM, 4 cores, swiftshader_indirect",
+    "raw_wm_size": "Physical size: 1080x2400",
+    "raw_wm_density": "Physical density: 420"
+  }
+}

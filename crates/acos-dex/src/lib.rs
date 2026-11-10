@@ -11,17 +11,34 @@
 //! The crate provides:
 //!
 //! * [`DexFile::parse`] — a fully bounds-checked DEX parser: header
-//!   (magic/version/Adler-32/SHA-1/endian), all id tables (`string_ids`,
-//!   `type_ids`, `proto_ids`, `field_ids`, `method_ids`, `class_defs`,
-//!   `call_site_ids`, `method_handles`), `map_list`, `class_data_item`,
-//!   `code_item` (instructions, tries, catch handlers), `debug_info_item` line
-//!   tables, `encoded_value`/`encoded_array`, and annotation directories.
+//!   (magic/version/Adler-32/endian, plus a lazily-computed SHA-1 check), all id
+//!   tables (`string_ids`, `type_ids`, `proto_ids`, `field_ids`, `method_ids`,
+//!   `class_defs`, `call_site_ids`, `method_handles`), `map_list`,
+//!   `class_data_item`, `code_item` (instructions, tries, catch handlers),
+//!   `debug_info_item` line tables, `encoded_value`/`encoded_array`,
+//!   annotation directories, and the ART `hiddenapi_class_data_item`.
 //! * [`decode`] — a decoder for every defined opcode (0x00–0xff), plus payload
 //!   decoders for packed/sparse switch and fill-array-data.
 //! * [`verify`] — a **structural** (pass-1) verifier: index bounds, instruction
 //!   decoding, branch/switch targets on instruction boundaries, register
 //!   indices, `ins_size`, try/handler addresses, payload well-formedness, and
 //!   fallthrough past the end of a method.
+//!
+//! ## Android load semantics
+//!
+//! Platform build tools (hiddenapi encoding) rewrite boot-classpath DEX files
+//! and fix up only the Adler-32 checksum, so the SHA-1 signature is frequently
+//! stale even in system images. Android's runtime does not validate it at load
+//! time, so [`DexFile::parse`] **accepts** a signature mismatch by default (the
+//! result is available, lazily, from [`DexFile::signature_valid`]). Use
+//! [`DexFile::parse_with`] and [`ParseOptions::STRICT`] to reject it.
+//!
+//! ## Performance
+//!
+//! String decoding and the SHA-1 check are deferred and cached, so parsing a
+//! 10 MB boot-classpath DEX is a few milliseconds and does not materialise the
+//! string table. Long-lived callers that need strings or signature validity pay
+//! for them on first access.
 //!
 //! ## Explicit non-goals (for now)
 //!
@@ -44,6 +61,7 @@ pub mod disasm;
 pub mod encoded;
 pub mod error;
 pub mod hash;
+pub mod hiddenapi;
 pub mod mutf8;
 pub mod opcode;
 pub mod reader;
@@ -59,11 +77,13 @@ pub use decode::{
 pub use disasm::{disassemble, format_instruction, mnemonic_sequence};
 pub use encoded::{EncodedAnnotation, EncodedValue};
 pub use error::{DexError, DexResult};
+pub use hiddenapi::HiddenApiClassData;
 pub use opcode::{defined_opcodes, Format, Opcode};
 pub use reader::Reader;
 pub use verify::{verify, VerifyReport};
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 /// Little-endian endian tag written into every standard DEX file.
 pub const ENDIAN_CONSTANT: u32 = 0x1234_5678;
@@ -73,6 +93,44 @@ pub const REVERSE_ENDIAN_CONSTANT: u32 = 0x7856_3412;
 pub const NO_INDEX: u32 = 0xffff_ffff;
 /// Size of the fixed DEX header in bytes.
 pub const HEADER_SIZE: usize = 0x70;
+
+/// Options controlling header validation during [`DexFile::parse_with`].
+///
+/// The defaults match Android's runtime load semantics: the Adler-32 checksum
+/// is enforced, but the SHA-1 signature is only recorded, not required.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParseOptions {
+    /// Verify the Adler-32 checksum. Default `true`.
+    pub verify_checksum: bool,
+    /// Verify the SHA-1 signature. Default `false`.
+    ///
+    /// Android's runtime does not validate the SHA-1 signature field at load
+    /// time, and platform build tools (hiddenapi encoding) rewrite boot
+    /// classpath DEX files while fixing up only the Adler-32 checksum. A
+    /// mismatch is reported through [`DexFile::signature_valid`]; set this to
+    /// `true` (or use
+    /// [`ParseOptions::STRICT`]) to turn a mismatch into
+    /// [`DexError::BadSignature`].
+    pub verify_signature: bool,
+}
+
+impl Default for ParseOptions {
+    fn default() -> Self {
+        ParseOptions {
+            verify_checksum: true,
+            verify_signature: false,
+        }
+    }
+}
+
+impl ParseOptions {
+    /// Strict mode: both the Adler-32 checksum and the SHA-1 signature must
+    /// match.
+    pub const STRICT: ParseOptions = ParseOptions {
+        verify_checksum: true,
+        verify_signature: true,
+    };
+}
 
 /// Standard DEX access flags.
 pub mod access {
@@ -253,7 +311,9 @@ impl FieldRef<'_> {
 pub struct DexFile {
     bytes: Arc<[u8]>,
     header: Header,
-    strings: Vec<String>,
+    /// Lazily-decoded string table. `parse` only records the `string_data_offs`;
+    /// the `String`s are materialised on first access and cached.
+    strings: OnceLock<Result<Vec<String>, DexError>>,
     string_data_offs: Vec<u32>,
     type_ids: Vec<u32>,
     proto_ids: Vec<ProtoId>,
@@ -263,6 +323,9 @@ pub struct DexFile {
     call_site_ids: Vec<u32>,
     method_handles: Vec<MethodHandle>,
     map: Vec<MapItem>,
+    hiddenapi: Option<HiddenApiClassData>,
+    /// Lazily-computed SHA-1 signature validity (see [`DexFile::signature_valid`]).
+    signature_check: OnceLock<bool>,
 }
 
 fn section_start(
@@ -317,10 +380,20 @@ fn parse_type_list(r: &Reader, off: u32, type_count: u32) -> DexResult<Vec<u32>>
 impl DexFile {
     /// Parse a DEX image from an owned `Vec<u8>`, `Arc<[u8]>`, or byte slice.
     ///
-    /// Performs magic/version validation, Adler-32 checksum and SHA-1 signature
-    /// verification, endianness validation, and depth-checked parsing of every
-    /// section.
+    /// Validates magic/version, endianness, file size and the Adler-32
+    /// checksum, and parses every section. The SHA-1 signature is computed and
+    /// available lazily via [`DexFile::signature_valid`], but a mismatch is
+    /// **accepted** by default, matching Android's runtime load semantics. Use
+    /// [`DexFile::parse_with`] with [`ParseOptions::STRICT`] to enforce it.
     pub fn parse(bytes: impl Into<Arc<[u8]>>) -> DexResult<DexFile> {
+        Self::parse_with(bytes, ParseOptions::default())
+    }
+
+    /// Like [`DexFile::parse`], but with explicit validation options.
+    pub fn parse_with(
+        bytes: impl Into<Arc<[u8]>>,
+        options: ParseOptions,
+    ) -> DexResult<DexFile> {
         let bytes: Arc<[u8]> = bytes.into();
         let len = bytes.len();
         let r = Reader::new(&bytes);
@@ -414,19 +487,27 @@ impl DexFile {
         }
 
         // Checksum first, then signature, matching the spec's dependency order.
+        // Android enforces the checksum but does not verify the signature at
+        // load time, so a signature mismatch is accepted unless `options` says
+        // otherwise. SHA-1 is only computed eagerly in strict mode; otherwise it
+        // is deferred to `signature_valid()` to keep parse latency low.
         let computed_checksum = hash::adler32(&bytes[12..file_len]);
-        if computed_checksum != header.checksum {
+        if options.verify_checksum && computed_checksum != header.checksum {
             return Err(DexError::BadChecksum {
                 stored: header.checksum,
                 computed: computed_checksum,
             });
         }
-        let computed_sig = hash::sha1(&bytes[32..file_len]);
-        if computed_sig != header.signature {
-            return Err(DexError::BadSignature {
-                stored: hash::hex(&header.signature),
-                computed: hash::hex(&computed_sig),
-            });
+        let signature_check = OnceLock::new();
+        if options.verify_signature {
+            let computed_sig = hash::sha1(&bytes[32..file_len]);
+            if computed_sig != header.signature {
+                return Err(DexError::BadSignature {
+                    stored: hash::hex(&header.signature),
+                    computed: hash::hex(&computed_sig),
+                });
+            }
+            let _ = signature_check.set(true);
         }
 
         // --- string_ids / string_data_item ---
@@ -437,7 +518,10 @@ impl DexFile {
             file_len,
             "string_ids",
         )?;
-        let mut strings = Vec::with_capacity(header.string_ids_size as usize);
+        // String data is decoded lazily (see `decode_strings`); parse only
+        // records and bounds-checks the `string_data_off`s. This keeps parse
+        // time and peak memory lower for large boot-classpath DEX files.
+        let string_count = header.string_ids_size;
         let mut string_data_offs = Vec::with_capacity(header.string_ids_size as usize);
         for i in 0..header.string_ids_size as usize {
             let data_off = r.u32(string_ids_off + i * 4)?;
@@ -447,12 +531,14 @@ impl DexFile {
                     reason: "null string_data_off",
                 });
             }
+            if data_off as usize >= file_len {
+                return Err(DexError::Truncated {
+                    offset: data_off as u64,
+                    needed: 1,
+                    len: file_len,
+                });
+            }
             string_data_offs.push(data_off);
-            let sr = r.sub_to_end(data_off as usize)?;
-            let (_utf16_len, n) = sr.uleb128(0)?;
-            let tail = sr.sub_to_end(n)?;
-            let (s, _) = mutf8::decode(tail.as_slice(), tail.base())?;
-            strings.push(s);
         }
 
         // --- type_ids ---
@@ -466,11 +552,11 @@ impl DexFile {
         let mut type_ids = Vec::with_capacity(header.type_ids_size as usize);
         for i in 0..header.type_ids_size as usize {
             let idx = r.u32(type_ids_off + i * 4)?;
-            if idx >= strings.len() as u32 {
+            if idx >= string_count {
                 return Err(DexError::IndexOutOfRange {
                     kind: "string",
                     index: idx,
-                    size: strings.len() as u32,
+                    size: string_count,
                     offset: r.base() + (type_ids_off + i * 4) as u64,
                 });
             }
@@ -491,11 +577,11 @@ impl DexFile {
             let shorty_idx = r.u32(o)?;
             let return_type_idx = r.u32(o + 4)?;
             let parameters_off = r.u32(o + 8)?;
-            if shorty_idx >= strings.len() as u32 {
+            if shorty_idx >= string_count {
                 return Err(DexError::IndexOutOfRange {
                     kind: "string",
                     index: shorty_idx,
-                    size: strings.len() as u32,
+                    size: string_count,
                     offset: r.base() + o as u64,
                 });
             }
@@ -546,11 +632,11 @@ impl DexFile {
                     offset: r.base() + (o + 2) as u64,
                 });
             }
-            if name_idx >= strings.len() as u32 {
+            if name_idx >= string_count {
                 return Err(DexError::IndexOutOfRange {
                     kind: "string",
                     index: name_idx,
-                    size: strings.len() as u32,
+                    size: string_count,
                     offset: r.base() + (o + 4) as u64,
                 });
             }
@@ -591,11 +677,11 @@ impl DexFile {
                     offset: r.base() + (o + 2) as u64,
                 });
             }
-            if name_idx >= strings.len() as u32 {
+            if name_idx >= string_count {
                 return Err(DexError::IndexOutOfRange {
                     kind: "string",
                     index: name_idx,
-                    size: strings.len() as u32,
+                    size: string_count,
                     offset: r.base() + (o + 4) as u64,
                 });
             }
@@ -663,11 +749,11 @@ impl DexFile {
                     offset: r.base() + (o + 8) as u64,
                 });
             }
-            if source_file_idx != NO_INDEX && source_file_idx >= strings.len() as u32 {
+            if source_file_idx != NO_INDEX && source_file_idx >= string_count {
                 return Err(DexError::IndexOutOfRange {
                     kind: "string",
                     index: source_file_idx,
-                    size: strings.len() as u32,
+                    size: string_count,
                     offset: r.base() + (o + 16) as u64,
                 });
             }
@@ -720,10 +806,23 @@ impl DexFile {
             }
         }
 
+        // --- hiddenapi_class_data_item (optional, ART extension) ---
+        // Parsing is best-effort: a malformed section must never fail the whole
+        // parse, since it is not required for structural verification.
+        let mut hiddenapi = None;
+        for m in &map {
+            if m.type_ == map_type::HIDDENAPI_CLASS_DATA_ITEM {
+                if let Ok(h) = hiddenapi::parse(&r, m.offset, header.class_defs_size) {
+                    hiddenapi = Some(h);
+                }
+                break;
+            }
+        }
+
         Ok(DexFile {
             bytes,
             header,
-            strings,
+            strings: OnceLock::new(),
             string_data_offs,
             type_ids,
             proto_ids,
@@ -733,6 +832,8 @@ impl DexFile {
             call_site_ids,
             method_handles,
             map,
+            hiddenapi,
+            signature_check,
         })
     }
 
@@ -759,12 +860,71 @@ impl DexFile {
         &self.header
     }
 
+    /// Whether the stored SHA-1 signature matches the computed one.
+    ///
+    /// A mismatch is accepted by default (Android does not verify the
+    /// signature at load time); see [`ParseOptions`]. The value is computed on
+    /// first call and cached, so a default parse does not pay for SHA-1 unless
+    /// the caller asks for it.
+    pub fn signature_valid(&self) -> bool {
+        *self.signature_check.get_or_init(|| {
+            let end = (self.header.file_size as usize).min(self.bytes.len());
+            hash::sha1(&self.bytes[32..end]) == self.header.signature
+        })
+    }
+
+    /// Raw hiddenapi class data, if the DEX carries a
+    /// `hiddenapi_class_data_item` (map type `0xF000`).
+    pub fn hiddenapi_class_data(&self) -> Option<&HiddenApiClassData> {
+        self.hiddenapi.as_ref()
+    }
+
+    /// Raw hiddenapi flags for the class at `class_index` in `class_defs`
+    /// order, if hiddenapi data is present.
+    pub fn hiddenapi_flags_by_index(&self, class_index: usize) -> Option<&[u32]> {
+        self.hiddenapi
+            .as_ref()
+            .and_then(|h| h.per_class.get(class_index).map(Vec::as_slice))
+    }
+
+    /// Raw hiddenapi flags for a class definition, if hiddenapi data is
+    /// present. `def` must be a reference obtained from [`DexFile::class_defs`]
+    /// (or a class found via [`DexFile::find_class`]).
+    pub fn hiddenapi_flags(&self, def: &ClassDef) -> Option<&[u32]> {
+        let idx = self
+            .class_defs
+            .iter()
+            .position(|d| std::ptr::eq(d, def))?;
+        self.hiddenapi_flags_by_index(idx)
+    }
+
     pub fn map(&self) -> &[MapItem] {
         &self.map
     }
 
+    /// The decoded string table, materialised on first access and cached.
+    ///
+    /// Returns an empty slice if the string data is malformed; use
+    /// [`DexFile::string`] to observe the underlying error.
     pub fn strings(&self) -> &[String] {
-        &self.strings
+        match self.strings.get_or_init(|| self.decode_strings()) {
+            Ok(v) => v,
+            Err(_) => &[],
+        }
+    }
+
+    /// Decode every `string_data_item` into a `String`.
+    pub(crate) fn decode_strings(&self) -> DexResult<Vec<String>> {
+        let r = self.reader();
+        let mut out = Vec::with_capacity(self.string_data_offs.len());
+        for &data_off in &self.string_data_offs {
+            let sr = r.sub_to_end(data_off as usize)?;
+            let (_utf16_len, n) = sr.uleb128(0)?;
+            let tail = sr.sub_to_end(n)?;
+            let (s, _) = mutf8::decode(tail.as_slice(), tail.base())?;
+            out.push(s);
+        }
+        Ok(out)
     }
 
     pub fn string_data_offsets(&self) -> &[u32] {
@@ -801,12 +961,12 @@ impl DexFile {
 
     /// Resolve a string index.
     pub fn string(&self, idx: u32) -> DexResult<&str> {
-        self.strings
-            .get(idx as usize)
-            .map(String::as_str)
-            .ok_or_else(|| {
-                DexError::index("string", idx, self.strings.len() as u32, 0)
-            })
+        match self.strings.get_or_init(|| self.decode_strings()) {
+            Ok(v) => v.get(idx as usize).map(String::as_str).ok_or_else(|| {
+                DexError::index("string", idx, v.len() as u32, 0)
+            }),
+            Err(e) => Err(e.clone()),
+        }
     }
 
     /// Resolve a type index to its descriptor string.

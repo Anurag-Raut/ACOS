@@ -1,0 +1,7 @@
+Starting: Intent { cmp=dev.acos.fixtures.hellojni/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.acos.fixtures.hellojni/.MainActivity
+TotalTime: 347
+WaitTime: 350
+Complete

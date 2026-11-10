@@ -1,0 +1,3 @@
+AcosJniFixture: onCreate
+AcosJniFixture: javaCallback x=21
+AcosJniFixture: voidCallback s=from-native

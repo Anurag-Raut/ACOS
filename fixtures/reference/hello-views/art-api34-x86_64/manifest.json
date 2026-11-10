@@ -1,0 +1,202 @@
+{
+  "fidelity": "art-reference",
+  "app": "hello-views",
+  "device_dir": "art-api34-x86_64",
+  "apk": "build/apps/hello-views.apk",
+  "apk_sha256": "05896b5cd534b0857c13ca5baec8b131c905b3a908bbbaad4ee05db9f21b007d",
+  "artifacts": [
+    {
+      "path": "am_start_initial.txt",
+      "size": 188,
+      "sha256": "6cb6ec938f39d5f9715b9dc6e33708888a06c26a4ebf131da8eb505589895207"
+    },
+    {
+      "path": "commands.txt",
+      "size": 3246,
+      "sha256": "42d8d75b4cbc97629036e66a2e4fc2586117b1d870f37deb78e469eed197bbe3"
+    },
+    {
+      "path": "device-config.json",
+      "size": 500,
+      "sha256": "6404cf16005f2909fbe114f8651fc7aaa6e373521c90affbe94521d3bde3d7f6"
+    },
+    {
+      "path": "display.txt",
+      "size": 17496,
+      "sha256": "a632ba7b58c8619a26d0d275947959d74069673c18508302c45c6cb0841382f6"
+    },
+    {
+      "path": "install.txt",
+      "size": 135,
+      "sha256": "e4f53a5b6c1df0cc5a328d86bdbe1b70eff925dbb20b7898887603bed010c158"
+    },
+    {
+      "path": "lifecycle-summary.txt",
+      "size": 485,
+      "sha256": "fb0ec5838cf648b28ec44fb586e13d881bd76fd72b02bb67f505765151ba2162"
+    },
+    {
+      "path": "logcat_final.txt",
+      "size": 1140,
+      "sha256": "78f23c0a5126d5096d715ea1c440b142680457d8b842a0d77d80223f4f047c9e"
+    },
+    {
+      "path": "logcat_initial.txt",
+      "size": 192,
+      "sha256": "dbde467df4dbc6e4b3aa4dcb0a64d4c809ef4e62ecb3a88051710190c170b3dc"
+    },
+    {
+      "path": "logcat_recreate.txt",
+      "size": 738,
+      "sha256": "118bfd949cf6a57f1acc86e5a06c61e8cf93f748d6f5a58d7a849e8264c6f787"
+    },
+    {
+      "path": "meminfo_initial.txt",
+      "size": 2919,
+      "sha256": "3a2d90fc11c0e8d23522bc34c20519a4df160fe457715f53e441710e8246fe6b"
+    },
+    {
+      "path": "observed-texts-after-click1.txt",
+      "size": 450,
+      "sha256": "f29df9f05b577df740fb589967d7854c7ce85675b6ad78d65ebf9423acec5aba"
+    },
+    {
+      "path": "observed-texts-after-click2.txt",
+      "size": 450,
+      "sha256": "aa76e053c9f192de98bec7322a1203e1c4c7063b3f86a7e66a258a152659ad47"
+    },
+    {
+      "path": "observed-texts-after-recreate.txt",
+      "size": 441,
+      "sha256": "b0cbd1c97fc26ce5d93f4fef721c19de597bdb96cc5d95f3ef1f9d28a6f65c51"
+    },
+    {
+      "path": "observed-texts-initial.txt",
+      "size": 446,
+      "sha256": "6c4d49d27ec8bd3f669bf26db5557771ba192dfbc351cb13d0626cefb775f676"
+    },
+    {
+      "path": "screenshot_after_back.png",
+      "size": 42914,
+      "sha256": "930322a88b36dec20be7d653a73481a53a2986af256aefa29769dd4a5d493bfc"
+    },
+    {
+      "path": "screenshot_after_click1.png",
+      "size": 131223,
+      "sha256": "09375e6df7ca307b33760a41d5029168738c78512ecd7b3fe739f55dcdc8d3dc"
+    },
+    {
+      "path": "screenshot_after_click2.png",
+      "size": 131934,
+      "sha256": "b2fa2c2d81c9135b7a72c2cb387b1c16d3f696fbfb796e8b111b24456eed3e7a"
+    },
+    {
+      "path": "screenshot_after_recreate.png",
+      "size": 101875,
+      "sha256": "768d711d180cb75f1d78586a88fb233065c2b460f6f442a3b15203a09bc756ba"
+    },
+    {
+      "path": "screenshot_initial.png",
+      "size": 47164,
+      "sha256": "1226ecc71938967d7e913c577799dd5b22ef80bda24a9d32f2563cfcfdd4446d"
+    },
+    {
+      "path": "ui_after_click1.json",
+      "size": 2700,
+      "sha256": "8c44a3e424c28b7429edc63fe15664dc0f4ca2e8a62a9bc2eeb9214c432a6d54"
+    },
+    {
+      "path": "ui_after_click1.xml",
+      "size": 4796,
+      "sha256": "c4661e8472f3e61e04ca4f1aa529d80fe2cbe8f4198f66817416082e6f976c2e"
+    },
+    {
+      "path": "ui_after_click2.json",
+      "size": 2700,
+      "sha256": "6224f547579c54aff0660eb7d3deb2d1a09a3ee31e048ad152f50d1c8d61f3b0"
+    },
+    {
+      "path": "ui_after_click2.xml",
+      "size": 4796,
+      "sha256": "5b225bc3d352cd27e1aae0b30e221715bb6cca48b5064965db8123c416af7ff4"
+    },
+    {
+      "path": "ui_after_recreate.json",
+      "size": 2700,
+      "sha256": "46e9b293ecc7c7c9e4f0b9d9cb3f993094ff2b9344f1648a40e9b7ab5d7a2650"
+    },
+    {
+      "path": "ui_after_recreate.xml",
+      "size": 4800,
+      "sha256": "b40f3dc6b1dbf562ab80f307e20433a1ebfcc718d002b86d9d40395a5f6c2802"
+    },
+    {
+      "path": "ui_after_rotate_back.json",
+      "size": 2686,
+      "sha256": "6efd293c35bb945853217475dd3c1a62041aab30ec3e263ccd125850c4afcd08"
+    },
+    {
+      "path": "ui_after_rotate_back.xml",
+      "size": 4782,
+      "sha256": "008c19241e5189f76e2184abdd11c5396d0e01aebbbb14600a1757fd628215b2"
+    },
+    {
+      "path": "ui_initial.json",
+      "size": 2697,
+      "sha256": "68167fd4261ffd9c61955c97fc335321a936f8402187df53e491f029e959fae0"
+    },
+    {
+      "path": "ui_initial.xml",
+      "size": 4793,
+      "sha256": "78e19aac3428ab081527ed20f0c29c60cda10e05c23bbea8cf07a435bfdbe8d6"
+    }
+  ],
+  "commands": [
+    "$ adb -s emulator-5554 install -r -g fixtures/build/apps/hello-views.apk",
+    "$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.helloviews",
+    "$ adb -s emulator-5554 shell logcat -c",
+    "$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.helloviews/.MainActivity -> am_start_initial.txt",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/ui_initial.xml",
+    "$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/display.txt",
+    "$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.helloviews > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/meminfo_initial.txt",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosFixture:I > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/logcat_initial.txt",
+    "$ adb -s emulator-5554 shell input tap 540 427",
+    "$ adb -s emulator-5554 shell input text World",
+    "$ adb -s emulator-5554 shell input tap 157 549",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/screenshot_after_click1.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/ui_after_click1.xml",
+    "$ adb -s emulator-5554 shell input tap 157 549",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/screenshot_after_click2.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/ui_after_click2.xml",
+    "$ adb -s emulator-5554 shell settings put system accelerometer_rotation 0",
+    "$ adb -s emulator-5554 shell settings put system user_rotation 1",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/screenshot_after_recreate.png",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/ui_after_recreate.xml",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosFixture:I > logcat_recreate.txt",
+    "$ adb -s emulator-5554 shell settings put system user_rotation 0",
+    "$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml",
+    "$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/ui_after_rotate_back.xml",
+    "$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK",
+    "$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosFixture:I > logcat_final.txt",
+    "$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-views/art-api34-x86_64/screenshot_after_back.png"
+  ],
+  "device_config": {
+    "resolution": "1080x2400",
+    "density_dpi": 420,
+    "locale": "en-US",
+    "font_scale": "1.0 (default; setting unset)",
+    "dark_light": "no",
+    "build_fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+    "api": "34",
+    "abi": "x86_64",
+    "serial": "emulator-5554",
+    "emulator": "qemu-system-x86_64-headless, KVM, 2048 MB RAM, 4 cores, swiftshader_indirect",
+    "raw_wm_size": "Physical size: 1080x2400",
+    "raw_wm_density": "Physical density: 420"
+  }
+}

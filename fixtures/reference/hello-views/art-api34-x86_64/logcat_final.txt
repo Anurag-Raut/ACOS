@@ -1,0 +1,20 @@
+--------- beginning of main
+11-10 13:51:14.009  7361  7361 I AcosFixture: onCreate
+11-10 13:51:14.038  7361  7361 I AcosFixture: onStart
+11-10 13:51:14.040  7361  7361 I AcosFixture: onResume
+11-10 13:51:19.022  7361  7361 I AcosFixture: greet name=World clicks=1
+11-10 13:51:22.372  7361  7361 I AcosFixture: greet name=World clicks=2
+11-10 13:51:25.746  7361  7361 I AcosFixture: onPause
+11-10 13:51:25.747  7361  7361 I AcosFixture: onStop
+11-10 13:51:25.748  7361  7361 I AcosFixture: onSaveInstanceState clicks=2
+11-10 13:51:25.748  7361  7361 I AcosFixture: onDestroy
+11-10 13:51:25.768  7361  7361 I AcosFixture: onCreate
+11-10 13:51:25.790  7361  7361 I AcosFixture: onStart
+11-10 13:51:25.793  7361  7361 I AcosFixture: onResume
+11-10 13:51:31.032  7361  7361 I AcosFixture: onPause
+11-10 13:51:31.033  7361  7361 I AcosFixture: onStop
+11-10 13:51:31.034  7361  7361 I AcosFixture: onSaveInstanceState clicks=2
+11-10 13:51:31.034  7361  7361 I AcosFixture: onDestroy
+11-10 13:51:31.048  7361  7361 I AcosFixture: onCreate
+11-10 13:51:31.062  7361  7361 I AcosFixture: onStart
+11-10 13:51:31.065  7361  7361 I AcosFixture: onResume

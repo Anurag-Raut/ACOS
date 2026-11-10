@@ -37,6 +37,11 @@ pub struct AnnotationsDirectory {
 impl AnnotationsDirectory {
     /// Parse an `annotation_set_item` at `off` into a list of annotations.
     pub fn read_set(r: &Reader, off: u32) -> DexResult<Vec<Annotation>> {
+        // A zero offset means "no annotations" (e.g. an unannotated parameter
+        // in an `annotation_set_ref_list`).
+        if off == 0 {
+            return Ok(Vec::new());
+        }
         let off = off as usize;
         let size = r.u32(off)? as usize;
         let mut out = Vec::with_capacity(size.min(4096));

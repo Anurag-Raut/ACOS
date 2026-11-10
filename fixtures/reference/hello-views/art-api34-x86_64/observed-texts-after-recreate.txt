@@ -1,0 +1,5 @@
+android.widget.TextView |  | Hello Views | [170,100][363,151]
+android.widget.TextView | dev.acos.fixtures.helloviews:id/title | Hello ACOS | [170,231][359,282]
+android.widget.EditText | dev.acos.fixtures.helloviews:id/input | World | [170,282][2358,400]
+android.widget.Button | dev.acos.fixtures.helloviews:id/btn | Greet | [170,400][401,526]
+android.widget.TextView | dev.acos.fixtures.helloviews:id/result | clicks: 2 | [170,526][303,577]

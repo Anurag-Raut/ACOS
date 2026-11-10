@@ -1,0 +1,16 @@
+inner.add=15
+nested.twice=42
+anon.run base=10
+top-level anon
+anonOp=42
+lambda=42
+blockLambda=25
+applyOp=99
+methodRef=144
+supplier=supplied
+function=n=7
+sum=42
+capture=6
+len=6
+positive=true false
+runnable done

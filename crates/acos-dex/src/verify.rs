@@ -103,14 +103,17 @@ fn wide_operand_mask(opcode: u8) -> u8 {
     }
 }
 
-struct MethodContext {
-    name: String,
+/// Lazily formats the method name only when a verification error occurs, so a
+/// successful verify does not need to decode the string table.
+struct MethodContext<'a> {
+    dex: &'a DexFile,
+    method_idx: u32,
 }
 
-impl MethodContext {
+impl MethodContext<'_> {
     fn fail<T>(&self, reason: impl Into<String>) -> DexResult<T> {
         Err(DexError::Verify {
-            method: self.name.clone(),
+            method: method_label(self.dex, self.method_idx),
             reason: reason.into(),
         })
     }
@@ -123,8 +126,10 @@ fn verify_method(
     report: &mut VerifyReport,
 ) -> DexResult<()> {
     let code = dex.code_item(method.code_off)?;
-    let label = method_label(dex, method.method_idx);
-    let ctx = MethodContext { name: label };
+    let ctx = MethodContext {
+        dex,
+        method_idx: method.method_idx,
+    };
 
     if code.ins_size > code.registers_size {
         return ctx.fail(format!(
@@ -286,12 +291,9 @@ fn verify_method(
         if end != n && !boundaries[end] {
             return ctx.fail(format!("try range ends at non-boundary pc {end}"));
         }
-        let handler = code.handlers.get(try_item.handler_index).ok_or_else(|| {
-            DexError::Verify {
-                method: ctx.name.clone(),
-                reason: "try_item references a missing handler".to_string(),
-            }
-        })?;
+        let Some(handler) = code.handlers.get(try_item.handler_index) else {
+            return ctx.fail("try_item references a missing handler");
+        };
         for pair in &handler.handlers {
             let addr = pair.addr as usize;
             if addr >= n || !boundaries[addr] {

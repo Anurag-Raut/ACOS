@@ -1,0 +1,20 @@
+ints.len=6
+ints.sum=32
+ints[0]=1 ints[5]=13
+longs[2]=30
+longs.sum=60
+bytes.sum=-1
+chars=A:65 b:98 3:51 é:233 
+bools=true,false,true
+objects=xyz
+grid.rows=3 grid[0].len=4
+grid[2][3]=23
+jagged.total=10
+letters=abcd
+filled0=null
+filled1=set
+dbl0=0.0
+ragged=9
+caught=java.lang.ArrayIndexOutOfBoundsException
+empty.len=0
+cov.len=2

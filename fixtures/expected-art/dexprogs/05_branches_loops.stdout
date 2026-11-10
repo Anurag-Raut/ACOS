@@ -1,0 +1,17 @@
+collatz27=111
+sum0to9=45
+evens=11
+fact5=120
+labeled=23
+sumdiv3_le50=408
+grade=B
+ternary=pass
+and_short=true
+or_short=true
+not=false
+fibs=0,1,1,2,3,5,8,13,21,34,55,89
+halvings=7
+loops=7
+neg_mod=-1
+neg_div=-2
+zero_ok=20

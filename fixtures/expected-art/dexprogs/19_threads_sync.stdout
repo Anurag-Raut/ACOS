@@ -1,0 +1,10 @@
+threads=4
+perThread=25000
+total=100000
+expected=100000
+matched=true
+shared=1
+mainThread=main
+t1.alive=false
+sleeper.alive=false
+done

@@ -1,0 +1,4 @@
+--------- beginning of main
+11-10 13:51:14.009  7361  7361 I AcosFixture: onCreate
+11-10 13:51:14.038  7361  7361 I AcosFixture: onStart
+11-10 13:51:14.040  7361  7361 I AcosFixture: onResume

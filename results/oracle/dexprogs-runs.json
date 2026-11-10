@@ -1,0 +1,22 @@
+{
+  "01_hello": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "02_int_arith": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "03_long_arith": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "04_float_double": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "05_branches_loops": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "06_switch": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "07_static_methods_recursion": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "08_arrays": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "09_strings": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "10_objects_fields": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "11_inheritance_virtual": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "12_interfaces": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "13_exceptions": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "14_instanceof_casts": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "15_inner_lambda": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "16_enums": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "17_generics_collections": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "18_string_format_misc": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "19_threads_sync": {"exit": 0, "nondeterministic": false, "runs": 3},
+  "20_uncaught": {"exit": 1, "nondeterministic": false, "runs": 3}
+}

@@ -1,0 +1,19 @@
+AcosFixture: onCreate
+AcosFixture: onStart
+AcosFixture: onResume
+AcosFixture: greet name=World clicks=1
+AcosFixture: greet name=World clicks=2
+AcosFixture: onPause
+AcosFixture: onStop
+AcosFixture: onSaveInstanceState clicks=2
+AcosFixture: onDestroy
+AcosFixture: onCreate
+AcosFixture: onStart
+AcosFixture: onResume
+AcosFixture: onPause
+AcosFixture: onStop
+AcosFixture: onSaveInstanceState clicks=2
+AcosFixture: onDestroy
+AcosFixture: onCreate
+AcosFixture: onStart
+AcosFixture: onResume

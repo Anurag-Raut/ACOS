@@ -2,7 +2,7 @@
 //! structured error or a successful parse — never a panic.
 
 use acos_dex::hash::{adler32, sha1};
-use acos_dex::DexFile;
+use acos_dex::{DexFile, ParseOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -49,15 +49,35 @@ fn bad_checksum() {
 }
 
 #[test]
-fn bad_signature() {
+fn bad_signature_strict_rejected() {
     let mut b = fixture();
     // Change a body byte and recompute only the checksum; signature now stale.
     let mid = b.len() / 2;
     b[mid] ^= 0xff;
     let checksum = adler32(&b[12..]);
     b[8..12].copy_from_slice(&checksum.to_le_bytes());
-    let err = DexFile::parse(b).unwrap_err();
+    let err = DexFile::parse_with(b, ParseOptions::STRICT).unwrap_err();
     assert_eq!(err.code(), "DEX_BAD_SIGNATURE");
+}
+
+#[test]
+fn bad_signature_accepted_by_default() {
+    // Android does not verify the SHA-1 signature at load time, so the default
+    // parse accepts it and only reports `signature_valid == false`.
+    let mut b = fixture();
+    let mid = b.len() / 2;
+    b[mid] ^= 0xff;
+    let checksum = adler32(&b[12..]);
+    b[8..12].copy_from_slice(&checksum.to_le_bytes());
+    let dex = DexFile::parse(b).unwrap();
+    assert!(!dex.signature_valid());
+}
+
+#[test]
+fn strict_accepts_valid_signature() {
+    let b = fixture();
+    let dex = DexFile::parse_with(b, ParseOptions::STRICT).unwrap();
+    assert!(dex.signature_valid());
 }
 
 #[test]

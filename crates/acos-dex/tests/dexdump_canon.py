@@ -6,6 +6,11 @@ Each output line has the form:
     M <class-descriptor> <method-name> <proto> <count> <mnemonic>...
 
 which is directly comparable with `dexdump --example ... --mnemonics`.
+
+`dexdump` prints string literals with their bytes unescaped, so a method with a
+string containing a newline/CR splits its `const-string` line across several
+physical lines. While inside a method body we therefore ignore any line that is
+not an instruction or a known section terminator.
 """
 import re
 import sys
@@ -33,6 +38,11 @@ def main() -> int:
     re_name = re.compile(r"^\s+name\s*:\s*'(.*)'")
     re_type = re.compile(r"^\s+type\s*:\s*'(.*)'")
     re_insn = re.compile(r"\|([0-9a-f]{4,}):\s+([A-Za-z0-9/_-]+)")
+    # Lines that end a method body or begin the next member.
+    re_terminator = re.compile(
+        r"^\s+(catches|positions|locals)\b|^\s+name\s*:|^Class descriptor|"
+        r"^\s+insns size|^\s+#\d+\s*:"
+    )
 
     for ln in lines:
         m = re_class.search(ln)
@@ -42,27 +52,28 @@ def main() -> int:
             continue
         m = re_name.match(ln)
         if m:
+            flush()
             name = m.group(1)
             continue
-        m = re_type.match(ln)
-        if m:
-            typ = m.group(1)
-            continue
+        if not in_code:
+            m = re_type.match(ln)
+            if m:
+                typ = m.group(1)
+                continue
         if "insns size" in ln:
             flush()
             in_code = True
             seq = []
             continue
-        m = re_insn.search(ln)
-        if m and in_code:
-            seq.append(m.group(2))
-            continue
-        # dexdump prints a method-start marker like `0016cc: |[0016cc] Foo.bar:()V`
-        # right after the `insns size` line; it is not an instruction.
-        if "|[" in ln:
-            continue
         if in_code:
-            flush()
+            m = re_insn.search(ln)
+            if m:
+                seq.append(m.group(2))
+            elif re_terminator.search(ln):
+                flush()
+            # else: continuation of an instruction line (embedded newline
+            # inside a string literal); ignore.
+            continue
 
     flush()
     return 0

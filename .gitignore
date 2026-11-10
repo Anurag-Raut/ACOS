@@ -1,4 +1,5 @@
 target/
 /fixtures/build/
 /results/tmp/
+/.cache/
 *.class

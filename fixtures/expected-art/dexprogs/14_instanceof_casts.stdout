@@ -1,0 +1,17 @@
+val=A null=false A=true B=false C=false String=false int[]=false
+val=B null=false A=true B=true C=false String=false int[]=false
+val=C null=false A=true B=true C=true String=false int[]=false
+val=String null=false A=false B=false C=false String=true int[]=false
+val=Integer null=false A=false B=false C=false String=false int[]=false
+val=int[] null=false A=false B=false C=false String=false int[]=true
+val=Object[] null=false A=false B=false C=false String=false int[]=false
+cast1=true
+cast2=Main$C
+num=true true
+objString=true len=5
+caught=java.lang.ClassCastException
+arrayStore.type=[Ljava.lang.String;
+caught=java.lang.ArrayStoreException
+primitive.array=true
+arrayIsObject=true
+nullCast=true

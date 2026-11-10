@@ -1,0 +1,9 @@
+android.widget.TextView |  | Hello JNI | [42,166][261,237]
+android.widget.TextView |  | stringFromJNI=Hello from native C
+add(20,22)=42
+sumArray([1,2,3,4,5])=15
+javaCallbackResult=42
+voidCallback=from-native
+registeredEcho=echo!
+throwFromJNI caught=thrown from native
+ | [0,275][1080,2337]

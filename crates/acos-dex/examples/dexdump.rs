@@ -2,15 +2,22 @@
 //!
 //! Usage:
 //! ```text
-//! cargo run -p acos-dex --example dexdump -- <file.dex> [--json] [--mnemonics]
+//! cargo run -p acos-dex --example dexdump -- <file.dex> [--json] [--mnemonics] [--strict] [--bench[=N]]
 //! ```
+//!
+//! `--strict` enforces the SHA-1 signature (default parse matches Android and
+//! accepts a signature mismatch). `--bench` measures parse and verify
+//! throughput across one or more DEX files and reports peak RSS.
 
 use acos_dex::disasm::{disassemble, mnemonic_sequence};
-use acos_dex::DexFile;
+use acos_dex::{DexFile, ParseOptions};
 use std::sync::Arc;
+use std::time::Instant;
 
 fn print_usage() {
-    eprintln!("usage: dexdump <file.dex> [--json] [--mnemonics] [--bench[=N]]");
+    eprintln!(
+        "usage: dexdump <file.dex> [more.dex ...] [--json] [--mnemonics] [--strict] [--bench[=N]]"
+    );
 }
 
 fn class_method_label(dex: &DexFile, method_idx: u32) -> String {
@@ -39,6 +46,102 @@ fn proto_string(dex: &DexFile, proto_idx: u32) -> String {
     }
 }
 
+/// Peak resident set size in kilobytes, read from `/proc/self/status` (VmHWM).
+fn vm_hwm_kb() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("VmHWM:") {
+            return rest
+                .trim()
+                .trim_end_matches(" kB")
+                .trim()
+                .parse::<u64>()
+                .ok();
+        }
+    }
+    None
+}
+
+fn run_bench(paths: &[&str], iters: u64) {
+    let mut total_bytes = 0u64;
+    let mut total_parse_s = 0f64;
+    let mut total_verify_s = 0f64;
+    let mut total_instructions = 0u64;
+    let mut files = 0u64;
+
+    for path in paths {
+        let data = match std::fs::read(path) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("skip {path}: {e}");
+                continue;
+            }
+        };
+        let arc: Arc<[u8]> = Arc::from(data);
+        let mb = arc.len() as f64 / (1024.0 * 1024.0);
+
+        let t = Instant::now();
+        let mut last = None;
+        for _ in 0..iters {
+            last = Some(DexFile::parse(arc.clone()).expect("bench parse"));
+        }
+        let parse_s = t.elapsed().as_secs_f64();
+        let dex = last.expect("at least one iteration");
+
+        let t = Instant::now();
+        let mut report = None;
+        for _ in 0..iters {
+            report = Some(dex.verify().expect("bench verify"));
+        }
+        let verify_s = t.elapsed().as_secs_f64();
+        let report = report.expect("at least one iteration");
+
+        // SHA-1 and full string materialisation are deferred out of parse;
+        // report their one-off costs separately.
+        let t = Instant::now();
+        for _ in 0..iters {
+            std::hint::black_box(acos_dex::hash::sha1(&arc));
+        }
+        let sha1_s = t.elapsed().as_secs_f64();
+        let t = Instant::now();
+        let n_strings = dex.strings().len();
+        let strings_s = t.elapsed().as_secs_f64();
+
+        println!(
+            "{path}: bytes={} classes={} methods={} instructions={} strings={} parse_ms={:.2} verify_ms={:.2} sha1_ms={:.2} strings_ms={:.2} parse_MBps={:.1} verify_MBps={:.1}",
+            arc.len(),
+            report.classes,
+            report.methods_with_code,
+            report.instructions,
+            n_strings,
+            parse_s * 1000.0 / iters as f64,
+            verify_s * 1000.0 / iters as f64,
+            sha1_s * 1000.0 / iters as f64,
+            strings_s * 1000.0,
+            mb * iters as f64 / parse_s,
+            mb * iters as f64 / verify_s,
+        );
+
+        total_bytes += arc.len() as u64;
+        total_parse_s += parse_s;
+        total_verify_s += verify_s;
+        total_instructions += report.instructions;
+        files += 1;
+    }
+
+    let total_work_mb = total_bytes as f64 * iters as f64 / (1024.0 * 1024.0);
+    println!(
+        "total: files={} bytes={} instructions={} iters={} aggregate_parse_MBps={:.1} aggregate_verify_MBps={:.1} peak_rss_kb={}",
+        files,
+        total_bytes,
+        total_instructions,
+        iters,
+        total_work_mb / total_parse_s,
+        total_work_mb / total_verify_s,
+        vm_hwm_kb().unwrap_or(0),
+    );
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
@@ -47,12 +150,14 @@ fn main() {
     }
     let mut json = false;
     let mut mnemonics = false;
+    let mut strict = false;
     let mut bench: Option<u64> = None;
-    let mut path: Option<&str> = None;
+    let mut paths: Vec<&str> = Vec::new();
     for a in &args {
         match a.as_str() {
             "--json" => json = true,
             "--mnemonics" => mnemonics = true,
+            "--strict" => strict = true,
             "--bench" => bench = Some(2000),
             "-h" | "--help" => {
                 print_usage();
@@ -66,15 +171,24 @@ fn main() {
                 print_usage();
                 std::process::exit(2);
             }
-            other => path = Some(other),
+            other => paths.push(other),
         }
     }
-    let path = match path {
-        Some(p) => p,
-        None => {
-            print_usage();
-            std::process::exit(2);
-        }
+    if paths.is_empty() {
+        print_usage();
+        std::process::exit(2);
+    }
+
+    if let Some(iters) = bench {
+        run_bench(&paths, iters);
+        return;
+    }
+
+    let path = paths[0];
+    let options = if strict {
+        ParseOptions::STRICT
+    } else {
+        ParseOptions::default()
     };
 
     let data = match std::fs::read(path) {
@@ -95,28 +209,7 @@ fn main() {
         }
     };
 
-    if let Some(iters) = bench {
-        let arc: Arc<[u8]> = Arc::from(data);
-        let t0 = std::time::Instant::now();
-        for _ in 0..iters {
-            let dex = DexFile::parse(arc.clone()).expect("bench parse");
-            dex.verify().expect("bench verify");
-        }
-        let elapsed = t0.elapsed().as_secs_f64();
-        let total_mb = (arc.len() as f64 * iters as f64) / (1024.0 * 1024.0);
-        println!(
-            "bench: bytes={} iterations={} total_MB={:.3} elapsed_s={:.3} throughput_MBps={:.1} us_per_iter={:.1}",
-            arc.len(),
-            iters,
-            total_mb,
-            elapsed,
-            total_mb / elapsed,
-            elapsed * 1e6 / iters as f64
-        );
-        return;
-    }
-
-    let dex = match DexFile::parse(data) {
+    let dex = match DexFile::parse_with(data, options) {
         Ok(d) => d,
         Err(e) => {
             if json {
@@ -190,13 +283,22 @@ fn emit_mnemonics(dex: &DexFile) {
     }
 }
 
+fn signature_line(valid: bool) -> String {
+    if valid {
+        "valid".to_string()
+    } else {
+        "MISMATCH (accepted, Android does not verify)".to_string()
+    }
+}
+
 fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
     let h = dex.header();
     println!("== header ==");
     println!("magic: dex\\n{:03}", h.version);
     println!("version: {:03}", h.version);
     println!("checksum: {:#010x}", h.checksum);
-    println!("signature: {}", acos_dex::hash::hex(&h.signature));
+    println!("signature: {}", signature_line(dex.signature_valid()));
+    println!("signature_hex: {}", acos_dex::hash::hex(&h.signature));
     println!("file_size: {}", h.file_size);
     println!("header_size: {:#x}", h.header_size);
     println!("endian_tag: {:#010x}", h.endian_tag);
@@ -210,11 +312,12 @@ fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
     println!("field_ids: {} @ {:#x}", h.field_ids_size, h.field_ids_off);
     println!("method_ids: {} @ {:#x}", h.method_ids_size, h.method_ids_off);
     println!("class_defs: {} @ {:#x}", h.class_defs_size, h.class_defs_off);
-    println!(
-        "call_site_ids: {}",
-        dex.call_site_ids().len()
-    );
+    println!("call_site_ids: {}", dex.call_site_ids().len());
     println!("method_handles: {}", dex.method_handles().len());
+    println!(
+        "hiddenapi_class_data: {}",
+        dex.hiddenapi_class_data().is_some()
+    );
 
     println!("\n== classes ==");
     for def in dex.class_defs() {
@@ -224,7 +327,10 @@ fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
             .ok()
             .flatten()
             .unwrap_or("<none>");
-        println!("\nclass {class}  access={:#06x}  super={superclass}", def.access_flags);
+        println!(
+            "\nclass {class}  access={:#06x}  super={superclass}",
+            def.access_flags
+        );
         if let Ok(Some(src)) = dex.source_file(def) {
             println!("  source: {src}");
         }
@@ -242,7 +348,10 @@ fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
         for m in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
             let label = class_method_label(dex, m.method_idx);
             if m.code_off == 0 {
-                println!("  method {label}  access={:#06x}  (abstract/native)", m.access_flags);
+                println!(
+                    "  method {label}  access={:#06x}  (abstract/native)",
+                    m.access_flags
+                );
                 continue;
             }
             match dex.code_item(m.code_off) {
@@ -337,6 +446,7 @@ fn emit_json(dex: &DexFile, report: &acos_dex::VerifyReport) {
             "version": h.version,
             "checksum": h.checksum,
             "signature": acos_dex::hash::hex(&h.signature),
+            "signature_valid": dex.signature_valid(),
             "file_size": h.file_size,
             "endian_tag": h.endian_tag,
             "string_ids_size": h.string_ids_size,
@@ -347,6 +457,7 @@ fn emit_json(dex: &DexFile, report: &acos_dex::VerifyReport) {
             "class_defs_size": h.class_defs_size,
             "call_site_ids_size": dex.call_site_ids().len(),
             "method_handles_size": dex.method_handles().len(),
+            "hiddenapi_class_data": dex.hiddenapi_class_data().is_some(),
         },
         "classes": classes,
         "verify": {

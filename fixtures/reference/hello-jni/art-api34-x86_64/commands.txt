@@ -1,0 +1,11 @@
+$ adb -s emulator-5554 install -r -g fixtures/build/apps/hello-jni.apk
+$ adb -s emulator-5554 shell am force-stop dev.acos.fixtures.hellojni
+$ adb -s emulator-5554 shell logcat -c
+$ adb -s emulator-5554 shell am start -W -n dev.acos.fixtures.hellojni/.MainActivity -> am_start_initial.txt
+$ adb -s emulator-5554 exec-out screencap -p > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/screenshot_initial.png
+$ adb -s emulator-5554 shell uiautomator dump /sdcard/window_dump.xml
+$ adb -s emulator-5554 exec-out cat /sdcard/window_dump.xml > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/ui_initial.xml
+$ adb -s emulator-5554 shell dumpsys window displays > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/display.txt
+$ adb -s emulator-5554 shell dumpsys meminfo dev.acos.fixtures.hellojni > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/meminfo_initial.txt
+$ adb -s emulator-5554 shell logcat -d -v threadtime -s AcosJniFixture:I > /home/Qui/Projects/acos/fixtures/reference/hello-jni/art-api34-x86_64/logcat_initial.txt
+$ adb -s emulator-5554 shell input keyevent KEYCODE_BACK

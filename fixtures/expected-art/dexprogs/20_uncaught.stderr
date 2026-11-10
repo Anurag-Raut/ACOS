@@ -1,0 +1,2 @@
+Exception in thread "main" Main$Fatal: fatal without args
+	at Main.main(Main.java:14)

@@ -1,0 +1,55 @@
+{
+  "fidelity": "art-reference",
+  "label": "emulator under KVM, x86_64, interpreter/JIT mode as-is (default ART)",
+  "note": "Wall time measured ON DEVICE with `date +%s%N` around the dalvikvm64 process; adb overhead excluded.",
+  "device": {
+    "serial": "emulator-5554",
+    "build_type": "userdebug",
+    "abi": "x86_64",
+    "sdk": "34",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.jitthreshold": "",
+    "dalvik.vm.isa.x86_64.variant": "x86_64",
+    "dalvik.vm.dex2oat-filter": ""
+  },
+  "programs": {
+    "01_hello": {
+      "invocation": "dalvikvm64 -cp classes.dex Main",
+      "runs": 20,
+      "wall_ms": [
+        169,
+        69,
+        70,
+        69,
+        72,
+        73,
+        73,
+        71,
+        69,
+        71,
+        71,
+        71,
+        72,
+        73,
+        71,
+        71,
+        70,
+        70,
+        73,
+        70
+      ],
+      "p50_ms": 71,
+      "p95_ms": 73,
+      "min_ms": 69,
+      "max_ms": 169,
+      "exit_codes": [
+        0
+      ]
+    }
+  },
+  "benchmark": {
+    "present": false,
+    "note": "crates/acos-vm/benches/java/ had no built .dex at measurement time"
+  },
+  "generated_by": "tools/oracle/art-perf.sh"
+}

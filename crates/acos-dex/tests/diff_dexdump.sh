@@ -22,11 +22,13 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Build the example once and locate its binary.
-cargo build -q --manifest-path "$CRATE_DIR/Cargo.toml" -p acos-dex --example dexdump
+# Build the example once and locate its binary (unless DEXDUMP_BIN is set).
 WORKSPACE_ROOT="$(cd "$CRATE_DIR/../.." && pwd)"
-DEXDUMP_BIN="$(find "$WORKSPACE_ROOT/target/debug/examples" -maxdepth 1 -name 'dexdump' -type f | head -1)"
-if [ -z "$DEXDUMP_BIN" ]; then
+if [ -z "${DEXDUMP_BIN:-}" ]; then
+    cargo build -q --manifest-path "$CRATE_DIR/Cargo.toml" -p acos-dex --example dexdump
+    DEXDUMP_BIN="$(find "$WORKSPACE_ROOT/target/debug/examples" -maxdepth 1 -name 'dexdump' -type f | head -1)"
+fi
+if [ -z "$DEXDUMP_BIN" ] || [ ! -x "$DEXDUMP_BIN" ]; then
     echo "error: could not locate built dexdump example" >&2
     exit 1
 fi

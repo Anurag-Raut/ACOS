@@ -1,0 +1,14 @@
+{
+  "resolution": "1080x2400",
+  "density_dpi": 420,
+  "locale": "en-US",
+  "font_scale": "1.0 (default; setting unset)",
+  "dark_light": "no",
+  "build_fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+  "api": "34",
+  "abi": "x86_64",
+  "serial": "emulator-5554",
+  "emulator": "qemu-system-x86_64-headless, KVM, 2048 MB RAM, 4 cores, swiftshader_indirect",
+  "raw_wm_size": "Physical size: 1080x2400",
+  "raw_wm_density": "Physical density: 420"
+}

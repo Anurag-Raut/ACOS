@@ -1,0 +1,82 @@
+[
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/decor_content_parent",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,0][1080,2337]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/action_bar_container",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,128][1080,275]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.ViewGroup",
+    "resource_id": "android:id/action_bar",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,128][1080,275]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "",
+    "text": "Hello JNI",
+    "content_desc": "",
+    "bounds": "[42,166][261,237]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.FrameLayout",
+    "resource_id": "android:id/content",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,275][1080,2337]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.widget.TextView",
+    "resource_id": "",
+    "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+    "content_desc": "",
+    "bounds": "[0,275][1080,2337]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/statusBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,0][1080,128]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  },
+  {
+    "class": "android.view.View",
+    "resource_id": "android:id/navigationBarBackground",
+    "text": "",
+    "content_desc": "",
+    "bounds": "[0,2337][1080,2400]",
+    "clickable": false,
+    "focused": false,
+    "enabled": true
+  }
+]

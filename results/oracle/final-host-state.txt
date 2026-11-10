@@ -1,0 +1,17 @@
+=== free -m after final stop ===
+               total        used        free      shared  buff/cache   available
+Mem:           61908       11608       29267         769       22446       50300
+Swap:              0           0           0
+
+=== adb devices after final stop ===
+List of devices attached
+
+
+=== pgrep qemu (expect none) ===
+(no qemu processes)
+
+=== ~/.android/avd ===
+ls: cannot access '/home/Qui/.android/avd': No such file or directory
+
+=== android-container status --short (expect empty) ===
+lines=0

@@ -1,0 +1,18 @@
+static-init Counter START=10
+total.before=10
+instance-init
+ctor2 a=0
+ctor1 a
+instance-init
+ctor2 b=5
+a=a(0) b=b(5)
+a.inc=1 a.inc=2
+b.inc=6
+total.after=15
+p.sum=7 q.sum=1
+p.x=3 p.y=4
+s1==s2=false
+s1.equals(s2)=true
+identity=true false
+class.name=Main$Point
+default.object_prefix=true
