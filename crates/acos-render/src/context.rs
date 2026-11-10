@@ -32,6 +32,14 @@ use crate::surface::{Frame, PngSetting, Surface};
 use crate::text::fonts::{FontCollection, FontRef};
 use crate::text::{FontMetrics, FontMetricsInt, TextEngine, TextStyle};
 
+/// Diagnostic switch: force text through the outline path even when the
+/// FreeType mask path is available. Used to benchmark/compare the two paths in
+/// one build (`ACOS_RENDER_FORCE_TEXT_PATH=1`).
+fn force_text_path() -> bool {
+    static FLAG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FLAG.get_or_init(|| std::env::var_os("ACOS_RENDER_FORCE_TEXT_PATH").is_some())
+}
+
 /// Node properties snapshotted for rendering (avoids holding a borrow on the
 /// node table while rasterising).
 #[derive(Clone)]
@@ -1692,10 +1700,9 @@ impl RenderContext {
             TextAlign::Center => x - advance * 0.5,
             TextAlign::Right => x - advance,
         };
-        let path = self
-            .text_engine_mut()?
-            .text_path(text, origin_x, y, &style);
         let mut text_paint = p.clone();
+        // Text never shaders/filters through the glyph path today; keep that
+        // contract so the FreeType mask path can composite a solid colour.
         text_paint.shader = None;
         text_paint.color_filter = None;
         if text_paint.style == PaintStyle::Fill {
@@ -1719,10 +1726,75 @@ impl RenderContext {
             deco_paint.style = PaintStyle::Fill;
             self.draw_path_with_paint(surface, &decorations, &deco_paint)?;
         }
+
+        // ADR-0019: rasterise glyphs with FreeType and blit the A8 masks.
+        // The direct blit is only exact for a translation-only canvas matrix,
+        // a solid source-over fill and no mask filter; anything else keeps the
+        // outline path (which is also the fallback when FreeType cannot load a
+        // face or produce a grayscale bitmap).
+        let ts = { self.surface_canvas(surface)?.state.matrix.to_affine() };
+        let translate_only = ts
+            .map(|t| t.sx == 1.0 && t.sy == 1.0 && t.kx == 0.0 && t.ky == 0.0)
+            .unwrap_or(false);
+        let use_masks = text_paint.style == PaintStyle::Fill
+            && text_paint.anti_alias
+            && text_paint.mask_filter.is_none()
+            && !text_paint.fake_bold
+            && text_paint.blend_mode == tiny_skia::BlendMode::SourceOver
+            && translate_only
+            && !shaped.runs.is_empty()
+            && !force_text_path();
+        if use_masks {
+            let ts = ts.expect("translate_only implies an affine matrix");
+            // Collect first so a single un-rasterisable glyph falls back to the
+            // outline path without half-drawing the string.
+            let mut placed: Vec<(Arc<crate::text::freetype::GlyphMask>, i32, i32)> = Vec::new();
+            let mut rasterised = true;
+            let mut pen_x = origin_x;
+            'runs: for run in &shaped.runs {
+                for g in &run.glyphs {
+                    match crate::text::freetype::rasterize(&run.font, g.glyph_id, style.size) {
+                        Some(mask) if !mask.is_empty() => {
+                            // Android's unhinted grid places each mask on an
+                            // integer pixel; the accumulated advances stay
+                            // fractional (matching the PoC's `hb_nohint`).
+                            let gx = pen_x + g.x_offset;
+                            let gy = y + g.y_offset - style.skew_x * pen_x;
+                            let dev_x = (ts.tx + gx).round() as i32 + mask.left;
+                            let dev_y = (ts.ty + gy).round() as i32 - mask.top;
+                            placed.push((mask, dev_x, dev_y));
+                        }
+                        Some(_) => {} // e.g. a space: no coverage to draw
+                        None => {
+                            rasterised = false;
+                            break 'runs;
+                        }
+                    }
+                    pen_x += g.advance;
+                }
+            }
+            if rasterised {
+                let argb = text_paint.effective_argb();
+                {
+                    let (state, target) = self.canvas_parts_mut(surface)?;
+                    let clip = state.clip.as_ref();
+                    for (mask, dx, dy) in &placed {
+                        canvas::blit_coverage(target, clip, mask, *dx, *dy, argb);
+                    }
+                }
+                self.raster_ops += 1;
+                if let Some(s) = self.surfaces.get_mut(surface) {
+                    s.raster_ops += 1;
+                }
+                return Ok(());
+            }
+        }
+
         if text_paint.fake_bold {
             text_paint.style = PaintStyle::FillAndStroke;
             text_paint.stroke_width = (style.size / 24.0).max(0.5);
         }
+        let path = self.text_engine_mut()?.text_path(text, origin_x, y, &style);
         self.draw_path_with_paint(surface, &path, &text_paint)
     }
 

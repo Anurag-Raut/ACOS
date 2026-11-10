@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "ACOS offscreen software 2D renderer: a Rust replacement for Android's HWUI/Skia/minikin stack (tiny-skia rasteriser, rustybuzz text shaping)."
+description = "ACOS offscreen software 2D renderer: a Rust replacement for Android's HWUI/Skia/minikin stack (tiny-skia geometry, FreeType glyph masks, rustybuzz shaping)."
 
 [dependencies]
 serde = { workspace = true }
@@ -38,6 +38,13 @@ image-webp = "0.2"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 sha2 = "0.10"
 
+# Glyph rasterisation (ADR-0019). `bundled` statically builds the pinned
+# FreeType 2.13.2 source shipped with freetype-sys (the version AOSP QPR
+# android-14.0.0_r75 uses); it needs no host libfreetype and fails at build
+# time with a clear cc error if the vendored C cannot compile. Remove the
+# `bundled` feature to link the host libfreetype instead (pkg-config).
+freetype-sys = { version = "0.23", features = ["bundled"] }
+
 [dev-dependencies]
 proptest = "1"
 
@@ -48,3 +55,7 @@ path = "examples/render_scene.rs"
 [[example]]
 name = "bench_render"
 path = "examples/bench_render.rs"
+
+[[example]]
+name = "bench_text_draw"
+path = "examples/bench_text_draw.rs"

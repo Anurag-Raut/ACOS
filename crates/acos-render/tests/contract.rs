@@ -303,6 +303,32 @@ fn nine_patch_scales_source_into_destination() {
 }
 
 #[test]
+fn scene_paint_defaults_antialias_like_android() {
+    // A shape without an explicit `antiAlias` flag must be anti-aliased:
+    // android.graphics.Paint() enables ANTI_ALIAS_FLAG (ADR-0019). The scene
+    // schema previously forced `anti_alias: false`, which is what made the
+    // fixture text render with only two grey levels.
+    let json = r##"{
+      "width": 64, "height": 64, "density": 1.0, "background": "#FFFFFFFF",
+      "root": { "name": "r", "bounds": [0,0,64,64],
+        "ops": [ {"op":"circle","cx":32,"cy":32,"r":20,"paint":{"color":"#FF000000"}} ] }
+    }"##;
+    let scene = acos_render::Scene::from_json(json).unwrap();
+    let mut ctx = RenderContext::new();
+    let out = scene.render(&mut ctx, 1).unwrap();
+    let rgba = out.frame.rgba8();
+    let mut unique = std::collections::HashSet::new();
+    for px in rgba.chunks_exact(4) {
+        unique.insert((px[0], px[1], px[2], px[3]));
+    }
+    assert!(
+        unique.len() > 2,
+        "AA off would leave only background and fill; got {} colours",
+        unique.len()
+    );
+}
+
+#[test]
 fn png_encoding_round_trips() {
     let scene = acos_render::Scene::from_json(&scene_json()).unwrap();
     let mut ctx = RenderContext::new();

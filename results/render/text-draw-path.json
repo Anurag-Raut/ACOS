@@ -1,0 +1,20 @@
+{
+  "coldMs": 0.187528,
+  "drawNs": {
+    "max": 75570.0,
+    "mean": 61786.26666666665,
+    "min": 56484.00000000001,
+    "p50": 60352.0,
+    "p95": 72354.0
+  },
+  "hwmKbAfter": 30900,
+  "hwmKbBefore": 3300,
+  "iterations": 60,
+  "mode": "path",
+  "rssKbAfterColdDraw": 30900,
+  "rssKbAfterFonts": 29764,
+  "rssKbAfterWarm": 30900,
+  "rssKbBefore": 3300,
+  "text": "Hello ACOS",
+  "textSizePx": 36.75
+}

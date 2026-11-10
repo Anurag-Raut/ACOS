@@ -402,7 +402,11 @@ fn build_paint(ctx: &mut RenderContext, spec: Option<&PaintSpec>) -> RenderResul
     if let Some(w) = spec.stroke_width {
         ctx.paint_set_stroke_width(h, w)?;
     }
-    ctx.paint_set_anti_alias(h, spec.anti_alias.unwrap_or(false))?;
+    // Android's `Paint()` has ANTI_ALIAS_FLAG set; only override the
+    // `Paint::default()` value when the scene asks explicitly (ADR-0019).
+    if let Some(anti_alias) = spec.anti_alias {
+        ctx.paint_set_anti_alias(h, anti_alias)?;
+    }
     if let Some(size) = spec.text_size {
         ctx.paint_set_text_size(h, size)?;
     }

@@ -3,25 +3,32 @@
 This crate is ACOS's replacement for **HWUI + Skia + SurfaceFlinger + minikin**.
 The Android 14 framework's `android.graphics.*` Java bytecode runs on the Rust VM
 and bottoms out in `native` methods; those natives bind to the handle-based API
-in `RenderContext` implemented here. Rasterisation is `tiny-skia` (a Rust port
-of Skia's software rasteriser), shaping is `rustybuzz` (HarfBuzz port) with
-`ttf-parser` outlines/metrics, and fonts are resolved from the real Android
+in `RenderContext` implemented here. Geometry is `tiny-skia` (a Rust port of
+Skia's software rasteriser); **text glyphs are rasterised by FreeType**
+(`FT_LOAD_NO_HINTING | FT_LOAD_RENDER`, grayscale A8 masks) shaped by
+`rustybuzz` (HarfBuzz port) — see ADR-0019 and `text-coverage.txt` /
+`text-draw-bench.md`; `ttf-parser` still supplies outlines (the path fallback)
+and metrics, and fonts are resolved from the real Android
 `/system/etc/fonts.xml`.
 
 - Source: `crates/acos-render/`
 - Scene/bench assets: `crates/acos-render/tests/scenes/`, `tests/golden/`
 - Artifacts: this directory (`bench.json`, `hello-views.png`,
-  `hello-views.meta.json`, `test-output.txt`, `clippy-output.txt`)
+  `hello-views.meta.json`, `test-output.txt`, `clippy-output.txt`,
+  `text-coverage.txt`, `text-draw-bench.md`, `text-draw-mask.json`,
+  `text-draw-path.json`)
 
 ## Acceptance (real output)
 
 ```
 $ cargo test -p acos-render
-running 63 tests   ... test result: ok. 63 passed; 0 failed
-running 14 tests   ... test result: ok. 14 passed; 0 failed   (tests/contract.rs)
+running 65 tests   ... test result: ok. 65 passed; 0 failed   (lib, incl. FreeType unit test)
+running 15 tests   ... test result: ok. 15 passed; 0 failed   (tests/contract.rs)
 running 2 tests    ... test result: ok. 2 passed; 0 failed    (tests/golden.rs)
 running 1 test     ... test result: ok. 1 passed; 0 failed    (tests/hello_views_metrics.rs)
-=> 80 tests, 0 failed
+running 4 tests    ... test result: ok. 4 passed; 0 failed    (tests/present_damage.rs)
+running 1 test     ... test result: ok. 1 passed; 0 failed    (tests/text_coverage.rs)
+=> 88 tests, 0 failed
 ```
 
 ```
@@ -46,23 +53,54 @@ Advance widths match the device to **0.3%**. The 15.6% height delta is
 font metric; ACOS reports the raw `FontMetrics` that the framework's layout code
 consumes.
 
+### ADR-0019 text rasterisation vs the real device
+
+The title region `[30,300][300,390]` of the reference screenshot
+(`fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png`) is
+scored on recovered coverage (green channel). `tests/text_coverage.rs` asserts
+the ADR-0019 acceptance numbers and rewrites `text-coverage.txt`:
+
+```
+whole-string          mean=0.009968  rmse=0.070489   (raw, integer-shift aligned)
+whole after per-glyph mean=0.004785  rmse=0.041178
+per-glyph (9 glyphs)  mean=0.013022  rmse=0.039008   thresholds: <=0.02 / <=0.05
+```
+
+The per-glyph metric isolates every glyph as a connected component in both the
+reference and the candidate, removes positioning with an independent sub-pixel
+alignment, and pools the residual — i.e. it measures the rasterised shape, not
+advance error. The PoC measured 0.0163 / 0.0415 for this stack; the old
+path-filled outlines (with AA on) were 0.0458 / 0.0822. The whole-string RMSE
+(`0.0705`) is dominated by the accumulated ~1px advance drift of the naive pen,
+which the per-glyph pass removes.
+
+Two defaults had to be fixed for this to hold: `Paint::default().anti_alias`
+(now `true`, matching `android.graphics.Paint()`) **and** the scene schema,
+which explicitly forced `anti_alias = false` when a scene paint omitted the
+flag. Without the second fix the scene stayed aliased and this test fails.
+
+Text-draw microbenchmark (`text-draw-bench.md`): steady-state 9-glyph draw
+**p50 12.61 µs** with FreeType masks vs **60.35 µs** filling outlines (~4.8×
+faster), at +0.7 MB RSS for the bounded glyph-mask cache; the 200-row heavy
+scene dropped from 24.0 ms to 11.9 ms warm.
+
 Rendered hello-views scene: `results/render/hello-views.png` (1080×2400,
 `frameClass=Content`, `unsupportedOps=[]`). Frame metadata:
 
 ```json
 {
   "causeId": 1,
-  "contentHash": "8b30e01cef711e901e9f28886ec2e61c",
+  "contentHash": "cc518ad3a7e4817889696efcf0b03002",
   "density": 2.625,
   "frameClass": "Content",
   "height": 2400,
   "nodeCount": 8,
   "output": "results/render/hello-views.png",
-  "pngBytes": 90022,
-  "renderMs": 5.0096,
+  "pngBytes": 109383,
+  "renderMs": 5.4738,
   "scene": "crates/acos-render/tests/scenes/hello-views.json",
   "seq": 1,
-  "sha256": "06f95b86abf3837c8873cb94cbdfae57e1022707947b071c813ea234d942f056",
+  "sha256": "5a77c0648eac36eea2bbf238845a13a34b4c2adfe7ae6899866cf6a67d01afec",
   "unsupportedOps": [],
   "version": "0.1.0",
   "width": 1080
@@ -78,6 +116,10 @@ cargo run -p acos-render --release --example render_scene -- \
     crates/acos-render/tests/scenes/hello-views.json \
     results/render/hello-views.png --json
 cargo run -p acos-render --release --example bench_render -- results/render/bench.json
+cargo test -p acos-render --test text_coverage            # ADR-0019 coverage vs device
+cargo run -p acos-render --release --example bench_text_draw -- results/render/text-draw-mask.json
+ACOS_RENDER_FORCE_TEXT_PATH=1 cargo run -p acos-render --release \
+    --example bench_text_draw -- results/render/text-draw-path.json
 UPDATE_GOLDEN=1 cargo test -p acos-render --test golden   # regenerate goldens
 ```
 
@@ -88,8 +130,8 @@ Host: **AMD Ryzen 9 9950X (16C/32T), 60 GiB RAM**, Linux; **single-threaded**;
 
 | # | Measurement | p50 | p95 | notes |
 |---|---|---:|---:|---|
-| a | hello-views scene, **cold** first frame (fonts pre-loaded, includes first shaping) | **5.10 ms** | — | 1080×2400 @2.625, 8 nodes, 5 text runs |
-| a | hello-views scene, **warm re-render** (tree touched so raster runs) | **3.97 ms** | 4.15 ms | includes full-surface clear + redraw |
+| a | hello-views scene, **cold** first frame (fonts pre-loaded, includes first shaping + FreeType masks) | **5.32 ms** | — | 1080×2400 @2.625, 8 nodes, 5 text runs |
+| a | hello-views scene, **warm re-render** (tree touched so raster runs) | **4.09 ms** | 4.33 ms | includes full-surface clear + redraw |
 | b | unchanged-tree render (damage-tracked, zero raster work) | **0.00012 ms** (120 ns) | 0.00016 ms | reuses previous pixel buffer, bumps `frame_seq` |
 | b | `capture()` of a presented frame | **0.00003 ms** (30 ns) | 0.00004 ms | `Arc<Pixmap>` clone, no copy |
 | c | PNG `Fast` (no filter) | 12.57 ms | 13.09 ms | **8 439 811 B** (worst: filterless data is huge) |
@@ -100,18 +142,18 @@ Host: **AMD Ryzen 9 9950X (16C/32T), 60 GiB RAM**, Linux; **single-threaded**;
 | c | raw RGBA8 copy (10.37 MB) | 0.123 ms | 0.140 ms | ~84 GB/s memcpy |
 | d | `measureText` 1 000 short strings, **cold** (all cache misses) | 23.65 ms total | — | **42 291 strings/s** |
 | d | same, **warm** (shaping cache) | 0.149 ms total | — | **6 703 581 strings/s**, **hit rate 1.0** |
-| e | heavy scene (200 text rows + 50 rounded cards + 20 bitmaps) cold | 31.39 ms | — | 1080×2400 |
-| e | heavy scene warm | **24.03 ms** | 24.38 ms | text shaping cached; 270 draw ops |
-| f | RSS after context + fonts | 30 256 KB | — | fonts mmap'd **once process-wide**, shared |
-| f | RSS after first hello frame | 52 396 KB | — | +22 MB surface/working buffers |
-| f | RSS after heavy scene + 20 extra surfaces | 87 568 → 94 112 KB | — | 20 surfaces grow RSS by **6 544 KB** (lazy pages) |
+| e | heavy scene (200 text rows + 50 rounded cards + 20 bitmaps) cold | 19.49 ms | — | 1080×2400 |
+| e | heavy scene warm | **11.91 ms** | 12.40 ms | shaping + glyph masks cached; 270 draw ops |
+| f | RSS after context + fonts | 30 288 KB | — | fonts mmap'd **once process-wide**, shared |
+| f | RSS after first hello frame | 53 096 KB | — | +22 MB surface/working buffers |
+| f | RSS after heavy scene + 20 extra surfaces | 103 692 → 110 372 KB | — | 20 surfaces grow RSS by **6 680 KB** (lazy pages) |
 
 ### Legacy comparison (explicitly different methodology)
 
 | Metric | Legacy ACVM (reference) | ACOS render (this run) | Ratio |
 |---|---:|---:|---:|
-| Fresh screenshot latency | ~67 ms | **3.97 ms** warm raster + **7.33 ms** PNG `FastFiltered` ≈ **11.3 ms** end-to-end; **5.10 ms** cold raster | ~5.9×–16.9× faster |
-| Per-session renderer native heap | ~88 MiB | **30.3 MiB** shared context+fonts + first-frame buffers; **327 KB RSS per additional untouched 1080×2400 surface** (lazy; 10.37 MB if fully touched) | baseline shared, per-surface tiny until drawn |
+| Fresh screenshot latency | ~67 ms | **4.09 ms** warm raster + **7.33 ms** PNG `FastFiltered` ≈ **11.4 ms** end-to-end; **5.32 ms** cold raster | ~5.9×–16.4× faster |
+| Per-session renderer native heap | ~88 MiB | **30.3 MiB** shared context+fonts + first-frame buffers; **334 KB RSS per additional untouched 1080×2400 surface** (lazy; 10.37 MB if fully touched) | baseline shared, per-surface tiny until drawn |
 
 The legacy figure is a whole-session native-heap number from a different engine
 and measurement method; it is **not** an apples-to-apples allocator comparison.

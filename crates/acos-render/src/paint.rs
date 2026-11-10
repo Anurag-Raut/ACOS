@@ -262,7 +262,11 @@ impl Default for Paint {
             stroke_miter: 4.0,
             stroke_cap: StrokeCap::Butt,
             stroke_join: StrokeJoin::Miter,
-            anti_alias: false,
+            // `android.graphics.Paint()` calls `this(ANTI_ALIAS_FLAG)`, so
+            // anti-aliasing is ON by default (frameworks/base Paint.java @
+            // android-14.0.0_r1). The previous `false` rendered fixture text
+            // with only two grey levels (ADR-0019 / REPORT.md §3.4).
+            anti_alias: true,
             dither: true,
             filter_bitmap: true,
             blend_mode: tiny_skia::BlendMode::SourceOver,
@@ -344,6 +348,23 @@ mod tests {
         let p = Paint::default();
         assert_eq!(p.effective_argb(), 0xff00_0000);
         assert_eq!(p.style, PaintStyle::Fill);
+    }
+
+    #[test]
+    fn default_paint_antialiases_like_android() {
+        // `new Paint()` == `new Paint(ANTI_ALIAS_FLAG)` on Android S+.
+        let p = Paint::default();
+        assert!(p.anti_alias, "Paint() must default anti_alias to true");
+        // The other Paint() defaults that the rasteriser consumes.
+        assert_eq!(p.color, 0xff00_0000);
+        assert_eq!(p.alpha, 255);
+        assert_eq!(p.stroke_width, 0.0);
+        assert_eq!(p.stroke_miter, 4.0);
+        assert_eq!(p.stroke_cap, StrokeCap::Butt);
+        assert_eq!(p.stroke_join, StrokeJoin::Miter);
+        assert_eq!(p.text_align, TextAlign::Left);
+        assert!(p.filter_bitmap);
+        assert!(!p.subpixel_text);
     }
 
     #[test]

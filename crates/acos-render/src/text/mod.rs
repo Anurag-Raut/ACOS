@@ -1,11 +1,13 @@
-//! Text shaping, measurement and layout: an Android `minikin` replacement
-//! backed by `rustybuzz` (HarfBuzz) + `ttf-parser`.
+//! Text shaping, measurement and layout: an Android `minikin` replacement.
+//! Shaping/metrics use `rustybuzz` (HarfBuzz) + `ttf-parser`; glyph
+//! rasterisation uses FreeType (see [`freetype`], ADR-0019).
 //!
 //! Input is UTF-16 (`Java char`), exactly as the framework passes it to the
 //! `Paint`/`LineBreaker`/`MeasuredText` natives. Output is advances, metrics,
 //! bounds, glyph runs (renderable outlines) and greedy line breaks.
 
 pub mod fonts;
+pub mod freetype;
 pub mod layout;
 
 pub use fonts::{FontCollection, FontRef};

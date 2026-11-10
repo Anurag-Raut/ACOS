@@ -12,7 +12,8 @@ use crate::matrix::Matrix3x3;
 use crate::paint::{BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle};
 use crate::path::Path;
 use tiny_skia::{
-    BlendMode, FillRule, Mask, PathBuilder, Pixmap, PixmapPaint, PixmapRef, Transform,
+    BlendMode, FillRule, Mask, PathBuilder, Pixmap, PixmapPaint, PixmapRef,
+    PremultipliedColorU8, Transform,
 };
 
 /// Android `Canvas.ClipOp`.
@@ -537,6 +538,92 @@ pub(crate) fn emit_shape(
                 paint.color_filter.as_ref(),
                 paint.mask_filter.as_ref(),
             );
+        }
+    }
+}
+
+/// Composite an 8-bit glyph coverage mask with a solid paint colour
+/// (ADR-0019).
+///
+/// `origin_x`/`origin_y` are the integer device coordinates of the mask's
+/// top-left pixel; `argb` is the already alpha-multiplied paint colour
+/// ([`crate::paint::Paint::effective_argb`]). Only source-over compositing is
+/// done here — text with another blend mode, a mask filter or a non-translation
+/// canvas transform keeps using the outline path, which delegates to tiny-skia.
+///
+/// The mask carries FreeType's anti-aliasing, so no additional coverage is
+/// synthesised from the paint's `anti_alias` flag.
+pub(crate) fn blit_coverage(
+    target: &mut Pixmap,
+    clip: Option<&Mask>,
+    mask: &crate::text::freetype::GlyphMask,
+    origin_x: i32,
+    origin_y: i32,
+    argb: u32,
+) {
+    if mask.is_empty() {
+        return;
+    }
+    let ca = (argb >> 24) & 0xff;
+    if ca == 0 {
+        return;
+    }
+    let cr = (argb >> 16) & 0xff;
+    let cg = (argb >> 8) & 0xff;
+    let cb = argb & 0xff;
+
+    let tw = target.width() as i32;
+    let th = target.height() as i32;
+    let x0 = origin_x.max(0);
+    let y0 = origin_y.max(0);
+    let x1 = origin_x.saturating_add(mask.width as i32).min(tw);
+    let y1 = origin_y.saturating_add(mask.rows as i32).min(th);
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+
+    let clip_data = clip.map(|m| m.data());
+    let cw = tw as usize;
+    let mw = mask.width as usize;
+    let pixels = target.pixels_mut();
+    for dy in y0..y1 {
+        let sy = (dy - origin_y) as usize;
+        let src = &mask.coverage[sy * mw..sy * mw + mw];
+        let dst = &mut pixels[dy as usize * cw..(dy as usize + 1) * cw];
+        for dx in x0..x1 {
+            let cov = src[(dx - origin_x) as usize] as u32;
+            if cov == 0 {
+                continue;
+            }
+            let clip_cov = match clip_data {
+                Some(d) => d[dy as usize * cw + dx as usize] as u32,
+                None => 255,
+            };
+            // Combined glyph + clip coverage, then the paint's colour alpha.
+            let cov = (cov * clip_cov + 127) / 255;
+            if cov == 0 {
+                continue;
+            }
+            let sa = (ca * cov + 127) / 255;
+            let sr = (cr * sa + 127) / 255;
+            let sg = (cg * sa + 127) / 255;
+            let sb = (cb * sa + 127) / 255;
+            let p = &mut dst[dx as usize];
+            let inv = 255 - sa;
+            let out_a = sa + (p.alpha() as u32 * inv + 127) / 255;
+            let out_r = sr + (p.red() as u32 * inv + 127) / 255;
+            let out_g = sg + (p.green() as u32 * inv + 127) / 255;
+            let out_b = sb + (p.blue() as u32 * inv + 127) / 255;
+            let a = out_a.min(255);
+            // Results are already premultiplied; clamp defensively so the
+            // `r,g,b <= a` invariant holds under 8-bit rounding.
+            *p = PremultipliedColorU8::from_rgba(
+                out_r.min(a) as u8,
+                out_g.min(a) as u8,
+                out_b.min(a) as u8,
+                a as u8,
+            )
+            .unwrap_or(*p);
         }
     }
 }

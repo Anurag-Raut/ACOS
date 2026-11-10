@@ -11,8 +11,10 @@
 //!
 //! * **Rasterisation** uses [`tiny_skia`], a Rust port of Skia's software
 //!   rasteriser, so AA/blend behaviour stays close to Android's software canvas.
-//! * **Text** uses `rustybuzz` (HarfBuzz port) for shaping and `ttf-parser` for
-//!   outlines/metrics, with real Android font resolution from `fonts.xml`.
+//! * **Text** shapes with `rustybuzz` (HarfBuzz port) and rasterises glyphs with
+//!   **FreeType** (`FT_LOAD_NO_HINTING | FT_LOAD_RENDER`, grayscale A8 masks,
+//!   ADR-0019); `ttf-parser` supplies outlines (the path fallback) and metrics,
+//!   with real Android font resolution from `fonts.xml`.
 //! * **Frames** are offscreen surfaces with a strict freshness contract
 //!   (`frame_seq`, production time, causal id, content hash) so an agent never
 //!   receives a stale frame labelled fresh.
