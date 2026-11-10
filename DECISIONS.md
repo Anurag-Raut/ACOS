@@ -765,3 +765,70 @@ layer; product wiring is still pending).
   session process: seccomp is installed with `TSYNC`, so `confine` must be
   called before the runtime spawns coordinator threads, or the call fails
   closed. The session-lifecycle workstream (W51-A) owns that call site.
+
+## ADR-0023 — Typed-IR slow-op trampoline; IR tier on by default (W73-A)
+
+**Status:** accepted (2026-11-11).
+
+**Context.** The typed-IR tier (`crates/acos-vm/src/exec.rs`, ADR-0013 / §8.9)
+decoded loop bodies into a compact `Op` stream and ran them in a tight `match`
+loop. `new-instance`, `new-array`, `const-string`, and every `invoke-*` lowered
+to `Op::Fallback`: the loop stopped before them and the general interpreter ran
+one instruction. On the allocation/GC programs this left `BenchAlloc` ~2x and
+`BenchGc` ~4.4x behind `java -Xint`, and the tier stayed opt-in
+(`ACOS_EXEC=ir`).
+
+**Decision.** Run the VM-touching slow ops inside the tier through a trampoline
+and make the tier the default execution path, with `ACOS_EXEC=interp` (also
+`off`/`0`) as the escape hatch.
+
+* `Op::NewInstance`, `Op::NewArray`, `Op::ConstString` and `Op::Invoke` are
+  lowered normally. `run_ir` runs a tight loop (`run_ir_loop`) that holds the
+  frame borrow for a whole run of register/field ops; on a slow op it returns,
+  releases the borrow, runs the op with `&mut Vm` through shared helpers
+  (`interp::exec_new_instance` / `exec_new_array` / `exec_const_string` /
+  `exec_invoke_at`), and re-enters the loop.
+* GC safety is preserved by construction: the frame never leaves
+  `vm.threads[t].frames`, so its `regs`/`refs` are visible to the mark phase at
+  every allocation, and the destination is written before any further
+  allocation. `ACOS_GC_STRESS=1` passes 27/27.
+* `invoke` positions the frame at the invoke, pushes the callee, and returns to
+  the scheduler so the callee body runs; the caller's pc is advanced by
+  `pop_frame` as before. A generic `Op::Fallback` (monitor, switch, check-cast,
+  ...) still stops before the instruction and is run by the general path, so
+  catch-table and resolution-error semantics are unchanged.
+
+**Evidence** (release, 5 interleaved rounds, `vmbench` min, host 32 threads,
+`ACOS_CORELIB` default; `results/bench/w73a-ir-before.json` /
+`w73a-ir-after.json`):
+
+| Program | IR off (ms) | IR on (ms) | speedup |
+|---|---:|---:|---:|
+| `BenchArith` | 2081.50 | 960.16 | **2.17x** |
+| `BenchLoop` | 1832.66 | 842.67 | **2.17x** |
+| `BenchArray` | 1353.23 | 710.83 | **1.90x** |
+| `BenchFields` | 445.95 | 116.53 | **3.83x** |
+| `BenchFib` | 485.82 | 499.97 | 0.97x¹ |
+| `BenchStaticCall` | 3243.94 | 3205.41 | 1.01x |
+| `BenchVirtualCall` | 3257.23 | 3225.01 | 1.01x |
+| `BenchVirtual` | 1980.60 | 1860.92 | **1.06x** |
+| `BenchAlloc` | 2465.98 | 1937.78 | **1.27x** |
+| `BenchGc` | 620.35 | 533.78 | **1.16x** |
+| `BenchString` | 122.65 | 123.50 | 0.99x¹ |
+| `BenchCollections` | 157.43 | 133.71 | **1.18x** |
+
+¹ Within the 5-15 % run-to-run spread; `BenchFib` has no backward branch, so
+the tier never applies to it (the row is the `enabled()` check alone).
+
+* `tools/diff-dexprogs.sh --corelib real`: 27/27 normal and `--gc-stress`, IR on
+  and off.
+* `crates/acos-vm/tests/ir_equivalence.rs`, `cargo test -p acos-vm`,
+  `cargo clippy -p acos-vm --lib --tests -- -D warnings`, and
+  `cargo check --workspace --all-targets`: green.
+
+**Consequences.** The tier is the default; the general interpreter remains
+available for debugging and as the reference path. `BenchAlloc` improves 1.27x
+and `BenchGc` 1.16x over IR-off, and the arithmetic/field loops keep their
+1.9-3.8x wins. The remaining `BenchGc`/`BenchAlloc` gap to `java -Xint` is
+allocator/GC-bound, not dispatch-bound; a bump/size-class arena is the next
+lever and is out of scope here.

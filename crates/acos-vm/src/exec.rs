@@ -21,8 +21,8 @@
 //! * Frames keep the same `regs`/`refs` layout, so GC root semantics are
 //!   identical (the tier never introduces a value that the interpreter would
 //!   not also have in a register/ref slot).
-//! * Enabled only when `ACOS_EXEC=ir` (or explicitly via [`set_enabled`]);
-//!   default behaviour is byte-for-byte the previous path.
+//! * Enabled by default; set `ACOS_EXEC=interp` (or `off`/`0`), or call
+//!   [`set_enabled`], to force the general interpreter.
 //!
 //! Lowered programs are immutable and cached process-wide, keyed by the shared
 //! `Arc<MethodCode>` pointer (the cache pins the `Arc`, so the address cannot be
@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicI8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::class::{Class, ClassId, FieldSign, InitState, Insn, MethodCode};
+use crate::error::VmResult;
 use crate::frame::Frame;
 use crate::heap::{ArrayData, Heap, Object, NULL};
 use crate::interp::{apply_sign, div_int, div_long, rem_int, rem_long};
@@ -59,16 +60,17 @@ pub fn set_enabled(v: Option<bool>) {
     MODE.store(mode, Ordering::Relaxed);
 }
 
-/// Whether the IR tier should be used. Defaults to off; on unless
-/// `ACOS_EXEC=ir` is set in the environment.
+/// Whether the IR tier should be used. Defaults to **on**; set
+/// `ACOS_EXEC=interp` (or `off`/`0`) to force the general interpreter.
 pub fn enabled() -> bool {
     match MODE.load(Ordering::Relaxed) {
         1 => true,
         0 => false,
         _ => {
-            let on = std::env::var("ACOS_EXEC")
-                .map(|v| v == "ir")
-                .unwrap_or(false);
+            let on = !matches!(
+                std::env::var("ACOS_EXEC").as_deref(),
+                Ok("interp") | Ok("off") | Ok("0")
+            );
             MODE.store(on as i8, Ordering::Relaxed);
             on
         }
@@ -147,6 +149,12 @@ pub enum Op {
     MoveException { dst: u16 },
     Const { dst: u16, val: i32 },
     ConstWide { dst: u16, val: i64 },
+    /// `const-string`/`const-string/jumbo`: intern string `string_index` into `dst`.
+    ConstString { dst: u16, string_index: u32 },
+    /// `new-instance`: allocate `type_index`, store the handle in `dst`.
+    NewInstance { dst: u16, type_index: u32 },
+    /// `new-array`: allocate `type_index` with length from register `len`.
+    NewArray { dst: u16, type_index: u32, len: u16 },
     ArrayLen { dst: u16, arr: u16 },
     ArrayGet { op: u8, dst: u16, arr: u16, idx: u16 },
     ArrayPut { op: u8, src: u16, arr: u16, idx: u16 },
@@ -170,6 +178,9 @@ pub enum Op {
         b: u16,
         target: u32,
     },
+    /// `invoke-*`: the trampoline pushes the callee frame; the loop then
+    /// returns to the scheduler so the callee body runs.
+    Invoke,
     /// `iget*`/`iget-object`; `slot` indexes the per-VM quickening table.
     InstanceGet { op: u8, dst: u16, obj: u16, slot: u32 },
     /// `iput*`/`iput-object`; `slot` indexes the per-VM quickening table.
@@ -354,6 +365,19 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
         0x0d => Op::MoveException { dst: r0 },
         0x12..=0x15 => Op::Const { dst: r0, val: insn.literal as i32 },
         0x16..=0x19 => Op::ConstWide { dst: r0, val: insn.literal },
+        0x1a..=0x1b => Op::ConstString {
+            dst: r0,
+            string_index: insn.index,
+        },
+        0x22 => Op::NewInstance {
+            dst: r0,
+            type_index: insn.index,
+        },
+        0x23 => Op::NewArray {
+            dst: r0,
+            type_index: insn.index,
+            len: r1,
+        },
         0x21 => Op::ArrayLen { dst: r0, arr: r1 },
         0x44..=0x4a => Op::ArrayGet { op, dst: r0, arr: r1, idx: r2 },
         // `aput-object` needs the ArrayStoreException check: fall back.
@@ -382,6 +406,7 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
             src: r0,
             slot: field_slot(),
         },
+        0x6e..=0x72 | 0x74..=0x78 => Op::Invoke,
         0x28..=0x2a => Op::Goto { target: insn_target_insn(code, pcs, i) },
         0x32..=0x3d => Op::If {
             op,
@@ -852,32 +877,34 @@ fn exec_arith_lit(f: &mut Frame, op: u8, r0: u16, r1: u16, lit: i32) -> bool {
     true
 }
 
-/// Execute the IR program on the current frame until the cap, the end of the
-/// ops, or the next [`Op::Fallback`]. Writes the current DEX pc/instruction
-/// index back onto the frame. Returns the number of DEX instructions executed.
-///
-/// `quick` is the VM's per-slot field quickening table and `classes` the VM's
-/// class table (read-only here, for the static-initialised check). A field op
-/// whose slot is not `Ready` stops the loop before the instruction, so the
-/// general path performs the null check, class initialisation, or resolution
-/// error with the original pc.
-#[inline]
-pub(crate) fn run_ir(
+/// A slow (VM-touching) op reached by the tight IR loop. The loop stops with
+/// the frame positioned at the op and hands it to [`run_ir`], which runs it with
+/// `&mut Vm` (allocation can run GC and `<clinit>`, so the frame borrow must be
+/// released first) and then resumes the tight loop.
+enum SlowOp {
+    NewInstance { dst: u16, type_index: u32 },
+    NewArray { dst: u16, type_index: u32, len: i32 },
+    ConstString { dst: u16, string_index: u32 },
+    Invoke,
+}
+
+/// Tight loop over the frame-local IR ops. Returns `(instructions executed,
+/// final op index, slow op)`; `slow` is `Some` when the loop stopped on an
+/// allocation or string op, and `None` when it stopped on an [`Op::Fallback`],
+/// the cap, or the end of the program. The frame borrow lives for the whole
+/// call, so no VM-touching op runs here; `run_ir` runs those and calls back in.
+#[inline(always)]
+fn run_ir_loop(
     f: &mut Frame,
     heap: &mut Heap,
     prog: &Program,
     cap: u64,
     quick: &[FieldQuick],
     classes: &mut [Class],
-) -> u64 {
+    mut pc: usize,
+) -> (u64, usize, Option<SlowOp>) {
     let ops = prog.ops.as_slice();
-    let op_pc = prog.op_pc.as_slice();
-    let op_insn = prog.op_insn.as_slice();
     let op_len = prog.op_len.as_slice();
-    let mut pc = match prog.insn_to_op.get(f.insn_index) {
-        Some(&i) if i != u32::MAX => i as usize,
-        _ => return 0,
-    };
     let mut count = 0u64;
 
     loop {
@@ -888,6 +915,28 @@ pub(crate) fn run_ir(
         let len = op_len[pc] as u64;
         match op {
             Op::Fallback => break,
+            Op::NewInstance { dst, type_index } => {
+                return (count, pc, Some(SlowOp::NewInstance { dst, type_index }))
+            }
+            Op::NewArray {
+                dst,
+                type_index,
+                len,
+            } => {
+                return (
+                    count,
+                    pc,
+                    Some(SlowOp::NewArray {
+                        dst,
+                        type_index,
+                        len: f.reg(len) as i32,
+                    }),
+                )
+            }
+            Op::ConstString { dst, string_index } => {
+                return (count, pc, Some(SlowOp::ConstString { dst, string_index }))
+            }
+            Op::Invoke => return (count, pc, Some(SlowOp::Invoke)),
             Op::Nop => {}
             Op::Move { kind, dst, src } => {
                 let v = f.reg(src);
@@ -1297,12 +1346,93 @@ pub(crate) fn run_ir(
         count += len;
     }
 
-    let (p, ins) = if pc < ops.len() {
-        (op_pc[pc], op_insn[pc])
+    (count, pc, None)
+}
+
+/// Execute the IR program on the current frame until the cap, the end of the
+/// ops, or the next op the tier cannot run itself. Allocation and string ops
+/// are run through the `interp` helpers with `&mut Vm`: the frame borrow is
+/// released, the op runs (it may allocate, trigger GC, or run `<clinit>`), and
+/// the tight loop resumes. The frame stays on the VM thread stack the whole
+/// time, so registers/refs are visible to the mark phase. A generic
+/// [`Op::Fallback`] still stops before the instruction and the caller runs it
+/// through the general path, so catch-table and resolution-error semantics are
+/// unchanged. Writes the current DEX pc/instruction index back onto the frame
+/// and returns the number of DEX instructions executed.
+#[inline]
+pub(crate) fn run_ir(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    prog: &Program,
+    cap: u64,
+) -> VmResult<(u64, bool)> {
+    let mut pc = match prog.insn_to_op.get(vm.threads[t].frames[fi].insn_index) {
+        Some(&i) if i != u32::MAX => i as usize,
+        _ => return Ok((0, false)),
+    };
+    let mut total = 0u64;
+    loop {
+        let (n, next_pc, slow) = {
+            let Vm {
+                threads,
+                heap,
+                ir_fields,
+                classes,
+                ..
+            } = &mut *vm;
+            let f = &mut threads[t].frames[fi];
+            let quick = ir_fields.as_slice();
+            run_ir_loop(f, heap, prog, cap - total, quick, classes, pc)
+        };
+        total += n;
+        pc = next_pc;
+        let slow = match slow {
+            Some(s) => s,
+            None => break,
+        };
+        // Position the frame at the slow op so an exception it raises (negative
+        // array size, OOM, `<clinit>` failure) is attributed to the original pc.
+        {
+            let f = &mut vm.threads[t].frames[fi];
+            f.pc = prog.op_pc[pc];
+            f.insn_index = prog.op_insn[pc] as usize;
+        }
+        match slow {
+            SlowOp::NewInstance { dst, type_index } => {
+                crate::interp::exec_new_instance(vm, t, fi, dst, type_index)?;
+            }
+            SlowOp::NewArray {
+                dst,
+                type_index,
+                len,
+            } => {
+                crate::interp::exec_new_array(vm, t, fi, dst, type_index, len)?;
+            }
+            SlowOp::ConstString { dst, string_index } => {
+                crate::interp::exec_const_string(vm, t, fi, dst, string_index)?;
+            }
+            SlowOp::Invoke => {
+                // The frame is positioned at the invoke by the common code
+                // above. `invoke` may push a callee frame or block the thread;
+                // either way the caller's pc must stay on the invoke (a
+                // returned callee advances it in `pop_frame`), so return now
+                // with `handled = true` and let the scheduler run the callee.
+                crate::interp::exec_invoke_at(vm, t, fi, prog.op_insn[pc] as usize)?;
+                return Ok((total + prog.op_len[pc] as u64, true));
+            }
+        }
+        total += prog.op_len[pc] as u64;
+        pc += 1;
+    }
+
+    let (p, ins) = if pc < prog.ops.len() {
+        (prog.op_pc[pc], prog.op_insn[pc])
     } else {
         (prog.end_pc, prog.end_insn)
     };
+    let f = &mut vm.threads[t].frames[fi];
     f.pc = p;
     f.insn_index = ins as usize;
-    count
+    Ok((total, false))
 }

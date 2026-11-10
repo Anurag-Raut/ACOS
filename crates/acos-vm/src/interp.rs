@@ -195,13 +195,14 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
             // references, so `fi` and the frame pointer stay valid for the
             // whole run and the frame lookup is paid once.
             if use_ir {
-                // Opt-in typed-IR tier (ACOS_EXEC=ir). The lowered program is
-                // cached on the frame (the process-global cache is only probed
-                // on first execution) and immutable; on any opcode it does not
-                // handle it stops before the instruction and the general path
-                // below runs it, so semantics are unchanged. Only loop bodies
-                // use the tier: straight-line methods get no fused-dispatch win
-                // and would pay the per-segment entry cost.
+                // Typed-IR tier (default on; `ACOS_EXEC=interp` forces the
+                // general interpreter). The lowered program is cached on the
+                // frame (the process-global cache is only probed on first
+                // execution) and immutable; on any opcode it does not handle it
+                // stops before the instruction and the general path below runs
+                // it, so semantics are unchanged. Only loop bodies use the tier:
+                // straight-line methods get no fused-dispatch win and would pay
+                // the per-segment entry cost.
                 if !vm.threads[t].frames[fi].ir_checked {
                     vm.threads[t].frames[fi].ir_checked = true;
                     let method = vm.threads[t].frames[fi].method;
@@ -220,16 +221,32 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                     // is off the per-instruction path. Failures become
                     // `Fallback` and are reported by the general path.
                     crate::exec::quicken(vm, t, fi, &prog);
-                    let Vm {
-                        threads,
-                        heap,
-                        ir_fields,
-                        classes,
-                        ..
-                    } = &mut *vm;
-                    let f = &mut threads[t].frames[fi];
-                    count += crate::exec::run_ir(f, heap, &prog, cap - count, ir_fields, classes);
-                    f.ir = Some(prog);
+                    let depth = vm.threads[t].frames.len();
+                    let handled = match crate::exec::run_ir(vm, t, fi, &prog, cap - count) {
+                        Ok((n, handled)) => {
+                            count += n;
+                            handled
+                        }
+                        Err(VmError::JavaException(h)) => {
+                            // A slow op (allocation/string/invoke) threw: route
+                            // it through the catch-table machinery exactly as
+                            // the general path would.
+                            handle_exception(vm, h)?;
+                            count += 1;
+                            true
+                        }
+                        Err(e) => return Err(e),
+                    };
+                    // Restore the cached program on the (surviving) frame.
+                    if fi < vm.threads[t].frames.len() {
+                        vm.threads[t].frames[fi].ir = Some(prog);
+                    }
+                    // `run_ir` handled the current op (invoke/allocation) or
+                    // pushed a callee frame: hand control back to the
+                    // scheduler loop so it picks up the new top frame.
+                    if handled || vm.threads[t].frames.len() != depth {
+                        continue;
+                    }
                 } else {
                     let Vm {
                         threads,
@@ -659,6 +676,124 @@ fn rel_target(pc: u32, target: i32) -> u32 {
     (pc as i64 + target as i64) as u32
 }
 
+/// Allocate a `new-instance` object. Shared by the general path and the typed-IR
+/// slow-op trampoline; runs `<clinit>` first, exactly as before.
+pub(crate) fn exec_new_instance(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    dst: u16,
+    type_index: u32,
+) -> VmResult<()> {
+    let dex = frame_dex(vm, t, fi);
+    let cid = cached_class(vm, dex, type_index)?;
+    if !matches!(vm.classes[cid as usize].init, crate::class::InitState::Init) {
+        vm.initialize_class(cid)?;
+    }
+    // DEX-defined classes skip the builtin-allocator `HashMap` probe (which
+    // `builtin_instance` would otherwise run for every `new-instance` miss).
+    // `c_string` must still go through `builtin_instance`: it is special-cased
+    // to `Object::String` even in real-corelib mode, where the class is
+    // DEX-loaded and therefore not flagged `is_builtin`.
+    let h = if vm.classes[cid as usize].is_builtin || cid == vm.c_string {
+        vm.builtin_instance(cid)?
+    } else {
+        vm.alloc_instance(cid)?
+    };
+    set_ref(vm, t, fi, dst, h);
+    Ok(())
+}
+
+/// Allocate a `new-array`. Shared by the general path and the typed-IR slow-op
+/// trampoline; `len` is the already-read length register.
+pub(crate) fn exec_new_array(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    dst: u16,
+    type_index: u32,
+    len: i32,
+) -> VmResult<()> {
+    let dex = frame_dex(vm, t, fi);
+    if len < 0 {
+        return Err(vm.throw_new(
+            "Ljava/lang/NegativeArraySizeException;",
+            Some(&len.to_string()),
+        ));
+    }
+    // Fast path: borrow the DEX component descriptor directly and build the
+    // backing store in place. `ArrayObj` already owns a copy of the element
+    // descriptor, so the previous unconditional `to_string()` here was a
+    // throwaway `String` heap allocation on every `new-array`. It is rebuilt
+    // only on the (cold) bounds-check error path, which needs the general
+    // `check_array_len` OOM throw.
+    let built = {
+        let desc = vm.dexs[dex as usize].file.type_descriptor(type_index)?;
+        let elem = desc.strip_prefix('[').unwrap_or(desc);
+        if crate::heap::array_len_fits(elem, len as usize, vm.heap.max_bytes) {
+            Some(crate::vm::simple_array_object(elem, len as usize)?)
+        } else {
+            None
+        }
+    };
+    let obj = match built {
+        Some(obj) => obj,
+        None => {
+            let desc = vm.dexs[dex as usize]
+                .file
+                .type_descriptor(type_index)?
+                .to_string();
+            let elem = desc.strip_prefix('[').unwrap_or(&desc);
+            // Same predicate as `array_len_fits`, so this always errs; it is
+            // the only place the Java `OutOfMemoryError` message is built.
+            return Err(vm.check_array_len(elem, len as usize).unwrap_err());
+        }
+    };
+    let h = vm.alloc(obj)?;
+    set_ref(vm, t, fi, dst, h);
+    Ok(())
+}
+
+/// Invoke the `invoke-*` at `insn_index` on the current frame. Shared by the
+/// general path and the typed-IR slow-op trampoline; the caller must have the
+/// frame positioned at the instruction.
+pub(crate) fn exec_invoke_at(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    insn_index: usize,
+) -> VmResult<()> {
+    let method = vm.threads[t].frames[fi].method;
+    let insn = match &vm.methods[method as usize].imp {
+        MethodImpl::Dex { code: Some(code), .. } => match code.insns.get(insn_index) {
+            Some(i) => *i,
+            None => {
+                return Err(VmError::Internal(format!(
+                    "invoke pc out of range in {}",
+                    vm.methods[method as usize].name
+                )))
+            }
+        },
+        _ => return Err(VmError::Internal("invoke on non-Dex frame".into())),
+    };
+    invoke(vm, t, fi, &insn)
+}
+
+/// Resolve/intern a `const-string`. Shared by the general path and the typed-IR
+/// slow-op trampoline.
+pub(crate) fn exec_const_string(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    dst: u16,
+    string_index: u32,
+) -> VmResult<()> {
+    let dex = frame_dex(vm, t, fi);
+    let h = const_string(vm, dex, string_index)?;
+    set_ref(vm, t, fi, dst, h);
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // The dispatch table
 // ---------------------------------------------------------------------------
@@ -776,9 +911,7 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             advance(vm, t, fi, insn.size);
         }
         0x1a..=0x1b => {
-            let dex = frame_dex(vm, t, fi);
-            let h = const_string(vm, dex, insn.index)?;
-            set_ref(vm, t, fi, r0, h);
+            exec_const_string(vm, t, fi, r0, insn.index)?;
             advance(vm, t, fi, insn.size);
         }
         0x1c => {
@@ -870,65 +1003,12 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             advance(vm, t, fi, insn.size);
         }
         0x22 => {
-            let dex = frame_dex(vm, t, fi);
-            let cid = cached_class(vm, dex, insn.index)?;
-            if !matches!(vm.classes[cid as usize].init, crate::class::InitState::Init) {
-                vm.initialize_class(cid)?;
-            }
-            // DEX-defined classes skip the builtin-allocator `HashMap` probe
-            // (which `builtin_instance` would otherwise run for every
-            // `new-instance` miss). `c_string` must still go through
-            // `builtin_instance`: it is special-cased to `Object::String` even
-            // in real-corelib mode, where the class is DEX-loaded and therefore
-            // not flagged `is_builtin`.
-            let h = if vm.classes[cid as usize].is_builtin || cid == vm.c_string {
-                vm.builtin_instance(cid)?
-            } else {
-                vm.alloc_instance(cid)?
-            };
-            set_ref(vm, t, fi, r0, h);
+            exec_new_instance(vm, t, fi, r0, insn.index)?;
             advance(vm, t, fi, insn.size);
         }
         0x23 => {
             let len = reg(vm, t, fi, r1) as i32;
-            let dex = frame_dex(vm, t, fi);
-            if len < 0 {
-                return Err(vm.throw_new(
-                    "Ljava/lang/NegativeArraySizeException;",
-                    Some(&len.to_string()),
-                ));
-            }
-            // Fast path: borrow the DEX component descriptor directly and build
-            // the backing store in place. `ArrayObj` already owns a copy of the
-            // element descriptor, so the previous unconditional `to_string()`
-            // here was a throwaway `String` heap allocation on every
-            // `new-array`. It is rebuilt only on the (cold) bounds-check error
-            // path, which needs the general `check_array_len` OOM throw.
-            let built = {
-                let desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?;
-                let elem = desc.strip_prefix('[').unwrap_or(desc);
-                if crate::heap::array_len_fits(elem, len as usize, vm.heap.max_bytes) {
-                    Some(crate::vm::simple_array_object(elem, len as usize)?)
-                } else {
-                    None
-                }
-            };
-            let obj = match built {
-                Some(obj) => obj,
-                None => {
-                    let desc = vm.dexs[dex as usize]
-                        .file
-                        .type_descriptor(insn.index)?
-                        .to_string();
-                    let elem = desc.strip_prefix('[').unwrap_or(&desc);
-                    // Same predicate as `array_len_fits`, so this always errs;
-                    // it is the only place the Java `OutOfMemoryError` message
-                    // is built.
-                    return Err(vm.check_array_len(elem, len as usize).unwrap_err());
-                }
-            };
-            let h = vm.alloc(obj)?;
-            set_ref(vm, t, fi, r0, h);
+            exec_new_array(vm, t, fi, r0, insn.index, len)?;
             advance(vm, t, fi, insn.size);
         }
         0x24..=0x25 => {

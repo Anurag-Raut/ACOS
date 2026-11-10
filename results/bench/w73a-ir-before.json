@@ -1,0 +1,81 @@
+{
+  "schema": "acos-w73a-bench/v1",
+  "label": "baseline-before",
+  "commit": "71b2a34d487fd5a35075fa58f9353a4b137cd384",
+  "profile": "release",
+  "repeats": 5,
+  "rows": {
+    "BenchArith": {
+      "off_ms": 1988.95,
+      "ir_ms": 888.25,
+      "java_xint_ms": 513.6576439981582,
+      "ir_speedup": 2.239178159301998
+    },
+    "BenchLoop": {
+      "off_ms": 1701.34,
+      "ir_ms": 834.99,
+      "java_xint_ms": 366.969403999974,
+      "ir_speedup": 2.037557336016
+    },
+    "BenchArray": {
+      "off_ms": 1279.22,
+      "ir_ms": 682.83,
+      "java_xint_ms": 321.0922030011716,
+      "ir_speedup": 1.8734091940893047
+    },
+    "BenchFields": {
+      "off_ms": 448.28,
+      "ir_ms": 113.7,
+      "java_xint_ms": 73.79723800113425,
+      "ir_speedup": 3.9426561125769566
+    },
+    "BenchFib": {
+      "off_ms": 501.54,
+      "ir_ms": 503.92,
+      "java_xint_ms": 338.62495299763395,
+      "ir_speedup": 0.9952770280996984
+    },
+    "BenchStaticCall": {
+      "off_ms": 3222.53,
+      "ir_ms": 3164.16,
+      "java_xint_ms": 2818.7485660018865,
+      "ir_speedup": 1.0184472340210358
+    },
+    "BenchVirtualCall": {
+      "off_ms": 3233.44,
+      "ir_ms": 3215.32,
+      "java_xint_ms": 2822.811931997421,
+      "ir_speedup": 1.0056355199482476
+    },
+    "BenchVirtual": {
+      "off_ms": 1956.31,
+      "ir_ms": 1849.98,
+      "java_xint_ms": 1105.9722809986852,
+      "ir_speedup": 1.057476297041049
+    },
+    "BenchAlloc": {
+      "off_ms": 2432.89,
+      "ir_ms": 2100.82,
+      "java_xint_ms": 1127.784601001622,
+      "ir_speedup": 1.1580668500871087
+    },
+    "BenchGc": {
+      "off_ms": 623.7,
+      "ir_ms": 553.36,
+      "java_xint_ms": 118.84369700055686,
+      "ir_speedup": 1.1271143559346537
+    },
+    "BenchString": {
+      "off_ms": 122.09,
+      "ir_ms": 124.89,
+      "java_xint_ms": 591.7855830011831,
+      "ir_speedup": 0.9775802706381616
+    },
+    "BenchCollections": {
+      "off_ms": 126.2,
+      "ir_ms": 127.54,
+      "java_xint_ms": 76.85236999896006,
+      "ir_speedup": 0.9894934922377293
+    }
+  }
+}
