@@ -2,6 +2,7 @@
 //! the public `run` entry point.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -42,6 +43,8 @@ pub struct ThreadRT {
     pub status: ThreadStatus,
     pub joiners: Vec<usize>,
     pub wake_at: Option<Instant>,
+    /// The object this thread is blocked in `Object.wait` on, if any.
+    pub wait_monitor: Option<Handle>,
 }
 
 impl ThreadRT {
@@ -52,6 +55,7 @@ impl ThreadRT {
             status: ThreadStatus::Runnable,
             joiners: Vec::new(),
             wake_at: None,
+            wait_monitor: None,
         }
     }
 
@@ -70,6 +74,8 @@ pub struct Metrics {
     pub gc_ms: u128,
     pub heap_peak_bytes: usize,
     pub classes_loaded: usize,
+    /// Number of `java.lang.Class` `<clinit>` bodies executed.
+    pub clinit_count: u64,
 }
 
 /// A captured uncaught exception.
@@ -92,11 +98,38 @@ pub struct RunOutcome {
     pub vm_error: Option<VmError>,
 }
 
+/// Which class provider backs the core library.
+///
+/// `Bootstrap` uses the Rust built-in `java.lang`/`java.util` subset (the
+/// original ACOS path). `Real` loads the real Android 14 boot-classpath DEX as
+/// the class provider and binds only true native methods from Rust.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoreLib {
+    Bootstrap,
+    Real,
+}
+
+impl CoreLib {
+    pub fn parse(s: &str) -> Option<CoreLib> {
+        match s {
+            "bootstrap" => Some(CoreLib::Bootstrap),
+            "real" => Some(CoreLib::Real),
+            _ => None,
+        }
+    }
+}
+
 /// Options controlling a VM run.
 #[derive(Clone, Debug)]
 pub struct VmOptions {
     pub heap_max_bytes: usize,
     pub gc_stress: bool,
+    pub corelib: CoreLib,
+    /// Directory holding `BOOTCLASSPATH` and `dex/<jar>/classes*.dex`.
+    /// `None` means the default search path (see [`default_boot_dir`]).
+    pub boot_dir: Option<PathBuf>,
+    /// Record every native invocation for the native-diff harness.
+    pub trace_natives: bool,
 }
 
 impl Default for VmOptions {
@@ -104,8 +137,110 @@ impl Default for VmOptions {
         VmOptions {
             heap_max_bytes: 256 * 1024 * 1024,
             gc_stress: std::env::var_os("ACOS_GC_STRESS").is_some(),
+            corelib: std::env::var("ACOS_CORELIB")
+                .ok()
+                .and_then(|s| CoreLib::parse(&s))
+                .unwrap_or(CoreLib::Bootstrap),
+            boot_dir: std::env::var_os("ACOS_BOOT_DIR").map(PathBuf::from),
+            trace_natives: std::env::var_os("ACOS_TRACE_NATIVES").is_some(),
         }
     }
+}
+
+/// Resolve the boot-classpath cache directory.
+///
+/// Order: explicit path, `$ACOS_BOOT_DIR`, `<repo>/.cache/boot/android-34`
+/// (walking up from the current directory), then `~/.cache/acos/boot/android-34`.
+pub fn default_boot_dir(explicit: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = explicit {
+        return Some(p.to_path_buf());
+    }
+    if let Some(p) = std::env::var_os("ACOS_BOOT_DIR") {
+        return Some(PathBuf::from(p));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = Some(cwd.as_path());
+        while let Some(d) = dir {
+            let cand = d.join(".cache/boot/android-34");
+            if cand.join("BOOTCLASSPATH").is_file() {
+                return Some(cand);
+            }
+            dir = d.parent();
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let cand = PathBuf::from(home).join(".cache/acos/boot/android-34");
+        if cand.join("BOOTCLASSPATH").is_file() {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// A recorded native invocation (native-diff / `--trace-natives`).
+#[derive(Clone, Debug)]
+pub struct NativeHit {
+    pub class: String,
+    pub method: String,
+    pub signature: String,
+    pub count: u64,
+    pub first_order: u64,
+}
+
+/// Per-run native invocation recorder.
+#[derive(Debug, Default)]
+pub struct NativeTrace {
+    pub hits: Vec<NativeHit>,
+    index: HashMap<(String, String, String), usize>,
+    order: u64,
+}
+
+impl NativeTrace {
+    pub fn record(&mut self, class: &str, method: &str, sig: &str) {
+        self.order += 1;
+        let key = (class.to_string(), method.to_string(), sig.to_string());
+        if let Some(&i) = self.index.get(&key) {
+            self.hits[i].count += 1;
+            return;
+        }
+        let i = self.hits.len();
+        self.index.insert(key, i);
+        self.hits.push(NativeHit {
+            class: class.to_string(),
+            method: method.to_string(),
+            signature: sig.to_string(),
+            count: 1,
+            first_order: self.order,
+        });
+    }
+
+    /// Emit `natives_*.tsv`-compatible columns.
+    pub fn to_tsv(&self) -> String {
+        let mut out = String::from("enters\texits\tfirst_order\tcall_site\tclass\tmethod\tsignature\n");
+        for h in &self.hits {
+            out.push_str(&format!(
+                "{}\t{}\t{}\tprogram\t{}\t{}\t{}\n",
+                h.count, h.count, h.first_order, h.class, h.method, h.signature
+            ));
+        }
+        out
+    }
+
+    /// `class\tmethod\tsignature` for success counters, sorted by first order.
+    pub fn classes(&self) -> Vec<(String, String, String)> {
+        self.hits
+            .iter()
+            .map(|h| (h.class.clone(), h.method.clone(), h.signature.clone()))
+            .collect()
+    }
+}
+
+/// Structured boot-classpath failure.
+pub fn boot_classpath_missing(dir: &Path, detail: &str) -> VmError {
+    VmError::BootClasspathMissing(format!(
+        "BOOT_CLASSPATH_MISSING: {detail} (looked in {})\ncreate it with: tools/extract-bootclasspath.sh (or set ACOS_BOOT_DIR)",
+        dir.display()
+    ))
 }
 
 /// A stack-trace entry captured for `printStackTrace`.
@@ -125,7 +260,16 @@ pub struct Vm {
     pub types: Vec<TypeInfo>,
     pub type_by_desc: HashMap<String, TypeId>,
     pub methods: Vec<Method>,
-    pub natives: HashMap<(String, String), crate::class::NativeFn>,
+    /// Keyed by `(class descriptor, method name, signature)` — the native
+    /// registry used to bind true `native` DEX methods.
+    pub natives: HashMap<(String, String, String), crate::class::NativeFn>,
+    pub corelib: CoreLib,
+    /// Boot-classpath DEX images (indices into `dexs`), in BOOTCLASSPATH order.
+    pub boot_dexs: Vec<usize>,
+    /// Boot-classpath jars not parsed at startup; parsed on first class miss.
+    pub boot_lazy_jars: Vec<String>,
+    pub boot_dir: Option<PathBuf>,
+    pub native_trace: Option<NativeTrace>,
     pub strings: HashMap<Vec<u16>, Handle>,
     pub interned: Vec<Handle>,
     pub threads: Vec<ThreadRT>,
@@ -163,6 +307,13 @@ pub struct Vm {
     pub builtin_alloc: HashMap<ClassId, crate::corelib::BuiltinAlloc>,
     pub int_cache: HashMap<i32, Handle>,
     pub monitors: HashMap<Handle, (usize, u32)>,
+    /// ICU converter handles: `jlong` -> canonical charset name (real mode).
+    pub converters: HashMap<u64, String>,
+    pub next_converter: u64,
+    /// Shadow `Object::String` hash cache keyed by handle (real mode).
+    pub string_hashes: HashMap<Handle, i32>,
+    /// The process main `ThreadGroup` (real mode).
+    pub main_thread_group: Handle,
 
     pub metrics: Metrics,
     /// Execution histogram for the 256 opcode bytes (populated when
@@ -185,6 +336,15 @@ impl Vm {
             type_by_desc: HashMap::new(),
             methods: Vec::new(),
             natives: HashMap::new(),
+            corelib: options.corelib,
+            boot_dexs: Vec::new(),
+            boot_lazy_jars: Vec::new(),
+            boot_dir: None,
+            native_trace: if options.trace_natives {
+                Some(NativeTrace::default())
+            } else {
+                None
+            },
             strings: HashMap::new(),
             interned: Vec::new(),
             threads: Vec::new(),
@@ -216,13 +376,186 @@ impl Vm {
             builtin_alloc: HashMap::new(),
             int_cache: HashMap::new(),
             monitors: HashMap::new(),
+            converters: HashMap::new(),
+            next_converter: 1,
+            string_hashes: HashMap::new(),
+            main_thread_group: NULL,
             metrics: Metrics::default(),
             opcode_counts: [0; 256],
             count_opcodes: false,
             max_frames: 2048,
         };
-        crate::corelib::install(&mut vm)?;
+        match options.corelib {
+            CoreLib::Bootstrap => {
+                crate::corelib::install(&mut vm)?;
+            }
+            CoreLib::Real => {
+                crate::natives::install(&mut vm)?;
+                let dir = default_boot_dir(options.boot_dir.as_deref())
+                    .ok_or_else(|| boot_classpath_missing(Path::new(".cache/boot/android-34"), "cache directory not found"))?;
+                vm.load_boot_classpath(&dir)?;
+                vm.crate_fast_classes()?;
+            }
+        }
         Ok(vm)
+    }
+
+    /// Load the real boot-classpath DEX images, in `BOOTCLASSPATH` order.
+    ///
+    /// Only `core-oj`, `core-libart` and `core-icu4j` are loaded for M1; the
+    /// remaining jars are present on disk and parsed lazily when a class needs
+    /// them (the current loader is eager-by-file, so this is explicit).
+    pub fn load_boot_classpath(&mut self, dir: &Path) -> VmResult<()> {
+        let bootlist = dir.join("BOOTCLASSPATH");
+        let text = std::fs::read_to_string(&bootlist).map_err(|_| {
+            boot_classpath_missing(dir, "BOOTCLASSPATH is not readable")
+        })?;
+        let jars: Vec<String> = text
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        let m1_jars = ["core-oj.jar", "core-libart.jar", "core-icu4j.jar"];
+        self.boot_dir = Some(dir.to_path_buf());
+        self.boot_lazy_jars = jars
+            .iter()
+            .filter(|j| !m1_jars.contains(&j.as_str()))
+            .cloned()
+            .collect();
+        for jar in &jars {
+            let base = jar.trim_end_matches(".jar");
+            // M1 loads the core trio eagerly; the rest stay lazy-on-disk.
+            if !m1_jars.contains(&jar.as_str()) {
+                continue;
+            }
+            let dexdir = dir.join("dex").join(base);
+            let mut dexs: Vec<PathBuf> = std::fs::read_dir(&dexdir)
+                .map_err(|_| boot_classpath_missing(&dexdir, "dex directory missing"))?
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with("classes") && n.ends_with(".dex"))
+                        .unwrap_or(false)
+                })
+                .collect();
+            dexs.sort();
+            for p in dexs {
+                let bytes = std::fs::read(&p)
+                    .map_err(|e| VmError::Load(format!("read {}: {e}", p.display())))?;
+                let dex = DexFile::parse(bytes)?;
+                let idx = self.add_dex(dex);
+                self.boot_dexs.push(idx);
+            }
+        }
+        if self.boot_dexs.is_empty() {
+            return Err(boot_classpath_missing(dir, "no boot DEX images loaded"));
+        }
+        Ok(())
+    }
+
+    /// Parse one not-yet-loaded boot jar in search of `desc`.
+    ///
+    /// Called only when the eager providers (core-oj/core-libart/core-icu4j)
+    /// and the app DEX cannot supply a class, so the 20 console programs never
+    /// pay for the remaining 14 boot jars.
+    fn try_load_lazy_boot_jar(&mut self, desc: &str) -> VmResult<bool> {
+        let Some(dir) = self.boot_dir.clone() else {
+            return Ok(false);
+        };
+        while let Some(jar) = self.boot_lazy_jars.first().cloned() {
+            self.boot_lazy_jars.remove(0);
+            let base = jar.trim_end_matches(".jar");
+            let dexdir = dir.join("dex").join(base);
+            let Ok(entries) = std::fs::read_dir(&dexdir) else {
+                continue;
+            };
+            let mut dexs: Vec<PathBuf> = entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with("classes") && n.ends_with(".dex"))
+                        .unwrap_or(false)
+                })
+                .collect();
+            dexs.sort();
+            let mut found = false;
+            for p in dexs {
+                let bytes = std::fs::read(&p)
+                    .map_err(|e| VmError::Load(format!("read {}: {e}", p.display())))?;
+                let dex = DexFile::parse(bytes)?;
+                found |= dex.find_class(desc).is_some();
+                let idx = self.add_dex(dex);
+                self.boot_dexs.push(idx);
+            }
+            if found {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// After loading the real boot classpath, cache the fundamental class ids
+    /// and create the pre-allocated fatal errors.
+    pub fn crate_fast_classes(&mut self) -> VmResult<()> {
+        // Primitive types have no DEX class definition, so the VM provides
+        // their mirror classes (`Class.getPrimitiveClass`/`TYPE`).
+        for desc in ["Z", "B", "C", "S", "I", "J", "F", "D", "V"] {
+            let id = self.def_root_class(
+                desc,
+                acos_dex::access::PUBLIC | acos_dex::access::FINAL | acos_dex::access::ABSTRACT,
+            );
+            self.classes[id as usize].is_primitive = true;
+            self.link_class(id)?;
+        }
+        self.c_object = self.load_class("Ljava/lang/Object;")?;
+        self.c_class = self.load_class("Ljava/lang/Class;")?;
+        self.c_string = self.load_class("Ljava/lang/String;")?;
+        self.c_string_builder = self
+            .load_class("Ljava/lang/StringBuilder;")
+            .or_else(|_| self.load_class("Ljava/lang/StringBuffer;"))?;
+        self.c_throwable = self.load_class("Ljava/lang/Throwable;")?;
+        self.c_thread = self.load_class("Ljava/lang/Thread;")?;
+        self.c_system = self.load_class("Ljava/lang/System;")?;
+        self.c_print_stream = self
+            .load_class("Ljava/io/PrintStream;")
+            .unwrap_or(0);
+        // A process ThreadGroup for the main thread and its children.
+        if let Ok(tg) = self.load_class("Ljava/lang/ThreadGroup;") {
+            let group = self.alloc_instance(tg)?;
+            self.native_roots.push(group);
+            let name_h = self.new_string("main")?;
+            self.set_instance_field_by_name(group, "name", name_h);
+            self.set_instance_field_by_name(group, "maxPriority", 10);
+            let threads = self.alloc(Object::Array(crate::heap::ArrayObj {
+                elem_desc: "Ljava/lang/Thread;".to_string(),
+                data: crate::heap::ArrayData::Ref(Vec::new()),
+            }))?;
+            self.set_instance_field_by_name(group, "threads", threads);
+            self.native_roots.pop();
+            self.main_thread_group = group;
+        }
+        // Pre-allocated fatal errors.
+        self.int_cache.clear();
+        if self.c_throwable != 0 {
+            let oom = self.load_class("Ljava/lang/OutOfMemoryError;").ok();
+            let so = self.load_class("Ljava/lang/StackOverflowError;").ok();
+            if let Some(cid) = oom {
+                self.oom_object = self.alloc_raw_no_gc(Object::Instance {
+                    class: cid,
+                    fields: vec![0; self.classes[cid as usize].instance_slot_count as usize],
+                })?;
+            }
+            if let Some(cid) = so {
+                self.stack_overflow_object = self.alloc_raw_no_gc(Object::Instance {
+                    class: cid,
+                    fields: vec![0; self.classes[cid as usize].instance_slot_count as usize],
+                })?;
+            }
+        }
+        Ok(())
     }
 
     // ---- types -----------------------------------------------------------
@@ -347,10 +680,51 @@ impl Vm {
         access: u32,
         func: crate::class::NativeFn,
     ) -> MethodId {
+        let desc = self.class_desc(class).to_string();
+        self.natives
+            .insert((desc, name.to_string(), sig.to_string()), func);
         let (params, ret) = parse_signature(sig).expect("builtin signature must be valid");
         let params: Vec<TypeId> = params.iter().map(|p| self.intern_type(p)).collect();
         let ret = self.intern_type(&ret);
         self.add_method(class, name, sig, params, ret, access, MethodImpl::Native(func))
+    }
+
+    /// Register a true native implementation for a real DEX class.
+    pub fn register_native(
+        &mut self,
+        class_desc: &str,
+        name: &str,
+        sig: &str,
+        func: crate::class::NativeFn,
+    ) {
+        self.natives
+            .insert((class_desc.to_string(), name.to_string(), sig.to_string()), func);
+    }
+
+    /// Bind a loaded DEX method to its Rust implementation, if one is
+    /// registered under `(class, name, signature)`.
+    ///
+    /// This normally binds true `native` methods. It also lets the VM override
+    /// a handful of bytecode methods whose storage is VM-internal (the real
+    /// `java.lang.String` constructors, which ART itself does not execute as
+    /// bytecode when called from `StringLatin1`/`StringUTF16`).
+    fn bind_dex_native(&mut self, mid: MethodId) {
+        let (class, name, sig) = {
+            let m = &self.methods[mid as usize];
+            (
+                m.class,
+                m.name.clone(),
+                m.sig.clone(),
+            )
+        };
+        let desc = self.class_desc(class).to_string();
+        // Bind any registered implementation. This covers true `native`
+        // methods and the small set of VM-internal overrides (real
+        // `java.lang.String` constructors, `AtomicInteger` storage, ...) whose
+        // DEX bodies are stubs or use unsupported reflection.
+        if let Some(&f) = self.natives.get(&(desc, name, sig)) {
+            self.methods[mid as usize].imp = MethodImpl::Native(f);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -546,6 +920,10 @@ impl Vm {
                     return self.load_dex_class(di as u32, def_idx);
                 }
             }
+            // Last resort: parse the remaining boot jars one at a time.
+            if self.try_load_lazy_boot_jar(desc)? {
+                return self.load_class(desc);
+            }
         }
         Err(VmError::unsupported_api(desc.to_string(), String::new()))
     }
@@ -701,9 +1079,10 @@ impl Vm {
         } else {
             None
         };
-        self.add_dex_method(
+        let mid = self.add_dex_method(
             class, &name, &sig, params, ret_id, access, dex_idx, method_idx, code,
         );
+        self.bind_dex_native(mid);
         Ok(())
     }
 
@@ -877,6 +1256,9 @@ impl Vm {
             if t.object != NULL {
                 stack.push(t.object);
             }
+            if let Some(w) = t.wait_monitor {
+                stack.push(w);
+            }
             for f in &t.frames {
                 for (i, &r) in f.refs.iter().enumerate() {
                     if r {
@@ -901,6 +1283,7 @@ impl Vm {
         stack.push(self.pending_exception);
         stack.push(self.oom_object);
         stack.push(self.stack_overflow_object);
+        stack.push(self.main_thread_group);
 
         while let Some(h) = stack.pop() {
             if h == NULL || h as usize >= n || mark[h as usize] {
@@ -955,6 +1338,7 @@ impl Vm {
         while i < self.heap.objects.len() {
             if self.heap.objects[i].is_some() && !mark[i] {
                 self.heap.free_slot(i as u32);
+                self.string_hashes.remove(&(i as u32));
             }
             i += 1;
         }
@@ -981,6 +1365,14 @@ impl Vm {
         let _ = class_id;
         self.classes[id as usize].class_obj = h;
         Ok(h)
+    }
+
+    /// The represented `ClassId` of a `java.lang.Class` instance.
+    pub fn class_id_of_class_object(&self, h: Handle) -> Option<ClassId> {
+        match self.heap.get(h)? {
+            Object::Class(id) => Some(*id),
+            _ => None,
+        }
     }
 
     pub fn class_of_object(&self, h: Handle) -> Option<ClassId> {
@@ -1241,6 +1633,55 @@ impl Vm {
         Ok(h)
     }
 
+    /// Read an instance field by name, walking the superclass chain.
+    pub fn get_instance_field_by_name(&self, obj: Handle, name: &str) -> Option<u32> {
+        let class = self.class_of_object(obj)?;
+        let mut c = Some(class);
+        while let Some(cur) = c {
+            if let Some(f) = self.classes[cur as usize]
+                .declared_instance_fields
+                .iter()
+                .find(|f| f.name == name)
+            {
+                let off = f.offset as usize;
+                return match self.heap.get(obj) {
+                    Some(Object::Instance { fields, .. }) => fields.get(off).copied(),
+                    Some(Object::String(u)) => match name {
+                        "count" => Some((u.len() as u32) << 1),
+                        "hash" => Some(0),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+            }
+            c = self.classes[cur as usize].super_class;
+        }
+        None
+    }
+
+    /// Write an instance field by name (superclass chain included).
+    pub fn set_instance_field_by_name(&mut self, obj: Handle, name: &str, value: u32) {
+        if let Some(class) = self.class_of_object(obj) {
+            let mut c = Some(class);
+            while let Some(cur) = c {
+                let found = self.classes[cur as usize]
+                    .declared_instance_fields
+                    .iter()
+                    .find(|f| f.name == name)
+                    .map(|f| f.offset as usize);
+                if let Some(off) = found {
+                    if let Some(Object::Instance { fields, .. }) = self.heap.get_mut(obj) {
+                        if off < fields.len() {
+                            fields[off] = value;
+                        }
+                    }
+                    return;
+                }
+                c = self.classes[cur as usize].super_class;
+            }
+        }
+    }
+
     fn set_field_by_name(
         &mut self,
         class: ClassId,
@@ -1439,6 +1880,20 @@ impl Vm {
         let name_h = self.intern_str(name)?;
         let id = self.next_thread_id;
         self.next_thread_id += 1;
+        if self.corelib == CoreLib::Real {
+            let obj = self.alloc_instance(self.c_thread)?;
+            self.set_instance_field_by_name(obj, "name", name_h);
+            self.set_instance_field_by_name(obj, "priority", 5);
+            self.set_instance_field_by_name(obj, "daemon", 0);
+            self.set_instance_field_by_name(obj, "tid", id);
+            if self.main_thread_group != NULL {
+                self.set_instance_field_by_name(obj, "group", self.main_thread_group);
+            }
+            if target != NULL {
+                self.set_instance_field_by_name(obj, "target", target);
+            }
+            return Ok(obj);
+        }
         let obj = self.alloc(Object::Builtin {
             class: self.c_thread,
             data: BuiltinData::Thread(crate::heap::ThreadData {
@@ -1461,7 +1916,13 @@ impl Vm {
             gc_ms: self.heap.gc_nanos as u128 / 1_000_000,
             heap_peak_bytes: self.heap.peak_bytes,
             classes_loaded: self.classes.len(),
+            clinit_count: self.metrics.clinit_count,
         }
+    }
+
+    /// Record that a class initialiser is about to run.
+    pub fn note_clinit(&mut self) {
+        self.metrics.clinit_count += 1;
     }
 }
 
@@ -1596,6 +2057,7 @@ mod tests {
         let mut vm = Vm::new(VmOptions {
             heap_max_bytes: 64 * 1024,
             gc_stress: false,
+            ..VmOptions::default()
         })
         .unwrap();
         let mut result = None;

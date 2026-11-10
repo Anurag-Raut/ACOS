@@ -7,26 +7,43 @@
 # code against fixtures/expected/dexprogs/<name>.{stdout,exit} (jvm-reference).
 #
 # Usage:
-#   tools/diff-dexprogs.sh [--gc-stress]
+#   tools/diff-dexprogs.sh [--gc-stress] [--corelib bootstrap|real] [--expected jvm|art]
 #
 # --gc-stress sets ACOS_GC_STRESS=1 (a collection before every allocation,
 # proving GC roots are exact).
+# --corelib selects the class provider. With --corelib real the authoritative
+# expectation is fixtures/expected-art/dexprogs (real ART); bootstrap compares
+# against the JVM reference. --expected overrides that choice.
 #
-# Writes results/vm/dexprogs-<mode>.json and exits nonzero unless every program
-# passes.
+# Writes results/vm/dexprogs-<corelib>-<mode>.json and exits nonzero unless
+# every program passes.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="normal"
 STRESS=0
-if [ "${1:-}" = "--gc-stress" ]; then
-    MODE="gc-stress"
-    STRESS=1
+CORELIB="bootstrap"
+EXPECTED_KIND=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --gc-stress) MODE="gc-stress"; STRESS=1 ;;
+        --corelib) CORELIB="$2"; shift ;;
+        --expected) EXPECTED_KIND="$2"; shift ;;
+        *) echo "diff-dexprogs: unknown argument: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+if [ -z "$EXPECTED_KIND" ]; then
+    if [ "$CORELIB" = "real" ]; then EXPECTED_KIND="art"; else EXPECTED_KIND="jvm"; fi
 fi
+case "$EXPECTED_KIND" in
+    jvm) EXPECTED="$ROOT/fixtures/expected/dexprogs" ;;
+    art) EXPECTED="$ROOT/fixtures/expected-art/dexprogs" ;;
+    *) echo "diff-dexprogs: unknown --expected $EXPECTED_KIND" >&2; exit 2 ;;
+esac
 
 BIN="$ROOT/target/release/acos"
 FIX="$ROOT/fixtures/build/dexprogs"
-EXPECTED="$ROOT/fixtures/expected/dexprogs"
 OUTDIR="$ROOT/results/vm"
 mkdir -p "$OUTDIR"
 
@@ -42,7 +59,7 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "diff-dexprogs: mode=$MODE"
+echo "diff-dexprogs: mode=$MODE corelib=$CORELIB expected=$EXPECTED_KIND"
 printf '%-22s %-12s %s\n' "PROGRAM" "STATUS" "DETAIL"
 printf '%-22s %-12s %s\n' "----------------------" "------------" "------------------------------"
 
@@ -51,19 +68,24 @@ for dir in "$FIX"/*/; do
     exp_stdout="$EXPECTED/$name.stdout"
     exp_exit="$(cat "$EXPECTED/$name.exit" 2>/dev/null || echo 0)"
     if [ "$STRESS" = "1" ]; then
-        ACOS_GC_STRESS=1 "$BIN" run-dex "$dir/classes.dex" --main Main --json \
-            >"$TMP/$name.json" 2>"$TMP/$name.err"
+        ACOS_GC_STRESS=1 "$BIN" run-dex "$dir/classes.dex" --main Main \
+            --corelib "$CORELIB" --json >"$TMP/$name.json" 2>"$TMP/$name.err"
     else
-        "$BIN" run-dex "$dir/classes.dex" --main Main --json \
-            >"$TMP/$name.json" 2>"$TMP/$name.err"
+        "$BIN" run-dex "$dir/classes.dex" --main Main \
+            --corelib "$CORELIB" --json >"$TMP/$name.json" 2>"$TMP/$name.err"
     fi
-    printf '%s\t%s\t%s\n' "$name" "$exp_stdout" "$exp_exit" >>"$TMP/index.tsv"
+    exp_stderr="$EXPECTED/$name.stderr"
+    [ -f "$exp_stderr" ] || exp_stderr=""
+    printf '%s\t%s\t%s\t%s\n' "$name" "$exp_stdout" "$exp_exit" \
+        "$exp_stderr" >>"$TMP/index.tsv"
 done
 
-python3 - "$TMP" "$OUTDIR" "$MODE" "$STRESS" <<'PY'
+python3 - "$TMP" "$OUTDIR" "$MODE" "$STRESS" "$CORELIB" <<'PY'
 import json, os, sys
 
-tmp, outdir, mode, stress = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+tmp, outdir, mode, stress, corelib = (
+    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1", sys.argv[5]
+)
 
 def first_diff(got, want):
     gl, wl = got.splitlines(), want.splitlines()
@@ -77,7 +99,7 @@ def first_diff(got, want):
 records = []
 counts = {"pass": 0, "fail": 0, "unsupported": 0}
 for line in open(os.path.join(tmp, "index.tsv")):
-    name, exp_stdout_path, exp_exit_s = line.rstrip("\n").split("\t")
+    name, exp_stdout_path, exp_exit_s, exp_stderr_path = line.rstrip("\n").split("\t")
     exp_exit = int(exp_exit_s)
     want = open(exp_stdout_path, "r", encoding="utf-8", errors="replace").read()
     try:
@@ -103,7 +125,19 @@ for line in open(os.path.join(tmp, "index.tsv")):
     result = env.get("result") or {}
     got = result.get("stdout", "")
     exit_code = result.get("exit_code")
-    if got == want and exit_code == exp_exit:
+    # For uncaught-exception programs the oracle only pins the first stderr
+    # line (the stack-frame text is VM-specific).
+    stderr_ok = True
+    stderr_detail = ""
+    if exp_stderr_path:
+        want_err = open(exp_stderr_path, "r", encoding="utf-8",
+                        errors="replace").read().splitlines()
+        got_err = result.get("stderr", "").splitlines()
+        if want_err and (not got_err or got_err[0] != want_err[0]):
+            stderr_ok = False
+            stderr_detail = (f"stderr line 1: got {got_err[0]!r}"
+                             if got_err else "stderr empty")
+    if got == want and exit_code == exp_exit and stderr_ok:
         counts["pass"] += 1
         records.append({"program": name, "status": "pass",
                         "exit_code": exit_code, "metrics": env.get("metrics")})
@@ -112,6 +146,8 @@ for line in open(os.path.join(tmp, "index.tsv")):
         counts["fail"] += 1
         if exit_code != exp_exit:
             detail = f"exit {exit_code} (want {exp_exit})"
+        elif not stderr_ok:
+            detail = stderr_detail
         else:
             detail = first_diff(got, want)
         uncaught = result.get("uncaught_exception")
@@ -124,10 +160,10 @@ for line in open(os.path.join(tmp, "index.tsv")):
         print(f"{name:<22} {'FAIL':<12} {detail[:90]}")
 
 total = len(records)
-report = {"mode": mode, "gc_stress": stress, "total": total,
+report = {"mode": mode, "corelib": corelib, "gc_stress": stress, "total": total,
           "pass": counts["pass"], "fail": counts["fail"],
           "unsupported": counts["unsupported"], "programs": records}
-path = os.path.join(outdir, f"dexprogs-{mode}.json")
+path = os.path.join(outdir, f"dexprogs-{corelib}-{mode}.json")
 with open(path, "w") as f:
     json.dump(report, f, indent=2)
 print()

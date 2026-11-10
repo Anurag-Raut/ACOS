@@ -1,0 +1,182 @@
+[
+  {
+    "program": "01_hello",
+    "classes_loaded": 196,
+    "clinit_count": 46,
+    "wall_ms": 24,
+    "run_ms": 7,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "02_int_arith",
+    "classes_loaded": 197,
+    "clinit_count": 47,
+    "wall_ms": 25,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "03_long_arith",
+    "classes_loaded": 199,
+    "clinit_count": 49,
+    "wall_ms": 26,
+    "run_ms": 9,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "04_float_double",
+    "classes_loaded": 207,
+    "clinit_count": 52,
+    "wall_ms": 27,
+    "run_ms": 11,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "05_branches_loops",
+    "classes_loaded": 197,
+    "clinit_count": 47,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "06_switch",
+    "classes_loaded": 197,
+    "clinit_count": 47,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "07_static_methods_recursion",
+    "classes_loaded": 198,
+    "clinit_count": 48,
+    "wall_ms": 27,
+    "run_ms": 10,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "08_arrays",
+    "classes_loaded": 213,
+    "clinit_count": 52,
+    "wall_ms": 26,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "09_strings",
+    "classes_loaded": 213,
+    "clinit_count": 54,
+    "wall_ms": 28,
+    "run_ms": 12,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "10_objects_fields",
+    "classes_loaded": 199,
+    "clinit_count": 48,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "11_inheritance_virtual",
+    "classes_loaded": 212,
+    "clinit_count": 52,
+    "wall_ms": 28,
+    "run_ms": 11,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "12_interfaces",
+    "classes_loaded": 203,
+    "clinit_count": 47,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "13_exceptions",
+    "classes_loaded": 216,
+    "clinit_count": 49,
+    "wall_ms": 25,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "14_instanceof_casts",
+    "classes_loaded": 206,
+    "clinit_count": 48,
+    "wall_ms": 24,
+    "run_ms": 9,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "15_inner_lambda",
+    "classes_loaded": 221,
+    "clinit_count": 48,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "16_enums",
+    "classes_loaded": 210,
+    "clinit_count": 51,
+    "wall_ms": 24,
+    "run_ms": 8,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "17_generics_collections",
+    "classes_loaded": 216,
+    "clinit_count": 51,
+    "wall_ms": 26,
+    "run_ms": 10,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "18_string_format_misc",
+    "classes_loaded": 210,
+    "clinit_count": 54,
+    "wall_ms": 28,
+    "run_ms": 12,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "19_threads_sync",
+    "classes_loaded": 207,
+    "clinit_count": 49,
+    "wall_ms": 77,
+    "run_ms": 61,
+    "natives_registered": 439,
+    "ok": true
+  },
+  {
+    "program": "20_uncaught",
+    "classes_loaded": 205,
+    "clinit_count": 47,
+    "wall_ms": 22,
+    "run_ms": 7,
+    "natives_registered": 439,
+    "ok": true
+  }
+]

@@ -1,0 +1,159 @@
+
+== native-diff 01_hello (real) ==
+ACOS natives: 46   ART natives: 21   both: 16   acos-only: 30   art-only: 5
+
+ART natives ACOS never invoked (5):
+  - dalvik.system.VMRuntime->stopHeapTaskProcessor()V  art_enters=1
+  - java.lang.Object->wait(JI)V  art_enters=7
+  - java.lang.System->currentTimeMillis()J  art_enters=4
+  - java.lang.Thread->interrupt0()V  art_enters=3
+  - java.lang.Throwable->nativeFillInStackTrace()Ljava/lang/Object;  art_enters=3
+
+ACOS natives ART never invoked (30):
+  + dalvik.system.VMRuntime->bootClassPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->classPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->properties()[Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->vmVersion()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMStack->getStackClass2()Ljava/lang/Class;  acos_enters=4
+  + java.lang.Class->getDeclaredField(Ljava/lang/String;)Ljava/lang/reflect/Field;  acos_enters=1
+  + java.lang.Class->getNameNative()Ljava/lang/String;  acos_enters=2
+  + java.lang.Class->getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;  acos_enters=3
+  + java.lang.Double->doubleToRawLongBits(D)J  acos_enters=1
+  + java.lang.Double->longBitsToDouble(J)D  acos_enters=2
+  + java.lang.Float->floatToRawIntBits(F)I  acos_enters=1
+  + java.lang.String->intern()Ljava/lang/String;  acos_enters=2
+  + java.lang.String->isEmpty()Z  acos_enters=3
+  + java.lang.String->lastIndexOf(I)I  acos_enters=2
+  + java.lang.String->substring(II)Ljava/lang/String;  acos_enters=2
+  + java.lang.System->specialProperties()[Ljava/lang/String;  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger-><clinit>()V  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->addAndGet(I)I  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->getAndAdd(I)I  acos_enters=2
+  + jdk.internal.misc.Unsafe->addressSize()I  acos_enters=1
+  + jdk.internal.misc.Unsafe->arrayBaseOffset(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->arrayIndexScale(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->objectFieldOffset(Ljava/lang/reflect/Field;)J  acos_enters=1
+  + libcore.icu.ICU->getCldrVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getIcuVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getUnicodeVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getenv(Ljava/lang/String;)Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getpwuid(I)Landroid/system/StructPasswd;  acos_enters=1
+  + libcore.io.Linux->getuid()I  acos_enters=1
+  + libcore.io.Linux->uname()Landroid/system/StructUtsname;  acos_enters=1
+
+Invocation-count drift (5):
+  ~ java.lang.Object->notifyAll()V  acos=2 art=1
+  ~ java.lang.String->charAt(I)C  acos=2265 art=1969
+  ~ java.lang.System->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V  acos=19 art=25
+  ~ java.lang.Thread->currentThread()Ljava/lang/Thread;  acos=18 art=21
+  ~ java.lang.ref.Reference->refersTo0(Ljava/lang/Object;)Z  acos=16 art=17
+
+== native-diff 17_generics_collections (real) ==
+ACOS natives: 50   ART natives: 25   both: 18   acos-only: 32   art-only: 7
+
+ART natives ACOS never invoked (7):
+  - dalvik.system.VMRuntime->stopHeapTaskProcessor()V  art_enters=1
+  - java.lang.Object->wait(JI)V  art_enters=7
+  - java.lang.StringFactory->newStringFromBytes([BIII)Ljava/lang/String;  art_enters=32
+  - java.lang.StringFactory->newStringFromUtf8Bytes([BII)Ljava/lang/String;  art_enters=9
+  - java.lang.System->currentTimeMillis()J  art_enters=4
+  - java.lang.Thread->interrupt0()V  art_enters=3
+  - java.lang.Throwable->nativeFillInStackTrace()Ljava/lang/Object;  art_enters=3
+
+ACOS natives ART never invoked (32):
+  + dalvik.system.VMRuntime->bootClassPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->classPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->properties()[Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->vmVersion()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMStack->getStackClass2()Ljava/lang/Class;  acos_enters=4
+  + java.lang.Class->getDeclaredField(Ljava/lang/String;)Ljava/lang/reflect/Field;  acos_enters=1
+  + java.lang.Class->getNameNative()Ljava/lang/String;  acos_enters=2
+  + java.lang.Class->getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;  acos_enters=3
+  + java.lang.Double->doubleToRawLongBits(D)J  acos_enters=1
+  + java.lang.Double->longBitsToDouble(J)D  acos_enters=2
+  + java.lang.Float->floatToRawIntBits(F)I  acos_enters=1
+  + java.lang.String-><init>([B)V  acos_enters=9
+  + java.lang.String-><init>([BIII)V  acos_enters=32
+  + java.lang.String->intern()Ljava/lang/String;  acos_enters=2
+  + java.lang.String->isEmpty()Z  acos_enters=3
+  + java.lang.String->lastIndexOf(I)I  acos_enters=2
+  + java.lang.String->substring(II)Ljava/lang/String;  acos_enters=2
+  + java.lang.System->specialProperties()[Ljava/lang/String;  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger-><clinit>()V  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->addAndGet(I)I  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->getAndAdd(I)I  acos_enters=2
+  + jdk.internal.misc.Unsafe->addressSize()I  acos_enters=1
+  + jdk.internal.misc.Unsafe->arrayBaseOffset(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->arrayIndexScale(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->objectFieldOffset(Ljava/lang/reflect/Field;)J  acos_enters=1
+  + libcore.icu.ICU->getCldrVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getIcuVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getUnicodeVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getenv(Ljava/lang/String;)Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getpwuid(I)Landroid/system/StructPasswd;  acos_enters=1
+  + libcore.io.Linux->getuid()I  acos_enters=1
+  + libcore.io.Linux->uname()Landroid/system/StructUtsname;  acos_enters=1
+
+Invocation-count drift (5):
+  ~ java.lang.Object->notifyAll()V  acos=2 art=1
+  ~ java.lang.String->charAt(I)C  acos=2267 art=2059
+  ~ java.lang.System->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V  acos=49 art=55
+  ~ java.lang.Thread->currentThread()Ljava/lang/Thread;  acos=25 art=28
+  ~ java.lang.ref.Reference->refersTo0(Ljava/lang/Object;)Z  acos=23 art=24
+
+== native-diff 19_threads_sync (real) ==
+ACOS natives: 55   ART natives: 28   both: 21   acos-only: 34   art-only: 7
+
+ART natives ACOS never invoked (7):
+  - dalvik.system.VMRuntime->stopHeapTaskProcessor()V  art_enters=1
+  - java.lang.StringFactory->newStringFromBytes([BIII)Ljava/lang/String;  art_enters=15
+  - java.lang.System->nanoTime()J  art_enters=2
+  - java.lang.Thread->interrupt0()V  art_enters=3
+  - java.lang.Thread->sleep(Ljava/lang/Object;JI)V  art_enters=1
+  - java.lang.Throwable->nativeFillInStackTrace()Ljava/lang/Object;  art_enters=3
+  - java.lang.reflect.Array->createObjectArray(Ljava/lang/Class;I)Ljava/lang/Object;  art_enters=1
+
+ACOS natives ART never invoked (34):
+  + dalvik.system.VMRuntime->bootClassPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->classPath()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->properties()[Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMRuntime->vmVersion()Ljava/lang/String;  acos_enters=1
+  + dalvik.system.VMStack->getStackClass2()Ljava/lang/Class;  acos_enters=4
+  + java.lang.Class->getDeclaredField(Ljava/lang/String;)Ljava/lang/reflect/Field;  acos_enters=1
+  + java.lang.Class->getNameNative()Ljava/lang/String;  acos_enters=2
+  + java.lang.Class->getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;  acos_enters=4
+  + java.lang.Double->doubleToRawLongBits(D)J  acos_enters=1
+  + java.lang.Double->longBitsToDouble(J)D  acos_enters=2
+  + java.lang.Float->floatToRawIntBits(F)I  acos_enters=1
+  + java.lang.String-><init>([BIII)V  acos_enters=15
+  + java.lang.String->intern()Ljava/lang/String;  acos_enters=2
+  + java.lang.String->isEmpty()Z  acos_enters=3
+  + java.lang.String->lastIndexOf(I)I  acos_enters=2
+  + java.lang.String->substring(II)Ljava/lang/String;  acos_enters=2
+  + java.lang.System->specialProperties()[Ljava/lang/String;  acos_enters=1
+  + java.lang.Thread->sleep(JI)V  acos_enters=1
+  + java.lang.ThreadGroup->add(Ljava/lang/Thread;)V  acos_enters=6
+  + java.lang.ThreadGroup->addUnstarted()V  acos_enters=6
+  + java.util.concurrent.atomic.AtomicInteger-><clinit>()V  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->addAndGet(I)I  acos_enters=1
+  + java.util.concurrent.atomic.AtomicInteger->getAndAdd(I)I  acos_enters=2
+  + jdk.internal.misc.Unsafe->addressSize()I  acos_enters=1
+  + jdk.internal.misc.Unsafe->arrayBaseOffset(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->arrayIndexScale(Ljava/lang/Class;)I  acos_enters=9
+  + jdk.internal.misc.Unsafe->objectFieldOffset(Ljava/lang/reflect/Field;)J  acos_enters=1
+  + libcore.icu.ICU->getCldrVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getIcuVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.icu.ICU->getUnicodeVersion()Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getenv(Ljava/lang/String;)Ljava/lang/String;  acos_enters=1
+  + libcore.io.Linux->getpwuid(I)Landroid/system/StructPasswd;  acos_enters=1
+  + libcore.io.Linux->getuid()I  acos_enters=1
+  + libcore.io.Linux->uname()Landroid/system/StructUtsname;  acos_enters=1
+
+Invocation-count drift (7):
+  ~ java.lang.Object->notifyAll()V  acos=2 art=1
+  ~ java.lang.Object->wait(JI)V  acos=3 art=12
+  ~ java.lang.String->charAt(I)C  acos=2265 art=1969
+  ~ java.lang.System->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V  acos=14 art=27
+  ~ java.lang.System->currentTimeMillis()J  acos=6 art=10
+  ~ java.lang.Thread->currentThread()Ljava/lang/Thread;  acos=18 art=22
+  ~ java.lang.ref.Reference->refersTo0(Ljava/lang/Object;)Z  acos=9 art=10

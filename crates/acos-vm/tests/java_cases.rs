@@ -79,6 +79,7 @@ fn run(dex: &Path, main: &str, heap_max: usize) -> (i32, String, Option<VmError>
     let mut vm = Vm::new(VmOptions {
         heap_max_bytes: heap_max,
         gc_stress: false,
+        ..VmOptions::default()
     })
     .unwrap();
     vm.add_dex(DexFile::parse(std::fs::read(dex).unwrap()).unwrap());

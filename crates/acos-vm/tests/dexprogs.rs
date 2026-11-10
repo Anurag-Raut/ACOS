@@ -34,6 +34,7 @@ fn run_one(name: &str, gc_stress: bool, count_opcodes: bool) -> (Vm, i32, String
     let options = VmOptions {
         heap_max_bytes: 256 * 1024 * 1024,
         gc_stress,
+        ..VmOptions::default()
     };
     let mut vm = Vm::new(options).expect("vm new");
     vm.count_opcodes = count_opcodes;

@@ -47,6 +47,23 @@ struct RunDexArgs {
     /// A program argument passed to `main(String[])` (repeatable).
     #[arg(long = "arg")]
     args: Vec<String>,
+
+    /// Core-library provider: `bootstrap` (Rust built-ins) or `real`
+    /// (the real Android 14 boot-classpath DEX).
+    #[arg(long, default_value = "bootstrap")]
+    corelib: String,
+
+    /// Boot-classpath cache directory (default: `.cache/boot/android-34`).
+    #[arg(long = "boot-dir")]
+    boot_dir: Option<PathBuf>,
+
+    /// Record every native invocation and emit `natives.tsv`.
+    #[arg(long = "trace-natives")]
+    trace_natives: bool,
+
+    /// Where to write the native trace (implies `--trace-natives`).
+    #[arg(long = "trace-natives-file")]
+    trace_natives_file: Option<PathBuf>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -293,6 +310,21 @@ fn kind_name(kind: ComponentKind) -> &'static str {
     }
 }
 
+/// Peak resident set size in KiB (Linux `/proc/self/status` `VmHWM`).
+fn peak_rss_kb() -> u64 {
+    let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
+        return 0;
+    };
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("VmHWM:") {
+            if let Some(kb) = rest.split_whitespace().next() {
+                return kb.parse().unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
 fn new_request_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -344,12 +376,29 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
     let request_id = new_request_id();
     let started = Instant::now();
 
+    let corelib = match acos_vm::CoreLib::parse(&args.corelib) {
+        Some(c) => c,
+        None => {
+            return run_error(
+                &request_id,
+                args.json,
+                "VM_INTERNAL",
+                &format!("unknown --corelib value {:?} (expected bootstrap|real)", args.corelib),
+                None,
+                started,
+            )
+        }
+    };
+
     let options = VmOptions {
         heap_max_bytes: std::env::var("ACOS_HEAP_MAX")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(256 * 1024 * 1024),
         gc_stress: std::env::var_os("ACOS_GC_STRESS").is_some(),
+        corelib,
+        boot_dir: args.boot_dir.clone(),
+        trace_natives: args.trace_natives || args.trace_natives_file.is_some(),
     };
 
     let images = match load_dex_images(&args.path) {
@@ -358,13 +407,16 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
             return run_error(&request_id, args.json, "VM_INTERNAL", &msg, None, started)
         }
     };
+    let image_read_ms = started.elapsed().as_millis();
 
+    let vm_started = Instant::now();
     let mut vm = match Vm::new(options) {
         Ok(v) => v,
         Err(e) => {
             return run_error(&request_id, args.json, e.code(), &e.to_string(), None, started)
         }
     };
+    let vm_new_ms = vm_started.elapsed().as_millis();
     for img in images {
         match acos_dex::DexFile::parse(img) {
             Ok(dex) => {
@@ -384,9 +436,22 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
     }
 
     let startup_ms = started.elapsed().as_millis();
+    let run_started = Instant::now();
     let outcome = vm.run(&args.main, &args.args);
+    let run_ms = run_started.elapsed().as_millis();
     let wall_ms = started.elapsed().as_millis();
     let m = &outcome.metrics;
+
+    if let Some(path) = &args.trace_natives_file {
+        if let Some(tr) = &vm.native_trace {
+            let _ = std::fs::write(path, tr.to_tsv());
+        }
+    }
+    if args.trace_natives && args.trace_natives_file.is_none() {
+        if let Some(tr) = &vm.native_trace {
+            eprint!("{}", tr.to_tsv());
+        }
+    }
 
     if !args.json {
         use std::io::Write;
@@ -424,6 +489,11 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
         "metrics": {
             "wall_ms": wall_ms,
             "startup_ms": startup_ms,
+            "image_read_ms": image_read_ms,
+            "vm_new_ms": vm_new_ms,
+            "dex_parse_ms": startup_ms.saturating_sub(image_read_ms + vm_new_ms),
+            "run_ms": run_ms,
+            "peak_rss_kb": peak_rss_kb(),
             "instructions": m.instructions,
             "invokes": m.invokes,
             "allocations": m.allocations,
@@ -431,6 +501,8 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
             "gc_ms": m.gc_ms,
             "heap_peak_bytes": m.heap_peak_bytes,
             "classes_loaded": m.classes_loaded,
+            "clinit_count": m.clinit_count,
+            "natives_registered": vm.natives.len(),
         },
     });
     print_json(&envelope);

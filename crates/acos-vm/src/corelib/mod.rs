@@ -7,10 +7,10 @@
 //! true natives in this registry.
 
 mod collections;
-mod r#enum;
-mod lang;
-mod math;
-mod thread;
+pub(crate) mod r#enum;
+pub(crate) mod lang;
+pub(crate) mod math;
+pub(crate) mod thread;
 
 use crate::class::{ClassId, MethodId, NativeCtx};
 use crate::error::{VmError, VmResult};
@@ -176,6 +176,12 @@ impl Vm {
     pub(crate) fn builtin_instance(&mut self, class: ClassId) -> VmResult<Handle> {
         if class == self.c_string && self.c_string != 0 {
             return self.alloc(Object::String(Vec::new()));
+        }
+        // The Rust builtin payloads (StringBuilder/Thread/collections) only
+        // exist in bootstrap mode; with the real core library every class has
+        // a real DEX instance layout.
+        if self.corelib != crate::vm::CoreLib::Bootstrap {
+            return self.alloc_instance(class);
         }
         if class == self.c_string_builder && self.c_string_builder != 0 {
             return self.alloc(Object::Builtin {

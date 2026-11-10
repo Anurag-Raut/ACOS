@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
 
+pub mod bridge;
 pub mod class;
 pub mod corelib;
 pub mod error;
@@ -18,10 +19,11 @@ pub mod format;
 pub mod frame;
 pub mod heap;
 pub mod interp;
+pub mod natives;
 pub mod vm;
 
 pub use error::{VmError, VmResult};
 pub use heap::{Handle, Object};
 pub use vm::{
-    descriptor_to_dotted, Metrics, RunOutcome, Uncaught, Vm, VmOptions,
+    descriptor_to_dotted, CoreLib, Metrics, NativeTrace, RunOutcome, Uncaught, Vm, VmOptions,
 };

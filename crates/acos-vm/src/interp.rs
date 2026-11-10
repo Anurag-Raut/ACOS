@@ -37,7 +37,7 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
             break;
         }
         if vm.threads[t].frames.is_empty() {
-            finish_thread(vm, t);
+            crate::bridge::finish_thread(vm, t);
             if !pick_runnable(vm) {
                 break;
             }
@@ -60,26 +60,6 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
     Ok(())
 }
 
-fn finish_thread(vm: &mut Vm, t: usize) {
-    if vm.threads[t].status == ThreadStatus::Finished {
-        return;
-    }
-    vm.threads[t].status = ThreadStatus::Finished;
-    if let Some(Object::Builtin {
-        data: crate::heap::BuiltinData::Thread(td),
-        ..
-    }) = vm.heap.get_mut(vm.threads[t].object)
-    {
-        td.alive = false;
-    }
-    let joiners = vm.threads[t].joiners.clone();
-    for j in joiners {
-        if vm.threads.get(j).is_some() && vm.threads[j].status == ThreadStatus::Waiting {
-            vm.threads[j].status = ThreadStatus::Runnable;
-            vm.threads[j].joiners.clear();
-        }
-    }
-}
 
 fn pick_runnable(vm: &mut Vm) -> bool {
     // Wake sleepers whose deadline passed, and monitor-blocked threads whose
@@ -142,6 +122,7 @@ fn step(vm: &mut Vm) -> VmResult<()> {
     match imp {
         MethodImpl::Native(f) => {
             vm.metrics.invokes += 1;
+            crate::bridge::record_native(vm, method);
             let ctx = NativeCtx { thread: t, frame: fi };
             match f(vm, ctx) {
                 Ok(()) => {
@@ -157,9 +138,14 @@ fn step(vm: &mut Vm) -> VmResult<()> {
         }
         MethodImpl::Dex { code, .. } => {
             if code.is_none() {
-                let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
-                let name = vm.methods[method as usize].name.clone();
-                let sig = vm.methods[method as usize].sig.clone();
+                if vm.methods[method as usize].is_native() {
+                    let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+                    return Err(crate::bridge::unbound_native_error(vm, method, at));
+                }
+                let m = &vm.methods[method as usize];
+                let desc = vm.class_desc(m.class).to_string();
+                let name = m.name.clone();
+                let sig = m.sig.clone();
                 let e = vm.throw_new(
                     "Ljava/lang/AbstractMethodError;",
                     Some(&format!("{desc}.{name}{sig}")),
@@ -768,7 +754,13 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
             let desc = field_desc(vm, dex, insn.index)?;
-            if f.width == 2 {
+            if let Some(v) = crate::bridge::internal_field_get(vm, obj, dex, insn.index) {
+                if op == 0x54 {
+                    set_ref(vm, t, fi, r0, v);
+                } else {
+                    set_reg(vm, t, fi, r0, narrow_field(v, &desc));
+                }
+            } else if f.width == 2 {
                 let (lo, hi) = match vm.heap.get(obj) {
                     Some(Object::Instance { fields, .. }) => (fields[off], fields[off + 1]),
                     _ => (0, 0),
@@ -798,7 +790,9 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
             let desc = field_desc(vm, dex, insn.index)?;
-            if f.width == 2 {
+            if crate::bridge::internal_field_put(vm, obj, dex, insn.index) {
+                // Shadow String fields (`hash`) are cached in a side table.
+            } else if f.width == 2 {
                 let val = get_wide(vm, t, fi, r0);
                 if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(obj) {
                     fields[off] = val as u32;
@@ -1363,30 +1357,34 @@ fn arith3(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             set_reg(vm, t, fi, r0, a.wrapping_shr(b & 0x1f))
         }
         0x9b..=0xa5 => {
-            let (a, b) = (get_wide(vm, t, fi, r1), get_wide(vm, t, fi, r2));
-            let (a, b) = (a as i64, b as i64);
-            let v: i64 = match insn.op {
-                0x9b => a.wrapping_add(b),
-                0x9c => a.wrapping_sub(b),
-                0x9d => a.wrapping_mul(b),
-                0x9e => match div_long(a, b) {
-                    Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
-                },
-                0x9f => match rem_long(a, b) {
-                    Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
-                },
-                0xa0 => a & b,
-                0xa1 => a | b,
-                0xa2 => a ^ b,
-                0xa3 => {
-                    let sh = (get_wide(vm, t, fi, r2) as i64 & 0x3f) as u32;
-                    (a as u64).wrapping_shl(sh) as i64
+            let a = get_wide(vm, t, fi, r1) as i64;
+            // `shl-long`/`shr-long`/`ushr-long` take an *int* shift amount in
+            // `vCC`; the other long binary ops take a wide `vCC`.
+            let v: i64 = if (0xa3..=0xa5).contains(&insn.op) {
+                let sh = (reg(vm, t, fi, r2) as i32 & 0x3f) as u32;
+                match insn.op {
+                    0xa3 => (a as u64).wrapping_shl(sh) as i64,
+                    0xa4 => a.wrapping_shr(sh),
+                    _ => ((a as u64).wrapping_shr(sh)) as i64,
                 }
-                0xa4 => a.wrapping_shr((b & 0x3f) as u32),
-                0xa5 => ((a as u64).wrapping_shr((b & 0x3f) as u32)) as i64,
-                _ => 0,
+            } else {
+                let b = get_wide(vm, t, fi, r2) as i64;
+                match insn.op {
+                    0x9b => a.wrapping_add(b),
+                    0x9c => a.wrapping_sub(b),
+                    0x9d => a.wrapping_mul(b),
+                    0x9e => match div_long(a, b) {
+                        Ok(v) => v,
+                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    },
+                    0x9f => match rem_long(a, b) {
+                        Ok(v) => v,
+                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    },
+                    0xa0 => a & b,
+                    0xa1 => a | b,
+                    _ => a ^ b,
+                }
             };
             set_wide(vm, t, fi, r0, v as u64);
         }
@@ -1451,25 +1449,32 @@ fn arith2addr(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         }
         0xbb..=0xc5 => {
             let a = get_wide(vm, t, fi, r0) as i64;
-            let b = get_wide(vm, t, fi, r1) as i64;
-            let v: i64 = match insn.op {
-                0xbb => a.wrapping_add(b),
-                0xbc => a.wrapping_sub(b),
-                0xbd => a.wrapping_mul(b),
-                0xbe => match div_long(a, b) {
-                    Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
-                },
-                0xbf => match rem_long(a, b) {
-                    Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
-                },
-                0xc0 => a & b,
-                0xc1 => a | b,
-                0xc2 => a ^ b,
-                0xc3 => ((a as u64).wrapping_shl((b & 0x3f) as u32)) as i64,
-                0xc4 => a.wrapping_shr((b & 0x3f) as u32),
-                _ => ((a as u64).wrapping_shr((b & 0x3f) as u32)) as i64,
+            // Long shift /2addr forms take an int shift amount in `vB`.
+            let v: i64 = if (0xc3..=0xc5).contains(&insn.op) {
+                let sh = (reg(vm, t, fi, r1) as i32 & 0x3f) as u32;
+                match insn.op {
+                    0xc3 => ((a as u64).wrapping_shl(sh)) as i64,
+                    0xc4 => a.wrapping_shr(sh),
+                    _ => ((a as u64).wrapping_shr(sh)) as i64,
+                }
+            } else {
+                let b = get_wide(vm, t, fi, r1) as i64;
+                match insn.op {
+                    0xbb => a.wrapping_add(b),
+                    0xbc => a.wrapping_sub(b),
+                    0xbd => a.wrapping_mul(b),
+                    0xbe => match div_long(a, b) {
+                        Ok(v) => v,
+                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    },
+                    0xbf => match rem_long(a, b) {
+                        Ok(v) => v,
+                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    },
+                    0xc0 => a & b,
+                    0xc1 => a | b,
+                    _ => a ^ b,
+                }
             };
             set_wide(vm, t, fi, r0, v as u64);
         }
@@ -1828,6 +1833,7 @@ impl Vm {
             .get(&("<clinit>".to_string(), "()V".to_string()))
             .copied();
         if let Some(mid) = clinit {
+            self.note_clinit();
             let t = self.current_thread;
             let base = self.threads[t].frames.len();
             push_frame_values(self, mid, NULL, &[])?;

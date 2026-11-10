@@ -25,6 +25,8 @@ pub enum VmError {
     Internal(String),
     /// DEX/class loading failure.
     Load(String),
+    /// The real boot classpath cache is missing or incomplete.
+    BootClasspathMissing(String),
 }
 
 impl VmError {
@@ -36,6 +38,7 @@ impl VmError {
             VmError::UnsupportedBytecode { .. } => "UNSUPPORTED_BYTECODE",
             VmError::Internal(_) => "VM_INTERNAL",
             VmError::Load(_) => "DEX_LOAD_ERROR",
+            VmError::BootClasspathMissing(_) => "BOOT_CLASSPATH_MISSING",
         }
     }
 
@@ -66,6 +69,7 @@ impl fmt::Display for VmError {
             }
             VmError::Internal(m) => write!(f, "internal VM error: {m}"),
             VmError::Load(m) => write!(f, "class loading error: {m}"),
+            VmError::BootClasspathMissing(m) => write!(f, "{m}"),
         }
     }
 }
