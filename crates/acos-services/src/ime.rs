@@ -39,7 +39,7 @@ use crate::value::Value;
 /// `InputBindResult.SUCCESS`.
 pub const BIND_SUCCESS: i32 = 0;
 /// `InputBindResult.NO_IME` — no IME bound for this field (V1 divergence).
-pub const BIND_NO_IME: i32 = 1;
+pub const BIND_NO_IME: i32 = 6; // API 34 InputBindResult.NO_IME = error(6)
 /// `InputBindResult.NO_EDITOR` — no editor on the client.
 pub const BIND_NO_EDITOR: i32 = 2;
 /// `InputBindResult.ALREADY_BOUND`.

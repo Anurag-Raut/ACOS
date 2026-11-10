@@ -21,7 +21,7 @@ use crate::error::{Result, WmError};
 /// `InputBindResult.SUCCESS`.
 pub const BIND_SUCCESS: i32 = 0;
 /// `InputBindResult.NO_IME` (the declared V1 divergence when nothing is bound).
-pub const BIND_NO_IME: i32 = 1;
+pub const BIND_NO_IME: i32 = 6; // API 34 InputBindResult.NO_IME = error(6)
 /// `InputBindResult.ALREADY_BOUND` (for a redundant `startInput`).
 pub const BIND_ALREADY_BOUND: i32 = -1;
 
