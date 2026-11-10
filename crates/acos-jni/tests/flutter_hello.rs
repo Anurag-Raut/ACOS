@@ -152,12 +152,99 @@ fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), St
     Ok(())
 }
 
+/// W103-A crash diagnosis: an async-signal-safe-ish handler that prints the
+/// fault address, instruction pointer and the loader's module+symbol+offset
+/// (`dladdr`) for both. The engine is mapped by the raw loader, not the host
+/// dynamic loader, so the host `dladdr` cannot see it; the loader's own
+/// `bionic::dl::dladdr` uses `OBJECTS` (populated at load) and `nearest_symbol`.
+///
+/// Prints to `stderr` and `_exit(134)` so the parent records the last lines.
+fn install_crash_handler() {
+    extern "C" fn handler(sig: i32, info: *mut libc::siginfo_t, ctx: *mut libc::c_void) {
+        let addr = if info.is_null() {
+            0usize
+        } else {
+            // SAFETY: a real signal frame with a valid `siginfo_t`.
+            unsafe { (*info).si_addr() as usize }
+        };
+        let pc = if ctx.is_null() {
+            0usize
+        } else {
+            // SAFETY: x86_64 Linux `ucontext_t` with `REG_RIP`.
+            unsafe {
+                (*(ctx as *const libc::ucontext_t)).uc_mcontext.gregs[libc::REG_RIP as usize]
+                    as usize
+            }
+        };
+        let describe = |value: usize| -> (String, usize) {
+            let mut info = acos_native_loader::bionic::dl::DlInfo {
+                dli_fname: std::ptr::null(),
+                dli_fbase: std::ptr::null_mut(),
+                dli_sname: std::ptr::null(),
+                dli_saddr: std::ptr::null_mut(),
+            };
+            // SAFETY: `info` is a writable local; a failed lookup leaves it zeroed.
+            let ok = unsafe {
+                acos_native_loader::bionic::dl::dladdr(value as *const std::os::raw::c_void, &mut info)
+            };
+            if ok == 0 {
+                return ("<host>".to_string(), 0);
+            }
+            let name = if info.dli_fname.is_null() {
+                "<unknown>".to_string()
+            } else {
+                // SAFETY: loader-owned NUL-terminated object name.
+                unsafe { std::ffi::CStr::from_ptr(info.dli_fname) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            let sym = if info.dli_sname.is_null() {
+                String::new()
+            } else {
+                // SAFETY: loader-owned NUL-terminated symbol name.
+                unsafe { std::ffi::CStr::from_ptr(info.dli_sname) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            let base = info.dli_fbase as usize;
+            let offset = value.wrapping_sub(base);
+            let text = if sym.is_empty() {
+                format!("{name}+0x{offset:x}")
+            } else {
+                format!("{name}+0x{offset:x} ({sym}+0x{:x})", value.wrapping_sub(info.dli_saddr as usize))
+            };
+            (text, base)
+        };
+        let (pc_text, _) = describe(pc);
+        let (addr_text, _) = describe(addr);
+        eprintln!(
+            "W103A_CRASH signal={sig} pc=0x{pc:x} [{pc_text}] fault=0x{addr:x} [{addr_text}]"
+        );
+        unsafe { libc::_exit(134) };
+    }
+
+    // SAFETY: installing handlers for the fatal synchronous signals; the
+    // handler only reads its arguments and prints.
+    unsafe {
+        let mut act: libc::sigaction = std::mem::zeroed();
+        act.sa_sigaction = handler as usize;
+        act.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_RESETHAND;
+        libc::sigemptyset(&mut act.sa_mask);
+        libc::sigaction(libc::SIGSEGV, &act, std::ptr::null_mut());
+        libc::sigaction(libc::SIGBUS, &act, std::ptr::null_mut());
+        libc::sigaction(libc::SIGABRT, &act, std::ptr::null_mut());
+        libc::sigaction(libc::SIGILL, &act, std::ptr::null_mut());
+        libc::sigaction(libc::SIGFPE, &act, std::ptr::null_mut());
+    }
+}
+
 /// The child: confine, then load/drive the engine. Runs only with the env set.
 #[test]
 fn flutter_child_worker() {
     if std::env::var_os(CHILD_ENV).is_none() {
         return;
     }
+    install_crash_handler();
     let libdir = PathBuf::from(std::env::var(LIBDIR_ENV).expect("libdir"));
     let scratch = PathBuf::from(std::env::var(OUT_ENV).expect("scratch"));
     let apk = PathBuf::from(std::env::var(APK_ENV).expect("apk"));
@@ -430,22 +517,51 @@ fn flutter_child_worker() {
         serde_json::json!({"phase": "looper-prepared", "looper": format!("{looper:p}")})
     );
     let mut seen_frames = 0usize;
-    for round in 0..120 {
+    let mut delivered = 0usize;
+    let mut vsync_due = std::time::Instant::now();
+    for _round in 0..1500 {
         let mut fd: std::os::raw::c_int = 0;
         let mut events: std::os::raw::c_int = 0;
         let mut data: *mut std::os::raw::c_void = std::ptr::null_mut();
         // SAFETY: the out-pointers are writable locals; the looper is the one
-        // `ALooper_prepare` installed for this thread.
+        // `ALooper_prepare` installed for this thread. A short timeout keeps
+        // the 60 Hz delivery cadence tight while still draining the engine's
+        // platform runner (which is where `asyncWaitForVsync` is requested).
         unsafe {
             acos_native_loader::bionic::ndk::ndk_looper::alooper_pollonce(
-                50,
+                8,
                 &mut fd,
                 &mut events,
                 &mut data,
             );
         }
-        if round % 4 == 0 {
-            std::thread::sleep(std::time::Duration::from_millis(25));
+        // Synthetic 60 Hz vsync: deliver `FlutterJNI.onVsync` on this (the VM
+        // owner / platform) thread only when the engine has an outstanding
+        // request. `frameDelayNanos` is the time since the synthetic vsync
+        // instant, exactly as `VsyncWaiter$FrameCallback.doFrame` computes it.
+        let now = std::time::Instant::now();
+        if now >= vsync_due {
+            vsync_due += std::time::Duration::from_nanos(16_666_667);
+            let delay = now.duration_since(vsync_due).as_nanos() as i64;
+            match vm.call_static(
+                "Ldev/acos/fixtures/flutterhello/FlutterProbe;",
+                "deliverVsync",
+                "(J)J",
+                &[acos_vm::JavaValue::Long(delay.max(0))],
+            ) {
+                Ok(acos_vm::JavaValue::Long(cookie)) if cookie >= 0 => {
+                    delivered += 1;
+                    println!(
+                        "W93A_STAGE {}",
+                        serde_json::json!({"phase": "vsync-delivered", "cookie": cookie, "count": delivered})
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => println!(
+                    "W93A_STAGE {}",
+                    serde_json::json!({"phase": "vsync-deliver-error", "detail": format!("{e:?}")})
+                ),
+            }
         }
         let frames = acos_jni::ndk_host::presented_frames();
         if frames.len() > seen_frames {
@@ -461,6 +577,10 @@ fn flutter_child_worker() {
                     "thread": frames.last().map(|f| f.thread.clone()),
                 })
             );
+        }
+        if seen_frames >= 3 {
+            // The tap's second frame is present; stop once it has settled.
+            break;
         }
     }
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -538,6 +658,10 @@ fn flutter_child_worker() {
         .filter(|(c, _, _, _)| c.contains("FlutterJNI"))
         .map(|(c, n, s, p)| serde_json::json!({"class": c, "name": n, "sig": s, "ptr": p}))
         .collect();
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({"phase": "vsync-counts", "delivered": delivered})
+    );
     let libs: Vec<String> = rt.libraries().into_iter().map(|(n, _)| n).collect();
     println!(
         "W93A_SUMMARY {}",

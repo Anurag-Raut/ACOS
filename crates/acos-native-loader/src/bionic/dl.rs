@@ -7,14 +7,32 @@
 
 use std::collections::HashMap;
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use super::Shim;
 use crate::elf::Phdr;
 use crate::loader::{
-    current_loader, dl_handle_lookup, dl_handle_remove, register_dl_handle, LibraryHandle,
-    LoaderInner, NativeLibrary, OBJECTS,
+    current_loader, dl_handle_lookup, dl_handle_remove, is_shim_system_lib,
+    register_dl_handle, LibraryHandle, LoaderInner, NativeLibrary, OBJECTS,
 };
-use std::sync::Arc;
+
+/// Pseudo-`dlopen` handles for the bionic-provided system libraries
+/// (`libandroid.so`, `liblog.so`, ...). They have no backing ELF; `dlsym` on
+/// them resolves from the process-wide bionic shim table via [`super::resolve`].
+///
+/// Impeller's `GetProcTable` (the Flutter engine's `AChoreographer` branch)
+/// opens `libandroid.so` and looks up `AChoreographer_*`; without this the
+/// engine concludes the native vsync path is unavailable and falls back to the
+/// Java delegate. The handle id sets bit 62 so it never collides with a real
+/// loader handle (`next_dl_handle` counts from 0).
+fn pseudo_handles() -> &'static Mutex<HashMap<usize, String>> {
+    static P: OnceLock<Mutex<HashMap<usize, String>>> = OnceLock::new();
+    P.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+const PSEUDO_HANDLE_BIT: usize = 1 << 62;
+static NEXT_PSEUDO: AtomicUsize = AtomicUsize::new(1);
 
 /// Matches glibc/bionic `struct dl_phdr_info`.
 #[repr(C)]
@@ -92,6 +110,18 @@ pub unsafe extern "C" fn dlopen(filename: *const c_char, _flags: c_int) -> *mut 
         None => return std::ptr::null_mut(),
     };
     let name = cstr(filename);
+    // A bionic system library (`libandroid.so`, `liblog.so`, ...) has no APK
+    // file: it is backed by the process-wide shim table. Hand out a pseudo
+    // handle so the engine's `fml::NativeLibrary` lookups (`AChoreographer_*`)
+    // succeed; `dlsym` resolves the symbol from the shim table.
+    if is_shim_system_lib(&name) {
+        let id = NEXT_PSEUDO.fetch_add(1, Ordering::SeqCst) | PSEUDO_HANDLE_BIT;
+        pseudo_handles()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, name);
+        return id as *mut c_void;
+    }
     let loader = crate::loader::Loader::from_inner(inner.clone());
     // HONESTY_AUDIT #1: only resolve inside the configured (extracted APK)
     // roots. An absolute host path is refused unless the loader is explicitly
@@ -166,6 +196,12 @@ pub unsafe extern "C" fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *m
         // RTLD_NEXT: unsupported.
         return std::ptr::null_mut();
     }
+    if (handle as usize) & PSEUDO_HANDLE_BIT != 0 {
+        // A system-library pseudo handle: resolve from the bionic shim table.
+        return super::resolve(&name)
+            .map(|s| s.ptr as *mut c_void)
+            .unwrap_or(std::ptr::null_mut());
+    }
     let inner = match current_loader() {
         Some(i) => i,
         None => return std::ptr::null_mut(),
@@ -185,6 +221,13 @@ pub unsafe extern "C" fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *m
 /// `handle` must come from [`dlopen`] or be NULL.
 pub unsafe extern "C" fn dlclose(handle: *mut c_void) -> c_int {
     if handle.is_null() || handle as isize == -1 {
+        return 0;
+    }
+    if (handle as usize) & PSEUDO_HANDLE_BIT != 0 {
+        pseudo_handles()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&(handle as usize));
         return 0;
     }
     let inner = match current_loader() {

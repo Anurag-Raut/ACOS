@@ -193,3 +193,153 @@ the critical path for this fixture. Nothing in `acos-gles` was changed.
   `csrc/stdio_shims.c` — `/system` → boot-tree path translation for `fopen`.
 * `tools/flutter-hello-probe.sh` — compile @hide `AssetManager` stub from
   classpath, d8 all nest-mate classes.
+
+---
+
+# W103-A — vsync delivery: crash diagnosis + native `AChoreographer` path
+
+**Date:** 2026-11-11 (wave W103-A). **Base:** `HEAD` = `ba69fab` (the W99-A
+commit). Built in a clean worktree (`.cache/wt-w103a`) with
+`CARGO_TARGET_DIR=.cache/target-w103a`, `CARGO_PROFILE_DEV_DEBUG=0`. Not
+committed.
+
+## Result at a glance
+
+| stage | W99-A | W103-A |
+|---|---|---|
+| confinement active | yes | yes (9 env vars, Landlock+seccomp) |
+| `libflutter.so` map/relocate/`JNI_OnLoad` | ok | ok (510/0 missing, 32,962 relocs) |
+| `init` / `attach` / `runBundle` | ok | ok |
+| Dart `main()` runs | yes | yes (`ACOS_DART_MAIN entered`) |
+| `AssetManager` / `Surface` / viewport (27 args) / pointer packet | ok | ok |
+| process crash on vsync delivery | **yes** (~2.7 s) | **no** |
+| engine vsync path | Java delegate, not driven | **native `AChoreographer`** (see §2) |
+| vsync callback reaches `VsyncWaiter::FireCallback` | n/a | **yes — callback invoked** |
+| Dart `onBeginFrame` / `onDrawFrame` | no | **no** |
+| `ANativeWindow_lock` / `unlockAndPost` | no | **no** |
+| PNG / `acos frame-diff` SSIM | not produced | **not produced** |
+| second frame (counter: 1) | no | **no** |
+
+## 1. Crash diagnosis (blocker 13)
+
+The W99-A report claimed two delivery strategies both faulted the process.
+W103-A rebuilt the harmonic with the **broker-correct** shape and **no crash
+was observed** (exit 0, every run):
+
+1. **The delegate never touches the VM again.** `FlutterJNI.setAsyncWaitForVsyncDelegate`
+   installs a Java object whose `asyncWaitForVsync(long cookie)` only stores the
+   cookie. The engine invokes it through the native→Java JNI slot, so it always
+   runs on the VM owner (platform) thread — never a raw worker thread.
+2. **`nativeOnVsync` is delivered by the owner.** The Rust pump calls
+   `FlutterProbe.deliverVsync(delay)` with `vm.call_static`; that Java method
+   calls `jni.onVsync(frameDelay, 16 666 667, cookie)` → `nativeOnVsync` on the
+   owner/platform thread. The cookie is cleared before the call, so a stale
+   (double-freed) cookie can never be replayed — the likely cause of the W99-A
+   `~2.7 s` fault.
+3. **Diagnostics added:** an async-signal handler for `SIGSEGV`/`SIGBUS`/
+   `SIGABRT`/`SIGILL`/`SIGFPE` that prints the fault address and the
+   instruction pointer resolved to `module+offset (symbol)` via the raw
+   loader's own `bionic::dl::dladdr` (the host `dladdr` cannot see a manually
+   mapped ELF). It exits `134` so the parent records the last lines. Also a JNI
+   entry trace (Java→native and native→Java method calls) was used during
+   development.
+
+No `W103A_CRASH` line was produced by any run. The container crash is therefore
+**not reproduced by the brokered bridge**; we record it as fixed-by-construction
+(Java only on the VM thread, cookie lifetime owned by the owner).
+
+## 2. Native `AChoreographer` path enabled (blocker 13/10)
+
+`VsyncWaiterAndroid::AwaitVSync` chooses the native path when
+`impeller::android::Choreographer::IsAvailableOnPlatform()` is true. That
+function `dlopen`s `libandroid.so` and resolves `AChoreographer_getInstance`,
+`AChoreographer_postFrameCallback` (32-bit) and
+`AChoreographer_postFrameCallback64`. The raw loader refused
+`dlopen("libandroid.so")` because no APK file exists for it, so the engine fell
+back to the Java delegate (W99-A's path).
+
+**Fix (native-loader, additive):** `bionic::dl::dlopen` now hands out a
+*psuedo-handle* (bit 62 set) for the bionic system libraries recognised by
+`is_shim_system_lib` (`libandroid.so`, `liblog.so`, `libEGL.so`, …), and
+`dlsym` on such a handle resolves from the process-wide bionic shim table
+(`bionic::resolve`). `dlclose` forgets the pseudo-handle. No ELF is mapped and
+no host library is touched.
+
+After the fix the engine takes the native path:
+
+```
+AChoreographer_getInstance
+AChoreographer_postFrameCallback delay=0 cb=0x7f…
+choreographer_post now=70 frame_time=16666737   # 60 Hz monotonic, fwk_vsync model
+invoke_frame_callback begin / end               # engine callback returned
+```
+
+`ndk_host::choreographer_post` invokes the engine callback synchronously with
+`frame_time = mono_nanos() + delay + 16 666 667`, i.e. the same 60 Hz,
+monotonic grid `fwk_vsync` uses. This is the "synthetic Choreographer frame
+time" the task asked for.
+
+## 3. Remaining blocker: the frame callback does not reach Dart
+
+The engine's callback (`VsyncWaiterAndroid::…UlT_E_`) calls
+`VsyncWaiterAndroid::ConsumePendingCallback(weak_ptr, frame_start, target)`
+→ `VsyncWaiter::FireCallback`. `FireCallback` consumes the waiter's
+`std::function` at `VsyncWaiter+0x80..0xa0`; if `0xa0` (the invoker) is null it
+emits the `MismatchedFrameCallback` trace and returns. Instrumentation shows:
+
+* `AChoreographer_postFrameCallback` is called **once**; our
+  `invoke_frame_callback` runs to completion and returns normally.
+* The engine then **never** calls `asyncWaitForVsync` again, never calls
+  `AChoreographer_postFrameCallback` again, and a subsequent
+  `nativeScheduleFrame` is coalesced (the `Animator`'s `Semaphore` is not
+  signalled — `Animator::AwaitVSync`'s `$_0` is the only place that signals it).
+* Dart `onBeginFrame`/`onDrawFrame` never run (instrumented snapshot), so
+  `ANativeWindow_lock`/`unlockAndPost` are never reached and no frame exists.
+
+Conclusion: `VsyncWaiter::FireCallback` runs but does **not** invoke the
+primary frame callback. The most likely causes, in order, are (a) the callback
+is consumed/cleared before the native callback fires (e.g. the waiter used by
+`Animator::RequestFrame` and the one whose `weak_ptr` is fired differ, or a
+prior `FireCallback` already consumed it) and (b) `FireCallback`'s
+`pause_rendering=true` argument (hard-coded by both
+`VsyncWaiterAndroid::OnVsyncFromJava` and the native `UlT_E_` lambda) taking a
+different branch than expected. This needs a debugger/trace on
+`VsyncWaiter::FireCallback` (base = `nativeOnVsync_ptr - 0x538dc2`, verified
+page-aligned) plus the engine's `fml::tracing` "MismatchedFrameCallback" event
+to settle.
+
+The Java bridge from §1 remains wired as the fallback for engines where the
+native path is unavailable; the harness delivers on the 60 Hz cadence whenever
+`deliverVsync` reports a pending cookie.
+
+## 4. Acceptance (W103-A, worktree of `ba69fab`)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-jni --test flutter_hello` | **pass** (2/2) |
+| other `acos-jni` suites | **pass** |
+| `rn_bridge` | **1 fail** — pre-existing, environment-only: Landlock `landlock_add_rule(/dev/urandom)` returns `EINVAL` (char devices are not Landlock paths); untouched by W103-A |
+| `cargo test -p acos-native-loader` | **pass** |
+| `cargo clippy -p acos-jni -p acos-native-loader --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check --workspace --all-targets` | **clean** |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+| confined flutter run | `confined:true`, `error:null`, exit 0 |
+| `libflutter.so` imports | 510 / 0 missing, 32,962 relocations |
+
+## 5. W103-A files (worktree)
+
+* `crates/acos-native-loader/src/bionic/dl.rs` — pseudo-`dlopen` handles for the
+  bionic system libraries; `dlsym` resolves them from the shim table;
+  `dlclose` forgets them.
+* `crates/acos-native-loader/src/loader.rs` — `is_shim_system_lib` made
+  `pub(crate)`.
+* `crates/acos-jni/tests/flutter_hello.rs` — `install_crash_handler`
+  (fault address + loader `dladdr` module+offset), 60 Hz `deliverVsync` pump on
+  the owner thread, frame-PNG capture unchanged.
+* `crates/acos-jni/tests/java/…/FlutterProbe.java` — `AsyncWaitForVsyncDelegate`
+  bridge, `deliverVsync`, `setRefreshRateFPS(60)`/`updateRefreshRate`.
+* `crates/acos-jni/tests/data/flutter-probe.dex` — rebuilt.
+
+No `acos-gles`/Skia GLSL blocker was reached: the engine is still in the
+software-renderer configuration and never issued a GL draw, so no shader
+issue could be recorded.

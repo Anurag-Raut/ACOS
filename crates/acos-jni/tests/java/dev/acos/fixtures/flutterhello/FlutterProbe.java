@@ -49,6 +49,23 @@ public final class FlutterProbe {
 
   private static final int POINTER_BYTES = POINTER_FIELDS * 8;
 
+  /** 60 Hz reference refresh, matching {@code fwk_vsync::DEFAULT_INTERVAL_NANOS}. */
+  private static final long REFRESH_PERIOD_NANOS = 16_666_667L;
+
+  /**
+   * The live engine handle. The engine's vsync path is native -> Java
+   * ({@code FlutterJNI.asyncWaitForVsync}) -> delegate; the delegate only
+   * records the request, and the Rust harness delivers the matching
+   * {@code onVsync} on the VM owner (platform) thread.
+   */
+  private static FlutterJNI sJni;
+
+  /** Cookie of the most recent {@code asyncWaitForVsync} request, or -1. */
+  private static volatile long sPendingCookie = -1L;
+
+  /** Number of {@code asyncWaitForVsync} requests seen (diagnostic). */
+  private static volatile long sRequestCount = 0L;
+
   public static void main(String[] args) {
     String bundlePath = args.length > 0 ? args[0] : null;
     String entrypoint = args.length > 1 ? args[1] : "main";
@@ -66,6 +83,8 @@ public final class FlutterProbe {
           "ACOS_FLUTTER_PROBE phase=assets cookie=" + cookie + " apk=" + apkPath);
 
       FlutterJNI jni = new FlutterJNI();
+      sJni = jni;
+      installVsyncBridge(jni);
       System.out.println("ACOS_FLUTTER_PROBE phase=constructed jni=" + jni);
 
 
@@ -78,6 +97,7 @@ public final class FlutterProbe {
           new String[] {
             "--enable-software-rendering",
             "--enable-impeller=false",
+            "--verbose-logging",
             "--aot-shared-library-name=" + bundlePath
           };
       jni.init(null, shellArgs, null, null, null, System.currentTimeMillis(), 0);
@@ -148,6 +168,10 @@ public final class FlutterProbe {
           0);
       System.out.println("ACOS_FLUTTER_PROBE phase=viewport ok");
 
+      jni.setRefreshRateFPS(60.0f);
+      jni.updateRefreshRate();
+      System.out.println("ACOS_FLUTTER_PROBE phase=refreshRate ok");
+
       jni.scheduleFrame();
       System.out.println("ACOS_FLUTTER_PROBE phase=scheduleFrame ok");
 
@@ -163,6 +187,50 @@ public final class FlutterProbe {
       System.out.println("ACOS_FLUTTER_PROBE phase=error " + t);
       t.printStackTrace(System.out);
     }
+  }
+
+  /**
+   * Installs the embedder-side vsync bridge. The engine calls the private
+   * static {@code FlutterJNI.asyncWaitForVsync(cookie)} from native; the
+   * delegate records the cookie and returns without re-entering the engine
+   * (calling {@code onVsync} inline from the requesting thread faults the
+   * process, and calling it from a non-VM thread violates the JNI contract).
+   * The Rust harness then delivers the matching {@code nativeOnVsync} at a
+   * monotonic 60 Hz cadence on the platform (VM owner) thread, the same pull
+   * model as {@code fwk_vsync}.
+   */
+  private static void installVsyncBridge(FlutterJNI jni) {
+    jni.setAsyncWaitForVsyncDelegate(
+        new FlutterJNI.AsyncWaitForVsyncDelegate() {
+          @Override
+          public void asyncWaitForVsync(long cookie) {
+            sPendingCookie = cookie;
+            sRequestCount++;
+            System.out.println("ACOS_FLUTTER_PROBE phase=vsyncRequest cookie=" + cookie);
+          }
+        });
+  }
+
+  /**
+   * Called by the Rust harness on the VM owner (platform) thread once per
+   * 60 Hz tick. Delivers {@code FlutterJNI.onVsync} for the outstanding
+   * request only; returns the cookie, or -1 when the engine has not asked.
+   *
+   * @param frameDelayNanos nanoseconds between the synthetic vsync and now
+   */
+  /** Number of engine vsync requests observed (diagnostic). */
+  public static long vsyncRequestCount() {
+    return sRequestCount;
+  }
+
+  public static long deliverVsync(long frameDelayNanos) {
+    long cookie = sPendingCookie;
+    if (cookie < 0L) {
+      return -1L;
+    }
+    sPendingCookie = -1L;
+    sJni.onVsync(frameDelayNanos, REFRESH_PERIOD_NANOS, cookie);
+    return cookie;
   }
 
   /**

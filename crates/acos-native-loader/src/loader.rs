@@ -50,7 +50,7 @@ fn contained_in(candidate: &Path, dir: &Path) -> bool {
     }
 }
 
-fn is_shim_system_lib(name: &str) -> bool {
+pub(crate) fn is_shim_system_lib(name: &str) -> bool {
     matches!(
         name,
         "libc.so"
