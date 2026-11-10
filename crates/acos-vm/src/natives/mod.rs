@@ -67,6 +67,7 @@ pub mod safe_point;
 mod reflect;
 #[path = "unsafe.rs"]
 mod unsafe_natives;
+pub(crate) mod varhandle;
 mod vmrt;
 mod zip;
 

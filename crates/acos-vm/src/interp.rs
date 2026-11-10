@@ -307,7 +307,7 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                     }
                     // `invoke-*`: skip the `exec_one` prologue, but keep the
                     // same Java-exception routing as the general path.
-                    0x6e..=0x72 | 0x74..=0x78 => {
+                    0x6e..=0x72 | 0x74..=0x78 | 0xfa | 0xfb => {
                         match invoke(vm, t, fi, &insn) {
                             Ok(()) => {}
                             Err(VmError::JavaException(h)) => handle_exception(vm, h)?,
@@ -1369,9 +1369,14 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             advance(vm, t, fi, insn.size);
         }
 
-        0xfa..=0xfd => {
+        0xfa | 0xfb => {
+            // Signature-polymorphic invocation. Handled in place: it advances
+            // the pc and leaves the result in `pending_result`.
+            invoke(vm, t, fi, insn)?;
+        }
+        0xfc | 0xfd => {
             return Err(VmError::unsupported_bytecode(
-                format!("{} (invoke-polymorphic/custom)", insn.mnemonic()),
+                format!("{} (invoke-custom)", insn.mnemonic()),
                 format!("{} pc={pc}", vm.frames_label(t, fi)),
             ));
         }
@@ -2026,6 +2031,13 @@ fn arith_lit8(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
 // ---------------------------------------------------------------------------
 
 fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    // `invoke-polymorphic` (0xfa/0xfb) is a signature-polymorphic call whose
+    // real operand types live in the `index2` prototype. It is handled in
+    // place: the accessor operates on the VM heap and leaves the result in
+    // `pending_result`, exactly like an inlined callee with no frame.
+    if insn.op == 0xfa || insn.op == 0xfb {
+        return invoke_polymorphic(vm, t, fi, insn);
+    }
     let (kind, range) = invoke_kind(insn.op);
     // Inlined `frame_dex`: this runs on every call.
     let dex = match &vm.methods[vm.threads[t].frames[fi].method as usize].imp {
@@ -2153,6 +2165,145 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     vm.threads[t].frames[fi].advance_size = insn.size;
     vm.threads[t].frames.push(frame);
     vm.metrics.invokes += 1;
+    Ok(())
+}
+
+/// Signature-polymorphic invocation: `VarHandle` (and `MethodHandle`) accessors.
+///
+/// The receiver's dynamic class selects the VM-side path; the call-site
+/// prototype supplies the real operand types. Unsupported receivers or access
+/// modes fail with a structured `UNSUPPORTED_BYTECODE` naming the receiver
+/// class -- never a silent fake. The VM runs green threads on a single host
+/// thread, so every atomic access mode is trivially atomic.
+fn invoke_polymorphic(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
+    let dex = frame_dex(vm, t, fi);
+    let (name, ref_class, param_descs, ret_desc) = {
+        let file = vm.dexs[dex as usize].file.clone();
+        let r = file.method_ref(insn.index)?;
+        // The call-site prototype (`index2`) carries the *real* operand and
+        // return types. D8 emits the generic `Object` return for primitive
+        // `get`/`getAndAdd`, so a primitive result must be boxed here exactly
+        // as ART does.
+        let proto = file.proto(insn.index2)?;
+        let params: Vec<String> = proto
+            .parameters
+            .iter()
+            .map(|&tid| file.type_descriptor(tid).unwrap_or("I").to_string())
+            .collect();
+        let ret = file
+            .type_descriptor(proto.return_type_idx)
+            .unwrap_or("V")
+            .to_string();
+        (r.name.to_string(), r.class.to_string(), params, ret)
+    };
+    let pc = vm.threads[t].frames[fi].pc;
+    let recv = reg(vm, t, fi, insn.regs[0]);
+
+    let Some(target) = crate::natives::varhandle::resolve_target(vm, recv) else {
+        return Err(VmError::unsupported_bytecode(
+            format!("{} {ref_class}->{name}", insn.mnemonic()),
+            format!(
+                "{} pc={pc} (receiver {})",
+                vm.frames_label(t, fi),
+                crate::natives::varhandle::varhandle_class(vm, recv)
+            ),
+        ));
+    };
+    if recv == NULL {
+        return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+    }
+    let Some(mode) = crate::natives::varhandle::mode_of(&name) else {
+        return Err(VmError::unsupported_bytecode(
+            format!("invoke-polymorphic VarHandle.{name}"),
+            format!(
+                "{} pc={pc} on {}",
+                vm.frames_label(t, fi),
+                crate::natives::varhandle::varhandle_class(vm, recv)
+            ),
+        ));
+    };
+
+    // Argument *word* registers: a 35c lists one register per word, a range
+    // lists `reg_count` consecutive registers starting at `regs[0]`.
+    let range = insn.op == 0xfb;
+    let words: Vec<u16> = (0..insn.reg_count as usize)
+        .map(|i| {
+            if range {
+                insn.regs[0] + i as u16
+            } else {
+                insn.regs[i]
+            }
+        })
+        .collect();
+    let mut cur = 1usize; // skip the VarHandle receiver word
+    let read_words = |vm: &Vm, cur: &mut usize, wide: bool| -> u64 {
+        if wide {
+            let v = (reg(vm, t, fi, words[*cur]) as u64)
+                | ((reg(vm, t, fi, words[*cur + 1]) as u64) << 32);
+            *cur += 2;
+            v
+        } else {
+            let v = reg(vm, t, fi, words[*cur]) as u64;
+            *cur += 1;
+            v
+        }
+    };
+    let wide_type = |d: &str| matches!(d.as_bytes().first(), Some(b'J') | Some(b'D'));
+
+    let ncoord = crate::natives::varhandle::coordinate_count(&target);
+    let mut obj = NULL;
+    let mut index = 0i32;
+    if ncoord >= 1 {
+        obj = read_words(vm, &mut cur, false) as u32;
+    }
+    if ncoord >= 2 {
+        index = read_words(vm, &mut cur, false) as i32;
+    }
+    let value_at = |k: usize| -> &str {
+        param_descs
+            .get(ncoord + k)
+            .map(String::as_str)
+            .unwrap_or("I")
+    };
+
+    use crate::natives::varhandle::{VhMode, VhOut};
+    let (operand, expected) = match mode {
+        VhMode::Get => (0, 0),
+        VhMode::CompareAndSet | VhMode::CompareAndExchange => {
+            let e = read_words(vm, &mut cur, wide_type(value_at(0)));
+            let u = read_words(vm, &mut cur, wide_type(value_at(1)));
+            (u, e)
+        }
+        _ => (read_words(vm, &mut cur, wide_type(value_at(0))), 0),
+    };
+
+    let out = crate::natives::varhandle::access(vm, &target, mode, obj, index, operand, expected)?;
+    let target_desc = target.desc().to_string();
+    let target_ref = matches!(target_desc.as_bytes().first(), Some(b'L') | Some(b'['));
+    let ret_ref = !ret_desc.is_empty()
+        && ret_desc != "V"
+        && matches!(ret_desc.as_bytes().first(), Some(b'L') | Some(b'['));
+    let (pending, is_ref) = match out {
+        VhOut::Void => (None, false),
+        VhOut::Bool(b) => (Some(b as u64), false),
+        VhOut::Value(v) => {
+            if !target_ref && ret_ref {
+                // Box the primitive result per the call-site prototype.
+                let kind = target_desc.chars().next().unwrap_or('I');
+                let h = crate::natives::varhandle::box_value(vm, kind, v)?;
+                (Some(h as u64), true)
+            } else {
+                (Some(v), target_ref)
+            }
+        }
+    };
+    if let Some(v) = pending {
+        let frame = &mut vm.threads[t].frames[fi];
+        frame.pending_result = v;
+        frame.pending_result_is_ref = is_ref;
+        frame.has_pending_result = true;
+    }
+    advance(vm, t, fi, insn.size);
     Ok(())
 }
 

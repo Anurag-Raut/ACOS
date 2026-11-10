@@ -457,12 +457,16 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
 
     let out_dir = repo_root().join("results/rn");
     let _ = std::fs::create_dir_all(&out_dir);
-    // W127-A: the bridge artifact is `w127a-ops.json`. It carries the captured
+    // W140-A: the bridge artifact is `w140a-ops.json`. It carries the captured
     // `ACOS_RN_OP` batch under `ops` plus the full `ACOS_RN_BRIDGE` stage trail
     // (main-looper preparation, `ReactChoreographer`, `initializeBridge`,
-    // `runJSBundle`, `AppRegistry.runApplication`).
+    // `runJSBundle`, `AppRegistry.runApplication`). With the generic
+    // `invoke-polymorphic` `VarHandle`/`MethodHandle` support (W140-A) the
+    // probe now runs `runJSBundle` through real core-library
+    // `ConcurrentLinkedQueue`/`ConcurrentHashMap`/`Striped64` code; the next
+    // blocker is the JS-level `__fbBatchedBridgeConfig` bootstrap.
     let _ = std::fs::write(
-        out_dir.join("w127a-ops.json"),
+        out_dir.join("w140a-ops.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "summary": summary,
             "stages": stage_lines,

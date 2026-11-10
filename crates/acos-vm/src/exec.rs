@@ -432,7 +432,7 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
             src: r0,
             slot: field_slot(),
         },
-        0x6e..=0x72 | 0x74..=0x78 => Op::Invoke,
+        0x6e..=0x72 | 0x74..=0x78 | 0xfa | 0xfb => Op::Invoke,
         0x28..=0x2a => Op::Goto { target: insn_target_insn(code, pcs, i) },
         0x32..=0x3d => Op::If {
             op,
