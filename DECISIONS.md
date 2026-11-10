@@ -501,6 +501,27 @@ Status: accepted (owner directive, 2026-11-10).
   - `tools/guarded.sh` is the mandatory bounded wrapper (`systemd-run` `MemoryMax`/swap-off, `ulimit -v` fallback, `timeout`, process-group kill, scratch cleanup); `tools/diff-dexprogs.sh`, `tools/bench-vm.sh` and `tools/build-*.sh` invoke it; `tools/ramguard.sh` is the host watchdog. See `tools/README.md`.
   - Resources are freed on every exit path: `guarded.sh` kills the whole process group and removes its scratch; `diff-dexprogs.sh` uses `target/tmp/` and traps its removal; `bench-vm.sh` removes `target/tmp/acos-bench`; `ramguard.sh` logs to `results/tmp/ramguard.log`.
 
+### ADR-0018 note — native loader sandbox gap (W35-A, 2026-11-10)
+
+Status: accepted as a **limitation**, not a solution.
+
+- `acos-native-loader` maps guest ELF `PROT_EXEC` and runs it **in the host
+  process**. There is no seccomp filter, landlock rule, user/mount namespace or
+  separate sandbox process, so a loaded `.so` gets the host syscall surface.
+- Path confinement is now enforced (`LoaderConfig::allow_host_paths`, default
+  `false`; `resolve_library` canonicalises and requires the path to be under a
+  configured `search_paths` root). That closes the "`dlopen` an arbitrary
+  absolute host library" class, but it does **not** sandbox the mapped code.
+- **Decision:** native `.so` execution stays **disabled for product paths**
+  until the mapped code runs under a seccomp/landlock sandbox. Today the only
+  entry point is `jni_glue::load_library_impl`, which raises
+  `UNSUPPORTED_JAVA_API` when no JNI host is installed, and no workspace crate
+  depends on `acos-jni`; only its own tests/examples exercise the loader. Do not
+  wire native loading into `acos run`/`verify` without the sandbox.
+- Enforcement point: the default `LoaderConfig` refuses out-of-root paths; a
+  future product path must additionally refuse to load native code unless an
+  explicit sandbox feature is enabled. See `HONESTY_AUDIT.md` #1/§2 rank 1.
+
 ## ADR-0019 — Text rendering: FreeType + HarfBuzz glyph rasterisation; no Skia adoption (supersedes the Skia part of the advisor suggestion)
 
 Status: accepted (2026-11-10), based on research/render-fidelity/REPORT.md.

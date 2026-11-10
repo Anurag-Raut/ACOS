@@ -230,7 +230,12 @@ impl ServiceObject for DisplayService {
                 }
                 Vec::new()
             }
-            "isUidPresentOnDisplay" => vec![Value::Bool(true)],
+            // Only display 0 exists; an unknown display id must not report
+            // every uid as present (HONESTY_AUDIT #22).
+            "isUidPresentOnDisplay" => {
+                let display = args.get(1).and_then(Value::as_int).unwrap_or(-1);
+                vec![Value::Bool(display == 0)]
+            }
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),

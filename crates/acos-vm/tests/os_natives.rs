@@ -287,6 +287,26 @@ fn core_os_natives_on_the_real_framework() {
     assert_eq!(get("loggable_info"), "true");
     assert_eq!(get("loggable_verbose"), "false");
     assert_eq!(get("logged"), "true");
+
+    // ---- Guest environment (HONESTY_AUDIT.md #5): the VM-owned table, never
+    // the host process environment.
+    assert_eq!(get("env_path_null"), "true", "host PATH must not leak to guest");
+    assert_eq!(get("env_android_root"), "/system", "fixed Android-like seed");
+    assert_eq!(get("env_setenv"), "round-trip", "Os.setenv round-trips");
+    assert_eq!(get("env_unset"), "true", "Os.unsetenv removes the key");
+    assert_eq!(
+        get("env_environ_nonempty"),
+        "true",
+        "Os.environ reflects the seeded table"
+    );
+
+    // ---- LockSupport park/unpark (HONESTY_AUDIT.md #7).
+    assert_eq!(get("park_nanos_ok"), "true", "parkNanos must block then wake");
+    assert_eq!(
+        get("park_permit_ok"),
+        "true",
+        "an unpark permit must make the next park return"
+    );
     assert!(outcome.stdout.ends_with("done\n"), "main did not finish");
 
     // ---- Log output: the exact ART `logcat -v threadtime` layout ----

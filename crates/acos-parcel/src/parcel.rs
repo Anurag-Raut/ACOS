@@ -718,6 +718,20 @@ impl Parcel {
             return Ok(None);
         }
         let n = len as usize;
+        // Every `String16` carries at least its 4-byte length word, so a count
+        // that cannot fit in the remaining payload is malformed. Reject it
+        // before allocating the backing vector: a guest `int32` of
+        // `i32::MAX` must never drive a multi-GB `Vec::with_capacity`.
+        let min_bytes = n.checked_mul(4).ok_or(ParcelError::BadLength {
+            len: n,
+            max: self.remaining() / 4,
+        })?;
+        if min_bytes > self.remaining() {
+            return Err(ParcelError::BadLength {
+                len: n,
+                max: self.remaining() / 4,
+            });
+        }
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
             v.push(self.read_string16()?);
@@ -995,6 +1009,15 @@ impl Parcel {
     #[must_use]
     pub fn data_size(&self) -> usize {
         self.data.len()
+    }
+
+    /// Bytes left between the current position and the logical data size.
+    ///
+    /// Used to bound guest-supplied element counts *before* any backing-store
+    /// allocation (host-safety; see `HONESTY_AUDIT.md` #3).
+    #[must_use]
+    pub fn remaining(&self) -> usize {
+        self.data.len().saturating_sub(self.pos)
     }
 
     /// Truncate or zero-extend the logical data size (`setDataSize`).

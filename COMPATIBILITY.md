@@ -18,13 +18,14 @@ level**, **ABI** and **date**. `verified` on *decode* is not `verified` on
 *execute*. The legacy ACVM results are **not** ACOS results and are not recorded
 here.
 
-> **As of 2026-11-10 (HEAD `40f075c` + working tree): static DEX/APK analysis is
+> **As of 2026-11-10 (HEAD `9426b5b` + working tree): static DEX/APK analysis is
 > verified; the 25 console `dexprogs` execute on the real Android 14 core library
 > (`art-reference`); framework boot reaches `bindApplication` + a real
 > `ClientTransaction`; Activity callbacks, frames, UI tree and input are still
-> `none`.** Tiers follow ADR-0005: `jvm-reference` (weak) and `art-reference`
-> (authoritative, API-34 x86_64 emulator). `physical-device` captures do not
-> exist (`docs/DEV_WORKFLOW.md` §11).
+> `none`.** Tiers follow ADR-0005: `jvm-reference` (weak), `art-reference`
+> (authoritative, API-34 x86_64 emulator) and `physical-device` (real phone;
+> captured under `fixtures/reference-device/`, kept separate from the emulator
+> tier because its API/density differ).
 
 ---
 
@@ -99,7 +100,9 @@ built-ins remain a temporary bootstrap; the M1/M2 paths use the real DEX.
 **Tier note.** The original 20 `dexprogs` have `jvm-reference` expected outputs
 under `fixtures/expected/dexprogs/` and authoritative `art-reference` outputs
 under `fixtures/expected-art/dexprogs/`; `results/oracle/jvm-vs-art.md` records
-where ART and the JVM differ. `physical-device` captures do not exist.
+where ART and the JVM differ. `physical-device` captures are real-phone
+references under `fixtures/reference-device/` (moto g35 5G, Android 15/API 35);
+they are not interchangeable with the API-34 emulator references.
 
 ---
 
@@ -172,7 +175,7 @@ redistributed.
 | `fixtures/apps/hello-jni` | NDK JNI (x86_64 + arm64-v8a) | verified (fixture output) | art-reference | `crates/acos-jni/tests/hello_jni.rs`; `fixtures/reference/hello-jni/art-api34-x86_64/` |
 | `fixtures/apps/{counter,todo-list,multi-activity,form-validation}` | dogfood View apps | present; Activity not executed | art-reference captured | `fixtures/reference/*/art-api34-x86_64/` |
 | Seeded-wrong variants | negative/false-pass | **present** (scenarios, not complete APKs) | art-reference replay | `scenarios/negative/*`; `scenarios/README.md` |
-| `physical-device` captures | oracle | **not captured** | — | `docs/DEV_WORKFLOW.md` §11 |
+| `physical-device` captures | oracle | **captured, not interchangeable** | physical-device | `fixtures/reference-device/DEVICE.md`; `fixtures/reference-device/COMPARISON.md` |
 
 ---
 

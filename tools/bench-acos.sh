@@ -29,6 +29,10 @@
 #   CARGO_TARGET_DIR     respected (agents must use their own target dir)
 set -euo pipefail
 
+# Fixture-dependent benchmark/acceptance tests must fail, not SKIP, under CI
+# (HONESTY_AUDIT.md #11).
+export ACOS_REQUIRE_FIXTURES="${ACOS_REQUIRE_FIXTURES:-1}"
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RESULTS="$ROOT/results/bench"
 RUNS="${ACOS_BENCH_RUNS:-20}"

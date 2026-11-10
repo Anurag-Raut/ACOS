@@ -503,9 +503,21 @@ macro_rules! peek_array {
             let addr = vm.arg_i64(ctx, 0);
             let arr = vm.arg_ref(ctx, 1);
             let off = vm.arg_i32(ctx, 2).max(0) as usize;
-            let count = vm.arg_i32(ctx, 3).max(0) as usize;
+            let count = vm.arg_i32(ctx, 3);
+            if count < 0 {
+                return Err(vm.throw_new(
+                    "Ljava/lang/IllegalArgumentException;",
+                    Some("Unsafe.peek count is negative"),
+                ));
+            }
+            let count = count as usize;
+            let bytes = count.saturating_mul($scale);
+            // Bound before allocating the host output vector (HONESTY_AUDIT.md
+            // #14); the checked multiply prevents a wrap-around that would
+            // pass the memory range check.
+            vm.check_array_len("B", bytes)?;
             let swap = vm.arg_bool(ctx, 4);
-            let raw = read_bytes_at(vm, addr, count * $scale)?;
+            let raw = read_bytes_at(vm, addr, bytes)?;
             let mut vals: Vec<$ty> = Vec::with_capacity(count);
             for chunk in raw.chunks_exact($scale) {
                 let mut w = [0u8; $scale];
@@ -524,10 +536,20 @@ macro_rules! poke_array {
             let addr = vm.arg_i64(ctx, 0);
             let arr = vm.arg_ref(ctx, 1);
             let off = vm.arg_i32(ctx, 2).max(0) as usize;
-            let count = vm.arg_i32(ctx, 3).max(0) as usize;
+            let count = vm.arg_i32(ctx, 3);
+            if count < 0 {
+                return Err(vm.throw_new(
+                    "Ljava/lang/IllegalArgumentException;",
+                    Some("Unsafe.poke count is negative"),
+                ));
+            }
+            let count = count as usize;
+            let bytes = count.saturating_mul($scale);
+            // Bound before allocating the host buffer (HONESTY_AUDIT.md #14).
+            vm.check_array_len("B", bytes)?;
             let swap = vm.arg_bool(ctx, 4);
             let vals: Vec<$ty> = array_read_as(vm, arr, off, count)?;
-            let mut raw = Vec::with_capacity(count * $scale);
+            let mut raw = Vec::with_capacity(bytes);
             for v in vals {
                 let v = if swap { swap_bytes(v) } else { v };
                 raw.extend_from_slice(&v.to_le_bytes());

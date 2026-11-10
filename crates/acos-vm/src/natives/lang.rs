@@ -468,9 +468,25 @@ fn str_do_replace(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn str_do_repeat(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    let n = vm.arg_i32(ctx, 0).max(0) as usize;
+    let n = vm.arg_i32(ctx, 0);
+    if n < 0 {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalArgumentException;",
+            Some("count is negative"),
+        ));
+    }
+    let n = n as usize;
     let base = units_of(vm, this).unwrap_or_default();
-    let mut out = Vec::with_capacity(base.len() * n);
+    // Checked multiply so a guest `int` cannot overflow into an unbounded
+    // host `Vec` (HONESTY_AUDIT.md #9). Bound the result against the heap cap.
+    let Some(total) = base.len().checked_mul(n) else {
+        return Err(vm.throw_new(
+            "Ljava/lang/OutOfMemoryError;",
+            Some("String.repeat length overflow"),
+        ));
+    };
+    vm.check_array_len("C", total)?;
+    let mut out = Vec::with_capacity(total);
     for _ in 0..n {
         out.extend_from_slice(&base);
     }
@@ -935,7 +951,11 @@ fn th_current(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn th_interrupt0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     for t in &mut vm.threads {
-        if t.object == this && t.status == ThreadStatus::Sleeping {
+        // Interrupting a sleeping thread wakes it early; interrupting a
+        // `LockSupport.park`ed thread unparks it (JDK `Parker` semantics).
+        if t.object == this
+            && matches!(t.status, ThreadStatus::Sleeping | ThreadStatus::Parked)
+        {
             t.status = ThreadStatus::Runnable;
             t.wake_at = None;
         }

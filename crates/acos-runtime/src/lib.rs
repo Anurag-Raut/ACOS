@@ -39,6 +39,7 @@ pub mod input_java;
 pub mod lifecycle;
 pub mod parcel_java;
 pub mod pms_java;
+pub mod session;
 pub mod session_pool;
 pub mod settings_java;
 pub mod transport;

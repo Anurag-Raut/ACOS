@@ -101,11 +101,10 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
     Some(report)
 }
 
-/// The M2 gate. Ignored while the framework blocks in `Typeface.<clinit>`
-/// before `Application.onCreate`; run with
-/// `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
+/// The M2 gate. Ignored while the framework blocks before `Activity.onCreate`;
+/// run with `cargo test -p acos-runtime --test m2 -- --ignored --nocapture`.
 #[test]
-#[ignore = "M2 not reached: Application.onCreate now runs (app_created=true) and the ClientTransaction launch reaches performLaunchActivity -> Activity.attach -> PhoneWindow.<init>, where Settings.getPublicSettingsForClass NPEs because Field.get reads the wrong static slot (artFieldIndex is the declaration index, not the slot offset); results/m2/M2_LOG.md §W29-A"]
+#[ignore = "M2 not reached: Application.onCreate now runs (app_created=true) and the ClientTransaction launch reaches performLaunchActivity -> Activity.attach -> PhoneWindow.<init>, where Settings.getPublicSettingsForClass calls Field.getAnnotation(Settings$Readable.class). ACOS has no annotation metadata, so it returns null and Settings.getString throws SecurityException for the @Readable key render_shadows_in_compositor; results/m2/M2_LOG.md §W33-A"]
 fn m2_lifecycle_create_start_resume_matches_reference() {
     let Some(reference) = reference_lifecycle() else {
         eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");

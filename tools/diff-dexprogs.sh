@@ -19,6 +19,10 @@
 # every program passes.
 set -uo pipefail
 
+# Fixture-dependent tests must fail, not silently SKIP, when run under CI
+# (HONESTY_AUDIT.md #11). Develop locally with ACOS_REQUIRE_FIXTURES= to opt out.
+export ACOS_REQUIRE_FIXTURES="${ACOS_REQUIRE_FIXTURES:-1}"
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="normal"
 STRESS=0

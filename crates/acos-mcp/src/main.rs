@@ -6,7 +6,8 @@
 use std::io::{self, BufReader};
 use std::sync::Arc;
 
-use acos_mcp::{Backend, BackendConfig, CliBackend, Server, ServerConfig};
+use acos_mcp::{Backend, BackendConfig, Server, ServerConfig, SessionBackend};
+use acos_runtime::session::SessionOptions;
 
 fn main() {
     let backend_config = BackendConfig::discover();
@@ -26,7 +27,7 @@ fn main() {
             .unwrap_or_else(|| "<not found>".to_string())
     ));
 
-    let backend = CliBackend::new(backend_config);
+    let backend = SessionBackend::new(backend_config, SessionOptions::default());
     let caps = backend.capabilities();
     let available: Vec<&str> = acos_mcp::descriptors::all_commands()
         .iter()

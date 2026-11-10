@@ -16,6 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 acos-protocol = { path = "../acos-protocol" }
+acos-runtime = { path = "../acos-runtime" }
 libc = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

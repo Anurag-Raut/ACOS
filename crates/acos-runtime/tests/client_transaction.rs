@@ -109,8 +109,12 @@ fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
     let pending = rt.vm().pending_exception;
     let mut blocker = result.as_ref().err().map(ToString::to_string);
     if pending != NULL {
-        let msg = describe(rt.vm_mut(), pending);
+        // `describe` calls real Java methods on the throwable, so the
+        // top-level pending-exception slot must be clear first (the VM refuses
+        // to run Java while an exception is pending). The handle is already
+        // captured above.
         rt.vm_mut().pending_exception = NULL;
+        let msg = describe(rt.vm_mut(), pending);
         blocker = Some(msg);
     }
     // `scheduleTransaction` -> `H.EXECUTE_TRANSACTION` must have created the

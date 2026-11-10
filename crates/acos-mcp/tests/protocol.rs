@@ -43,7 +43,10 @@ fn tools_list_contains_every_protocol_command_plus_meta_tools() {
     }
     assert!(names.contains(&"acos_capabilities".to_string()));
     assert!(names.contains(&"acos_help".to_string()));
-    assert_eq!(names.len(), mcp_tools().tools.len() + 2);
+    assert_eq!(
+        names.len(),
+        mcp_tools().tools.len() + 2 + acos_mcp::descriptors::SESSION_TOOL_NAMES.len()
+    );
 
     // Every protocol command is represented.
     for command in [

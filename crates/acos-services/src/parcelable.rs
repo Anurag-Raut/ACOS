@@ -16,7 +16,7 @@
 
 use std::sync::OnceLock;
 
-use acos_parcel::Parcel;
+use acos_parcel::{Parcel, ParcelError};
 use acos_protocol::ErrorCode;
 
 use crate::error::{ServiceError, Result};
@@ -630,7 +630,18 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             if n < 0 {
                 Value::List(None)
             } else {
-                let mut out = Vec::with_capacity(n as usize);
+                let n = n as usize;
+                // Each typed payload occupies at least one byte, so a count
+                // larger than the remaining payload is malformed. Bound it
+                // before `with_capacity` (host-safety, HONESTY_AUDIT #3).
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
                 for _ in 0..n {
                     out.push(Value::Parcelable(read_payload(class, parcel)?));
                 }

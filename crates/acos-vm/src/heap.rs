@@ -130,6 +130,15 @@ pub struct Heap {
     pub allocations: u64,
     pub gc_count: u64,
     pub gc_nanos: u64,
+    /// Reused GC mark generation bitmap: `gc_mark[slot] == gc_gen` means live.
+    /// A generation counter avoids clearing the whole bitmap on every
+    /// collection (allocation + `memset` per GC), which matters on the
+    /// allocation-heavy benchmarks.
+    pub(crate) gc_mark: Vec<u32>,
+    pub(crate) gc_gen: u32,
+    /// Reused mark worklist. Kept on the heap so a collection does not have to
+    /// allocate and grow a fresh stack every time.
+    pub(crate) gc_stack: Vec<Handle>,
 }
 
 impl Heap {
@@ -144,6 +153,9 @@ impl Heap {
             allocations: 0,
             gc_count: 0,
             gc_nanos: 0,
+            gc_mark: Vec::new(),
+            gc_gen: 0,
+            gc_stack: Vec::new(),
         }
     }
 
@@ -257,8 +269,45 @@ pub fn element_kind(desc: &str) -> VmResult<char> {
         .ok_or_else(|| VmError::Internal("empty array component descriptor".into()))
 }
 
+/// Bytes per element for an array component descriptor (`L`/`[` are 32-bit
+/// handles). Used to bound a guest array request before it reaches the host
+/// allocator (`HONESTY_AUDIT.md` #2).
+pub fn array_element_size(desc: &str) -> usize {
+    match element_kind(desc).unwrap_or('L') {
+        'Z' | 'B' => 1,
+        'C' | 'S' => 2,
+        'I' | 'F' | 'L' | '[' => 4,
+        'J' | 'D' => 8,
+        _ => 4,
+    }
+}
+
+/// Hard per-allocation ceiling on a single array's backing store (64 MiB),
+/// independent of the guest heap cap. A single guest request must never drive
+/// a multi-GB host allocation even when the guest heap would allow it.
+pub const MAX_SINGLE_ARRAY_BYTES: usize = 64 * 1024 * 1024;
+
+/// `true` when `len` elements of `elem_desc` fit both the guest heap cap and
+/// the hard single-allocation cap.
+#[must_use]
+pub fn array_len_fits(elem_desc: &str, len: usize, heap_max_bytes: usize) -> bool {
+    let bytes = len.saturating_mul(array_element_size(elem_desc));
+    bytes <= heap_max_bytes.min(MAX_SINGLE_ARRAY_BYTES)
+}
+
 /// Create the backing store for an array of `len` elements of `elem_desc`.
+///
+/// The hard single-allocation cap is enforced here as a last-resort backstop so
+/// a caller that forgets the Java-level check still cannot abort the host
+/// allocator. Preferred callers check [`array_len_fits`] first and throw a Java
+/// `OutOfMemoryError`.
 pub fn new_array_data(elem_desc: &str, len: usize) -> VmResult<ArrayData> {
+    let bytes = len.saturating_mul(array_element_size(elem_desc));
+    if bytes > MAX_SINGLE_ARRAY_BYTES {
+        return Err(VmError::Internal(format!(
+            "array allocation of {bytes} bytes (len {len}) exceeds the {MAX_SINGLE_ARRAY_BYTES}-byte per-array cap"
+        )));
+    }
     let c = element_kind(elem_desc)?;
     Ok(match c {
         'Z' => ArrayData::Bool(vec![false; len]),

@@ -76,6 +76,11 @@ fn which(name: &str) -> Option<PathBuf> {
 }
 
 fn run(dex: &Path, main: &str, heap_max: usize) -> (i32, String, Option<VmError>) {
+    let outcome = run_full(dex, main, heap_max);
+    (outcome.exit_code, outcome.stdout, outcome.vm_error)
+}
+
+fn run_full(dex: &Path, main: &str, heap_max: usize) -> acos_vm::RunOutcome {
     let mut vm = Vm::new(VmOptions {
         heap_max_bytes: heap_max,
         gc_stress: false,
@@ -83,8 +88,7 @@ fn run(dex: &Path, main: &str, heap_max: usize) -> (i32, String, Option<VmError>
     })
     .unwrap();
     vm.add_dex(DexFile::parse(std::fs::read(dex).unwrap()).unwrap());
-    let outcome = vm.run(main, &[]);
-    (outcome.exit_code, outcome.stdout, outcome.vm_error)
+    vm.run(main, &[])
 }
 
 #[test]
@@ -127,4 +131,27 @@ fn unsupported_java_api_is_structured() {
         }
         other => panic!("expected UNSUPPORTED_JAVA_API, got {other:?}"),
     }
+}
+
+/// The exception floor: a `<clinit>` failure must stop at the synchronous
+/// Rust→Java call base and be rethrown into the outer Java frames (as
+/// `ExceptionInInitializerError`), not unwind past it with a stale frame index.
+#[test]
+fn exception_floor_rethrows_at_the_rust_call_base() {
+    let Some(dex) = compile_case("ExceptionFloorMain") else {
+        eprintln!("SKIP exception_floor_rethrows_at_the_rust_call_base: javac/d8 unavailable");
+        return;
+    };
+    let outcome = run_full(&dex, "ExceptionFloorMain", 256 * 1024 * 1024);
+    assert!(
+        outcome.vm_error.is_none(),
+        "unexpected VM error: {:?}",
+        outcome.vm_error
+    );
+    assert_eq!(
+        outcome.exit_code, 0,
+        "stdout:\n{}\nstderr:\n{}",
+        outcome.stdout, outcome.stderr
+    );
+    assert_eq!(outcome.stdout, "eie:boom\nncdfe\ndone\n");
 }

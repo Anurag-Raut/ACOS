@@ -12,7 +12,9 @@
 //! sandbox, not the shared ABI; they are asserted separately below:
 //!
 //! * `umask` — the sandbox uses a fixed `0022`; ART inherits the shell's umask;
-//! * `environ_empty` — the sandbox never exports host variables, ART does.
+//! * `environ_empty` — the guest sees the fixed, Android-like VM-owned
+//!   environment table (non-empty), never the host process environment
+//!   (`HONESTY_AUDIT.md` #5).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -249,8 +251,8 @@ fn os_constants_on_the_real_framework() {
     );
     assert_eq!(
         got.get("environ_empty").map(String::as_str),
-        Some("true"),
-        "the sandbox never exports host environment variables"
+        Some("false"),
+        "the guest sees the fixed Android-like table, not the host environment"
     );
 
     // Spot-check the framework-critical values in their raw form as well, so a

@@ -26,6 +26,15 @@ thread_local! {
         line_table: Vec::new(),
         source_file: None,
     });
+
+    /// Innermost synchronous Rust→Java call base (`call_method`,
+    /// `initialize_class`, native→Java callbacks). Exception unwinding must not
+    /// pop below this depth: it is converted into a VM-level pending exception
+    /// and returned to the Rust caller as `Err(JavaException)`, which rethrows
+    /// it into its own Java frames at the right handler. `0` is the top-level
+    /// scheduler run (and any base at depth 0), where unwinding may reach an
+    /// empty stack.
+    static EXCEPTION_FLOOR: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 fn empty_code() -> Arc<MethodCode> {
@@ -45,6 +54,14 @@ fn acquire_frame(
 ) -> Frame {
     let mut frame = match vm.threads[t].frame_pool.pop() {
         Some(mut f) => {
+            // Keep the lowered IR program when the pooled frame is reused for
+            // the same method body (the common recursive/looping case), so the
+            // process-global cache is probed at most once per distinct body per
+            // pooled slot.
+            if !Arc::ptr_eq(&f.code, &code) {
+                f.ir = None;
+                f.ir_checked = false;
+            }
             // Set the length to exactly the method's register size. Native
             // handlers (`ctx_this`/`param_off`) derive the frame base from
             // `regs.len()`, so an oversized pooled buffer would corrupt them.
@@ -153,6 +170,7 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
         return Ok(1);
     }
     let cap = crate::dispatch::FAST_CAP;
+    let use_ir = crate::exec::enabled();
     let mut count = 0u64;
     while count < cap {
         if vm.threads[t].frames.len() <= stop_depth {
@@ -186,12 +204,71 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
             // Fast opcodes never push/pop frames, allocate, or resolve
             // references, so `fi` and the frame pointer stay valid for the
             // whole run and the frame lookup is paid once.
-            let Vm { threads, heap, .. } = &mut *vm;
-            let f = &mut threads[t].frames[fi];
-            count += crate::dispatch::fast_run(f, heap, cap - count);
+            if use_ir {
+                // Opt-in typed-IR tier (ACOS_EXEC=ir). The lowered program is
+                // cached on the frame (the process-global cache is only probed
+                // on first execution) and immutable; on any opcode it does not
+                // handle it stops before the instruction and the general path
+                // below runs it, so semantics are unchanged. Only loop bodies
+                // use the tier: straight-line methods get no fused-dispatch win
+                // and would pay the per-segment entry cost.
+                if !vm.threads[t].frames[fi].ir_checked {
+                    vm.threads[t].frames[fi].ir_checked = true;
+                    if crate::exec::is_loop_body(&vm.threads[t].frames[fi].code) {
+                        let code = vm.threads[t].frames[fi].code.clone();
+                        vm.threads[t].frames[fi].ir = Some(crate::exec::get_or_lower(&code));
+                    }
+                }
+                if vm.threads[t].frames[fi].ir.is_some() {
+                    let prog = vm.threads[t].frames[fi].ir.take().expect("ir cached");
+                    let Vm { threads, heap, .. } = &mut *vm;
+                    let f = &mut threads[t].frames[fi];
+                    count += crate::exec::run_ir(f, heap, &prog, cap - count);
+                    f.ir = Some(prog);
+                } else {
+                    let Vm { threads, heap, .. } = &mut *vm;
+                    let f = &mut threads[t].frames[fi];
+                    count += crate::dispatch::fast_run(f, heap, cap - count);
+                }
+            } else {
+                let Vm { threads, heap, .. } = &mut *vm;
+                let f = &mut threads[t].frames[fi];
+                count += crate::dispatch::fast_run(f, heap, cap - count);
+            }
         }
         if count >= cap || vm.threads[t].frames.len() <= stop_depth {
             break;
+        }
+        // Fast path for a `return`: `exec_one`'s prologue (method lookup, impl
+        // match and instruction fetch) is pure overhead for the opcode that
+        // ends every call. The register/result transfer and frame pop are the
+        // same as the general path.
+        if is_dex {
+            let frame = &vm.threads[t].frames[fi];
+            if let Some(insn) = frame.code.insns.get(frame.insn_index) {
+                match insn.op {
+                    // `return*`
+                    0x0e..=0x11 => {
+                        let insn = *insn;
+                        exec_return(vm, t, fi, &insn);
+                        count += 1;
+                        continue;
+                    }
+                    // `invoke-*`: skip the `exec_one` prologue, but keep the
+                    // same Java-exception routing as the general path.
+                    0x6e..=0x72 | 0x74..=0x78 => {
+                        let insn = *insn;
+                        match invoke(vm, t, fi, &insn) {
+                            Ok(()) => {}
+                            Err(VmError::JavaException(h)) => handle_exception(vm, h)?,
+                            Err(e) => return Err(e),
+                        }
+                        count += 1;
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
         }
         // Exactly one general-path instruction: native, invoke, return,
         // field/class resolution, allocation, monitor, throw, ...
@@ -199,6 +276,34 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
         count += 1;
     }
     Ok(count)
+}
+
+/// Fast `return`/`return-void`/`return-wide`/`return-object`: store the result
+/// into the frame and pop it, exactly as `execute`'s return arms do.
+#[inline]
+fn exec_return(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) {
+    let r0 = insn.regs[0];
+    let f = &mut vm.threads[t].frames[fi];
+    match insn.op {
+        0x0e => {
+            f.pending_result = 0;
+            f.pending_result_is_ref = false;
+        }
+        0x0f => {
+            f.pending_result = f.regs[r0 as usize] as u64;
+            f.pending_result_is_ref = false;
+        }
+        0x10 => {
+            f.pending_result = f.reg_wide(r0);
+            f.pending_result_is_ref = false;
+        }
+        0x11 => {
+            f.pending_result = f.regs[r0 as usize] as u64;
+            f.pending_result_is_ref = true;
+        }
+        _ => {}
+    }
+    pop_frame(vm, t);
 }
 
 fn pick_runnable(vm: &mut Vm) -> bool {
@@ -368,8 +473,19 @@ fn handle_exception(vm: &mut Vm, h: Handle) -> VmResult<()> {
 
 fn handle_exception_inner(vm: &mut Vm, h: Handle) -> VmResult<()> {
     let t = vm.current_thread;
+    let floor = EXCEPTION_FLOOR.with(|f| f.get());
     loop {
         if vm.threads[t].frames.is_empty() {
+            vm.pending_exception = h;
+            return Ok(());
+        }
+        // Stop at the synchronous Rust→Java call base. The frame below the
+        // floor belongs to the Rust caller, not to the unwinding Java stack;
+        // the caller receives the exception as `Err(JavaException)` and
+        // rethrows it into its own frames. Without this the unwinder pops the
+        // native/`call_method` frame and the caller then continues with a stale
+        // frame index (`set_ref` panic, `frames.len()=3 fi=13`).
+        if vm.threads[t].frames.len() <= floor {
             vm.pending_exception = h;
             return Ok(());
         }
@@ -718,15 +834,20 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0x23 => {
             let len = reg(vm, t, fi, r1) as i32;
             let dex = frame_dex(vm, t, fi);
+            // `strip_prefix` already yields a `&str`; the extra `to_string()`
+            // only paid a second heap allocation per `new-array`.
             let arr_desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
-            let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc).to_string();
+            let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc);
             if len < 0 {
                 return Err(vm.throw_new(
                     "Ljava/lang/NegativeArraySizeException;",
                     Some(&len.to_string()),
                 ));
             }
-            let obj = crate::vm::simple_array_object(&elem, len as usize)?;
+            // Bound the guest length before building the backing store
+            // (HONESTY_AUDIT.md #2).
+            vm.check_array_len(elem, len as usize)?;
+            let obj = crate::vm::simple_array_object(elem, len as usize)?;
             let h = vm.alloc(obj)?;
             set_ref(vm, t, fi, r0, h);
             advance(vm, t, fi, insn.size);
@@ -2024,6 +2145,29 @@ pub fn push_frame_values(
 /// Run the current thread until its frame depth returns to `base_depth`.
 pub fn run_current_until(vm: &mut Vm, base_depth: usize) -> VmResult<()> {
     let t = vm.current_thread;
+    // Set the exception floor for the duration of this synchronous call. A
+    // nested synchronous call installs a deeper floor and restores this one on
+    // return, so the innermost base always wins.
+    let prev_floor = EXCEPTION_FLOOR.with(|f| f.replace(base_depth));
+    let result = run_current_until_body(vm, t, base_depth);
+    EXCEPTION_FLOOR.with(|f| f.set(prev_floor));
+    result
+}
+
+fn run_current_until_body(vm: &mut Vm, t: usize, base_depth: usize) -> VmResult<()> {
+    // A pending exception installed by an earlier top-level run blocks the
+    // interpreter: `run_batch` returns immediately without popping the frame
+    // this call just pushed, so the loop below would spin forever on a frame
+    // that can never pop. Unwind down to this call's base and surface it, the
+    // same way `handle_exception` unwinds to `EXCEPTION_FLOOR`.
+    if vm.pending_exception != NULL {
+        while vm.threads[t].frames.len() > base_depth {
+            pop_frame_quiet(vm, t);
+        }
+        let h = vm.pending_exception;
+        vm.pending_exception = NULL;
+        return Err(VmError::JavaException(h));
+    }
     while vm.threads[t].frames.len() > base_depth {
         let n = run_batch(vm, t, base_depth, false)?;
         vm.metrics.instructions += n;
@@ -2119,11 +2263,47 @@ impl Vm {
             push_frame_values(self, mid, NULL, &[])?;
             if let Err(e) = run_current_until(self, base) {
                 self.classes[id as usize].init = InitState::Failed;
-                return Err(e);
+                return Err(self.wrap_in_exception_in_initializer(e));
             }
         }
         self.classes[id as usize].init = InitState::Init;
         Ok(())
+    }
+
+    /// Wrap a `<clinit>` failure in `ExceptionInInitializerError`, exactly as
+    /// ART does the first time a class initialisation fails. A later access to
+    /// the now-erroneous class throws `NoClassDefFoundError` (the
+    /// `InitState::Failed` arm of `initialize_class`).
+    fn wrap_in_exception_in_initializer(&mut self, e: VmError) -> VmError {
+        let VmError::JavaException(cause) = e else {
+            return e;
+        };
+        // Root the cause across the allocation below (the pending-exception
+        // root was already released by the time we get here).
+        self.native_roots.push(cause);
+        let result = (|| -> VmResult<Handle> {
+            if let Some(cid) = self.class_of_object(cause) {
+                if self.class_desc_of_id(cid) == "java.lang.ExceptionInInitializerError" {
+                    return Ok(cause);
+                }
+            }
+            let cid = self.load_class("Ljava/lang/ExceptionInInitializerError;")?;
+            let h = self.builtin_instance(cid)?;
+            self.native_roots.push(h);
+            // API 34 `ExceptionInInitializerError` overrides `getCause()` to
+            // read its own `exception` field; the bootstrap corelib has no such
+            // field and inherits `Throwable.getCause()` (the `cause` field).
+            // `set_instance_field_by_name` is a no-op when the field is absent.
+            self.set_instance_field_by_name(h, "exception", cause);
+            self.set_instance_field_by_name(h, "cause", cause);
+            self.native_roots.pop();
+            Ok(h)
+        })();
+        self.native_roots.pop();
+        match result {
+            Ok(h) => VmError::JavaException(h),
+            Err(e) => e,
+        }
     }
 }
 

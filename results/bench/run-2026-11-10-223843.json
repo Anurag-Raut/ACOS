@@ -1,0 +1,210 @@
+{
+  "schema": "acos-bench-run/v1",
+  "timestamp": "2026-11-10T22:38:44",
+  "commit": "9426b5b",
+  "samples_per_metric": 10,
+  "profile": "release",
+  "methodology": "BENCHMARKS.md \u00a72: >=20 samples (p50/p95 nearest-rank), metric type labelled, cold/warm stated, /proc based (no /usr/bin/time), no fixed sleep in a timed path, one tools/guarded.sh scope per metric",
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "threads": 32,
+    "kernel": "7.2.11-arch1-1",
+    "ram_total_kib": 63394528,
+    "ram_available_at_start_kib": 27318732,
+    "zram_swap_total_kib": 20971516,
+    "loadavg1": "3.62",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "fixture": {
+    "path": "/home/Qui/Projects/acos/fixtures/build/apps/hello-views.apk",
+    "sha256": "d5b66b1388b086650046a2bce52ec9d26bd25be64041604f282767628cad10a3",
+    "package": "com.example.helloviews",
+    "api_level": 34,
+    "abi": "x86_64"
+  },
+  "metric_status": {
+    "interpreter": "pass"
+  },
+  "gates": {
+    "interpreter.02_int_arith.wall_ms.p50": {
+      "p50": 6.548,
+      "p95": 7.434
+    },
+    "interpreter.05_branches_loops.wall_ms.p50": {
+      "p50": 6.183,
+      "p95": 6.523
+    },
+    "interpreter.09_strings.wall_ms.p50": {
+      "p50": 8.001,
+      "p95": 8.996
+    }
+  },
+  "envelopes": {
+    "interpreter": {
+      "request_id": "bench_f53b6_18e6be1ae182d903",
+      "ok": true,
+      "status": "pass",
+      "backend": "acos-native",
+      "fidelity": "native-runtime",
+      "capabilities_used": [],
+      "result": {
+        "cold_or_warm": "fresh Vm per sample; the first sample in the process parses the boot classpath, later samples reuse the process-global boot cache (warm). See results/bench/MEMORY_PROFILE.md",
+        "corelib": "real",
+        "definition": "interpreted DEX program wall time and interpreted instructions",
+        "metric": "interpreter",
+        "note": "ACOS-only: legacy ACVM published no interpreter micro benchmarks, so these rows have no legacy counterpart (host-JVM numbers live in results/vm, a different engine and fidelity)",
+        "programs": [
+          {
+            "allocations": 933,
+            "instructions": 62583,
+            "instructions_per_second": {
+              "max": 9983296.566,
+              "mean": 9438991.323,
+              "min": 8418112.359,
+              "p50": 9434926.55,
+              "p95": 9983296.566,
+              "raw": [
+                8418112.359,
+                9026817.797,
+                9420084.47,
+                9423880.366,
+                9434926.55,
+                9556903.455,
+                9610498.621,
+                9701246.019,
+                9814147.031,
+                9983296.566
+              ],
+              "samples": 10
+            },
+            "instructions_per_second_p50": 9556903.455,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/02_int_arith/classes.dex",
+            "program": "02_int_arith",
+            "samples": 10,
+            "wall_ms": {
+              "max": 7.434,
+              "mean": 6.644,
+              "min": 6.269,
+              "p50": 6.548,
+              "p95": 7.434,
+              "raw": [
+                6.269,
+                6.377,
+                6.451,
+                6.512,
+                6.548,
+                6.633,
+                6.641,
+                6.644,
+                6.933,
+                7.434
+              ],
+              "samples": 10
+            }
+          },
+          {
+            "allocations": 862,
+            "instructions": 49935,
+            "instructions_per_second": {
+              "max": 8451656.811,
+              "mean": 8107197.178,
+              "min": 7654664.931,
+              "p50": 8042022.406,
+              "p95": 8451656.811,
+              "raw": [
+                7654664.931,
+                7941902.838,
+                7980943.549,
+                8039700.843,
+                8042022.406,
+                8076347.728,
+                8240580.39,
+                8254735.5,
+                8389416.785,
+                8451656.811
+              ],
+              "samples": 10
+            },
+            "instructions_per_second_p50": 8076347.728,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/05_branches_loops/classes.dex",
+            "program": "05_branches_loops",
+            "samples": 10,
+            "wall_ms": {
+              "max": 6.523,
+              "mean": 6.164,
+              "min": 5.908,
+              "p50": 6.183,
+              "p95": 6.523,
+              "raw": [
+                5.908,
+                5.952,
+                6.049,
+                6.06,
+                6.183,
+                6.209,
+                6.211,
+                6.257,
+                6.288,
+                6.523
+              ],
+              "samples": 10
+            }
+          },
+          {
+            "allocations": 1807,
+            "instructions": 143811,
+            "instructions_per_second": {
+              "max": 18350146.847,
+              "mean": 17683254.001,
+              "min": 15985461.679,
+              "p50": 17885062.812,
+              "p95": 18350146.847,
+              "raw": [
+                15985461.679,
+                17113550.432,
+                17445874.312,
+                17652311.656,
+                17885062.812,
+                17973658.731,
+                18083001.418,
+                18166904.957,
+                18176567.167,
+                18350146.847
+              ],
+              "samples": 10
+            },
+            "instructions_per_second_p50": 17973658.731,
+            "path": "/home/Qui/Projects/acos/fixtures/build/dexprogs/09_strings/classes.dex",
+            "program": "09_strings",
+            "samples": 10,
+            "wall_ms": {
+              "max": 8.996,
+              "mean": 8.145,
+              "min": 7.837,
+              "p50": 8.001,
+              "p95": 8.996,
+              "raw": [
+                7.837,
+                7.912,
+                7.916,
+                7.953,
+                8.001,
+                8.041,
+                8.147,
+                8.243,
+                8.403,
+                8.996
+              ],
+              "samples": 10
+            }
+          }
+        ],
+        "type": "wall + VM counters",
+        "unit": "ms, instructions, instructions/second"
+      },
+      "metrics": {
+        "wall_ms": 270
+      }
+    }
+  }
+}

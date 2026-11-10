@@ -1,7 +1,7 @@
 # ACOS — Status
 
-**As of 2026-11-10, HEAD `40f075c` + working tree** (49 commits; checkpoints
-`ced0d70`/`40f075c`). Honest, dated snapshot. `TASKS.md` is the plan;
+**As of 2026-11-10, HEAD `9426b5b` + working tree** (50 commits; checkpoint
+`ced0d70`/`40f075c`/`e64897f`). Honest, dated snapshot. `TASKS.md` is the plan;
 `docs/V1.md` is the V1 definition; `docs/FINDINGS.md` is the append-only
 findings log; `EXPERIMENTS.md` is the history; `BENCHMARKS.md` §8 and
 `results/bench/REPORT.md` are the measured benchmark record.
@@ -41,7 +41,7 @@ Fidelity tiers are defined in `DECISIONS.md` ADR-0005 (updated by ADR-0015).
 |---|---|---|
 | `jvm-reference` (weak) | host OpenJDK 17 output for the same source | `fixtures/expected/dexprogs/` (51 files) |
 | `art-reference` (authoritative) | real ART on the API-34 `google_apis` x86_64 emulator | `fixtures/expected-art/dexprogs/` (75 files, 25 programs × stdout/exit/stderr); `fixtures/reference/{hello-views,hello-jni,counter,todo-list,multi-activity,form-validation}/art-api34-x86_64/`; `results/oracle/jvm-vs-art.md`; `results/oracle/dexprogs-runs.json` |
-| `physical-device` | real phone capture | **not captured** (`docs/DEV_WORKFLOW.md` §11; the target device was absent from `adb devices`) |
+| `physical-device` | real phone capture | **captured, not interchangeable** — `fixtures/reference-device/` (moto g35 5G, Android 15/API 35; `DEVICE.md`/`COMPARISON.md`, commit `50f2f5f`). Kept separate from the API-34 emulator `art-reference`; density/API differ. |
 
 **Verified (reproducible artifact exists):** DEX decode (`dexdump` differential),
 APK manifest/AXML (`aapt2` differential), M1 console corpus on real core libs
@@ -56,8 +56,9 @@ benchmark rows (`results/bench/REPORT.md`).
 
 **Claimed / not yet verified:** Activity lifecycle order; any rendered frame from
 a real Activity; UI tree; input; reset; concurrency with independent state;
-`verified tasks / GiB-minute`; any end-to-end `acos verify` pass; the
-`physical-device` tier.
+`verified tasks / GiB-minute`; any end-to-end `acos verify` pass. The
+`physical-device` tier is captured but only as a reference, not yet run as a
+differential fixture.
 
 ## What runs
 
@@ -82,10 +83,13 @@ a real Activity; UI tree; input; reset; concurrency with independent state;
   13.052/14.933 ms; attach → bindApplication delivered 2.311/2.732 ms; idle core
   (Vm only) 26,984 KiB anon+shmem; booted framework 161,384 KiB anon+shmem
   (PSS 166,739 KiB); N=10 sessions 293,612 KiB anon+shmem; marginal N=5→10
-  14.314 MiB/session; parked idle CPU 0 ticks / 5 s. Interpreter
-  `02_int_arith` 6.361 ms / 9,806,216 insn/s; `05_branches_loops` 5.992 ms;
-  `09_strings` 8.267 ms. Full per-metric legacy comparison in §"Per-metric vs
-  legacy" below.
+  14.314 MiB/session; parked idle CPU 0 ticks / 5 s. Interpreter (authoritative
+  `results/bench/REPORT.md` §1, run `205045`): `02_int_arith` 16.048 ms /
+  3.86 M insn/s; `05_branches_loops` and `09_strings` per that table. Earlier
+  runs quote 6.361 ms / 9.8 M (run `201637`) and `BENCHMARKS.md` §8.1 quotes
+  22.8 ms / 2.73 M (run `191849`); the spread reflects host load (loadavg 4.8),
+  so no single best-of-three number is the claim. Full per-metric legacy
+  comparison in §"Per-metric vs legacy" below.
 
 ## What is unsupported (`UNSUPPORTED_JAVA_API` sites, by area)
 
@@ -128,6 +132,15 @@ Unregistered natives and explicit `unsupported_api` sites raise a structured
   run.
 - **Committed artifacts lag.** `results/vm/dexprogs-real-normal.json` (24/25)
   and `results/bench/baseline.json` (commit `fad5534`) predate the current tree.
+
+## Fixture-dependent tests in CI
+
+`fixtures/build/` and `.cache/boot/` are git-ignored, so differential tests
+silently `SKIP` on a fresh clone. Setting `ACOS_REQUIRE_FIXTURES=1` turns every
+skip into a **failure** (`crates/acos-vm/tests/fixtures_required.rs`);
+`tools/diff-dexprogs.sh` and `tools/bench-acos.sh` set it by default. CI must run
+`tools/build-fixtures.sh` / `tools/build-apps.sh` and the boot-cache extractor
+first (`HONESTY_AUDIT.md` #11).
 
 ## Per-metric vs legacy — `results/bench/REPORT.md` §2/§3
 
@@ -186,16 +199,21 @@ same-type/same-state pairs are called `better`/`worse`.
    usable (M9/V1 §5.1; `results/bench/MEMORY_PROFILE.md` §5).
 9. Extend the benchmark harness to M3–M11 and record every tracked metric with
    ≥20 reps p50/p95; keep the regression gate (`tools/bench-acos.sh --check`).
-10. Capture the `physical-device` reference tier and run the `scenarios/negative/*`
-    suite to prove zero false passes before any V1 verdict claim.
+10. Run the `scenarios/negative/*` suite (and a differential against the now
+    captured `fixtures/reference-device/`) to prove zero false passes before any
+    V1 verdict claim.
 
 ## Working tree / concurrency
 
-HEAD `40f075c` is a committed wave checkpoint. The working tree carries
-uncommitted W25 work (display parcel, frame handoff, vsync, `OsConstants`,
-`libcore.io.Linux` expansion) plus untracked `results/vm/OS_NATIVES_AUDIT.md`.
-Other agents reported the shared tree mid-edit; W25-B validated in a scratch
-worktree (`.cache/wt-w25b`). No build was run for this status update.
+HEAD `9426b5b` (the honesty/host-safety audit) is the committed checkpoint. The
+working tree carries uncommitted wave work: W33-A (reflection fields, exception
+floor, lifecycle), W28-A (interpreter/dispatch/vm performance), W34-B
+(`acos-cli` session/launch, `acos-mcp`) and W35-A (the audit fixes: guest-sized
+allocation bounds, parcel counts, AppOps/UserManager grants, guest environment,
+surface decode errors, green-thread `park`/`unpark`, native-loader path
+confinement). Shared files (`heap.rs`, `reflect.rs`, `interp.rs`, `vm.rs`) were
+edited in place; concurrent agents re-read before editing. Validate on a scratch
+worktree if the shared tree does not build.
 
 ## Decisions in force
 
@@ -214,4 +232,5 @@ text).
 - **Production-image dex stripping** untested (only `userdebug` available).
 - **`android-34` framework sources** not installed (only `android-36`), so
   source-line references are indicative.
-- **`physical-device` tier** not captured.
+- **`physical-device` differential** not run: the capture exists
+  (`fixtures/reference-device/`) but no scenario compares against it yet.

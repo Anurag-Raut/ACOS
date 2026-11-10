@@ -6,6 +6,8 @@
 mod bench;
 mod bench_pool;
 mod bench_sessions;
+mod launch;
+mod session;
 mod verify;
 
 use std::path::PathBuf;
@@ -34,6 +36,23 @@ enum Command {
     Inspect(InspectArgs),
     /// Execute a DEX/APK's `main` on the ACOS Rust interpreter.
     RunDex(RunDexArgs),
+    /// Boot an app and report the launch stage ladder.
+    Launch(launch::LaunchArgs),
+    /// Observe the latest completed frame of a session.
+    Observe(session::ObserveArgs),
+    /// Tap a point or a text label.
+    Tap(session::TapArgs),
+    /// Press a key code.
+    Key(session::KeyArgs),
+    /// Swipe between two points.
+    Swipe(session::SwipeArgs),
+    /// Read the guest log buffer.
+    Logs(session::LogsArgs),
+    /// Session lifecycle: status, reset, close.
+    Session {
+        #[command(subcommand)]
+        command: session::SessionCommand,
+    },
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
     /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
@@ -117,6 +136,13 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Inspect(args) => inspect(args),
         Command::RunDex(args) => run_dex(args),
+        Command::Launch(args) => launch::run(args),
+        Command::Observe(args) => session::observe(args),
+        Command::Tap(args) => session::tap(args),
+        Command::Key(args) => session::key(args),
+        Command::Swipe(args) => session::swipe(args),
+        Command::Logs(args) => session::logs(args),
+        Command::Session { command } => session::session(command),
         Command::Verify(args) => verify::run(args),
         Command::Bench(args) => bench::run(args),
     }
@@ -336,7 +362,7 @@ fn peak_rss_kb() -> u64 {
     0
 }
 
-fn new_request_id() -> String {
+pub(crate) fn new_request_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -586,7 +612,7 @@ fn vm_error_details(e: &VmError) -> Option<Value> {
     }
 }
 
-fn print_json<T: Serialize>(envelope: &T) {
+pub(crate) fn print_json<T: Serialize>(envelope: &T) {
     match serde_json::to_string_pretty(envelope) {
         Ok(s) => println!("{s}"),
         Err(e) => eprintln!("error: failed to serialize JSON envelope: {e}"),

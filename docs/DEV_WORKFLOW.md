@@ -385,3 +385,60 @@ The emulator is started/stopped directly with `tools/oracle/emulator.sh`
 (it self-checks `MemAvailable > 16 GiB`, RAM ≤ 2048 MB, one instance, headless)
 and is **always** shut down afterwards (`pgrep -af qemu` must be empty). Use a
 private `CARGO_TARGET_DIR` when other agents are building concurrently.
+
+---
+
+## 13. Agent session loop (build → launch → observe → input → logs)
+
+The tight loop an AI agent runs while developing an app. It uses the commands
+from `docs/AGENT_API.md` §18; every step is one JSON envelope and a non-zero
+exit on any non-`pass` status.
+
+```bash
+export CARGO_TARGET_DIR=$PWD/.cache/target-agent
+export ACOS=$(cargo build -q -p acos-cli && echo target/debug/acos)
+
+# 1. build the app (the existing fixture pipeline)
+tools/build-apps.sh
+
+# 2. launch and read the ladder. Exit 1 means a rung did not complete; read
+#    result.reached_stage and error.details.stage, never "retry until green".
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" launch \
+  fixtures/build/apps/counter.apk --json | tee artifacts/launch.json
+
+# 3. observe. Before the first frame this is `not_ready`; it is not a bug in
+#    your app and it is not a pass.
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" observe --apk \
+  fixtures/build/apps/counter.apk --screenshot artifacts/frame.png --json
+
+# 4. drive input only after a window exists (today the dispatcher answers
+#    NoWindowAtPoint until WMS publishes a window).
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" tap 120 340 --apk \
+  fixtures/build/apps/counter.apk --json
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" key back --json
+
+# 5. read the guest log buffer (empty is valid; no fabricated lines).
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" logs --apk \
+  fixtures/build/apps/counter.apk --json
+
+# 6. reset / close when the task state is polluted.
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" session reset --json
+tools/guarded.sh --mem 4G --time 300 -- "$ACOS" session close --json
+```
+
+Reading the result:
+
+* `ok:true`/`status:pass` → the rung ran. Only then may the next command rely
+  on it.
+* `unsupported`/`UNSUPPORTED_BACKEND` → the engine cannot do it yet. Report the
+  gap; do not rewrite the app or the expectation to hide it.
+* `error`/`JAVA_EXCEPTION`/`VM_*` → the app or the engine threw. Read
+  `error.details.stage` (the rung) and the stack top; this is not an assertion
+  failure.
+* `fail`/`ELEMENT_NOT_FOUND`/`ASSERTION_FAILED` → the app ran and a check did
+  not hold. Read the linked frame/tree.
+
+MCP: when the loop must keep one session across calls (an agent that inspects,
+taps and observes in separate requests), run the default `acos-mcp` binary. Its
+`SessionBackend` holds the session in-process; the CLI's session ends with the
+command. See `docs/AGENT_API.md` §18.6.

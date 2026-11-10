@@ -93,7 +93,12 @@ pub unsafe extern "C" fn dlopen(filename: *const c_char, _flags: c_int) -> *mut 
     };
     let name = cstr(filename);
     let loader = crate::loader::Loader::from_inner(inner.clone());
-    let path = resolve_library(&inner, &name);
+    // HONESTY_AUDIT #1: only resolve inside the configured (extracted APK)
+    // roots. An absolute host path is refused unless the loader is explicitly
+    // in trusted-test mode.
+    let Some(path) = resolve_library(&inner, &name) else {
+        return std::ptr::null_mut();
+    };
     let handle = match loader.load(&path, &name) {
         Ok(h) => h,
         Err(_) => return std::ptr::null_mut(),
@@ -215,18 +220,36 @@ pub unsafe extern "C" fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int
     0
 }
 
-fn resolve_library(inner: &Arc<LoaderInner>, name: &str) -> std::path::PathBuf {
+/// Resolve a `dlopen` name to a loader path within the allowed roots.
+///
+/// An absolute (or slash-containing) name is canonicalised and must live under
+/// one of `search_paths`; otherwise it is refused (returns `None`). A bare
+/// soname is only ever resolved through `search_paths`, never the host dynamic
+/// loader. This is the path-confinement half of HONESTY_AUDIT #1; the process
+/// sandbox (seccomp/landlock) is still required before native APK code is
+/// trusted (see DECISIONS.md ADR-0018 note).
+fn resolve_library(inner: &Arc<LoaderInner>, name: &str) -> Option<std::path::PathBuf> {
+    let config = inner.config();
     let p = std::path::Path::new(name);
     if p.is_absolute() || name.contains('/') {
-        return p.to_path_buf();
+        let real = std::fs::canonicalize(p).ok()?;
+        let allowed = config.search_paths.iter().any(|root| {
+            std::fs::canonicalize(root)
+                .map(|r| real.starts_with(&r))
+                .unwrap_or(false)
+        });
+        if !allowed && !config.allow_host_paths {
+            return None;
+        }
+        return Some(real);
     }
-    for dir in &inner.config().search_paths {
+    for dir in &config.search_paths {
         let candidate = dir.join(name);
         if candidate.is_file() {
-            return candidate;
+            return Some(candidate);
         }
     }
-    p.to_path_buf()
+    None
 }
 
 macro_rules! shim {

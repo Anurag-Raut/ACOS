@@ -5,10 +5,12 @@
 //! instance slots are 4 bytes starting at byte 8, and array data starts at
 //! byte 16 with the natural element scale.
 
+use std::time::{Duration, Instant};
+
 use crate::class::NativeCtx;
 use crate::error::VmResult;
 use crate::heap::{ArrayData, ArrayObj, Object, NULL};
-use crate::vm::Vm;
+use crate::vm::{ThreadStatus, Vm};
 
 const ARRAY_BASE: i32 = 16;
 const INSTANCE_BASE: i32 = 8;
@@ -96,14 +98,68 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(c, "loadFence", "()V", noop);
         vm.register_native(c, "storeFence", "()V", noop);
         vm.register_native(c, "fullFence", "()V", noop);
-        vm.register_native(c, "park", "(ZJ)V", noop);
-        vm.register_native(c, "unpark", "(Ljava/lang/Object;)V", noop);
+        vm.register_native(c, "park", "(ZJ)V", park);
+        vm.register_native(c, "unpark", "(Ljava/lang/Object;)V", unpark);
         vm.register_native(c, "objectFieldOffset", "(Ljava/lang/reflect/Field;)J", object_field_offset);
     }
     Ok(())
 }
 
 fn noop(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    Ok(())
+}
+
+/// `Unsafe.park(boolean isAbsolute, long time)` / `LockSupport.park*`.
+///
+/// Real green-thread parking: a pending `unpark` permit is consumed
+/// immediately; otherwise the thread yields to the scheduler (timed parks wake
+/// via `wake_at`, unbounded parks wake on `unpark`). Never a no-op
+/// (HONESTY_AUDIT.md #7).
+fn park(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let t = vm.current_thread;
+    if vm.threads.get(t).map(|th| th.park_permit).unwrap_or(false) {
+        vm.threads[t].park_permit = false;
+        return Ok(());
+    }
+    let is_absolute = vm.arg_bool(ctx, 0);
+    let time = vm.arg_i64(ctx, 1);
+    if time <= 0 {
+        vm.threads[t].status = ThreadStatus::Parked;
+        vm.threads[t].wake_at = None;
+        return Ok(());
+    }
+    // `isAbsolute` is milliseconds on the wall clock (JDK convention); the
+    // relative form is nanoseconds.
+    let nanos = if is_absolute {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        (time.saturating_sub(now_ms).max(0) as u64).saturating_mul(1_000_000)
+    } else {
+        time as u64
+    };
+    vm.threads[t].status = ThreadStatus::Sleeping;
+    vm.threads[t].wake_at = Some(Instant::now() + Duration::from_nanos(nanos));
+    Ok(())
+}
+
+/// `Unsafe.unpark(Object thread)` / `LockSupport.unpark`: grant a park permit
+/// and wake the target if it is currently parked.
+fn unpark(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let target = vm.arg_ref(ctx, 0);
+    if target == NULL {
+        return Ok(());
+    }
+    for th in vm.threads.iter_mut() {
+        if th.object == target {
+            th.park_permit = true;
+            if th.status == ThreadStatus::Parked {
+                th.status = ThreadStatus::Runnable;
+            }
+            break;
+        }
+    }
     Ok(())
 }
 

@@ -8,12 +8,14 @@
 //! to stderr. Tools are the descriptors in [`acos_protocol::mcp_tools`], one per
 //! ACOS command, plus two server tools: `acos_capabilities` and `acos_help`.
 //!
-//! The runtime is behind the [`backend::Backend`] trait. The only implementation
-//! today is [`backend::CliBackend`], which executes the `acos` binary as a
-//! subprocess for the commands that binary actually implements and returns a
-//! structured `unsupported` envelope for every command that does not exist yet.
-//! As runtime capabilities land in `acos-cli`, they become available tools with
-//! no server changes.
+//! The runtime is behind the [`backend::Backend`] trait. [`backend::CliBackend`]
+//! executes the `acos` binary as a subprocess for the commands that binary
+//! implements. [`session_backend::SessionBackend`] (installed by default) wraps
+//! it with an in-process map of [`acos_runtime::session::AgentSession`]s so that
+//! `acos_run`/`acos_launch`, `acos_observe`, `acos_action`/`acos_tap`/`acos_key`/
+//! `acos_swipe`, `acos_logs`, `acos_status`, `acos_reset` and `acos_destroy`
+//! hold their state across tool calls. As runtime capabilities land in
+//! `acos-cli`, they become available tools with no server changes.
 
 #![deny(unsafe_op_in_unsafe_fn)]
 // One controlled `libc::kill` call (see `process::kill_tree`) is the only unsafe
@@ -29,9 +31,11 @@ pub mod process;
 pub mod safety;
 pub mod server;
 pub mod session;
+pub mod session_backend;
 pub mod transport;
 
 pub use backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
+pub use session_backend::SessionBackend;
 pub use descriptors::{
     LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS,
 };

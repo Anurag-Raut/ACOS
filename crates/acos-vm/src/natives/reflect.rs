@@ -392,14 +392,26 @@ fn cl_empty_annotation_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn arr_create_object(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let class_obj = vm.arg_ref(ctx, 0);
-    let len = vm.arg_i32(ctx, 1).max(0) as usize;
+    let len = vm.arg_i32(ctx, 1);
+    if len < 0 {
+        return Err(vm.throw_new(
+            "Ljava/lang/NegativeArraySizeException;",
+            Some(&len.to_string()),
+        ));
+    }
+    let len = len as usize;
     let desc = vm
         .class_id_of_class_object(class_obj)
         .map(|c| vm.class_desc(c).to_string())
         .unwrap_or_else(|| "Ljava/lang/Object;".to_string());
+    // Bound the guest length before the `vec![..; len]` backing store: the
+    // reflection path must throw Java OutOfMemoryError, never abort the host
+    // allocator (HONESTY_AUDIT.md #2).
+    vm.check_array_len(&desc, len)?;
+    let data = new_array_data(&desc, len)?;
     let h = vm.alloc(Object::Array(ArrayObj {
         elem_desc: desc,
-        data: ArrayData::Ref(vec![NULL; len]),
+        data,
     }))?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -416,6 +428,14 @@ fn arr_create_multi(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         Some(Object::Array(ArrayObj { data: ArrayData::Int(v), .. })) => v.clone(),
         _ => Vec::new(),
     };
+    // The JVM caps array dimensions at 255; a guest `int[] dims` must not drive
+    // unbounded recursion in `build_multi`.
+    if lens.len() > 255 {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalArgumentException;",
+            Some("array dimensions exceed 255"),
+        ));
+    }
     let obj = build_multi(vm, &desc, &lens)?;
     vm.ret_ref(ctx, obj);
     Ok(())
@@ -425,7 +445,16 @@ fn arr_create_multi(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// (`I`, `Ljava/lang/String;`, ...) and `dims` the dimension sizes from the
 /// outermost inward.
 fn build_multi(vm: &mut Vm, elem_desc: &str, dims: &[i32]) -> VmResult<Handle> {
-    let n = dims.first().copied().unwrap_or(0).max(0) as usize;
+    let raw = dims.first().copied().unwrap_or(0);
+    if raw < 0 {
+        return Err(vm.throw_new(
+            "Ljava/lang/NegativeArraySizeException;",
+            Some(&raw.to_string()),
+        ));
+    }
+    let n = raw as usize;
+    // Bound every dimension before allocating/recursing (HONESTY_AUDIT.md #2).
+    vm.check_array_len(elem_desc, n)?;
     if dims.len() <= 1 {
         let data = new_array_data(elem_desc, n)?;
         return vm.alloc(Object::Array(ArrayObj {
@@ -577,48 +606,85 @@ fn field_get_art(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn field_offsets(vm: &Vm, this: Handle) -> (bool, i32, usize) {
+/// Resolve a `Field` mirror to `(is_static, slot)`.
+///
+/// `artFieldIndex` is the **declaration index** (used by `getNameInternal` and
+/// `getDeclaredFields`), while the storage slot is `FieldDef::offset`: a
+/// `long`/`double` occupies two slots, so indexing `Vm::statics` (or an
+/// object's field array) by the declaration index reads the wrong slot as soon
+/// as a wide field precedes the target. That is the `Settings.Global` NPE in
+/// the M2 chain: `Field.get` returned a value from the wrong static slot.
+fn field_slot(vm: &Vm, this: Handle) -> (bool, usize) {
     let access = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0);
     let is_static = access & acos_dex::access::STATIC != 0;
-    let off = vm.get_instance_field_by_name(this, "offset").unwrap_or(0) as i32;
     let idx = vm.get_instance_field_by_name(this, "artFieldIndex").unwrap_or(0) as usize;
-    (is_static, off, idx)
+    if let Some(cid) = vm
+        .get_instance_field_by_name(this, "declaringClass")
+        .and_then(|dc| vm.class_id_of_class_object(dc))
+    {
+        let c = &vm.classes[cid as usize];
+        let def = if is_static {
+            c.declared_static_fields.get(idx)
+        } else {
+            c.declared_instance_fields.get(idx)
+        };
+        if let Some(d) = def {
+            return (is_static, d.offset as usize);
+        }
+    }
+    // Fall back to the encoded byte offset (instance-field encoding).
+    let off = vm.get_instance_field_by_name(this, "offset").unwrap_or(0) as i32;
+    (is_static, ((off - FIELD_BASE) / 4).max(0) as usize)
 }
 
 fn read_field(vm: &Vm, this: Handle, target: Handle) -> u32 {
-    let (is_static, off, idx) = field_offsets(vm, this);
+    let (is_static, slot) = field_slot(vm, this);
     if is_static {
-        if let Some(dc) = vm.get_instance_field_by_name(this, "declaringClass") {
-            if let Some(cid) = vm.class_id_of_class_object(dc) {
-                return vm.classes[cid as usize]
-                    .statics
-                    .get(idx)
-                    .copied()
-                    .unwrap_or(0);
-            }
+        if let Some(cid) = vm
+            .get_instance_field_by_name(this, "declaringClass")
+            .and_then(|dc| vm.class_id_of_class_object(dc))
+        {
+            return vm.classes[cid as usize].statics.get(slot).copied().unwrap_or(0);
         }
         return 0;
     }
-    let slot = ((off - FIELD_BASE) / 4).max(0) as usize;
     match vm.heap.get(target) {
         Some(Object::Instance { fields, .. }) => fields.get(slot).copied().unwrap_or(0),
         _ => 0,
     }
 }
 
-fn write_field(vm: &mut Vm, this: Handle, target: Handle, v: u32) {
-    let (is_static, off, idx) = field_offsets(vm, this);
+/// Read the high 32 bits of a wide (`long`/`double`) field: the adjacent slot.
+fn read_wide_hi(vm: &Vm, this: Handle, target: Handle) -> u64 {
+    let (is_static, slot) = field_slot(vm, this);
     if is_static {
-        if let Some(dc) = vm.get_instance_field_by_name(this, "declaringClass") {
-            if let Some(cid) = vm.class_id_of_class_object(dc) {
-                if idx < vm.classes[cid as usize].statics.len() {
-                    vm.classes[cid as usize].statics[idx] = v;
-                }
+        vm.get_instance_field_by_name(this, "declaringClass")
+            .and_then(|dc| vm.class_id_of_class_object(dc))
+            .and_then(|cid| vm.classes[cid as usize].statics.get(slot + 1).copied())
+            .unwrap_or(0) as u64
+    } else {
+        match vm.heap.get(target) {
+            Some(Object::Instance { fields, .. }) => {
+                fields.get(slot + 1).copied().unwrap_or(0) as u64
+            }
+            _ => 0,
+        }
+    }
+}
+
+fn write_field(vm: &mut Vm, this: Handle, target: Handle, v: u32) {
+    let (is_static, slot) = field_slot(vm, this);
+    if is_static {
+        if let Some(cid) = vm
+            .get_instance_field_by_name(this, "declaringClass")
+            .and_then(|dc| vm.class_id_of_class_object(dc))
+        {
+            if slot < vm.classes[cid as usize].statics.len() {
+                vm.classes[cid as usize].statics[slot] = v;
             }
         }
         return;
     }
-    let slot = ((off - FIELD_BASE) / 4).max(0) as usize;
     if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(target) {
         if slot < fields.len() {
             fields[slot] = v;
@@ -626,11 +692,118 @@ fn write_field(vm: &mut Vm, this: Handle, target: Handle, v: u32) {
     }
 }
 
+/// Write the high 32 bits of a wide (`long`/`double`) field.
+fn write_wide_hi(vm: &mut Vm, this: Handle, target: Handle, hi: u32) {
+    let (is_static, slot) = field_slot(vm, this);
+    if is_static {
+        if let Some(cid) = vm
+            .get_instance_field_by_name(this, "declaringClass")
+            .and_then(|dc| vm.class_id_of_class_object(dc))
+        {
+            if slot + 1 < vm.classes[cid as usize].statics.len() {
+                vm.classes[cid as usize].statics[slot + 1] = hi;
+            }
+        }
+        return;
+    }
+    if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(target) {
+        if slot + 1 < fields.len() {
+            fields[slot + 1] = hi;
+        }
+    }
+}
+
+/// Descriptor of a field's declared type (`I`, `[B`, `Ljava/lang/String;`).
+fn field_type_desc(vm: &Vm, this: Handle) -> Option<String> {
+    let ty = vm.get_instance_field_by_name(this, "type")?;
+    let cid = vm.class_id_of_class_object(ty)?;
+    // The raw descriptor, not the dotted Java name.
+    Some(vm.class_desc(cid).to_string())
+}
+
+fn read_wide(vm: &Vm, this: Handle, target: Handle) -> u64 {
+    (read_field(vm, this, target) as u64) | (read_wide_hi(vm, this, target) << 32)
+}
+
+/// Box a primitive field value exactly as ART's native `Field.get` does.
+fn box_primitive(vm: &mut Vm, kind: u8, raw: u64) -> VmResult<Handle> {
+    let (class, sig, arg) = match kind {
+        b'Z' => ("Ljava/lang/Boolean;", "(Z)Ljava/lang/Boolean;", raw & 1),
+        b'B' => (
+            "Ljava/lang/Byte;",
+            "(B)Ljava/lang/Byte;",
+            (raw as u8 as i8 as i64) as u64,
+        ),
+        b'C' => (
+            "Ljava/lang/Character;",
+            "(C)Ljava/lang/Character;",
+            raw & 0xffff,
+        ),
+        b'S' => (
+            "Ljava/lang/Short;",
+            "(S)Ljava/lang/Short;",
+            (raw as u16 as i16 as i64) as u64,
+        ),
+        b'I' => (
+            "Ljava/lang/Integer;",
+            "(I)Ljava/lang/Integer;",
+            (raw as u32 as i32 as i64) as u64,
+        ),
+        b'J' => ("Ljava/lang/Long;", "(J)Ljava/lang/Long;", raw),
+        b'F' => ("Ljava/lang/Float;", "(F)Ljava/lang/Float;", raw),
+        b'D' => ("Ljava/lang/Double;", "(D)Ljava/lang/Double;", raw),
+        _ => {
+            return Err(vm.throw_new(
+                "Ljava/lang/InternalError;",
+                Some("Field.get on unknown primitive"),
+            ))
+        }
+    };
+    let cid = vm.load_class(class)?;
+    let mid = vm.find_method(cid, "valueOf", sig, InvokeKind::Static)?;
+    Ok(crate::interp::call_method(vm, mid, NULL, &[arg])? as u32)
+}
+
+/// Unbox the argument of `Field.set` for a primitive field.
+fn unbox_primitive(vm: &mut Vm, kind: u8, obj: Handle) -> VmResult<u64> {
+    if obj == NULL {
+        return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
+    }
+    let (method, sig) = match kind {
+        b'Z' => ("booleanValue", "()Z"),
+        b'B' => ("byteValue", "()B"),
+        b'C' => ("charValue", "()C"),
+        b'S' => ("shortValue", "()S"),
+        b'I' => ("intValue", "()I"),
+        b'J' => ("longValue", "()J"),
+        b'F' => ("floatValue", "()F"),
+        b'D' => ("doubleValue", "()D"),
+        _ => {
+            return Err(vm.throw_new(
+                "Ljava/lang/InternalError;",
+                Some("Field.set on unknown primitive"),
+            ))
+        }
+    };
+    let class = vm
+        .class_of_object(obj)
+        .ok_or_else(|| vm.throw_new("Ljava/lang/IllegalArgumentException;", None))?;
+    let mid = vm.find_method(class, method, sig, InvokeKind::Virtual)?;
+    crate::interp::call_method(vm, mid, obj, &[])
+}
+
 fn field_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let target = vm.arg_ref(ctx, 0);
-    let v = read_field(vm, this, target);
-    vm.ret_ref(ctx, v);
+    let desc = field_type_desc(vm, this).unwrap_or_default();
+    let h = match desc.as_bytes().first().copied() {
+        Some(b'L') | Some(b'[') | None => read_field(vm, this, target),
+        Some(b'J') | Some(b'D') => {
+            box_primitive(vm, desc.as_bytes()[0], read_wide(vm, this, target))?
+        }
+        Some(c) => box_primitive(vm, c, read_field(vm, this, target) as u64)?,
+    };
+    vm.ret_ref(ctx, h);
     Ok(())
 }
 
@@ -647,29 +820,7 @@ fn field_get_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let target = vm.arg_ref(ctx, 0);
     let lo = read_field(vm, this, target) as u64;
     // Wide fields are stored in two adjacent slots.
-    let this2 = this;
-    let hi = {
-        let (is_static, off, idx) = field_offsets(vm, this2);
-        if is_static {
-            if let Some(dc) = vm.get_instance_field_by_name(this2, "declaringClass") {
-                if let Some(cid) = vm.class_id_of_class_object(dc) {
-                    vm.classes[cid as usize].statics.get(idx + 1).copied().unwrap_or(0) as u64
-                } else {
-                    0
-                }
-            } else {
-                0
-            }
-        } else {
-            let slot = ((off - FIELD_BASE) / 4).max(0) as usize + 1;
-            match vm.heap.get(target) {
-                Some(Object::Instance { fields, .. }) => {
-                    fields.get(slot).copied().unwrap_or(0) as u64
-                }
-                _ => 0,
-            }
-        }
-    };
+    let hi = read_wide_hi(vm, this, target);
     vm.ret_i64(ctx, (lo | (hi << 32)) as i64);
     Ok(())
 }
@@ -713,12 +864,7 @@ fn field_get_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let target = vm.arg_ref(ctx, 0);
     let lo = read_field(vm, this, target) as u64;
-    let (_, off, _) = field_offsets(vm, this);
-    let slot = ((off - FIELD_BASE) / 4).max(0) as usize + 1;
-    let hi = match vm.heap.get(target) {
-        Some(Object::Instance { fields, .. }) => fields.get(slot).copied().unwrap_or(0) as u64,
-        _ => 0,
-    };
+    let hi = read_wide_hi(vm, this, target);
     vm.ret_f64(ctx, f64::from_bits(lo | (hi << 32)));
     Ok(())
 }
@@ -726,8 +872,20 @@ fn field_get_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn field_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let target = vm.arg_ref(ctx, 0);
-    let v = vm.arg_ref(ctx, 1);
-    write_field(vm, this, target, v);
+    let value = vm.arg_ref(ctx, 1);
+    let desc = field_type_desc(vm, this).unwrap_or_default();
+    match desc.as_bytes().first().copied() {
+        Some(b'L') | Some(b'[') | None => write_field(vm, this, target, value),
+        Some(c) => {
+            let raw = unbox_primitive(vm, c, value)?;
+            if c == b'J' || c == b'D' {
+                write_field(vm, this, target, raw as u32);
+                write_wide_hi(vm, this, target, (raw >> 32) as u32);
+            } else {
+                write_field(vm, this, target, raw as u32);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -744,26 +902,7 @@ fn field_set_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let target = vm.arg_ref(ctx, 0);
     let v = vm.arg_i64(ctx, 1) as u64;
     write_field(vm, this, target, v as u32);
-    let (_, off, idx) = field_offsets(vm, this);
-    if let Some(dc) = vm.get_instance_field_by_name(this, "declaringClass") {
-        if let Some(cid) = vm.class_id_of_class_object(dc) {
-            let is_static = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0)
-                & acos_dex::access::STATIC
-                != 0;
-            if is_static {
-                if idx + 1 < vm.classes[cid as usize].statics.len() {
-                    vm.classes[cid as usize].statics[idx + 1] = (v >> 32) as u32;
-                }
-            } else {
-                let slot = ((off - FIELD_BASE) / 4).max(0) as usize + 1;
-                if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(target) {
-                    if slot < fields.len() {
-                        fields[slot] = (v >> 32) as u32;
-                    }
-                }
-            }
-        }
-    }
+    write_wide_hi(vm, this, target, (v >> 32) as u32);
     Ok(())
 }
 
@@ -780,25 +919,6 @@ fn field_set_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let target = vm.arg_ref(ctx, 0);
     let v = vm.arg_f64(ctx, 1).to_bits();
     write_field(vm, this, target, v as u32);
-    let (_, off, idx) = field_offsets(vm, this);
-    if let Some(dc) = vm.get_instance_field_by_name(this, "declaringClass") {
-        if let Some(cid) = vm.class_id_of_class_object(dc) {
-            let is_static = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0)
-                & acos_dex::access::STATIC
-                != 0;
-            if is_static {
-                if idx + 1 < vm.classes[cid as usize].statics.len() {
-                    vm.classes[cid as usize].statics[idx + 1] = (v >> 32) as u32;
-                }
-            } else {
-                let slot = ((off - FIELD_BASE) / 4).max(0) as usize + 1;
-                if let Some(Object::Instance { fields, .. }) = vm.heap.get_mut(target) {
-                    if slot < fields.len() {
-                        fields[slot] = (v >> 32) as u32;
-                    }
-                }
-            }
-        }
-    }
+    write_wide_hi(vm, this, target, (v >> 32) as u32);
     Ok(())
 }

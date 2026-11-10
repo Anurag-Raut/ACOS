@@ -71,3 +71,18 @@ fn missing_dependency_is_structured() {
     assert_eq!(err.code(), "NATIVE_DEP_NOT_FOUND");
     assert!(format!("{err}").contains("libtestdep.so"), "{err}");
 }
+
+/// HONESTY_AUDIT #1: `dlopen` must not map an arbitrary absolute host path.
+/// With the default config a path outside the configured search roots is
+/// refused, so a guest cannot reach `/lib/.../libc.so.6` or any host object.
+#[test]
+fn dlopen_refuses_an_absolute_host_path() {
+    let _g = common::serial();
+    let _loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
+    let c = std::ffi::CString::new("/lib/x86_64-linux-gnu/libc.so.6").unwrap();
+    let h = unsafe { acos_native_loader::bionic::dl::dlopen(c.as_ptr(), 0) };
+    assert!(
+        h.is_null(),
+        "dlopen of an absolute host library must be refused by the default policy"
+    );
+}

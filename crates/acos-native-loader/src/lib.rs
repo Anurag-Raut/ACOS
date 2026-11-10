@@ -68,6 +68,14 @@ pub struct LoaderConfig {
     pub log_sink: Option<Arc<dyn LogSink>>,
     /// Overrides / additions to the default Android system properties.
     pub system_properties: HashMap<String, String>,
+    /// When `false` (the default), `dlopen`/`android_dlopen_ext` reject any
+    /// absolute path that does not canonicalise inside a configured
+    /// `search_paths` root, so an APK `.so` cannot name a host system library
+    /// (e.g. `/lib/x86_64-linux-gnu/libc.so.6`). Set `true` only for trusted
+    /// in-process tests. Native `.so` execution stays disabled for product
+    /// paths until a seccomp/landlock sandbox exists (see DECISIONS.md,
+    /// ADR-0018 note).
+    pub allow_host_paths: bool,
 }
 
 impl std::fmt::Debug for LoaderConfig {
@@ -97,6 +105,12 @@ impl LoaderConfig {
     /// Convenience builder: install a guest log sink.
     pub fn with_log_sink(mut self, sink: Arc<dyn LogSink>) -> Self {
         self.log_sink = Some(sink);
+        self
+    }
+
+    /// Convenience builder: allow absolute host paths (trusted tests only).
+    pub fn with_host_paths_allowed(mut self) -> Self {
+        self.allow_host_paths = true;
         self
     }
 }

@@ -74,7 +74,7 @@ pub struct McpClient {
 
 impl McpClient {
     /// Start an in-process server and return a connected client.
-    pub fn start(backend: CliBackend, config: ServerConfig) -> McpClient {
+    pub fn start<B: acos_mcp::Backend + 'static>(backend: B, config: ServerConfig) -> McpClient {
         let server = Arc::new(Server::new(backend, config));
         let (server_stdin, client_stdin) = std::io::pipe().expect("pipe");
         let (client_stdout, server_stdout) = std::io::pipe().expect("pipe");
@@ -96,9 +96,7 @@ impl McpClient {
 
     /// Write a raw line to the server (used for malformed-input tests).
     pub fn send_raw(&mut self, raw: &str) {
-        self.stdin
-            .write_all(raw.as_bytes())
-            .expect("write raw");
+        self.stdin.write_all(raw.as_bytes()).expect("write raw");
         self.stdin.write_all(b"\n").expect("write newline");
         self.stdin.flush().expect("flush");
     }

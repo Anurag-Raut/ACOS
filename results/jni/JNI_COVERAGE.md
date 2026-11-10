@@ -300,3 +300,21 @@ VC root-accounting bug in `Vm` (reproducible at HEAD without these changes) corr
 - `PushLocalFrame`/`EnsureLocalCapacity` capacity limits are implemented; the overflow test is
   omitted for the same reason (it constructs an `OutOfMemoryError`).
 
+
+### Correction (W33-A): the "root-accounting bug" was a stale `*mut Vm`
+
+The note above attributes the reduced tests to a latent VM root-accounting bug.
+A focused probe shows the accounting is correct: `ThrowNew` pushes exactly one
+`native_roots` entry (`set_pending`) and `ExceptionClear` removes exactly one
+(`take_pending`), and `ExceptionOccurred` + `DeleteLocalRef` round-trips the
+local root one-for-one — in plain and `ACOS_GC_STRESS=1` builds. What actually
+corrupts `native_roots` is calling `JniRuntime::bind(&mut vm)` before the `Vm`
+reaches its final address (for example inside a `setup()` that then moves the
+`Vm` out of its return tuple). `attach` intentionally does **not** retain a
+`*mut Vm`, but `bind` must, so a later move leaves a dangling pointer and the
+JNI calls mutate/free the moved-from `Vm`'s `Vec` fields (observed as
+`free(): double free detected` in the Rust allocator). Bind only after the
+`Vm` is in its final location; see `crates/acos-jni/tests/jni_errors.rs` for
+the canonical `attach`-in-`setup`, `bind`-in-test pattern. The
+`GetStringCritical` / `PushLocalFrame` overflow paths can therefore be
+re-enabled once their tests follow that pattern.

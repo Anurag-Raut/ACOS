@@ -93,7 +93,7 @@ fn end_to_end_mcp_session_over_stdio() {
     // 2. tools/list (assert it is large; full contents are covered in protocol.rs)
     let list = client.request(2, "tools/list", json!({}));
     let tools = list["result"]["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 15);
+    assert_eq!(tools.len(), 21);
     assert!(tools
         .iter()
         .any(|t| t["name"] == "acos_inspect" && t["annotations"]["available"] == true));
@@ -141,8 +141,8 @@ fn end_to_end_mcp_session_over_stdio() {
         5,
         "tools/call",
         json!({
-            "name": "acos_run",
-            "arguments": {"base": {"request_id": "e2e_run"}, "apk": "x.apk"},
+            "name": "acos_capture",
+            "arguments": {"base": {"request_id": "e2e_capture"}},
         }),
     );
     assert!(is_error(&unsupported));

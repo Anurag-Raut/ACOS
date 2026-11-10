@@ -115,6 +115,15 @@ struct Proxy {
     light_geometry: (f32, f32, f32, f32),
     animating: Vec<RHandle>,
     drawing_enabled: bool,
+    // Renderer configuration handed to HWUI. Previously silently dropped
+    // (`h_noop`); recorded so the frame path can consume them and so the
+    // current divergence is inspectable (HONESTY_AUDIT.md #14/#27).
+    opaque: Option<bool>,
+    force_dark: Option<bool>,
+    content_draw_bounds: Option<(i32, i32, i32, i32)>,
+    light_alpha: Option<(f32, f32)>,
+    sdr_white_point: Option<f32>,
+    target_sdr_hdr_ratio: Option<f32>,
     frame_callback: u32,
     frame_complete_callback: u32,
     frame_commit_callback: u32,
@@ -130,6 +139,10 @@ struct HwuiState {
     /// recorded for introspection by later rendering work.
     shaders_disk_cache: Option<String>,
     skia_disk_cache: Option<String>,
+    /// Global renderer configuration (`nSetHighContrastText`,
+    /// `nSetDisplayDensityDpi`). Recorded, not silently dropped.
+    high_contrast_text: bool,
+    display_density_dpi: i32,
 }
 
 impl HwuiState {
@@ -140,6 +153,8 @@ impl HwuiState {
             drawing_enabled: true,
             shaders_disk_cache: None,
             skia_disk_cache: None,
+            high_contrast_text: false,
+            display_density_dpi: 0,
         }
     }
 }
@@ -183,7 +198,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetDrawingEnabled", "(Z)V", h_set_drawing_enabled);
     vm.register_native(H, "nSetName", "(JLjava/lang/String;)V", h_set_name);
     vm.register_native(H, "nSetLightGeometry", "(JFFFF)V", h_light_geometry);
-    vm.register_native(H, "nSetLightAlpha", "(JFF)V", h_noop);
+    vm.register_native(H, "nSetLightAlpha", "(JFF)V", h_set_light_alpha);
     vm.register_native(H, "nRegisterAnimatingRenderNode", "(JJ)V", h_register_animating);
     vm.register_native(H, "nAllocateBuffers", "(J)V", h_noop);
     vm.register_native(H, "nLoadSystemProperties", "(J)Z", h_ret_false);
@@ -196,19 +211,19 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetProcessStatsBuffer", "(I)V", h_noop);
     vm.register_native(H, "nSetRtAnimationsEnabled", "(Z)V", h_noop);
     vm.register_native(H, "nSetDebuggingEnabled", "(Z)V", h_noop);
-    vm.register_native(H, "nSetHighContrastText", "(Z)V", h_noop);
+    vm.register_native(H, "nSetHighContrastText", "(Z)V", h_set_high_contrast_text);
     vm.register_native(H, "nSetColorMode", "(JI)F", h_set_color_mode);
     vm.register_native(H, "nSetContextPriority", "(I)V", h_noop);
-    vm.register_native(H, "nSetDisplayDensityDpi", "(I)V", h_noop);
+    vm.register_native(H, "nSetDisplayDensityDpi", "(I)V", h_set_display_density_dpi);
     vm.register_native(H, "nSetIsHighEndGfx", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsLowRam", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsSystemOrPersistent", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsolatedProcess", "(Z)V", h_noop);
-    vm.register_native(H, "nSetOpaque", "(JZ)V", h_noop);
-    vm.register_native(H, "nSetContentDrawBounds", "(JIIII)V", h_noop);
-    vm.register_native(H, "nSetForceDark", "(JZ)V", h_noop);
-    vm.register_native(H, "nSetSdrWhitePoint", "(JF)V", h_noop);
-    vm.register_native(H, "nSetTargetSdrHdrRatio", "(JF)V", h_noop);
+    vm.register_native(H, "nSetOpaque", "(JZ)V", h_set_opaque);
+    vm.register_native(H, "nSetContentDrawBounds", "(JIIII)V", h_set_content_draw_bounds);
+    vm.register_native(H, "nSetForceDark", "(JZ)V", h_set_force_dark);
+    vm.register_native(H, "nSetSdrWhitePoint", "(JF)V", h_set_sdr_white_point);
+    vm.register_native(H, "nSetTargetSdrHdrRatio", "(JF)V", h_set_target_sdr_hdr_ratio);
     vm.register_native(H, "nTrimCaches", "(I)V", h_noop);
     vm.register_native(H, "nTrimMemory", "(I)V", h_noop);
     vm.register_native(H, "nSetFrameCallback", "(JLandroid/graphics/HardwareRenderer$FrameDrawingCallback;)V", h_set_frame_callback);
@@ -271,6 +286,12 @@ fn h_create_proxy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             light_geometry: (0.0, 0.0, 0.0, 0.0),
             animating: Vec::new(),
             drawing_enabled: true,
+            opaque: None,
+            force_dark: None,
+            content_draw_bounds: None,
+            light_alpha: None,
+            sdr_white_point: None,
+            target_sdr_hdr_ratio: None,
             frame_callback: 0,
             frame_complete_callback: 0,
             frame_commit_callback: 0,
@@ -501,6 +522,123 @@ fn h_light_geometry(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     });
     Ok(())
+}
+
+fn h_set_opaque(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let v = vm.arg_bool(ctx, 1);
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.opaque = Some(v);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_force_dark(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let v = vm.arg_bool(ctx, 1);
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.force_dark = Some(v);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_content_draw_bounds(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let b = (
+        vm.arg_i32(ctx, 1),
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i32(ctx, 4),
+    );
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.content_draw_bounds = Some(b);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_light_alpha(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let a = (vm.arg_f32(ctx, 1), vm.arg_f32(ctx, 2));
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.light_alpha = Some(a);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_sdr_white_point(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let v = vm.arg_f32(ctx, 1);
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.sdr_white_point = Some(v);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_target_sdr_hdr_ratio(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = proxy(vm, ctx)?;
+    let v = vm.arg_f32(ctx, 1);
+    HWUI.with(|s| {
+        if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
+            p.target_sdr_hdr_ratio = Some(v);
+        }
+    });
+    Ok(())
+}
+
+fn h_set_high_contrast_text(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = vm.arg_bool(ctx, 0);
+    HWUI.with(|s| s.borrow_mut().high_contrast_text = v);
+    Ok(())
+}
+
+fn h_set_display_density_dpi(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let v = vm.arg_i32(ctx, 0);
+    HWUI.with(|s| s.borrow_mut().display_density_dpi = v);
+    Ok(())
+}
+
+/// Recorded renderer configuration (per-proxy fields and globals), for the
+/// frame path and for tests that pin "recorded, not silently dropped".
+pub fn recorded_renderer_config() -> Vec<(String, String)> {
+    HWUI.with(|s| {
+        let s = s.borrow();
+        let mut out = vec![
+            ("high_contrast_text".to_string(), s.high_contrast_text.to_string()),
+            ("display_density_dpi".to_string(), s.display_density_dpi.to_string()),
+        ];
+        for (h, p) in s.proxies.iter() {
+            let id = format!("{:#x}", h.to_jlong());
+            if let Some(v) = p.opaque {
+                out.push((format!("{id}.opaque"), v.to_string()));
+            }
+            if let Some(v) = p.force_dark {
+                out.push((format!("{id}.force_dark"), v.to_string()));
+            }
+            if let Some(v) = p.content_draw_bounds {
+                out.push((format!("{id}.content_draw_bounds"), format!("{v:?}")));
+            }
+            if let Some(v) = p.light_alpha {
+                out.push((format!("{id}.light_alpha"), format!("{v:?}")));
+            }
+            if let Some(v) = p.sdr_white_point {
+                out.push((format!("{id}.sdr_white_point"), v.to_string()));
+            }
+            if let Some(v) = p.target_sdr_hdr_ratio {
+                out.push((format!("{id}.target_sdr_hdr_ratio"), v.to_string()));
+            }
+        }
+        out
+    })
 }
 
 fn h_register_animating(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

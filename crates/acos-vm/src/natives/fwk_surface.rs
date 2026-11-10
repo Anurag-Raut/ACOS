@@ -730,6 +730,12 @@ impl<'a> Reader<'a> {
 pub fn decode_ops(bytes: &[u8]) -> Option<Vec<SurfaceOp>> {
     let mut r = Reader { bytes, pos: 0 };
     let count = r.u64()? as usize;
+    // Every op consumes at least its 1-byte tag, so a count larger than the
+    // remaining bytes is malformed. Reject it before allocating
+    // (HONESTY_AUDIT.md #6).
+    if count > bytes.len().saturating_sub(r.pos) {
+        return None;
+    }
     let mut ops = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = r.u8()?;
@@ -1280,8 +1286,20 @@ fn native_read_transaction_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<
             Some("nativeReadTransactionFromParcel: parcel has no mNativePtr"),
         ));
     };
-    let bytes = read_bytes_from_parcel(ph).unwrap_or_default();
-    let ops = decode_ops(&bytes).unwrap_or_default();
+    // A malformed transaction must surface as a structured Java error, never
+    // as a silently-empty successful transaction (HONESTY_AUDIT.md #6/#17).
+    let Some(bytes) = read_bytes_from_parcel(ph) else {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalStateException;",
+            Some("nativeReadTransactionFromParcel: malformed transaction parcel"),
+        ));
+    };
+    let Some(ops) = decode_ops(&bytes) else {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalStateException;",
+            Some("nativeReadTransactionFromParcel: undecodable surface op stream"),
+        ));
+    };
     let handle = with_state(|st| {
         let handle = st.alloc();
         st.transactions.insert(

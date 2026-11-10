@@ -354,6 +354,7 @@ impl JniRuntime {
             missing_policy: config.missing_policy,
             log_sink: config.log_sink.clone(),
             system_properties: HashMap::new(),
+            ..LoaderConfig::default()
         });
         let env = Box::new(EnvSlot {
             table: crate::table::native_table_ptr(),

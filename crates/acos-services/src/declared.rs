@@ -10,9 +10,11 @@
 //!
 //! Reply values:
 //!
-//! * `IAppOpsService.checkOperation` → `MODE_ALLOWED` (0) for the app's own
-//!   package, the value the real client (`AppOpsManager.checkOp`) accepts for a
-//!   non-restricted operation on a debuggable single-user image.
+//! * `IAppOpsService.checkOperation` → `MODE_ALLOWED` (0) for a non-restricted
+//!   op, or for a permission-gated op whose runtime permission is present in
+//!   the PMS manifest-grant set. A permission-gated op without a grant returns
+//!   `MODE_ERRORED` (2), matching `AppOpsManager.checkOp` on a device where the
+//!   permission is a hard restriction — never a default success.
 //! * `IPermissionManager.getPermissionFlags` → 0, `shouldShowRequestPermission-
 //!   Rationale` → false, and the runtime-permission mutators are **recorded**
 //!   no-ops (they would change system state on Android, so they are reported as
@@ -81,6 +83,10 @@ pub struct AppOpsState {
     pub notes: Vec<(i32, i32, String)>,
     /// Explicit `setMode`/`setUidMode` requests.
     pub mode_changes: Vec<(i32, i32, i32, String)>,
+    /// Runtime permissions granted to the app by its manifest / install (`-g`).
+    /// Seeded from PMS state; an empty set means `checkOperation` denies every
+    /// permission-gated op.
+    pub granted_permissions: Vec<String>,
 }
 
 impl AppOpsState {
@@ -88,6 +94,48 @@ impl AppOpsState {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The runtime permission that gates `code`, if the op is restricted.
+    /// Mirrors the API-34 `AppOpsManager.sOpPerms` entries the launch path can
+    /// reach.
+    fn required_permission(code: i32) -> Option<&'static str> {
+        Some(match code {
+            0 => "android.permission.ACCESS_COARSE_LOCATION",
+            1 | 2 => "android.permission.ACCESS_FINE_LOCATION",
+            4 => "android.permission.READ_CONTACTS",
+            5 => "android.permission.WRITE_CONTACTS",
+            6 => "android.permission.READ_CALL_LOG",
+            7 => "android.permission.WRITE_CALL_LOG",
+            8 => "android.permission.READ_CALENDAR",
+            9 => "android.permission.WRITE_CALENDAR",
+            13 => "android.permission.CALL_PHONE",
+            14 => "android.permission.READ_SMS",
+            15 => "android.permission.WRITE_SMS",
+            16..=22 => "android.permission.READ_SMS",
+            23 => "android.permission.WRITE_SETTINGS",
+            24 => "android.permission.SYSTEM_ALERT_WINDOW",
+            26 => "android.permission.CAMERA",
+            27 => "android.permission.RECORD_AUDIO",
+            29 => "android.permission.READ_CLIPBOARD",
+            30 => "android.permission.WRITE_CLIPBOARD",
+            41 => "android.permission.BODY_SENSORS",
+            56 => "android.permission.BODY_SENSORS",
+            59 => "android.permission.READ_EXTERNAL_STORAGE",
+            60 => "android.permission.WRITE_EXTERNAL_STORAGE",
+            62 => "android.permission.READ_PHONE_STATE",
+            _ => return None,
+        })
+    }
+
+    /// The mode Android would return for `code`: `MODE_ALLOWED` for a benign or
+    /// granted op, `MODE_ERRORED` for a permission-gated op without a grant.
+    fn mode_for(&self, code: i32) -> i32 {
+        match Self::required_permission(code) {
+            Some(perm) if self.granted_permissions.iter().any(|p| p == perm) => MODE_ALLOWED,
+            Some(_) => MODE_ERRORED,
+            None => MODE_ALLOWED,
+        }
     }
 }
 
@@ -102,6 +150,22 @@ impl AppOpsService {
     pub fn new(state: Arc<Mutex<AppOpsState>>) -> Self {
         Self { state }
     }
+
+    /// Record a manifest/install permission grant for the app process (PMS).
+    pub fn grant_permission(&mut self, permission: impl Into<String>) {
+        self.state
+            .lock()
+            .unwrap()
+            .granted_permissions
+            .push(permission.into());
+    }
+
+    /// The current grant set, exposed so the boot report and tests can inspect
+    /// the app-op decision input instead of assuming a default allow.
+    #[must_use]
+    pub fn granted_permissions(&self) -> Vec<String> {
+        self.state.lock().unwrap().granted_permissions.clone()
+    }
 }
 
 impl ServiceObject for AppOpsService {
@@ -114,25 +178,25 @@ impl ServiceObject for AppOpsService {
                 let code = int_arg(args, 0);
                 let uid = int_arg(args, 1);
                 let package = str_arg(args, 2);
-                self.state
-                    .lock()
-                    .unwrap()
-                    .checks
-                    .push((code, uid, package));
-                vec![Value::Int(MODE_ALLOWED)]
+                let mut st = self.state.lock().unwrap();
+                st.checks.push((code, uid, package));
+                let mode = st.mode_for(code);
+                vec![Value::Int(mode)]
             }
             "checkOperationRaw" => {
                 let code = int_arg(args, 0);
                 let uid = int_arg(args, 1);
                 let package = str_arg(args, 2);
-                self.state
-                    .lock()
-                    .unwrap()
-                    .checks
-                    .push((code, uid, package));
-                vec![Value::Int(MODE_ALLOWED)]
+                let mut st = self.state.lock().unwrap();
+                st.checks.push((code, uid, package));
+                let mode = st.mode_for(code);
+                vec![Value::Int(mode)]
             }
-            "checkAudioOperation" => vec![Value::Int(MODE_ALLOWED)],
+            "checkAudioOperation" => {
+                let code = int_arg(args, 0);
+                let st = self.state.lock().unwrap();
+                vec![Value::Int(st.mode_for(code))]
+            }
             "checkPackage" => {
                 let _ = (int_arg(args, 0), str_arg(args, 1));
                 vec![Value::Int(MODE_ALLOWED)]
@@ -349,9 +413,19 @@ impl ServiceObject for UserService {
             }
             "getVisibleUsers" => vec![Value::IntArray(Some(vec![state.user_id]))],
             "getUserName" => vec![Value::Str(Some(state.name.clone()))],
+            // Only the one real user (id 0) is unlocked/running/foreground. An
+            // unknown id must not be reported as a healthy user: Android
+            // returns `false` (or throws) rather than a blanket `true`.
             "isUserUnlocked" | "isUserRunning" | "isUserForeground" | "isUserVisible"
-            | "isUserUnlockingOrUnlocked" | "isUserNameSet" | "isSameProfileGroup"
-            | "isDemoUser" | "isAdminUser" => vec![Value::Bool(true)],
+            | "isUserUnlockingOrUnlocked" | "isUserNameSet" | "isDemoUser" | "isAdminUser" => {
+                let user = int_arg(args, 0);
+                vec![Value::Bool(user == state.user_id)]
+            }
+            "isSameProfileGroup" => {
+                let a = int_arg(args, 0);
+                let b = int_arg(args, 1);
+                vec![Value::Bool(a == state.user_id && b == state.user_id)]
+            }
             "isRestricted" | "canHaveRestrictedProfile" | "isHeadlessSystemUserMode"
             | "isUserSwitcherEnabled" | "hasRestrictedProfiles" | "hasBadge" => {
                 vec![Value::Bool(false)]

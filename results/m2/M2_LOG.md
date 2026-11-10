@@ -983,3 +983,130 @@ cargo clippy -p acos-vm -p acos-runtime -p acos-services --all-targets
 Files: `crates/acos-services/src/{exception,pms,parcelable}.rs`,
 `crates/acos-runtime/src/{client_transaction,pms_java}.rs`,
 `crates/acos-vm/src/{vfs.rs,natives/{io_linux,gfx_hwui,fwk_res,fwk_m2_chain2,mod}.rs}`.
+
+## W33-A: reflection slot fix landed, exception floor, spin root-caused
+
+**Status:** the static-field slot bug that blocked `Settings.Global.<clinit>`
+is fixed and the M2 chain moves one blocker further. The new block is the
+`Settings$Readable` runtime annotation, which is a genuine missing feature
+(annotation metadata → Java annotation proxy), not a slot bug.
+
+### 1. Reflection static-slot fix (`natives/reflect.rs`)
+
+`Field.artFieldIndex` is the *declaration index* (`getNameInternal`,
+`getDeclaredFields` order) but the VM's static storage is **slot-indexed**
+(`long`/`double` occupy two slots), so any static field declared after a wide
+field read the wrong slot. `Settings.Global.DEFAULT_DNS_SERVER` (after the
+`long serialVersionUID`) therefore read a neighbouring slot and returned
+`null`, NPE'ing `Settings.getPublicSettingsForClass` before `Application.onCreate`.
+
+The fix resolves every read/write through the field definition's own `offset`
+(`field_slot`), which is already the correct slot index for both statics
+(`statics.len()`) and instance fields (`instance_slot_count`). It also adds
+ART-accurate boxing/unboxing for `Field.get`/`set` (`valueOf` / `xValue`) and
+handles wide halves. Regression test:
+`crates/acos-runtime/tests/reflect_fields.rs` +
+`tests/java/ReflectFieldsMain.java` (interleaved wide/narrow static *and*
+instance fields, typed and boxed reads, typed sets, `getDeclaredFields`
+grouping).
+
+### 2. Exception floor + `ExceptionInInitializerError`
+
+Two independent fixes:
+
+* **Pre-existing pending exception.** `run_current_until_body` spun forever
+  when `vm.pending_exception` was already set: `run_batch` returns 0
+  immediately (it bails on a pending exception) without popping the frame
+  `call_method` just pushed, so `while frames.len() > base_depth` never
+  terminated. It now unwinds to the call's base (`pop_frame_quiet`) and returns
+  `Err(JavaException)`. This is the real cause of the `client_transaction`
+  spin; W29-A's `HostGuard` in `run_current_until` never reached it because the
+  loop never made progress.
+* **`<clinit>` wrapping.** A nested synchronous invocation now installs an
+  `EXCEPTION_FLOOR` (`0` at the top-level scheduler run; the call base for
+  `call_method`/`initialize_class`), so a `<clinit>` failure unwinds only to
+  the Rust→Java call base instead of past it (the old `set_ref` panic,
+  `frames.len()=3 fi=13`). `initialize_class` wraps the cause in
+  `ExceptionInInitializerError` and marks the class `Failed` so a later access
+  throws `NoClassDefFoundError`. API 34's
+  `ExceptionInInitializerError.getCause()` overrides `Throwable.getCause()` to
+  read its own `exception` field, so the wrapper sets **both** `exception` and
+  `cause` (the bootstrap corelib has no `exception` field and inherits
+  `Throwable.cause`). Tests:
+  `crates/acos-runtime/tests/exception_floor.rs` and
+  `crates/acos-vm/tests/java_cases.rs::exception_floor_rethrows_at_the_rust_call_base`.
+
+### 3. `client_transaction` spin
+
+Root cause as above (pre-existing pending exception + pushed frame). The test
+helper also had to clear `vm.pending_exception` *before* calling Java methods
+on the throwable (`describe`), because the VM refuses to run Java while an
+exception is pending. `cargo test -p acos-runtime --test client_transaction`
+now finishes in ~1.4 s (was an unbounded spin) and still asserts
+`LaunchActivityItem.execute` reached `handleLaunchActivity`.
+
+### 4. Next blocker: `Settings$Readable` runtime annotation
+
+The lifecycle probe now gets past `Settings.Global.<clinit>` and dies here:
+
+```
+java.lang.RuntimeException: Unable to start activity
+  ComponentInfo{dev.acos.fixtures.helloviews/...MainActivity}:
+  java.lang.SecurityException: Settings key: <render_shadows_in_compositor>
+  is not readable. From S+, settings keys annotated with @hide are restricted
+  to system_server and system apps only, unless they are annotated with @Readable.
+```
+
+`Settings$NameValueCache.getPublicSettingsForClass` iterates
+`Class.getDeclaredFields()`, reads each `String` static, then calls
+`field.getAnnotation(Settings$Readable.class)`. API 34's annotation is
+**`Landroid/provider/Settings$Readable;`** (a nested annotation), not
+`android.annotation.Readable`; the field `DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR`
+*is* `@Readable`. ACOS's `Field.getAnnotationNative`
+(`natives/fwk_m2_chain2.rs`) honestly returns `null` (no annotation metadata is
+parsed), so `mReadableFields` never contains the key and the framework throws
+`SecurityException` for a key that real Android allows.
+
+This is a real missing feature, and it is medium-sized, not a one-liner:
+
+* `Field.getAnnotationNative(Class)` must return an object assignable to the
+  requested annotation interface. `libcore.reflect.AnnotationFactory.createAnnotation(Class, AnnotationMember[])`
+  is **public static** and would build the real proxy, but ACOS must first
+  decode the field's `annotations_directory_item` (`acos-dex` already parses
+  `AnnotationsDirectory::field_annotations`), map each `FieldDef` to its DEX
+  `field_idx`, box the `EncodedValue` elements, and construct
+  `libcore.reflect.AnnotationMember[]`.
+* Until then the honest options are to keep returning `null` (documented
+  divergence) or to raise `UNSUPPORTED_JAVA_API`; returning a synthetic
+  annotation for all fields would make restricted keys readable and is
+  dishonest.
+
+The remaining natives on the tail are
+`nativeGetAssignedPackageIdentifiers` / `flushPendingCommands` /
+`nativeThemeApplyStyle` / `HardwareRenderer.nSetDisplayDensityDpi` etc., all
+already implemented.
+
+### 5. W32-B JNI `native_roots` finding (extra item)
+
+The "latent VM root-accounting bug" recorded in `results/jni/JNI_COVERAGE.md`
+is **not** a VM accounting bug. A focused probe
+(`ThrowNew` → `ExceptionCheck` → `ExceptionClear` → drop, and
+`ThrowNew` → `ExceptionOccurred` → `DeleteLocalRef` → `ExceptionClear` → drop)
+shows `native_roots` is exactly balanced, in both plain and
+`ACOS_GC_STRESS=1` builds:
+
+```
+base=3 after_throw=4 after_clear=3         # set_pending pushes 1, take_pending removes 1
+base=5 after_delete=4 after_clear=3        # local + pending roots released one-for-one
+```
+
+The corruption seen by W32-B's reduced tests comes from calling
+`JniRuntime::bind(&mut vm)` **before** the `Vm` reaches its final address (e.g.
+inside a `setup()` that then moves the `Vm` out of its return tuple). `attach`
+deliberately does not retain a `*mut Vm` for exactly this reason, but `bind`
+necessarily stores it, so binding an about-to-be-moved `Vm` leaves a stale
+pointer and the JNI calls mutate/free the moved-from `Vm`'s `Vec` fields. With
+the canonical pattern (`attach` in `setup`, `bind` after the move, as in
+`crates/acos-jni/tests/jni_errors.rs`) the accounting is sound. The correct
+documentation fix is to call out the footgun next to `bind`, not to add a
+VM-side accounting change.

@@ -496,3 +496,118 @@ memory-safety or native escape could reach another session's heap, the
 abort. **Processes remain the isolation boundary for untrusted APKs**;
 in-process pooling is for the agent's own trusted workloads. Defaults chosen:
 60 s wall, template heap quota, RSS disabled.
+
+### 8.8 Interpreter hot-path wave w28a: invoke/return fast path + GC generation mark (2026-11-10, W28-A)
+
+Target: the remaining weak spots left by §8.6 — `BenchStaticCall`/`BenchVirtualCall`
+(~3.9 s), `BenchFib` (580 ms), `BenchAlloc` (2.8 s) and `BenchGc` (624 ms) — without
+touching correctness. Base = HEAD `40f075c` + the §8.6 w25a changes (the committed
+baseline binary `.cache/vmbench-base-w28a`); "after" = base + the three kept changes
+below. Builds: `release`, own `CARGO_TARGET_DIR=.cache/target-w28a`,
+`CARGO_BUILD_JOBS=4`, every command under `tools/guarded.sh` (ADR-0018).
+Method: **10 interleaved base/new rounds per program, each `best-of-1` internal
+repetition, p50 over the 10 samples**; spread is `(max-min)/p50`. Host 32 threads /
+60 GiB, loadavg1 2.56 (quiet window), so the base and after rows are read inside one
+window per program. The same table is the evidence for every "kept" decision; each
+change was measured alone before being kept.
+
+| Program | base p50 (ms) | after p50 (ms) | speedup | base spread | after spread | `java -Xint` p50 (ms) |
+|---|---:|---:|---:|---:|---:|---:|
+| `BenchStaticCall` | 3909.61 | 3396.68 | **1.15x** | 13.4 % | 6.6 % | 2927 |
+| `BenchVirtualCall` | 3882.49 | 3511.81 | **1.11x** | 5.2 % | 5.9 % | 2842 |
+| `BenchVirtual` | 2230.49 | 2013.69 | **1.11x** | 5.0 % | 8.0 % | 1133 |
+| `BenchFib` | 578.59 | 501.76 | **1.15x** | 5.9 % | 2.6 % | 332 |
+| `BenchAlloc` | 2843.77 | 2586.87 | **1.10x** | 6.8 % | 1.6 % | 1125 |
+| `BenchGc` | 659.15 | 598.31 | **1.10x** | 2.6 % | 6.0 % | 138 |
+| `BenchString` | 145.92 | 134.82 | **1.08x** | 6.1 % | 3.8 % | 582 |
+| `BenchCollections` | 135.79 | 129.73 | **1.05x** | 1.6 % | 2.1 % | 81 |
+| `BenchLoop` | 1674.59 | 1604.80 | **1.04x** | 2.5 % | 1.8 % | 362 |
+| `BenchArith` | 1889.64 | 1814.99 | **1.04x** | 1.7 % | 0.7 % | 468 |
+| `BenchArray` | 1219.80 | 1196.35 | **1.02x** | 2.7 % | 6.3 % | 328 |
+| `BenchFields` | 427.87 | 420.37 | **1.02x** | 4.4 % | 4.7 % | 75 |
+
+The `java -Xint` column is OpenJDK 17 `-Xint` (confirmed `interpreted mode`,
+`TieredCompilation=false`) measured with the same wall-clock method on the same host,
+so it is a like-for-like **interpreted** comparison (it includes ~50-80 ms of JVM
+startup, so the steady-state gap is slightly larger than the raw ratio). The ACOS
+interpreter is still 3.6-5.6x behind HotSpot's template interpreter on the
+pure-dispatch loops (`Array` 3.6x, `Arith` 3.9x, `Loop` 4.4x, `Fields` 5.6x),
+1.16-1.51x behind on call-heavy programs (`StaticCall` 1.16x, `VirtualCall` 1.24x,
+`Fib` 1.51x), and 2.3-4.3x behind on `Alloc`/`Gc`; it is **ahead** on `BenchString`
+(135 vs 582 ms) because the native `StringBuilder` append path does not go through
+the generic interpreter. No row regressed; `BenchFields` and `BenchArray` moved only
+within their spread.
+
+Kept changes (each measured alone; a change that did not win was dropped):
+
+1. **`return` fast path in `run_batch`** (`interp.rs`). Every `return*` used to pay
+   `exec_one`'s prologue — a `MethodImpl` match, a method lookup and an instruction
+   fetch — for the opcode that ends every call. The new `exec_return` helper does the
+   same register/result transfer and `pop_frame` the general path does, without the
+   prologue. `BenchFib` 579→502 ms, `BenchStaticCall` 3910→3397 ms.
+2. **`invoke-*` fast path in `run_batch`** (`interp.rs`). `invoke` already had an
+   inline cache; the remaining cost was the `exec_one` prologue in front of it. The
+   fast path calls `invoke` directly and routes a `JavaException` through the same
+   `handle_exception` as the general path. `BenchVirtualCall` 3882→3512 ms,
+   `BenchVirtual` 2230→2014 ms.
+3. **GC generation bitmap + reused worklist** (`heap.rs`, `vm.rs`). `Vm::gc` allocated
+   a fresh `vec![false; n]` mark bitmap and a fresh mark stack per collection. The
+   bitmap is now a per-heap generation array (`gc_mark[slot] == gc_gen` means live,
+   reset only on wrap) and the worklist is reused across collections
+   (`std::mem::take`/restore). The sweep also probes `string_hashes` only for dead
+   `Object::String` slots instead of every dead slot. `BenchGc` 659→598 ms with
+   `gc_ms` 139→53 on the same run; `BenchAlloc` 2844→2587 ms.
+4. **`new-array` redundant `to_string()`** (`interp.rs`). `strip_prefix` already
+   returns a `&str`; the extra `to_string()` allocated a second `String` per
+   `new-array`. Small, kept because it is a strict allocation removal and measured
+   inside the `BenchGc`/`BenchAlloc` win above.
+
+Rejected / not kept (measured, then reverted):
+
+* Two `dispatch.rs` `fast_run` restructurings (split `Frame` borrow + `Regs` window
+  struct, and `&mut Vec` variants). Mixed: `BenchLoop` 0.945-0.968x, `BenchArith`
+  0.949-0.968x, with only `BenchStaticCall` +3-4 %. Reverted.
+* A `new-instance`/`new-array` fast path in `run_batch` (shared helper with the
+  general path). No win on `BenchAlloc` (1.08x either way) and it grew `run_batch`
+  enough to regress the pure-dispatch benches to 0.94-0.97x. Reverted.
+* `#[inline(never)]` on `dispatch::fast_run` to keep it out of `run_batch`: 0.90x on
+  `BenchLoop`/`BenchArith`/`BenchArray` (the inlined copy is faster). Reverted.
+* Superinstructions for hot pairs (`const+if`, `add-int/lit+if-lt`, `iget+add`) were
+  not attempted: the measurement budget went to the wins above and the
+  `fast_op`/`fast_arith` match already covers the hot opcode families.
+
+Correctness for the wave (worktree at `40f075c` + these changes):
+
+* `tests/fast_path_equivalence.rs`: 2/2 pass (fast path == general path, normal and
+  GC stress) after the final `&elem`→`elem` clippy fix.
+* `tools/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
+  **25 pass / 0 fail** on the `40f075c` worktree. (`26_regex_matrix` is a fixture
+  added *after* `40f075c` in a later commit; the `40f075c` binary reports it
+  unsupported, so it is excluded from this wave's 25/25 — `diff-dexprogs` classifies
+  it as "unsupported", not "fail".)
+* `cargo clippy --release -p acos-vm --all-targets -- -D warnings`: clean in the
+  worktree; on the current main tree the only two errors are pre-existing
+  `unnecessary_cast` in `natives/fwk_input.rs` (a file this wave does not touch).
+
+The changes were applied to the current main tree as localized patches (the main tree
+has since moved past `40f075c` with W33-A/W35-A work in `interp.rs`/`vm.rs`/`heap.rs`,
+so the patches were re-read and applied against the current text, never by
+overwriting whole files). Re-run on that tree:
+
+* `cargo check --release -p acos-vm --lib`: passes.
+* `cargo test --release -p acos-vm --test fast_path_equivalence`: 2/2 pass.
+* `cargo test --release -p acos-vm --test dexprogs -- --skip thousand_events`: 2/2
+  pass (the main tree's newer corelib supports `26_regex_matrix`, so the full
+  26/26 corpus is green).
+* `tools/diff-dexprogs.sh --corelib real`: **26 pass / 0 fail / 0 unsupported**;
+  `--gc-stress`: **26 pass / 0 fail / 0 unsupported**.
+
+Interpreter-metric rerun (`tools/bench-acos.sh interpreter --runs 10`,
+`run-2026-11-10-223843.json`, loadavg1 2.56, release): `02_int_arith`
+6.548 ms p50 / 7.434 p95, `05_branches_loops` 6.183 / 6.523, `09_strings`
+8.001 / 8.996. The metric's wall covers `Vm::new` (boot/native bring-up) as well as
+interpretation, so it is a startup + host-load measurement, not a per-instruction
+one. These rows are much lower than the §8.6 run (16.048 / 15.054 / 19.730 ms p50)
+because that run was on a loadavg1 4.80 host and this one on 2.56, and because the
+main tree now carries later W33-A/W35-A work; they are **not** a like-for-like
+speed claim against §8.6. The `vmbench` table above is the per-instruction evidence.

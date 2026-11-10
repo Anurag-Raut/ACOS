@@ -126,6 +126,14 @@ pub trait Backend: Send + Sync + 'static {
     fn refresh_capabilities(&self) -> Capabilities;
     /// Backend identity.
     fn info(&self) -> BackendInfo;
+    /// Handle an in-process session tool (`acos_launch`, `acos_logs`, ...).
+    ///
+    /// The default returns `None`, which the server maps to a structured
+    /// `unsupported` envelope. Only a backend that owns a live session (the
+    /// [`crate::session_backend::SessionBackend`]) implements this.
+    fn session_call(&self, _name: &str, _args: &Value, _ctx: &CallContext) -> Option<Envelope> {
+        None
+    }
 }
 
 /// Configuration for [`CliBackend`].

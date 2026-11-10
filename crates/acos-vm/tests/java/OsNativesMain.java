@@ -3,7 +3,10 @@ import android.os.Process;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
+import android.system.Os;
 import android.util.Log;
+
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Java-level proof for the {@code core.os} natives (T-25).
@@ -79,6 +82,27 @@ public class OsNativesMain {
         System.out.println("loggable_info=" + Log.isLoggable("AcosFixture", Log.INFO));
         System.out.println("loggable_verbose=" + Log.isLoggable("AcosFixture", Log.VERBOSE));
         Log.w("AcosFixture", "warn");
+
+        // ---- Guest environment: VM-owned, never the host process env.
+        System.out.println("env_path_null=" + (Os.getenv("PATH") == null));
+        System.out.println("env_android_root=" + Os.getenv("ANDROID_ROOT"));
+        Os.setenv("ACOS_TEST_VAR", "round-trip", true);
+        System.out.println("env_setenv=" + Os.getenv("ACOS_TEST_VAR"));
+        Os.unsetenv("ACOS_TEST_VAR");
+        System.out.println("env_unset=" + (Os.getenv("ACOS_TEST_VAR") == null));
+        String[] env = Os.environ();
+        System.out.println("env_environ_nonempty=" + (env != null && env.length > 0));
+
+        // ---- LockSupport park/unpark (HONESTY_AUDIT.md #7): timed parks wake
+        // and an unpark permit makes the next park return immediately.
+        long p0 = System.nanoTime();
+        LockSupport.parkNanos(2_000_000L);
+        long park_elapsed = System.nanoTime() - p0;
+        System.out.println("park_nanos_ok=" + (park_elapsed >= 1_000_000L));
+        LockSupport.unpark(Thread.currentThread());
+        long p1 = System.nanoTime();
+        LockSupport.park();
+        System.out.println("park_permit_ok=" + (System.nanoTime() - p1 < 1_000_000_000L));
         System.out.println("done");
     }
 

@@ -284,8 +284,10 @@ fn clipboard_set_primary_clip_without_a_vm_is_a_structured_error() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn app_ops_check_operation_is_mode_allowed() {
+fn app_ops_check_operation_is_denied_without_a_grant() {
     let mut host = ServiceHost::standard();
+    // OP_FINE_LOCATION = 1 is permission-gated. No ACCESS_FINE_LOCATION grant
+    // is present, so it must not report MODE_ALLOWED (HONESTY_AUDIT.md #4).
     let reply = invoke(
         &mut host,
         "appops",
@@ -293,7 +295,16 @@ fn app_ops_check_operation_is_mode_allowed() {
         "checkOperation",
         &[Value::Int(1), Value::Int(10192), s("dev.acos.fixtures.helloviews")],
     );
-    assert_eq!(reply, vec![Value::Int(acos_services::declared::MODE_ALLOWED)]);
+    assert_ne!(reply, vec![Value::Int(acos_services::declared::MODE_ALLOWED)]);
+    // A non-restricted op code is still answered MODE_ALLOWED.
+    let benign = invoke(
+        &mut host,
+        "appops",
+        IAPP_OPS,
+        "checkOperation",
+        &[Value::Int(9999), Value::Int(10192), s("dev.acos.fixtures.helloviews")],
+    );
+    assert_eq!(benign, vec![Value::Int(acos_services::declared::MODE_ALLOWED)]);
     // A state-changing op is refused, not faked.
     let err = invoke_err(
         &mut host,

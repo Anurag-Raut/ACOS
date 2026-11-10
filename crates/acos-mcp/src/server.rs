@@ -24,6 +24,7 @@ use crate::backend::{Backend, CallContext, Capabilities};
 use crate::descriptors::{
     command_from_tool, negotiate, supports_structured_content, tool_infos, CAPABILITIES_TOOL,
     HELP_TOOL, INSTRUCTIONS, LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION,
+    SESSION_TOOL_NAMES,
 };
 use crate::gate::{Gate, GateError};
 use crate::help;
@@ -167,6 +168,8 @@ enum ToolRef {
     Command(CommandName),
     Capabilities,
     Help,
+    /// A server-local in-process session tool (`acos_launch`, `acos_tap`, ...).
+    Session(&'static str),
 }
 
 /// The MCP server.
@@ -354,6 +357,12 @@ impl<B: Backend> Server<B> {
                     help::build_help(&caps, &info, root.as_deref()),
                 )
             }
+            ToolRef::Session(name) => {
+                let ctx = self.call_context(token, &args);
+                self.backend
+                    .session_call(name, &args, &ctx)
+                    .unwrap_or_else(|| unsupported_session_tool(name))
+            }
         };
         drop(permit);
         tool_result(id, &envelope, &self.negotiated_version(), &self.config)
@@ -477,7 +486,25 @@ fn lookup_tool(name: &str) -> Option<ToolRef> {
     if name == HELP_TOOL {
         return Some(ToolRef::Help);
     }
+    if let Some(session) = SESSION_TOOL_NAMES.iter().find(|tool| **tool == name) {
+        return Some(ToolRef::Session(session));
+    }
     command_from_tool(name).map(ToolRef::Command)
+}
+
+fn unsupported_session_tool(name: &str) -> Envelope {
+    Envelope::failure(
+        "req_session",
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(
+            ErrorCode::UnsupportedBackend,
+            format!("session tool `{name}` requires the in-process session backend"),
+        )
+        .with_hint("Run the default `acos-mcp` binary, which installs SessionBackend; the bare CliBackend does not hold sessions.")
+        .with_details(json!({"tool": name})),
+        Metrics::wall_ms(0),
+    )
 }
 
 fn pass_with_result(request_id: &str, result: Value) -> Envelope {

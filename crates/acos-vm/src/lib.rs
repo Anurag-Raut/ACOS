@@ -17,6 +17,7 @@ pub mod codecache;
 pub mod corelib;
 mod dispatch;
 pub mod error;
+pub mod exec;
 pub mod format;
 pub mod frame;
 pub mod heap;

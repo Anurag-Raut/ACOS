@@ -1157,16 +1157,35 @@ fn linux_gai_strerror(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-/// `environ(7)`: the guest gets an empty environment. The sandbox never
-/// exports host variables (they can carry host paths/secrets), and the
-/// property table, not the environment, seeds Android configuration.
+/// `environ(7)`: the guest sees the fixed, VM-owned Android-like environment
+/// table seeded by [`super::io`], never the host process environment (which
+/// can carry host paths/secrets) and never an implicit empty set that hides a
+/// `setenv` round-trip.
 fn linux_environ(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let array = vm.alloc(Object::Array(ArrayObj {
+    let entries = super::io::environ_entries();
+    let mut refs = Vec::with_capacity(entries.len());
+    let arr = vm.alloc(Object::Array(ArrayObj {
         elem_desc: "Ljava/lang/String;".to_string(),
         data: ArrayData::Ref(Vec::new()),
-    }));
-    let array = array?;
-    vm.ret_ref(ctx, array);
+    }))?;
+    vm.native_roots.push(arr);
+    let result = (|| -> VmResult<()> {
+        for entry in &entries {
+            let h = vm.new_string(entry)?;
+            refs.push(h);
+        }
+        if let Some(Object::Array(ArrayObj {
+            data: ArrayData::Ref(v),
+            ..
+        })) = vm.heap.get_mut(arr)
+        {
+            *v = refs;
+        }
+        Ok(())
+    })();
+    vm.native_roots.pop();
+    result?;
+    vm.ret_ref(ctx, arr);
     Ok(())
 }
 

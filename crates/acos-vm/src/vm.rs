@@ -58,6 +58,9 @@ pub struct ThreadRT {
     /// loops in real framework code; allocating a fresh `regs`/`refs` pair for
     /// every call dominated invoke cost. The pool is per-thread and capped.
     pub(crate) frame_pool: Vec<Frame>,
+    /// A `LockSupport.unpark`/`Unsafe.unpark` permit waiting for this thread's
+    /// next park (JDK `Parker` semantics). Set by `unpark`, consumed by `park`.
+    pub park_permit: bool,
 }
 
 impl ThreadRT {
@@ -72,6 +75,7 @@ impl ThreadRT {
             wake_at: None,
             wait_monitor: None,
             frame_pool: Vec::new(),
+            park_permit: false,
         }
     }
 
@@ -1326,6 +1330,25 @@ impl Vm {
         self.alloc(Object::Instance { class, fields })
     }
 
+    /// Validate a guest array length before building its backing store.
+    ///
+    /// Rejects against both the guest heap cap and the hard per-array cap, and
+    /// throws a real Java `OutOfMemoryError` (never a host abort). Guest-sized
+    /// `vec![..; len]`/`with_capacity(len)` must go through this first
+    /// (`HONESTY_AUDIT.md` #2).
+    pub fn check_array_len(&mut self, elem_desc: &str, len: usize) -> VmResult<()> {
+        if crate::heap::array_len_fits(elem_desc, len, self.heap.max_bytes) {
+            return Ok(());
+        }
+        Err(self.throw_new(
+            "Ljava/lang/OutOfMemoryError;",
+            Some(&format!(
+                "array length {len} of {elem_desc} exceeds the heap cap ({} bytes)",
+                self.heap.max_bytes
+            )),
+        ))
+    }
+
     pub fn new_string_utf16(&mut self, units: Vec<u16>) -> VmResult<Handle> {
         self.alloc(Object::String(units))
     }
@@ -1377,8 +1400,20 @@ impl Vm {
     pub fn gc(&mut self) {
         let start = Instant::now();
         let n = self.heap.objects.len();
-        let mut mark = vec![false; n];
-        let mut stack: Vec<Handle> = Vec::new();
+        // Generation bitmap + reused worklist: a fresh `vec![false; n]` and a
+        // fresh stack per collection cost an allocation and a full `memset`
+        // each time. The generation counter marks live slots without clearing;
+        // it is reset only on wrap.
+        let mut gen = self.heap.gc_gen.wrapping_add(1);
+        if gen == 0 {
+            self.heap.gc_mark.fill(0);
+            gen = 1;
+        }
+        self.heap.gc_gen = gen;
+        if self.heap.gc_mark.len() < n {
+            self.heap.gc_mark.resize(n, 0);
+        }
+        let mut stack: Vec<Handle> = std::mem::take(&mut self.heap.gc_stack);
 
         for t in &self.threads {
             if t.object != NULL {
@@ -1414,10 +1449,10 @@ impl Vm {
         stack.push(self.main_thread_group);
 
         while let Some(h) = stack.pop() {
-            if h == NULL || h as usize >= n || mark[h as usize] {
+            if h == NULL || h as usize >= n || self.heap.gc_mark[h as usize] == gen {
                 continue;
             }
-            mark[h as usize] = true;
+            self.heap.gc_mark[h as usize] = gen;
             match &self.heap.objects[h as usize] {
                 Some(Object::Array(a)) => {
                     if let crate::heap::ArrayData::Ref(v) = &a.data {
@@ -1464,12 +1499,21 @@ impl Vm {
 
         let mut i = 1usize;
         while i < self.heap.objects.len() {
-            if self.heap.objects[i].is_some() && !mark[i] {
-                self.heap.free_slot(i as u32);
-                self.string_hashes.remove(&(i as u32));
+            if let Some(obj) = self.heap.objects[i].as_ref() {
+                if self.heap.gc_mark[i] != gen {
+                    // Only strings are indexed in `string_hashes`; probing the
+                    // map for every dead slot was a wasted hash lookup per
+                    // collected object.
+                    if matches!(obj, Object::String(_)) {
+                        self.string_hashes.remove(&(i as u32));
+                    }
+                    self.heap.free_slot(i as u32);
+                }
             }
             i += 1;
         }
+        self.heap.gc_stack = stack;
+        self.heap.gc_stack.clear();
 
         self.heap.gc_count += 1;
         self.heap.gc_nanos += start.elapsed().as_nanos() as u64;

@@ -79,6 +79,7 @@ name = "acos-mcp"
 version = "0.1.0"
 dependencies = [
  "acos-protocol",
+ "acos-runtime",
  "libc",
  "serde",
  "serde_json",

@@ -35,6 +35,13 @@ pub struct Frame {
     /// originating `invoke-*` instruction (true) or leave its pc alone (native
     /// callbacks and class initialisers).
     pub advance_on_return: bool,
+    /// Lazily-lowered typed-IR program for this body (`ACOS_EXEC=ir`). Cached
+    /// here so the per-batch dispatch does not probe the process-global cache.
+    /// Only loop bodies get a program; straight-line bodies are run by
+    /// `fast_run` and are marked `ir_checked` so the decision is made once.
+    pub ir: Option<Arc<crate::exec::Program>>,
+    /// Whether the IR decision above has been made for this frame's body.
+    pub ir_checked: bool,
 }
 
 impl Frame {
@@ -58,6 +65,8 @@ impl Frame {
             pending_exception: 0,
             monitor: None,
             advance_on_return: false,
+            ir: None,
+            ir_checked: false,
         }
     }
 

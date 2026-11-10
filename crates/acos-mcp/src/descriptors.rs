@@ -45,6 +45,17 @@ pub const CAPABILITIES_TOOL: &str = "acos_capabilities";
 /// Tool name for the self-description.
 pub const HELP_TOOL: &str = "acos_help";
 
+/// Server-local in-process session tool names (served by
+/// [`crate::session_backend::SessionBackend`], not by the `acos` subprocess).
+pub const SESSION_TOOL_NAMES: &[&str] = &[
+    "acos_launch",
+    "acos_tap",
+    "acos_key",
+    "acos_swipe",
+    "acos_logs",
+    "acos_status",
+];
+
 /// Identify a command from its wire name (`run-dex`).
 pub fn command_from_wire(wire: &str) -> Option<CommandName> {
     all_commands()
@@ -216,7 +227,89 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
         .collect();
     tools.push(capabilities_tool());
     tools.push(help_tool());
+    tools.extend(session_tools());
     tools
+}
+
+/// The server-local in-process session tools.
+///
+/// They are marked available unconditionally: the default `acos-mcp` binary
+/// installs the [`crate::session_backend::SessionBackend`] which serves them.
+/// A server wired to the bare [`crate::backend::CliBackend`] answers with a
+/// structured `unsupported` envelope rather than a false pass.
+pub fn session_tools() -> Vec<ToolInfo> {
+    let mut out = Vec::with_capacity(SESSION_TOOL_NAMES.len());
+    for name in SESSION_TOOL_NAMES {
+        let (description, schema) = session_tool_spec(name);
+        out.push(ToolInfo {
+            tool_name: (*name).to_string(),
+            command: None,
+            description: description.to_string(),
+            input_schema: schema,
+            available: true,
+            fidelity: Fidelity::NativeRuntime,
+            reason: None,
+        });
+    }
+    out
+}
+
+fn session_tool_spec(name: &str) -> (&'static str, Value) {
+    let base = json!({
+        "type": "object",
+        "description": "Identity fields; only `session_id` is meaningful here.",
+        "properties": {
+            "request_id": {"type": "string"},
+            "session_id": {"type": "string"}
+        }
+    });
+    let with_base = |properties: Value| {
+        let mut schema = json!({
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": true
+        });
+        schema["properties"]["base"] = base.clone();
+        schema
+    };
+    match name {
+        "acos_launch" => (
+            "Boot an APK in the in-process session and return the honest launch stage ladder \
+             (apk_parsed -> ... -> first_frame). `ok:true` is only returned when every rung ran; \
+             otherwise the first blocked rung carries the structured blocker.",
+            with_base(json!({"apk": {"type": "string"}, "timeout_ms": {"type": "integer"}})),
+        ),
+        "acos_tap" => (
+            "Tap a point (`x`,`y`) or a text label in the held session. No window returns \
+             `ELEMENT_NOT_FOUND` with `details.kind=NoWindowAtPoint`/`NoUiTree`.",
+            with_base(json!({
+                "x": {"type": "integer"}, "y": {"type": "integer"}, "text": {"type": "string"}
+            })),
+        ),
+        "acos_key" => (
+            "Press a key code (4=BACK, 66=ENTER) or name in the held session. No focused \
+             window returns `ELEMENT_NOT_FOUND` with `details.kind=NoFocusedWindow`.",
+            with_base(json!({"code": {"type": ["integer", "string"]}})),
+        ),
+        "acos_swipe" => (
+            "Swipe between two points in the held session. No window returns \
+             `ELEMENT_NOT_FOUND` with `details.kind=NoWindowAtPoint`.",
+            with_base(json!({
+                "from": {"type": "object"}, "to": {"type": "object"}, "duration_ms": {"type": "integer"}
+            })),
+        ),
+        "acos_logs" => (
+            "Read the guest log buffer of the held session. Empty is a valid pass; it never \
+             fabricates lifecycle lines.",
+            with_base(json!({})),
+        ),
+        "acos_status" => (
+            "Report whether the held session has launched, the last stage reached, and the \
+             published frame count.",
+            with_base(json!({})),
+        ),
+        _ => ("In-process session tool.", with_base(json!({}))),
+    }
 }
 
 /// The `acos_capabilities` tool descriptor.
@@ -302,14 +395,17 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help.
-        assert_eq!(infos.len(), 15);
+        // 13 protocol tools + acos_capabilities + acos_help + 6 session tools.
+        assert_eq!(infos.len(), 21);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(names.contains(descriptor.name.as_str()), "{}", descriptor.name);
         }
         for info in &infos {
-            if info.tool_name != CAPABILITIES_TOOL && info.tool_name != HELP_TOOL {
+            let is_server_tool = info.tool_name == CAPABILITIES_TOOL
+                || info.tool_name == HELP_TOOL
+                || SESSION_TOOL_NAMES.contains(&info.tool_name.as_str());
+            if !is_server_tool {
                 assert!(info.command.is_some(), "{}", info.tool_name);
             }
         }

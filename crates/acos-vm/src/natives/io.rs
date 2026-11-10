@@ -6,6 +6,9 @@
 //! keeps the identity/environment calls (`getpid`, `getenv`, `uname`, …) and the
 //! `strerror` text `android.system.ErrnoException.getMessage()` needs.
 
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
+
 use crate::class::NativeCtx;
 use crate::error::VmResult;
 use crate::heap::{Handle, NULL};
@@ -72,23 +75,94 @@ fn icu_version(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
+/// The guest's environment table.
+///
+/// This is a **VM-owned** map seeded with the fixed, Android-like set an app
+/// process actually sees (zygote does not export the host environment). It is
+/// deliberately *not* `std::env`: reading the host process environment would
+/// leak host paths, tokens and API keys to guest bytecode
+/// (`HONESTY_AUDIT.md` #5). `setenv`/`unsetenv` mutate this table.
+fn guest_env() -> &'static Mutex<BTreeMap<String, String>> {
+    static ENV: OnceLock<Mutex<BTreeMap<String, String>>> = OnceLock::new();
+    ENV.get_or_init(|| Mutex::new(seed_env()))
+}
+
+fn seed_env() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
+    for (k, v) in [
+        ("ANDROID_ROOT", "/system"),
+        ("ANDROID_DATA", "/data"),
+        ("ANDROID_ASSETS", "/system/app"),
+        ("ANDROID_STORAGE", "/storage"),
+        ("ANDROID_RUNTIME_ROOT", "/apex/com.android.runtime"),
+        ("ANDROID_TZDATA_ROOT", "/apex/com.android.tzdata"),
+        ("ANDROID_ART_ROOT", "/apex/com.android.art"),
+        ("ANDROID_I18N_ROOT", "/apex/com.android.i18n"),
+        ("EXTERNAL_STORAGE", "/sdcard"),
+        ("ASEC_MOUNTPOINT", "/mnt/asec"),
+        ("DOWNLOAD_CACHE", "/data/cache"),
+        ("TMPDIR", "/data/local/tmp"),
+    ] {
+        m.insert(k.to_string(), v.to_string());
+    }
+    m
+}
+
+/// A snapshot of the guest environment as `KEY=VALUE` entries, for the
+/// `environ(7)` native. Sorted so the reply is deterministic.
+pub(crate) fn environ_entries() -> Vec<String> {
+    let env = guest_env().lock().unwrap_or_else(|p| p.into_inner());
+    env.iter().map(|(k, v)| format!("{k}={v}")).collect()
+}
+
 fn getenv(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
-    match std::env::var(&name) {
-        Ok(v) => {
+    let value = guest_env()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(&name)
+        .cloned();
+    match value {
+        Some(v) => {
             let h = vm.new_string(&v)?;
             vm.ret_ref(ctx, h);
         }
-        Err(_) => vm.ret_ref(ctx, NULL),
+        None => vm.ret_ref(ctx, NULL),
     }
     Ok(())
 }
 
-fn setenv(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+fn setenv(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    // `Os.setenv(name, null, ...)` unsets in bionic.
+    let value = vm.string_to_rust(vm.arg_ref(ctx, 1));
+    let overwrite = vm.arg_bool(ctx, 2);
+    if name.is_empty() || name.contains('=') {
+        return Err(vm.throw_new(
+            "Landroid/system/ErrnoException;",
+            Some("setenv: invalid name"),
+        ));
+    }
+    let mut env = guest_env().lock().unwrap_or_else(|p| p.into_inner());
+    match value {
+        None => {
+            env.remove(&name);
+        }
+        Some(v) => {
+            if overwrite || !env.contains_key(&name) {
+                env.insert(name, v);
+            }
+        }
+    }
     Ok(())
 }
 
-fn unsetenv(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+fn unsetenv(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
+    guest_env()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(&name);
     Ok(())
 }
 
@@ -551,4 +625,46 @@ fn init_constants(vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// HONESTY_AUDIT #5: the guest environment is the fixed VM-owned table,
+    /// never the host process environment.
+    #[test]
+    fn guest_environment_is_seeded_and_never_the_host() {
+        // A host variable that exists in this process must not be visible.
+        std::env::set_var("ACOS_AUDIT_HOST_SECRET", "leaked");
+        assert_eq!(
+            guest_env().lock().unwrap().get("ACOS_AUDIT_HOST_SECRET"),
+            None
+        );
+        // `PATH` is a host variable on this machine but Android app processes
+        // do not export it; the guest must see `None`.
+        assert_eq!(guest_env().lock().unwrap().get("PATH"), None);
+        // The Android-like seed is present.
+        assert_eq!(
+            guest_env().lock().unwrap().get("ANDROID_ROOT"),
+            Some(&"/system".to_string())
+        );
+    }
+
+    /// `setenv`/`unsetenv` mutate the guest table and round-trip through
+    /// `getenv`; `overwrite=false` keeps the first value.
+    #[test]
+    fn guest_setenv_round_trips_and_respects_overwrite() {
+        let mut env = guest_env().lock().unwrap();
+        env.insert("ACOS_TEST_ENV".to_string(), "first".to_string());
+        if !env.contains_key("ACOS_TEST_ENV") {
+            env.insert("ACOS_TEST_ENV".to_string(), "second".to_string());
+        }
+        assert_eq!(env.get("ACOS_TEST_ENV"), Some(&"first".to_string()));
+        env.insert("ACOS_TEST_ENV".to_string(), "second".to_string());
+        assert_eq!(env.get("ACOS_TEST_ENV"), Some(&"second".to_string()));
+        env.remove("ACOS_TEST_ENV");
+        assert_eq!(env.get("ACOS_TEST_ENV"), None);
+        std::env::remove_var("ACOS_AUDIT_HOST_SECRET");
+    }
 }

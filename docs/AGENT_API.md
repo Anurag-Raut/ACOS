@@ -853,6 +853,11 @@ server is not in the protocol crate. One tool per command:
 Each descriptor has `name`, an agent-facing `description` (when to use, what it
 returns, common errors) and `inputSchema` generated from the request type.
 
+The default `acos-mcp` server adds six server-local session tools
+(`acos_launch`, `acos_tap`, `acos_key`, `acos_swipe`, `acos_logs`, `acos_status`)
+served in-process by `SessionBackend`, plus the `acos_capabilities` and
+`acos_help` meta tools. See §18.6 for their contract.
+
 ---
 
 ## 12. Error code table
@@ -1236,3 +1241,183 @@ enforces it so a backend cannot pass by showing the change in only one channel:
   the baseline with `crates/acos-verify/src/screenshot.rs`, honouring
   `tolerance` and `region_masks`. A frame whose size differs from the baseline
   is an error, never an optimistic pass.
+
+---
+
+## 18. Agent session commands (launch / observe / input / logs / session)
+
+The M2 milestones are landed one rung at a time. These commands expose the
+rungs that exist **today** with the same envelopes the finished commands will
+use, so an agent can build its loop now and keep the same calls as the engine
+fills in. Nothing here fabricates a frame, a tree or a pass: a stage that did
+not complete is reported as `blocked`/`not_reached` with the structured
+blocker, and `ok:true` only appears when every rung ran.
+
+The commands are implemented in `acos-cli/src/launch.rs` and
+`acos-cli/src/session.rs`; the in-process session type is
+`acos_runtime::session::AgentSession` (a worker thread owns the `Vm` behind a
+channel command loop, the same pattern as `SessionPool`). There is **no
+`acos serve` daemon yet**: a CLI invocation owns its session for the duration
+of one command. The MCP server (`acos-mcp`, default `SessionBackend`) holds the
+same `AgentSession` across tool calls inside the server process.
+
+### 18.1 `acos launch <apk> [--timeout SECS] [--json]`
+
+Boots the APK on the real framework bytecode and prints the stage ladder:
+
+```text
+apk_parsed → process_booted → bind_application → application_on_create
+           → client_transaction → activity_on_create → on_resume → first_frame
+```
+
+Every rung is `ok` only when the real framework completed it. The first rung
+that did not is `blocked` and carries the root blocker; later rungs are
+`not_reached` and carry the same blocker (so an agent can read the reason from
+any non-ok rung). `reached_stage` is the last `ok` rung. The envelope is a
+`pass` only when `first_frame` ran; otherwise the envelope is a failure whose
+`error.code` is the blocker's stable code (`JAVA_EXCEPTION`,
+`UNSUPPORTED_BACKEND`, `VM_TIMEOUT`, ...).
+
+Real blocked-stage envelope captured on 2026-11-10 (counter fixture; trimmed
+stack tail):
+
+```json
+{
+  "request_id": "req_f4b9f_18e6be0e8b2f25d5",
+  "ok": false,
+  "status": "error",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_default",
+  "capabilities_used": ["apk.inspect", "lifecycle"],
+  "error": {
+    "code": "JAVA_EXCEPTION",
+    "message": "java exception: java.lang.IllegalArgumentException: unknown service name \"dev.acos.fixtures.counter\" ...",
+    "hint": "An exception escaped. Inspect exception/stack, fix the app (or the missing platform behaviour), and rerun.",
+    "retryable": false,
+    "details": {
+      "stage": "application_on_create",
+      "reached_stage": "bind_application",
+      "classes": "1580",
+      "classes_loaded": 1580,
+      "hint": "handleBindApplication threw before Application.onCreate"
+    }
+  },
+  "result": {
+    "package": "dev.acos.fixtures.counter",
+    "activity": "dev.acos.fixtures.counter.MainActivity",
+    "reached_stage": "bind_application",
+    "classes_loaded": 1580,
+    "wall_ms": 4999,
+    "peak_rss_bytes": 506757120,
+    "events": [],
+    "stages": [
+      {"stage": "apk_parsed",            "ok": true,  "status": "ok",          "blocker": null},
+      {"stage": "process_booted",        "ok": true,  "status": "ok",          "blocker": null},
+      {"stage": "bind_application",      "ok": true,  "status": "ok",          "blocker": null},
+      {"stage": "application_on_create", "ok": false, "status": "blocked",     "blocker": {"code": "JAVA_EXCEPTION", "message": "java exception: ... unknown service name ...", "details": {"stage": "application_on_create", "classes": "1580"}}},
+      {"stage": "client_transaction",    "ok": false, "status": "not_reached", "blocker": {"code": "JAVA_EXCEPTION", "message": "..."}},
+      {"stage": "activity_on_create",    "ok": false, "status": "not_reached", "blocker": {"code": "JAVA_EXCEPTION", "message": "..."}},
+      {"stage": "on_resume",             "ok": false, "status": "not_reached", "blocker": {"code": "JAVA_EXCEPTION", "message": "..."}},
+      {"stage": "first_frame",           "ok": false, "status": "not_reached", "blocker": {"code": "JAVA_EXCEPTION", "message": "..."}}
+    ]
+  },
+  "metrics": {"wall_ms": 4999, "peak_rss_bytes": 506757120, "classes_loaded": 1580}
+}
+```
+
+Read it as: *the APK parsed, the process booted and `bindApplication` was
+delivered; `handleBindApplication` threw before `Application.onCreate`, so no
+later rung ran.* The blocker's `details.stage` names the exact rung. This is a
+real `error`, not a `fail` and not a `pass`.
+
+If the boot classpath is absent on the host, `launch` returns
+`BOOT_CLASSPATH_MISSING` (or a `VM_INTERNAL` naming the missing path) with no
+ladder; the CLI integration test skips loudly in that case rather than pretend.
+
+### 18.2 `acos observe [--screenshot out.png] [--tree] [--text] [--apk APK] [--session ID]`
+
+Binds to `frame_handoff::FrameStore::latest()`. A completed frame is the only
+thing that makes `observe` a pass:
+
+* **No completed frame** → `status: unsupported`, `error.code:
+  UNSUPPORTED_BACKEND`, `error.details.reason: "not_ready"`, plus the
+  `stage_reached` and `published_frames` count. There is no blank image and no
+  empty tree: `result` is absent. This is the honest answer before the first
+  frame and is what the CLI/MCP tests assert.
+* **A completed frame** → `pass` with `result.frame`
+  (`frame_seq`, `width`, `height`, `content_hash`, `cause_id`,
+  `meaningful`), `result.published_frames` and, with `--screenshot`, the
+  written PNG path and byte count. The pixels come from the frame the guest
+  actually produced; the CLI does not paint a placeholder.
+* `--tree`/`--text` return `UNSUPPORTED_BACKEND` (`ui.tree`) **even when a
+  frame exists**, because the accessibility tree extractor is not implemented
+  yet. An empty tree is never returned as a pass.
+
+`--apk APK` seeds the session with a real `launch` first (the same ladder as
+18.1) so `observe` describes the state the launch reached; without `--apk` the
+session is a fresh un-launched VM.
+
+### 18.3 `acos tap X Y` / `acos tap --text LABEL` / `acos key CODE` / `acos swipe X1 Y1 X2 Y2`
+
+Input goes through `acos_services::input`'s dispatcher via
+`input_java::inject_tap`/`inject_swipe`/`inject_key` and the `wms_java` window
+registry. The envelope is a `pass` when the event was accepted and delivered to
+a window; the structured errors are the dispatcher's own:
+
+| condition | `error.code` | `error.details` |
+|---|---|---|
+| no window contains the point | `ELEMENT_NOT_FOUND` | `{"kind":"NoWindowAtPoint","x":"…","y":"…"}` |
+| no focused window for a key | `ELEMENT_NOT_FOUND` | `{"kind":"NoFocusedWindow"}` |
+| `--text` with no extracted tree | `ELEMENT_NOT_FOUND` | `{"kind":"NoUiTree","label":"…"}` |
+| one coordinate missing | `INVALID_ARGUMENT` | `{"field":"x/y"}` |
+
+`key` accepts a numeric code (`4` = BACK, `66` = ENTER) or a name (`back`,
+`home`, `enter`, `tab`, `escape`, `delete`, `volume_up`, `volume_down`,
+`power`). `swipe` takes `--duration-ms` and `--steps`. A successful input
+envelope includes `accepted`, `state_changed: false` and the last
+`input_ack_seq`; it does **not** claim the screen changed — only a subsequent
+`observe` frame can prove that.
+
+### 18.4 `acos logs [--apk APK] [--session ID] [--json]`
+
+Reads the guest log buffer from the `log` native (drained by
+`boot_and_run_lifecycle` and appended as `I AcosFixture: …` records so the
+lifecycle order is visible). An empty buffer is a valid `pass` with
+`result.count: 0`; the command never fabricates lifecycle lines.
+
+### 18.5 `acos session status|reset|close [--json]`
+
+* `status` → `pass`, `result.{launched,package,apk,stage_reached,published_frames,live}`.
+* `reset` → `pass`, recreates the task state (`state_reset: true`). The
+  in-process guest VFS and log sink are process-global, so `data_cleared` is
+  honestly `false` until the per-session VFS lands.
+* `close` → `pass`, idempotent (`destroyed: true`, `already_absent: false`).
+  The CLI's session is process-local; closing it ends the command.
+
+### 18.6 MCP tools (in-process sessions)
+
+The default `acos-mcp` binary installs `SessionBackend`, which wraps
+`CliBackend` and owns a `Mutex<HashMap<session_id, AgentSession>>`. The session
+tools hold their state across `tools/call` requests:
+
+| tool | wire command | behaviour |
+|---|---|---|
+| `acos_run` / `acos_launch` | `run` | launch the APK, return the ladder |
+| `acos_observe` | `observe` | latest frame or structured `not_ready` |
+| `acos_action` | `action` | `{kind: tap|swipe|key|back}` |
+| `acos_tap` | — | `{x,y}` or `{text}` |
+| `acos_key` | — | `{code}` |
+| `acos_swipe` | — | `{from,to,duration_ms}` |
+| `acos_logs` | — | guest log buffer |
+| `acos_status` | — | launched/stage/frames |
+| `acos_reset` | `reset` | recreate task state |
+| `acos_destroy` | `destroy` | drop the session |
+
+Sessions are created lazily: an `observe`/`status`/`logs`/`action` on an unknown
+`base.session_id` creates a fresh un-launched session (so `observe` returns
+`not_ready` rather than `SESSION_NOT_FOUND`), and `destroy` removes it. A
+server wired to the bare `CliBackend` answers these six server-local tools with
+`UNSUPPORTED_BACKEND` rather than a false pass. `acos_capabilities` and
+`acos_help` remain server tools; `tools/list` now returns 21 descriptors
+(13 protocol commands + 2 meta + 6 session tools).

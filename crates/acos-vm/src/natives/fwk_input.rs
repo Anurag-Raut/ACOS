@@ -664,18 +664,38 @@ fn me_initialize(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let props = vm.arg_ref(ctx, 17);
     let coords = vm.arg_ref(ctx, 18);
 
-    let mut pointers = Vec::with_capacity(pointer_count.max(0) as usize);
-    for i in 0..pointer_count.max(0) {
+    if pointer_count < 0 {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalArgumentException;",
+            Some("pointerCount is negative"),
+        ));
+    }
+    // Android validates `pointerCount` against the coords array. Reject a count
+    // that cannot be satisfied instead of allocating/looping to a guest `int`
+    // (HONESTY_AUDIT.md #10).
+    let coord_len = match vm.heap.get(coords) {
+        Some(crate::heap::Object::Array(a)) => a.len(),
+        _ => 0,
+    };
+    if pointer_count as usize > coord_len {
+        return Err(vm.throw_new(
+            "Ljava/lang/IllegalArgumentException;",
+            Some("pointerCount exceeds the coords array length"),
+        ));
+    }
+    let pointer_count = pointer_count as usize;
+    let mut pointers = Vec::with_capacity(pointer_count);
+    for i in 0..pointer_count {
         let mut p = Pointer::default();
         if props != 0 {
-            if let Ok(JavaValue::Object(o)) = vm.get_array_element(props, i as usize) {
+            if let Ok(JavaValue::Object(o)) = vm.get_array_element(props, i) {
                 p.id = read_int(vm, o, "id");
                 p.tool_type = read_int(vm, o, "toolType");
                 vm.release_bridge_root(o);
             }
         }
         if coords != 0 {
-            if let Ok(JavaValue::Object(o)) = vm.get_array_element(coords, i as usize) {
+            if let Ok(JavaValue::Object(o)) = vm.get_array_element(coords, i) {
                 p.x = read_f32(vm, o, "x");
                 p.y = read_f32(vm, o, "y");
                 p.pressure = read_f32(vm, o, "pressure");
