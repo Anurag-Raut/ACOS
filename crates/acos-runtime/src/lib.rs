@@ -27,6 +27,7 @@
 #![warn(missing_debug_implementations)]
 
 pub mod apk_loader;
+pub mod ams_java;
 pub mod atms_boot;
 pub mod bind_app;
 pub mod boot;

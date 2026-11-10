@@ -184,6 +184,20 @@ impl BinderTransport for ServiceTransport {
                 let result = crate::user_java::transact(vm, binder, code, data, reply, flags)
                     .map(|_| ());
                 (result, Vec::new())
+            } else if crate::ams_java::owns(descriptor.as_deref())
+                && code_owns_method(descriptor.as_deref(), code, crate::ams_java::owns_method)
+            {
+                // W52-A: the AMS methods that carry a real `Intent` (and the
+                // replies that are real `ComponentName`/`ContentProviderHolder`)
+                // are marshalled here; the state machine is `acos-services::ams`.
+                match crate::ams_java::transact(vm, binder, code, data, reply, flags) {
+                    Ok(_) => {
+                        let deliveries =
+                            crate::ams_java::take_deliveries(vm).unwrap_or_default();
+                        (Ok(()), deliveries)
+                    }
+                    Err(e) => (Err(e), Vec::new()),
+                }
             } else {
                 let mut host = self.host.borrow_mut();
                 let result = host
