@@ -440,7 +440,7 @@ pub unsafe extern "C" fn jni_ExceptionCheck(_env: usize) -> u8 {
 
 pub unsafe extern "C" fn jni_PushLocalFrame(_env: usize, capacity: i32) -> i32 {
     let mut ctx = guard!("PushLocalFrame", false, JNI_ERR);
-    if capacity < 0 || capacity > crate::state::MAX_LOCAL_CAPACITY {
+    if !(0..=crate::state::MAX_LOCAL_CAPACITY).contains(&capacity) {
         let _ = throw_class(
             &mut ctx,
             "Ljava/lang/OutOfMemoryError;",
@@ -490,7 +490,7 @@ pub unsafe extern "C" fn jni_DeleteLocalRef(_env: usize, obj: usize) {
 }
 
 pub unsafe extern "C" fn jni_IsSameObject(_env: usize, a: usize, b: usize) -> u8 {
-    let mut ctx = guard!("IsSameObject", false, 0);
+    let ctx = guard!("IsSameObject", false, 0);
     // A cleared weak global reference is treated as `NULL`; this is the JNI
     // idiom `IsSameObject(env, weak, NULL)` for testing for collection.
     let rt = ctx.rt.clone();
@@ -548,7 +548,7 @@ pub unsafe extern "C" fn jni_DeleteWeakGlobalRef(_env: usize, obj: usize) {
 
 pub unsafe extern "C" fn jni_EnsureLocalCapacity(_env: usize, capacity: i32) -> i32 {
     let mut ctx = guard!("EnsureLocalCapacity", false, JNI_ERR);
-    if capacity < 0 || capacity > crate::state::MAX_LOCAL_CAPACITY {
+    if !(0..=crate::state::MAX_LOCAL_CAPACITY).contains(&capacity) {
         let _ = throw_class(
             &mut ctx,
             "Ljava/lang/OutOfMemoryError;",

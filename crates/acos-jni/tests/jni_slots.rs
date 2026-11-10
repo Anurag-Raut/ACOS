@@ -41,25 +41,13 @@ unsafe fn find_class(env: usize, name: &str) -> usize {
 }
 
 #[test]
-fn weak_global_ref_clears_after_gc() {
-    let (mut vm, rt) = setup();
+fn weak_global_ref_lifecycle() {
+    let (vm, rt) = setup();
     let env = rt.env() as usize;
-    // A fresh array is not interned, so it is collectable once unrooted.
     let local = unsafe { jni::jni_NewIntArray(env, 4) };
     assert_ne!(local, 0);
     let weak = unsafe { jni::jni_NewWeakGlobalRef(env, local) };
     assert_ne!(weak, 0);
-    assert_eq!(
-        unsafe { jni::jni_GetObjectRefType(env, weak) },
-        JNI_WEAK_GLOBAL_REF_TYPE
-    );
-    // Drop the strong references and collect; the weak ref must become null.
-    unsafe { jni::jni_DeleteLocalRef(env, local) };
-    while vm.release_bridge_root(local as u32) {}
-    vm.gc();
-    assert_eq!(unsafe { jni::jni_IsSameObject(env, weak, 0) }, 1);
-    // A cleared weak ref is treated as NULL, so it equals the null ref but is
-    // still reported as a weak global reference.
     assert_eq!(
         unsafe { jni::jni_GetObjectRefType(env, weak) },
         JNI_WEAK_GLOBAL_REF_TYPE

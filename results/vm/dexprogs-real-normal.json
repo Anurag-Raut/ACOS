@@ -2,8 +2,8 @@
   "mode": "normal",
   "corelib": "real",
   "gc_stress": false,
-  "total": 25,
-  "pass": 25,
+  "total": 26,
+  "pass": 26,
   "fail": 0,
   "unsupported": 0,
   "programs": [
@@ -23,11 +23,11 @@
         "instructions": 43611,
         "invokes": 8320,
         "natives_registered": 1611,
-        "peak_rss_kb": 41728,
-        "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 22
+        "peak_rss_kb": 41676,
+        "run_ms": 5,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 21
       }
     },
     {
@@ -46,11 +46,11 @@
         "instructions": 62584,
         "invokes": 11372,
         "natives_registered": 1611,
-        "peak_rss_kb": 41760,
+        "peak_rss_kb": 41992,
         "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 23
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 21
       }
     },
     {
@@ -69,7 +69,7 @@
         "instructions": 67534,
         "invokes": 11572,
         "natives_registered": 1611,
-        "peak_rss_kb": 42032,
+        "peak_rss_kb": 42460,
         "run_ms": 7,
         "startup_ms": 15,
         "vm_new_ms": 15,
@@ -92,11 +92,11 @@
         "instructions": 147172,
         "invokes": 15190,
         "natives_registered": 1611,
-        "peak_rss_kb": 42792,
-        "run_ms": 8,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 25
+        "peak_rss_kb": 42856,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 23
       }
     },
     {
@@ -115,11 +115,11 @@
         "instructions": 49936,
         "invokes": 8991,
         "natives_registered": 1611,
-        "peak_rss_kb": 41724,
+        "peak_rss_kb": 41908,
         "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 22
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 21
       }
     },
     {
@@ -138,8 +138,8 @@
         "instructions": 55425,
         "invokes": 10277,
         "natives_registered": 1611,
-        "peak_rss_kb": 41788,
-        "run_ms": 6,
+        "peak_rss_kb": 41888,
+        "run_ms": 7,
         "startup_ms": 15,
         "vm_new_ms": 15,
         "wall_ms": 22
@@ -161,11 +161,11 @@
         "instructions": 86950,
         "invokes": 14795,
         "natives_registered": 1611,
-        "peak_rss_kb": 41692,
-        "run_ms": 7,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 23
+        "peak_rss_kb": 41996,
+        "run_ms": 6,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 22
       }
     },
     {
@@ -184,11 +184,11 @@
         "instructions": 52295,
         "invokes": 9666,
         "natives_registered": 1611,
-        "peak_rss_kb": 42316,
+        "peak_rss_kb": 42544,
         "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 23
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -207,7 +207,7 @@
         "instructions": 143812,
         "invokes": 15334,
         "natives_registered": 1611,
-        "peak_rss_kb": 42872,
+        "peak_rss_kb": 42900,
         "run_ms": 8,
         "startup_ms": 16,
         "vm_new_ms": 16,
@@ -230,11 +230,11 @@
         "instructions": 50010,
         "invokes": 9424,
         "natives_registered": 1611,
-        "peak_rss_kb": 41864,
+        "peak_rss_kb": 41876,
         "run_ms": 6,
         "startup_ms": 16,
         "vm_new_ms": 16,
-        "wall_ms": 23
+        "wall_ms": 22
       }
     },
     {
@@ -253,11 +253,11 @@
         "instructions": 123976,
         "invokes": 11991,
         "natives_registered": 1611,
-        "peak_rss_kb": 42480,
+        "peak_rss_kb": 42708,
         "run_ms": 7,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 24
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -276,11 +276,11 @@
         "instructions": 47788,
         "invokes": 9118,
         "natives_registered": 1611,
-        "peak_rss_kb": 41716,
-        "run_ms": 7,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 23
+        "peak_rss_kb": 41796,
+        "run_ms": 6,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -299,11 +299,11 @@
         "instructions": 54996,
         "invokes": 10450,
         "natives_registered": 1611,
-        "peak_rss_kb": 42008,
+        "peak_rss_kb": 41924,
         "run_ms": 6,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 24
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 22
       }
     },
     {
@@ -322,11 +322,11 @@
         "instructions": 63948,
         "invokes": 11953,
         "natives_registered": 1611,
-        "peak_rss_kb": 42096,
-        "run_ms": 6,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 22
+        "peak_rss_kb": 41928,
+        "run_ms": 7,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 23
       }
     },
     {
@@ -345,11 +345,11 @@
         "instructions": 50641,
         "invokes": 9651,
         "natives_registered": 1611,
-        "peak_rss_kb": 42536,
-        "run_ms": 6,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 22
+        "peak_rss_kb": 42612,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 23
       }
     },
     {
@@ -368,11 +368,11 @@
         "instructions": 50251,
         "invokes": 9520,
         "natives_registered": 1611,
-        "peak_rss_kb": 42484,
+        "peak_rss_kb": 42372,
         "run_ms": 7,
         "startup_ms": 16,
         "vm_new_ms": 16,
-        "wall_ms": 24
+        "wall_ms": 23
       }
     },
     {
@@ -391,11 +391,11 @@
         "instructions": 67547,
         "invokes": 12438,
         "natives_registered": 1611,
-        "peak_rss_kb": 42504,
-        "run_ms": 8,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 24
+        "peak_rss_kb": 42792,
+        "run_ms": 7,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 23
       }
     },
     {
@@ -414,11 +414,11 @@
         "instructions": 148141,
         "invokes": 15706,
         "natives_registered": 1611,
-        "peak_rss_kb": 42864,
+        "peak_rss_kb": 42788,
         "run_ms": 8,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 23
+        "wall_ms": 24
       }
     },
     {
@@ -437,11 +437,11 @@
         "instructions": 1343015,
         "invokes": 108252,
         "natives_registered": 1611,
-        "peak_rss_kb": 42144,
-        "run_ms": 32,
+        "peak_rss_kb": 42492,
+        "run_ms": 34,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 47
+        "wall_ms": 50
       }
     },
     {
@@ -460,8 +460,8 @@
         "instructions": 32651,
         "invokes": 6526,
         "natives_registered": 1611,
-        "peak_rss_kb": 41660,
-        "run_ms": 5,
+        "peak_rss_kb": 41676,
+        "run_ms": 6,
         "startup_ms": 16,
         "vm_new_ms": 16,
         "wall_ms": 22
@@ -483,8 +483,8 @@
         "instructions": 69203,
         "invokes": 13094,
         "natives_registered": 1611,
-        "peak_rss_kb": 42284,
-        "run_ms": 7,
+        "peak_rss_kb": 42708,
+        "run_ms": 8,
         "startup_ms": 15,
         "vm_new_ms": 15,
         "wall_ms": 23
@@ -506,11 +506,11 @@
         "instructions": 87703,
         "invokes": 16169,
         "natives_registered": 1611,
-        "peak_rss_kb": 42140,
-        "run_ms": 7,
+        "peak_rss_kb": 42748,
+        "run_ms": 8,
         "startup_ms": 15,
         "vm_new_ms": 15,
-        "wall_ms": 23
+        "wall_ms": 24
       }
     },
     {
@@ -529,11 +529,11 @@
         "instructions": 87987,
         "invokes": 16257,
         "natives_registered": 1611,
-        "peak_rss_kb": 42652,
+        "peak_rss_kb": 43124,
         "run_ms": 8,
-        "startup_ms": 16,
-        "vm_new_ms": 16,
-        "wall_ms": 25
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 23
       }
     },
     {
@@ -552,11 +552,11 @@
         "instructions": 135114,
         "invokes": 20179,
         "natives_registered": 1611,
-        "peak_rss_kb": 47696,
-        "run_ms": 12,
-        "startup_ms": 15,
-        "vm_new_ms": 15,
-        "wall_ms": 28
+        "peak_rss_kb": 48048,
+        "run_ms": 13,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 29
       }
     },
     {
@@ -575,11 +575,34 @@
         "instructions": 2985892,
         "invokes": 547108,
         "natives_registered": 1611,
-        "peak_rss_kb": 213436,
-        "run_ms": 155,
-        "startup_ms": 17,
-        "vm_new_ms": 17,
-        "wall_ms": 173
+        "peak_rss_kb": 213780,
+        "run_ms": 154,
+        "startup_ms": 16,
+        "vm_new_ms": 16,
+        "wall_ms": 170
+      }
+    },
+    {
+      "program": "26_regex_matrix",
+      "status": "pass",
+      "exit_code": 0,
+      "metrics": {
+        "allocations": 12664,
+        "classes_loaded": 224,
+        "clinit_count": 58,
+        "dex_parse_ms": 0,
+        "gc_count": 0,
+        "gc_ms": 0,
+        "heap_peak_bytes": 1360651,
+        "image_read_ms": 0,
+        "instructions": 1032425,
+        "invokes": 176644,
+        "natives_registered": 1611,
+        "peak_rss_kb": 45436,
+        "run_ms": 30,
+        "startup_ms": 15,
+        "vm_new_ms": 15,
+        "wall_ms": 46
       }
     }
   ]
