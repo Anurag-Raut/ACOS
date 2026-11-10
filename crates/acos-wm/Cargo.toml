@@ -1,0 +1,35 @@
+[package]
+name = "acos-wm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS in-process WindowManager, compositor, input dispatcher, IME and vsync state machines (VM-independent, pure Rust)"
+
+[lib]
+name = "acos_wm"
+path = "src/lib.rs"
+
+[dependencies]
+acos-parcel = { path = "../acos-parcel" }
+acos-aidl = { path = "../acos-aidl" }
+acos-protocol = { path = "../acos-protocol" }
+acos-render = { path = "../acos-render" }
+rustix = { version = "1.1", features = ["fs", "net", "event", "time"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+acos-dex = { path = "../acos-dex" }
+proptest = "1"
+
+[[bench]]
+name = "wm_bench"
+harness = false
+
+[[example]]
+name = "derive_layouts"
+path = "examples/derive_layouts.rs"
+
+[[example]]
+name = "replay_report"
+path = "examples/replay_report.rs"

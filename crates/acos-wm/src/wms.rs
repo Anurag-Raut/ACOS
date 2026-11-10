@@ -1,0 +1,985 @@
+//! `svc.wms`: the IWindowSession / IWindowManager window state machine.
+//!
+//! This is the VM-independent half of BACKLOG T-29: it decodes the real
+//! `addToDisplayAsUser`/`relayout` arguments (via [`crate::codec`]) and produces
+//! the typed out-parameters (`ClientWindowFrames`, `MergedConfiguration`,
+//! `SurfaceControl`, `InsetsState`, `InsetsSourceControl$Array`) whose byte
+//! layouts were derived from the framework DEX.
+//!
+//! The window frame is not guessed: for the reference device it is the measured
+//! `mAppBounds=Rect(0, 128 - 1080, 2337)` and the inset sources are the exact
+//! ten `InsetsSource` rows from `display.txt` (status bar 128 px, nav bar
+//! 63 px, IME `[0,2274][1080,2400]`, cutout 128 px).
+
+use std::collections::{BTreeMap, HashMap};
+
+use acos_parcel::binder::BinderId;
+
+use crate::callbacks::{CallbackQueue, WmCallback};
+use crate::codec::{
+    inset_type, ClientWindowFrames, Configuration, Cutout, CutoutPathParserInfo, DisplayCutout,
+    InsetsSource, InsetsSourceControl, InsetsSourceControlArray, InsetsState, LayoutParams,
+    MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners, SurfaceControlInfo,
+    WindowConfiguration,
+};
+use crate::display::DisplaySpec;
+use crate::error::{Result, WmError};
+use crate::geom::{InsetsI, PointI, RectI};
+use crate::transport::{Channel, InputChannelRegistry};
+
+/// A window is identified by its `IWindow` binder id.
+pub type WindowId = u64;
+/// A session is identified by the `IWindowSession` binder id.
+pub type SessionId = u64;
+
+/// `IWindowSession.ADD_OKAY`.
+pub const ADD_OKAY: i32 = 0;
+/// `ADD_BAD_APP_TOKEN`.
+pub const ADD_BAD_APP_TOKEN: i32 = 1;
+/// `ADD_BAD_SUBWINDOW_TOKEN`.
+pub const ADD_BAD_SUBWINDOW_TOKEN: i32 = 2;
+/// `ADD_NOT_APP_TOKEN`.
+pub const ADD_NOT_APP_TOKEN: i32 = 3;
+/// `ADD_DUPLICATE_ADD`.
+pub const ADD_DUPLICATE_ADD: i32 = 5;
+
+/// `IWindowSession.RELAYOUT_RES_FIRST_TIME`.
+pub const RELAYOUT_RES_FIRST_TIME: i32 = 1;
+/// `RELAYOUT_RES_SURFACE_CHANGED`.
+pub const RELAYOUT_RES_SURFACE_CHANGED: i32 = 2;
+/// `RELAYOUT_RES_SURFACE_RESIZED`.
+pub const RELAYOUT_RES_SURFACE_RESIZED: i32 = 4;
+/// `RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS`.
+pub const RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS: i32 = 8;
+
+/// Lifecycle of a window record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowState {
+    /// `addToDisplayAsUser` accepted, no surface yet.
+    Added,
+    /// `relayout` created the surface.
+    HasSurface,
+    /// `finishDrawing` delivered a buffer.
+    Drawn,
+    /// Removed from the session.
+    Removed,
+}
+
+/// Everything the WMS knows about one window.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowRecord {
+    /// Window id (`IWindow` binder id).
+    pub id: WindowId,
+    /// Owning session.
+    pub session: SessionId,
+    /// `IWindow` callback binder.
+    pub callback: Option<BinderId>,
+    /// Latest `LayoutParams`.
+    pub params: LayoutParams,
+    /// Window frame in display coordinates.
+    pub frame: RectI,
+    /// Full display frame.
+    pub display_frame: RectI,
+    /// Parent frame (same as `frame` for top-level windows).
+    pub parent_frame: RectI,
+    /// `true` when the frame is attached inside a parent.
+    pub attached_in_parent: bool,
+    /// Requested visibility.
+    pub visible: bool,
+    /// Whether a `SurfaceControl` exists.
+    pub has_surface: bool,
+    /// `SurfaceControl` layer handle.
+    pub surface_handle: Option<u64>,
+    /// `SurfaceControl` name.
+    pub surface_name: String,
+    /// Input-channel registry handle.
+    pub input_channel_handle: i32,
+    /// `updateRequestedVisibleTypes` bitmask.
+    pub requested_visible_types: i32,
+    /// Whether the window may hold focus.
+    pub focusable: bool,
+    /// Z-order.
+    pub z: i64,
+    /// Monotonic relayout sequence (the `syncSeqId`).
+    pub relayout_seq: u64,
+    /// Last insets state sent to the client.
+    pub insets_state: InsetsState,
+    /// Last insets controls sent to the client.
+    pub insets_controls: InsetsSourceControlArray,
+    /// Lifecycle.
+    pub state: WindowState,
+    /// `true` once `relayout` has run at least once.
+    pub first_relayout_done: bool,
+}
+
+impl WindowRecord {
+    /// The frame reported to the client.
+    #[must_use]
+    pub fn client_frames(&self) -> ClientWindowFrames {
+        ClientWindowFrames {
+            frame: self.frame,
+            display_frame: self.display_frame,
+            parent_frame: self.parent_frame,
+            attached_frame: if self.attached_in_parent {
+                Some(self.parent_frame)
+            } else {
+                None
+            },
+            is_parent_frame_clipped_by_display_cutout: false,
+            compat_scale: 1.0,
+        }
+    }
+}
+
+/// `addToDisplayAsUser` out-parameters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AddWindowResult {
+    /// `ADD_OKAY` (0) on success.
+    pub result: i32,
+    /// The new input channel (handle + token).
+    pub input_channel: crate::codec::InputChannelParcel,
+    /// Insets state for the window.
+    pub insets_state: InsetsState,
+    /// Insets source controls.
+    pub insets_controls: InsetsSourceControlArray,
+    /// `outFrame`.
+    pub out_frame: RectI,
+    /// `outFloat` (compat scale).
+    pub out_float: Vec<f32>,
+    /// The window id assigned.
+    pub window: WindowId,
+}
+
+/// `relayout` out-parameters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RelayoutResult {
+    /// Relayou result flags.
+    pub result: i32,
+    /// `ClientWindowFrames`.
+    pub frames: ClientWindowFrames,
+    /// `MergedConfiguration`.
+    pub merged_configuration: MergedConfiguration,
+    /// The window's `SurfaceControl`.
+    pub surface: SurfaceControlInfo,
+    /// `InsetsState`.
+    pub insets_state: InsetsState,
+    /// `InsetsSourceControl$Array`.
+    pub insets_controls: InsetsSourceControlArray,
+    /// The `syncSeqId` echoed back.
+    pub sync_seq: u64,
+}
+
+/// Per-session state.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SessionRecord {
+    /// `IWindowSessionCallback` binder.
+    pub callback: Option<BinderId>,
+    /// Windows in creation order.
+    pub windows: Vec<WindowId>,
+}
+
+/// The window manager state machine.
+#[derive(Debug)]
+pub struct WindowManager {
+    /// Display geometry.
+    pub display: DisplaySpec,
+    /// Sessions by id.
+    pub sessions: HashMap<SessionId, SessionRecord>,
+    /// Windows by id.
+    pub windows: BTreeMap<WindowId, WindowRecord>,
+    /// Input channels handed to windows.
+    pub channels: InputChannelRegistry,
+    /// Outgoing `IWindow` callbacks.
+    pub callbacks: CallbackQueue,
+    /// Currently focused window.
+    pub focus: Option<WindowId>,
+    /// Touch-mode flag (device-wide).
+    pub touch_mode: bool,
+    /// `SurfaceControl` layer id allocator.
+    next_layer: u64,
+    /// Session id allocator.
+    next_session: u64,
+}
+
+impl WindowManager {
+    /// A window manager for `display`.
+    #[must_use]
+    pub fn new(display: DisplaySpec) -> Self {
+        Self {
+            display,
+            sessions: HashMap::new(),
+            windows: BTreeMap::new(),
+            channels: InputChannelRegistry::new(),
+            callbacks: CallbackQueue::new(),
+            focus: None,
+            touch_mode: true,
+            next_layer: 0x1000,
+            next_session: 0,
+        }
+    }
+
+    /// `IWindowManager.openSession`: allocate a session and return its id and
+    /// the synthetic `IWindowSession` binder id.
+    pub fn open_session(&mut self, callback: Option<BinderId>) -> (SessionId, BinderId) {
+        let id = self.next_session;
+        self.next_session += 1;
+        self.sessions.insert(
+            id,
+            SessionRecord {
+                callback,
+                windows: Vec::new(),
+            },
+        );
+        (id, BinderId(0x5e55_0000 + id))
+    }
+
+    /// `IWindowSession.addToDisplayAsUser`.
+    ///
+    /// Creates the window record, a fresh input channel, the reference
+    /// `InsetsState` and `InsetsSourceControl[]`, and queues the outgoing
+    /// visibility/focus/insets callbacks in the measured order.
+    pub fn add_to_display_as_user(
+        &mut self,
+        session: SessionId,
+        window: BinderId,
+        params: LayoutParams,
+        requested_visible_types: i32,
+    ) -> Result<AddWindowResult> {
+        if !self.sessions.contains_key(&session) {
+            return Err(WmError::UnknownSession(session));
+        }
+        if window.is_null() {
+            return Ok(AddWindowResult {
+                result: ADD_BAD_APP_TOKEN,
+                input_channel: crate::codec::InputChannelParcel::absent(),
+                insets_state: empty_insets_state(&self.display),
+                insets_controls: InsetsSourceControlArray(vec![]),
+                out_frame: RectI::default(),
+                out_float: vec![],
+                window: 0,
+            });
+        }
+        if self.windows.contains_key(&window.0) {
+            return Ok(AddWindowResult {
+                result: ADD_DUPLICATE_ADD,
+                input_channel: crate::codec::InputChannelParcel::absent(),
+                insets_state: empty_insets_state(&self.display),
+                insets_controls: InsetsSourceControlArray(vec![]),
+                out_frame: RectI::default(),
+                out_float: vec![],
+                window: window.0,
+            });
+        }
+
+        let frame = self.compute_frame(&params);
+        let layer = self.alloc_layer();
+        let name = format!(
+            "Surface(name={}/{})/@0x{:x}",
+            params.package_name.as_deref().unwrap_or("app"),
+            params.title.as_deref().unwrap_or("window"),
+            layer
+        );
+        let id = window.0;
+        let channel = Channel::in_memory(format!("{name} client"), 0);
+        let channel_handle = self.channels.register(channel);
+        let insets_state = reference_insets_state(&self.display, false);
+        let insets_controls = reference_insets_controls(&self.display, layer);
+        let focusable = !params.is_system_window();
+        let z = self.windows.len() as i64 + 1;
+
+        let record = WindowRecord {
+            id,
+            session,
+            callback: Some(window),
+            params,
+            frame,
+            display_frame: self.display.frame,
+            parent_frame: frame,
+            attached_in_parent: true,
+            visible: true,
+            has_surface: false,
+            surface_handle: Some(layer),
+            surface_name: name,
+            input_channel_handle: channel_handle,
+            requested_visible_types,
+            focusable,
+            z,
+            relayout_seq: 0,
+            insets_state: insets_state.clone(),
+            insets_controls: insets_controls.clone(),
+            state: WindowState::Added,
+            first_relayout_done: false,
+        };
+        self.windows.insert(id, record);
+        if let Some(s) = self.sessions.get_mut(&session) {
+            s.windows.push(id);
+        }
+
+        // Measured launch order: visibility → focus → insetsControlChanged.
+        self.callbacks.push(
+            id,
+            WmCallback::DispatchAppVisibility { visible: true },
+        );
+        if focusable && self.focus.is_none() {
+            self.focus = Some(id);
+            self.callbacks
+                .push(id, WmCallback::WindowFocusChanged { focused: true });
+        }
+        self.callbacks.push(
+            id,
+            WmCallback::InsetsControlChanged {
+                state: Box::new(insets_state.clone()),
+                controls: Box::new(insets_controls.clone()),
+            },
+        );
+
+        let result = AddWindowResult {
+            result: ADD_OKAY,
+            input_channel: crate::codec::InputChannelParcel {
+                name: self
+                    .channels
+                    .get(channel_handle)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default(),
+                present: true,
+                channel_handle,
+                token: Some(window),
+            },
+            insets_state,
+            insets_controls,
+            out_frame: frame,
+            out_float: vec![1.0],
+            window: id,
+        };
+        Ok(result)
+    }
+
+    /// `IWindowSession.relayout`.
+    pub fn relayout(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        params: LayoutParams,
+        sync_seq: i32,
+    ) -> Result<RelayoutResult> {
+        let display = self.display;
+        let merged = reference_merged_configuration(&display);
+        let record = self
+            .windows
+            .get_mut(&window)
+            .ok_or(WmError::UnknownWindow(window))?;
+        if record.session != session {
+            return Err(WmError::UnknownSession(session));
+        }
+        let old_frame = record.frame;
+        let first = !record.first_relayout_done;
+        record.params = params;
+        record.frame = compute_frame_for(&display, &record.params);
+        record.parent_frame = record.frame;
+        let resized = record.frame != old_frame;
+        record.relayout_seq += 1;
+        let sync_seq_out = if sync_seq >= 0 {
+            sync_seq as u64
+        } else {
+            record.relayout_seq
+        };
+        record.first_relayout_done = true;
+        record.state = WindowState::HasSurface;
+        record.has_surface = true;
+
+        let frames = record.client_frames();
+        let surface = SurfaceControlInfo {
+            name: record.surface_name.clone(),
+            width: record.frame.width(),
+            height: record.frame.height(),
+            handle: record.surface_handle,
+        };
+        let insets_state = record.insets_state.clone();
+        let insets_controls = record.insets_controls.clone();
+
+        let mut result = 0;
+        if first {
+            result |= RELAYOUT_RES_FIRST_TIME;
+            result |= RELAYOUT_RES_SURFACE_CHANGED;
+        }
+        if resized {
+            result |= RELAYOUT_RES_SURFACE_RESIZED;
+        }
+
+        // Outgoing callbacks: resized then insetsControlChanged (measured).
+        self.callbacks.push(
+            window,
+            WmCallback::Resized {
+                frames: Box::new(frames.clone()),
+                report_draw: true,
+                merged_configuration: Box::new(merged.clone()),
+                insets_state: Box::new(insets_state.clone()),
+                force_layout: false,
+                always_consume_system_bars: false,
+                display_id: display.id,
+                sync_seq_id: sync_seq_out as i32,
+                drag_resizing: false,
+            },
+        );
+        self.callbacks.push(
+            window,
+            WmCallback::InsetsControlChanged {
+                state: Box::new(insets_state.clone()),
+                controls: Box::new(insets_controls.clone()),
+            },
+        );
+
+        Ok(RelayoutResult {
+            result,
+            frames,
+            merged_configuration: merged,
+            surface,
+            insets_state,
+            insets_controls,
+            sync_seq: sync_seq_out,
+        })
+    }
+
+    /// `IWindowSession.remove`.
+    pub fn remove(&mut self, window: WindowId) -> Result<()> {
+        let record = self
+            .windows
+            .remove(&window)
+            .ok_or(WmError::UnknownWindow(window))?;
+        self.channels.remove(record.input_channel_handle);
+        if let Some(s) = self.sessions.get_mut(&record.session) {
+            s.windows.retain(|w| *w != window);
+        }
+        if self.focus == Some(window) {
+            self.focus = None;
+            // Focus the topmost remaining focusable window.
+            self.focus = self
+                .windows
+                .values()
+                .filter(|w| w.focusable)
+                .max_by_key(|w| w.z)
+                .map(|w| w.id);
+        }
+        Ok(())
+    }
+
+    /// `IWindowSession.finishDrawing`: record that the buffer arrived for
+    /// `window`. The compositor handoff happens in [`crate::facade::SessionWm`].
+    pub fn finish_drawing(&mut self, window: WindowId, seq: i32) -> Result<WindowId> {
+        let record = self
+            .windows
+            .get_mut(&window)
+            .ok_or(WmError::UnknownWindow(window))?;
+        record.state = WindowState::Drawn;
+        if seq >= 0 {
+            // The client echoes the frame's syncSeqId; nothing else to do here.
+            let _ = seq;
+        }
+        Ok(window)
+    }
+
+    /// `IWindowSession.reportDrawn`.
+    pub fn report_drawn(&mut self, window: WindowId) -> Result<()> {
+        self.finish_drawing(window, -1).map(|_| ())
+    }
+
+    /// `IWindowSession.getDisplayId`.
+    #[must_use]
+    pub fn get_display_id(&self, _window: WindowId) -> i32 {
+        self.display.id
+    }
+
+    /// `IWindowSession.setInsets` (oneway, recorded).
+    pub fn set_insets(
+        &mut self,
+        window: WindowId,
+        _touchable_region: Option<RectI>,
+        _content_insets: Option<RectI>,
+    ) -> Result<()> {
+        self.windows
+            .get_mut(&window)
+            .ok_or(WmError::UnknownWindow(window))
+            .map(|_| ())
+    }
+
+    /// `IWindowSession.updateRequestedVisibleTypes` (oneway).
+    pub fn update_requested_visible_types(&mut self, window: WindowId, types: i32) -> Result<()> {
+        let display = self.display;
+        let ime_visible = types & (1 << inset_type::IME) != 0;
+        let (state, controls) = {
+            let record = self
+                .windows
+                .get_mut(&window)
+                .ok_or(WmError::UnknownWindow(window))?;
+            record.requested_visible_types = types;
+            // IME visibility tracks the requested types' ITYPE_IME bit.
+            let state = reference_insets_state(&display, ime_visible);
+            if ime_visible {
+                let controls = record.insets_controls.clone();
+                record.insets_state = state.clone();
+                (Some(state), Some(controls))
+            } else {
+                record.insets_state = state;
+                (None, None)
+            }
+        };
+        if let (Some(state), Some(controls)) = (state, controls) {
+            self.callbacks.push(
+                window,
+                WmCallback::ShowInsets {
+                    types: 1 << inset_type::IME,
+                    from_ime: false,
+                    token: None,
+                },
+            );
+            self.callbacks.push(
+                window,
+                WmCallback::InsetsControlChanged {
+                    state: Box::new(state),
+                    controls: Box::new(controls),
+                },
+            );
+        }
+        Ok(())
+    }
+
+    /// `IWindowSession.onRectangleOnScreenRequested` (oneway; recorded).
+    pub fn on_rectangle_on_screen_requested(
+        &mut self,
+        window: WindowId,
+        _rect: Option<RectI>,
+    ) -> Result<()> {
+        self.windows
+            .get_mut(&window)
+            .ok_or(WmError::UnknownWindow(window))
+            .map(|_| ())
+    }
+
+    /// `IWindowManager.useBLAST`.
+    #[must_use]
+    pub const fn use_blast(&self) -> bool {
+        true
+    }
+
+    /// `IWindowManager.getCurrentAnimatorScale`.
+    #[must_use]
+    pub const fn get_current_animator_scale(&self) -> f32 {
+        1.0
+    }
+
+    /// `IWindowManager.hasNavigationBar`.
+    #[must_use]
+    pub fn has_navigation_bar(&self, display_id: i32) -> bool {
+        display_id == self.display.id && self.display.has_navigation_bar()
+    }
+
+    /// `IWindowManager.isInTouchMode`.
+    #[must_use]
+    pub fn is_in_touch_mode(&self, display_id: i32) -> bool {
+        display_id == self.display.id && self.touch_mode
+    }
+
+    /// `IWindowManager.setInTouchMode`.
+    pub fn set_in_touch_mode(&mut self, in_touch_mode: bool, display_id: i32) {
+        if display_id == self.display.id {
+            self.touch_mode = in_touch_mode;
+        }
+    }
+
+    /// The window currently holding focus.
+    #[must_use]
+    pub fn focused_window(&self) -> Option<&WindowRecord> {
+        self.focus.and_then(|id| self.windows.get(&id))
+    }
+
+    /// Compute the frame for `params` on this display.
+    #[must_use]
+    pub fn compute_frame(&self, params: &LayoutParams) -> RectI {
+        compute_frame_for(&self.display, params)
+    }
+
+    /// A reference `MergedConfiguration` matching `display.txt`'s
+    /// `overrideConfig` line.
+    #[must_use]
+    pub fn merged_configuration(&self) -> MergedConfiguration {
+        reference_merged_configuration(&self.display)
+    }
+
+    fn alloc_layer(&mut self) -> u64 {
+        self.next_layer += 1;
+        self.next_layer
+    }
+}
+
+/// Frame computation: fixed sizes are honoured, otherwise the app bounds.
+#[must_use]
+pub fn compute_frame_for(display: &DisplaySpec, params: &LayoutParams) -> RectI {
+    let app = display.app_bounds;
+    if params.width >= 0 && params.height >= 0 {
+        return RectI::new(
+            params.x,
+            params.y,
+            params.x + params.width,
+            params.y + params.height,
+        );
+    }
+    if params.width >= 0 {
+        return RectI::new(params.x, app.top, params.x + params.width, app.bottom);
+    }
+    if params.height >= 0 {
+        return RectI::new(app.left, params.y, app.right, params.y + params.height);
+    }
+    app
+}
+
+/// `true` when `frame` touches all display edges (fullscreen).
+#[must_use]
+pub fn is_fullscreen(display: &DisplaySpec, frame: RectI) -> bool {
+    frame.left <= display.frame.left
+        && frame.top <= display.frame.top
+        && frame.right >= display.frame.right
+        && frame.bottom >= display.frame.bottom
+}
+
+/// A minimal `InsetsState` with just the display frame (error replies).
+#[must_use]
+pub fn empty_insets_state(display: &DisplaySpec) -> InsetsState {
+    InsetsState {
+        display_frame: display.frame,
+        display_cutout: Cutout::NoCutout,
+        rounded_corners: None,
+        rounded_corner_frame: RectI::default(),
+        privacy_indicator_bounds: None,
+        display_shape: None,
+        sources: vec![],
+    }
+}
+
+/// The exact ten `InsetsSource` rows from `display.txt`.
+#[must_use]
+pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> InsetsState {
+    let b = display.bars;
+    let ime_frame = if ime_visible {
+        b.ime_visible
+    } else {
+        RectI::new(0, 0, 0, 0)
+    };
+    let sources = vec![
+        InsetsSource::new(0x9b1a_0000u32 as i32, inset_type::STATUS_BAR, b.status_bar, true),
+        InsetsSource::new(
+            0xfc05_0001u32 as i32,
+            inset_type::NAVIGATION_BAR,
+            b.nav_bar,
+            true,
+        ),
+        InsetsSource {
+            id: 3,
+            type_: inset_type::IME,
+            frame: ime_frame,
+            visible_frame: Some(b.ime_visible),
+            visible: ime_visible,
+            flags: 0,
+            insets_rounded_corner_frame: false,
+        },
+        InsetsSource::new(
+            27,
+            inset_type::DISPLAY_CUTOUT,
+            b.display_cutout,
+            true,
+        ),
+        InsetsSource::new(
+            0x9b1a_0005u32 as i32,
+            inset_type::MANDATORY_SYSTEM_GESTURES,
+            b.mandatory_system_gestures_top,
+            true,
+        ),
+        InsetsSource::new(
+            0xfc05_0005u32 as i32,
+            inset_type::MANDATORY_SYSTEM_GESTURES,
+            b.mandatory_system_gestures_bottom,
+            true,
+        ),
+        InsetsSource::new(
+            0xfc05_0004u32 as i32,
+            inset_type::SYSTEM_GESTURES,
+            b.system_gestures_left,
+            true,
+        ),
+        InsetsSource::new(
+            0xfc05_0024u32 as i32,
+            inset_type::SYSTEM_GESTURES,
+            b.system_gestures_right,
+            true,
+        ),
+        InsetsSource::new(
+            0x9b1a_0006u32 as i32,
+            inset_type::TOP_TAPPABLE_ELEMENT,
+            b.status_bar_tappable,
+            true,
+        ),
+        InsetsSource::new(
+            0xfc05_0006u32 as i32,
+            inset_type::BOTTOM_TAPPABLE_ELEMENT,
+            b.nav_bar_tappable,
+            true,
+        ),
+    ];
+    InsetsState {
+        display_frame: display.frame,
+        display_cutout: reference_cutout(display),
+        rounded_corners: Some(reference_rounded_corners()),
+        rounded_corner_frame: RectI::new(0, 0, 0, 0),
+        privacy_indicator_bounds: Some(PrivacyIndicatorBounds {
+            static_bounds: vec![RectI::new(827, 0, 1043, 128)],
+            rotation: 0,
+        }),
+        // DisplayShape is left absent: its string spec is not in the capture.
+        display_shape: None,
+        sources,
+    }
+}
+
+/// The reference `DisplayCutout` (safe inset 128 px, one 118x128 cutout rect).
+#[must_use]
+pub fn reference_cutout(display: &DisplaySpec) -> Cutout {
+    Cutout::Present(DisplayCutout {
+        safe_insets: Some(RectI::new(0, display.bars.status_bar.height(), 0, 0)),
+        bounds: vec![
+            RectI::new(0, 0, 0, 0),
+            RectI::new(492, 0, 610, 128),
+            RectI::new(0, 0, 0, 0),
+            RectI::new(0, 0, 0, 0),
+        ],
+        waterfall_insets: Some(InsetsI::default()),
+        path_parser_info: CutoutPathParserInfo {
+            display_width: display.frame.width(),
+            display_height: display.frame.height(),
+            physical_display_width: display.frame.width(),
+            physical_display_height: display.frame.height(),
+            density: display.density,
+            cutout_spec: "M 507,64 a 33,33 0 1 0 66,0 33,33 0 1 0 -66,0 Z @left".to_string(),
+            rotation: 0,
+            scale: 1.0,
+            physical_pixel_display_size_ratio: 1.0,
+        },
+    })
+}
+
+/// The reference four 28 px rounded corners.
+#[must_use]
+pub fn reference_rounded_corners() -> RoundedCorners {
+    RoundedCorners::Corners(vec![
+        RoundedCorner {
+            position: 0,
+            radius: 28,
+            center: PointI { x: 28, y: 28 },
+        },
+        RoundedCorner {
+            position: 1,
+            radius: 28,
+            center: PointI { x: 1052, y: 28 },
+        },
+        RoundedCorner {
+            position: 2,
+            radius: 28,
+            center: PointI { x: 1052, y: 2372 },
+        },
+        RoundedCorner {
+            position: 3,
+            radius: 28,
+            center: PointI { x: 28, y: 2372 },
+        },
+    ])
+}
+
+/// The three `InsetsSourceControl` entries from the dumpsys `Control map`.
+#[must_use]
+pub fn reference_insets_controls(
+    display: &DisplaySpec,
+    base_layer: u64,
+) -> InsetsSourceControlArray {
+    let leash = |id: u64, label: &str| SurfaceControlInfo {
+        name: format!("Surface(name={label} animation-leash of insets_animation)/@0x{id:x}"),
+        width: display.frame.width(),
+        height: display.frame.height(),
+        handle: Some(base_layer + id),
+    };
+    InsetsSourceControlArray(vec![
+        InsetsSourceControl {
+            id: 3,
+            type_: inset_type::IME,
+            leash: Some(leash(3, "InputMethod")),
+            initially_visible: false,
+            surface_position: Some(PointI { x: 0, y: 128 }),
+            insets_hint: Some(InsetsI::new(0, 0, 0, 883)),
+            skip_animation_once: false,
+        },
+        InsetsSourceControl {
+            id: 0x9b1a_0000u32 as i32,
+            type_: inset_type::STATUS_BAR,
+            leash: Some(leash(0, "StatusBar")),
+            initially_visible: true,
+            surface_position: Some(PointI { x: 0, y: 0 }),
+            insets_hint: Some(InsetsI::new(0, 128, 0, 0)),
+            skip_animation_once: false,
+        },
+        InsetsSourceControl {
+            id: 0xfc05_0001u32 as i32,
+            type_: inset_type::NAVIGATION_BAR,
+            leash: Some(leash(1, "NavigationBar0")),
+            initially_visible: true,
+            surface_position: Some(PointI { x: 0, y: 2274 }),
+            insets_hint: Some(InsetsI::new(0, 0, 0, 63)),
+            skip_animation_once: false,
+        },
+    ])
+}
+
+/// The `MergedConfiguration` matching the measured `overrideConfig`.
+#[must_use]
+pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfiguration {
+    let cfg = Configuration {
+        font_scale: 1.0,
+        mcc: 310,
+        mnc: 260,
+        locale_list: Some("en-US".to_string()),
+        user_set_locale: false,
+        touchscreen: 3,       // TOUCHSCREEN_FINGER
+        keyboard: 2,          // KEYBOARD_QWERTY
+        keyboard_hidden: 1,   // KEYBOARDHIDDEN_YES
+        hard_keyboard_hidden: 1,
+        navigation: 1,        // NAVIGATION_DPAD
+        navigation_hidden: 1,
+        orientation: 1,       // ORIENTATION_PORT
+        screen_layout: 0x1a,  // LONG|PORT|NOTOUCH? measured `port finger`
+        color_mode: 0,        // HDR_UNDEFINED / sRGB
+        ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
+        screen_width_dp: 411,
+        screen_height_dp: 842,
+        smallest_screen_width_dp: 411,
+        density_dpi: display.density_dpi as i32,
+        compat_screen_width_dp: 411,
+        compat_screen_height_dp: 842,
+        compat_smallest_screen_width_dp: 411,
+        window_configuration: WindowConfiguration {
+            bounds: display.frame,
+            app_bounds: Some(display.app_bounds),
+            max_bounds: display.frame,
+            windowing_mode: 1, // WINDOWING_MODE_FULLSCREEN
+            activity_type: 0,  // ACTIVITY_TYPE_UNDEFINED
+            always_on_top: 0,
+            rotation: 0,
+            display_windowing_mode: 1,
+            display_rotation: 0,
+        },
+        assets_seq: 0,
+        seq: 1,
+        font_weight_adjustment: 0,
+        grammatical_gender: 0,
+    };
+    MergedConfiguration {
+        global: cfg.clone(),
+        override_config: cfg.clone(),
+        merged: cfg,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app_params() -> LayoutParams {
+        LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity")
+    }
+
+    #[test]
+    fn add_returns_measured_app_frame_and_insets() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let r = wm
+            .add_to_display_as_user(sess, BinderId(0x1111), app_params(), 0)
+            .unwrap();
+        assert_eq!(r.result, ADD_OKAY);
+        assert_eq!(r.out_frame, RectI::new(0, 128, 1080, 2337));
+        assert_eq!(r.insets_state.visible_insets_for(inset_type::STATUS_BAR).top, 128);
+        assert_eq!(
+            r.insets_state
+                .visible_insets_for(inset_type::NAVIGATION_BAR)
+                .bottom,
+            63
+        );
+        assert!(matches!(
+            r.insets_state.display_cutout,
+            Cutout::Present(_)
+        ));
+    }
+
+    #[test]
+    fn relayout_is_stable_and_first_time_only_once() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), app_params(), 0)
+            .unwrap();
+        let a = wm.relayout(sess, 1, app_params(), -1).unwrap();
+        let b = wm.relayout(sess, 1, app_params(), -1).unwrap();
+        assert_eq!(a.frames.frame, b.frames.frame);
+        assert_eq!(a.surface.handle, b.surface.handle);
+        assert_ne!(a.result & RELAYOUT_RES_FIRST_TIME, 0);
+        assert_eq!(b.result & RELAYOUT_RES_FIRST_TIME, 0);
+        assert_eq!(b.result & RELAYOUT_RES_SURFACE_RESIZED, 0);
+    }
+
+    #[test]
+    fn duplicate_add_and_unknown_window_are_structured() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(9), app_params(), 0)
+            .unwrap();
+        let dup = wm
+            .add_to_display_as_user(sess, BinderId(9), app_params(), 0)
+            .unwrap();
+        assert_eq!(dup.result, ADD_DUPLICATE_ADD);
+        assert!(matches!(
+            wm.relayout(sess, 42, app_params(), -1),
+            Err(WmError::UnknownWindow(42))
+        ));
+    }
+
+    #[test]
+    fn focus_and_visibility_callbacks_are_queued_in_order() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), app_params(), 0)
+            .unwrap();
+        let first = wm.callbacks.pop().unwrap();
+        assert!(matches!(
+            first.callback,
+            WmCallback::DispatchAppVisibility { visible: true }
+        ));
+        let second = wm.callbacks.pop().unwrap();
+        assert!(matches!(
+            second.callback,
+            WmCallback::WindowFocusChanged { focused: true }
+        ));
+        let third = wm.callbacks.pop().unwrap();
+        assert!(matches!(
+            third.callback,
+            WmCallback::InsetsControlChanged { .. }
+        ));
+    }
+
+    #[test]
+    fn update_requested_visible_types_shows_ime() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), app_params(), 0)
+            .unwrap();
+        wm.callbacks.clear();
+        wm.update_requested_visible_types(1, 1 << inset_type::IME)
+            .unwrap();
+        let c = wm.callbacks.pop().unwrap();
+        assert!(matches!(c.callback, WmCallback::ShowInsets { .. }));
+        let state = &wm.windows.get(&1).unwrap().insets_state;
+        assert!(state.sources.iter().any(|s| s.id == 3 && s.visible));
+    }
+}

@@ -1,0 +1,111 @@
+| order | direction | interface | method | n | status | shape |
+|---:|---|---|---|---:|---|---|
+| 3767 | app->system | android.hardware.display.IDisplayManager | getPreferredWideGamutColorSpaceId | 1 | not-owned |  |
+| 3821 | app->system | android.hardware.display.IDisplayManager | getOverlaySupport | 1 | not-owned |  |
+| 3926 | app->system | android.hardware.display.IDisplayManager | getDisplayInfo | 1 | not-owned |  |
+| 4409 | app->system | android.view.autofill.IAutoFillManager | addClient | 1 | not-owned |  |
+| 4533 | system->app | com.android.internal.os.IResultReceiver | onTransact | 4 | transport |  |
+| 4544 | system->app | com.android.internal.os.IResultReceiver | com.android.internal.util.SyncResultReceiver.send | 2 | not-owned |  |
+| 5122 | app->system | android.view.autofill.IAutoFillManager | startSession | 1 | not-owned |  |
+| 5315 | system->app | android.app.IApplicationThread | onTransact | 2 | transport |  |
+| 5432 | system->app | android.app.IApplicationThread | android.app.ActivityThread$ApplicationThread.requestAssistContextExtras | 1 | not-owned |  |
+| 5654 | app->system | android.os.INetworkManagementService | setUidCleartextNetworkPolicy | 1 | not-owned |  |
+| 6914 | app->system | android.content.pm.IPackageManager | hasSystemFeature | 1 | not-owned |  |
+| 7953 | app->system | android.content.pm.IPackageManager | notifyDexLoad | 1 | not-owned |  |
+| 9403 | app->system | com.android.internal.view.IInputMethodManager | startInputOrWindowGainedFocus | 1 | ok | InputBindResult{result=0, session=Some(BinderId(81408))} |
+| 10401 | app->system | com.android.internal.inputmethod.IInputMethodSession | viewClicked | 1 | ok | void (oneway) |
+| 11307 | app->system | com.android.internal.view.IInputMethodManager | getImeTrackerService | 1 | ok | binder IImeTracker |
+| 11399 | app->system | com.android.internal.inputmethod.IImeTracker | onRequestShow | 1 | ok | ImeTracker$Token{1} |
+| 11711 | app->system | com.android.internal.inputmethod.IImeTracker | onProgress | 22 | ok | void (oneway) |
+| 11728 | app->system | android.app.IActivityManager | checkPermission | 4 | not-owned |  |
+| 12244 | app->system | com.android.internal.view.IInputMethodManager | showSoftInput | 1 | ok | b=true |
+| 12398 | app->system | android.net.IConnectivityManager | getProxyForNetwork | 1 | not-owned |  |
+| 13343 | app->system | android.content.pm.IPackageManager | getPackagesForUid | 1 | not-owned |  |
+| 13588 | app->system | android.content.pm.IPackageManager | getApplicationInfo | 2 | not-owned |  |
+| 14026 | app->system | android.os.IServiceManager | checkService | 9 | not-owned |  |
+| 14350 | app->system | android.app.IGameManagerService | isAngleEnabled | 1 | not-owned |  |
+| 14549 | app->system | android.content.pm.IPackageManager | hasSystemFeature | 3 | not-owned |  |
+| 15329 | app->system | android.content.pm.IPackageManager | getPackageInfo | 1 | not-owned |  |
+| 17961 | app->system | android.app.IActivityManager | finishAttachApplication | 1 | not-owned |  |
+| 18953 | app->system | android.app.IActivityTaskManager | reportAssistContextExtras | 1 | not-owned |  |
+| 19401 | app->system | android.view.IWindowManager | getCurrentAnimatorScale | 1 | ok | f=1 |
+| 19468 | app->system | android.view.IWindowManager | useBLAST | 1 | ok | b=true |
+| 19596 | app->system | android.hardware.display.IDisplayManager | registerCallbackWithEventMask | 1 | not-owned |  |
+| 19714 | app->system | android.app.IActivityTaskManager | getActivityClientController | 1 | not-owned |  |
+| 19806 | app->system | android.app.IActivityClientController | getDisplayId | 1 | not-owned |  |
+| 21910 | app->system | android.companion.virtual.IVirtualDeviceManager | getDeviceIdForDisplayId | 2 | not-owned |  |
+| 22039 | system->app | com.android.internal.os.IResultReceiver | android.os.ResultReceiver$MyResultReceiver.send | 2 | not-owned |  |
+| 22439 | app->system | android.view.IWindowSession | setOnBackInvokedCallbackInfo | 2 | ok | void (recorded) |
+| 22532 | system->app | android.view.IWindow | onTransact | 13 | transport |  |
+| 23600 | system->app | android.view.IWindow | android.view.ViewRootImpl$W.insetsControlChanged | 4 | ok | IWindow.insetsControlChanged code=3 bytes=960 |
+| 25748 | app->system | android.app.IActivityManager | getContentProvider | 1 | not-owned |  |
+| 26106 | app->system | com.android.internal.view.IInputMethodManager | reportPerceptibleAsync | 6 | ok | void (oneway) |
+| 28136 | system->app | android.view.IWindow | android.view.ViewRootImpl$W.resized | 7 | ok | IWindow.resized code=2 bytes=1624 |
+| 29966 | app->system | android.view.IWindowManager | hasNavigationBar | 1 | ok | b=true |
+| 30880 | app->system | android.view.accessibility.IAccessibilityManager | addClient | 1 | not-owned |  |
+| 30940 | app->system | android.view.accessibility.IAccessibilityManager | getRecommendedTimeoutMillis | 1 | not-owned |  |
+| 30987 | app->system | android.view.accessibility.IAccessibilityManager | getFocusStrokeWidth | 1 | not-owned |  |
+| 31031 | app->system | android.view.accessibility.IAccessibilityManager | getFocusColor | 1 | not-owned |  |
+| 32341 | app->system | android.app.IActivityClientController | setTaskDescription | 1 | not-owned |  |
+| 32890 | system->app | android.view.autofill.IAutoFillManagerClient | onTransact | 1 | transport |  |
+| 32921 | system->app | android.view.autofill.IAutoFillManagerClient | android.view.autofill.AutofillManager$AutofillManagerClient.setSessionFinished | 1 | not-owned |  |
+| 39664 | system->app | android.view.IWindow | android.view.ViewRootImpl$W.showInsets | 1 | ok | IWindow.showInsets code=4 bytes=72 |
+| 41440 | app->system | android.view.IWindowSession | updateRequestedVisibleTypes | 2 | ok | void (recorded) |
+| 58922 | app->system | android.content.IContentService | registerContentObserver | 1 | not-owned |  |
+| 63977 | app->system | android.view.IWindowManager | setInTouchMode | 2 | ok | void |
+| 64079 | app->system | com.android.internal.view.IInputMethodManager | addClient | 1 | ok | void (client recorded) |
+| 66868 | app->system | com.android.internal.textservice.ITextServicesManager | isSpellCheckerEnabled | 5 | not-owned |  |
+| 66959 | app->system | com.android.internal.textservice.ITextServicesManager | getCurrentSpellCheckerSubtype | 6 | not-owned |  |
+| 67439 | app->system | com.android.internal.textservice.ITextServicesManager | getCurrentSpellChecker | 1 | not-owned |  |
+| 70710 | app->system | com.android.internal.textservice.ITextServicesManager | getSpellCheckerService | 1 | not-owned |  |
+| 73701 | system->app | com.android.internal.textservice.ITextServicesSessionListener | onTransact | 1 | transport |  |
+| 73894 | system->app | com.android.internal.textservice.ITextServicesSessionListener | android.view.textservice.SpellCheckerSession$InternalListener.onServiceConnected | 1 | not-owned |  |
+| 79950 | app->system | android.view.IWindowSession | onRectangleOnScreenRequested | 18 | ok | void (recorded) |
+| 80117 | app->system | com.android.internal.inputmethod.IInputMethodSession | updateSelection | 11 | ok | void (oneway) |
+| 80648 | system->app | com.android.internal.inputmethod.IRemoteInputConnection | onTransact | 15 | transport |  |
+| 80991 | system->app | com.android.internal.inputmethod.IRemoteInputConnection | android.view.inputmethod.RemoteInputConnectionImpl.getSurroundingText | 8 | ok | SurroundingText{len=0} |
+| 88007 | app->system | com.android.internal.infra.IAndroidFuture | complete | 8 | not-owned |  |
+| 88300 | system->app | com.android.internal.inputmethod.IRemoteInputConnection | android.view.inputmethod.RemoteInputConnectionImpl.setComposingRegion | 5 | ok | void (oneway) |
+| 92703 | system->app | com.android.internal.inputmethod.IRemoteInputConnection | android.view.inputmethod.RemoteInputConnectionImpl.clearMetaKeyStates | 1 | ok | void (oneway) |
+| 94989 | app->system | android.app.IActivityClientController | reportSizeConfigurations | 1 | not-owned |  |
+| 98653 | app->system | com.android.internal.app.IVoiceInteractionManagerService | notifyActivityEventChanged | 2 | not-owned |  |
+| 99008 | app->system | android.view.IWindowManager | openSession | 1 | ok | session 1 binder 1582628865 |
+| 101903 | app->system | android.hardware.display.IDisplayManager | getDisplayIds | 1 | not-owned |  |
+| 102249 | app->system | android.app.IActivityManager | setRenderThread | 1 | not-owned |  |
+| 102336 | app->system | android.view.IGraphicsStats | requestBufferForProcess | 1 | not-owned |  |
+| 102692 | app->system | android.view.IWindowSession | addToDisplayAsUser | 1 | ok | AddWindowResult{result=0, InsetsState, InsetsSourceControl[3], outFrame=[0,128][1080,2337]} |
+| 104228 | app->system | com.android.internal.view.IInputMethodManager | isImeTraceEnabled | 1 | ok | b=false |
+| 105437 | app->system | android.app.IActivityClientController | activityResumed | 1 | not-owned |  |
+| 105780 | app->system | android.view.contentcapture.IContentCaptureManager | registerContentCaptureOptionsCallback | 1 | not-owned |  |
+| 109241 | app->system | com.android.internal.textservice.ITextServicesManager | getCurrentSpellCheckerSubtype | 2 | not-owned |  |
+| 116276 | app->system | android.view.IWindowSession | setOnBackInvokedCallbackInfo | 1 | ok | void (recorded) |
+| 120199 | app->system | android.view.IWindowSession | relayout | 1 | ok | RelayoutResult{result=0x3, frame=RectI { left: 0, top: 128, right: 1080, bottom: 2337 }, surface=Surface(name=dev.acos.fixtures.helloviews/MainActivity)/@0x1001} |
+| 124665 | system->app | android.view.IWindow | onTransact | 2 | transport |  |
+| 125933 | system->app | android.view.IWindow | android.view.ViewRootImpl$W.insetsControlChanged | 2 | ok | IWindow.insetsControlChanged code=3 bytes=960 |
+| 130724 | app->system | android.view.IWindowManager | isInTouchMode | 1 | ok | b=true |
+| 132423 | system->app | android.app.IApplicationThread | onTransact | 1 | transport |  |
+| 132495 | system->app | android.app.IApplicationThread | android.app.ActivityThread$ApplicationThread.scheduleEnterAnimationComplete | 1 | not-owned |  |
+| 135777 | app->system | android.view.IWindowSession | finishDrawing | 1 | ok | presented=Some(1) |
+| 138556 | app->system | android.hardware.input.IInputManager | getVelocityTrackerStrategy | 1 | not-owned |  |
+| 138630 | app->system | android.hardware.input.IInputManager | registerInputDevicesChangedListener | 1 | not-owned |  |
+| 138676 | app->system | android.hardware.input.IInputManager | getInputDeviceIds | 1 | not-owned |  |
+| 138873 | app->system | android.hardware.input.IInputManager | getInputDevice | 1 | not-owned |  |
+| 145881 | app->system | com.android.internal.view.IInputMethodManager | startInputOrWindowGainedFocus | 1 | ok | InputBindResult{result=0, session=Some(BinderId(81409))} |
+| 146199 | system->app | com.android.internal.inputmethod.IInputMethodClient | onTransact | 3 | transport |  |
+| 146211 | system->app | com.android.internal.inputmethod.IInputMethodClient | android.view.inputmethod.InputMethodManager$2.setActive | 1 | ok | IInputMethodClient.setActive(boolean,boolean) |
+| 146403 | system->app | com.android.internal.inputmethod.IInputMethodClient | android.view.inputmethod.InputMethodManager$2.onBindMethod | 1 | ok | InputBindResult{result=0, session=Some(BinderId(81410))} |
+| 150892 | system->app | com.android.internal.inputmethod.IInputMethodClient | android.view.inputmethod.InputMethodManager$2.reportFullscreenMode | 1 | ok | void (oneway) |
+| 151712 | app->system | com.android.internal.view.IInputMethodManager | reportPerceptibleAsync | 1 | ok | void (oneway) |
+| 151824 | app->system | com.android.internal.view.IInputMethodManager | removeImeSurfaceFromWindowAsync | 1 | ok | void (oneway) |
+| 152178 | app->system | android.app.IActivityClientController | activityIdle | 1 | not-owned |  |
+| 198341 | app->system | com.android.internal.inputmethod.IImeTracker | onShown | 1 | ok | void (oneway) |
+| 221328 | app->system | android.os.IServiceManager | checkService | 1 | not-owned |  |
+| 221438 | app->system | android.media.IAudioService | areNavigationRepeatSoundEffectsEnabled | 1 | not-owned |  |
+| 221488 | app->system | android.media.IAudioService | playSoundEffect | 1 | not-owned |  |
+| 243168 | system->app | com.android.internal.inputmethod.IRemoteInputConnection | android.view.inputmethod.RemoteInputConnectionImpl.finishComposingText | 1 | ok | void (oneway) |
+| 246882 | system->app | android.view.IWindow | android.view.ViewRootImpl$W.hideInsets | 1 | ok | IWindow.hideInsets code=5 bytes=72 |
+| 285655 | app->system | com.android.internal.inputmethod.IImeTracker | onRequestHide | 1 | ok | ImeTracker$Token{4} |
+| 286052 | app->system | com.android.internal.view.IInputMethodManager | hideSoftInput | 1 | ok | b=false |
+| 286204 | app->system | com.android.internal.view.IInputMethodManager | removeImeSurfaceFromWindowAsync | 1 | ok | void (oneway) |
+| 286322 | app->system | com.android.internal.inputmethod.IImeTracker | onHidden | 1 | ok | void (oneway) |
+| 290725 | system->app | android.app.IApplicationThread | android.app.ActivityThread$ApplicationThread.profilerControl | 1 | not-owned |  |

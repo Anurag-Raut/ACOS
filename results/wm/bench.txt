@@ -1,0 +1,14 @@
+# acos-wm benchmark (release)
+
+| operation | p50 (ns) | p95 (ns) | mean (ns) |
+|---|---:|---:|---:|
+| inject → deliver → ack (ns) | 430.0 | 872.0 | 522.7 |
+| relayout compute + reply (ns) | 861.0 | 1252.0 | 831.2 |
+| compositor present 1080×2400 (ns) | 50122067.0 | 50477220.0 | 50133653.7 |
+
+## Idle (5 s, no events)
+
+- timer arms while idle: **0** (must be 0)
+- /proc/self/stat utime delta: **0** ticks
+- /proc/self/stat stime delta: **0** ticks
+- wall time: 5001 ms

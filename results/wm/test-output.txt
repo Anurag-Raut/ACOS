@@ -1,0 +1,126 @@
+   Compiling acos-wm v0.1.0 (/home/Qui/Projects/acos/crates/acos-wm)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running unittests src/lib.rs (target/debug/deps/acos_wm-6b1476ec8c5b7ca9)
+
+running 39 tests
+test clock::tests::real_clock_is_monotonic ... ok
+test callbacks::tests::insets_control_changed_round_trips_frames ... ok
+test callbacks::tests::visibility_delivers_one_bool ... ok
+test clock::tests::virtual_clock_arms_and_disarms ... ok
+test display::tests::control_positions_match_dumpsys ... ok
+test display::tests::reference_numbers_are_the_measured_ones ... ok
+test compositor::tests::cause_id_is_propagated ... ok
+test compositor::tests::two_layers_z_order_opaque_wins ... ok
+test ime::tests::input_bind_result_round_trips ... ok
+test ime::tests::editor_info_round_trips ... ok
+test compositor::tests::present_is_skipped_without_damage ... ok
+test ime::tests::start_input_without_connection_is_no_ime ... ok
+test ime::tests::tracker_tokens_are_monotonic ... ok
+test ime::tests::show_hide_are_honest ... ok
+test ime::tests::typing_round_trip_through_input_connection ... ok
+test input::tests::hit_test_prefers_topmost_z ... ok
+test input::tests::anr_arms_only_while_unacked ... ok
+test input::tests::message_round_trip_is_exact ... ok
+test input::tests::sessions_never_see_each_others_events ... ok
+test input::tests::unknown_ack_is_structured ... ok
+test input::tests::tap_delivers_down_and_up_with_ack_latency ... ok
+test input::tests::swipe_interpolation_action_sequence ... ok
+test replay::tests::relayout_request_and_reply_shapes_match_the_layout ... ok
+test replay::tests::wm_owned_classification_is_exact ... ok
+test transport::tests::in_memory_preserves_boundaries ... ok
+test transport::tests::registry_handles_are_stable_and_reusable ... ok
+test vsync::tests::concurrent_clients_share_one_deadline ... ok
+test transport::tests::socketpair_round_trips_and_is_nonblocking ... ok
+test vsync::tests::fixed_grid_is_deterministic ... ok
+test vsync::tests::idle_has_no_timer_and_zero_arms ... ok
+test vsync::tests::pipe_record_layout_is_stable ... ok
+test vsync::tests::unlimited_mode_delivers_immediately ... ok
+test replay::tests::tsv_parser_reads_both_traces ... ok
+test wms::tests::add_returns_measured_app_frame_and_insets ... ok
+test wms::tests::duplicate_add_and_unknown_window_are_structured ... ok
+test wms::tests::focus_and_visibility_callbacks_are_queued_in_order ... ok
+test wms::tests::relayout_is_stable_and_first_time_only_once ... ok
+test wms::tests::update_requested_visible_types_shows_ime ... ok
+test replay::tests::full_replay_reports_no_wm_errors ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/codec_golden.rs (target/debug/deps/codec_golden-aae6283fccbcfa7a)
+
+running 10 tests
+test client_window_frames_golden_layout ... ok
+test configuration_round_trips ... ok
+test display_cutout_marker_is_present_zero_or_minus_one ... ok
+test optional_codecs_round_trip ... ok
+test layout_params_full_round_trip ... ok
+test point_and_insets_golden_bytes ... ok
+test rect_golden_bytes ... ok
+test insets_state_round_trips_with_reference_sources ... ok
+test insets_state_ime_visible_round_trips ... ok
+test derived_layout_file_exists_and_covers_every_codec ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compositor.rs (target/debug/deps/compositor-ae962b69d37b574a)
+
+running 4 tests
+test window_frame_is_the_measured_app_bounds ... ok
+test remove_window_drops_layer_and_input_route ... ok
+test two_windows_z_order_and_opaque_overlap ... ok
+test finish_drawing_produces_a_fresh_frame_with_cause ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/fuzz.rs (target/debug/deps/fuzz-36f0c5fda8295b26)
+
+running 2 tests
+test a_fixed_workload_runs_cleanly ... ok
+test random_operation_sequences_never_panic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/input.rs (target/debug/deps/input-e142173fbdd22c02)
+
+running 6 tests
+test idle_input_has_no_wakeups ... ok
+test focus_change_reports_to_the_new_window ... ok
+test type_text_reaches_the_registered_input_connection ... ok
+test anr_is_detected_only_while_unacked ... ok
+test swipe_produces_down_moves_up_in_order ... ok
+test tap_is_hit_tested_delivered_and_acked ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/multi_session.rs (target/debug/deps/multi_session-bcc6d7ee128a369c)
+
+running 2 tests
+test concurrent_sessions_do_not_share_events ... ok
+test concurrent_sessions_keep_independent_frames ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/replay.rs (target/debug/deps/replay-de73a4fbbdbcff83)
+
+running 3 tests
+test aidl_tables_cover_the_owned_methods ... ok
+test replay_covers_every_wm_owned_row ... ok
+test coverage_table_counts_are_sane ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+     Running tests/vsync.rs (target/debug/deps/vsync-f03e1635e727e2be)
+
+running 4 tests
+test idle_vsync_has_zero_wakeups ... ok
+test deterministic_60hz_sequence ... ok
+test vrr_refresh_rate_is_queryable ... ok
+test pipe_record_has_the_dispatch_vsync_shape ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_wm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
