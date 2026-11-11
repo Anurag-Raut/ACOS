@@ -48,6 +48,20 @@ at N=20, 0 OOM. Report: `results/art-runtime/MILESTONE-1.md`. Open: key/type_tex
 EditorInfo codec, W13), 3 legacy cli test failures (W14), sandbox certification before
 untrusted APKs, phone parity, other app types (RN/Compose/Gaten/ARM64), stock-SF cost not measured.
 
+### Overnight progress (2026-11-11 evening, 9eb5b39)
+
+On the real ART engine (`acos verify --engine art`): live tree with hint/screen bounds/content-desc,
+taps, host-injected keys and `type_text` (stock KeyCharacterMap), real `reset` (fresh process),
+`assert_log`, `wait_for` that polls, region/pixel assertions, evidence provenance and trust modes.
+Matrix over fixture apps: 25 strict passes of 32 scenario runs (W22), including native JNI apps
+(NDK libs), sqlite, canvas, dialogs, fragments, lists, forms, and rn-hello (renders and reacts).
+Sandbox: C1 bounds + fd validation (S7), verdict-integrity decision implemented (S8); untrusted
+APKs remain refused (`UNTRUSTED_APK_NOT_CERTIFIED`) until the section 5 gates in
+`docs/SANDBOX_CERTIFICATION.md` pass. Phone parity: phone not connected (W18), ACOS side captured.
+Open: Activity title/all-caps/colour fidelity (W24 running), Gaten recon (W25 running), dialog-window
+tree probe, `rotate`, guest `startActivity` (multi-activity), todo-list text width, counter cold-start
+flake, ARM64, Compose, stock-SurfaceFlinger cost comparison.
+
 ### Component status (ART, 2026-11-11)
 
 Sources: `results/art-runtime/{P4b,S3,Q1,Q2b,D1,R1,R2,S2,Q3}.md` and the git
