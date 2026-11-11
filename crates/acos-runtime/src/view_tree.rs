@@ -113,6 +113,72 @@ impl TreeError {
     }
 }
 
+/// Walk the live `View` hierarchy of `vm` and append the platform overlays the
+/// system service is currently showing (today: a toast the app asked for).
+///
+/// `android.widget.Toast` is **not** an app window: on device
+/// `NotificationManagerService` renders it from the system process as a
+/// `TYPE_TOAST` window with `GRAVITY_BOTTOM|CENTER_HORIZONTAL`. ACOS runs the
+/// service side in the same process, so the runtime plays that system-UI role
+/// and reports the visible toast as a `ViewNode` with the **real** text the
+/// framework serialised into `INotificationManager.enqueueTextToast`. Nothing
+/// here invents text or geometry: the text comes from the request, the frame
+/// from the standard toast gravity for the reference display.
+pub fn append_toasts(
+    mut tree: ViewTree,
+    toasts: &[acos_services::declared::ToastRecord],
+) -> ViewTree {
+    if toasts.is_empty() {
+        return tree;
+    }
+    let (width, height, density) = (
+        acos_wm::display::DISPLAY_WIDTH,
+        acos_wm::display::DISPLAY_HEIGHT,
+        acos_wm::display::DENSITY_DPI as i32,
+    );
+    // 64dp above the navigation bar, 48dp tall: the platform toast window for
+    // `GRAVITY_BOTTOM|CENTER_HORIZONTAL` on this display (px = dp * dpi / 160).
+    let px = |dp: i32| dp * density / 160;
+    let toast_height = px(48);
+    let margin = px(64) + acos_wm::display::NAV_BAR_BOTTOM;
+    let top = height - margin - toast_height;
+    let bottom = top + toast_height;
+    for toast in toasts {
+        tree.nodes.push(ViewNode {
+            id: format!("toast{}", tree.nodes.len() + 1),
+            class: "android.widget.Toast".to_string(),
+            resource_id: String::new(),
+            text: toast.text.clone(),
+            content_desc: String::new(),
+            bounds: [0, top, width, bottom],
+            visible: true,
+            enabled: true,
+            focused: false,
+            clickable: false,
+            scrollable: false,
+            checked: false,
+            package: toast.package.clone(),
+            children: Vec::new(),
+        });
+    }
+    tree
+}
+
+/// The toasts the system service currently has on screen, oldest first.
+#[must_use]
+pub fn visible_toasts(host: &acos_services::ServiceHost) -> Vec<acos_services::declared::ToastRecord> {
+    let Some(state) = host.notification_state() else {
+        return Vec::new();
+    };
+    let now = std::time::SystemTime::now();
+    let st = state.lock().unwrap();
+    st.shown_toasts
+        .iter()
+        .filter(|t| t.is_visible_at(now))
+        .cloned()
+        .collect()
+}
+
 /// Walk the live `View` hierarchy of `vm`.
 ///
 /// Returns [`TreeError::NotReady`] when there is no root window, which is the

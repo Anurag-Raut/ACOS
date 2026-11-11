@@ -514,6 +514,18 @@ fn handle_session(
         "getDisplayId" => {
             reply.write_int32(with_wms(|s| s.wm.display.id));
         }
+        "getWindowId" => {
+            let w = window.ok_or_else(|| err("getWindowId: null IWindow"))?;
+            // `IWindowId` is the framework's opaque per-window identity handle
+            // (used by the IME/accessibility paths). The only method the
+            // framework calls on it is the local `asBinder()`, so a stable
+            // synthetic binder per `IWindow` is enough. Without a reply the
+            // popup's `ViewRootImpl.setView` aborts while reading the strong
+            // binder (`parcel underflow`) and never installs its input
+            // receiver, so a tap routed to the popup window is never
+            // dispatched to the popup's view tree.
+            reply.write_strong_binder_opt(Some(BinderId(0x1d_0000_0000 + w.0)));
+        }
         "reportDrawn" | "reportDrawnAsync" => {
             if let Some(w) = window {
                 with_wms(|s| s.finish_drawing(w.0, -1)).map_err(err)?;

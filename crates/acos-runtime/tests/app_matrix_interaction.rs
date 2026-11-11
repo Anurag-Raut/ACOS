@@ -394,7 +394,13 @@ fn popup_menu_item_select_sets_status() {
     if boot(&session, &apk).is_none() {
         return;
     }
-    let _ = session.tap_text("Popup menu");
+    // Warm the window-input path and retry the open, exactly like the
+    // `dialogs_popup_menu_opens_with_items` guard: the first injected tap
+    // after launch is sometimes lost while the looper re-enters.
+    let _ = session.tap_text("Alert dialog");
+    let _ = session.tap_text("Cancel");
+    let opened = tap_text_until(&session, "Popup menu", 3, |t| has_text(t, "Rename"));
+    assert!(opened, "PopupMenu opened with Rename/Delete");
     let report = session.tap_text("Rename").expect("tap accepted");
     assert!(report.state_changed, "popup item click sets status");
     let tree = session
@@ -421,23 +427,29 @@ fn spinner_item_select_updates_selection() {
     if boot(&session, &apk).is_none() {
         return;
     }
-    let _ = session.tap_text("One");
-    let _ = session.tap_text("Two");
+    let opened = tap_text_until(&session, "One", 3, |t| has_text(t, "Two"));
+    assert!(opened, "the Spinner dropdown opened with One/Two/Three");
+    let report = session.tap_text("Two").expect("tap accepted");
+    assert!(report.accepted, "the row tap was routed");
     let lines = session.logs().unwrap();
     assert!(
         lines.iter().any(|l| l.message.contains("spinner_pos=1")),
-        "selecting the second row logs spinner_pos=1"
+        "selecting the second row logs spinner_pos=1; logs: {:?}",
+        lines
+            .iter()
+            .filter(|l| l.message.contains("spinner") || l.message.contains("AcosDialogs"))
+            .map(|l| format!("{}: {}", l.tag, l.message))
+            .collect::<Vec<_>>()
     );
     session.close();
 }
 
-/// Toast observability is not yet a structured ACOS event. `Toast.show()`
-/// reaches the framework's notification service, but the text is only visible
-/// to the app (`AcosDialogs: toast_shown`); it is not surfaced in
-/// `observe --tree` (no toast window) or as a structured `toast` log record.
-/// The fixture's own `Toast` tap is also subject to the first-tap flakiness.
+/// `Toast.show()` reaches `INotificationManager.enqueueTextToast`, whose text
+/// AOSP's `NotificationManagerService` renders as a `TYPE_TOAST` system window.
+/// ACOS records that real request: the run is observable both as a structured
+/// `AcosToast` event (`{"event":"toast","text":…}`) and as the toast overlay
+/// node in `observe --tree`.
 #[test]
-#[ignore = "OPEN: Toast text is not exposed as a structured ACOS event; observe --tree has no toast window and logs carry only the app tag"]
 fn toast_text_is_observable() {
     seed_boot_dir();
     let Some(apk) = apk("dialogs-menus") else {
@@ -459,6 +471,20 @@ fn toast_text_is_observable() {
     assert!(
         has_text(&tree, "Hello from ACOS"),
         "the Toast text is present as a structured node/event"
+    );
+    // The other half of the contract: the text is in the event stream as a
+    // structured `toast` record, not just inside the app's own log tag.
+    let lines = session.logs().unwrap();
+    assert!(
+        lines.iter().any(|l| l.tag == "AcosToast"
+            && l.message.contains("\"event\":\"toast\"")
+            && l.message.contains("Hello from ACOS")),
+        "a structured toast event carries the text: {:?}",
+        lines
+            .iter()
+            .filter(|l| l.tag == "AcosToast" || l.message.contains("toast"))
+            .map(|l| format!("{}: {}", l.tag, l.message))
+            .collect::<Vec<_>>()
     );
     session.close();
 }

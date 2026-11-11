@@ -1492,6 +1492,7 @@ impl Runtime {
             vm,
             host,
             native: None,
+            emitted_toasts: 0,
         }
     }
 }

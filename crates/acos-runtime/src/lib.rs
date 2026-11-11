@@ -87,6 +87,9 @@ pub struct Runtime {
     /// ADR-0022). `None` means no JNI host is installed and native library
     /// loads report `UNSUPPORTED_JAVA_API`.
     native: Option<native_bridge::NativeBridge>,
+    /// Number of `INotificationManager` toast requests already emitted as
+    /// structured `AcosToast` events (see `emit_platform_events`).
+    emitted_toasts: usize,
 }
 
 impl core::fmt::Debug for Runtime {
@@ -141,6 +144,7 @@ impl Runtime {
             vm,
             host,
             native: None,
+            emitted_toasts: 0,
         })
     }
 

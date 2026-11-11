@@ -515,6 +515,18 @@ impl<'a> Scanner<'a> {
                 continue;
             };
 
+            // A nullable `CharSequence`/parcelable argument is written as
+            // `if (value == null) writeInt(0) else { writeInt(1); <value> }`:
+            // the *branch* comes before the marker write, so `try_cond` (which
+            // needs a `move-result` between marker and branch) cannot see it.
+            // This form has its own matcher.
+            if matches!(insn.opcode.byte(), 0x38 | 0x39) {
+                if let Some((cond, end)) = self.try_nullable_cond(insns, pc, c.len(), &types) {
+                    info.args.push(cond);
+                    pc = end;
+                    continue;
+                }
+            }
             if insn.opcode.is_invoke() {
                 if let Ok(m) = self.dex.method_ref(insn.index) {
                     // The Parcel operand is the receiver for `Parcel.*` and the
@@ -683,6 +695,156 @@ impl<'a> Scanner<'a> {
     }
 
     /// Detect `marker; if (marker == 0) skip; <op>` and fold it into a `Cond`.
+    /// Fold the AIDL nullable-value idiom whose branch precedes the marker
+    /// write (so `try_cond` cannot see it):
+    ///
+    /// ```text
+    /// if-eqz vA, else
+    ///   const/4 vB, #1
+    ///   invoke-virtual {parcel, vB}, Parcel.writeInt(I)V      // marker
+    ///   invoke-static {vA, parcel, 0}, TextUtils.writeToParcel // value
+    ///   goto end
+    /// else:
+    ///   invoke-virtual {parcel, vB}, Parcel.writeInt(I)V       // vB == 0 (hoisted)
+    /// end:
+    /// ```
+    ///
+    /// The wire form is `int32 present` + the value when present, which is
+    /// exactly `WireOp::Cond { marker: I32, ops: [value] }`. Only the
+    /// `if-eqz`/present-on-fallthrough shape is folded; every other shape keeps
+    /// the previous literal decoding so no unknown pattern is guessed at.
+    fn try_nullable_cond(
+        &self,
+        insns: &[u16],
+        pc: usize,
+        to: usize,
+        types: &HashMap<u16, String>,
+    ) -> Option<(WireOp, usize)> {
+        let branch = decode(insns, pc).ok()?;
+        if branch.opcode.byte() != 0x38 {
+            return None;
+        }
+        let fallthrough = pc + branch.size as usize;
+        // `const/4 vB, #1` on the present path (or the same constant hoisted
+        // above the branch, in which case the marker invoke comes first).
+        let mut marker_pc = fallthrough;
+        let mut marker_reg = None;
+        if let Ok(first) = decode(insns, fallthrough) {
+            if first.opcode.byte() == 0x12 && first.literal == 1 {
+                marker_pc = fallthrough + first.size as usize;
+                marker_reg = Some(first.regs[0]);
+            }
+        }
+        if marker_reg.is_none() {
+            let reg = self.write_int_reg(insns, fallthrough)?;
+            if self.const_before(insns, pc, reg) == Some(1) {
+                marker_reg = Some(reg);
+            }
+        }
+        let marker_reg = marker_reg?;
+        if !self.is_write_int_of(insns, marker_pc, marker_reg) {
+            return None;
+        }
+        let marker = decode(insns, marker_pc).ok()?;
+        let value_pc = marker_pc + marker.size as usize;
+        if value_pc >= to {
+            return None;
+        }
+        let value_insn = decode(insns, value_pc).ok()?;
+        if !value_insn.opcode.is_invoke() {
+            return None;
+        }
+        let value = match self.classify_call(&value_insn, types) {
+            Call::Write(op) | Call::Read(op) => op,
+            _ => return None,
+        };
+        let goto_pc = value_pc + value_insn.size as usize;
+        let goto_insn = decode(insns, goto_pc).ok()?;
+        if !goto_insn.opcode.is_goto() {
+            return None;
+        }
+        // The absent path writes the same marker with a constant `0`. A dex
+        // branch encodes its destination as a signed code-unit delta from the
+        // branch instruction itself (unlike a method-relative jump table).
+        let else_pc = (pc as i64 + branch.target as i64) as usize;
+        if else_pc >= to {
+            return None;
+        }
+        // The `const/4 vB, #0` may lead the absent marker or be hoisted above
+        // the branch (the common AIDL shape).
+        let mut else_marker_pc = else_pc;
+        let mut else_reg = None;
+        if let Ok(first) = decode(insns, else_pc) {
+            if first.opcode.byte() == 0x12 && first.literal == 0 {
+                else_marker_pc = else_pc + first.size as usize;
+                else_reg = Some(first.regs[0]);
+            }
+        }
+        if else_reg.is_none() {
+            let reg = self.write_int_reg(insns, else_pc)?;
+            if self.const_before(insns, pc, reg) == Some(0) {
+                else_reg = Some(reg);
+            }
+        }
+        let else_reg = else_reg?;
+        if !self.is_write_int_of(insns, else_marker_pc, else_reg) {
+            return None;
+        }
+        let else_marker = decode(insns, else_marker_pc).ok()?;
+        let resume = else_marker_pc + else_marker.size as usize;
+        // Both arms converge on the instruction after the absent marker.
+        let end = (goto_pc as i64 + goto_insn.target as i64) as usize;
+        if resume != end {
+            return None;
+        }
+        Some((
+            WireOp::Cond {
+                marker: Box::new(WireOp::I32),
+                ops: vec![value],
+            },
+            resume,
+        ))
+    }
+
+    /// The value register of a `Parcel.writeInt(reg)` invoke at `pc`.
+    fn write_int_reg(&self, insns: &[u16], pc: usize) -> Option<u16> {
+        if !self.is_write_int_of(insns, pc, decode(insns, pc).ok()?.regs[1]) {
+            return None;
+        }
+        let insn = decode(insns, pc).ok()?;
+        self.is_write_int_of(insns, pc, insn.regs[1]).then_some(insn.regs[1])
+    }
+
+    /// The last `const*` written to `reg` before `before_pc`, if any.
+    fn const_before(&self, insns: &[u16], before_pc: usize, reg: u16) -> Option<i64> {
+        let mut value = None;
+        let mut pc = 0usize;
+        while pc < before_pc {
+            let Ok(insn) = decode(insns, pc) else {
+                break;
+            };
+            if matches!(insn.opcode.byte(), 0x12..=0x15) && insn.regs[0] == reg {
+                value = Some(insn.literal);
+            }
+            pc += insn.size as usize;
+        }
+        value
+    }
+
+    /// True when the instruction at `pc` is `Parcel.writeInt(reg)`.
+    fn is_write_int_of(&self, insns: &[u16], pc: usize, reg: u16) -> bool {
+        let Ok(insn) = decode(insns, pc) else {
+            return false;
+        };
+        if !insn.opcode.is_invoke() {
+            return false;
+        }
+        let Ok(m) = self.dex.method_ref(insn.index) else {
+            return false;
+        };
+        m.class == "Landroid/os/Parcel;" && m.name == "writeInt" && insn.regs[1] == reg
+    }
+
     fn try_cond(
         &self,
         insns: &[u16],
@@ -781,6 +943,24 @@ impl<'a> Scanner<'a> {
         };
         if m.class != "Landroid/os/Parcel;" {
             return match m.name {
+                // `TextUtils.writeToParcel(CharSequence, Parcel, int)` is what an
+                // AIDL proxy calls for a `CharSequence` field. Its wire form is
+                // `int32 flag` + `string8` for a plain String, where the flag is
+                // `1` for a non-Spanned value (`0` when span data follows).
+                // Modelling it as a conditional `Str8` keeps the parcel aligned
+                // for the (universal) plain-text case; a Spanned payload is
+                // reported by the reader instead of being silently misparsed.
+                "writeToParcel" | "readFromParcel" if m.class == "Landroid/text/TextUtils;" => {
+                    let op = WireOp::Cond {
+                        marker: Box::new(WireOp::I32),
+                        ops: vec![WireOp::Str8],
+                    };
+                    if m.name == "writeToParcel" {
+                        Call::Write(op)
+                    } else {
+                        Call::Read(op)
+                    }
+                }
                 "readFromParcel" => Call::Read(WireOp::Parcelable {
                     class: dotted(m.class),
                 }),

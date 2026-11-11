@@ -365,6 +365,8 @@ pub fn install(host: &mut ServiceHost) {
         Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode)))
             as Box<dyn ServiceObject>
     });
+    // The runtime plays the system-UI role for toasts, so it needs the state.
+    host.set_notification_state(Arc::clone(&notification));
     host.register(
         "notification",
         "android.app.INotificationManager",

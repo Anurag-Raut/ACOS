@@ -378,14 +378,59 @@ fn notifications_are_reported_as_not_enabled_and_post_is_unsupported() {
             &[s("dev.acos.fixtures.helloviews")]),
         vec![Value::Int(0)]
     );
-    let err = invoke_err(
+    // A text toast is *not* unsupported: AOSP's `NotificationManagerService`
+    // renders it from the system process, so ACOS records the real request
+    // (package, serialised `CharSequence`, duration) and the runtime surfaces
+    // it as a structured `AcosToast` event plus the toast overlay in the tree.
+    // The reply is the plain AIDL `V` (no exception).
+    let text = Value::Cond {
+        present: true,
+        values: vec![Value::Cond {
+            present: true,
+            values: vec![s("Hello from ACOS")],
+        }],
+    };
+    let reply = invoke(
         &mut host,
         "notification",
         INOTIF,
         "enqueueTextToast",
-        &[s("dev.acos.fixtures.helloviews"), Value::Binder(None), Value::Int(0),
-          Value::Int(0), Value::Int(0), Value::Bool(false), Value::Int(0),
-          Value::Binder(None)],
+        &[
+            s("dev.acos.fixtures.helloviews"),
+            Value::Binder(None),
+            text,
+            Value::Int(0),
+            Value::Bool(false),
+            Value::Int(0),
+            Value::Binder(None),
+        ],
+    );
+    assert!(reply.is_empty(), "enqueueTextToast returns void");
+
+    let state = host.notification_state().expect("notification state");
+    let recorded = state.lock().unwrap().shown_toasts.clone();
+    assert_eq!(recorded.len(), 1, "one toast request recorded");
+    assert_eq!(recorded[0].text, "Hello from ACOS", "real toast text");
+    assert_eq!(
+        recorded[0].duration_ms, 2000,
+        "LENGTH_SHORT is shown for 2000 ms"
+    );
+
+    // An explicit `enqueueNotificationWithTag` (a status-bar notification) is
+    // still unsupported: ACOS has no system UI to post it to.
+    let err = invoke_err(
+        &mut host,
+        "notification",
+        INOTIF,
+        "enqueueNotificationWithTag",
+        &[
+            s("dev.acos.fixtures.helloviews"),
+            s("dev.acos.fixtures.helloviews"),
+            s("tag"),
+            Value::Int(0),
+            null_obj(),
+            Value::Int(0),
+        ],
     );
     assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
 }

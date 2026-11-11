@@ -957,7 +957,14 @@ fn do_observe_tree(
             ("stage_reached", stage.to_string()),
         ]));
     };
-    match crate::view_tree::walk(runtime.vm_mut(), max_nodes) {
+    // The tree also carries the platform overlays the system service is
+    // showing (a toast), so `observe --tree` and `tap --text` see what the
+    // user sees.
+    let host = runtime.host();
+    let overlays = crate::view_tree::visible_toasts(&host.borrow());
+    match crate::view_tree::walk(runtime.vm_mut(), max_nodes)
+        .map(|tree| crate::view_tree::append_toasts(tree, &overlays))
+    {
         Ok(tree) => Ok(tree),
         Err(e) => Err(SessionError::new(e.code(), e.message().to_string()).with_details(vec![
             ("reason", e.reason().to_string()),
@@ -1051,22 +1058,19 @@ fn do_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, Sessio
     })
 }
 
-/// Inject a tap across two looper passes: DOWN, pump, UP.
+/// Inject a tap as one DOWN+UP batch, then let the caller pump.
 ///
-/// A physical tap delivers DOWN and UP as separate `InputEventReceiver`
-/// drains, so the widget's posted tap/long-press scheduling runs *between*
-/// them. The previous single-batch `inject_tap` wrote DOWN+UP before the
-/// looper was pumped, so `AbsListView` never posted its `PerformClick`
-/// `Runnable` and a `ListView` row click was silently dropped. Splitting the
-/// gesture lets the framework's real touch state machine advance.
-fn do_split_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, SessionError> {
-    let mut seqs = input_java::inject_tap_down(x, y).map_err(input_error)?;
-    if let Some(rt) = state.runtime.as_mut() {
-        if let Err(e) = rt.pump() {
-            eprintln!("acos-session: tap-down pump failed: {e}");
-        }
-    }
-    seqs.extend(input_java::inject_tap_up(x, y).map_err(input_error)?);
+/// W187-A split the tap (DOWN, pump, UP) while
+/// `VelocityTracker.nativeAddMovement` threw during `AbsListView`'s DOWN
+/// handling, which aborted the whole event and made a row click look like a
+/// dispatch problem. With that native implemented the batch advances the real
+/// touch state machine correctly, and the intermediate pump is *harmful*: it
+/// re-runs `performTraversals` on a popup window that was just shown, setting
+/// `AbsListView.mDataChanged` between DOWN and UP so `onTouchUp` skips
+/// `PerformClick` (the spinner dropdown row never selected). One batch matches
+/// how a fast physical tap is drained by `InputEventReceiver`.
+fn do_split_tap(_state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, SessionError> {
+    let seqs = input_java::inject_tap(x, y).map_err(input_error)?;
     finish_input("tap", Ok(seqs))
 }
 

@@ -169,6 +169,39 @@ fn layout_spot_checks() {
         expected_args,
         "relayout proxy byte-op mismatch"
     );
+
+    // A nullable `CharSequence` argument is `writeInt(present)` + a
+    // `TextUtils.writeToParcel` payload (`writeInt(notSpanned)` + string8), so
+    // the decoded layout must be a doubly-conditional `Str8` — not the two bare
+    // `I32`s the decoder emitted before. Getting this wrong made the parcel
+    // reader misalign and every toast request fail with
+    // `arg 7 … is not a binder`.
+    let nm = scanner
+        .decode_interface("android.app.INotificationManager")
+        .unwrap();
+    let toast = nm.method_by_name("enqueueTextToast").unwrap();
+    let char_sequence = WireOp::Cond {
+        marker: Box::new(WireOp::I32),
+        ops: vec![WireOp::Cond {
+            marker: Box::new(WireOp::I32),
+            ops: vec![WireOp::Str8],
+        }],
+    };
+    assert_eq!(
+        toast.args,
+        vec![
+            WireOp::Str16,
+            WireOp::Binder { iface: None },
+            char_sequence,
+            WireOp::I32,
+            WireOp::Bool,
+            WireOp::I32,
+            WireOp::Binder {
+                iface: Some("android.app.ITransientNotificationCallback".into())
+            },
+        ],
+        "enqueueTextToast args"
+    );
 }
 
 /// (b) Every measured work-list row must resolve in the generated table.

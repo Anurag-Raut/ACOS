@@ -406,6 +406,31 @@ struct SenderState {
     channel: u64,
 }
 
+/// One `(eventTime, x, y)` motion sample fed to a `VelocityTracker`.
+#[derive(Debug, Clone, Copy)]
+struct VelocitySample {
+    time: i64,
+    x: f32,
+    y: f32,
+}
+
+/// Native state of one `android.view.VelocityTracker`.
+///
+/// Mirrors AOSP's `VelocityTracker`: `nativeInitialize` picks a strategy,
+/// `nativeAddMovement` accumulates recent samples per pointer id, and
+/// `nativeComputeCurrentVelocity` turns them into a velocity that
+/// `nativeGetVelocity` reads back. The samples are the window-local pointer
+/// coordinates the event carried, so the resulting velocity is in the same
+/// space the widget's `trackMotionScroll` expects.
+#[derive(Debug)]
+struct VelocityTrackerState {
+    _strategy: i32,
+    samples: BTreeMap<i32, VecDeque<VelocitySample>>,
+    /// `(pointer id, axis)` -> pixels/second (already scaled by the last
+    /// `computeCurrentVelocity` call).
+    velocities: BTreeMap<(i32, i32), f32>,
+}
+
 #[derive(Default)]
 struct Pools {
     next_id: u64,
@@ -414,6 +439,7 @@ struct Pools {
     channels: BTreeMap<u64, ChannelState>,
     receivers: BTreeMap<u64, ReceiverState>,
     senders: BTreeMap<u64, SenderState>,
+    velocity_trackers: BTreeMap<u64, VelocityTrackerState>,
     /// Local ack counter used when no [`InputHost`] is installed.
     finished: u64,
     /// Frames actually dispatched through `dispatchInputEvent`.
@@ -585,6 +611,15 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(me, "nativeWriteToParcel", "(JLandroid/os/Parcel;)V", me_write_to_parcel);
     vm.register_native(me, "nativeApplyTransform", "(JLandroid/graphics/Matrix;)V", me_apply_transform);
     vm.register_native(me, "nativeTransform", "(JLandroid/graphics/Matrix;)V", me_apply_transform);
+
+    let vt = "Landroid/view/VelocityTracker;";
+    vm.register_native(vt, "nativeInitialize", "(I)J", vt_initialize);
+    vm.register_native(vt, "nativeDispose", "(J)V", vt_dispose);
+    vm.register_native(vt, "nativeClear", "(J)V", vt_clear);
+    vm.register_native(vt, "nativeAddMovement", "(JLandroid/view/MotionEvent;)V", vt_add_movement);
+    vm.register_native(vt, "nativeComputeCurrentVelocity", "(JIF)V", vt_compute_current_velocity);
+    vm.register_native(vt, "nativeGetVelocity", "(JII)F", vt_get_velocity);
+    vm.register_native(vt, "nativeIsAxisSupported", "(I)Z", vt_is_axis_supported);
 
     let ke = "Landroid/view/KeyEvent;";
     vm.register_native(ke, "nativeNextId", "()I", key_next_id);
@@ -1238,6 +1273,208 @@ fn me_apply_transform(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         s.x_offset = nx;
         s.y_offset = ny;
     });
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// VelocityTracker natives
+// ---------------------------------------------------------------------------
+
+/// `"impulse"` (the strategy the services layer reports) and every other
+/// AOSP strategy share one estimator here: a recency-weighted linear
+/// least-squares fit of position over time, evaluated over the last 100 ms of
+/// movement. That is the same observable contract as AOSP's trackers (a
+/// velocity in pixels/second for `computeCurrentVelocity`), and it is enough
+/// for `AbsListView`'s fling decision, without pretending to be bit-exact.
+const VELOCITY_HORIZON_NANOS: i64 = 100_000_000;
+/// Maximum number of samples retained per pointer (AOSP keeps a bounded ring).
+const VELOCITY_MAX_SAMPLES: usize = 20;
+
+fn vt_initialize(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeInitialize");
+    let strategy = vm.arg_i32(ctx, 0);
+    let ptr = POOLS.with(|p| {
+        let mut p = p.borrow_mut();
+        let id = p.alloc_id();
+        p.velocity_trackers.insert(
+            id,
+            VelocityTrackerState {
+                _strategy: strategy,
+                samples: BTreeMap::new(),
+                velocities: BTreeMap::new(),
+            },
+        );
+        id
+    });
+    vm.ret_i64(ctx, ptr as i64);
+    Ok(())
+}
+
+fn vt_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeDispose");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    POOLS.with(|p| {
+        p.borrow_mut().velocity_trackers.remove(&ptr);
+    });
+    Ok(())
+}
+
+fn vt_clear(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeClear");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    POOLS.with(|p| {
+        if let Some(t) = p.borrow_mut().velocity_trackers.get_mut(&ptr) {
+            t.samples.clear();
+            t.velocities.clear();
+        }
+    });
+    Ok(())
+}
+
+fn vt_add_movement(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeAddMovement");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let event = vm.arg_ref(ctx, 1);
+    // The Java `MotionEvent` owns its native struct through `mNativePtr`; the
+    // tracker reads the same pointer coordinates `getX/getY` expose.
+    let ev_ptr = match vm.get_field(event, "mNativePtr") {
+        Ok(JavaValue::Long(v)) => v as u64,
+        Ok(JavaValue::Int(v)) => v as u64,
+        _ => 0,
+    };
+    let Some((action, time, pointers)) = read_motion(ev_ptr, |s| {
+        (
+            s.action,
+            s.event_time,
+            s.pointers
+                .iter()
+                .map(|p| (p.id, p.x, p.y))
+                .collect::<Vec<_>>(),
+        )
+    }) else {
+        // A stale/disposed event contributes nothing; AOSP never crashes on it.
+        return Ok(());
+    };
+    POOLS.with(|p| {
+        if let Some(t) = p.borrow_mut().velocity_trackers.get_mut(&ptr) {
+            // `ACTION_DOWN` starts a new gesture: drop the previous samples.
+            if action & 0xff == ACTION_DOWN {
+                t.samples.clear();
+                t.velocities.clear();
+            }
+            for (id, x, y) in pointers {
+                let q = t.samples.entry(id).or_default();
+                q.push_back(VelocitySample { time, x, y });
+                while q.len() > VELOCITY_MAX_SAMPLES {
+                    q.pop_front();
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Recency-weighted least-squares velocity for one pointer, in pixels/second.
+fn estimate_velocity(samples: &VecDeque<VelocitySample>) -> (f32, f32) {
+    if samples.len() < 2 {
+        return (0.0, 0.0);
+    }
+    let t_end = samples.back().map_or(0, |s| s.time);
+    let window_start = t_end - VELOCITY_HORIZON_NANOS;
+    let mut sw = 0.0f64;
+    let mut st = 0.0f64;
+    let mut sx = 0.0f64;
+    let mut sy = 0.0f64;
+    let mut stt = 0.0f64;
+    let mut stx = 0.0f64;
+    let mut sty = 0.0f64;
+    for (i, s) in samples.iter().enumerate() {
+        if s.time < window_start {
+            continue;
+        }
+        let w = (i + 1) as f64;
+        let t = s.time as f64 * 1e-9;
+        sw += w;
+        st += w * t;
+        sx += w * s.x as f64;
+        sy += w * s.y as f64;
+        stt += w * t * t;
+        stx += w * t * s.x as f64;
+        sty += w * t * s.y as f64;
+    }
+    let denom = sw * stt - st * st;
+    if denom.abs() < 1e-9 {
+        return (0.0, 0.0);
+    }
+    let vx = (sw * stx - st * sx) / denom;
+    let vy = (sw * sty - st * sy) / denom;
+    (vx as f32, vy as f32)
+}
+
+/// Apply `VelocityTracker.computeCurrentVelocity`'s unit scaling and
+/// `maxVelocity` clamp.
+///
+/// `units` is `VELOCITY_UNITS_PIXELS_PER_MS` (1000) or
+/// `VELOCITY_UNITS_PIXELS_PER_SECOND` (0); `max_velocity > 0` clamps the
+/// magnitude, exactly like AOSP's `VelocityTracker::computeCurrentVelocity`.
+fn scale_velocity(estimate: (f32, f32), units: i32, max_velocity: f32) -> (f32, f32) {
+    let scale = if units == 1000 { 1.0 / 1000.0 } else { 1.0 };
+    let (mut sx, mut sy) = (estimate.0 * scale, estimate.1 * scale);
+    if max_velocity > 0.0 {
+        let mag = (sx * sx + sy * sy).sqrt();
+        if mag > max_velocity {
+            let f = max_velocity / mag;
+            sx *= f;
+            sy *= f;
+        }
+    }
+    (sx, sy)
+}
+
+fn vt_compute_current_velocity(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeComputeCurrentVelocity");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let units = vm.arg_i32(ctx, 1);
+    let max_velocity = vm.arg_f32(ctx, 2);
+    POOLS.with(|p| {
+        if let Some(t) = p.borrow_mut().velocity_trackers.get_mut(&ptr) {
+            t.velocities.clear();
+            let computed: Vec<(i32, (f32, f32))> = t
+                .samples
+                .iter()
+                .map(|(&id, s)| (id, estimate_velocity(s)))
+                .collect();
+            for (id, estimate) in computed {
+                let (sx, sy) = scale_velocity(estimate, units, max_velocity);
+                t.velocities.insert((id, 0), sx);
+                t.velocities.insert((id, 1), sy);
+            }
+        }
+    });
+    Ok(())
+}
+
+fn vt_get_velocity(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeGetVelocity");
+    let ptr = vm.arg_i64(ctx, 0) as u64;
+    let id = vm.arg_i32(ctx, 1);
+    let axis = vm.arg_i32(ctx, 2);
+    let v = POOLS.with(|p| {
+        p.borrow()
+            .velocity_trackers
+            .get(&ptr)
+            .and_then(|t| t.velocities.get(&(id, axis)).copied())
+            .unwrap_or(0.0)
+    });
+    vm.ret_f32(ctx, v);
+    Ok(())
+}
+
+fn vt_is_axis_supported(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    me_hit(ctx, "nativeIsAxisSupported");
+    let axis = vm.arg_i32(ctx, 0);
+    // `MotionEvent.AXIS_X == 0`, `AXIS_Y == 1` -- the two the tracker fits.
+    vm.ret_bool(ctx, axis == 0 || axis == 1);
     Ok(())
 }
 
@@ -2404,5 +2641,60 @@ fn bridge_err(e: crate::javabridge::BridgeError) -> VmError {
     match e {
         crate::javabridge::BridgeError::Vm(e) => e,
         other => VmError::Internal(other.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample(time: i64, y: f32) -> VelocitySample {
+        VelocitySample { time, x: 0.0, y }
+    }
+
+    /// A drag of 1000 px in 100 ms is 10 000 px/s. `AbsListView` uses this to
+    /// decide whether a release becomes a fling, so the scale must be
+    /// pixels/second, not pixels/millisecond or pixels/frame.
+    #[test]
+    fn velocity_is_pixels_per_second() {
+        let mut samples = VecDeque::new();
+        for i in 0..=10 {
+            let t = 1_000_000_000 + i * 10_000_000; // 10 ms apart
+            samples.push_back(sample(t, -100.0 * i as f32));
+        }
+        let (vx, vy) = estimate_velocity(&samples);
+        assert!(vx.abs() < 1.0, "no horizontal motion, got {vx}");
+        assert!(
+            (vy + 10_000.0).abs() < 50.0,
+            "expected ~-10000 px/s, got {vy}"
+        );
+    }
+
+    /// A single sample (or a stationary finger) has no velocity; a widget must
+    /// not start a fling from it.
+    #[test]
+    fn stationary_or_single_sample_is_zero() {
+        let mut one = VecDeque::new();
+        one.push_back(sample(1_000_000_000, 42.0));
+        assert_eq!(estimate_velocity(&one), (0.0, 0.0));
+
+        let mut still = VecDeque::new();
+        for i in 0..5 {
+            still.push_back(sample(1_000_000_000 + i * 10_000_000, 42.0));
+        }
+        assert_eq!(estimate_velocity(&still), (0.0, 0.0));
+    }
+
+    /// `computeCurrentVelocity(units)` scales by units: AOSP passes 1000 for
+    /// pixels/millisecond and 0 for pixels/second, and clamps to `maxVelocity`.
+    #[test]
+    fn compute_scales_and_clamps_to_max_velocity() {
+        // 10 000 px/s as pixels/ms is 10.
+        let (_, per_ms) = scale_velocity((0.0, 10_000.0), 1000, 0.0);
+        assert!((per_ms - 10.0).abs() < 0.01, "pixels/ms: {per_ms}");
+        let (_, per_s) = scale_velocity((0.0, 10_000.0), 0, 0.0);
+        assert!((per_s - 10_000.0).abs() < 0.01, "pixels/s: {per_s}");
+        let (_, clamped) = scale_velocity((0.0, 10_000.0), 0, 500.0);
+        assert!((clamped.abs() - 500.0).abs() < 0.01, "clamped: {clamped}");
     }
 }

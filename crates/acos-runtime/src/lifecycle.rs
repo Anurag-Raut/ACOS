@@ -354,8 +354,62 @@ impl Runtime {
                 h,
             )));
         }
+        self.emit_platform_events();
         self.render_frame_now()?;
         Ok(())
+    }
+
+    /// Turn the platform-service state that the pump advanced into structured
+    /// evidence on the log/event stream.
+    ///
+    /// Today that is the toast: `Toast.show()` reaches
+    /// `INotificationManager.enqueueTextToast`, whose text would be rendered by
+    /// `NotificationManagerService` in the system process. ACOS records the real
+    /// request; this emits it as one `AcosToast` record carrying
+    /// `{"event":"toast","text":…,"duration_ms":…}` so an agent can observe the
+    /// toast without screen-scraping, and exactly once per request.
+    pub fn emit_platform_events(&mut self) {
+        let Some(state) = self.host().borrow().notification_state() else {
+            return;
+        };
+        let toasts = {
+            let st = state.lock().unwrap();
+            st.shown_toasts.clone()
+        };
+        let mut emitted = self.emitted_toasts;
+        while emitted < toasts.len() {
+            let toast = &toasts[emitted];
+            // `{"event":"toast","text":…}`: a structured record, so an agent
+            // reads the toast text from the event stream instead of scraping.
+            let payload = format!(
+                "{{\"event\":\"toast\",\"text\":{},\"package\":{},\"duration_ms\":{}}}",
+                Self::json_quote(&toast.text),
+                Self::json_quote(&toast.package),
+                toast.duration_ms
+            );
+            os_log::push_record(4, "AcosToast", &payload, 0);
+            emitted += 1;
+        }
+        self.emitted_toasts = emitted;
+    }
+
+    /// Quote and escape a string for the structured `AcosToast` payload.
+    fn json_quote(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('"');
+        for c in s.chars() {
+            match c {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                c => out.push(c),
+            }
+        }
+        out.push('"');
+        out
     }
 
     /// Drive the real `ThreadedRenderer.draw` for every live `ViewRootImpl`.

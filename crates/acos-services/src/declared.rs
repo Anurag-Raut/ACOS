@@ -70,6 +70,29 @@ fn str_arg(args: &[Value], i: usize) -> String {
     args.get(i).and_then(Value::as_str).unwrap_or_default().to_string()
 }
 
+/// Read an AIDL nullable `CharSequence` argument.
+///
+/// The wire shape (see `acos_aidl::decode`) is `Cond { marker: I32, ops:
+/// [Cond { marker: I32, ops: [Str8] }] }`: the outer marker is AIDL's
+/// presence flag, the inner one is `TextUtils.writeToParcel`'s "not Spanned"
+/// flag. Only a plain (non-Spanned) value is modelled; a Spanned payload comes
+/// back with the inner marker false and is reported as absent rather than
+/// guessed at.
+fn char_sequence_arg(args: &[Value], i: usize) -> Option<String> {
+    fn text_of(value: &Value) -> Option<String> {
+        match value {
+            Value::Cond { present, values } => {
+                if !*present {
+                    return None;
+                }
+                values.first().and_then(text_of)
+            }
+            other => other.as_str().map(str::to_string),
+        }
+    }
+    args.get(i).and_then(text_of)
+}
+
 // ---------------------------------------------------------------------------
 // IAppOpsService
 // ---------------------------------------------------------------------------
@@ -543,10 +566,45 @@ impl ServiceObject for UiModeService {
 pub struct NotificationState {
     /// Notifications that Android would have posted.
     pub posted: Vec<(String, i32)>,
-    /// Toasts that Android would have shown.
+    /// Toasts that Android would have shown (`(package, text)`).
     pub toasts: Vec<String>,
     /// Channels created (recorded).
     pub channels: Vec<String>,
+    /// Every toast the framework asked the (in-process) system service to show,
+    /// in order. This is the real `Toast.show()` -> `INotificationManager`
+    /// request, with the text the framework serialised.
+    pub shown_toasts: Vec<ToastRecord>,
+    /// Toasts `cancelToast`/`hide` removed before their duration elapsed.
+    pub cancelled_toasts: Vec<String>,
+}
+
+/// One toast request the system service received.
+///
+/// Android's `NotificationManagerService` renders a text toast itself (in the
+/// system process) for `duration` milliseconds. ACOS has no separate system
+/// process, so the request is recorded here with its real text/duration and the
+/// runtime renders it as the system overlay it is (see `view_tree::toast_nodes`
+/// and the structured `AcosToast` log event).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToastRecord {
+    /// Package that asked for the toast.
+    pub package: String,
+    /// The `CharSequence` the framework serialised (`Toast.getText()`).
+    pub text: String,
+    /// `Toast.LENGTH_SHORT` (2000 ms) or `LENGTH_LONG` (3500 ms).
+    pub duration_ms: i64,
+    /// When the request arrived.
+    pub shown_at: std::time::SystemTime,
+}
+
+impl ToastRecord {
+    /// Whether the toast is still on screen at `now`.
+    #[must_use]
+    pub fn is_visible_at(&self, now: std::time::SystemTime) -> bool {
+        now.duration_since(self.shown_at)
+            .map(|d| d.as_millis() as i64 <= self.duration_ms)
+            .unwrap_or(false)
+    }
 }
 
 impl NotificationState {
@@ -605,8 +663,33 @@ impl ServiceObject for NotificationService {
             }
             "enqueueToast" | "enqueueTextToast" => {
                 let package = str_arg(args, 0);
-                self.state.lock().unwrap().toasts.push(package);
-                return Err(unsupported(interface, method))
+                // `enqueueTextToast(pkg, token, CharSequence text, int duration,
+                // …)`: the text arrives as the AIDL nullable-CharSequence group
+                // (`int32 present` + `int32 TextUtils flag` + string8).
+                let text = char_sequence_arg(args, 2).unwrap_or_default();
+                let duration_ms = int_arg(args, 3).max(0) as i64;
+                let duration_ms = match duration_ms {
+                    0 => 2000, // Toast.LENGTH_SHORT
+                    1 => 3500, // Toast.LENGTH_LONG
+                    ms => ms,
+                };
+                let mut st = self.state.lock().unwrap();
+                st.toasts.push(package.clone());
+                st.shown_toasts.push(ToastRecord {
+                    package,
+                    text,
+                    duration_ms,
+                    shown_at: std::time::SystemTime::now(),
+                });
+                // A real NMS answers `enqueueTextToast` with no exception: the
+                // toast is now the system's to show, and the caller's
+                // `Toast.show()` returns.
+                vec![]
+            }
+            "cancelToast" => {
+                let package = str_arg(args, 0);
+                self.state.lock().unwrap().cancelled_toasts.push(package);
+                vec![]
             }
             "createNotificationChannels" | "createNotificationChannelsForPackage" => {
                 let package = str_arg(args, 0);

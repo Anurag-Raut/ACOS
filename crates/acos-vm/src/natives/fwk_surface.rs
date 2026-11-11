@@ -184,6 +184,9 @@ pub struct TransactionRecord {
     pub ops: Vec<SurfaceOp>,
     /// `setAnimationTransaction` seen.
     pub animation: bool,
+    /// `addTransactionCommittedListener` callbacks, run when this transaction
+    /// is applied/committed.
+    pub listeners: Vec<Handle>,
 }
 
 /// A `Surface` record (the consumer/software-canvas side of a layer).
@@ -354,6 +357,11 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         ),
         ("nativeCreateTransaction", "()J", native_create_transaction),
         ("nativeApplyTransaction", "(JZ)V", native_apply_transaction),
+        (
+            "nativeAddTransactionCommittedListener",
+            "(JLandroid/view/SurfaceControl$TransactionCommittedListener;)V",
+            native_add_transaction_committed_listener,
+        ),
         ("nativeMergeTransaction", "(JJ)V", native_merge_transaction),
         ("nativeClearTransaction", "(J)V", native_clear_transaction),
         ("nativeGetTransactionId", "(J)J", native_get_transaction_id),
@@ -543,6 +551,13 @@ fn stale_error(vm: &mut Vm, handle: u64) -> VmError {
         "Ljava/lang/IllegalStateException;",
         Some(&format!("SurfaceControl: stale/unknown layer handle {handle}")),
     )
+}
+
+fn bridge_err(e: crate::javabridge::BridgeError) -> VmError {
+    match e {
+        crate::javabridge::BridgeError::Vm(e) => e,
+        other => VmError::Internal(other.to_string()),
+    }
 }
 
 fn missing_transaction(vm: &mut Vm, handle: u64) -> VmError {
@@ -1027,6 +1042,7 @@ fn native_create_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
                 id: handle,
                 ops: Vec::new(),
                 animation: false,
+                listeners: Vec::new(),
             },
         );
         handle
@@ -1049,14 +1065,54 @@ fn native_get_transaction_id(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_apply_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
-    let ops = STATE.with(|s| s.borrow().transactions.get(&handle).map(|t| t.ops.clone()));
-    let Some(ops) = ops else {
-        return Err(missing_transaction(vm, handle));
-    };
+    let (ops, listeners) = STATE.with(|s| {
+        s.borrow()
+            .transactions
+            .get(&handle)
+            .map(|t| (t.ops.clone(), t.listeners.clone()))
+    })
+    .ok_or_else(|| missing_transaction(vm, handle))?;
     apply_ops(vm, &ops)?;
     // A real buffer submission is the frame-publish signal (advisor rule).
     if ops.iter().any(|o| matches!(o, SurfaceOp::Buffer { .. })) {
         STATE.with(|s| s.borrow_mut().presented_frames += 1);
+    }
+    // ACOS commits a transaction synchronously inside `apply_ops`, so every
+    // `TransactionCommittedListener` registered on it runs exactly once, now,
+    // on the calling thread. A real `SurfaceFlinger` would run them on the
+    // requested executor after the apply; running them here is the faithful
+    // software-compositor equivalent. The list is cleared so re-applying the
+    // same transaction cannot fire the callback twice.
+    if !listeners.is_empty() {
+        STATE.with(|s| {
+            if let Some(t) = s.borrow_mut().transactions.get_mut(&handle) {
+                t.listeners.clear();
+            }
+        });
+        for listener in listeners {
+            vm.call_method(listener, "onTransactionCommitted", "()V", &[])
+                .map_err(bridge_err)?;
+        }
+    }
+    Ok(())
+}
+
+/// `SurfaceControl.nativeAddTransactionCommittedListener(J, listener)`.
+///
+/// Records the listener on its transaction; [`native_apply_transaction`]
+/// invokes `onTransactionCommitted()` when the transaction is applied.
+fn native_add_transaction_committed_listener(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
+    let listener = vm.arg_ref(ctx, 1);
+    let found = with_state(|st| {
+        st.transactions.get_mut(&handle).map(|t| {
+            if listener != 0 {
+                t.listeners.push(listener);
+            }
+        })
+    });
+    if found.is_none() {
+        return Err(missing_transaction(vm, handle));
     }
     Ok(())
 }
@@ -1336,6 +1392,7 @@ fn native_read_transaction_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<
                 id: handle,
                 ops,
                 animation: false,
+                listeners: Vec::new(),
             },
         );
         handle
@@ -1954,6 +2011,7 @@ fn blast_gather(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
                 id: handle,
                 ops: Vec::new(),
                 animation: false,
+                listeners: Vec::new(),
             },
         );
         handle

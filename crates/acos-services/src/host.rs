@@ -122,6 +122,11 @@ pub struct ServiceHost {
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
+    /// The `INotificationManager` state, kept here so the runtime (which plays
+    /// the system-UI role) can surface a toast the app asked for. Android shows
+    /// a text toast from `NotificationManagerService` in the system process;
+    /// ACOS has one process, so the runtime renders the recorded request.
+    notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -158,6 +163,7 @@ impl ServiceHost {
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
+            notification: None,
         }
     }
 
@@ -246,6 +252,23 @@ impl ServiceHost {
                 }
             }
         }
+    }
+
+    /// Register the `INotificationManager` state (called by
+    /// [`crate::registry::install`]).
+    pub fn set_notification_state(
+        &mut self,
+        state: std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>,
+    ) {
+        self.notification = Some(state);
+    }
+
+    /// The `INotificationManager` state, when the standard set is installed.
+    #[must_use]
+    pub fn notification_state(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>> {
+        self.notification.as_ref().map(std::sync::Arc::clone)
     }
 
     /// Enable the per-call trace.

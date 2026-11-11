@@ -81,6 +81,30 @@ fn push(record: LogRecord) {
     sink.push_back(record);
 }
 
+/// Push one record into the log sink from host (non-guest) code.
+///
+/// Used by the platform services that must surface a structured event into the
+/// same stream `acos logs` / `acos events` read (e.g. the toast the system
+/// service was asked to show). The record is indistinguishable from a guest
+/// `android.util.Log` write, which is the point: it is the platform logging, not
+/// the app.
+pub fn push_record(
+    priority: i32,
+    tag: &str,
+    msg: &str,
+    buffer: i32,
+) {
+    push(LogRecord {
+        buffer,
+        priority,
+        tag: tag.to_string(),
+        msg: truncate_payload(tag, msg),
+        timestamp: SystemTime::now(),
+        pid: std::process::id(),
+        tid: current_tid(),
+    });
+}
+
 /// Every record in the sink, oldest first.
 pub fn records() -> Vec<LogRecord> {
     lock().iter().cloned().collect()
