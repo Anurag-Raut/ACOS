@@ -26,11 +26,13 @@
 
 pub mod app;
 pub mod capture;
+pub mod cgroup;
 pub mod launch;
 pub mod session;
 pub mod launcher;
 pub mod logd;
 pub mod props;
+pub mod seccomp;
 pub mod watchdog;
 
 use std::ffi::OsString;
@@ -66,6 +68,10 @@ pub enum Error {
     Layout(String),
     #[error("tool failed: {0}")]
     Tool(String),
+    #[error("MEMORY_CGROUP_UNAVAILABLE: {0}")]
+    CgroupUnavailable(String),
+    #[error("SECCOMP_UNAVAILABLE: {0}")]
+    SeccompUnavailable(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -182,6 +188,7 @@ impl ArtRoot {
             "misc/apexdata/com.android.art/dalvik-cache/x86_64",
             "linkerconfig",
             "runs",
+            "seccomp",
             "socket",
             "system/environ",
             "tmp",
@@ -790,6 +797,9 @@ pub struct Sandbox<'a> {
     args: Vec<String>,
     /// Per-run writable data root (`None` = the one shared `<data>` tree).
     run_root: Option<PathBuf>,
+    /// Guest-side seccomp filter (S5): preload the freestanding stub, which
+    /// installs the filter and logs SIGSYS denials.
+    seccomp_guest: bool,
     /// Host-side build step: keep today's fully-writable `<data>` (regenerating
     /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
     staging: bool,
@@ -819,8 +829,17 @@ impl<'a> Sandbox<'a> {
             image: None,
             args: Vec::new(),
             run_root: None,
+            seccomp_guest: false,
             staging: false,
         }
+    }
+
+    /// Make this run install the guest-side seccomp-bpf filter before ART runs.
+    /// The freestanding stub is preloaded (it installs the filter from
+    /// `/data/seccomp/seccomp.bpf` in its constructor and logs denials).
+    pub fn seccomp_guest(&mut self, on: bool) -> &mut Self {
+        self.seccomp_guest = on;
+        self
     }
 
     /// Use a per-run writable data root: shared inputs become read-only in the
@@ -1015,6 +1034,23 @@ impl<'a> Sandbox<'a> {
             a.push(host.into());
             a.push(guest.into());
         }
+        if self.seccomp_guest {
+            // The filter blob and the freestanding installer: read-only inputs.
+            let dir = r.data.join("seccomp");
+            if !dir.join("seccomp.bpf").is_file()
+                || !dir.join("libacos_seccomp_guest.so").is_file()
+            {
+                return Err(Error::SeccompUnavailable(format!(
+                    "guest guard not built in {} (run `acos-art build-shim`)",
+                    dir.display()
+                )));
+            }
+            a.push("--ro-bind".into());
+            a.push(dir.into());
+            a.push("/data/seccomp".into());
+            // The program is installed by the preloaded stub's constructor, so
+            // it lands after bionic finished loading and before ART's main.
+        }
         if self.shim {
             let shim = r.data.join("shim/libartshim.so");
             if !shim.is_file() {
@@ -1050,7 +1086,27 @@ impl<'a> Sandbox<'a> {
             // Before `derive_classpath` has run (e.g. the linkerconfig step).
             None => (r.device_bootclasspath()?, Some(r.fallback_dex2oat_classpath()?)),
         };
+        // One LD_PRELOAD line, assembled from every source: the guest seccomp
+        // guard first (its constructor installs the filter before any other
+        // preloaded library runs), then whatever the route/shims installed.
+        // bwrap keeps only the *last* `--setenv` of a key, so duplicates would
+        // silently drop the guard.
+        let mut preload: Vec<String> = self
+            .env
+            .iter()
+            .filter(|(k, _)| k == "LD_PRELOAD")
+            .map(|(_, v)| v.clone())
+            .collect();
+        if self.shim {
+            preload.push("/data/shim/libartshim.so".to_string());
+        }
+        if self.seccomp_guest {
+            preload.insert(0, seccomp::GUEST_SO.to_string());
+        }
         for (k, v) in &self.env {
+            if k == "LD_PRELOAD" {
+                continue;
+            }
             let v = if k.as_str() == "BOOTCLASSPATH" { bc.join(":") } else { v.clone() };
             a.push("--setenv".into());
             a.push(k.as_str().into());
@@ -1061,10 +1117,10 @@ impl<'a> Sandbox<'a> {
             a.push("DEX2OATBOOTCLASSPATH".into());
             a.push(dx.join(":").as_str().into());
         }
-        if self.shim {
+        if !preload.is_empty() {
             a.push("--setenv".into());
             a.push("LD_PRELOAD".into());
-            a.push("/data/shim/libartshim.so".into());
+            a.push(preload.join(" ").into());
         }
         if let Some(img) = &self.image {
             // A boot image is a build input: the guest may read it, never
@@ -1290,7 +1346,7 @@ pub fn build_shim(dest_dir: &Path) -> Result<PathBuf> {
     Ok(out)
 }
 
-fn simple_hash(s: &str) -> u64 {
+pub(crate) fn simple_hash(s: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.as_bytes() {
         h ^= *b as u64;

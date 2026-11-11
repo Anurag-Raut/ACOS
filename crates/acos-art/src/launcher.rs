@@ -9,6 +9,7 @@
 //! `exec` (`RLIMIT_AS`, `RLIMIT_CORE=0`, `RLIMIT_NOFILE`, `PDEATHSIG`).
 
 use crate::capture::{stream_cap_from_env, TailBuffer};
+use crate::cgroup::{MemoryLimits, RunCgroup};
 use crate::logd::{LogEntry, LogStats, Logd};
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
@@ -183,8 +184,14 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
         .map(|d| d.join("x86_64/boot.art").is_file())
         .unwrap_or(false);
 
+    // S5 layer 2: the guest-side seccomp-bpf filter. Built (or reused from the
+    // content-hash cache) before the argv is assembled, and fail-closed: no
+    // guard artefacts means no run.
+    crate::seccomp::build_guest(&root.data.join("seccomp"))?;
+
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    sb.seccomp_guest(true);
     sb.with_shim(shim_built.is_some());
     sb.dir("/data/task");
     sb.args(Vec::new());
@@ -217,7 +224,18 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     // namespace lookup off it (the `/apex/<module>` spelling makes it fall back
     // to the default namespace, which cannot see libnativehelper.so).
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
-    let mut cmd = sb.command(dalvik, &argv)?;
+    let cmd = sb.command(dalvik, &argv)?;
+
+    // S5 layer 1: a mandatory cgroup v2 scope. No cgroup ⇒ no run (there is no
+    // `ulimit -v` fallback: it breaks Scudo and is not a kernel ceiling).
+    let limits = MemoryLimits::from_env()?;
+    // Absolute: the scope's shell may not share the launcher's cwd.
+    let scope_info = std::fs::canonicalize(run.path())
+        .unwrap_or_else(|_| run.path().to_path_buf())
+        .join("cgroup");
+    let mut cgroup = RunCgroup::prepare(limits, scope_info)?;
+    let mut cmd = cgroup.wrap(&cmd)?;
+
     let rlimit_as = opts.rlimit_as_mb;
     unsafe {
         cmd.pre_exec(move || {
@@ -244,8 +262,22 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     let mut command: Command = cmd;
 
     let started = Instant::now();
-    let mut child = command.spawn().map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
+    let mut child = command
+        .spawn()
+        .map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
     let pid = child.id() as i32;
+
+    // Prove the cgroup before letting the run continue. A scope we cannot
+    // verify is killed: fail closed, never "run it anyway".
+    if let Err(e) = cgroup.confirm(Duration::from_secs(10)) {
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+            libc::kill(pid, libc::SIGKILL);
+        }
+        cgroup.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
 
     // Captured with a hard ceiling: a guest that loops on printf must not be
     // able to grow this process (R1: read_to_end was the unbounded allocation).
@@ -272,6 +304,7 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     }
 
     let mut timed_out = false;
+    let mut wall_tick: Option<Instant> = None;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
@@ -289,19 +322,32 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
                 break None;
             }
         }
+        if wall_tick.is_none() || wall_tick.is_some_and(|t: Instant| t.elapsed() > Duration::from_millis(100)) {
+            cgroup.sample();
+            wall_tick = Some(Instant::now());
+        }
         if started.elapsed() >= opts.timeout {
             timed_out = true;
-            // Kill the whole group: bwrap + dalvikvm64 + ART threads.
+            // Kill the whole group and, belt-and-braces, the whole scope:
+            // bwrap + dalvikvm64 + ART threads + anything they forked.
             unsafe {
                 libc::kill(-pid, libc::SIGKILL);
                 libc::kill(pid, libc::SIGKILL);
             }
+            cgroup.kill();
             let _ = child.wait();
             break None;
         }
         std::thread::sleep(Duration::from_millis(5));
     };
     let wall_ms = started.elapsed().as_millis() as u64;
+    cgroup.sample();
+
+    // Guest seccomp evidence: the freestanding preload appends to
+    // /data/out/seccomp.log (host path: the run root). A missing "OK" line is
+    // fail-closed: a run whose filter we cannot prove is not a run we trust.
+    let guard_log_path = run.path().join("out/seccomp.log");
+    let guard_report = std::fs::read_to_string(&guard_log_path).unwrap_or_default();
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -365,6 +411,49 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
                 trip.killed_pgid
             ));
         }
+    }
+    // The cgroup is the *guest's* ceiling: an OOM kill inside the scope is a
+    // host-resource outcome (and it never touched the host allocator).
+    if cgroup.oom_kills() > 0 {
+        outcome = Outcome::Unsupported;
+        code = Some(HOST_MEMORY_LIMIT.to_string());
+        diagnostics.push(format!(
+            "{HOST_MEMORY_LIMIT}: memcg OOM-killed the run ({} kill(s) in {}); \
+             memory.max={}MiB swap=0",
+            cgroup.oom_kills(),
+            cgroup.path().display(),
+            limits.mem_bytes / 1024 / 1024
+        ));
+    }
+    diagnostics.push(cgroup.summary());
+    // Guest seccomp guard: OK/ERR at install, DENY on a blocked syscall.
+    let mut guard_ok = false;
+    for line in guard_report.lines().filter(|l| !l.trim().is_empty()) {
+        if let Some(rest) = line.strip_prefix("OK ") {
+            guard_ok = true;
+            diagnostics.push(format!("seccomp: {rest}"));
+        } else if let Some(rest) = line.strip_prefix("ERR ") {
+            diagnostics.push(format!("seccomp: ERR {rest}"));
+        } else if let Some(rest) = line.strip_prefix("DENY ") {
+            diagnostics.push(format!("seccomp denial: {rest}"));
+            if outcome == Outcome::Ok {
+                outcome = Outcome::Unsupported;
+                code = Some("UNSUPPORTED_SYSCALL".into());
+            }
+        }
+    }
+    // Fail closed: the filter is mandatory, so a run whose guard never reported
+    // is not trusted. Two exceptions are already a structured host-resource
+    // outcome (the watchdog/cgroup killed the run before the guest's
+    // constructor could run); those stay reported, not turned into a new error.
+    let killed_by_host = dog.as_ref().and_then(|d| d.trip()).is_some() || cgroup.oom_kills() > 0;
+    if !guard_ok && !killed_by_host {
+        return Err(Error::SeccompUnavailable(format!(
+            "the guest seccomp guard did not install (report: {:?}, exit: {:?}, stderr: {})",
+            guard_report.trim(),
+            exit,
+            crate::capture::head(&stderr, 400)
+        )));
     }
     let _ = &mut code;
     if let Some(img) = &image {
