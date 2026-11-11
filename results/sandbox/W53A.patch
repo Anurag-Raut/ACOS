@@ -1,0 +1,2513 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index a633a2d..b41a996 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -32,6 +32,7 @@ dependencies = [
+  "acos-protocol",
+  "acos-render",
+  "acos-runtime",
++ "acos-sandbox",
+  "acos-services",
+  "acos-verify",
+  "acos-vm",
+@@ -94,6 +95,7 @@ name = "acos-native-loader"
+ version = "0.1.0"
+ dependencies = [
+  "acos-render",
++ "acos-sandbox",
+  "cc",
+  "libc",
+  "serde",
+@@ -162,6 +164,16 @@ dependencies = [
+  "thiserror",
+ ]
+ 
++[[package]]
++name = "acos-sandbox"
++version = "0.1.0"
++dependencies = [
++ "libc",
++ "serde",
++ "serde_json",
++ "thiserror",
++]
++
+ [[package]]
+ name = "acos-services"
+ version = "0.1.0"
+diff --git a/DECISIONS.md b/DECISIONS.md
+index 55b47bb..2d239c3 100644
+--- a/DECISIONS.md
++++ b/DECISIONS.md
+@@ -608,3 +608,69 @@ Status: accepted (2026-11-11), workstream 3 of cross-platform apps.
+   `GetEnv == JNI_OK` → `DetachCurrentThread == JNI_OK` → `JNI_EDETACHED`
+   (`jni_native_fixture`, bit 10). `jni_slots::javavm_attach_getenv_and_versions`
+   keeps the owner-thread contract.
++
++---
++
++## ADR-0022 — Native confinement layer: `acos-sandbox`, no sudo, fail closed
++
++Status: accepted (W53-A, 2026-11-11), supersedes the ADR-0018 note's
++"native loader sandbox gap" as a *limitation* (the gap is now closed by a
++layer; product wiring is still pending).
++
++- **Context.** `acos-native-loader` maps guest ELF `PROT_EXEC` and runs it in
++  the host process. The ADR-0018 note recorded that this is unsandboxed and
++  therefore disabled for product paths. Cross-platform apps (workstream 1)
++  need a confinement layer before an untrusted APK `.so` can run inside the
++  ACOS session process, with **no sudo and no kernel/system changes**.
++- **Decision.** Add `crates/acos-sandbox`, the *only* ACOS crate allowed to
++  hold the `unsafe`/`libc` calls needed to enter a sandbox. It exposes a
++  capability probe (`probe`, `Capabilities`), a profile (`ConfineProfile`), an
++  orchestrator (`confine`) and a live fork probe (`probe_live`). Layers, in
++  application order:
++  1. `prctl(PR_SET_NO_NEW_PRIVS)`;
++  2. close inherited fds except `keep_fds` (`close_range`, `ENOSYS` fallback);
++  3. sanitised env (`clearenv` + a minimal Android-flavoured set);
++  4. rlimits (`RLIMIT_AS=4 GiB`, `NOFILE=1024`, `NPROC=8192`, `CPU=60 s`,
++     `CORE=0`, all configurable);
++  5. optional unprivileged user/network/mount namespaces (`uid_map`/`gid_map`
++     + private mount propagation);
++  6. Landlock filesystem ruleset via the raw ABI (syscalls 444/445/446):
++     `handled_access_fs` is every right the ABI supports, read-only roots grant
++     `EXECUTE|READ_FILE|READ_DIR`, read-write roots grant the full mask, and
++     any path outside the listed roots is denied;
++  7. seccomp-bpf (`SECCOMP_SET_MODE_FILTER` + `TSYNC`; default `ALLOW`, denials
++     return `EACCES`) denying `execve`/`execveat`, `ptrace`, `process_vm_*`,
++     `mount`/`umount2`/`pivot_root`/`chroot`, `unshare`/`setns`, `kexec*`,
++     `bpf`, `perf_event_open`, `keyctl`/`add_key`/`request_key`, module ops,
++     `reboot`, and `socket`/`socketpair` for every family except `AF_UNIX`;
++     `futex`, threads, `mmap`/`mprotect` (including `PROT_EXEC`), signals,
++     clocks, `eventfd` and `epoll` stay available.
++  Optional cgroup-v2 memory/PID limits via `systemd-run --user --scope` are
++  **probed only** and never required.
++- **Ordering deviation from the work item.** Namespaces are applied *before*
++  Landlock/seccomp (not last): writing `uid_map` needs `/proc` and making
++  mounts private needs `mount`, both of which the later layers deny. This is
++  the only deviation; `PR_SET_NO_NEW_PRIVS` still precedes Landlock and seccomp.
++- **Fail closed.** `confine` returns a structured `ConfineError` with code
++  `CONFINEMENT_UNAVAILABLE` whenever a layer in `ConfineProfile::required` is
++  not active. It never reports a layer active unless the kernel accepted it.
++  `confinement_active()` is a process-global bit set only when
++  `PR_SET_NO_NEW_PRIVS` + Landlock + seccomp are all active.
++- **Native-loader integration.** `LoaderConfig` gains `require_confinement:
++  bool` (default `true`); `Loader::load_bytes_named` refuses with
++  `LoaderError::ConfinementRequired` (code `CONFINEMENT_UNAVAILABLE`) unless
++  the process reports confinement. Trusted in-process tests use the
++  clearly-named `LoaderConfig::for_tests_without_confinement()`; product paths
++  must not. `acos sandbox-probe` reports capabilities and a live layer report
++  as JSON.
++- **Evidence.** `cargo test -p acos-sandbox` runs `sandbox_child` as a separate
++  process and asserts, with confinement on, that `exec`, `ptrace`,
++  `process_vm_readv`, `socket(AF_INET)`, and open/write outside the allowed
++  roots fail while threads, `mmap(PROT_EXEC)`, `futex`, read of the read-only
++  root and write to the data dir succeed; with confinement off the denied
++  actions succeed, proving the sandbox is the cause. On the dev host (kernel
++  `7.2.11-arch1-1`, Landlock ABI 10) all six mandatory layers are active.
++- **Open question.** Running the confinement inside the already-multithreaded
++  session process: seccomp is installed with `TSYNC`, so `confine` must be
++  called before the runtime spawns coordinator threads, or the call fails
++  closed. The session-lifecycle workstream (W51-A) owns that call site.
+diff --git a/crates/acos-cli/Cargo.toml b/crates/acos-cli/Cargo.toml
+index bec695a..fe6fc89 100644
+--- a/crates/acos-cli/Cargo.toml
++++ b/crates/acos-cli/Cargo.toml
+@@ -17,6 +17,7 @@ acos-native-loader = { path = "../acos-native-loader" }
+ acos-protocol = { path = "../acos-protocol" }
+ acos-render = { path = "../acos-render" }
+ acos-runtime = { path = "../acos-runtime" }
++acos-sandbox = { path = "../acos-sandbox" }
+ acos-services = { path = "../acos-services" }
+ acos-verify = { path = "../acos-verify" }
+ acos-vm = { path = "../acos-vm" }
+diff --git a/crates/acos-cli/src/main.rs b/crates/acos-cli/src/main.rs
+index d4ed8c4..8a48e37 100644
+--- a/crates/acos-cli/src/main.rs
++++ b/crates/acos-cli/src/main.rs
+@@ -11,6 +11,7 @@ mod launch;
+ mod native_inventory;
+ mod observe_tree;
+ mod parity;
++mod sandbox_probe;
+ mod session;
+ mod verify;
+ 
+@@ -67,6 +68,8 @@ enum Command {
+     Parity(parity::ParityArgs),
+     /// Measure an ACOS V1 metric (BENCHMARKS.md §2/§5).
+     Bench(bench::BenchArgs),
++    /// Probe confinement capabilities and report which layers are active (JSON).
++    SandboxProbe,
+ }
+ 
+ #[derive(Debug, clap::Args)]
+@@ -158,6 +161,7 @@ fn main() -> ExitCode {
+         Command::Parity(args) => parity::run(args),
+         Command::Bench(args) => bench::run(args),
+         Command::NativeInventory(args) => native_inventory::run(args),
++        Command::SandboxProbe => sandbox_probe::run(),
+     }
+ }
+ 
+diff --git a/crates/acos-cli/src/sandbox_probe.rs b/crates/acos-cli/src/sandbox_probe.rs
+new file mode 100644
+index 0000000..794b733
+--- /dev/null
++++ b/crates/acos-cli/src/sandbox_probe.rs
+@@ -0,0 +1,48 @@
++//! `acos sandbox-probe` — report confinement capabilities and which layers
++//! are actually active on this host.
++//!
++//! The static capabilities are read from `/proc`/`/sys`; the `live` object
++//! comes from forking a child that applies the profile and reports the layer
++//! outcomes. The command always emits the standard ACOS JSON envelope.
++
++use std::process::ExitCode;
++
++use acos_protocol::{Backend, Envelope, Fidelity, Metrics};
++use serde_json::{json, Value};
++
++use crate::new_request_id;
++
++/// Run `acos sandbox-probe`.
++pub fn run() -> ExitCode {
++    let request_id = new_request_id();
++    let caps = acos_sandbox::probe();
++    let systemd_scope = acos_sandbox::systemd_user_scope_available();
++
++    let scratch = std::env::temp_dir().join(format!("acos-sandbox-probe-{}", std::process::id()));
++    let _ = std::fs::create_dir_all(&scratch);
++    let profile = acos_sandbox::ConfineProfile::probe(scratch.clone()).with_namespaces();
++    let live = acos_sandbox::probe_live(&profile);
++    let _ = std::fs::remove_dir_all(&scratch);
++
++    let live: Value = match live {
++        Ok(report) => json!(report),
++        Err(e) => json!({"error": e.to_string(), "code": e.code()}),
++    };
++
++    let result = json!({
++        "capabilities": caps,
++        "systemd_user_scope": systemd_scope,
++        "live": live,
++    });
++
++    let envelope = Envelope::pass(
++        &request_id,
++        Backend::AcosNative,
++        Fidelity::NativeRuntime,
++        Metrics::wall_ms(0),
++    )
++    .with_value_result(result)
++    .with_capabilities(["sandbox.probe"]);
++    crate::print_json(&envelope);
++    ExitCode::SUCCESS
++}
+diff --git a/crates/acos-jni/tests/jni_native_fixture.rs b/crates/acos-jni/tests/jni_native_fixture.rs
+index 0c18009..0c08cb0 100644
+--- a/crates/acos-jni/tests/jni_native_fixture.rs
++++ b/crates/acos-jni/tests/jni_native_fixture.rs
+@@ -49,7 +49,9 @@ fn native_fixture_exercises_slots_through_jni_table() {
+     rt.attach(&mut vm).expect("attach");
+     rt.bind(&mut vm);
+ 
+-    let loader = Loader::new(LoaderConfig::default());
++    // The fixture is a trusted checked-in test object, not guest code; this
++    // trusted test process is not confined, so opt out explicitly (ADR-0022).
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
+     let handle = loader.load_file(&path).expect("load fixture .so");
+ 
+     let sym = handle
+diff --git a/crates/acos-native-loader/Cargo.toml b/crates/acos-native-loader/Cargo.toml
+index e14de0a..c9db241 100644
+--- a/crates/acos-native-loader/Cargo.toml
++++ b/crates/acos-native-loader/Cargo.toml
+@@ -12,6 +12,7 @@ name = "acos_native_loader"
+ path = "src/lib.rs"
+ 
+ [dependencies]
++acos-sandbox = { path = "../acos-sandbox" }
+ libc = "0.2"
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+diff --git a/crates/acos-native-loader/examples/bench.rs b/crates/acos-native-loader/examples/bench.rs
+index 8cdd6cb..0f74339 100644
+--- a/crates/acos-native-loader/examples/bench.rs
++++ b/crates/acos-native-loader/examples/bench.rs
+@@ -44,7 +44,7 @@ fn main() {
+         .unwrap_or(200);
+     let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+     let loader = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(data.clone())
+             .with_log_sink(Arc::new(NullSink)),
+     );
+diff --git a/crates/acos-native-loader/examples/jni_smoke.rs b/crates/acos-native-loader/examples/jni_smoke.rs
+index 6900a71..08d2abd 100644
+--- a/crates/acos-native-loader/examples/jni_smoke.rs
++++ b/crates/acos-native-loader/examples/jni_smoke.rs
+@@ -19,7 +19,7 @@ unsafe fn sym_fn<R>(p: *const c_void) -> R {
+ 
+ fn main() {
+     let jni = TestJni::install();
+-    let loader = Loader::new(LoaderConfig::default());
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
+     let bytes = std::fs::read(data("libhellojni.so")).expect("read");
+     let h = loader
+         .load_bytes(&bytes, "libhellojni.so")
+diff --git a/crates/acos-native-loader/examples/missing_report.rs b/crates/acos-native-loader/examples/missing_report.rs
+index 576690d..c99872a 100644
+--- a/crates/acos-native-loader/examples/missing_report.rs
++++ b/crates/acos-native-loader/examples/missing_report.rs
+@@ -10,7 +10,7 @@ fn main() {
+     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+     let path = dir.join("libtestmissing.so");
+ 
+-    let strict = Loader::new(LoaderConfig::default().with_search_path(dir.clone()));
++    let strict = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(dir.clone()));
+     match strict.load_file(&path) {
+         Ok(_) => println!("unexpected success"),
+         Err(e) => {
+@@ -20,7 +20,7 @@ fn main() {
+     }
+ 
+     let lazy = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(dir)
+             .with_missing_policy(MissingPolicy::LazyTrap),
+     );
+diff --git a/crates/acos-native-loader/examples/smoke.rs b/crates/acos-native-loader/examples/smoke.rs
+index e5f2c49..59275e5 100644
+--- a/crates/acos-native-loader/examples/smoke.rs
++++ b/crates/acos-native-loader/examples/smoke.rs
+@@ -14,7 +14,7 @@ fn data(name: &str) -> PathBuf {
+ fn main() {
+     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+     let loader = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(dir)
+             .with_missing_policy(MissingPolicy::Strict),
+     );
+diff --git a/crates/acos-native-loader/src/error.rs b/crates/acos-native-loader/src/error.rs
+index 0c9a4ab..fe5ad2d 100644
+--- a/crates/acos-native-loader/src/error.rs
++++ b/crates/acos-native-loader/src/error.rs
+@@ -52,6 +52,16 @@ pub enum LoaderError {
+     /// Caller supplied an invalid argument.
+     #[error("invalid argument: {0}")]
+     InvalidArgument(String),
++
++    /// Native loading was refused because the process is not confined.
++    ///
++    /// The loader maps `PROT_EXEC` guest code in-process, so it refuses to
++    /// proceed unless `PR_SET_NO_NEW_PRIVS`, Landlock and seccomp are active
++    /// (see DECISIONS.md ADR-0022).
++    #[error(
++        "refusing to load native code: process confinement is not active (CONFINEMENT_UNAVAILABLE)"
++    )]
++    ConfinementRequired,
+ }
+ 
+ impl LoaderError {
+@@ -67,6 +77,7 @@ impl LoaderError {
+             LoaderError::Io(_) => "NATIVE_IO_ERROR",
+             LoaderError::SymbolNotFound(_) => "NATIVE_SYMBOL_NOT_FOUND",
+             LoaderError::InvalidArgument(_) => "NATIVE_INVALID_ARGUMENT",
++            LoaderError::ConfinementRequired => "CONFINEMENT_UNAVAILABLE",
+         }
+     }
+ }
+diff --git a/crates/acos-native-loader/src/lib.rs b/crates/acos-native-loader/src/lib.rs
+index a7ffd3e..3c53522 100644
+--- a/crates/acos-native-loader/src/lib.rs
++++ b/crates/acos-native-loader/src/lib.rs
+@@ -62,7 +62,7 @@ pub enum MissingPolicy {
+ }
+ 
+ /// Loader configuration.
+-#[derive(Clone, Default)]
++#[derive(Clone)]
+ pub struct LoaderConfig {
+     /// Directories searched for `DT_NEEDED` libraries (e.g. the extracted
+     /// APK `lib/x86_64/` directory).
+@@ -81,6 +81,30 @@ pub struct LoaderConfig {
+     /// paths until a seccomp/landlock sandbox exists (see DECISIONS.md,
+     /// ADR-0018 note).
+     pub allow_host_paths: bool,
++    /// When `true` (the default), the loader refuses to map a guest `.so`
++    /// unless this process reports an active confinement (`PR_SET_NO_NEW_PRIVS`
++    /// + Landlock + seccomp; see [`acos_sandbox::confinement_active`]).
++    ///
++    /// Product paths must leave this on. Trusted in-process tests that map
++    /// their own test libraries without entering a sandbox disable it with
++    /// [`LoaderConfig::for_tests_without_confinement`]. See DECISIONS.md
++    /// ADR-0022.
++    pub require_confinement: bool,
++}
++
++impl Default for LoaderConfig {
++    fn default() -> Self {
++        LoaderConfig {
++            search_paths: Vec::new(),
++            missing_policy: MissingPolicy::default(),
++            log_sink: None,
++            system_properties: HashMap::new(),
++            allow_host_paths: false,
++            // Product default: never map guest `PROT_EXEC` code unless the
++            // process is confined (ADR-0022).
++            require_confinement: true,
++        }
++    }
+ }
+ 
+ impl std::fmt::Debug for LoaderConfig {
+@@ -90,6 +114,7 @@ impl std::fmt::Debug for LoaderConfig {
+             .field("missing_policy", &self.missing_policy)
+             .field("log_sink", &self.log_sink.is_some())
+             .field("system_properties", &self.system_properties.len())
++            .field("require_confinement", &self.require_confinement)
+             .finish()
+     }
+ }
+@@ -118,4 +143,19 @@ impl LoaderConfig {
+         self.allow_host_paths = true;
+         self
+     }
++
++    /// Test-only: a loader that does not require an active confinement.
++    ///
++    /// This exists for trusted in-process tests that map their own test
++    /// libraries and never run untrusted APK code. **Product code must not use
++    /// it** — it defeats the ADR-0022 guarantee that native APK code only runs
++    /// under a seccomp/landlock sandbox. Runs are still safe because the test
++    /// inputs are checked-in fixtures, not guest code.
++    #[doc(hidden)]
++    pub fn for_tests_without_confinement() -> Self {
++        LoaderConfig {
++            require_confinement: false,
++            ..LoaderConfig::default()
++        }
++    }
+ }
+diff --git a/crates/acos-native-loader/src/loader.rs b/crates/acos-native-loader/src/loader.rs
+index 8d09804..4d35253 100644
+--- a/crates/acos-native-loader/src/loader.rs
++++ b/crates/acos-native-loader/src/loader.rs
+@@ -338,6 +338,12 @@ impl Loader {
+         path: Option<PathBuf>,
+         name: &str,
+     ) -> Result<LibraryHandle> {
++        // ADR-0022: mapping `PROT_EXEC` guest code in-process is only allowed
++        // once this process reports an active confinement. Product paths leave
++        // `require_confinement` on; trusted tests opt out explicitly.
++        if self.inner.config.require_confinement && !acos_sandbox::confinement_active() {
++            return Err(LoaderError::ConfinementRequired);
++        }
+         let root = self.load_object(bytes, path, name)?;
+         // Recursively load DT_NEEDED dependencies (pre-order registration gives
+         // the ELF global search order: root, then deps breadth/depth-first).
+diff --git a/crates/acos-native-loader/tests/cpp_features.rs b/crates/acos-native-loader/tests/cpp_features.rs
+index a7a2ec6..64a5d34 100644
+--- a/crates/acos-native-loader/tests/cpp_features.rs
++++ b/crates/acos-native-loader/tests/cpp_features.rs
+@@ -9,7 +9,7 @@ fn cpp_features_and_destructor_on_unload() {
+     let _g = common::serial();
+     let sink = common::RecordingSink::new_arc();
+     let loader = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(common::data_dir())
+             .with_log_sink(sink.clone()),
+     );
+diff --git a/crates/acos-native-loader/tests/deps.rs b/crates/acos-native-loader/tests/deps.rs
+index 438b991..06cf2c9 100644
+--- a/crates/acos-native-loader/tests/deps.rs
++++ b/crates/acos-native-loader/tests/deps.rs
+@@ -7,7 +7,7 @@ use acos_native_loader::{Loader, LoaderConfig};
+ #[test]
+ fn dependency_order_and_interposition() {
+     let _g = common::serial();
+-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+     let h = loader.load_file(&common::data("libtestuser.so")).unwrap();
+ 
+     // user_run checks: dep_greet, dep_calls_hook (dep's undefined symbol binds
+diff --git a/crates/acos-native-loader/tests/jni.rs b/crates/acos-native-loader/tests/jni.rs
+index c9c988b..28da67e 100644
+--- a/crates/acos-native-loader/tests/jni.rs
++++ b/crates/acos-native-loader/tests/jni.rs
+@@ -16,7 +16,7 @@ use std::os::raw::c_void;
+ fn hello_jni_end_to_end() {
+     let _g = common::serial();
+     let jni = TestJni::install();
+-    let loader = Loader::new(LoaderConfig::default());
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
+     let bytes = std::fs::read(common::data("libhellojni.so")).expect("read fixture .so");
+     let h = loader
+         .load_bytes(&bytes, "libhellojni.so")
+diff --git a/crates/acos-native-loader/tests/leak.rs b/crates/acos-native-loader/tests/leak.rs
+index 913da40..d1883b9 100644
+--- a/crates/acos-native-loader/tests/leak.rs
++++ b/crates/acos-native-loader/tests/leak.rs
+@@ -16,7 +16,7 @@ fn load_unload_1000_times_does_not_leak_mappings() {
+     let _g = common::serial();
+     let sink = common::RecordingSink::new_arc();
+     let loader = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(common::data_dir())
+             .with_log_sink(sink),
+     );
+diff --git a/crates/acos-native-loader/tests/native_features.rs b/crates/acos-native-loader/tests/native_features.rs
+index 59cc91b..79d8ffe 100644
+--- a/crates/acos-native-loader/tests/native_features.rs
++++ b/crates/acos-native-loader/tests/native_features.rs
+@@ -11,7 +11,7 @@ use common::{cstr, RecordingSink};
+ fn c_library_all_features_including_packed_relocations() {
+     let _g = common::serial();
+     std::env::set_var("ACOS_TEST_ENV", "present");
+-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+ 
+     // Plain RELA, Android APS2 packed RELA, and RELR packed forms must all load
+     // and pass the same feature checks.
+@@ -43,7 +43,7 @@ fn log_lines_are_captured_by_the_sink() {
+     let _g = common::serial();
+     std::env::set_var("ACOS_TEST_ENV", "present");
+     let sink = RecordingSink::new_arc();
+-    let config = LoaderConfig::default()
++    let config = LoaderConfig::for_tests_without_confinement()
+         .with_search_path(common::data_dir())
+         .with_log_sink(sink.clone());
+     let loader = Loader::new(config);
+diff --git a/crates/acos-native-loader/tests/ndk.rs b/crates/acos-native-loader/tests/ndk.rs
+index 447509e..98e59ca 100644
+--- a/crates/acos-native-loader/tests/ndk.rs
++++ b/crates/acos-native-loader/tests/ndk.rs
+@@ -389,7 +389,10 @@ fn ndk_surface_is_backed_by_real_acos_state() {
+     });
+     install_ndk_host(host.clone());
+ 
+-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    // Trusted checked-in test object in an unconfined test process; use the
++    // explicit test-only confinement opt-out (ADR-0022).
++    let loader =
++        Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+     let h = loader.load_file(&common::data("libacosndk.so")).unwrap();
+ 
+     // --- assets: bytes come from the APK entry ---------------------------
+diff --git a/crates/acos-native-loader/tests/policy.rs b/crates/acos-native-loader/tests/policy.rs
+index 78c1573..e6b9d4c 100644
+--- a/crates/acos-native-loader/tests/policy.rs
++++ b/crates/acos-native-loader/tests/policy.rs
+@@ -8,7 +8,7 @@ use acos_native_loader::{Loader, LoaderConfig, LoaderError, MissingPolicy};
+ #[test]
+ fn strict_mode_reports_all_missing_symbols() {
+     let _g = common::serial();
+-    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+     let err = loader
+         .load_file(&common::data("libtestmissing.so"))
+         .err()
+@@ -32,7 +32,7 @@ fn lazy_trap_binds_and_reports_symbol() {
+     let _g = common::serial();
+     let before = trap::stub_count();
+     let loader = Loader::new(
+-        LoaderConfig::default()
++        LoaderConfig::for_tests_without_confinement()
+             .with_search_path(common::data_dir())
+             .with_missing_policy(MissingPolicy::LazyTrap),
+     );
+@@ -50,7 +50,7 @@ fn lazy_trap_binds_and_reports_symbol() {
+ #[test]
+ fn arm64_library_is_reported_as_wrong_abi() {
+     let _g = common::serial();
+-    let loader = Loader::new(LoaderConfig::default());
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
+     let err = loader
+         .load_file(&common::data("libhellojni-arm64.so"))
+         .err()
+@@ -63,7 +63,7 @@ fn arm64_library_is_reported_as_wrong_abi() {
+ fn missing_dependency_is_structured() {
+     let _g = common::serial();
+     // libtestuser needs libtestdep; point the search path somewhere empty.
+-    let loader = Loader::new(LoaderConfig::default());
++    let loader = Loader::new(LoaderConfig::for_tests_without_confinement());
+     let err = loader
+         .load_file(&common::data("libtestuser.so"))
+         .err()
+@@ -78,7 +78,7 @@ fn missing_dependency_is_structured() {
+ #[test]
+ fn dlopen_refuses_an_absolute_host_path() {
+     let _g = common::serial();
+-    let _loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    let _loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+     let c = std::ffi::CString::new("/lib/x86_64-linux-gnu/libc.so.6").unwrap();
+     let h = unsafe { acos_native_loader::bionic::dl::dlopen(c.as_ptr(), 0) };
+     assert!(
+@@ -86,3 +86,18 @@ fn dlopen_refuses_an_absolute_host_path() {
+         "dlopen of an absolute host library must be refused by the default policy"
+     );
+ }
++
++/// ADR-0022: the default loader refuses to map any guest `.so` unless the
++/// process reports an active confinement. This test process is not confined,
++/// so even a checked-in test library must be refused.
++#[test]
++fn default_config_refuses_without_active_confinement() {
++    let _g = common::serial();
++    let loader = Loader::new(LoaderConfig::default().with_search_path(common::data_dir()));
++    let err = loader
++        .load_file(&common::data("libtestc.so"))
++        .err()
++        .expect("an unconfined process must not load native code");
++    assert_eq!(err.code(), "CONFINEMENT_UNAVAILABLE");
++    assert!(matches!(err, LoaderError::ConfinementRequired));
++}
+diff --git a/crates/acos-sandbox/Cargo.toml b/crates/acos-sandbox/Cargo.toml
+new file mode 100644
+index 0000000..830c85a
+--- /dev/null
++++ b/crates/acos-sandbox/Cargo.toml
+@@ -0,0 +1,24 @@
++[package]
++name = "acos-sandbox"
++version.workspace = true
++edition.workspace = true
++license.workspace = true
++rust-version.workspace = true
++description = "Confinement layer for ACOS: no_new_privs, fd/env/rlimit hygiene, Landlock filesystem rulesets and seccomp-bpf syscall filtering. The only ACOS crate allowed to hold the unsafe/libc calls needed to enter a sandbox (see DECISIONS.md ADR-0022)."
++
++[lib]
++name = "acos_sandbox"
++path = "src/lib.rs"
++
++[[bin]]
++name = "sandbox_child"
++path = "src/bin/sandbox_child.rs"
++
++[dependencies]
++libc = "0.2"
++serde = { workspace = true }
++serde_json = { workspace = true }
++thiserror = { workspace = true }
++
++[dev-dependencies]
++serde_json = { workspace = true }
+diff --git a/crates/acos-sandbox/src/bin/sandbox_child.rs b/crates/acos-sandbox/src/bin/sandbox_child.rs
+new file mode 100644
+index 0000000..b62c2d9
+--- /dev/null
++++ b/crates/acos-sandbox/src/bin/sandbox_child.rs
+@@ -0,0 +1,250 @@
++//! Hostile native test program for the ACOS confinement layer.
++//!
++//! This is **not** a product binary and never runs untrusted APK code. It is
++//! invoked by `tests/confine.rs` in a fresh child process: it optionally
++//! confines itself with [`acos_sandbox::confine`], performs exactly one
++//! requested action, and exits with a code the parent can assert on:
++//!
++//! * `0`  — the action succeeded (a permitted action);
++//! * `10` — the action was denied by Landlock or seccomp (`EACCES`/`EPERM`);
++//! * `20` — confinement itself failed;
++//! * `30` — the action failed for an unexpected reason.
++//!
++//! `--action probe` prints the full [`ConfinementReport`] as JSON instead.
++
++use std::ffi::CString;
++use std::path::PathBuf;
++
++const EXIT_OK: i32 = 0;
++const EXIT_DENIED: i32 = 10;
++const EXIT_SETUP_FAILED: i32 = 20;
++const EXIT_UNEXPECTED: i32 = 30;
++
++fn main() {
++    std::process::exit(run());
++}
++
++fn value_of(args: &[String], key: &str) -> Option<String> {
++    args.iter()
++        .position(|a| a == key)
++        .and_then(|i| args.get(i + 1))
++        .cloned()
++}
++
++fn run() -> i32 {
++    let args: Vec<String> = std::env::args().collect();
++    let Some(action) = value_of(&args, "--action") else {
++        eprintln!(
++            "usage: sandbox_child --action <name> [--ro DIR] [--rw DIR] \
++             [--outside DIR] [--no-confinement]"
++        );
++        return 2;
++    };
++    let no_confinement = args.iter().any(|a| a == "--no-confinement");
++    let ro = value_of(&args, "--ro").map(PathBuf::from);
++    let rw = value_of(&args, "--rw").map(PathBuf::from);
++    let outside = value_of(&args, "--outside").map(PathBuf::from);
++
++    if action == "probe" {
++        let scratch = rw
++            .clone()
++            .unwrap_or_else(|| std::env::temp_dir().join("acos-sandbox-probe"));
++        let mut profile = acos_sandbox::ConfineProfile::probe(scratch);
++        if let Some(path) = &ro {
++            profile.read_only_paths.push(path.clone());
++        }
++        return match acos_sandbox::confine(&profile) {
++            Ok(report) => {
++                println!("{}", serde_json::to_string(&report).unwrap_or_default());
++                EXIT_OK
++            }
++            Err(e) => {
++                eprintln!("CONFINE_FAILED: {e}");
++                EXIT_SETUP_FAILED
++            }
++        };
++    }
++
++    if !no_confinement {
++        let mut profile = acos_sandbox::ConfineProfile::default();
++        if let Some(path) = &ro {
++            profile.read_only_paths.push(path.clone());
++        }
++        if let Some(path) = &rw {
++            profile.read_write_paths.push(path.clone());
++        }
++        if let Err(e) = acos_sandbox::confine(&profile) {
++            eprintln!("CONFINE_FAILED: {e}");
++            return EXIT_SETUP_FAILED;
++        }
++    }
++
++    match action.as_str() {
++        "open_ro" => do_read(ro.map(|p| p.join("hello.txt"))),
++        "open_outside" => do_read(outside.map(|p| p.join("secret.txt"))),
++        "write_data" => do_write(rw.map(|p| p.join("out.txt"))),
++        "write_ro" => do_write(ro.map(|p| p.join("nope.txt"))),
++        "write_outside" => do_write(outside.map(|p| p.join("nope.txt"))),
++        "threads" => do_threads(),
++        "mmap_exec" => do_mmap_exec(),
++        "futex" => do_futex(),
++        "exec" => do_exec(),
++        "ptrace" => do_ptrace(),
++        "socket_inet" => do_socket_inet(),
++        "process_vm" => do_process_vm(),
++        other => {
++            eprintln!("unknown action {other:?}");
++            2
++        }
++    }
++}
++
++fn classify(error: &std::io::Error) -> i32 {
++    match error.raw_os_error() {
++        Some(code) if code == libc::EACCES || code == libc::EPERM => EXIT_DENIED,
++        _ => EXIT_UNEXPECTED,
++    }
++}
++
++fn do_read(path: Option<PathBuf>) -> i32 {
++    let Some(path) = path else {
++        return EXIT_UNEXPECTED;
++    };
++    match std::fs::read_to_string(&path) {
++        Ok(_) => EXIT_OK,
++        Err(e) => classify(&e),
++    }
++}
++
++fn do_write(path: Option<PathBuf>) -> i32 {
++    let Some(path) = path else {
++        return EXIT_UNEXPECTED;
++    };
++    match std::fs::write(&path, b"acos\n") {
++        Ok(_) => EXIT_OK,
++        Err(e) => classify(&e),
++    }
++}
++
++fn do_threads() -> i32 {
++    let mut handles = Vec::new();
++    for i in 0..4u64 {
++        handles.push(std::thread::spawn(move || i * i));
++    }
++    for handle in handles {
++        if handle.join().is_err() {
++            return EXIT_UNEXPECTED;
++        }
++    }
++    EXIT_OK
++}
++
++fn do_mmap_exec() -> i32 {
++    // SAFETY: anonymous private mapping; we write one byte then unmap it.
++    let ptr = unsafe {
++        libc::mmap(
++            std::ptr::null_mut(),
++            4096,
++            libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
++            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
++            -1,
++            0,
++        )
++    };
++    if ptr == libc::MAP_FAILED {
++        return EXIT_UNEXPECTED;
++    }
++    // SAFETY: `ptr` is a writable mapping of one page.
++    unsafe {
++        *(ptr as *mut u8) = 0xc3;
++        libc::munmap(ptr, 4096);
++    }
++    EXIT_OK
++}
++
++fn do_futex() -> i32 {
++    let mut word: u32 = 0;
++    // SAFETY: futex operates on the aligned 4-byte word we own.
++    let rc = unsafe {
++        libc::syscall(
++            libc::SYS_futex,
++            &mut word as *mut u32,
++            libc::FUTEX_WAKE,
++            1u32,
++            0u64,
++            0u64,
++            0u64,
++        )
++    };
++    if rc < 0 {
++        EXIT_UNEXPECTED
++    } else {
++        EXIT_OK
++    }
++}
++
++fn do_exec() -> i32 {
++    let path = CString::new("/bin/true").expect("no NUL");
++    let argv = [path.as_ptr(), std::ptr::null()];
++    // SAFETY: `path`/`argv` are valid NUL-terminated C values for execve. If
++    // seccomp permits it the process is replaced by /bin/true; otherwise the
++    // call returns and we classify the error.
++    unsafe {
++        libc::execve(path.as_ptr(), argv.as_ptr(), std::ptr::null());
++    }
++    classify(&std::io::Error::last_os_error())
++}
++
++fn do_ptrace() -> i32 {
++    // SAFETY: PTRACE_TRACEME is the ptrace request that touches no memory.
++    let rc = unsafe { libc::ptrace(libc::PTRACE_TRACEME, 0, 0, 0) };
++    if rc == 0 {
++        EXIT_OK
++    } else {
++        classify(&std::io::Error::last_os_error())
++    }
++}
++
++fn do_socket_inet() -> i32 {
++    // SAFETY: `socket` takes scalar arguments.
++    let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
++    if fd >= 0 {
++        // SAFETY: `fd` is live and owned here.
++        unsafe {
++            libc::close(fd);
++        }
++        EXIT_OK
++    } else {
++        classify(&std::io::Error::last_os_error())
++    }
++}
++
++fn do_process_vm() -> i32 {
++    let mut buf = [0u8; 8];
++    let local = libc::iovec {
++        iov_base: buf.as_mut_ptr() as *mut libc::c_void,
++        iov_len: 8,
++    };
++    let remote = libc::iovec {
++        iov_base: buf.as_ptr() as *mut libc::c_void,
++        iov_len: 8,
++    };
++    // SAFETY: `local`/`remote` describe our own buffers; the kernel validates
++    // them. The syscall is denied by seccomp before it runs.
++    let rc = unsafe {
++        libc::syscall(
++            libc::SYS_process_vm_readv,
++            libc::getpid(),
++            &local,
++            1usize,
++            &remote,
++            1usize,
++            0usize,
++        )
++    };
++    if rc >= 0 {
++        EXIT_OK
++    } else {
++        classify(&std::io::Error::last_os_error())
++    }
++}
+diff --git a/crates/acos-sandbox/src/confine.rs b/crates/acos-sandbox/src/confine.rs
+new file mode 100644
+index 0000000..64008cf
+--- /dev/null
++++ b/crates/acos-sandbox/src/confine.rs
+@@ -0,0 +1,321 @@
++//! The [`confine`] orchestrator and its report types.
++
++use std::path::PathBuf;
++use std::sync::atomic::{AtomicBool, Ordering};
++
++use serde::{Deserialize, Serialize};
++
++use crate::error::ConfineError;
++use crate::{linux, probe, Layer};
++
++/// Process-global flag set only when [`Layer::BASE`] is fully active.
++static CONFINEMENT_ACTIVE: AtomicBool = AtomicBool::new(false);
++
++/// Whether this process has successfully entered confinement.
++///
++/// This is the process-reported bit the native loader consults before mapping
++/// an untrusted APK `.so`. It is set atomically at the very end of
++/// [`confine`], and only when no-new-privs, Landlock and seccomp are all
++/// active. A fork inherits it; a fresh `exec` (which seccomp forbids anyway)
++/// would not.
++pub fn confinement_active() -> bool {
++    CONFINEMENT_ACTIVE.load(Ordering::SeqCst)
++}
++
++/// A confinement profile: the filesystem surface plus the hygiene knobs.
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct ConfineProfile {
++    /// Paths the confined process may read (and execute) but never write.
++    ///
++    /// Intended for `/system`-like VFS roots and the extracted APK directory.
++    pub read_only_paths: Vec<PathBuf>,
++    /// Paths the confined process may fully modify. Intended for the app data
++    /// directory only.
++    pub read_write_paths: Vec<PathBuf>,
++    /// Layers that must be active or [`confine`] fails closed.
++    ///
++    /// Defaults to [`Layer::NoNewPrivs`], [`Layer::CloseFds`],
++    /// [`Layer::SanitizeEnv`], [`Layer::Rlimits`], [`Layer::Landlock`],
++    /// [`Layer::Seccomp`].
++    pub required: Vec<Layer>,
++    /// File descriptors kept open across the fd-hygiene step (default
++    /// `[0, 1, 2]`).
++    pub keep_fds: Vec<i32>,
++    /// The sanitised environment to install after `clearenv`.
++    pub env: Vec<(String, String)>,
++    /// Resource limits to install.
++    pub rlimits: RlimitProfile,
++    /// Optional namespaces.
++    pub namespaces: NamespacePlan,
++}
++
++/// Resource limits installed by [`confine`].
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct RlimitProfile {
++    /// `RLIMIT_AS` in bytes (`None` leaves it untouched).
++    pub address_space_bytes: Option<u64>,
++    /// `RLIMIT_NOFILE` (`None` leaves it untouched).
++    pub nofile: Option<u64>,
++    /// `RLIMIT_NPROC` (`None` leaves it untouched).
++    pub nproc: Option<u64>,
++    /// `RLIMIT_CPU` in seconds (`None` leaves it untouched).
++    pub cpu_seconds: Option<u64>,
++    /// `RLIMIT_CORE` (default `0`: never dump core).
++    pub core: u64,
++}
++
++impl Default for RlimitProfile {
++    fn default() -> Self {
++        RlimitProfile {
++            address_space_bytes: Some(4 * 1024 * 1024 * 1024),
++            nofile: Some(1024),
++            nproc: Some(8192),
++            cpu_seconds: Some(60),
++            core: 0,
++        }
++    }
++}
++
++/// Which optional namespaces to attempt.
++///
++/// All three are unprivileged only when an unprivileged user namespace can be
++/// created first, so `net`/`mount` imply `user`.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
++pub struct NamespacePlan {
++    /// Create an unprivileged user namespace and map the caller's uid/gid.
++    pub user: bool,
++    /// Create a network namespace (loopback only).
++    pub net: bool,
++    /// Create a mount namespace with private propagation.
++    pub mount: bool,
++}
++
++impl NamespacePlan {
++    /// Whether any namespace was requested.
++    pub fn any(&self) -> bool {
++        self.user || self.net || self.mount
++    }
++
++    /// Request all three (the "best effort" profile).
++    pub fn unprivileged_all() -> Self {
++        NamespacePlan {
++            user: true,
++            net: true,
++            mount: true,
++        }
++    }
++}
++
++impl Default for ConfineProfile {
++    fn default() -> Self {
++        ConfineProfile {
++            read_only_paths: Vec::new(),
++            read_write_paths: Vec::new(),
++            required: vec![
++                Layer::NoNewPrivs,
++                Layer::CloseFds,
++                Layer::SanitizeEnv,
++                Layer::Rlimits,
++                Layer::Landlock,
++                Layer::Seccomp,
++            ],
++            keep_fds: vec![0, 1, 2],
++            env: default_env(),
++            rlimits: RlimitProfile::default(),
++            namespaces: NamespacePlan::default(),
++        }
++    }
++}
++
++impl ConfineProfile {
++    /// Builder: add a read-only root.
++    pub fn with_read_only(mut self, path: impl Into<PathBuf>) -> Self {
++        self.read_only_paths.push(path.into());
++        self
++    }
++
++    /// Builder: add a read-write root.
++    pub fn with_read_write(mut self, path: impl Into<PathBuf>) -> Self {
++        self.read_write_paths.push(path.into());
++        self
++    }
++
++    /// Builder: request all namespaces.
++    pub fn with_namespaces(mut self) -> Self {
++        self.namespaces = NamespacePlan::unprivileged_all();
++        self
++    }
++
++    /// A probe profile: nothing is required, every layer is merely attempted
++    /// and reported. `read_write` is where any probe scratch dir should live.
++    pub fn probe(read_write: impl Into<PathBuf>) -> Self {
++        ConfineProfile {
++            read_write_paths: vec![read_write.into()],
++            required: Vec::new(),
++            ..ConfineProfile::default()
++        }
++    }
++}
++
++fn default_env() -> Vec<(String, String)> {
++    vec![
++        ("PATH".to_string(), "/system/bin:/system/xbin".to_string()),
++        ("ANDROID_ROOT".to_string(), "/system".to_string()),
++        ("ANDROID_DATA".to_string(), "/data".to_string()),
++        ("ANDROID_ASSETS".to_string(), "/system/app".to_string()),
++        ("TMPDIR".to_string(), "/data/local/tmp".to_string()),
++        ("HOME".to_string(), "/data/local/tmp".to_string()),
++        ("LANG".to_string(), "C".to_string()),
++        ("LC_ALL".to_string(), "C".to_string()),
++    ]
++}
++
++/// The status of one layer after a [`confine`] attempt.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum LayerStatus {
++    /// The kernel accepted the layer.
++    Active,
++    /// The layer was attempted but the kernel refused it.
++    Inactive,
++    /// The layer was required and is not active.
++    Failed,
++    /// The layer was not requested.
++    Skipped,
++}
++
++/// One layer's outcome.
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct LayerReport {
++    /// Which layer.
++    pub layer: Layer,
++    /// What happened.
++    pub status: LayerStatus,
++    /// Optional explanation (kernel error, ABI, rule counts, ...).
++    pub detail: Option<String>,
++}
++
++/// The full outcome of a [`confine`] attempt.
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct ConfinementReport {
++    /// Whether the process now counts as confined ([`Layer::BASE`] all active).
++    pub active: bool,
++    /// Landlock ABI observed during the attempt.
++    pub landlock_abi: Option<u32>,
++    /// Kernel release observed during the attempt.
++    pub kernel_release: String,
++    /// One entry per layer, in application order.
++    pub layers: Vec<LayerReport>,
++}
++
++impl ConfinementReport {
++    fn new(landlock_abi: Option<u32>, kernel_release: String) -> Self {
++        ConfinementReport {
++            active: false,
++            landlock_abi,
++            kernel_release,
++            layers: Vec::new(),
++        }
++    }
++
++    fn set(&mut self, layer: Layer, status: LayerStatus, detail: Option<String>) {
++        self.layers.push(LayerReport {
++            layer,
++            status,
++            detail,
++        });
++    }
++
++    /// Whether `layer` is active in this report.
++    pub fn is_active(&self, layer: Layer) -> bool {
++        self.layers
++            .iter()
++            .any(|l| l.layer == layer && l.status == LayerStatus::Active)
++    }
++
++    /// The status of `layer`, if present.
++    pub fn status(&self, layer: Layer) -> Option<LayerStatus> {
++        self.layers.iter().find(|l| l.layer == layer).map(|l| l.status)
++    }
++}
++
++/// Apply the confinement layers in `profile`.
++///
++/// Returns a full [`ConfinementReport`] when every required layer is active.
++/// If a required layer is missing, returns
++/// [`ConfineError::Unavailable`] with code [`CONFINEMENT_UNAVAILABLE`](crate::CONFINEMENT_UNAVAILABLE)
++/// — the caller must treat the process as untrusted.
++pub fn confine(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineError> {
++    let caps = probe::probe();
++    let mut report = ConfinementReport::new(caps.landlock_abi, caps.kernel_release);
++
++    // 1. PR_SET_NO_NEW_PRIVS — must precede Landlock and seccomp.
++    record(&mut report, Layer::NoNewPrivs, linux::no_new_privs());
++
++    // 2. Close inherited file descriptors.
++    record(&mut report, Layer::CloseFds, linux::close_inherited(&profile.keep_fds));
++
++    // 3. Sanitised environment.
++    record(&mut report, Layer::SanitizeEnv, linux::sanitize_env(&profile.env));
++
++    // 4. Resource limits.
++    record(&mut report, Layer::Rlimits, linux::apply_rlimits(&profile.rlimits));
++
++    // 5. Optional namespaces. Applied before Landlock/seccomp because mapping
++    //    uid_map and making mounts private need `/proc` and `mount`, both of
++    //    which the later layers would deny.
++    let ns = linux::setup_namespaces(&profile.namespaces);
++    if ns.is_empty() {
++        report.set(Layer::UserNamespace, LayerStatus::Skipped, None);
++        report.set(Layer::NetNamespace, LayerStatus::Skipped, None);
++        report.set(Layer::MountNamespace, LayerStatus::Skipped, None);
++    } else {
++        for (layer, result) in ns {
++            match result {
++                Ok(detail) => report.set(layer, LayerStatus::Active, Some(detail)),
++                Err(detail) => report.set(layer, LayerStatus::Failed, Some(detail)),
++            }
++        }
++    }
++
++    // 6. Landlock filesystem ruleset.
++    record(
++        &mut report,
++        Layer::Landlock,
++        linux::apply_landlock(&profile.read_only_paths, &profile.read_write_paths),
++    );
++
++    // 7. seccomp-bpf syscall filter.
++    record(&mut report, Layer::Seccomp, linux::install_seccomp());
++
++    // Fail closed.
++    let missing: Vec<Layer> = profile
++        .required
++        .iter()
++        .copied()
++        .filter(|l| !report.is_active(*l))
++        .collect();
++    if !missing.is_empty() {
++        let message = report
++            .layers
++            .iter()
++            .filter(|l| missing.contains(&l.layer))
++            .map(|l| format!("{}: {}", l.layer, l.detail.as_deref().unwrap_or("unavailable")))
++            .collect::<Vec<_>>()
++            .join("; ");
++        return Err(ConfineError::Unavailable { missing, message });
++    }
++
++    if Layer::BASE.iter().all(|l| report.is_active(*l)) {
++        CONFINEMENT_ACTIVE.store(true, Ordering::SeqCst);
++        report.active = true;
++    }
++    Ok(report)
++}
++
++fn record(report: &mut ConfinementReport, layer: Layer, result: Result<String, String>) {
++    match result {
++        Ok(detail) => report.set(layer, LayerStatus::Active, Some(detail)),
++        Err(detail) => report.set(layer, LayerStatus::Failed, Some(detail)),
++    }
++}
+diff --git a/crates/acos-sandbox/src/error.rs b/crates/acos-sandbox/src/error.rs
+new file mode 100644
+index 0000000..e269b9e
+--- /dev/null
++++ b/crates/acos-sandbox/src/error.rs
+@@ -0,0 +1,36 @@
++//! Structured confinement errors.
++
++use crate::Layer;
++
++/// Stable error code returned when a required confinement layer is missing.
++pub const CONFINEMENT_UNAVAILABLE: &str = "CONFINEMENT_UNAVAILABLE";
++
++/// Stable error code returned for any other confinement failure.
++pub const CONFINEMENT_FAILED: &str = "CONFINEMENT_FAILED";
++
++/// A structured confinement failure.
++///
++/// [`confine`](crate::confine) fails closed: if any layer in
++/// [`ConfineProfile::required`](crate::ConfineProfile::required) is not active
++/// after the attempt, it returns [`ConfineError::Unavailable`] with code
++/// [`CONFINEMENT_UNAVAILABLE`] rather than running partially sandboxed.
++#[derive(Debug, thiserror::Error)]
++pub enum ConfineError {
++    /// One or more required layers could not be established.
++    #[error("CONFINEMENT_UNAVAILABLE: required confinement layers not active: {missing:?} ({message})")]
++    Unavailable {
++        /// Layers that were required but did not end up active.
++        missing: Vec<Layer>,
++        /// Human-readable explanation naming the kernel failures.
++        message: String,
++    },
++}
++
++impl ConfineError {
++    /// Stable, machine-readable error code.
++    pub fn code(&self) -> &'static str {
++        match self {
++            ConfineError::Unavailable { .. } => CONFINEMENT_UNAVAILABLE,
++        }
++    }
++}
+diff --git a/crates/acos-sandbox/src/lib.rs b/crates/acos-sandbox/src/lib.rs
+new file mode 100644
+index 0000000..5fbd5db
+--- /dev/null
++++ b/crates/acos-sandbox/src/lib.rs
+@@ -0,0 +1,109 @@
++//! # `acos-sandbox`
++//!
++//! The ACOS confinement layer. It is the **only** ACOS crate allowed to hold
++//! the `unsafe`/`libc` calls needed to enter a sandbox (see
++//! `DECISIONS.md` ADR-0022). No sudo and no kernel/system changes are required:
++//! every layer is an unprivileged Linux facility.
++//!
++//! [`confine`] applies, in order, the layers an untrusted APK native library
++//! needs to be contained inside the ACOS session process:
++//!
++//! 1. `prctl(PR_SET_NO_NEW_PRIVS)` — makes the following layers un-removable;
++//! 2. close inherited file descriptors (except an explicit keep list);
++//! 3. a sanitised environment (`clearenv` + a minimal set);
++//! 4. resource limits (address space, `NOFILE`, `NPROC`, CPU, `CORE=0`);
++//! 5. optional unprivileged user/network/mount namespaces;
++//! 6. a Landlock filesystem ruleset: read-only for system VFS roots and the
++//!    APK directory, read-write only for the app data directory, nothing else;
++//! 7. a seccomp-bpf filter that denies `exec*`, `ptrace`, `process_vm_*`,
++//!    `mount`/`unshare`/`setns`, `kexec`, `bpf`, `perf_event_open`, `keyctl`,
++//!    module ops, and every socket family except `AF_UNIX`, while leaving
++//!    futex, thread creation, `mmap`/`mprotect` (including `PROT_EXEC`),
++//!    signals, clocks, eventfd and epoll available.
++//!
++//! It **fails closed**: if any layer listed in [`ConfineProfile::required`]
++//! cannot be established, [`confine`] returns a structured
++//! [`ConfineError`] with code [`CONFINEMENT_UNAVAILABLE`]. The
++//! [`ConfinementReport`] always says exactly which layers are active.
++//!
++//! Optional cgroup-v2 memory/PID limits via `systemd-run --user --scope` are
++//! *probed* ([`Capabilities`]) but never required and never part of the fatal
++//! path.
++//!
++//! ## Never fake
++//!
++//! [`confine`] never reports a layer as active unless the kernel accepted it.
++//! A process that has not called [`confine`] reports
++//! [`confinement_active`]`() == false`, which is what the native loader checks
++//! before it maps an APK `.so`.
++#![deny(unsafe_op_in_unsafe_fn)]
++#![allow(clippy::missing_safety_doc)]
++
++use serde::{Deserialize, Serialize};
++
++mod confine;
++pub mod error;
++mod live;
++mod linux;
++mod probe;
++
++pub use confine::{
++    confine, confinement_active, ConfineProfile, ConfinementReport, LayerReport, LayerStatus,
++    NamespacePlan, RlimitProfile,
++};
++pub use error::{ConfineError, CONFINEMENT_FAILED, CONFINEMENT_UNAVAILABLE};
++pub use live::probe_live;
++pub use probe::{probe, systemd_user_scope_available, Capabilities};
++
++/// A confinement layer that can be independently probed and reported.
++///
++/// The `snake_case` serialisation is the stable wire name used by
++/// `acos sandbox-probe` and by the ADR-0022 report.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Layer {
++    /// `prctl(PR_SET_NO_NEW_PRIVS)`.
++    NoNewPrivs,
++    /// Closing inherited file descriptors.
++    CloseFds,
++    /// Clearing and re-seeding the process environment.
++    SanitizeEnv,
++    /// Address-space / file / process / CPU / core resource limits.
++    Rlimits,
++    /// Unprivileged user namespace.
++    UserNamespace,
++    /// Network namespace.
++    NetNamespace,
++    /// Mount namespace.
++    MountNamespace,
++    /// Landlock filesystem access ruleset.
++    Landlock,
++    /// seccomp-bpf syscall filter.
++    Seccomp,
++}
++
++impl Layer {
++    /// Stable machine-readable name (`snake_case`).
++    pub fn as_str(self) -> &'static str {
++        match self {
++            Layer::NoNewPrivs => "no_new_privs",
++            Layer::CloseFds => "close_fds",
++            Layer::SanitizeEnv => "sanitize_env",
++            Layer::Rlimits => "rlimits",
++            Layer::UserNamespace => "user_namespace",
++            Layer::NetNamespace => "net_namespace",
++            Layer::MountNamespace => "mount_namespace",
++            Layer::Landlock => "landlock",
++            Layer::Seccomp => "seccomp",
++        }
++    }
++
++    /// The layers that must all be active for a process to count as confined.
++    pub const BASE: [Layer; 3] = [Layer::NoNewPrivs, Layer::Landlock, Layer::Seccomp];
++}
++
++impl std::fmt::Display for Layer {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
+diff --git a/crates/acos-sandbox/src/linux/landlock.rs b/crates/acos-sandbox/src/linux/landlock.rs
+new file mode 100644
+index 0000000..2a2b617
+--- /dev/null
++++ b/crates/acos-sandbox/src/linux/landlock.rs
+@@ -0,0 +1,215 @@
++//! Landlock filesystem confinement via the raw Landlock syscalls.
++//!
++//! We call the ABI directly rather than pull in the `landlock` crate so that
++//! the whole unsafe surface stays in this crate and the exact handled-access
++//! mask can be tuned per ABI version.
++//!
++//! A ruleset with `handled_access_fs` set to every right the kernel supports
++//! restricts *all* of them; any path not covered by an added rule is denied.
++//! Read-only roots grant `EXECUTE|READ_FILE|READ_DIR`; read-write roots grant
++//! the full handled mask.
++
++use std::ffi::CString;
++use std::os::raw::c_int;
++use std::os::unix::ffi::OsStrExt;
++use std::path::{Path, PathBuf};
++
++const LANDLOCK_CREATE_RULESET_VERSION: u64 = 1;
++const LANDLOCK_RULE_PATH_BENEATH: u32 = 1;
++
++const FS_EXECUTE: u64 = 1 << 0;
++const FS_WRITE_FILE: u64 = 1 << 1;
++const FS_READ_FILE: u64 = 1 << 2;
++const FS_READ_DIR: u64 = 1 << 3;
++const FS_REMOVE_DIR: u64 = 1 << 4;
++const FS_REMOVE_FILE: u64 = 1 << 5;
++const FS_MAKE_CHAR: u64 = 1 << 6;
++const FS_MAKE_DIR: u64 = 1 << 7;
++const FS_MAKE_REG: u64 = 1 << 8;
++const FS_MAKE_SOCK: u64 = 1 << 9;
++const FS_MAKE_FIFO: u64 = 1 << 10;
++const FS_MAKE_BLOCK: u64 = 1 << 11;
++const FS_MAKE_SYM: u64 = 1 << 12;
++const FS_REFER: u64 = 1 << 13;
++const FS_TRUNCATE: u64 = 1 << 14;
++const FS_IOCTL_DEV: u64 = 1 << 15;
++
++#[repr(C)]
++struct RulesetAttr {
++    handled_access_fs: u64,
++}
++
++#[repr(C, packed)]
++struct PathBeneathAttr {
++    allowed_access: u64,
++    parent_fd: i32,
++}
++
++/// Query the Landlock ABI version.
++pub fn abi() -> Option<u32> {
++    // SAFETY: passing a NULL attribute pointer with size 0 and the VERSION
++    // command is the documented way to query the ABI; no memory is touched.
++    let rc = unsafe {
++        libc::syscall(
++            libc::SYS_landlock_create_ruleset,
++            std::ptr::null::<RulesetAttr>(),
++            0usize,
++            LANDLOCK_CREATE_RULESET_VERSION,
++        )
++    };
++    if rc < 0 {
++        None
++    } else {
++        Some(rc as u32)
++    }
++}
++
++fn handled_fs(abi: u32) -> u64 {
++    let mut mask = FS_EXECUTE
++        | FS_WRITE_FILE
++        | FS_READ_FILE
++        | FS_READ_DIR
++        | FS_REMOVE_DIR
++        | FS_REMOVE_FILE
++        | FS_MAKE_CHAR
++        | FS_MAKE_DIR
++        | FS_MAKE_REG
++        | FS_MAKE_SOCK
++        | FS_MAKE_FIFO
++        | FS_MAKE_BLOCK
++        | FS_MAKE_SYM;
++    if abi >= 2 {
++        mask |= FS_REFER;
++    }
++    if abi >= 3 {
++        mask |= FS_TRUNCATE;
++    }
++    if abi >= 5 {
++        mask |= FS_IOCTL_DEV;
++    }
++    mask
++}
++
++fn read_only_access() -> u64 {
++    FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
++}
++
++/// Create and enforce a ruleset. Missing roots are skipped (never widened).
++pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String, String> {
++    let abi = abi().ok_or_else(|| "landlock_create_ruleset(VERSION) unsupported".to_string())?;
++    let handled = handled_fs(abi);
++    let attr = RulesetAttr {
++        handled_access_fs: handled,
++    };
++    // SAFETY: `attr` is a valid, initialised ruleset attribute of the size we
++    // pass; the kernel copies it before returning.
++    let fd = unsafe {
++        libc::syscall(
++            libc::SYS_landlock_create_ruleset,
++            &attr as *const RulesetAttr,
++            std::mem::size_of::<RulesetAttr>(),
++            0u64,
++        )
++    };
++    if fd < 0 {
++        return Err(format!(
++            "landlock_create_ruleset: {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    let ruleset_fd = fd as c_int;
++
++    let mut rules = 0usize;
++    let mut skipped = Vec::new();
++    for path in read_only {
++        match add_path_rule(ruleset_fd, path, read_only_access()) {
++            Ok(true) => rules += 1,
++            Ok(false) => skipped.push(path.display().to_string()),
++            Err(e) => {
++                // SAFETY: `ruleset_fd` is a live descriptor returned above.
++                unsafe {
++                    libc::close(ruleset_fd);
++                }
++                return Err(e);
++            }
++        }
++    }
++    for path in read_write {
++        match add_path_rule(ruleset_fd, path, handled) {
++            Ok(true) => rules += 1,
++            Ok(false) => skipped.push(path.display().to_string()),
++            Err(e) => {
++                // SAFETY: see above.
++                unsafe {
++                    libc::close(ruleset_fd);
++                }
++                return Err(e);
++            }
++        }
++    }
++
++    // SAFETY: `ruleset_fd` refers to the ruleset built above.
++    let rc = unsafe { libc::syscall(libc::SYS_landlock_restrict_self, ruleset_fd, 0u64) };
++    let restrict_err = if rc != 0 {
++        Some(std::io::Error::last_os_error())
++    } else {
++        None
++    };
++    // SAFETY: `ruleset_fd` is still live and no longer needed.
++    unsafe {
++        libc::close(ruleset_fd);
++    }
++    if let Some(err) = restrict_err {
++        return Err(format!("landlock_restrict_self: {err}"));
++    }
++
++    let mut detail = format!("abi {abi}, {rules} rules");
++    if !skipped.is_empty() {
++        detail.push_str(&format!(", skipped missing {skipped:?}"));
++    }
++    Ok(detail)
++}
++
++/// Add one path-beneath rule. Returns `Ok(false)` for a missing root.
++fn add_path_rule(ruleset_fd: c_int, path: &Path, access: u64) -> Result<bool, String> {
++    let cpath = CString::new(path.as_os_str().as_bytes())
++        .map_err(|e| format!("path {} contains NUL: {e}", path.display()))?;
++    // SAFETY: `cpath` is a valid NUL-terminated path; O_PATH|O_CLOEXEC is a
++    // read-only lookup that cannot create or modify anything.
++    let path_fd = unsafe { libc::open(cpath.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };
++    if path_fd < 0 {
++        let err = std::io::Error::last_os_error();
++        if err.raw_os_error() == Some(libc::ENOENT) {
++            return Ok(false);
++        }
++        return Err(format!("open({}) O_PATH: {err}", path.display()));
++    }
++    let attr = PathBeneathAttr {
++        allowed_access: access,
++        parent_fd: path_fd,
++    };
++    // SAFETY: `attr` is a valid packed path-beneath attribute; the path_fd
++    // inside it is live for the duration of the call.
++    let rc = unsafe {
++        libc::syscall(
++            libc::SYS_landlock_add_rule,
++            ruleset_fd,
++            LANDLOCK_RULE_PATH_BENEATH as u64,
++            &attr as *const PathBeneathAttr,
++            0u64,
++        )
++    };
++    let add_err = if rc != 0 {
++        Some(std::io::Error::last_os_error())
++    } else {
++        None
++    };
++    // SAFETY: `path_fd` was opened above and is no longer needed.
++    unsafe {
++        libc::close(path_fd);
++    }
++    if let Some(err) = add_err {
++        return Err(format!("landlock_add_rule({}): {err}", path.display()));
++    }
++    Ok(true)
++}
+diff --git a/crates/acos-sandbox/src/linux/mod.rs b/crates/acos-sandbox/src/linux/mod.rs
+new file mode 100644
+index 0000000..fb8a254
+--- /dev/null
++++ b/crates/acos-sandbox/src/linux/mod.rs
+@@ -0,0 +1,254 @@
++//! Low-level Linux confinement primitives.
++//!
++//! Every syscall that changes process state lives in this module (and its two
++//! submodules). Nothing here is public API: [`crate::confine`] is the single
++//! entry point. Each `unsafe` block names the invariant it relies on.
++
++pub mod landlock;
++pub mod seccomp;
++
++use std::ffi::CString;
++use std::os::raw::{c_int, c_ulong};
++use std::path::PathBuf;
++
++use crate::confine::{NamespacePlan, RlimitProfile};
++use crate::Layer;
++
++/// Landlock ABI version reported by the kernel, if available.
++pub fn landlock_abi() -> Option<u32> {
++    landlock::abi()
++}
++
++/// `prctl(PR_SET_NO_NEW_PRIVS, 1)`.
++pub fn no_new_privs() -> Result<String, String> {
++    // SAFETY: `prctl` with PR_SET_NO_NEW_PRIVS takes four integer arguments and
++    // returns an int; no pointers are involved.
++    let rc = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1u64, 0u64, 0u64, 0u64) };
++    if rc != 0 {
++        return Err(format!(
++            "prctl(PR_SET_NO_NEW_PRIVS): {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    Ok("PR_SET_NO_NEW_PRIVS=1".to_string())
++}
++
++/// Close every inherited file descriptor except those in `keep`.
++pub fn close_inherited(keep: &[i32]) -> Result<String, String> {
++    let mut keep: Vec<i32> = keep.iter().copied().filter(|&fd| fd >= 3).collect();
++    keep.sort_unstable();
++    keep.dedup();
++    let mut next: u32 = 3;
++    for &k in &keep {
++        let k = k as u32;
++        if k > next {
++            close_span(next, k - 1)?;
++        }
++        next = k.saturating_add(1);
++    }
++    close_span(next, u32::MAX)?;
++    Ok(format!("kept {keep:?}"))
++}
++
++fn close_span(first: u32, last: u32) -> Result<(), String> {
++    if first > last {
++        return Ok(());
++    }
++    // SAFETY: `close_range` takes three scalar arguments; closing descriptors
++    // is idempotent and cannot invalidate memory.
++    let rc = unsafe { libc::close_range(first, last, 0) };
++    if rc == 0 {
++        return Ok(());
++    }
++    let err = std::io::Error::last_os_error();
++    if err.raw_os_error() == Some(libc::ENOSYS) {
++        // Fallback for kernels without close_range: bounded brute-force close.
++        let ceiling = last.min(1 << 20);
++        for fd in first..=ceiling {
++            // SAFETY: `close` only affects the descriptor table.
++            unsafe {
++                libc::close(fd as c_int);
++            }
++        }
++        return Ok(());
++    }
++    Err(format!("close_range({first},{last}): {err}"))
++}
++
++/// Clear the environment and install exactly `pairs`.
++pub fn sanitize_env(pairs: &[(String, String)]) -> Result<String, String> {
++    // SAFETY: `clearenv` replaces the process environment pointer; no Rust
++    // borrow of `environ` is live.
++    let rc = unsafe { libc::clearenv() };
++    if rc != 0 {
++        return Err(format!(
++            "clearenv: {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    for (key, value) in pairs {
++        let ck = CString::new(key.as_str()).map_err(|e| format!("env key {key:?}: {e}"))?;
++        let cv = CString::new(value.as_str()).map_err(|e| format!("env value for {key:?}: {e}"))?;
++        // SAFETY: both CStrings are NUL-terminated and outlive the call.
++        let rc = unsafe { libc::setenv(ck.as_ptr(), cv.as_ptr(), 1) };
++        if rc != 0 {
++            return Err(format!(
++                "setenv({key}): {}",
++                std::io::Error::last_os_error()
++            ));
++        }
++    }
++    Ok(format!("cleared; set {} vars", pairs.len()))
++}
++
++/// Apply the resource limits in `profile`.
++pub fn apply_rlimits(profile: &RlimitProfile) -> Result<String, String> {
++    let mut applied = Vec::new();
++    if let Some(value) = profile.address_space_bytes {
++        set_limit(libc::RLIMIT_AS, value)?;
++        applied.push(format!("AS={value}"));
++    }
++    if let Some(value) = profile.nofile {
++        set_limit(libc::RLIMIT_NOFILE, value)?;
++        applied.push(format!("NOFILE={value}"));
++    }
++    if let Some(value) = profile.nproc {
++        set_limit(libc::RLIMIT_NPROC, value)?;
++        applied.push(format!("NPROC={value}"));
++    }
++    if let Some(value) = profile.cpu_seconds {
++        set_limit(libc::RLIMIT_CPU, value)?;
++        applied.push(format!("CPU={value}"));
++    }
++    set_limit(libc::RLIMIT_CORE, profile.core)?;
++    applied.push(format!("CORE={}", profile.core));
++    Ok(applied.join(" "))
++}
++
++fn set_limit(resource: u32, value: u64) -> Result<(), String> {
++    let res = resource as libc::__rlimit_resource_t;
++    let mut current = libc::rlimit {
++        rlim_cur: 0,
++        rlim_max: 0,
++    };
++    // SAFETY: `current` is a valid out-parameter of the right type.
++    let rc = unsafe { libc::getrlimit(res, &mut current) };
++    if rc != 0 {
++        return Err(format!(
++            "getrlimit({resource}): {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    let want = value as libc::rlim_t;
++    let capped = if current.rlim_max == libc::RLIM_INFINITY {
++        want
++    } else {
++        want.min(current.rlim_max)
++    };
++    let limit = libc::rlimit {
++        rlim_cur: capped,
++        rlim_max: capped,
++    };
++    // SAFETY: `limit` is a valid in-parameter; setrlimit copies it.
++    let rc = unsafe { libc::setrlimit(res, &limit) };
++    if rc != 0 {
++        return Err(format!(
++            "setrlimit({resource}={capped}): {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    Ok(())
++}
++
++/// Attempt the requested namespaces. Returns one entry per requested layer.
++pub fn setup_namespaces(plan: &NamespacePlan) -> Vec<(Layer, Result<String, String>)> {
++    let mut out = Vec::new();
++    if !plan.any() {
++        return out;
++    }
++    // Capture the caller's credentials before entering the user namespace.
++    // SAFETY: `getuid`/`getgid` are trivial, always-successful queries.
++    let host_uid = unsafe { libc::getuid() };
++    let host_gid = unsafe { libc::getgid() };
++
++    let mut flags: c_int = 0;
++    if plan.user {
++        flags |= libc::CLONE_NEWUSER;
++    }
++    if plan.net {
++        flags |= libc::CLONE_NEWNET;
++    }
++    if plan.mount {
++        flags |= libc::CLONE_NEWNS;
++    }
++    // SAFETY: `unshare` takes a flag word; it changes only the current task's
++    // namespaces.
++    let rc = unsafe { libc::unshare(flags) };
++    if rc != 0 {
++        let err = std::io::Error::last_os_error();
++        let message = format!("unshare({flags:#x}): {err}");
++        for (layer, requested) in [
++            (Layer::UserNamespace, plan.user),
++            (Layer::NetNamespace, plan.net),
++            (Layer::MountNamespace, plan.mount),
++        ] {
++            if requested {
++                out.push((layer, Err(message.clone())));
++            }
++        }
++        return out;
++    }
++
++    if plan.user {
++        out.push((Layer::UserNamespace, map_user(host_uid, host_gid)));
++    }
++    if plan.net {
++        out.push((Layer::NetNamespace, Ok("CLONE_NEWNET".to_string())));
++    }
++    if plan.mount {
++        out.push((Layer::MountNamespace, make_mounts_private()));
++    }
++    out
++}
++
++fn map_user(uid: u32, gid: u32) -> Result<String, String> {
++    // `setgroups` does not exist on very old kernels; ENOENT is harmless.
++    let _ = std::fs::write("/proc/self/setgroups", "deny");
++    std::fs::write("/proc/self/uid_map", format!("0 {uid} 1\n"))
++        .map_err(|e| format!("write uid_map: {e}"))?;
++    std::fs::write("/proc/self/gid_map", format!("0 {gid} 1\n"))
++        .map_err(|e| format!("write gid_map: {e}"))?;
++    Ok(format!("0 {uid} 1 / 0 {gid} 1"))
++}
++
++fn make_mounts_private() -> Result<String, String> {
++    let target = CString::new("/").expect("static string has no NUL");
++    // SAFETY: `target` is a valid C string; the other arguments are NULL as
++    // required by MS_REC|MS_PRIVATE (no source, no fstype, no data).
++    let rc = unsafe {
++        libc::mount(
++            std::ptr::null(),
++            target.as_ptr(),
++            std::ptr::null(),
++            (libc::MS_REC | libc::MS_PRIVATE) as c_ulong,
++            std::ptr::null(),
++        )
++    };
++    if rc != 0 {
++        return Err(format!(
++            "mount(NULL, \"/\", MS_REC|MS_PRIVATE): {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    Ok("private mount propagation".to_string())
++}
++
++/// Apply a Landlock ruleset from two root lists.
++pub fn apply_landlock(ro: &[PathBuf], rw: &[PathBuf]) -> Result<String, String> {
++    landlock::restrict(ro, rw)
++}
++
++/// Install the seccomp-bpf syscall filter.
++pub fn install_seccomp() -> Result<String, String> {
++    seccomp::install()
++}
+diff --git a/crates/acos-sandbox/src/linux/seccomp.rs b/crates/acos-sandbox/src/linux/seccomp.rs
+new file mode 100644
+index 0000000..5c7bd8b
+--- /dev/null
++++ b/crates/acos-sandbox/src/linux/seccomp.rs
+@@ -0,0 +1,302 @@
++//! seccomp-bpf syscall confinement.
++//!
++//! The filter's default action is `SECCOMP_RET_ALLOW`; it denies a curated
++//! list of dangerous syscalls and, for `socket`/`socketpair`, allows only the
++//! `AF_UNIX` domain. Denials return `EACCES` so a confined process can handle
++//! them and an agent can observe a clean failure rather than a signal.
++//!
++//! Everything not named in the deny list stays available on purpose:
++//! `futex`, `clone`/`clone3` (threads), `mmap`/`mprotect` (including
++//! `PROT_EXEC`), `rt_sigaction`, `clock_*`, `eventfd`, `epoll_*`, `poll`,
++//! `read`/`write`, `brk`, `getrandom`, ...
++//!
++//! The classic-BPF program is assembled with a tiny forward-only label
++//! assembler so the control flow is auditable.
++
++/// `AUDIT_ARCH_X86_64` from `linux/audit.h`; libc does not export it.
++const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
++
++const SECCOMP_SET_MODE_FILTER: u64 = 1;
++const SECCOMP_FILTER_FLAG_TSYNC: u64 = 1;
++
++const RET_KILL_PROCESS: u32 = 0x8000_0000;
++const RET_ERRNO: u32 = 0x0005_0000;
++const RET_ALLOW: u32 = 0x7fff_0000;
++const ERRNO_DATA_MASK: u32 = 0x0000_ffff;
++
++// `struct seccomp_data` offsets.
++const OFF_NR: u32 = 0;
++const OFF_ARCH: u32 = 4;
++const OFF_ARG0: u32 = 16;
++
++// Classic-BPF opcodes (`linux/bpf_common.h`).
++const LD_ABS_W: u16 = 0x20; // BPF_LD | BPF_W | BPF_ABS
++const JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
++const JA: u16 = 0x05; // BPF_JMP | BPF_JA
++const RET_K: u16 = 0x06; // BPF_RET | BPF_K
++
++#[repr(C)]
++#[derive(Clone, Copy)]
++struct SockFilter {
++    code: u16,
++    jt: u8,
++    jf: u8,
++    k: u32,
++}
++
++#[repr(C)]
++struct SockFprog {
++    len: u16,
++    filter: *const SockFilter,
++}
++
++type Label = usize;
++
++enum Op {
++    Ld(u32),
++    Jeq {
++        k: u32,
++        t: Label,
++        f: Label,
++    },
++    Ja(Label),
++    Ret(u32),
++}
++
++struct Builder {
++    ops: Vec<Op>,
++    labels: Vec<Option<usize>>,
++}
++
++impl Builder {
++    fn new() -> Self {
++        Builder {
++            ops: Vec::new(),
++            labels: Vec::new(),
++        }
++    }
++
++    fn label(&mut self) -> Label {
++        self.labels.push(None);
++        self.labels.len() - 1
++    }
++
++    fn mark(&mut self, label: Label) {
++        debug_assert!(self.labels[label].is_none(), "label marked twice");
++        self.labels[label] = Some(self.ops.len());
++    }
++
++    fn ld_abs(&mut self, offset: u32) {
++        self.ops.push(Op::Ld(offset));
++    }
++
++    fn jeq(&mut self, k: u32, t: Label, f: Label) {
++        self.ops.push(Op::Jeq { k, t, f });
++    }
++
++    fn ja(&mut self, t: Label) {
++        self.ops.push(Op::Ja(t));
++    }
++
++    fn ret(&mut self, k: u32) {
++        self.ops.push(Op::Ret(k));
++    }
++
++    fn finish(self) -> Vec<SockFilter> {
++        let target = |label: Label| self.labels[label].expect("label was never marked");
++        let mut out = Vec::with_capacity(self.ops.len());
++        for (pc, op) in self.ops.iter().enumerate() {
++            let insn = match *op {
++                Op::Ld(offset) => SockFilter {
++                    code: LD_ABS_W,
++                    jt: 0,
++                    jf: 0,
++                    k: offset,
++                },
++                Op::Jeq { k, t, f } => {
++                    let jt = target(t) - pc - 1;
++                    let jf = target(f) - pc - 1;
++                    debug_assert!(target(t) > pc && target(f) > pc, "backward jump");
++                    SockFilter {
++                        code: JEQ_K,
++                        jt: jt as u8,
++                        jf: jf as u8,
++                        k,
++                    }
++                }
++                Op::Ja(t) => {
++                    debug_assert!(target(t) > pc, "backward jump");
++                    SockFilter {
++                        code: JA,
++                        jt: 0,
++                        jf: 0,
++                        k: (target(t) - pc - 1) as u32,
++                    }
++                }
++                Op::Ret(k) => SockFilter {
++                    code: RET_K,
++                    jt: 0,
++                    jf: 0,
++                    k,
++                },
++            };
++            out.push(insn);
++        }
++        out
++    }
++}
++
++fn deny_list() -> Vec<u32> {
++    let mut list = vec![
++        libc::SYS_execve as u32,
++        libc::SYS_execveat as u32,
++        libc::SYS_ptrace as u32,
++        libc::SYS_process_vm_readv as u32,
++        libc::SYS_process_vm_writev as u32,
++        libc::SYS_mount as u32,
++        libc::SYS_umount2 as u32,
++        libc::SYS_pivot_root as u32,
++        libc::SYS_chroot as u32,
++        libc::SYS_unshare as u32,
++        libc::SYS_setns as u32,
++        libc::SYS_kexec_load as u32,
++        libc::SYS_kexec_file_load as u32,
++        libc::SYS_bpf as u32,
++        libc::SYS_perf_event_open as u32,
++        libc::SYS_keyctl as u32,
++        libc::SYS_add_key as u32,
++        libc::SYS_request_key as u32,
++        libc::SYS_init_module as u32,
++        libc::SYS_finit_module as u32,
++        libc::SYS_delete_module as u32,
++        libc::SYS_reboot as u32,
++    ];
++    list.sort_unstable();
++    list.dedup();
++    list
++}
++
++fn build() -> Vec<SockFilter> {
++    let mut b = Builder::new();
++    let deny = b.label();
++    let kill = b.label();
++    let x86_ok = b.label();
++    let list = b.label();
++    let socket_check = b.label();
++    let not_socket1 = b.label();
++    let not_socket2 = b.label();
++
++    // Reject a mismatched architecture outright: syscall numbers are per-arch.
++    b.ld_abs(OFF_ARCH);
++    b.jeq(AUDIT_ARCH_X86_64, x86_ok, kill);
++    b.mark(kill);
++    b.ret(RET_KILL_PROCESS);
++    b.mark(x86_ok);
++
++    // Route socket/socketpair to a domain check; everything else to the list.
++    b.ld_abs(OFF_NR);
++    b.jeq(libc::SYS_socket as u32, socket_check, not_socket1);
++    b.mark(not_socket1);
++    b.jeq(libc::SYS_socketpair as u32, socket_check, not_socket2);
++    b.mark(not_socket2);
++    b.ja(list);
++
++    b.mark(socket_check);
++    b.ld_abs(OFF_ARG0);
++    b.jeq(libc::AF_UNIX as u32, list, deny);
++
++    // Linear deny list. `list` reloads the syscall number because the socket
++    // check may have clobbered the accumulator with args[0].
++    b.mark(list);
++    b.ld_abs(OFF_NR);
++    for syscall in deny_list() {
++        let next = b.label();
++        b.jeq(syscall, deny, next);
++        b.mark(next);
++    }
++    b.ret(RET_ALLOW);
++    b.mark(deny);
++    b.ret(RET_ERRNO | (libc::EACCES as u32 & ERRNO_DATA_MASK));
++    b.finish()
++}
++
++/// Install the filter on all threads via `TSYNC`.
++///
++/// `TSYNC` requires every thread to already have `PR_SET_NO_NEW_PRIVS`; if any
++/// thread cannot be synchronised the filter is not installed and this fails
++/// closed, so the caller must not treat the process as confined.
++pub fn install() -> Result<String, String> {
++    let filter = build();
++    let prog = SockFprog {
++        len: filter.len() as u16,
++        filter: filter.as_ptr(),
++    };
++    // SAFETY: `prog` points at `filter`, a live Vec of `SockFilter` that
++    // outlives the call, and `len` matches its length.
++    let rc = unsafe {
++        libc::syscall(
++            libc::SYS_seccomp,
++            SECCOMP_SET_MODE_FILTER,
++            SECCOMP_FILTER_FLAG_TSYNC,
++            &prog as *const SockFprog,
++        )
++    };
++    if rc != 0 {
++        return Err(format!(
++            "seccomp(SET_MODE_FILTER, TSYNC): {}",
++            std::io::Error::last_os_error()
++        ));
++    }
++    Ok(format!(
++        "{} bpf insns, {} denied syscalls, AF_UNIX-only sockets",
++        filter.len(),
++        deny_list().len()
++    ))
++}
++
++/// Exposed for unit tests: compile the filter without installing it.
++#[cfg(test)]
++fn compiled_filter() -> Vec<SockFilter> {
++    build()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn every_jump_is_forward_and_in_range() {
++        let filter = compiled_filter();
++        assert!(!filter.is_empty());
++        assert!(filter.len() < 255, "jt/jf are u8-limited");
++        // The program must end in an unconditional return.
++        assert_eq!(filter.last().map(|i| i.code), Some(RET_K));
++    }
++
++    #[test]
++    fn last_instruction_denies_with_eacces() {
++        let filter = compiled_filter();
++        let last = filter.last().expect("non-empty");
++        assert_eq!(last.k, RET_ERRNO | (libc::EACCES as u32 & ERRNO_DATA_MASK));
++    }
++
++    #[test]
++    fn deny_list_is_sorted_and_unique() {
++        let list = deny_list();
++        let mut sorted = list.clone();
++        sorted.sort_unstable();
++        sorted.dedup();
++        assert_eq!(list, sorted);
++        assert!(list.contains(&(libc::SYS_execve as u32)));
++        assert!(list.contains(&(libc::SYS_bpf as u32)));
++    }
++
++    #[test]
++    fn allows_become_default_and_index_types_compile() {
++        // A smoke check that the assembler produced 8-byte instructions too.
++        let filter = compiled_filter();
++        assert_eq!(std::mem::size_of::<SockFilter>(), 8);
++        assert!(filter.iter().all(|i| i.code != 0 || i.k != 0));
++    }
++}
++
+diff --git a/crates/acos-sandbox/src/live.rs b/crates/acos-sandbox/src/live.rs
+new file mode 100644
+index 0000000..6fecaef
+--- /dev/null
++++ b/crates/acos-sandbox/src/live.rs
+@@ -0,0 +1,137 @@
++//! Fork-and-confine live probe, used by `acos sandbox-probe`.
++//!
++//! Forks a child that applies the profile and reports the resulting layer
++//! statuses back over a pipe. The parent is never confined, so the probe can
++//! run inside a normal process. This is safe to call while single-threaded;
++//! callers that are already multi-threaded should rely on the static
++//! [`probe`](crate::probe) instead.
++
++use std::os::raw::{c_int, c_void};
++
++use serde::{Deserialize, Serialize};
++
++use crate::confine::{confine, ConfinementReport};
++use crate::error::ConfineError;
++use crate::ConfineProfile;
++
++#[derive(Serialize, Deserialize)]
++enum LiveOutcome {
++    Report(ConfinementReport),
++    Error { code: String, message: String },
++}
++
++/// Apply `profile` in a forked child and return the child's report.
++///
++/// The child's `keep_fds` is extended with the report pipe so fd hygiene in
++/// the child cannot sever the report channel.
++pub fn probe_live(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineError> {
++    let mut fds = [0 as c_int; 2];
++    // SAFETY: `fds` is a valid two-element out-parameter array.
++    let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
++    if rc != 0 {
++        return Err(unavailable(format!(
++            "pipe: {}",
++            std::io::Error::last_os_error()
++        )));
++    }
++    let (read_fd, write_fd) = (fds[0], fds[1]);
++
++    // SAFETY: `fork` has no arguments. The child runs a bounded code path and
++    // terminates with `_exit`; it never returns into the parent's stack.
++    let pid = unsafe { libc::fork() };
++    if pid < 0 {
++        // SAFETY: both descriptors are live and owned here.
++        unsafe {
++            libc::close(read_fd);
++            libc::close(write_fd);
++        }
++        return Err(unavailable(format!(
++            "fork: {}",
++            std::io::Error::last_os_error()
++        )));
++    }
++    if pid == 0 {
++        // Child: report through the pipe, then leave immediately.
++        // SAFETY: the read end is not needed in the child.
++        unsafe {
++            libc::close(read_fd);
++        }
++        let mut child_profile = profile.clone();
++        if !child_profile.keep_fds.contains(&write_fd) {
++            child_profile.keep_fds.push(write_fd);
++        }
++        let outcome = match confine(&child_profile) {
++            Ok(report) => LiveOutcome::Report(report),
++            Err(e) => LiveOutcome::Error {
++                code: e.code().to_string(),
++                message: e.to_string(),
++            },
++        };
++        let payload = serde_json::to_vec(&outcome).unwrap_or_default();
++        write_all(write_fd, &payload);
++        // SAFETY: `_exit` terminates without running destructors or atexit.
++        unsafe {
++            libc::_exit(0);
++        }
++    }
++
++    // Parent.
++    // SAFETY: the write end is closed in the parent; the child owns its copy.
++    unsafe {
++        libc::close(write_fd);
++    }
++    let payload = read_all(read_fd);
++    // SAFETY: `read_fd` is live.
++    unsafe {
++        libc::close(read_fd);
++    }
++    let mut status: c_int = 0;
++    // SAFETY: `pid` is a live child and `status` is a valid out-parameter.
++    unsafe {
++        libc::waitpid(pid, &mut status, 0);
++    }
++
++    match serde_json::from_slice::<LiveOutcome>(&payload) {
++        Ok(LiveOutcome::Report(report)) => Ok(report),
++        Ok(LiveOutcome::Error { code, message }) => Err(ConfineError::Unavailable {
++            missing: Vec::new(),
++            message: format!("{code}: {message}"),
++        }),
++        Err(e) => Err(unavailable(format!(
++            "invalid live probe output: {e} ({})",
++            String::from_utf8_lossy(&payload)
++        ))),
++    }
++}
++
++fn unavailable(message: String) -> ConfineError {
++    ConfineError::Unavailable {
++        missing: Vec::new(),
++        message,
++    }
++}
++
++fn write_all(fd: c_int, mut buf: &[u8]) {
++    while !buf.is_empty() {
++        // SAFETY: `buf` is a valid slice and `fd` is a live descriptor.
++        let n = unsafe { libc::write(fd, buf.as_ptr() as *const c_void, buf.len()) };
++        if n <= 0 {
++            break;
++        }
++        buf = &buf[n as usize..];
++    }
++}
++
++fn read_all(fd: c_int) -> Vec<u8> {
++    let mut out = Vec::new();
++    let mut chunk = [0u8; 4096];
++    loop {
++        // SAFETY: `chunk` is a valid mutable buffer and `fd` is live.
++        let n = unsafe { libc::read(fd, chunk.as_mut_ptr() as *mut c_void, chunk.len()) };
++        if n <= 0 {
++            break;
++        }
++        out.extend_from_slice(&chunk[..n as usize]);
++    }
++    out
++}
+diff --git a/crates/acos-sandbox/src/probe.rs b/crates/acos-sandbox/src/probe.rs
+new file mode 100644
+index 0000000..2fc078f
+--- /dev/null
++++ b/crates/acos-sandbox/src/probe.rs
+@@ -0,0 +1,82 @@
++//! Unprivileged capability probe: what can this host actually support.
++//!
++//! Every field is derived from read-only kernel interfaces
++//! (`/proc/sys`, `/sys/fs/cgroup`) or a version syscall. Nothing here changes
++//! process state, so it is safe to call before a decision to confine.
++
++use serde::{Deserialize, Serialize};
++
++use crate::linux;
++
++/// What the running kernel/host can support, independent of any profile.
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct Capabilities {
++    /// `uname -r`.
++    pub kernel_release: String,
++    /// `std::env::consts::ARCH` (e.g. `x86_64`).
++    pub arch: String,
++    /// Landlock ABI version, or `None` when Landlock is unavailable.
++    pub landlock_abi: Option<u32>,
++    /// Whether the kernel exposes the seccomp-bpf interface.
++    pub seccomp: bool,
++    /// Whether unprivileged user namespaces can be created.
++    pub unprivileged_userns: bool,
++    /// Whether a cgroup-v2 hierarchy is mounted.
++    pub cgroup_v2: bool,
++}
++
++/// Probe the host. Does not modify the process.
++pub fn probe() -> Capabilities {
++    Capabilities {
++        kernel_release: kernel_release(),
++        arch: std::env::consts::ARCH.to_string(),
++        landlock_abi: linux::landlock_abi(),
++        seccomp: seccomp_available(),
++        unprivileged_userns: unprivileged_userns_available(),
++        cgroup_v2: std::path::Path::new("/sys/fs/cgroup/cgroup.controllers").exists(),
++    }
++}
++
++fn kernel_release() -> String {
++    std::fs::read_to_string("/proc/sys/kernel/osrelease")
++        .map(|s| s.trim().to_string())
++        .unwrap_or_else(|_| std::env::consts::OS.to_string())
++}
++
++fn seccomp_available() -> bool {
++    // `actions_avail` exists on every kernel that supports seccomp filters;
++    // the directory itself is the fallback for older exports.
++    std::path::Path::new("/proc/sys/kernel/seccomp/actions_avail").exists()
++        || std::path::Path::new("/proc/sys/kernel/seccomp").is_dir()
++}
++
++fn unprivileged_userns_available() -> bool {
++    // The `unprivileged_userns_clone` knob (Debian/Ubuntu) gates it explicitly.
++    if let Ok(value) = std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone") {
++        if value.trim() == "0" {
++            return false;
++        }
++    }
++    // `max_user_namespaces` is the upstream knob: 0 disables unprivileged
++    // creation.
++    match std::fs::read_to_string("/proc/sys/user/max_user_namespaces") {
++        Ok(value) => value.trim().parse::<u64>().map(|n| n > 0).unwrap_or(true),
++        Err(_) => true,
++    }
++}
++
++/// Probe whether a transient systemd user scope (`systemd-run --user --scope`)
++/// can be created for optional cgroup-v2 memory/PID limits.
++///
++/// This *does* spawn a helper process, so it is deliberately not part of
++/// [`probe`]; it is reported by `acos sandbox-probe` and is never required.
++pub fn systemd_user_scope_available() -> bool {
++    std::process::Command::new("systemd-run")
++        .args(["--user", "--scope", "-q", "true"])
++        .stdin(std::process::Stdio::null())
++        .stdout(std::process::Stdio::null())
++        .stderr(std::process::Stdio::null())
++        .status()
++        .map(|s| s.success())
++        .unwrap_or(false)
++}
+diff --git a/crates/acos-sandbox/tests/confine.rs b/crates/acos-sandbox/tests/confine.rs
+new file mode 100644
+index 0000000..6837d5c
+--- /dev/null
++++ b/crates/acos-sandbox/tests/confine.rs
+@@ -0,0 +1,147 @@
++//! End-to-end confinement harness.
++//!
++//! Runs the `sandbox_child` bin as a separate process. With confinement on, a
++//! set of hostile actions must fail while normal runtime actions must succeed;
++//! with confinement off, the same hostile actions must succeed, proving the
++//! sandbox (not the environment) is what denies them.
++
++use std::path::PathBuf;
++use std::process::Command;
++use std::sync::atomic::{AtomicU64, Ordering};
++
++const OK: i32 = 0;
++const DENIED: i32 = 10;
++
++static NEXT_ID: AtomicU64 = AtomicU64::new(0);
++
++fn child_bin() -> PathBuf {
++    PathBuf::from(env!("CARGO_BIN_EXE_sandbox_child"))
++}
++
++struct Sandbox {
++    root: PathBuf,
++}
++
++impl Sandbox {
++    fn new() -> Self {
++        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
++        let root = std::env::temp_dir().join(format!(
++            "acos-sandbox-test-{}-{}",
++            std::process::id(),
++            id
++        ));
++        let _ = std::fs::remove_dir_all(&root);
++        std::fs::create_dir_all(root.join("ro")).expect("create ro");
++        std::fs::create_dir_all(root.join("rw")).expect("create rw");
++        std::fs::create_dir_all(root.join("outside")).expect("create outside");
++        std::fs::write(root.join("ro/hello.txt"), b"hello\n").expect("seed ro");
++        std::fs::write(root.join("outside/secret.txt"), b"secret\n").expect("seed outside");
++        Sandbox { root }
++    }
++
++    fn run(&self, action: &str, confined: bool) -> i32 {
++        let mut cmd = Command::new(child_bin());
++        cmd.arg("--action")
++            .arg(action)
++            .arg("--ro")
++            .arg(self.root.join("ro"))
++            .arg("--rw")
++            .arg(self.root.join("rw"))
++            .arg("--outside")
++            .arg(self.root.join("outside"));
++        if !confined {
++            cmd.arg("--no-confinement");
++        }
++        cmd.status()
++            .expect("spawn sandbox_child")
++            .code()
++            .unwrap_or(-1)
++    }
++}
++
++impl Drop for Sandbox {
++    fn drop(&mut self) {
++        let _ = std::fs::remove_dir_all(&self.root);
++    }
++}
++
++#[test]
++fn confined_process_denies_dangerous_actions_and_allows_normal_ones() {
++    let sandbox = Sandbox::new();
++
++    // Permitted: normal runtime needs.
++    for action in ["open_ro", "write_data", "threads", "mmap_exec", "futex"] {
++        assert_eq!(
++            sandbox.run(action, true),
++            OK,
++            "{action} should succeed inside confinement"
++        );
++    }
++
++    // Denied: filesystem escape.
++    for action in ["open_outside", "write_ro", "write_outside"] {
++        assert_eq!(
++            sandbox.run(action, true),
++            DENIED,
++            "{action} should be denied by Landlock"
++        );
++    }
++
++    // Denied: syscall escape.
++    for action in ["exec", "ptrace", "socket_inet", "process_vm"] {
++        assert_eq!(
++            sandbox.run(action, true),
++            DENIED,
++            "{action} should be denied by seccomp"
++        );
++    }
++}
++
++#[test]
++fn baseline_without_confinement_allows_what_confinement_denies() {
++    let sandbox = Sandbox::new();
++    for action in ["open_outside", "write_outside", "socket_inet", "ptrace"] {
++        assert_eq!(
++            sandbox.run(action, false),
++            OK,
++            "{action} should succeed without confinement"
++        );
++    }
++}
++
++#[test]
++fn probe_reports_which_layers_are_active() {
++    let sandbox = Sandbox::new();
++    let output = Command::new(child_bin())
++        .arg("--action")
++        .arg("probe")
++        .arg("--ro")
++        .arg(sandbox.root.join("ro"))
++        .arg("--rw")
++        .arg(sandbox.root.join("rw"))
++        .output()
++        .expect("spawn sandbox_child probe");
++    assert!(
++        output.status.success(),
++        "probe failed: {}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let report: serde_json::Value =
++        serde_json::from_slice(&output.stdout).expect("probe emitted JSON");
++
++    for layer in ["no_new_privs", "close_fds", "sanitize_env", "rlimits", "landlock", "seccomp"] {
++        let status = report["layers"]
++            .as_array()
++            .expect("layers array")
++            .iter()
++            .find(|entry| entry["layer"] == layer)
++            .and_then(|entry| entry["status"].as_str())
++            .unwrap_or("missing");
++        assert_eq!(status, "active", "layer {layer} should be active: {report}");
++    }
++    assert_eq!(report["active"], serde_json::Value::Bool(true));
++    assert!(
++        report["landlock_abi"].as_u64().is_some(),
++        "landlock ABI should be reported: {report}"
++    );
++}
