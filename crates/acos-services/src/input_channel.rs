@@ -121,6 +121,13 @@ pub const MAX_POINTERS: usize = 16;
 pub const MAX_MESSAGE_SIZE: usize = HEADER_SIZE + MOTION_FIXED_SIZE + MAX_POINTERS * POINTER_SIZE;
 /// `sizeof` of a published `KEY` message.
 pub const KEY_MESSAGE_SIZE: usize = 0x68;
+/// `sizeof` of a `FOCUS` message (server → consumer). I1 originally recorded
+/// `8` from a hand-count of the header; the image's `InputMessage::size()`
+/// jump table returns `0x10`, and `publishFocusEvent` writes `eventId` at
+/// `0x08` and `hasFocus` at `0x0c` (see `docs/IMAGE_ABI_NOTEBOOK.md`, I2).
+pub const FOCUS_MESSAGE_SIZE: usize = 0x10;
+/// `sizeof` of a `TOUCH_MODE` message (server → consumer).
+pub const TOUCH_MODE_MESSAGE_SIZE: usize = 0x10;
 /// `sizeof` of a `FINISHED` message (the consumer's reply).
 pub const FINISHED_MESSAGE_SIZE: usize = 0x18;
 /// `sizeof` of a `TIMELINE` message (the consumer's reply).
@@ -633,6 +640,27 @@ pub enum InputMessage {
         /// The event body.
         event: KeyEvent,
     },
+    /// A focus change published by the dispatcher (`InputPublisher::
+    /// publishFocusEvent`). The receiver turns it into
+    /// `InputEventReceiver.onFocusEvent` → `ViewRootImpl.windowFocusChanged`;
+    /// it is **not** acknowledged with `FINISHED`.
+    Focus {
+        /// Channel sequence number.
+        seq: u32,
+        /// `FocusEvent.eventId`.
+        event_id: i32,
+        /// `FocusEvent.hasFocus`.
+        has_focus: bool,
+    },
+    /// A touch-mode change (`publishTouchModeEvent`).
+    TouchMode {
+        /// Channel sequence number.
+        seq: u32,
+        /// `TouchModeEvent.eventId`.
+        event_id: i32,
+        /// `TouchModeEvent.inTouchMode`.
+        in_touch_mode: bool,
+    },
     /// The consumer's acknowledgement of one sequence.
     Finished {
         /// The sequence being acknowledged.
@@ -666,6 +694,8 @@ impl InputMessage {
         match self {
             Self::Motion { seq, .. }
             | Self::Key { seq, .. }
+            | Self::Focus { seq, .. }
+            | Self::TouchMode { seq, .. }
             | Self::Finished { seq, .. }
             | Self::Timeline { seq, .. } => *seq,
         }
@@ -678,6 +708,16 @@ impl InputMessage {
         match self {
             Self::Motion { seq, event } => encode_motion(*seq, event),
             Self::Key { seq, event } => Ok(encode_key(*seq, event)),
+            Self::Focus {
+                seq,
+                event_id,
+                has_focus,
+            } => Ok(encode_focus(*seq, *event_id, *has_focus)),
+            Self::TouchMode {
+                seq,
+                event_id,
+                in_touch_mode,
+            } => Ok(encode_touch_mode(*seq, *event_id, *in_touch_mode)),
             Self::Finished {
                 seq,
                 handled,
@@ -775,6 +815,26 @@ impl InputMessage {
                     },
                 })
             }
+            TYPE_FOCUS => {
+                if bytes.len() != FOCUS_MESSAGE_SIZE {
+                    return Err(ChannelError::Malformed("focus size mismatch"));
+                }
+                Ok(Self::Focus {
+                    seq,
+                    event_id: get_i32(bytes, 0x08)?,
+                    has_focus: bytes[0x0c] != 0,
+                })
+            }
+            TYPE_TOUCH_MODE => {
+                if bytes.len() != TOUCH_MODE_MESSAGE_SIZE {
+                    return Err(ChannelError::Malformed("touch-mode size mismatch"));
+                }
+                Ok(Self::TouchMode {
+                    seq,
+                    event_id: get_i32(bytes, 0x08)?,
+                    in_touch_mode: bytes[0x0c] != 0,
+                })
+            }
             TYPE_FINISHED => {
                 if bytes.len() != FINISHED_MESSAGE_SIZE {
                     return Err(ChannelError::Malformed("finished size mismatch"));
@@ -857,6 +917,24 @@ fn encode_key(seq: u32, event: &KeyEvent) -> Vec<u8> {
     put_i32(&mut buf, 0x58, event.repeat_count);
     put_i32(&mut buf, 0x5c, 0); // empty2
     put_i64(&mut buf, 0x60, event.down_time);
+    buf
+}
+
+fn encode_focus(seq: u32, event_id: i32, has_focus: bool) -> Vec<u8> {
+    let mut buf = vec![0u8; FOCUS_MESSAGE_SIZE];
+    put_u32(&mut buf, 0x00, TYPE_FOCUS);
+    put_u32(&mut buf, 0x04, seq);
+    put_i32(&mut buf, 0x08, event_id);
+    buf[0x0c] = u8::from(has_focus);
+    buf
+}
+
+fn encode_touch_mode(seq: u32, event_id: i32, in_touch_mode: bool) -> Vec<u8> {
+    let mut buf = vec![0u8; TOUCH_MODE_MESSAGE_SIZE];
+    put_u32(&mut buf, 0x00, TYPE_TOUCH_MODE);
+    put_u32(&mut buf, 0x04, seq);
+    put_i32(&mut buf, 0x08, event_id);
+    buf[0x0c] = u8::from(in_touch_mode);
     buf
 }
 
@@ -1050,6 +1128,13 @@ impl InputPublisher {
         id
     }
 
+    /// Allocate an `eventId` for a body this caller encodes itself (the
+    /// session's transform-carried tap). Same counter the `tap`/`key` helpers
+    /// use, so ids stay unique per channel.
+    pub fn allocate_event_id(&mut self) -> i32 {
+        self.alloc_event_id()
+    }
+
     /// `InputChannel::sendMessage`: one `SOCK_SEQPACKET` datagram, non-blocking,
     /// `MSG_NOSIGNAL`, and the buffer the consumer will read (`0x9a8` max).
     pub fn publish(&mut self, message: &InputMessage) -> Result<()> {
@@ -1181,6 +1266,33 @@ impl InputPublisher {
     /// A key press on `CLOCK_MONOTONIC` now.
     pub fn key(&mut self, key_code: i32) -> Result<Gesture> {
         self.key_at(key_code, monotonic_nanos(), DEFAULT_TAP_HOLD_NANOS)
+    }
+
+    /// `InputPublisher::publishFocusEvent`: announce a focus change.
+    ///
+    /// Focus is not acknowledged (`InputEventReceiver.onFocusEvent` has no
+    /// `finishInputEvent`), so it is not added to the pending table.
+    pub fn focus(&mut self, has_focus: bool) -> Result<u32> {
+        let seq = self.alloc_seq()?;
+        let event_id = self.alloc_event_id();
+        self.publish(&InputMessage::Focus {
+            seq,
+            event_id,
+            has_focus,
+        })?;
+        Ok(seq)
+    }
+
+    /// `InputPublisher::publishTouchModeEvent`: announce the touch-mode state.
+    pub fn touch_mode(&mut self, in_touch_mode: bool) -> Result<u32> {
+        let seq = self.alloc_seq()?;
+        let event_id = self.alloc_event_id();
+        self.publish(&InputMessage::TouchMode {
+            seq,
+            event_id,
+            in_touch_mode,
+        })?;
+        Ok(seq)
     }
 
     /// Press several key codes in order (each a `DOWN`+`UP` pair).
@@ -1344,7 +1456,15 @@ impl InputChannelRegistry {
     /// appends `" (server)"`/`" (client)"` like `openInputChannelPair`.
     pub fn register(&mut self, token: BinderId, name: &str) -> Result<()> {
         let pair = open_input_channel_pair(name)?;
-        let client_name = format!("{name} (client)");
+        // The session's W2 name already ends in " client"; keep the framework's
+        // `... client` spelling without adding a second suffix (the API-34
+        // framework only requires a non-empty name, but the existing wire test
+        // and `InputChannel.mName` convention both use this form).
+        let client_name = if name.ends_with(" client") {
+            name.to_string()
+        } else {
+            format!("{name} client")
+        };
         self.channels.insert(
             token.0,
             ChannelEntry {
@@ -1368,7 +1488,7 @@ impl InputChannelRegistry {
         self.channels.get(&token.0).map(|e| &e.publisher)
     }
 
-    /// The client-end name (`"<window> (client)"`).
+    /// The client-end name (`"<window> client"`).
     #[must_use]
     pub fn name(&self, token: BinderId) -> Option<&str> {
         self.channels.get(&token.0).map(|e| e.name.as_str())
@@ -1535,6 +1655,46 @@ mod tests {
         assert_eq!(KEY_MESSAGE_SIZE, 0x68);
         assert_eq!(FINISHED_MESSAGE_SIZE, 0x18);
         assert_eq!(TIMELINE_MESSAGE_SIZE, 0x20);
+        assert_eq!(FOCUS_MESSAGE_SIZE, 0x10);
+        assert_eq!(TOUCH_MODE_MESSAGE_SIZE, 0x10);
+    }
+
+    #[test]
+    fn focus_and_touch_mode_match_the_image_publisher_body() {
+        // libinput.so publishFocusEvent (0x79910) writes type@0, seq@4,
+        // eventId@8, hasFocus@0xc; size() returns 0x10 for FOCUS. I1 originally
+        // recorded 8, which this test now pins against the image.
+        let f = InputMessage::Focus {
+            seq: 7,
+            event_id: 42,
+            has_focus: true,
+        }
+        .encode()
+        .unwrap();
+        assert_eq!(f.len(), 0x10);
+        assert_eq!(u32::from_le_bytes(f[0..4].try_into().unwrap()), TYPE_FOCUS);
+        assert_eq!(u32::from_le_bytes(f[4..8].try_into().unwrap()), 7);
+        assert_eq!(i32::from_le_bytes(f[8..12].try_into().unwrap()), 42);
+        assert_eq!(f[0x0c], 1);
+        assert_eq!(
+            InputMessage::decode(&f).unwrap(),
+            InputMessage::Focus {
+                seq: 7,
+                event_id: 42,
+                has_focus: true
+            }
+        );
+
+        let t = InputMessage::TouchMode {
+            seq: 8,
+            event_id: 43,
+            in_touch_mode: false,
+        }
+        .encode()
+        .unwrap();
+        assert_eq!(t.len(), 0x10);
+        assert_eq!(u32::from_le_bytes(t[0..4].try_into().unwrap()), TYPE_TOUCH_MODE);
+        assert_eq!(t[0x0c], 0);
     }
 
     #[test]

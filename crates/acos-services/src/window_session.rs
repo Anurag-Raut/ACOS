@@ -55,6 +55,9 @@
 //!   ACOS has no surface sync group, and the framework treats null as "no
 //!   sync".
 
+#[path = "input_dispatch.rs"]
+pub mod input_dispatch;
+
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -142,6 +145,11 @@ pub struct WindowSessionService {
     /// image-less code 17 must not be put on the wire). Counted so a silent
     /// drop can be measured.
     callbacks_deferred: usize,
+    /// I2: the one authoritative `InputChannel` producer for this host. When
+    /// present, `addToDisplayAsUser` writes *this* registry's client fd (not
+    /// `acos-wm`'s private channel), publishes the real FOCUS/TOUCH_MODE
+    /// state, and `relayout` wakes the env-driven injector.
+    input: Option<input_dispatch::InputHost>,
 }
 
 impl std::fmt::Debug for WindowSessionService {
@@ -150,6 +158,7 @@ impl std::fmt::Debug for WindowSessionService {
             .field("window_id", &self.window_id_binder)
             .field("visibility_delivered", &self.visibility_delivered.len())
             .field("callbacks_deferred", &self.callbacks_deferred)
+            .field("input", &self.input.as_ref().map(|h| h.is_active()))
             .finish()
     }
 }
@@ -164,7 +173,16 @@ impl WindowSessionService {
             compositor: None,
             visibility_delivered: HashSet::new(),
             callbacks_deferred: 0,
+            input: None,
         }
+    }
+
+    /// I2: hand I1's producer registry to the session. Without this call the
+    /// W2 fd path is unchanged (unit fixtures without a producer).
+    #[must_use]
+    pub fn with_input(mut self, input: input_dispatch::InputHost) -> Self {
+        self.input = Some(input);
+        self
     }
 
     /// Serve `relayout` with a real compositor behind it (W5).
@@ -295,7 +313,27 @@ fn present<T: ParcelCodec>(reply: &mut Parcel, value: Option<&T>) -> SResult<()>
 /// The descriptor is a duplicate of the client end of the window's socketpair,
 /// so the framework installs an `InputEventReceiver` on a channel the ACOS
 /// dispatcher keeps the other end of.
-fn write_input_channel(state: &mut WmsState, add: &AddWindowResult, reply: &mut Parcel) -> SResult<()> {
+fn write_input_channel(
+    state: &mut WmsState,
+    input: Option<&input_dispatch::InputHost>,
+    add: &AddWindowResult,
+    reply: &mut Parcel,
+) -> SResult<()> {
+    // I2: when the producer registry is installed it is the **only** fd the
+    // guest gets; the server end lives in that registry keyed by the window
+    // token, so `inject_tap`/`inject_key` can publish on the same socket.
+    if let (Some(input), Some(token)) = (input, add.input_channel.token) {
+        let result = {
+            let mut dispatch = input
+                .state()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            dispatch.write_and_forget(token, reply)
+        };
+        return result.map_err(|e| {
+            ServiceError::Internal(format!("{DESCRIPTOR}: register window input: {e}"))
+        });
+    }
     let handle = add.input_channel.channel_handle;
     let fd = state
         .wm
@@ -353,12 +391,13 @@ fn write_size_compat_scale(reply: &mut Parcel, values: &[f32], client_len: i32) 
 /// rejection) and an uninitialised channel.
 fn write_add_result(
     state: &mut WmsState,
+    input: Option<&input_dispatch::InputHost>,
     add: &AddWindowResult,
     size_compat_scale_len: i32,
     reply: &mut Parcel,
 ) -> SResult<()> {
     reply.write_int32(add.result);
-    write_input_channel(state, add, reply)?;
+    write_input_channel(state, input, add, reply)?;
     present(reply, Some(&add.insets_state))?;
     present(reply, Some(&add.insets_controls))?;
     present(reply, Some(&add.out_frame))?;
@@ -437,6 +476,27 @@ impl ServiceObject for WindowSessionService {
             let code = pc.callback.code();
             match &pc.callback {
                 WmCallback::DispatchAppVisibility { visible: true } => {
+                    // I2 diagnostic mode: W6's visibility delivery makes the
+                    // first traversal call `drawSoftware`, which blocks the
+                    // main looper in `Surface.nativeLockCanvas` (no buffer yet,
+                    // W6 §3). Input is dispatched on that same looper, so an
+                    // injected tap would never run. When an injection plan is
+                    // configured we hold this callback and log why; the tap
+                    // path itself is unchanged and still goes through the real
+                    // socketpair. Remove this gate once the first buffer lands.
+                    if let Some(input) = &self.input {
+                        if input.is_active() {
+                            self.callbacks_deferred += 1;
+                            if std::env::var_os("ACOSI2_VERBOSE").is_some() {
+                                eprintln!(
+                                    "ACOSI2 holding dispatchAppVisibility for window {:#x}: \
+                                     input needs the main looper free (W6 lockCanvas wall)",
+                                    pc.window
+                                );
+                            }
+                            continue;
+                        }
+                    }
                     // A rejected add (`null` IWindow) has no binder to address.
                     // There is nothing to deliver to, and a fabricated handle
                     // would be a fake callback.
@@ -532,8 +592,29 @@ impl ServiceObject for WindowSessionService {
                 let add = state
                     .add_to_display_as_user(window, params, requested_visible_types)
                     .map_err(werr)?;
+                // I2: create the authoritative pair before the reply so the
+                // body written below is the fd the guest installs its real
+                // `InputEventReceiver` on. The FOCUS/TOUCH_MODE messages are
+                // queued on it here (the guest reads them after nativeInit).
+                if let (Some(input), Some(token), true) = (
+                    self.input.as_ref(),
+                    add.input_channel.token,
+                    add.result == acos_wm::wms::ADD_OKAY,
+                ) {
+                    let mut dispatch = input
+                        .state()
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    dispatch
+                        .register_window(token, &add.input_channel.name)
+                        .map_err(|e| {
+                            ServiceError::Internal(format!(
+                                "{DESCRIPTOR}: register window input: {e}"
+                            ))
+                        })?;
+                }
                 crate::exception::write_no_exception(reply);
-                write_add_result(&mut state, &add, size_compat_scale_len, reply)?;
+                write_add_result(&mut state, self.input.as_ref(), &add, size_compat_scale_len, reply)?;
                 // W5 finding: the real WMS also sends `IWindow`
                 // `dispatchAppVisibility(true)` here, and `ViewRootImpl`
                 // derives `mAppVisible` from the add result's
@@ -569,6 +650,13 @@ impl ServiceObject for WindowSessionService {
             codes::REMOVE => {
                 if let Some(binder) = read_window(data)? {
                     state.remove(binder.0).map_err(werr)?;
+                    if let Some(input) = &self.input {
+                        let mut dispatch = input
+                            .state()
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        dispatch.remove(binder);
+                    }
                 }
                 crate::exception::write_no_exception(reply);
             }
@@ -625,6 +713,12 @@ impl ServiceObject for WindowSessionService {
                 }
                 crate::exception::write_no_exception(reply);
                 write_relayout_result(&r, reply)?;
+                // I2: the first traversal is the first moment the live view
+                // tree has bounds. Wake the env-driven injector (no-op when no
+                // plan is configured).
+                if let Some(input) = &self.input {
+                    input.note_relayout(window);
+                }
                 // W5 finding: `resized(reportDraw=true)` is the other callback
                 // the client needs before it will draw; same open item as the
                 // visibility callback above. It is deliberately **not**

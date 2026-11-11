@@ -9,6 +9,9 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -261,9 +264,85 @@ public final class LaunchMain {
                     + " display_state=" + (attach == null ? "null" : get(attach, "mDisplayState"))
                     + " renderer=" + (attach == null ? "null" : get(attach, "mThreadedRenderer"))
                     + " dirty=" + dirty
-                    + " layout_requested=" + get(vr, "mLayoutRequested"));
+                    + " layout_requested=" + get(vr, "mLayoutRequested")
+                    + " last_touch=" + get(vr, "mLastTouchPoint")
+                    + " touch_source=" + get(vr, "mLastTouchSource")
+                    + " touch_device=" + get(vr, "mLastTouchDeviceId")
+                    + " pending_input=" + get(vr, "mPendingInputEventCount")
+                    + " in_touch_mode=" + (attach == null ? "null" : get(attach, "mInTouchMode"))
+                    + " has_focus=" + (attach == null ? "null" : get(attach, "mHasWindowFocus")));
         } catch (Throwable x) {
             System.out.println("ACOSLAUNCH MARK viewroot-probe failed " + x);
+        }
+    }
+
+    /**
+     * I2 read-only input probe: walks the live decor view and prints the
+     * counter's text plus the Increment button's window-local bounds (the
+     * coordinate space an `InputChannel` MotionEvent uses). Nothing is
+     * touched or invoked; this only reads layout state.
+     */
+    static void probeInputTree(Object activity) {
+        try {
+            Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+            Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+            if (!(decor instanceof View)) {
+                System.out.println("ACOSLAUNCH MARK input-probe: no decor view");
+                return;
+            }
+            StringBuilder tree = new StringBuilder();
+            walkViews((View) decor, 0, tree);
+            System.out.println("ACOSLAUNCH MARK input-probe count_text=" + sCountText
+                    + " inc_bounds=" + sIncBounds + " tree={" + tree + "}");
+        } catch (Throwable x) {
+            System.out.println("ACOSLAUNCH MARK input-probe failed " + x);
+        }
+    }
+
+    static String sCountText = "<none>";
+    static String sIncBounds = "<none>";
+
+    static void walkViews(View v, int depth, StringBuilder tree) {
+        try {
+            String idName = "";
+            try {
+                int id = v.getId();
+                if (id != View.NO_ID) {
+                    idName = v.getResources().getResourceEntryName(id);
+                }
+            } catch (Throwable ignored) {
+            }
+            String text = "";
+            if (v instanceof TextView) {
+                CharSequence cs = ((TextView) v).getText();
+                text = cs == null ? "" : cs.toString();
+            }
+            int[] loc = new int[2];
+            v.getLocationInWindow(loc);
+            String row = depth + ":" + v.getClass().getSimpleName()
+                    + (idName.isEmpty() ? "" : "#" + idName)
+                    + (text.isEmpty() ? "" : "='" + text + "'")
+                    + "@" + v.getWidth() + "x" + v.getHeight()
+                    + "+" + loc[0] + "+" + loc[1]
+                    + (v.getVisibility() == View.VISIBLE ? "" : "(vis=" + v.getVisibility() + ")");
+            if (tree.length() < 3000) {
+                if (tree.length() > 0) tree.append(' ');
+                tree.append(row);
+            }
+            if ("count".equals(idName)) sCountText = text;
+            if ("inc".equals(idName)) {
+                sIncBounds = "[" + loc[0] + "," + loc[1] + " - "
+                        + (loc[0] + v.getWidth()) + "," + (loc[1] + v.getHeight()) + "]"
+                        + " center=" + (loc[0] + v.getWidth() / 2) + ","
+                        + (loc[1] + v.getHeight() / 2);
+            }
+            if (v instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) v;
+                for (int i = 0; i < g.getChildCount(); i++) {
+                    walkViews(g.getChildAt(i), depth + 1, tree);
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -394,9 +473,19 @@ public final class LaunchMain {
                 if (hold != null) {
                     try {
                         long ms = Long.parseLong(hold);
-                        Thread.sleep(ms);
+                        // I2: probe once the first traversal has laid the tree
+                        // out, before the hold elapses, so the diagnostic touch
+                        // listener is installed before a host-injected tap.
+                        Thread.sleep(Math.min(400L, ms / 2));
+                        probeInputTree(activity);
+                        Thread.sleep(Math.max(0L, ms - Math.min(400L, ms / 2)));
                         System.out.println("ACOSLAUNCH MARK held-after-resume ms=" + ms);
                         probeViewRoot(activity);
+                        // I2: read-only live view tree probe. The tap
+                        // coordinates come from the *live* post-layout bounds
+                        // here, not from the offline renderer. The same probe
+                        // after a host-injected tap shows the counter text.
+                        probeInputTree(activity);
                     } catch (Throwable ignored) {
                     }
                 }
@@ -601,6 +690,16 @@ public final class LaunchMain {
                 // native implementation (W3's wall). The InputChannel it is
                 // handed is the real socketpair from `addToDisplayAsUser`.
                 "register_android_view_InputEventReceiver",
+                // I2: the receiver's native `dispatchInputEvent` builds the
+                // Java event with the framework's own static factories
+                // (`MotionEvent.obtain` / `KeyEvent.obtain`). Those method ids
+                // live in the MotionEvent/KeyEvent registrations; without them
+                // the first published message aborts with
+                // "mid == null in CallStaticObjectMethodV from
+                //  MessageQueue.nativePollOnce" (the same allowlist class of
+                // wall as W4's InputEventReceiver gap).
+                "register_android_view_MotionEvent",
+                "register_android_view_KeyEvent",
                 // `ViewRootImpl.performTraversals` -> `dispatchAttachedToWindow`
                 // -> `TextView.drawableStateChanged` -> `StateListAnimator` runs
                 // an `ObjectAnimator`, whose `PropertyValuesHolder` setup uses

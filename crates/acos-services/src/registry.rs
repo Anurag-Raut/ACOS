@@ -176,7 +176,12 @@ pub fn install(host: &mut ServiceHost) {
         "android.view.IWindowSession",
         Box::new(
             crate::window_session::WindowSessionService::new(session_state, window_id)
-                .with_compositor(Arc::clone(&compositor)),
+                .with_compositor(Arc::clone(&compositor))
+                // I2: the one authoritative InputChannel producer. It publishes
+                // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
+                // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
+                // the first relayout and logs the FINISHED/TIMELINE replies.
+                .with_input(crate::window_session::input_dispatch::InputHost::from_env()),
         ),
     );
     wms_state
