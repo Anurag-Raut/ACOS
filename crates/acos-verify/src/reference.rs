@@ -155,6 +155,7 @@ impl ReferenceBackend {
             tree,
             screenshot_png: self.screenshot_png.clone(),
             crashed: self.crashed.clone(),
+            input: None,
         })
     }
 }

@@ -14,9 +14,11 @@ mod native_inventory;
 mod native_launch;
 mod observe_tree;
 mod parity;
+mod provenance;
 mod sandbox_probe;
 mod serve;
 mod session;
+mod trust;
 mod verify;
 
 use std::path::PathBuf;

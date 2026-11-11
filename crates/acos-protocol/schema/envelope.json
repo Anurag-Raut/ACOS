@@ -486,6 +486,20 @@
           "type": "string"
         },
         {
+          "description": "A tree-only assertion ran on an untrusted APK run, where the tree is guest-asserted and cannot corroborate a pass (fail closed).",
+          "enum": [
+            "INSUFFICIENT_HOST_EVIDENCE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The requested assertion kind has no implementation in this build.",
+          "enum": [
+            "UNSUPPORTED_ASSERTION"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The requested session does not exist (or was already destroyed).",
           "enum": [
             "SESSION_NOT_FOUND"
@@ -552,6 +566,13 @@
           "description": "A declared resource budget was exhausted.",
           "enum": [
             "RESOURCE_LIMIT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "An untrusted APK run was requested while the product path is not certified for untrusted APKs. Only the labelled test override may run it.",
+          "enum": [
+            "UNTRUSTED_APK_NOT_CERTIFIED"
           ],
           "type": "string"
         },

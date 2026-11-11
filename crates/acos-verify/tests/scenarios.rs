@@ -400,6 +400,7 @@ fn slice_observation(
         tree,
         screenshot_png: Some(screenshot.to_vec()),
         crashed: None,
+        input: None,
     }
 }
 

@@ -335,6 +335,38 @@ pub struct LaunchOutcome {
     pub detail: serde_json::Value,
 }
 
+/// One guest input acknowledgment (`FINISHED`/`TIMELINE`).
+///
+/// The host wrote the input message; the ack itself is guest-asserted. It is
+/// recorded for diagnostics, never as independent host evidence.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InputAck {
+    /// Input sequence number.
+    pub seq: u64,
+    /// Whether the guest claimed to handle the event.
+    pub handled: bool,
+    /// Guest-reported latency, when present.
+    pub latency_us: Option<u64>,
+}
+
+/// Host-observed input delivery plus the guest's acknowledgment.
+///
+/// `delivered` is the host's record that it injected the gesture/key/text.
+/// `visual_change` is the host's comparison of the frame the action produced
+/// with the frame before it. A legitimate action with no visual effect (a tap on
+/// a no-op area, a key a view consumes without redrawing) is delivered with
+/// `visual_change == false`; it is **not** a stale frame and must not be rejected
+/// as one. It also must not be reported as a state change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputDelivery {
+    /// The host injected the input and the guest session accepted it.
+    pub delivered: bool,
+    /// The completed frame after the action differs from the one before it.
+    pub visual_change: bool,
+    /// Guest acknowledgments, in delivery order.
+    pub acks: Vec<InputAck>,
+}
+
 /// The session state after an observation or an action.
 #[derive(Debug, Clone)]
 pub struct SessionObservation {
@@ -350,6 +382,9 @@ pub struct SessionObservation {
     pub screenshot_png: Option<Vec<u8>>,
     /// A crash observed for this session, if any.
     pub crashed: Option<CrashRecord>,
+    /// Host-observed delivery for the input action that produced this
+    /// observation (`None` for launch/tree/capture observations).
+    pub input: Option<InputDelivery>,
 }
 
 /// The parameters for a `launch` step.

@@ -8,10 +8,12 @@
 //! * a negative scenario that somehow passes is converted into an `INTERNAL`
 //!   harness failure instead of being reported as a successful test.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use acos_protocol::assertion::{AssertionDiff, AssertionResult, ScreenshotAssertion};
+use acos_protocol::assertion::{
+    AssertionDiff, AssertionResult, RegionAssertion, ScreenshotAssertion,
+};
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
 use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef};
@@ -33,6 +35,7 @@ use crate::clock::Clock;
 use crate::error::VerifyError;
 use crate::manifest::sha256_file;
 use crate::screenshot;
+use sha2::{Digest, Sha256};
 
 /// Everything the executor needs about one run.
 #[derive(Debug, Clone)]
@@ -266,9 +269,10 @@ pub fn run_scenario(
                 .push(ArtifactRef::new("tree", acos_protocol::tree_file_name(seq)));
             if let Some(png) = &observation.screenshot_png {
                 artifacts::write_frame(&options.artifacts_dir, seq, png)?;
-                step_result
-                    .evidence
-                    .push(ArtifactRef::new("frame", acos_protocol::frame_file_name(seq)));
+                step_result.evidence.push(ArtifactRef::new(
+                    "frame",
+                    acos_protocol::frame_file_name(seq),
+                ));
             }
             produced_frames.push(observation.frame.clone());
         } else if let Some(frame) = &exec.produced_frame {
@@ -279,12 +283,10 @@ pub fn run_scenario(
             Some(StepRef::AssertLog(_) | StepRef::AssertNoCrash(_))
         ) && caps.logs
         {
-            step_result
-                .evidence
-                .push(ArtifactRef::new(
-                    "log",
-                    acos_protocol::artifacts::logcat_file_name(),
-                ));
+            step_result.evidence.push(ArtifactRef::new(
+                "log",
+                acos_protocol::artifacts::logcat_file_name(),
+            ));
         }
         step_result
             .evidence
@@ -671,7 +673,13 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver key");
             }
-            input_step(backend, &InputAction::Key(key.key), caps, previous, last_frame_seq)
+            input_step(
+                backend,
+                &InputAction::Key(key.key),
+                caps,
+                previous,
+                last_frame_seq,
+            )
         }
         StepRef::Back(_) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
@@ -803,6 +811,37 @@ fn execute_step(
                 StepExec::failed(evaluated)
             }
         }
+        StepRef::AssertRegion(assertion) => {
+            capabilities_used.insert(Capability::Screenshot.as_str().to_string());
+            if !caps.screenshot {
+                return StepExec::unsupported(
+                    Capability::Screenshot,
+                    "the backend cannot capture a frame for a region assertion",
+                );
+            }
+            // A region assertion always needs new pixels: the executor's
+            // certainty rule. It is host-observed and therefore allowed on an
+            // untrusted APK run.
+            match backend.capture() {
+                Ok(observation) => {
+                    if let Some(failure) = observation_binding_error(backend.id(), &observation) {
+                        return failure;
+                    }
+                    if let Some(failure) = meaningful_error(&observation) {
+                        return failure;
+                    }
+                    let evaluated = eval_region(assertion, &observation, scenario_path);
+                    let mut exec = if evaluated.result.passed {
+                        StepExec::passed_assertion(evaluated)
+                    } else {
+                        StepExec::failed(evaluated)
+                    };
+                    exec.observation = Some(observation);
+                    exec
+                }
+                Err(error) => StepExec::backend_error(&error, backend.id(), "assert_region"),
+            }
+        }
         StepRef::AssertScreenshot(assertion) => {
             capabilities_used.insert(Capability::Screenshot.as_str().to_string());
             if !caps.screenshot {
@@ -876,14 +915,24 @@ fn execute_step(
                 Err(error) => StepExec::backend_error(&error, backend.id(), "reset"),
             }
         }
-        StepRef::SetNetwork(setup) => environment_step(backend, caps, EnvironmentChange::Network(setup.clone())),
+        StepRef::SetNetwork(setup) => {
+            environment_step(backend, caps, EnvironmentChange::Network(setup.clone()))
+        }
         StepRef::SetPermission(setup) => {
             environment_step(backend, caps, EnvironmentChange::Permission(setup.clone()))
         }
-        StepRef::SetLocale(setup) => environment_step(backend, caps, EnvironmentChange::Locale(setup.clone())),
-        StepRef::SetDensity(setup) => environment_step(backend, caps, EnvironmentChange::Density(*setup)),
-        StepRef::SetTheme(setup) => environment_step(backend, caps, EnvironmentChange::Theme(*setup)),
-        StepRef::SetTime(setup) => environment_step(backend, caps, EnvironmentChange::Time(setup.clone())),
+        StepRef::SetLocale(setup) => {
+            environment_step(backend, caps, EnvironmentChange::Locale(setup.clone()))
+        }
+        StepRef::SetDensity(setup) => {
+            environment_step(backend, caps, EnvironmentChange::Density(*setup))
+        }
+        StepRef::SetTheme(setup) => {
+            environment_step(backend, caps, EnvironmentChange::Theme(*setup))
+        }
+        StepRef::SetTime(setup) => {
+            environment_step(backend, caps, EnvironmentChange::Time(setup.clone()))
+        }
         StepRef::CallActivityMethod(_) => StepExec::unsupported(
             Capability::Environment,
             "call_activity_method requires an injected debug hook that this build does not provide",
@@ -991,6 +1040,7 @@ fn frame_advancing_step(step: &Step) -> bool {
                 | StepRef::Rotate(_)
                 | StepRef::Capture(_)
                 | StepRef::AssertScreenshot(_)
+                | StepRef::AssertRegion(_)
         )
     )
 }
@@ -1096,6 +1146,38 @@ fn eval_tap_change(
     current: &SessionObservation,
     caps: Capabilities,
 ) -> Evaluated {
+    // A delivered input that produced no visible change is not stale: the host
+    // observed the injection, the guest accepted it, and the action's frame is
+    // fresh. It is also not a state change, so nothing visual is claimed.
+    if let Some(delivery) = &current.input {
+        if delivery.delivered && !delivery.visual_change {
+            let acks = delivery.acks.len();
+            return Evaluated::pass(
+                "input_delivery",
+                Vec::new(),
+                Some(format!(
+                    "host-observed input delivery ({acks} guest ack(s)); no visual change; \
+                     no state change claimed"
+                )),
+            );
+        }
+        if !delivery.delivered {
+            return Evaluated::fail(
+                "input_delivery",
+                Vec::new(),
+                AssertionDiff {
+                    expected: serde_json::json!({"delivered": true}),
+                    actual: serde_json::json!({"delivered": false}),
+                    path: None,
+                    detail: Some("the host did not observe input delivery".to_string()),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::NoFreshFrame,
+                    detail: "the host did not observe input delivery".to_string(),
+                },
+            );
+        }
+    }
     let Some(previous) = previous else {
         return Evaluated::pass(
             "state_change",
@@ -1104,10 +1186,10 @@ fn eval_tap_change(
         );
     };
     let change = current.changed_from(previous);
-    let tree_required = caps.ui_tree && (!current.tree.nodes.is_empty() || !previous.tree.nodes.is_empty());
-    let screenshot_required = caps.screenshot
-        && current.screenshot_png.is_some()
-        && previous.screenshot_png.is_some();
+    let tree_required =
+        caps.ui_tree && (!current.tree.nodes.is_empty() || !previous.tree.nodes.is_empty());
+    let screenshot_required =
+        caps.screenshot && current.screenshot_png.is_some() && previous.screenshot_png.is_some();
     let tree_ok = !tree_required || change.tree_changed;
     let screenshot_ok = !screenshot_required || change.screenshot_changed;
     if tree_ok && screenshot_ok {
@@ -1202,10 +1284,8 @@ fn eval_screenshot(
             },
         );
     };
-    let baseline_path = crate::verify::resolve_relative(
-        &scenario_path.display().to_string(),
-        &assertion.baseline,
-    );
+    let baseline_path =
+        crate::verify::resolve_relative(&scenario_path.display().to_string(), &assertion.baseline);
     let baseline = match std::fs::read(&baseline_path) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -1229,7 +1309,12 @@ fn eval_screenshot(
             );
         }
     };
-    match screenshot::compare_png(&baseline, actual, assertion.tolerance, &assertion.region_masks) {
+    match screenshot::compare_png(
+        &baseline,
+        actual,
+        assertion.tolerance,
+        &assertion.region_masks,
+    ) {
         Ok(diff) => {
             let detail = format!(
                 "{:.4}% of {} compared pixels changed (tolerance {:.4}%)",
@@ -1282,6 +1367,235 @@ fn eval_screenshot(
             },
         ),
     }
+}
+
+/// Evaluate a host-side pixel/region assertion against one fresh frame.
+///
+/// The region is cropped from the **host-observed** PNG. A match is exact where
+/// the scenario asks for exactness; colour statistics are reported alongside so
+/// a failure says what was actually drawn. OCR is not implemented: asking for it
+/// returns `UNSUPPORTED_ASSERTION`, never a pass.
+fn eval_region(
+    assertion: &RegionAssertion,
+    observation: &SessionObservation,
+    scenario_path: &Path,
+) -> Evaluated {
+    if assertion.text_ocr.is_some() {
+        return Evaluated::fail(
+            "region",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::json!({"text_ocr": assertion.text_ocr}),
+                actual: serde_json::Value::Null,
+                path: None,
+                detail: Some("no OCR implementation is available in this build".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::UnsupportedAssertion,
+                detail: "assert_region.text_ocr needs an OCR engine; this build has none"
+                    .to_string(),
+            },
+        );
+    }
+    let Some(actual_png) = observation.screenshot_png.as_deref() else {
+        return Evaluated::fail(
+            "region",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::json!({"region": [assertion.x, assertion.y, assertion.w, assertion.h]}),
+                actual: serde_json::Value::Null,
+                path: None,
+                detail: Some("capture returned no screenshot bytes".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::NoFreshFrame,
+                detail: "capture returned no screenshot bytes".to_string(),
+            },
+        );
+    };
+    let (frame_w, frame_h, rgba) = match screenshot::decode_rgba8(actual_png) {
+        Ok(decoded) => decoded,
+        Err(detail) => {
+            return Evaluated::fail(
+                "region",
+                Vec::new(),
+                AssertionDiff {
+                    expected: serde_json::json!({"region": [assertion.x, assertion.y, assertion.w, assertion.h]}),
+                    actual: serde_json::Value::Null,
+                    path: None,
+                    detail: Some(detail.clone()),
+                },
+                BackendError::Error {
+                    code: ErrorCode::Internal,
+                    detail,
+                },
+            );
+        }
+    };
+    let x = assertion.x as u64;
+    let y = assertion.y as u64;
+    let w = assertion.w as u64;
+    let h = assertion.h as u64;
+    if x + w > u64::from(frame_w) || y + h > u64::from(frame_h) {
+        let detail = format!(
+            "region [{},{},{},{}] is outside the {}x{} frame",
+            assertion.x, assertion.y, assertion.w, assertion.h, frame_w, frame_h
+        );
+        return Evaluated::fail(
+            "region",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::json!({"region": [assertion.x, assertion.y, assertion.w, assertion.h]}),
+                actual: serde_json::json!({"width": frame_w, "height": frame_h}),
+                path: None,
+                detail: Some(detail.clone()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail,
+            },
+        );
+    }
+    let crop_rgba = |source: &[u8], source_w: u32, _source_h: u32| -> Vec<u8> {
+        let mut out = Vec::with_capacity((w * h * 4) as usize);
+        for row in 0..h {
+            let offset = (((y + row) * u64::from(source_w) + x) * 4) as usize;
+            out.extend_from_slice(&source[offset..offset + (w * 4) as usize]);
+        }
+        out
+    };
+    let region = crop_rgba(&rgba, frame_w, frame_h);
+    let mut distinct = HashSet::new();
+    for pixel in region.chunks_exact(4) {
+        distinct.insert([pixel[0], pixel[1], pixel[2], pixel[3]]);
+    }
+    let actual_hash = hex_sha256(&region);
+    let mut failures: Vec<String> = Vec::new();
+    let mut checks: Vec<String> = Vec::new();
+    if let Some(expected_hash) = &assertion.hash {
+        checks.push(format!("hash={expected_hash}"));
+        if !actual_hash.eq_ignore_ascii_case(expected_hash) {
+            failures.push(format!("hash {actual_hash} != {expected_hash}"));
+        }
+    }
+    if let Some(baseline) = &assertion.equals_png {
+        let baseline_path =
+            crate::verify::resolve_relative(&scenario_path.display().to_string(), baseline);
+        match std::fs::read(&baseline_path) {
+            Ok(bytes) => match screenshot::decode_rgba8(&bytes) {
+                Ok((bw, bh, brgba)) => {
+                    let baseline_region = if (bw, bh) == (frame_w, frame_h) {
+                        crop_rgba(&brgba, bw, bh)
+                    } else if (bw, bh) == (assertion.w, assertion.h) {
+                        brgba.clone()
+                    } else {
+                        failures.push(format!(
+                            "reference {} is {bw}x{bh}; expected the frame ({frame_w}x{frame_h}) or the region ({}x{})",
+                            baseline_path.display(), assertion.w, assertion.h
+                        ));
+                        Vec::new()
+                    };
+                    if !baseline_region.is_empty() {
+                        checks.push(format!("equals_png={}", baseline_path.display()));
+                        if baseline_region != region {
+                            let differing = baseline_region
+                                .iter()
+                                .zip(region.iter())
+                                .filter(|(a, b)| a != b)
+                                .count();
+                            failures.push(format!(
+                                "region differs from {} ({differing} differing bytes)",
+                                baseline_path.display()
+                            ));
+                        }
+                    }
+                }
+                Err(detail) => failures.push(format!(
+                    "cannot decode reference {}: {detail}",
+                    baseline_path.display()
+                )),
+            },
+            Err(error) => failures.push(format!(
+                "cannot read reference {}: {error}",
+                baseline_path.display()
+            )),
+        }
+    }
+    let distinct_count = distinct.len() as u32;
+    if let Some(min) = assertion.min_distinct_colors {
+        checks.push(format!("min_distinct_colors={min}"));
+        if distinct_count < min {
+            failures.push(format!(
+                "only {distinct_count} distinct colours, need >= {min}"
+            ));
+        }
+    }
+    if let Some(max) = assertion.max_distinct_colors {
+        checks.push(format!("max_distinct_colors={max}"));
+        if distinct_count > max {
+            failures.push(format!("{distinct_count} distinct colours, need <= {max}"));
+        }
+    }
+    if checks.is_empty() {
+        return Evaluated::fail(
+            "region",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::Value::Null,
+                actual: serde_json::json!({"distinct_colors": distinct_count, "hash": actual_hash}),
+                path: None,
+                detail: Some("region assertion has no criterion".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::UnsupportedAssertion,
+                detail: "region assertion has no criterion".to_string(),
+            },
+        );
+    }
+    let actual_value = serde_json::json!({
+        "frame_seq": observation.frame.frame_seq,
+        "region": [assertion.x, assertion.y, assertion.w, assertion.h],
+        "hash": actual_hash,
+        "distinct_colors": distinct_count,
+    });
+    if failures.is_empty() {
+        return Evaluated::pass(
+            "region",
+            Vec::new(),
+            Some(format!(
+                "region [{},{},{},{}] matched ({})",
+                assertion.x,
+                assertion.y,
+                assertion.w,
+                assertion.h,
+                checks.join(", ")
+            )),
+        );
+    }
+    let detail = failures.join("; ");
+    Evaluated::fail(
+        "region",
+        Vec::new(),
+        AssertionDiff {
+            expected: serde_json::json!({"criteria": checks}),
+            actual: actual_value,
+            path: None,
+            detail: Some(detail.clone()),
+        },
+        BackendError::Failed {
+            code: ErrorCode::AssertionFailed,
+            detail,
+        },
+    )
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
 }
 
 /// Static assertion that the scenario's launch target exists in the manifest.
@@ -1370,6 +1684,199 @@ fn build_events(
         );
     }
     events
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+    use crate::backend::InputDelivery;
+    use acos_protocol::assertion::RegionAssertion;
+    use acos_protocol::ui::UiTree;
+    use acos_protocol::FrameMeta;
+
+    fn png(width: u32, height: u32, pixels: &[[u8; 4]]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            let flat: Vec<u8> = pixels
+                .iter()
+                .flat_map(|pixel| pixel.iter().copied())
+                .collect();
+            writer.write_image_data(&flat).unwrap();
+        }
+        bytes
+    }
+
+    fn observation(pixels: &[[u8; 4]], width: u32, height: u32) -> SessionObservation {
+        let frame = FrameMeta::new(
+            7,
+            "2026-11-11T21:00:00.000Z",
+            "req:test",
+            width,
+            height,
+            420,
+            "hash",
+            true,
+        );
+        let tree = UiTree::new(frame.clone(), "test.pkg", Vec::new());
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "test.pkg".to_string(),
+            frame,
+            tree,
+            screenshot_png: Some(png(width, height, pixels)),
+            crashed: None,
+            input: None,
+        }
+    }
+
+    fn region(criteria: RegionAssertion) -> RegionAssertion {
+        criteria
+    }
+
+    #[test]
+    fn region_hash_matches_exact_rgba() {
+        let observed = observation(&[[10, 20, 30, 255], [40, 50, 60, 255]], 2, 1);
+        let expected = hex_sha256(&[10, 20, 30, 255, 40, 50, 60, 255]);
+        let assertion = region(RegionAssertion {
+            x: 0,
+            y: 0,
+            w: 2,
+            h: 1,
+            equals_png: None,
+            hash: Some(expected),
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        });
+        let evaluated = eval_region(&assertion, &observed, Path::new("unused.yaml"));
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        assert_eq!(evaluated.result.kind, "region");
+    }
+
+    #[test]
+    fn region_hash_mismatch_fails() {
+        let observed = observation(&[[255, 0, 0, 255]], 1, 1);
+        let assertion = region(RegionAssertion {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            equals_png: None,
+            hash: Some(hex_sha256(&[0, 255, 0, 255])),
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        });
+        let evaluated = eval_region(&assertion, &observed, Path::new("unused.yaml"));
+        assert!(!evaluated.result.passed);
+        assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+    }
+
+    #[test]
+    fn region_equals_png_is_exact_and_reads_a_region_of_the_frame() {
+        let pixels = [
+            [0, 0, 0, 255],
+            [255, 255, 255, 255],
+            [9, 9, 9, 255],
+            [1, 2, 3, 255],
+        ];
+        let observed = observation(&pixels, 2, 2);
+        let dir = std::env::temp_dir().join(format!("acos-region-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let baseline = dir.join("frame.png");
+        std::fs::write(&baseline, png(2, 2, &pixels)).unwrap();
+        let assertion = region(RegionAssertion {
+            x: 1,
+            y: 0,
+            w: 1,
+            h: 2,
+            equals_png: Some(baseline.display().to_string()),
+            hash: None,
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        });
+        let evaluated = eval_region(&assertion, &observed, Path::new("unused.yaml"));
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        let wrong_baseline = dir.join("other.png");
+        std::fs::write(
+            &wrong_baseline,
+            png(1, 2, &[[7, 7, 7, 255], [8, 8, 8, 255]]),
+        )
+        .unwrap();
+        let wrong = region(RegionAssertion {
+            x: 1,
+            y: 0,
+            w: 1,
+            h: 2,
+            equals_png: Some(wrong_baseline.display().to_string()),
+            hash: None,
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        });
+        let evaluated = eval_region(&wrong, &observed, Path::new("unused.yaml"));
+        assert!(
+            !evaluated.result.passed,
+            "a different reference must not match"
+        );
+    }
+
+    #[test]
+    fn region_colour_statistics_and_ocr_unsupported() {
+        let observed = observation(&[[255, 0, 0, 255], [255, 0, 0, 255]], 2, 1);
+        let one_colour = region(RegionAssertion {
+            x: 0,
+            y: 0,
+            w: 2,
+            h: 1,
+            equals_png: None,
+            hash: None,
+            min_distinct_colors: Some(2),
+            max_distinct_colors: None,
+            text_ocr: None,
+        });
+        let evaluated = eval_region(&one_colour, &observed, Path::new("unused.yaml"));
+        assert!(!evaluated.result.passed, "solid red has one colour");
+        let ocr = region(RegionAssertion {
+            x: 0,
+            y: 0,
+            w: 2,
+            h: 1,
+            equals_png: None,
+            hash: None,
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: Some("HOSTILE PASS".to_string()),
+        });
+        let evaluated = eval_region(&ocr, &observed, Path::new("unused.yaml"));
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.error.unwrap().code(),
+            ErrorCode::UnsupportedAssertion
+        );
+    }
+
+    #[test]
+    fn delivered_but_visually_unchanged_input_is_not_a_state_change() {
+        let previous = observation(&[[0, 0, 0, 255]], 1, 1);
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: false,
+            acks: Vec::new(),
+        });
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        assert!(evaluated.result.passed);
+        assert_eq!(evaluated.result.kind, "input_delivery");
+        let message = evaluated.result.message.unwrap_or_default();
+        assert!(message.contains("host-observed input delivery"));
+        assert!(message.contains("no visual change"));
+    }
 }
 
 /// Peak resident set size in bytes (`/proc/self/status` `VmHWM`).

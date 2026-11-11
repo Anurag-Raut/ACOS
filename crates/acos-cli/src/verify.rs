@@ -63,6 +63,16 @@ pub struct VerifyArgs {
     #[arg(long, value_name = "ENGINE", default_value = "rust-vm")]
     pub engine: String,
 
+    /// Treat this run as an untrusted APK.
+    ///
+    /// Untrusted runs are refused with `UNTRUSTED_APK_NOT_CERTIFIED` unless the
+    /// labelled test override `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is set. When
+    /// allowed for a test, tree-only assertions fail closed with
+    /// `INSUFFICIENT_HOST_EVIDENCE`; host-observed region/screenshot assertions
+    /// still run. Equivalent to a scenario `trust: untrusted`.
+    #[arg(long)]
+    pub untrusted: bool,
+
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -79,6 +89,30 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         .artifacts
         .clone()
         .unwrap_or_else(|| default_artifacts(&scenario));
+
+    let trust = match crate::trust::resolve(args.untrusted, &scenario) {
+        Ok(trust) => trust,
+        Err(detail) => {
+            let envelope = Envelope::failure(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::StaticAnalysis,
+                ProtocolError::new(ErrorCode::InvalidScenario, detail),
+                Metrics::wall_ms(0),
+            );
+            return finish(&envelope, &args, &artifacts);
+        }
+    };
+    if trust == crate::trust::Trust::Untrusted && !crate::trust::untrusted_allowed_by_env() {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::StaticAnalysis,
+            crate::trust::refusal_error(trust),
+            Metrics::wall_ms(0),
+        );
+        return finish(&envelope, &args, &artifacts);
+    }
 
     let Some(engine) = Engine::parse(&args.engine) else {
         let envelope = Envelope::failure(
@@ -153,7 +187,10 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
         scenario: scenario.display().to_string(),
         artifacts: artifacts.display().to_string(),
-        reference: args.reference.as_ref().map(|path| path.display().to_string()),
+        reference: args
+            .reference
+            .as_ref()
+            .map(|path| path.display().to_string()),
         required_fidelity,
         flags: args.flags.clone(),
     };
@@ -176,13 +213,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         };
         // The verifier must still be able to write its evidence directory, so
         // that path is added to the confinement's writable root explicitly.
-        if let Err(error) =
-            crate::native_launch::confine_native_launch_with_writable(
+        if let Err(error) = crate::native_launch::confine_native_launch_with_writable(
             &apk,
             Some(&artifacts),
             Some(&scenario),
-        )
-        {
+        ) {
             let envelope = Envelope::failure(
                 request_id,
                 ProtocolBackend::AcosNative,
@@ -198,7 +233,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         }
     }
 
-    let mut backend: EngineBackend = match engine {
+    let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
         Engine::RustVm => {
@@ -241,8 +276,17 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let engine_label = backend.engine();
     let mode = backend.mode().unwrap_or(Mode::Live);
     let session_caps = backend.session_capabilities();
-    let mut envelope = acos_verify::verify(&request, &mut backend);
-    annotate(&mut envelope, &args, engine_label, mode, session_caps.as_ref(), &artifacts);
+    let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
+    let mut envelope = acos_verify::verify(&request, &mut guarded);
+    annotate(
+        &mut envelope,
+        &args,
+        engine_label,
+        mode,
+        session_caps.as_ref(),
+        trust,
+        &artifacts,
+    );
     finish(&envelope, &args, &artifacts)
 }
 
@@ -254,6 +298,7 @@ pub(crate) fn annotate(
     engine: Option<Engine>,
     mode: Mode,
     caps: Option<&crate::engine::SessionCapabilities>,
+    trust: crate::trust::Trust,
     artifacts: &Path,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
@@ -270,7 +315,9 @@ pub(crate) fn annotate(
             steps
                 .iter()
                 .enumerate()
-                .filter(|(_, step)| step.get("status").and_then(|s| s.as_str()) == Some("unsupported"))
+                .filter(|(_, step)| {
+                    step.get("status").and_then(|s| s.as_str()) == Some("unsupported")
+                })
                 .map(|(index, step)| {
                     let capability = step
                         .pointer("/error/details/capability")
@@ -290,9 +337,12 @@ pub(crate) fn annotate(
         "verdict": artifacts.join(acos_protocol::artifacts::VERDICT_JSON).display().to_string(),
         "engine_report": artifacts.join("engine.json").display().to_string(),
     });
+    let provenance = crate::provenance::run_evidence(trust);
     let engine_block = serde_json::json!({
         "engine": engine.as_str(),
         "mode": mode.as_str(),
+        "trust": trust.as_str(),
+        "evidence_provenance": provenance["evidence_provenance"].clone(),
         "unsupported_steps": unsupported_steps,
         "evidence": evidence,
         "commands": caps.map(|caps| serde_json::json!({
@@ -310,6 +360,7 @@ pub(crate) fn annotate(
         );
         object.insert("evidence".to_string(), engine_block["evidence"].clone());
     }
+    crate::provenance::annotate_verdict(&mut verdict, trust);
 
     let preview_downgrade = mode == Mode::Preview && crate::engine::preview_downgrade(&mut verdict);
     // Evidence files: the annotated verdict (engine/mode fields are additive) and
@@ -325,10 +376,11 @@ pub(crate) fn annotate(
                 "request_id": envelope.request_id(),
                 "engine": engine_block,
                 "verdict_status": verdict.get("verdict"),
+                "provenance_rule": provenance["rule"].clone(),
             }))
             .unwrap_or_default(),
         );
-
+        crate::provenance::annotate_step_artifacts(&verdict, artifacts, trust);
     }
     let mut annotated_result = result;
     annotated_result["verdict"] = verdict;
@@ -372,14 +424,19 @@ fn print_summary(envelope: &Envelope, artifacts: &Path) {
         envelope.fidelity()
     );
     if let Some(verdict) = envelope.result().and_then(|result| result.get("verdict")) {
-        let engine = verdict.get("engine").and_then(|v| v.as_str()).unwrap_or("-");
+        let engine = verdict
+            .get("engine")
+            .and_then(|v| v.as_str())
+            .unwrap_or("-");
         let mode = verdict.get("mode").and_then(|v| v.as_str()).unwrap_or("-");
         println!("  engine: {engine} (mode: {mode})");
         if let Some(steps) = verdict.get("unsupported_steps").and_then(|v| v.as_array()) {
             for step in steps {
                 println!(
                     "  unsupported: {} [{}]",
-                    step.get("capability").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                    step.get("capability")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown"),
                     step.get("step").and_then(|v| v.as_str()).unwrap_or("")
                 );
             }
@@ -439,7 +496,13 @@ pub fn resolve_apk(path: &Path, scenario: &Path) -> Result<PathBuf, ProtocolErro
     let app = scenario_text
         .lines()
         .find_map(|line| line.trim().strip_prefix("app:"))
-        .map(|value| value.trim().trim_matches('"').trim_matches('\'').to_string());
+        .map(|value| {
+            value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string()
+        });
     if path != scenario {
         return Ok(path.to_path_buf());
     }

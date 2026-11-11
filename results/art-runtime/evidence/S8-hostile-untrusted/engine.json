@@ -1,0 +1,47 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/S8-hostile-untrusted",
+      "engine_report": "results/art-runtime/evidence/S8-hostile-untrusted/engine.json",
+      "verdict": "results/art-runtime/evidence/S8-hostile-untrusted/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "trust": "untrusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
+  "request_id": "req_2ddd74_18e71d25a1c6b959",
+  "verdict_status": "fail"
+}

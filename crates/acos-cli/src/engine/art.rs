@@ -43,7 +43,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use acos_protocol::ui::UiTree;
-use acos_protocol::{FrameMeta, Selector};
+use acos_protocol::{ErrorCode, FrameMeta, Selector};
+use acos_verify::backend::{InputAck, InputDelivery};
 use acos_verify::{BackendError, LaunchOutcome};
 
 use super::{
@@ -76,6 +77,8 @@ pub struct ArtSession {
     seen_seq: u64,
     /// The process group the session child leads (its pid).
     process_group: Option<i32>,
+    /// Host-observed delivery of the most recent input action.
+    last_input: Option<InputDelivery>,
     closed: bool,
 }
 
@@ -105,6 +108,44 @@ impl CachedFrame {
             tree: self.tree.clone(),
             frame: self.evidence(previous_seq),
         }
+    }
+}
+
+/// Build a host-observed delivery record from a session reply.
+///
+/// `previous_md5` is the content hash of the frame before the action. A normal
+/// reply whose `md5` is unchanged is a delivered input with no visual change;
+/// a recovery reply is always `visual_change: false`. The acks are copied
+/// verbatim and remain guest-asserted.
+fn input_delivery(
+    reply: &serde_json::Value,
+    previous_md5: Option<&str>,
+    changed_if_unknown: bool,
+) -> InputDelivery {
+    let visual_change = match (reply.get("md5").and_then(|v| v.as_str()), previous_md5) {
+        (Some(current), Some(previous)) => current != previous,
+        _ => changed_if_unknown,
+    };
+    let acks = reply
+        .pointer("/gesture/acks")
+        .and_then(|value| value.as_array())
+        .map(|acks| {
+            acks.iter()
+                .map(|ack| InputAck {
+                    seq: ack.get("seq").and_then(|v| v.as_u64()).unwrap_or(0),
+                    handled: ack
+                        .get("handled")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    latency_us: ack.get("latency_us").and_then(|v| v.as_u64()),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    InputDelivery {
+        delivered: true,
+        visual_change,
+        acks,
     }
 }
 
@@ -199,13 +240,16 @@ impl ArtSession {
             let mut reader = BufReader::new(stdout);
             loop {
                 let mut line = Vec::new();
-                match reader.by_ref().take(MAX_LINE_BYTES as u64).read_until(b'\n', &mut line) {
+                match reader
+                    .by_ref()
+                    .take(MAX_LINE_BYTES as u64)
+                    .read_until(b'\n', &mut line)
+                {
                     Ok(0) => break,
                     Ok(_) => {
                         if line.len() > MAX_LINE_BYTES {
-                            let _ = tx.send(Err(format!(
-                                "protocol line exceeds {MAX_LINE_BYTES} bytes"
-                            )));
+                            let _ = tx
+                                .send(Err(format!("protocol line exceeds {MAX_LINE_BYTES} bytes")));
                             break;
                         }
                         let text = String::from_utf8_lossy(&line).trim().to_string();
@@ -258,6 +302,7 @@ impl ArtSession {
             cached: None,
             seen_seq: 0,
             process_group: Some(_pid as i32),
+            last_input: None,
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -280,12 +325,11 @@ impl ArtSession {
                 },
                 other => other,
             })?;
-        let ready: serde_json::Value = serde_json::from_str(&ready).map_err(|error| {
-            BackendError::Error {
+        let ready: serde_json::Value =
+            serde_json::from_str(&ready).map_err(|error| BackendError::Error {
                 code: acos_protocol::ErrorCode::Internal,
                 detail: format!("acos-art ready line is not JSON: {error}"),
-            }
-        })?;
+            })?;
         if ready.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let code = ready
                 .get("code")
@@ -345,25 +389,42 @@ impl ArtSession {
         }
     }
 
-    fn command(&mut self, request: serde_json::Value) -> Result<serde_json::Value, BackendError> {
-        let stdin = self.stdin.as_mut().ok_or_else(|| BackendError::Error {
-            code: acos_protocol::ErrorCode::Internal,
-            detail: "the ART session stdin is closed".to_string(),
+    /// Send one command and keep the raw failure reply. The engine needs that
+    /// reply for one case only: a delivered input whose action legitimately
+    /// produced no pixel change. The guest reports the delivery evidence
+    /// (`gesture` acks) in the same reply it uses to refuse the frame.
+    fn command_raw(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, (ErrorCode, serde_json::Value, String)> {
+        let stdin = self.stdin.as_mut().ok_or_else(|| {
+            (
+                ErrorCode::Internal,
+                serde_json::Value::Null,
+                "the ART session stdin is closed".to_string(),
+            )
         })?;
         let line = request.to_string();
-        writeln!(stdin, "{line}").and_then(|_| stdin.flush()).map_err(|error| {
-            BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
-                detail: format!("cannot write to acos-art: {error}"),
-            }
-        })?;
+        if let Err(error) = writeln!(stdin, "{line}").and_then(|_| stdin.flush()) {
+            return Err((
+                ErrorCode::Internal,
+                serde_json::Value::Null,
+                format!("cannot write to acos-art: {error}"),
+            ));
+        }
         let timeout = self.timeout;
-        let reply = self.read_line(timeout, "command")?;
-        let reply: serde_json::Value =
-            serde_json::from_str(&reply).map_err(|error| BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
-                detail: format!("acos-art reply is not JSON: {error}"),
-            })?;
+        let reply = self.read_line(timeout, "command").map_err(|error| {
+            let code = error.code();
+            let detail = error.to_protocol_error().message;
+            (code, serde_json::Value::Null, detail)
+        })?;
+        let reply: serde_json::Value = serde_json::from_str(&reply).map_err(|error| {
+            (
+                ErrorCode::Internal,
+                serde_json::Value::Null,
+                format!("acos-art reply is not JSON: {error}"),
+            )
+        })?;
         if reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let code = reply
                 .get("code")
@@ -372,14 +433,65 @@ impl ArtSession {
             let message = reply
                 .get("error")
                 .and_then(|v| v.as_str())
-                .unwrap_or("acos-art session command failed");
-            return Err(BackendError::Error {
-                code: acos_protocol::ErrorCode::from_str_opt(code)
-                    .unwrap_or(acos_protocol::ErrorCode::Internal),
-                detail: format!("acos-art: {code}: {message}"),
-            });
+                .unwrap_or("acos-art session command failed")
+                .to_string();
+            let code = ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal);
+            return Err((code, reply, message));
         }
         Ok(reply)
+    }
+
+    fn command(&mut self, request: serde_json::Value) -> Result<serde_json::Value, BackendError> {
+        self.command_raw(request)
+            .map_err(|(code, _, message)| BackendError::Error {
+                code,
+                detail: format!("acos-art: {code}: {message}"),
+            })
+    }
+
+    /// Send one input command. A guest reply that refuses the frame but carries
+    /// a `gesture` record means the host-injected input was delivered and simply
+    /// changed no pixels (focus-only tap, consumed key). That is **not** a stale
+    /// frame: the engine re-binds a fresh tree/capture and records
+    /// `visual_change: false` so no state change is claimed. Every other
+    /// `NO_FRESH_FRAME` (or a missing new frame after the recovery capture) stays
+    /// a hard failure.
+    fn input_command(
+        &mut self,
+        request: serde_json::Value,
+        context: &str,
+    ) -> Result<(), BackendError> {
+        let previous_md5 = self.cached.as_ref().map(|frame| frame.md5.clone());
+        match self.command_raw(request) {
+            Ok(reply) => {
+                self.last_input = Some(input_delivery(&reply, previous_md5.as_deref(), true));
+                self.absorb(&reply)
+            }
+            Err((ErrorCode::NoFreshFrame, reply, message)) if reply.get("gesture").is_some() => {
+                let _ = message;
+                // The guest session injected the input and then found no
+                // changed pixels. Capture the current state as the action's
+                // frame; the executor sees a fresh sequence and a delivery
+                // record with no visual change.
+                let previous = self.seen_seq;
+                self.request_tree()?;
+                if let Some(cached) = self.cached.as_ref() {
+                    if cached.seq <= previous {
+                        return Err(stale_frame(
+                            previous,
+                            cached.seq,
+                            &format!("{context} (no-pixel-change delivery)"),
+                        ));
+                    }
+                }
+                self.last_input = Some(input_delivery(&reply, None, false));
+                Ok(())
+            }
+            Err((code, _, message)) => Err(BackendError::Error {
+                code,
+                detail: format!("acos-art: {code}: {message}"),
+            }),
+        }
     }
 
     fn frame_meta(&self, seq: u64, md5: &str) -> FrameMeta {
@@ -582,6 +694,12 @@ impl SessionBackend for ArtSession {
                 "activity": self.activity,
                 "apk": self.apk.display().to_string(),
                 "frame": frame.frame.label(),
+                "provenance": {
+                    "frame": "host-observed",
+                    "tree": "guest-asserted",
+                    "launch_markers": "guest-asserted",
+                    "lifecycle_markers": "guest-asserted",
+                },
             }),
         })
     }
@@ -611,6 +729,10 @@ impl SessionBackend for ArtSession {
             .map(|frame| frame.observed(self.seen_seq.min(frame.seq.saturating_sub(1))))
     }
 
+    fn last_input_delivery(&self) -> Option<InputDelivery> {
+        self.last_input.clone()
+    }
+
     fn last_frame_seq(&self) -> u64 {
         self.seen_seq
     }
@@ -633,12 +755,9 @@ impl SessionBackend for ArtSession {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let png_path = reply
-            .get("png")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                live_frame_unavailable("the ART screenshot reply carried no PNG path")
-            })?;
+        let png_path = reply.get("png").and_then(|v| v.as_str()).ok_or_else(|| {
+            live_frame_unavailable("the ART screenshot reply carried no PNG path")
+        })?;
         if seq <= previous {
             return Err(stale_frame(previous, seq, "screenshot"));
         }
@@ -661,8 +780,7 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
-        let reply = self.command(serde_json::json!({"cmd":"tap","x":x,"y":y}))?;
-        self.absorb(&reply)
+        self.input_command(serde_json::json!({"cmd":"tap","x":x,"y":y}), "input.tap")
     }
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
@@ -682,8 +800,10 @@ impl SessionBackend for ArtSession {
     }
 
     fn type_text(&mut self, text: &str) -> Result<(), BackendError> {
-        let reply = self.command(serde_json::json!({"cmd":"type_text","text":text}))?;
-        self.absorb(&reply)
+        self.input_command(
+            serde_json::json!({"cmd":"type_text","text":text}),
+            "input.type_text",
+        )
     }
 
     fn key(&mut self, key: &str) -> Result<(), BackendError> {
@@ -694,8 +814,7 @@ impl SessionBackend for ArtSession {
                 format!("unknown symbolic key {key:?}"),
             ));
         }
-        let reply = self.command(serde_json::json!({"cmd":"key","code":code}))?;
-        self.absorb(&reply)
+        self.input_command(serde_json::json!({"cmd":"key","code":code}), "input.key")
     }
 
     fn reset(&mut self) -> Result<(), BackendError> {
@@ -845,11 +964,7 @@ pub(crate) fn processes_in_group(group: i32) -> Vec<u32> {
         // state, ppid, pgrp
         let _state = fields.next();
         let _ppid = fields.next();
-        if fields
-            .next()
-            .and_then(|pgrp| pgrp.parse::<i32>().ok())
-            == Some(group)
-        {
+        if fields.next().and_then(|pgrp| pgrp.parse::<i32>().ok()) == Some(group) {
             pids.push(pid);
         }
     }
@@ -877,7 +992,10 @@ mod tests {
             environment: false,
             crash_reports: false,
         };
-        assert_eq!(caps.missing(), vec!["reset", "logs", "environment", "crash_reports"]);
+        assert_eq!(
+            caps.missing(),
+            vec!["reset", "logs", "environment", "crash_reports"]
+        );
     }
 
     #[test]

@@ -434,6 +434,7 @@ mod tests {
             tree,
             screenshot_png: None,
             crashed: None,
+            input: None,
         }
     }
 

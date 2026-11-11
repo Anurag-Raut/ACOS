@@ -85,6 +85,8 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ASSERTION_FAILED` | An assertion ran and did not hold. | acos-verify | 1 |
 | `ELEMENT_NOT_FOUND` | A selector matched no node. | acos-runtime / acos-verify | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
+| `INSUFFICIENT_HOST_EVIDENCE` | A tree-only assertion ran on an untrusted APK run, where the tree is guest-asserted; fail closed and require host-observed evidence. | acos-cli / acos-verify | 1 |
+| `UNSUPPORTED_ASSERTION` | The requested assertion kind has no implementation in this build (for example `assert_region.text_ocr` with no OCR engine). | acos-verify | 1 |
 | `SESSION_NOT_FOUND` | The requested session does not exist (or was already destroyed). | acos-runtime / MCP | 1 |
 | `SESSION_BUSY` | The session is busy with another request. | acos-runtime / MCP | 1 |
 | `ISOLATION_UNAVAILABLE` | The requested isolation level is not implemented for this app. | acos-runtime / acos-sandbox | 1 |
@@ -95,6 +97,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `RAM_ABORT` | Execution was aborted by the RAM guard. | acos-runtime / acos-art | 1 / 2 |
 | `TIMEOUT` | The operation exceeded its wall/CPU budget. | acos-runtime / acos-art | 1 / 2 |
 | `RESOURCE_LIMIT` | A declared resource budget was exhausted. | acos-runtime / acos-art | 1 / 2 |
+| `UNTRUSTED_APK_NOT_CERTIFIED` | An untrusted APK run was requested while the product path is not certified for untrusted APKs; only the labelled hostile-fixture test override may run it. | acos-cli | 1 |
 | `INVALID_SCENARIO` | The scenario is structurally or semantically invalid. | acos-verify | 1 |
 | `INVALID_ARGUMENT` | A request argument is invalid. | acos-cli / MCP | 1 |
 | `UNSAFE_PATH` | An artifact path was rejected (escape, absolute path, symlink, ...). | acos-cli / acos-protocol | 1 |

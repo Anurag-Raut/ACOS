@@ -1,0 +1,161 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.hostileprobe",
+    "path": "fixtures/build/apps/hostile-probe.apk",
+    "sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/art-runtime/evidence/S8-hostile-region",
+    "engine_report": "results/art-runtime/evidence/S8-hostile-region/engine.json",
+    "verdict": "results/art-runtime/evidence/S8-hostile-region/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "error": {
+      "code": "ASSERTION_FAILED",
+      "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+      "message": "only 1 distinct colours, need >= 2",
+      "retryable": false
+    },
+    "step_index": 1,
+    "summary": "step 1 (assert_region) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T22:10:38.020Z",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 1 (assert_region): fail; later steps were not executed",
+    "scenario expected `pass`, engine produced `fail` — result is a truthful partial"
+  ],
+  "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/hostile-probe.apk",
+    "apk_sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/s8-hostile-region.yaml",
+    "scenario_sha256": "e752dfacee08a6551353b5dbbd5bd67063e434a481fb9fde4263b2889985d3ae"
+  },
+  "request_id": "req_2dde7a_18e71d279df7534e",
+  "resources": {
+    "events": 2,
+    "frames_captured": 2,
+    "memory_mib": 73,
+    "peak_rss_bytes": 77328384,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 3799
+  },
+  "scenario": {
+    "name": "s8-hostile-region",
+    "path": "scenarios/s8-hostile-region.yaml",
+    "sha256": "e752dfacee08a6551353b5dbbd5bd67063e434a481fb9fde4263b2889985d3ae"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_hostile-probe",
+  "started_at": "2026-11-11T22:10:34.221Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1888,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "diff": {
+            "actual": {
+              "distinct_colors": 1,
+              "frame_seq": 2,
+              "hash": "869ed904c16375f570ddac4b544936b94dca27dda7f31eaaab814c09606a2e34",
+              "region": [
+                100,
+                400,
+                100,
+                100
+              ]
+            },
+            "detail": "only 1 distinct colours, need >= 2",
+            "expected": {
+              "criteria": [
+                "min_distinct_colors=2"
+              ]
+            }
+          },
+          "kind": "region",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 1907,
+      "error": {
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "only 1 distinct colours, need >= 2",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-assert_region.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "status": "fail",
+      "step": "assert_region"
+    }
+  ],
+  "trust": "untrusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

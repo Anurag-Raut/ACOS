@@ -1,0 +1,127 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.hostileprobe",
+    "path": "fixtures/build/apps/hostile-probe.apk",
+    "sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/art-runtime/evidence/S8-hostile-untrusted",
+    "engine_report": "results/art-runtime/evidence/S8-hostile-untrusted/engine.json",
+    "verdict": "results/art-runtime/evidence/S8-hostile-untrusted/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "INSUFFICIENT_HOST_EVIDENCE",
+    "error": {
+      "code": "INSUFFICIENT_HOST_EVIDENCE",
+      "hint": "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass.",
+      "message": "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation.",
+      "retryable": false
+    },
+    "step_index": 1,
+    "summary": "step 1 (assert_text) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T22:10:27.656Z",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 1 (assert_text): fail; later steps were not executed",
+    "scenario expected `pass`, engine produced `fail` — result is a truthful partial"
+  ],
+  "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/hostile-probe.apk",
+    "apk_sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/s8-hostile-untrusted.yaml",
+    "scenario_sha256": "e7955f59c1f87e6d192bbb0904f1efd82a7f71ed11862f5aaf08c8d264b0f2d0"
+  },
+  "request_id": "req_2ddd74_18e71d25a1c6b959",
+  "resources": {
+    "events": 1,
+    "frames_captured": 1,
+    "memory_mib": 53,
+    "peak_rss_bytes": 56160256,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 1914
+  },
+  "scenario": {
+    "name": "s8-hostile-untrusted",
+    "path": "scenarios/s8-hostile-untrusted.yaml",
+    "sha256": "e7955f59c1f87e6d192bbb0904f1efd82a7f71ed11862f5aaf08c8d264b0f2d0"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_hostile-probe",
+  "started_at": "2026-11-11T22:10:25.742Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1914,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 0,
+      "error": {
+        "code": "INSUFFICIENT_HOST_EVIDENCE",
+        "hint": "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass.",
+        "message": "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation.",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/01-assert_text.json"
+        }
+      ],
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "status": "fail",
+      "step": "assert_text"
+    }
+  ],
+  "trust": "untrusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

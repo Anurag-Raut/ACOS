@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::assertion::{
-    LogAssertion, NoCrashAssertion, ScreenshotAssertion, StateAssertion, TextAssertion,
-    VisibilityAssertion,
+    LogAssertion, NoCrashAssertion, RegionAssertion, ScreenshotAssertion, StateAssertion,
+    TextAssertion, VisibilityAssertion,
 };
 use crate::commands::{CaptureFormat, KeyName, Orientation, ResetScope};
 use crate::error::ErrorCode;
@@ -115,6 +115,9 @@ pub struct Step {
     /// Assert a screenshot against a baseline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_screenshot: Option<ScreenshotAssertion>,
+    /// Assert a rectangular region of a fresh host-observed frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_region: Option<RegionAssertion>,
     /// Capture a frame into the artifacts directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture: Option<CaptureStep>,
@@ -176,6 +179,8 @@ pub enum StepRef<'a> {
     AssertNoCrash(&'a NoCrashAssertion),
     /// See [`Step::assert_screenshot`].
     AssertScreenshot(&'a ScreenshotAssertion),
+    /// See [`Step::assert_region`].
+    AssertRegion(&'a RegionAssertion),
     /// See [`Step::capture`].
     Capture(&'a CaptureStep),
     /// See [`Step::reset`].
@@ -214,6 +219,7 @@ impl StepRef<'_> {
             StepRef::AssertLog(_) => "assert_log",
             StepRef::AssertNoCrash(_) => "assert_no_crash",
             StepRef::AssertScreenshot(_) => "assert_screenshot",
+            StepRef::AssertRegion(_) => "assert_region",
             StepRef::Capture(_) => "capture",
             StepRef::Reset(_) => "reset",
             StepRef::SetNetwork(_) => "set_network",
@@ -245,6 +251,7 @@ impl Step {
             self.assert_log.is_some(),
             self.assert_no_crash.is_some(),
             self.assert_screenshot.is_some(),
+            self.assert_region.is_some(),
             self.capture.is_some(),
             self.reset.is_some(),
             self.set_network.is_some(),
@@ -309,6 +316,9 @@ impl Step {
                 .assert_screenshot
                 .as_ref()
                 .map(StepRef::AssertScreenshot);
+        }
+        if self.assert_region.is_some() {
+            return self.assert_region.as_ref().map(StepRef::AssertRegion);
         }
         if self.capture.is_some() {
             return self.capture.as_ref().map(StepRef::Capture);
@@ -1052,6 +1062,51 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         &format!("{path}.region_masks[{i}].bounds"),
                         mask.bounds,
                     );
+                }
+            }
+            StepRef::AssertRegion(assertion) => {
+                if assertion.w == 0 || assertion.h == 0 {
+                    v.push(&path, "assert_region needs non-zero w and h");
+                }
+                if assertion.x < 0 || assertion.y < 0 {
+                    v.push(&path, "assert_region x/y must be >= 0");
+                }
+                let has_criterion = assertion.equals_png.is_some()
+                    || assertion.hash.is_some()
+                    || assertion.min_distinct_colors.is_some()
+                    || assertion.max_distinct_colors.is_some()
+                    || assertion.text_ocr.is_some();
+                if !has_criterion {
+                    v.push(
+                        &path,
+                        "assert_region needs at least one criterion (equals_png/hash/min_distinct_colors/max_distinct_colors/text_ocr)",
+                    );
+                }
+                if let Some(hash) = &assertion.hash {
+                    if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+                        v.push(
+                            format!("{path}.hash"),
+                            "hash must be 64 hex characters (SHA-256)",
+                        );
+                    }
+                }
+                if let Some(png) = &assertion.equals_png {
+                    if png.trim().is_empty() {
+                        v.push(
+                            format!("{path}.equals_png"),
+                            "equals_png path must not be empty",
+                        );
+                    }
+                }
+                if let (Some(min), Some(max)) =
+                    (assertion.min_distinct_colors, assertion.max_distinct_colors)
+                {
+                    if min > max {
+                        v.push(
+                            &path,
+                            "min_distinct_colors must not exceed max_distinct_colors",
+                        );
+                    }
                 }
             }
             StepRef::Capture(capture) => {

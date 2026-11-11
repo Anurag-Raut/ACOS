@@ -224,4 +224,107 @@ Chosen path: **A with stricter pass semantics** (B optional, C deferred, D as co
 - A pass for an untrusted APK needs host-controlled evidence that independently satisfies the assertion: C1 pixels (reference/region match, OCR with uncertainty), host-injected input, host-observed binder transactions. "Pixels changed" never substitutes for "expected text appeared". Tree-only assertions on untrusted runs return an insufficient-evidence result (fail closed).
 - A per-run nonce is an accident tripwire only; it is not a security boundary (the app shares the probe's process).
 - Stale text above: the sizeCompatScale cap landed in e55b3ec.
-- Planned work (S8, after W15/W16 free `engine/art.rs`): provenance field on every evidence item (host-observed | guest-asserted), fail-closed rules for untrusted runs, a pixel/region assertion, live hostile fixture (forged probe/marker lines, hostile parcels), then re-certify. Untrusted APKs stay disabled until all section 5 gates pass.
+- Planned work (S8, after W15/W16 free `engine/art.rs`): provenance field on every evidence item (host-observed | guest-asserted), fail-closed rules for untrusted runs, a pixel/region assertion, live hostile fixture (forged probe/marker lines, hostile parcels), then re-certify. Untrusted APKs stay disabled until all section 5 gates pass. **Implemented in S8 — see §8.** The product path is still not certified; only the labelled test override (`ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`) can run the hostile fixture.
+
+## 8. S8 — verdict-integrity implementation (2026-11-11)
+
+S8 implements the §7 decision. It does **not** certify untrusted APKs; it makes
+the verdict channel fail closed and proves the failure with a live hostile APK.
+
+### 8.1 What the verdict now says
+
+Every ART-engine result carries:
+
+* `trust: trusted | untrusted` on the verdict and `engine.json`;
+* `evidence_provenance` (run level) and `steps[].provenance` (per step), copied
+  into each `steps/*.json` artifact.
+
+| evidence item | provenance | justified by |
+|---|---|---|
+| C1 frame / `frames/*.png` | **host-observed** | the host read the compositor's pixels |
+| region / screenshot assertion | **host-observed** | evaluated on those pixels, never on the tree |
+| host-injected tap/key/type | **host-observed** | the host wrote the input message |
+| binder transactions | **host-observed** (label reserved) | host-owned service state |
+| static APK manifest | **host-observed** | parsed by the host |
+| View tree | **guest-asserted** | built by the in-guest probe |
+| lifecycle / launch markers | **guest-asserted** | guest-written files and stdout |
+| input `handled` acks | **guest-asserted** | guest `FINISHED`/`TIMELINE` replies |
+| logs | **guest-asserted** | guest logd socket |
+
+Per-step labels: `launch` → frame host-observed, markers/tree guest-asserted;
+tree assertions → tree guest-asserted; input steps → host input + frame
+host-observed, acks/tree guest-asserted; `capture`/`assert_screenshot`/
+`assert_region` → frame host-observed; `assert_log` → logs guest-asserted.
+
+### 8.2 Trust modes (exact)
+
+| condition | result |
+|---|---|
+| default (no `--untrusted`, no `trust:` in the scenario) | `trust: trusted`; existing strict step rules unchanged |
+| `--untrusted` **or** top-level scenario `trust: untrusted`, without `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` | **refused before ART starts** with `UNTRUSTED_APK_NOT_CERTIFIED` (status `blocked`, no session, no frame) |
+| untrusted + `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`, tree-only step (`wait_for`, `assert_text`, `assert_visible`, `assert_not_visible`, `assert_state`) | **fails closed** with `INSUFFICIENT_HOST_EVIDENCE`; the tree is not used to justify a pass |
+| untrusted + override, `tap` with a selector | allowed: the host injects the tap and resolves the point from the tree **for navigation only** |
+| untrusted + override, `capture` / `assert_screenshot` / `assert_region` | allowed: host-observed pixels |
+| untrusted + override, `assert_log` / markers / acks alone | cannot justify a pass (guest-asserted; on ART logs are unsupported anyway) |
+| `assert_region.text_ocr` | `UNSUPPORTED_ASSERTION` (no OCR engine in this build), never a pass |
+
+`assert_region` is a scenario step: `{x, y, w, h, equals_png?, hash?,
+min_distinct_colors?, max_distinct_colors?, text_ocr?}`. It always captures a
+**fresh** frame. `hash` is SHA-256 of the region's tightly packed RGBA8 bytes;
+`equals_png` is an exact reference (region-sized, or frame-sized and cropped to
+the same region); colour statistics count distinct RGBA values. "Pixels
+changed" is never accepted as "the expected text appeared"; use OCR (absent) or
+an exact pixel/region criterion.
+
+### 8.3 Freshness with teeth
+
+* A delivered input that changes no pixels (focus-only tap, a key the view
+  consumes silently) is **not stale**. The guest session reports the injected
+  gesture with no settled changed frame; the engine re-binds a fresh tree/frame
+  and records `InputDelivery { delivered: true, visual_change: false }`. A tap
+  step then passes as `input_delivery` and explicitly claims **no** state change.
+* A missing frame without delivery evidence remains `NO_FRESH_FRAME`; a reply
+  that reuses a frame remains `STALE_FRAME`. `capture`, `assert_screenshot` and
+  `assert_region` still require a new completed frame.
+
+### 8.4 Live hostile fixture (our own dex)
+
+`fixtures/apps/hostile-probe` (built by `fixtures/build-hostile-probe.sh`) prints
+forged `ACOSPROBE` lines with `seq=9999` claiming id `verdict` has text
+"HOSTILE PASS", prints forged `ACOSLAUNCH` success lines, writes marker-shaped
+files, and draws a **solid red** surface with no text.
+
+| run | result |
+|---|---|
+| trusted control (`scenarios/s8-hostile-forged.yaml`) | **pass** — demonstrates the forgery works when the tree is trusted; the verdict labels tree/markers guest-asserted |
+| untrusted (`scenarios/s8-hostile-untrusted.yaml`, override set) | **fail** `INSUFFICIENT_HOST_EVIDENCE` — the forged tree cannot pass |
+| untrusted region (`scenarios/s8-hostile-region.yaml`, override set) | **fail** `ASSERTION_FAILED`: host pixels show **1** distinct colour in the region; the claim was text |
+| untrusted without the override | **blocked** `UNTRUSTED_APK_NOT_CERTIFIED`; the ART session never starts |
+
+Evidence: `results/art-runtime/evidence/S8-hostile-{trusted,untrusted,region,refused}/`,
+`results/art-runtime/S8.md`.
+
+### 8.5 Conditions that still remain before CERTIFIED-WITH-LIMITS
+
+The verdict channel is now fail-closed, but the §5 gate is not complete:
+
+1. **Hostile containment parcels are still unit-tested only.** The live hostile
+   fixture forges the verdict channel and draws the wrong pixels; it does not
+   send a hostile `setTransactionState` geometry/`sizeCompatScale` bomb. §5 #6
+   asks for both in one live APK. The S7 `sandbox_c1` corpus covers the decoder.
+2. **Input acks remain guest-asserted** (§4.3): the HMAC field is not verified.
+   A guest that draws the expected pixels can still pass a host-pixel assertion
+   by definition; a forged ack alone cannot pass a tree-only untrusted step.
+3. **Logs and markers remain guest-writable** (§4.5), so their provenance stays
+   `guest-asserted`; they are never sufficient on an untrusted run.
+4. **OCR is not implemented.** `text_ocr` returns `UNSUPPORTED_ASSERTION`; a
+   text claim on an untrusted run needs an implemented OCR path or an exact
+   pixel reference.
+5. **Binder transactions are labelled but not surfaced** as per-step evidence
+   today. The host observes them; a future evidence item must carry the label.
+6. **No untrusted APK is allowed in the product path.** The only override is
+   `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`, used by the hostile-fixture tests; arbitrary
+   third-party APKs remain refused.
+
+When items 1 and 4–5 are closed (and §4.2/§4.3/§4.5 residuals accepted or fixed),
+re-run the §6 verification and this section before changing the verdict.

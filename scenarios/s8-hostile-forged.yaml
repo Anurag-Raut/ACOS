@@ -1,0 +1,35 @@
+# S8 hostile fixture, TRUSTED control: the guest prints forged ACOSPROBE and
+# ACOSLAUNCH lines. The forged probe claims id=verdict has text "HOSTILE PASS";
+# the app actually draws a solid red surface with no text. In trusted mode the
+# guest-asserted tree is allowed to corroborate a pass, which is exactly the
+# forgery §7 must stop on untrusted runs.
+version: 1
+name: s8-hostile-forged-trusted
+description: >-
+  Control run: the hostile fixture forges a probe line with text "HOSTILE PASS".
+  A trusted run may use the guest-asserted tree (so this passes), and the verdict
+  labels the evidence guest-asserted.
+app: fixtures/build/apps/hostile-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: verdict}
+      text: {exact: "HOSTILE PASS"}

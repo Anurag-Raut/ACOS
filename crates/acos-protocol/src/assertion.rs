@@ -28,6 +28,42 @@ pub struct ScreenshotAssertion {
     pub region_masks: Vec<RegionMask>,
 }
 
+/// A host-side pixel/region assertion over one freshly captured frame.
+///
+/// The region is expressed in frame pixels. At least one criterion must be
+/// present; `text_ocr` is recognised but has no implementation in this build
+/// (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the
+/// lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8
+/// bytes (row-major). `equals_png` names a PNG relative to the scenario file;
+/// it must be the same size as the region, or the same size as the frame (in
+/// which case the same region is cropped from it).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RegionAssertion {
+    /// Region left edge in frame pixels.
+    pub x: i32,
+    /// Region top edge in frame pixels.
+    pub y: i32,
+    /// Region width in pixels (must be > 0).
+    pub w: u32,
+    /// Region height in pixels (must be > 0).
+    pub h: u32,
+    /// Exact RGBA reference image for the region.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equals_png: Option<String>,
+    /// Expected SHA-256 of the region's RGBA8 bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    /// Minimum number of distinct RGBA colours in the region.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_distinct_colors: Option<u32>,
+    /// Maximum number of distinct RGBA colours in the region.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_distinct_colors: Option<u32>,
+    /// Text expected to appear in the region (OCR is not implemented today).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_ocr: Option<String>,
+}
+
 /// Assert a node's text (and optionally its exact bounds).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct TextAssertion {

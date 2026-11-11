@@ -1,0 +1,23 @@
+{
+  "request_id": "req_2ddf78_18e71d290235e7f5",
+  "ok": false,
+  "status": "blocked",
+  "backend": "acos-native",
+  "fidelity": "static-analysis",
+  "capabilities_used": [],
+  "error": {
+    "code": "UNTRUSTED_APK_NOT_CERTIFIED",
+    "message": "untrusted APK runs are refused: the product path is not certified for untrusted APKs",
+    "hint": "Run a trusted fixture, or set ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1 for a labelled hostile-fixture test only. Never enable this for an arbitrary APK; see docs/SANDBOX_CERTIFICATION.md §5/§7.",
+    "retryable": false,
+    "details": {
+      "certification": "NOT_CERTIFIED_FOR_UNTRUSTED_APKS",
+      "override_env": "ACOS_ALLOW_UNTRUSTED_FOR_TESTS",
+      "override_set": false,
+      "trust": "untrusted"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

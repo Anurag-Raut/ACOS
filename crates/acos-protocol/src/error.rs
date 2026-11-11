@@ -164,6 +164,11 @@ pub enum ErrorCode {
     ElementNotFound,
     /// A UI node reference is no longer valid.
     StaleRef,
+    /// A tree-only assertion ran on an untrusted APK run, where the tree is
+    /// guest-asserted and cannot corroborate a pass (fail closed).
+    InsufficientHostEvidence,
+    /// The requested assertion kind has no implementation in this build.
+    UnsupportedAssertion,
 
     // ---- sessions / isolation / resources --------------------------------
     /// The requested session does not exist (or was already destroyed).
@@ -187,6 +192,9 @@ pub enum ErrorCode {
     Timeout,
     /// A declared resource budget was exhausted.
     ResourceLimit,
+    /// An untrusted APK run was requested while the product path is not
+    /// certified for untrusted APKs. Only the labelled test override may run it.
+    UntrustedApkNotCertified,
 
     // ---- request/scenario/artifact validity ------------------------------
     /// The scenario is structurally or semantically invalid.
@@ -288,6 +296,8 @@ impl ErrorCode {
             ErrorCode::AssertionFailed => "ASSERTION_FAILED",
             ErrorCode::ElementNotFound => "ELEMENT_NOT_FOUND",
             ErrorCode::StaleRef => "STALE_REF",
+            ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
+            ErrorCode::UnsupportedAssertion => "UNSUPPORTED_ASSERTION",
             ErrorCode::SessionNotFound => "SESSION_NOT_FOUND",
             ErrorCode::SessionBusy => "SESSION_BUSY",
             ErrorCode::IsolationUnavailable => "ISOLATION_UNAVAILABLE",
@@ -298,6 +308,7 @@ impl ErrorCode {
             ErrorCode::RamAbort => "RAM_ABORT",
             ErrorCode::Timeout => "TIMEOUT",
             ErrorCode::ResourceLimit => "RESOURCE_LIMIT",
+            ErrorCode::UntrustedApkNotCertified => "UNTRUSTED_APK_NOT_CERTIFIED",
             ErrorCode::InvalidScenario => "INVALID_SCENARIO",
             ErrorCode::InvalidArgument => "INVALID_ARGUMENT",
             ErrorCode::UnsafePath => "UNSAFE_PATH",
@@ -458,6 +469,12 @@ impl ErrorCode {
             ErrorCode::StaleRef => {
                 "Re-run observe/assert to obtain fresh node ids; never reuse node refs across a mutation."
             }
+            ErrorCode::InsufficientHostEvidence => {
+                "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass."
+            }
+            ErrorCode::UnsupportedAssertion => {
+                "This assertion kind has no implementation. Use a supported host-observed criterion (equals_png, hash, min_distinct_colors) or report the assertion unsupported. Never treat it as a pass."
+            }
             ErrorCode::SessionNotFound => {
                 "Create a session with run first; list/keep the session id. Destroying a session invalidates it."
             }
@@ -487,6 +504,9 @@ impl ErrorCode {
             }
             ErrorCode::ResourceLimit => {
                 "A declared budget (memory/CPU/wall) was exhausted. Raise it explicitly or reduce the workload; report the measured value."
+            }
+            ErrorCode::UntrustedApkNotCertified => {
+                "Untrusted APKs are disabled on the product path until the sandbox certification gates pass. Run only labelled hostile fixtures with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1; never enable this for arbitrary APKs."
             }
             ErrorCode::InvalidScenario => {
                 "Read every error path in the validation result and fix the YAML. Do not edit the runtime to accept an invalid scenario."
@@ -553,7 +573,9 @@ impl ErrorCode {
     pub const fn default_status(self) -> crate::envelope::Status {
         use crate::envelope::Status;
         match self {
-            ErrorCode::AssertionFailed | ErrorCode::ElementNotFound => Status::Fail,
+            ErrorCode::AssertionFailed
+            | ErrorCode::ElementNotFound
+            | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
             ErrorCode::SessionBusy
@@ -563,7 +585,8 @@ impl ErrorCode {
             | ErrorCode::IsolationUnavailable
             | ErrorCode::IsolationUnsatisfied
             | ErrorCode::ConfinementUnavailable
-            | ErrorCode::LandlockUnavailable => Status::Blocked,
+            | ErrorCode::LandlockUnavailable
+            | ErrorCode::UntrustedApkNotCertified => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
             | ErrorCode::UnsupportedBytecode
@@ -583,7 +606,8 @@ impl ErrorCode {
             | ErrorCode::UnsupportedRnNoRenderer
             | ErrorCode::UnsupportedRnKey
             | ErrorCode::UnsupportedRnText
-            | ErrorCode::UnsupportedRnNoTarget => Status::Unsupported,
+            | ErrorCode::UnsupportedRnNoTarget
+            | ErrorCode::UnsupportedAssertion => Status::Unsupported,
             _ => Status::Error,
         }
     }
@@ -724,6 +748,8 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::AssertionFailed,
     ErrorCode::ElementNotFound,
     ErrorCode::StaleRef,
+    ErrorCode::InsufficientHostEvidence,
+    ErrorCode::UnsupportedAssertion,
     ErrorCode::SessionNotFound,
     ErrorCode::SessionBusy,
     ErrorCode::IsolationUnavailable,
@@ -734,6 +760,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::RamAbort,
     ErrorCode::Timeout,
     ErrorCode::ResourceLimit,
+    ErrorCode::UntrustedApkNotCertified,
     ErrorCode::InvalidScenario,
     ErrorCode::InvalidArgument,
     ErrorCode::UnsafePath,

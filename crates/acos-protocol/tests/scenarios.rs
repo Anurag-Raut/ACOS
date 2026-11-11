@@ -134,8 +134,16 @@ fn every_checked_in_scenario_parses_and_validates() {
         }
         assert_eq!(scenario.display.label(), "1080x2400@420");
     }
-    assert_eq!(positive, 8);
-    assert_eq!(negative, 9);
+    // The fixture matrix grows (W15 added scenarios); the invariant is that
+    // every positive scenario expects pass and every negative one does not.
+    assert!(
+        positive >= 8,
+        "expected at least 8 positive scenarios, got {positive}"
+    );
+    assert!(
+        negative >= 9,
+        "expected at least 9 negative scenarios, got {negative}"
+    );
 }
 
 #[test]

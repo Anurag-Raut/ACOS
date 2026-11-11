@@ -697,6 +697,79 @@
         }
       ]
     },
+    "RegionAssertion": {
+      "description": "A host-side pixel/region assertion over one freshly captured frame.\n\nThe region is expressed in frame pixels. At least one criterion must be present; `text_ocr` is recognised but has no implementation in this build (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8 bytes (row-major). `equals_png` names a PNG relative to the scenario file; it must be the same size as the region, or the same size as the frame (in which case the same region is cropped from it).",
+      "properties": {
+        "equals_png": {
+          "description": "Exact RGBA reference image for the region.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "h": {
+          "description": "Region height in pixels (must be > 0).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "hash": {
+          "description": "Expected SHA-256 of the region's RGBA8 bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_distinct_colors": {
+          "description": "Maximum number of distinct RGBA colours in the region.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_distinct_colors": {
+          "description": "Minimum number of distinct RGBA colours in the region.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "text_ocr": {
+          "description": "Text expected to appear in the region (OCR is not implemented today).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "w": {
+          "description": "Region width in pixels (must be > 0).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "x": {
+          "description": "Region left edge in frame pixels.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Region top edge in frame pixels.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "h",
+        "w",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
     "RegionMask": {
       "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).",
       "properties": {
@@ -1013,6 +1086,17 @@
             }
           ],
           "description": "Assert node invisibility."
+        },
+        "assert_region": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RegionAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert a rectangular region of a fresh host-observed frame."
         },
         "assert_screenshot": {
           "anyOf": [

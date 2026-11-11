@@ -48,3 +48,16 @@ Regenerate everything with:
     tools/build-apps.sh
 
 Both scripts are idempotent and never touch the read-only legacy tree.
+
+
+## S8 hostile fixture
+
+`apps/hostile-probe/` is our own adversarial APK for the S8 verdict-integrity
+work. It prints forged `ACOSPROBE`/`ACOSLAUNCH` lines (claiming the tree contains
+`HOSTILE PASS`), writes marker-shaped files, and draws a solid red surface with
+no text. Build it with the same gradle-free toolchain:
+
+    tools/guarded.sh --mem 6G --time 600 -- fixtures/build-hostile-probe.sh
+
+Output: `build/apps/hostile-probe.apk`. It is only used by the S8 hostile tests
+(`scenarios/s8-hostile-*.yaml`) under `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`.

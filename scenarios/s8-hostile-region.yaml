@@ -1,0 +1,39 @@
+# S8 hostile fixture, UNTRUSTED region: host-observed pixels are allowed on an
+# untrusted run, and they disagree with the forged claim. The app draws solid
+# red in the middle of the content area; the scenario requires at least two
+# distinct colours there (the region a truthful text claim would produce).
+# Run only with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1.
+version: 1
+name: s8-hostile-region
+description: >-
+  Host-observed region assertion on the hostile APK. It must fail because the
+  guest draws solid red while claiming text appeared; pixels never stand in for
+  the expected text.
+trust: untrusted
+app: fixtures/build/apps/hostile-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.MainActivity
+      clear_state: true
+  - assert_region:
+      x: 100
+      y: 400
+      w: 100
+      h: 100
+      min_distinct_colors: 2

@@ -184,6 +184,7 @@ fn observation_from(
         tree: ui_tree,
         screenshot_png: Some(encode_png(&frame.pixels, frame.width, frame.height)?),
         crashed: None,
+        input: None,
     })
 }
 

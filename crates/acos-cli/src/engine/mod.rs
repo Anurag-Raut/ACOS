@@ -353,6 +353,12 @@ pub trait SessionBackend {
     /// newer frame than the one an action produced.
     fn last_frame(&self) -> Option<ObservedFrame>;
 
+    /// Host-observed delivery for the most recent input action, if the engine
+    /// records it. `None` means the engine has no delivery record.
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        None
+    }
+
     /// The highest completed frame sequence this session has seen (0 when none).
     ///
     /// A tree-less reply (a pure screenshot) can advance the sequence past the
@@ -523,6 +529,7 @@ impl EngineBackend {
             tree,
             screenshot_png: Some(png),
             crashed: None,
+            input: None,
         })
     }
 
@@ -560,7 +567,14 @@ impl EngineBackend {
         if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
             return Err(stale_frame(previous, observed.frame_seq(), context));
         }
-        self.bind_observation(observed)
+        let mut observation = self.bind_observation(observed)?;
+        // The delivery record is host-observed: the host injected the input and
+        // the guest session accepted it. Guest acks inside it stay guest-asserted.
+        observation.input = match self {
+            EngineBackend::Native(_) => None,
+            EngineBackend::Session { session, .. } => session.last_input_delivery(),
+        };
+        Ok(observation)
     }
 
     /// Close the session and report whether its process tree is clean.
@@ -1168,6 +1182,7 @@ mod engine_tests {
             flags: Vec::new(),
             native: false,
             engine: engine.to_string(),
+            untrusted: false,
             json,
         }
     }
@@ -1244,6 +1259,7 @@ mod engine_tests {
             Some(Engine::Art),
             Mode::Live,
             backend.session_capabilities().as_ref(),
+            crate::trust::Trust::Trusted,
             &dir,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
@@ -1292,6 +1308,7 @@ mod engine_tests {
             Some(Engine::Art),
             Mode::Preview,
             backend.session_capabilities().as_ref(),
+            crate::trust::Trust::Trusted,
             &dir,
         );
         assert!(!envelope.status().is_pass());

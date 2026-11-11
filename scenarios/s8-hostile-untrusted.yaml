@@ -1,0 +1,34 @@
+# S8 hostile fixture, UNTRUSTED: same forged tree claim as the trusted control,
+# but the run is untrusted. The tree-only assertion must fail closed with
+# INSUFFICIENT_HOST_EVIDENCE; it must never pass on the forged text.
+# Run only with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1.
+version: 1
+name: s8-hostile-untrusted
+description: >-
+  A hostile APK forges ACOSPROBE text claiming "HOSTILE PASS". On an untrusted
+  run the tree is guest-asserted, so the tree-only assertion fails closed.
+trust: untrusted
+app: fixtures/build/apps/hostile-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: verdict}
+      text: {exact: "HOSTILE PASS"}
