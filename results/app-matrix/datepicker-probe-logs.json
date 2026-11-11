@@ -1,0 +1,319 @@
+{
+  "request_id": "req_157fa_18e6d866c587bed8",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "logs"
+  ],
+  "result": {
+    "collapsed": 0,
+    "count": 42,
+    "launched": true,
+    "logs": [
+      {
+        "line": "11-11 01:10:31.127 87936 87940 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:31.129 87936 87940 D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:31.273 87936 87940 D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:35.437 87936 87940 V GraphicsEnvironment: Currently set values for:",
+        "message": "Currently set values for:",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.437 87936 87940 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]",
+        "message": "  angle_gl_driver_selection_pkgs=[]",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.437 87936 87940 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.438 87936 87940 V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.probedate: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.probedate: false",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.438 87936 87940 V GraphicsEnvironment: dev.acos.fixtures.probedate is not listed in per-application setting",
+        "message": "dev.acos.fixtures.probedate is not listed in per-application setting",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.438 87936 87940 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:35.441 87936 87940 W SystemServiceRegistry: No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": 5,
+        "repeat_count": 1,
+        "tag": "SystemServiceRegistry"
+      },
+      {
+        "line": "11-11 01:10:35.441 87936 87940 E TrafficStats: TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "TrafficStats"
+      },
+      {
+        "line": "11-11 01:10:35.970 87936 87940 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:36.039 87936 87940 D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:36.067 87936 87940 W Choreographer: Frame time is 4.100831 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "message": "Frame time is 4.100831 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "priority": 5,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:36.309 87936 87940 E AcosProbeDate: probe_err date | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #23 in android:layout/date_picker_material: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | android.view.InflateException: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | java.lang.NullPointerException: null @ android.content.res.TypedArray.getString(Unknown Source:271) @ android.widget.TextView.readTextAppearance(Unknown Source:4288) @ android.widget.TextView.<init>(Unknown Source:1211) @ android.widget.TextView.<init>(Unknown Source:1149) @ android.widget.TextView.<init>(Unknown Source:1145) @ java.lang.reflect.Constructor.newInstance(Unknown Source:343) @ android.view.LayoutInflater.createView(Unknown Source:866) @ android.view.LayoutInflater.createView(Unknown Source:788) @ com.android.internal.policy.PhoneLayoutInflater.onCreateView(Unknown Source:58) @ android.view.LayoutInflater.onCreateView(Unknown Source:942) @ android.view.LayoutInflater.onCreateView(Unknown Source:962) @ android.view.LayoutInflater.createViewFromTag(Unknown Source:1016)",
+        "message": "probe_err date | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #23 in android:layout/date_picker_material: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | android.view.InflateException: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | java.lang.NullPointerException: null @ android.content.res.TypedArray.getString(Unknown Source:271) @ android.widget.TextView.readTextAppearance(Unknown Source:4288) @ android.widget.TextView.<init>(Unknown Source:1211) @ android.widget.TextView.<init>(Unknown Source:1149) @ android.widget.TextView.<init>(Unknown Source:1145) @ java.lang.reflect.Constructor.newInstance(Unknown Source:343) @ android.view.LayoutInflater.createView(Unknown Source:866) @ android.view.LayoutInflater.createView(Unknown Source:788) @ com.android.internal.policy.PhoneLayoutInflater.onCreateView(Unknown Source:58) @ android.view.LayoutInflater.onCreateView(Unknown Source:942) @ android.view.LayoutInflater.onCreateView(Unknown Source:962) @ android.view.LayoutInflater.createViewFromTag(Unknown Source:1016)",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "AcosProbeDate"
+      },
+      {
+        "line": "11-11 01:10:37.161 87936 87940 I Choreographer: Skipped 63 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 63 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:37.246 87936 87940 I Choreographer: Skipped 67 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 67 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:37.332 87936 87940 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:37.332 87936 87940 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:37.333 87936 87940 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:37.333 87936 87940 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Currently set values for:",
+        "message": "Currently set values for:",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture:   angle_gl_driver_selection_pkgs=[]",
+        "message": "  angle_gl_driver_selection_pkgs=[]",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture:   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: ANGLE GameManagerService for dev.acos.fixtures.probedate: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.probedate: false",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: dev.acos.fixtures.probedate is not listed in per-application setting",
+        "message": "dev.acos.fixtures.probedate is not listed in per-application setting",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Frame time is 4.100831 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "message": "Frame time is 4.100831 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: probe_err date | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #23 in android:layout/date_picker_material: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | android.view.InflateException: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | java.lang.NullPointerException: null @ android.content.res.TypedArray.getString(Unknown Source:271) @ android.widget.TextView.readTextAppearance(Unknown Source:4288) @ android.widget.TextView.<init>(Unknown Source:1211) @ android.widget.TextView.<init>(Unknown Source:1149) @ android.widget.TextView.<init>(Unknown Source:1145) @ java.lang.reflect.Constructor.newInstance(Unknown Source:343) @ android.view.LayoutInflater.createView(Unknown Source:866) @ android.view.LayoutInflater.createView(Unknown Source:788) @ com.android.internal.policy.PhoneLayoutInflater.onCreateView(Unknown Source:58) @ android.view.LayoutInflater.onCreateView(Unknown Source:942) @ android.view.LayoutInflater.onCreateView(Unknown Source:962) @ android.view.LayoutInflater.createViewFromTag(Unknown Source:1016)",
+        "message": "probe_err date | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #18 in android:layout/date_picker_dialog: Error inflating class android.widget.DatePicker | android.view.InflateException: Binary XML file line #23 in android:layout/date_picker_material: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | android.view.InflateException: Binary XML file line #35 in android:layout/date_picker_header_material: Error inflating class <unknown> | java.lang.NullPointerException: null @ android.content.res.TypedArray.getString(Unknown Source:271) @ android.widget.TextView.readTextAppearance(Unknown Source:4288) @ android.widget.TextView.<init>(Unknown Source:1211) @ android.widget.TextView.<init>(Unknown Source:1149) @ android.widget.TextView.<init>(Unknown Source:1145) @ java.lang.reflect.Constructor.newInstance(Unknown Source:343) @ android.view.LayoutInflater.createView(Unknown Source:866) @ android.view.LayoutInflater.createView(Unknown Source:788) @ com.android.internal.policy.PhoneLayoutInflater.onCreateView(Unknown Source:58) @ android.view.LayoutInflater.onCreateView(Unknown Source:942) @ android.view.LayoutInflater.onCreateView(Unknown Source:962) @ android.view.LayoutInflater.createViewFromTag(Unknown Source:1016)",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 63 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 63 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 67 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 67 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      }
+    ],
+    "note": "",
+    "session_id": "s_cli",
+    "stage_reached": "activity_on_create",
+    "total": 42
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

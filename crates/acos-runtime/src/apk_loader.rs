@@ -23,6 +23,38 @@ use std::path::Path;
 use acos_services::pms::AppInfo;
 use acos_vm::Vm;
 
+/// Android's per-package data sub-directories.
+///
+/// Real `installd` creates these at install time; the framework's
+/// `ContextImpl.ensurePrivateDirExists` only calls `mkdir` (not `mkdir -p`),
+/// so it relies on the package directory already existing. ACOS has no package
+/// installer, so the trusted side creates the tree before `bindApplication`.
+const APP_DATA_SUBDIRS: &[&str] = &["files", "cache", "code_cache", "no_backup"];
+
+/// Create `<root>/<guest dir>/{files,cache,code_cache,no_backup}` for every
+/// guest data directory under `/data/**`.
+///
+/// `root` is the VFS session root. Directories outside `/data/**` are ignored:
+/// the VFS only maps that subtree, and `stage` already rejects a `dataDir`
+/// outside it. The operation is idempotent.
+fn ensure_app_data_dirs(root: &Path, guest_dirs: &[&str]) -> Result<(), String> {
+    for guest in guest_dirs {
+        let guest = guest.trim_end_matches('/');
+        if !guest.starts_with("/data/") {
+            continue;
+        }
+        let base = root.join(guest.trim_start_matches('/'));
+        std::fs::create_dir_all(&base)
+            .map_err(|e| format!("apk_loader: create {}: {e}", base.display()))?;
+        for sub in APP_DATA_SUBDIRS {
+            let dir = base.join(sub);
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| format!("apk_loader: create {}: {e}", dir.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Where the APK lives inside the guest sandbox.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StagedApk {
@@ -53,6 +85,16 @@ pub fn stage(vm: &Vm, apk_path: &Path, app: &mut AppInfo) -> Result<StagedApk, S
     let host_dir = vm.vfs.root().join(rel);
     std::fs::create_dir_all(&host_dir)
         .map_err(|e| format!("apk_loader: create {}: {e}", host_dir.display()))?;
+    // Create the credential- and device-protected package trees the real
+    // framework expects to exist before the app runs (see APP_DATA_SUBDIRS).
+    ensure_app_data_dirs(
+        vm.vfs.root(),
+        &[
+            app.data_dir.as_str(),
+            app.credential_protected_data_dir.as_str(),
+            app.device_protected_data_dir.as_str(),
+        ],
+    )?;
     let guest_path = format!("{guest_dir}/base.apk");
     let host_path = host_dir.join("base.apk");
     std::fs::write(&host_path, &bytes)
@@ -64,4 +106,40 @@ pub fn stage(vm: &Vm, apk_path: &Path, app: &mut AppInfo) -> Result<StagedApk, S
         guest_path,
         size: bytes.len() as u64,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("acos-apk-loader-{tag}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn app_data_dirs_are_created_for_both_storage_trees() {
+        let root = scratch("both");
+        let _ = std::fs::remove_dir_all(&root);
+        ensure_app_data_dirs(
+            &root,
+            &["/data/user/0/com.example", "/data/user_de/0/com.example"],
+        )
+        .expect("create app data dirs");
+        for tree in ["data/user/0/com.example", "data/user_de/0/com.example"] {
+            for sub in APP_DATA_SUBDIRS {
+                let dir = root.join(tree).join(sub);
+                assert!(dir.is_dir(), "missing {}", dir.display());
+            }
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn app_data_dirs_ignore_paths_outside_data() {
+        let root = scratch("skip");
+        let _ = std::fs::remove_dir_all(&root);
+        ensure_app_data_dirs(&root, &["/etc/passwd"]).expect("no-op for non-/data path");
+        assert!(!root.join("etc/passwd").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

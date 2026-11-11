@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fragments Nav</string>
+    <string name="show_a">Show Alpha</string>
+    <string name="show_b">Show Beta</string>
+    <string name="back">Back stack</string>
+    <string name="detail">Second activity</string>
+    <string name="state">state</string>
+    <string name="received">received</string>
+    <string name="finish">Finish</string>
+</resources>

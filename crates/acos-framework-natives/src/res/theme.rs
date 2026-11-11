@@ -510,12 +510,47 @@ fn null_or_raw_typed_value(value: ResValue, attr: u32) -> TypedValueOut {
         asset_cookie: -1,
         // A `@resid` carries its target in `STYLE_RESOURCE_ID` so
         // `TypedArray.getResourceId` returns the referenced resource, not the
-        // attribute id.
-        resource_id: if value.is_reference() { value.data } else { attr },
+        // attribute id. A raw value has no resource id, and Android 14's
+        // `TypedArray.getResourceId` reads this slot verbatim, so storing the
+        // attribute id here made `View` treat e.g. `android:pointerIcon=1002`
+        // as `@0x01010509` and inflate `attr/pointerIcon` as a drawable
+        // (`Resources$NotFoundException: Resource ID #0x1010509 type #0x1 is
+        // not valid` while inflating `date_picker_header_material`).
+        resource_id: if value.is_reference() { value.data } else { 0 },
         changing_configurations: 0,
         density: 0,
         source_resource_id: attr,
         flags: 0,
         string: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::res::value::TYPE_INT_DEC;
+
+    #[test]
+    fn raw_style_value_carries_no_resource_id() {
+        // `android:pointerIcon="1002"` is a raw system-icon type, not a
+        // `@resid`. Android 14's `TypedArray.getResourceId` reads
+        // `STYLE_RESOURCE_ID`; it must stay 0 so the framework does not try to
+        // load the attribute itself as a drawable.
+        let raw = ResValue {
+            data_type: TYPE_INT_DEC,
+            data: 1002,
+        };
+        let tv = null_or_raw_typed_value(raw, 0x0101_0509);
+        assert_eq!(tv.data_type, TYPE_INT_DEC);
+        assert_eq!(tv.data, 1002);
+        assert_eq!(tv.resource_id, 0);
+        assert_eq!(tv.source_resource_id, 0x0101_0509);
+    }
+
+    #[test]
+    fn reference_style_value_targets_its_resource() {
+        let reference = ResValue::reference(0x7f08_0001);
+        let tv = null_or_raw_typed_value(reference, 0x0101_0509);
+        assert_eq!(tv.resource_id, 0x7f08_0001);
     }
 }

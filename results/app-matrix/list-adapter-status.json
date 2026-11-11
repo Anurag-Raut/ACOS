@@ -1,0 +1,21 @@
+{
+  "request_id": "req_15534_18e6d86015af6282",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "result": {
+    "apk": "/home/Qui/Projects/acos/.cache/wt-w166a/fixtures/build/apps/list-adapter.apk",
+    "launched": true,
+    "live": true,
+    "package": "dev.acos.fixtures.listadapter",
+    "published_frames": 8,
+    "session_id": "s_cli",
+    "stage_reached": "first_frame"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

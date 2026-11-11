@@ -1,0 +1,371 @@
+{
+  "request_id": "req_15239_18e6d85dcc848bf9",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.tree"
+  ],
+  "result": {
+    "package": "dev.acos.fixtures.dialogsmenus",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "tree": {
+      "max_nodes": 2000,
+      "nodes": [
+        {
+          "bounds": [
+            0,
+            128,
+            1080,
+            2337
+          ],
+          "checked": false,
+          "children": [
+            {
+              "bounds": [
+                0,
+                128,
+                1080,
+                2337
+              ],
+              "checked": false,
+              "children": [
+                {
+                  "bounds": [
+                    0,
+                    422,
+                    1080,
+                    2484
+                  ],
+                  "checked": false,
+                  "children": [
+                    {
+                      "bounds": [
+                        0,
+                        422,
+                        1080,
+                        2484
+                      ],
+                      "checked": false,
+                      "children": [
+                        {
+                          "bounds": [
+                            84,
+                            506,
+                            407,
+                            632
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.Button",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": true,
+                          "id": "n5",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/dialog",
+                          "scrollable": false,
+                          "text": "Alert dialog",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            84,
+                            758,
+                            361,
+                            884
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.Button",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n6",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/popup",
+                          "scrollable": false,
+                          "text": "Popup menu",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            84,
+                            1010,
+                            315,
+                            1136
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.Button",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n7",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/toast",
+                          "scrollable": false,
+                          "text": "Toast",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            84,
+                            1262,
+                            338,
+                            1388
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.Button",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n8",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/date",
+                          "scrollable": false,
+                          "text": "Pick date",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            84,
+                            1514,
+                            1080,
+                            1578
+                          ],
+                          "checked": false,
+                          "children": [
+                            {
+                              "bounds": [
+                                84,
+                                1514,
+                                954,
+                                1578
+                              ],
+                              "checked": false,
+                              "children": [],
+                              "class": "android.widget.TextView",
+                              "clickable": false,
+                              "content_desc": "",
+                              "enabled": true,
+                              "focused": false,
+                              "id": "n10",
+                              "package": "dev.acos.fixtures.dialogsmenus",
+                              "resource_id": "android:id/text1",
+                              "scrollable": false,
+                              "text": "One",
+                              "visible": true
+                            }
+                          ],
+                          "class": "android.widget.Spinner",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n9",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/spinner",
+                          "scrollable": false,
+                          "text": "",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            84,
+                            1642,
+                            1080,
+                            1706
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.TextView",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n11",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "dev.acos.fixtures.dialogsmenus:id/status",
+                          "scrollable": false,
+                          "text": "Idle",
+                          "visible": true
+                        }
+                      ],
+                      "class": "android.widget.LinearLayout",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n4",
+                      "package": "dev.acos.fixtures.dialogsmenus",
+                      "resource_id": "@0xffffffff",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": true
+                    }
+                  ],
+                  "class": "android.widget.FrameLayout",
+                  "clickable": false,
+                  "content_desc": "",
+                  "enabled": true,
+                  "focused": false,
+                  "id": "n3",
+                  "package": "dev.acos.fixtures.dialogsmenus",
+                  "resource_id": "android:id/content",
+                  "scrollable": false,
+                  "text": "",
+                  "visible": true
+                },
+                {
+                  "bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "checked": false,
+                  "children": [
+                    {
+                      "bounds": [
+                        0,
+                        128,
+                        1080,
+                        275
+                      ],
+                      "checked": false,
+                      "children": [
+                        {
+                          "bounds": [
+                            84,
+                            184,
+                            491,
+                            275
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.TextView",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n14",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "@0xffffffff",
+                          "scrollable": false,
+                          "text": "Dialogs Menus",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            2160,
+                            128,
+                            2160,
+                            275
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.ActionMenuView",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n15",
+                          "package": "dev.acos.fixtures.dialogsmenus",
+                          "resource_id": "@0xffffffff",
+                          "scrollable": false,
+                          "text": "",
+                          "visible": true
+                        }
+                      ],
+                      "class": "android.widget.Toolbar",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n13",
+                      "package": "dev.acos.fixtures.dialogsmenus",
+                      "resource_id": "android:id/action_bar",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": true
+                    },
+                    {
+                      "bounds": [
+                        0,
+                        128,
+                        0,
+                        128
+                      ],
+                      "checked": false,
+                      "children": [],
+                      "class": "com.android.internal.widget.ActionBarContextView",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n16",
+                      "package": "dev.acos.fixtures.dialogsmenus",
+                      "resource_id": "android:id/action_context_bar",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": false
+                    }
+                  ],
+                  "class": "com.android.internal.widget.ActionBarContainer",
+                  "clickable": false,
+                  "content_desc": "",
+                  "enabled": true,
+                  "focused": false,
+                  "id": "n12",
+                  "package": "dev.acos.fixtures.dialogsmenus",
+                  "resource_id": "android:id/action_bar_container",
+                  "scrollable": false,
+                  "text": "",
+                  "visible": true
+                }
+              ],
+              "class": "com.android.internal.widget.ActionBarOverlayLayout",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n2",
+              "package": "dev.acos.fixtures.dialogsmenus",
+              "resource_id": "android:id/decor_content_parent",
+              "scrollable": false,
+              "text": "",
+              "visible": true
+            }
+          ],
+          "class": "com.android.internal.policy.DecorView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n1",
+          "package": "dev.acos.fixtures.dialogsmenus",
+          "resource_id": "@0xffffffff",
+          "scrollable": false,
+          "text": "",
+          "visible": true
+        }
+      ],
+      "truncated": false,
+      "windows": 1
+    },
+    "truncated": false,
+    "windows": 1
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dialogs Menus</string>
+    <string name="show_dialog">Alert dialog</string>
+    <string name="show_popup">Popup menu</string>
+    <string name="show_toast">Toast</string>
+    <string name="pick_date">Pick date</string>
+    <string name="idle">Idle</string>
+    <string name="pick_hint">Pick one</string>
+</resources>

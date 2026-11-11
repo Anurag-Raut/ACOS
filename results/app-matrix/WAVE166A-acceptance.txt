@@ -1,0 +1,451 @@
+### /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo test -p acos-runtime
+   Compiling acos-framework-natives v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-framework-natives)
+   Compiling acos-vm v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-vm)
+   Compiling acos-jni v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-jni)
+   Compiling acos-runtime v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-runtime)
+    Finished `test` profile [unoptimized] target(s) in 5.08s
+     Running unittests src/lib.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/acos_runtime-98506406e7e3f931)
+
+running 28 tests
+test apk_loader::tests::app_data_dirs_ignore_paths_outside_data ... ok
+test apk_loader::tests::app_data_dirs_are_created_for_both_storage_trees ... ok
+test boot_image_cache::tests::non_directory_cache_root_is_rejected ... ok
+test boot_image_cache::tests::miss_for_unknown_key ... ok
+test boot_image_cache::tests::lock_is_exclusive_and_publish_is_safe_without_it ... ok
+test boot_image_cache::tests::corrupt_payload_is_a_miss ... ok
+test boot_image_cache::tests::truncated_and_oversized_are_misses ... ok
+test session::tests::buried_java_cause_is_surfaced_and_parsed ... ok
+test boot_image_cache::tests::private_directory_permissions ... ok
+test boot_image_cache::tests::round_trip_and_atomic_publish ... ok
+test session::tests::not_ready_hints_override_the_generic_backend_hint ... ok
+test boot_image_cache::tests::symlinked_cache_dir_is_rejected ... ok
+test session::tests::observe_without_a_frame_is_not_ready ... ok
+test boot_image_cache::tests::wrong_key_version_and_magic_are_refused ... ok
+test session::tests::png_encoder_is_a_valid_png ... ok
+test session_pool::payload_tests::crafted_lengths_are_errors_not_panics ... ok
+test session_pool::payload_tests::valid_frame_round_trips ... ok
+test session_pool::payload_tests::truncated_frames_are_errors ... ok
+test session::tests::unsupported_message_yields_api_and_at_details ... ok
+test text_java::tests::errors_are_coded_not_passes ... ok
+test text_java::tests::key_map_covers_lowercase_digits_space_newline ... ok
+test text_java::tests::key_map_refuses_what_it_cannot_type ... ok
+test view_tree::tests::errors_are_coded_not_passes ... ok
+test boot_image_cache::tests::concurrent_writers_publish_a_valid_entry ... ok
+test transport::tests::binder_identity_caches_are_bounded ... ok
+test boot_image_cache::tests::eviction_keeps_the_directory_bounded ... ok
+test lifecycle::tests::describe_throwable_unwraps_exception_in_initializer_error ... ok
+test boot_image_cache::tests::key_changes_with_boot_dir_content ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/ams_java.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/ams_java-883b9bbaed070f42)
+
+running 5 tests
+test get_content_provider_does_not_treat_the_calling_package_as_the_authority ... ok
+test component_name_reply_is_a_real_component_name ... ok
+test get_content_provider_reads_the_authority_and_carries_the_provider ... ok
+test unsupported_extra_type_is_a_structured_error ... ok
+test intent_facts_round_trip_through_the_real_creators ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/binder_transport.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/binder_transport-675b8abc63ea3de7)
+
+running 2 tests
+test service_manager_get_service_returns_a_working_proxy ... ok
+test fake_service_round_trips_binder_and_fd_and_reenters_the_looper ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/boot.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/boot-2a6bab83d37273e9)
+
+running 2 tests
+test missing_apk_is_a_structured_error ... ok
+test activity_thread_attach_reaches_atms_attach_application ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+     Running tests/boot_classpath.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/boot_classpath-fa10ea7a2c48b4e2)
+
+running 1 test
+test boot_classpath_resolves_classes_from_apex_jars ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+     Running tests/boot_image_cache.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/boot_image_cache-42228def159eee6a)
+
+running 6 tests
+test cold_restore_helper ... ok
+test cached_snapshot_restores_a_runnable_vm ... ok
+test template_cache_hit_skips_the_framework_boot ... ok
+test restored_template_carries_deterministic_clinit ... ok
+test corrupt_template_entry_falls_back_and_reboots ... ok
+test cold_restore_matches_uncached_ladder ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.99s
+
+     Running tests/client_transaction.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/client_transaction-891e8c5b07bd95ba)
+
+running 1 test
+test client_transaction_is_built_and_delivered_to_the_real_application_thread ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+
+     Running tests/counter_interaction.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/counter_interaction-f637f8a311a30455)
+
+running 2 tests
+test counter_tap_increment_updates_the_tree ... ignored, blocked: the leash NPE is fixed and the injected MotionEvent now reaches the app in window-local coordinates, but the Button's `View.onTouchEvent`/`performClick` does not run (no `AcosCounter: increment` log and `state_changed=false`); the remaining gap is in `ViewRootImpl` input delivery, not the WMS reply fan-out. See results/m2/M2_LOG.md §W152-A
+test counter_launch_publishes_a_real_frame_and_live_tree ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 7.74s
+
+     Running tests/dex_loader.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/dex_loader-ab8db01e96df5029)
+
+running 1 test
+test path_class_loader_loads_app_class_from_counter_apk_dex ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+
+     Running tests/display.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/display-1998cafd0b7df72e)
+
+running 1 test
+test display_manager_reply_round_trips_through_the_real_java_creators ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+
+     Running tests/egl_swap_frame.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/egl_swap_frame-bb8bafb6c8dbeb5e)
+
+running 1 test
+test egl_swap_publishes_a_completed_frame ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/exception_floor.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/exception_floor-7ca0bb61a6af039f)
+
+running 1 test
+test exception_floor_rethrows_native_init_failure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+     Running tests/frame_handoff.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/frame_handoff-cf8914f971d17969)
+
+running 3 tests
+test install_frame_handoff_is_idempotent ... ok
+test finish_drawing_alone_publishes_nothing ... ok
+test frame_handoff_publishes_on_real_submission ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/frame_reference_diff.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/frame_reference_diff-dfbc8eec93e6a996)
+
+running 1 test
+test synthetic_frame_reaches_frame_store_and_matches_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.10s
+
+     Running tests/input.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/input-ed382e8aacf5db00)
+
+running 3 tests
+test dispatcher_errors_when_no_window_is_registered ... ok
+test tap_outside_every_window_is_a_structured_error ... ok
+test injected_tap_reaches_the_real_window_channel ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/m2.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/m2-cc44ad92a584828f)
+
+running 3 tests
+test bind_application_is_delivered_to_the_real_application_thread ... ok
+test lifecycle_never_claims_an_undelivered_transaction ... ok
+test m2_lifecycle_create_start_resume_matches_reference ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.04s
+
+     Running tests/parcelable_java.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/parcelable_java-226e18a4f466f6f3)
+
+running 1 test
+test real_java_write_to_parcel_matches_the_rust_codec ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s
+
+     Running tests/pms.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/pms-f716121368a25b4d)
+
+running 1 test
+Note: /home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-runtime/../../crates/acos-runtime/tests/java/PmsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+test pms_java_app_info_matches_the_reference_capture ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+     Running tests/provider_java.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/provider_java-ba9eb09530256743)
+
+running 1 test
+test app_provider_is_installed_published_and_reachable_through_the_binder ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.66s
+
+     Running tests/reflect_fields.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/reflect_fields-190fefcf668027b5)
+
+running 1 test
+test reflect_field_slots_match_art ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+
+     Running tests/rn_product.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/rn_product-b9f30fbcadbd7520)
+
+running 2 tests
+test rn_product_child_worker ... ok
+test rn_product_launches_observes_and_taps ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.02s
+
+     Running tests/rn_runtime.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/rn_runtime-b2b6e19380dfd908)
+
+running 2 tests
+test rn_runtime_child_worker ... ok
+test rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.97s
+
+     Running tests/services_t38.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/services_t38-6558e1ecbefc3cfd)
+
+running 13 tests
+test every_declared_service_is_reachable_through_service_manager ... ok
+test ime_unknown_transaction_is_a_structured_error ... ok
+test connectivity_get_proxy_for_network_is_null ... ok
+test ime_session_and_tracker_transactions_are_served ... ok
+test clipboard_set_primary_clip_without_a_vm_is_a_structured_error ... ok
+test status_bar_is_minimal_and_system_effects_are_unsupported ... ok
+test notifications_are_reported_as_not_enabled_and_post_is_unsupported ... ok
+test ime_show_and_hide_soft_input_are_recorded_false ... ok
+test app_ops_check_operation_is_denied_without_a_grant ... ok
+test user_manager_serves_exactly_one_user ... ok
+test permission_manager_denies_runtime_grants_explicitly ... ok
+test ime_client_registers_and_start_input_returns_no_ime ... ok
+test clipboard_round_trips_the_marshalled_clipdata_bytes ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/services_t38_java.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/services_t38_java-d2ae30458b54145b)
+
+running 1 test
+test ime_and_clipboard_replies_round_trip_through_real_java_proxies ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.20s
+
+     Running tests/session_pool.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/session_pool-f436b8110558f427)
+
+running 4 tests
+test reset_restores_clean_state ... ok
+test panicking_session_is_isolated_and_replaced ... ok
+test deterministic_across_worker_counts ... ok
+test looping_session_is_killed_by_wall_guard ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
+
+     Running tests/settings.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/settings-e9fa0dc02f961dc8)
+
+running 1 test
+test settings_provider_generation_matches_the_golden ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.14s
+
+     Running tests/text_input.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/text_input-a21f0d1a1bd0237f)
+
+running 2 tests
+test commit_text_refuses_what_it_cannot_type ... ok
+test commit_text_calls_the_real_input_connection ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+     Running tests/vsync_natives.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/vsync_natives-d4aebe42911a63df)
+
+running 3 tests
+test choreographer_frames_run_under_virtual_time ... ok
+test choreographer_frames_are_monotonic_and_stop_when_idle ... ok
+test no_ticks_when_nothing_is_scheduled ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+     Running tests/wms.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/wms-f367bed61210d9ac)
+
+running 8 tests
+test window_manager_scalars_and_open_session ... ok
+test add_to_display_as_user_returns_reference_frame_and_insets ... ok
+test viewrootimpl_handlers_return_faithful_scalars ... ok
+test finish_drawing_is_recorded_but_never_publishes_a_frame ... ok
+test relayout_returns_a_valid_surface_control_and_reference_frames ... ok
+test wm_surface_backend_publishes_only_on_buffer_submission ... ok
+test wms_java_stub_proxy_matches_the_reference ... ok
+test wms_java_session_add_and_relayout_are_accepted ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+   Doc-tests acos_runtime
+
+running 1 test
+test crates/acos-runtime/src/lib.rs - (line 16) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+EXIT=0
+### /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 1200 -- cargo test -p acos-framework-natives
+   Compiling acos-framework-natives v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-framework-natives)
+    Finished `test` profile [unoptimized] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/acos_framework_natives-31d58915c53f4bbf)
+
+running 10 tests
+test res::config::tests::dense_selection_rule_calibrated ... ok
+test res::config::tests::label_matches_aapt_examples ... ok
+test res::config::tests::locale_fallback_better_than ... ok
+test res::config::tests::screen_size_larger_than_request_does_not_match ... ok
+test res::strpool::tests::empty_pool_is_empty ... ok
+test res::config::tests::smallest_width_must_fit ... ok
+test res::strpool::tests::rejects_non_pool ... ok
+test res::theme::tests::raw_style_value_carries_no_resource_id ... ok
+test res::theme::tests::reference_style_value_targets_its_resource ... ok
+test res::xmlblock::tests::rejects_bad_magic ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/config_matching.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/config_matching-401934db6c6872b3)
+
+running 7 tests
+test dens_any_wins ... ok
+test locale_exact_beats_language_beats_default ... ok
+test density_nearest_rule_calibrated_against_aapt2 ... ok
+test orientation_and_night_and_uimode ... ok
+test screen_size_larger_than_request_does_not_match ... ok
+test sdk_version_and_layout_direction ... ok
+test smallest_width_must_fit ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/differential_aapt2.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/differential_aapt2-a5362b0d9783961a)
+
+running 3 tests
+test differential_app_values ... ok
+test differential_device_config_selection ... ok
+test differential_framework_res_values ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
+
+     Running tests/fuzz_mutation.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/fuzz_mutation-88d65f7f12aa859e)
+
+running 1 test
+test fuzz_arsc_and_axml_never_panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/memory_lazy.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/memory_lazy-08fbff504337ff01)
+
+running 1 test
+test framework_res_lazy_memory ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/smoke.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/smoke-1699f23fb3fe968b)
+
+running 3 tests
+test app_apk_parses ... ok
+test manager_reads_asset ... ok
+test framework_res_loads_and_resolves ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/theme_resolution.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/theme_resolution-f3c526f8576d58f1)
+
+running 5 tests
+test null_reference_entry_resolves_to_type_null ... ok
+test null_theme_reference_becomes_type_null ... ok
+test theme_copy_and_rebase ... ok
+test retrieve_attributes_clears_unset_slots ... ok
+test theme_device_default_light_dark_action_bar ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/xmlblock_diff.rs (/home/Qui/Projects/acos/.cache/target-w166a/debug/deps/xmlblock_diff-7b0e4822f334ee3a)
+
+running 6 tests
+test retrieve_attributes_through_manager ... ok
+test resolve_attrs_chases_a_theme_reference_to_a_concrete_color ... ok
+test retrieve_attributes_resolves_framework_color_reference ... ok
+test xmlblock_hello_views_layout ... ok
+test retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array ... ok
+test xmlblock_screen_simple ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+   Doc-tests acos_framework_natives
+
+running 1 test
+test crates/acos-framework-natives/src/lib.rs - (line 21) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+EXIT=0
+### /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo clippy --workspace --all-targets --no-deps -- -D warnings
+    Checking acos-framework-natives v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-framework-natives)
+    Checking acos-vm v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-vm)
+    Checking acos-jni v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-jni)
+    Checking acos-runtime v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-runtime)
+    Checking acos-mcp v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-mcp)
+    Checking acos-verify v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-verify)
+    Checking acos-cli v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-cli)
+    Checking acos-protocol v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-protocol)
+    Checking acos-native-loader v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-native-loader)
+    Checking acos-gles v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-gles)
+    Checking acos-sandbox v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-sandbox)
+    Checking acos-sqlite v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-sqlite)
+    Checking acos-dex v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-dex)
+    Checking acos-apk v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-apk)
+    Checking acos-aidl v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-aidl)
+    Checking acos-test-support v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-test-support)
+    Finished `dev` profile [unoptimized] target(s) in 9.83s
+EXIT=0
+### /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 3000 -- cargo check --workspace --all-targets
+    Checking acos-framework-natives v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-framework-natives)
+    Checking acos-vm v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-vm)
+    Checking acos-jni v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-jni)
+    Checking acos-runtime v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-runtime)
+    Checking acos-mcp v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-mcp)
+    Checking acos-verify v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-verify)
+    Checking acos-cli v0.1.0 (/home/Qui/Projects/acos/.cache/wt-w166a/crates/acos-cli)
+    Finished `dev` profile [unoptimized] target(s) in 2.56s
+EXIT=0
+### /home/Qui/Projects/acos/tools/guarded.sh --mem 8G --time 1800 -- env ACOS_BIN=/home/Qui/Projects/acos/.cache/target-w166a/debug/acos bash tools/diff-dexprogs.sh --corelib real
+diff-dexprogs: mode=normal corelib=real expected=art
+PROGRAM                STATUS       DETAIL
+---------------------- ------------ ------------------------------
+01_hello               PASS         exit=0 stdout=471 bytes
+02_int_arith           PASS         exit=0 stdout=377 bytes
+03_long_arith          PASS         exit=0 stdout=569 bytes
+04_float_double        PASS         exit=0 stdout=581 bytes
+05_branches_loops      PASS         exit=0 stdout=218 bytes
+06_switch              PASS         exit=0 stdout=260 bytes
+07_static_methods_recursion PASS         exit=0 stdout=333 bytes
+08_arrays              PASS         exit=0 stdout=326 bytes
+09_strings             PASS         exit=0 stdout=662 bytes
+10_objects_fields      PASS         exit=0 stdout=283 bytes
+11_inheritance_virtual PASS         exit=0 stdout=355 bytes
+12_interfaces          PASS         exit=0 stdout=320 bytes
+13_exceptions          PASS         exit=0 stdout=436 bytes
+14_instanceof_casts    PASS         exit=0 stdout=698 bytes
+15_inner_lambda        PASS         exit=0 stdout=209 bytes
+16_enums               PASS         exit=0 stdout=375 bytes
+17_generics_collections PASS         exit=0 stdout=517 bytes
+18_string_format_misc  PASS         exit=0 stdout=572 bytes
+19_threads_sync        PASS         exit=0 stdout=133 bytes
+20_uncaught            PASS         exit=1 stdout=33 bytes
+21_regex_basic         PASS         exit=0 stdout=373 bytes
+22_regex_advanced      PASS         exit=0 stdout=432 bytes
+23_regex_split_replace PASS         exit=0 stdout=466 bytes
+24_zip_roundtrip       PASS         exit=0 stdout=1255 bytes
+25_security_digest     PASS         exit=0 stdout=1016 bytes
+26_regex_matrix        PASS         exit=0 stdout=6937 bytes
+27_annotations_reflection PASS         exit=0 stdout=1358 bytes
+
+dexprogs: 27 pass / 0 fail / 0 unsupported of 27
+dexprogs: report -> /home/Qui/Projects/acos/.cache/wt-w166a/results/vm/dexprogs-real-normal.json
+EXIT=0
+ALL DONE

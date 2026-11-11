@@ -1,0 +1,417 @@
+{
+  "request_id": "req_15532_18e6d86013c9ccd8",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "logs"
+  ],
+  "result": {
+    "collapsed": 0,
+    "count": 56,
+    "launched": true,
+    "logs": [
+      {
+        "line": "11-11 01:10:00.067 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:00.069 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:00.217 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment: Currently set values for:",
+        "message": "Currently set values for:",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]",
+        "message": "  angle_gl_driver_selection_pkgs=[]",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.listadapter: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.listadapter: false",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment: dev.acos.fixtures.listadapter is not listed in per-application setting",
+        "message": "dev.acos.fixtures.listadapter is not listed in per-application setting",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.543 86599 86603 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": 2,
+        "repeat_count": 1,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "11-11 01:10:04.546 86599 86603 W SystemServiceRegistry: No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": 5,
+        "repeat_count": 1,
+        "tag": "SystemServiceRegistry"
+      },
+      {
+        "line": "11-11 01:10:04.547 86599 86603 E TrafficStats: TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "TrafficStats"
+      },
+      {
+        "line": "11-11 01:10:04.791 86599 86603 I AcosListAdapter: onCreate",
+        "message": "onCreate",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosListAdapter"
+      },
+      {
+        "line": "11-11 01:10:05.100 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:05.219 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171228096; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:05.273 86599 86603 I AcosListAdapter: adapter_count=60",
+        "message": "adapter_count=60",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosListAdapter"
+      },
+      {
+        "line": "11-11 01:10:05.332 86599 86603 I AcosListAdapter: onResume",
+        "message": "onResume",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosListAdapter"
+      },
+      {
+        "line": "11-11 01:10:05.355 86599 86603 D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": 3,
+        "repeat_count": 1,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "11-11 01:10:05.388 86599 86603 W Choreographer: Frame time is 2.669151 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "message": "Frame time is 2.669151 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "priority": 5,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:07.893 86599 86603 I Choreographer: Skipped 148 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 148 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:07.981 86599 86603 I Choreographer: Skipped 152 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 152 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:08.073 86599 86603 I Choreographer: Skipped 156 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 156 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:08.159 86599 86603 I Choreographer: Skipped 161 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 161 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:08.246 86599 86603 I Choreographer: Skipped 165 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 165 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:08.332 86599 86603 I Choreographer: Skipped 169 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 169 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "Choreographer"
+      },
+      {
+        "line": "11-11 01:10:08.418 86599 86603 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:08.418 86599 86603 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:08.419 86599 86603 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "11-11 01:10:08.419 86599 86603 E SurfaceSyncGroup: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "priority": 6,
+        "repeat_count": 1,
+        "tag": "SurfaceSyncGroup"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Currently set values for:",
+        "message": "Currently set values for:",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture:   angle_gl_driver_selection_pkgs=[]",
+        "message": "  angle_gl_driver_selection_pkgs=[]",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture:   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: ANGLE GameManagerService for dev.acos.fixtures.listadapter: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.listadapter: false",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: dev.acos.fixtures.listadapter is not listed in per-application setting",
+        "message": "dev.acos.fixtures.listadapter is not listed in per-application setting",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: onCreate",
+        "message": "onCreate",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 171228096; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171228096; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: adapter_count=60",
+        "message": "adapter_count=60",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: onResume",
+        "message": "onResume",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Frame time is 2.669151 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "message": "Frame time is 2.669151 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 148 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 148 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 152 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 152 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 156 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 156 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 161 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 161 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 165 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 165 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Skipped 169 frames!  The application may be doing too much work on its main thread.",
+        "message": "Skipped 169 frames!  The application may be doing too much work on its main thread.",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#4) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      },
+      {
+        "line": "I AcosFixture: Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "message": "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#5) as ready",
+        "priority": 4,
+        "repeat_count": 1,
+        "tag": "AcosFixture"
+      }
+    ],
+    "note": "",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "total": 56
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}
