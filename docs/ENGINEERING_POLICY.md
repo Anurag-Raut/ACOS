@@ -1,8 +1,12 @@
 # ACOS engineering policy: reuse by default, replace only for massive gains (2026-11-11)
 
-Objective: maximum correctly verified Android app changes per second per GiB of RAM, with minimum engineering effort.
+## Primary objective (final direction, 2026-11-11)
+ACOS is an agent-first Android application execution and verification environment, not a replacement mobile OS. Run real Android APKs with the highest practical compatibility, fastest verification loops, lowest memory and minimum engineering effort. Agents install, launch, inspect, interact with, reset and verify apps quickly and concurrently. Final compatibility testing happens on a real emulator or physical device; ACOS gives high-fidelity development verification without reproducing unnecessary phone infrastructure.
+Metric: maximum correctly verified app changes per second per GiB of RAM, with minimum engineering effort.
+Default to reuse; replace only with compelling evidence. Reuse ladder per layer: stock -> minimal shims -> replacement only if justified. Use lightweight independent processes with isolated app state. Rendering infrastructure only when rendering is needed; audio/camera/media and other optional services initialise on demand. system_server: lightweight Rust services where practical, but do not insist on replacing a service when reuse is much cheaper. Rust VM and its tests are preserved, feature development frozen.
 
-## Rewrite gate (all three must hold)
+## Rewrite gate (evaluate benefit, effort, compatibility before any significant rewrite)
+Thresholds: >=50% reduction in a major subsystem with meaningful whole-system savings, or >=25% whole-system improvement, or >=2x on a critical operation = strong candidate. (Final message was cut off after '>=25% improvement'; these thresholds are carried over from the earlier policy.)
 1. Massive gain: >=25% of a whole-system metric (total core or multi-session memory), >=50% of a major subsystem, or >=2x on a critical operation. 5-10% from a complicated rewrite: reject. Small gain from a safe config change: accept.
 2. Fast to get: prefer configuration, reuse and small architectural changes over months of reimplementation.
 3. Android behaviour stays correct: verified with real APKs, not isolated benchmarks. Lower-fidelity shortcuts must be an explicitly labelled mode.

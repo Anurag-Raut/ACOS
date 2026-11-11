@@ -16,6 +16,12 @@ Metric: verified tasks per GiB-minute with N=10 concurrent agents (M12: total at
 | Flutter, RN, Gaten | Cheaper on ART (real JNI, native libs just run) | KEEP DEFERRED until counter.apk runs on ART |
 | ART plan S1..S4 as written (54-77 agent-days, replacement framework JNI + patched libbinder + custom graphics intercept) | Not reuse-first. Replaces libandroid_runtime/libhwui/libbinder wholesale before proving stock pieces cannot work | REVISE: reuse-first ladder below |
 
+## 1b. Evidence since this plan was written (experiments D, E, 2026-11-11)
+- D: stock libandroid_runtime + libbinder run Parcel, Looper, Resources on ART (needs property table, registration order, LD_PRELOAD into default namespace). Binder driver emulation via one ioctl (BINDER_WRITE_READ) is the clean hook; fake /dev/binder in bwrap is not viable.
+- E: stock libhwui draws via exported register_android_graphics_classes; seam = Skia CPU canvas (2-4 d). acos-vm gfx natives remain the pixel-diff oracle.
+- Consequence: natives rung 1 (stock) and graphics rung 1 (stock software) selected; binder rung 1 (stock libbinder + driver emulation) under test (G). Estimated M-A+M-B drops from 31-46 to a few weeks. Caps unchanged.
+- Product scope: verification environment, final compatibility on real emulator/device (docs/ENGINEERING_POLICY.md).
+
 ## 2. Reuse-first ladder (replaces the advisor's S2/S3 assumptions; advisor's S1/S4, gates and kill criteria stay)
 
 For each layer try in order; stop at the first rung that works on counter.apk:
