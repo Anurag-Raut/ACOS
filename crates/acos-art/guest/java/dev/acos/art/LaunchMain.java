@@ -509,6 +509,12 @@ public final class LaunchMain {
                 // the new launch DOES need the class, so the ordering issue is
                 // now observable instead of avoided (L1.md).
                 "register_android_view_SurfaceControl",
+                // `ViewRootImpl.relayoutWindow` turns the `outSurfaceControl` from
+                // `IWindowSession.relayout` into a Java `Surface` with
+                // `Surface.copyFrom` -> `nativeGetFromSurfaceControl`. The
+                // `Surface` natives were never registered either, so registering
+                // `SurfaceControl` alone is not enough (W4).
+                "register_android_view_Surface",
                 // `ViewRootImpl.<init>` (line 724 on API 34) constructs a
                 // `SurfaceSession`, whose Java constructor calls
                 // `nativeCreate()` immediately.
@@ -517,6 +523,18 @@ public final class LaunchMain {
                 // `InputChannel`, whose `<clinit>` calls
                 // `nativeGetFinalizer()`.
                 "register_android_view_InputChannel",
+                // `ViewRootImpl.setView` (line 1455 on API 34) constructs
+                // `WindowInputEventReceiver`, whose `InputEventReceiver.<init>`
+                // calls `nativeInit(...)`. libandroid_runtime exports the
+                // registration entry point; without it the class has no
+                // native implementation (W3's wall). The InputChannel it is
+                // handed is the real socketpair from `addToDisplayAsUser`.
+                "register_android_view_InputEventReceiver",
+                // `ViewRootImpl.performTraversals` -> `dispatchAttachedToWindow`
+                // -> `TextView.drawableStateChanged` -> `StateListAnimator` runs
+                // an `ObjectAnimator`, whose `PropertyValuesHolder` setup uses
+                // the stock reflection helper natives.
+                "register_android_animation_PropertyValuesHolder",
                 "register_android_text_AndroidCharacter",
                 "register_android_text_Hyphenator",
                 "register_android_util_CharsetUtils",
