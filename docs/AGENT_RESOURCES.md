@@ -38,3 +38,14 @@ Do not copy AOSP source into the repo. Do not rely on memory of Android internal
 - **Three separate verdicts** in reports: Task (accepted/checkpoint/blocked), Component (DONE/PARTIAL/BLOCKED/NOT STARTED), Evidence scope (unit / isolated stock probe / real APK lifecycle / interactive E2E). PREVIEW evidence stays separate.
 - **Ownership includes Cargo.toml/Cargo.lock/mod declarations/STATUS.md** — the integrator (orchestrator) owns those; request changes in your report. Record `git status` at start and end.
 - **Reports are short:** verdict, evidence table, ledger, residuals.
+
+### Evidence bundles and ownership checks (added 2026-11-11)
+- `tools/accept-bundle.sh --task NAME -- <cmd...>` runs one command and writes `results/bundles/<task>-<UTCstamp>/bundle.txt` (task, base commit, start `git status --porcelain`, source digest before/after, image-manifest digest, command, cwd, exit code, UTC start/finish, run-log path+sha256) plus the combined `run.log`.
+- The source digest hashes `git diff HEAD` for `crates/ tools/ scenarios/ docs/` plus the contents of untracked non-ignored files there; `results/`, `fixtures/`, `research/` and `.cache/` are excluded so command output cannot dirty the evidence.
+- `source_status: SOURCE_CHANGED_DURING_RUN` means the command edited sources mid-run; the tool exits with the command's rc and warns on stderr, so callers must check the marker before trusting a bundle.
+- The image-manifest digest hashes `.cache/art/sysroot/READY` plus the generated `MANIFEST.txt` (sorted path+size+sha256[:16]); it is `none` when no sysroot exists.
+- This tool never launches ART itself: wrap ART callers as `tools/art-runtime/run-exclusive.sh --task NAME -- tools/accept-bundle.sh --task NAME -- tools/guarded.sh ...`.
+- `tools/own-check.sh --own '<glob>'... [--base <commit>]` lists changed and untracked files since `--base` (default HEAD, i.e. the working tree) and exits 1 printing offenders for paths outside every own-glob or in the integrator-owned set.
+- Integrator-owned, matched by filename only: `Cargo.toml`, `Cargo.lock`, `STATUS.md`, `docs/OPERATING_DIRECTIVES.md`, `crates/*/Cargo.toml`, `**/lib.rs` (lib.rs contents are never inspected; do not edit mod declarations).
+- Globs use bash pattern semantics (`*` crosses `/`); a wildcard-free glob matches a path or a directory prefix. `ACOS_REPO_ROOT` overrides the repo root for tests only.
+- Tests are plain bash: `tools/tests/test-accept-bundle.sh` and `tools/tests/test-own-check.sh` build throwaway repos under `.cache/tests/` and print PASS/FAIL (negative cases: source changed during a run, out-of-ownership file).
