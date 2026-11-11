@@ -113,6 +113,39 @@ pub mod listener_codes {
 /// How many layer-handle binders are pre-allocated at install time.
 pub const LAYER_HANDLE_POOL: usize = 16;
 
+// ---------------------------------------------------------------------------
+// Bounds on guest-controlled sizes (S7 sandbox certification)
+//
+// Everything below arrives in a trampoline parcel from a process ACOS does not
+// trust. A compositor must never let a *declared* size become an allocation or
+// a read loop that the host pays for, so each shape has a hard ceiling here and
+// a rejected parcel is a structured error, never a guess. The ceilings are
+// deliberately far above a real BLAST transaction (measured: 88-byte
+// `GraphicBuffer` header, 1 fd, 1 composer, one callback per transaction,
+// 1080x2209 stride 1088); they bound the host, not the app.
+
+/// Largest accepted `GraphicBuffer` width or height, in pixels.
+pub const MAX_BUFFER_DIMENSION: u32 = 8192;
+/// Largest accepted `GraphicBuffer` stride, in pixels.
+pub const MAX_BUFFER_STRIDE: u32 = 8192;
+/// Largest accepted frame, in bytes (`stride * 4 * height`). 64 MiB covers 4K
+/// RGBA_8888 (33 MiB) with headroom; the live session's frame is 9.6 MiB.
+pub const MAX_BUFFER_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest accepted flattened `GraphicBuffer` header (the image writes 88).
+pub const MAX_GRAPHIC_BUFFER_HEADER_BYTES: i32 = 4096;
+/// Largest accepted fd count in one `GraphicBuffer` (the image writes 1).
+pub const MAX_GRAPHIC_BUFFER_FDS: i32 = 8;
+/// Largest accepted `CallbackId[]` in one listener entry.
+pub const MAX_CALLBACK_IDS: i32 = 4096;
+/// Largest accepted listener entries on one layer/top-level vector.
+pub const MAX_LISTENERS: i32 = 64;
+/// Largest accepted `ComposerState[]` (one per changed layer).
+pub const MAX_COMPOSERS: u32 = 256;
+/// Largest accepted `DisplayState[]` (ACOS has one display).
+pub const MAX_DISPLAYS: u32 = 16;
+/// Largest accepted top-level `uncacheBuffers` count.
+pub const MAX_UNCACHE_BUFFERS: u32 = 1024;
+
 /// `layer_state_t` change flags used by this task.
 pub mod what {
     /// `ePositionChanged`.
@@ -396,6 +429,12 @@ impl SurfaceState {
         if state.buffer_cache.contains_key(&meta.id) {
             return;
         }
+        // A descriptor limit (EMFILE) must not abort the host: an entry that
+        // cannot be duplicated is simply not cached, and a later `client_cache_t`
+        // reference to it is the same structured miss as an unknown id.
+        let Some(fd) = meta.fd.try_clone().ok() else {
+            return;
+        };
         while state.buffer_cache_order.len() >= MAX_CACHED_BUFFERS {
             let oldest = state.buffer_cache_order.remove(0);
             state.buffer_cache.remove(&oldest);
@@ -404,7 +443,7 @@ impl SurfaceState {
         state.buffer_cache.insert(
             meta.id,
             CachedBuffer {
-                fd: Some(meta.fd.try_clone().expect("dup of a memfd")),
+                fd: Some(fd),
                 width: meta.width,
                 height: meta.height,
                 stride: meta.stride,
@@ -443,11 +482,15 @@ impl SurfaceState {
         use std::os::unix::fs::FileExt;
 
         let (layer, buffer) = self.newest_frame_layer()?;
-        let row = buffer.row_bytes();
-        let size = row.saturating_mul(buffer.height as usize);
+        // Decode already rejects an out-of-bounds geometry; repeat the bound
+        // here because `LatestBuffer` is public and a capture must never turn a
+        // declared size into an allocation the host pays for.
+        let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)?;
+        let size = usize::try_from(bytes).ok()?;
         if size == 0 {
             return None;
         }
+        let row = buffer.row_bytes();
         let owned = rustix::io::dup(buffer.fd()).ok()?;
         let file = std::fs::File::from(owned);
         let mut pixels = vec![0u8; size];
@@ -1064,7 +1107,7 @@ fn apply_layer_state(
             Some(meta) => {
                 SurfaceState::cache_buffer(state, meta);
                 Some(CachedBuffer {
-                    fd: Some(try_clone(meta)),
+                    fd: try_clone(meta),
                     width: meta.width,
                     height: meta.height,
                     stride: meta.stride,
@@ -1247,10 +1290,25 @@ fn apply_layer_state(
     }
 }
 
-fn try_clone(meta: &GraphicBufferMeta) -> OwnedFd {
-    meta.fd
-        .try_clone()
-        .unwrap_or_else(|_| panic!("duplicating a GraphicBuffer memfd cannot fail"))
+fn try_clone(meta: &GraphicBufferMeta) -> Option<OwnedFd> {
+    // `dup` can fail on a descriptor limit (EMFILE); the caller treats that as
+    // "no frame stored", never as a panic in the host.
+    meta.fd.try_clone().ok()
+}
+
+/// `stride * 4 * height`, checked, and `None` when the geometry is outside the
+/// S7 bounds (dimension/stride ceilings, byte ceiling, or arithmetic overflow).
+fn checked_buffer_bytes(width: u32, height: u32, stride: u32) -> Option<u64> {
+    if width > MAX_BUFFER_DIMENSION
+        || height > MAX_BUFFER_DIMENSION
+        || stride > MAX_BUFFER_STRIDE
+        || (width != 0 && stride < width)
+    {
+        return None;
+    }
+    let row = u64::from(stride).checked_mul(4)?;
+    let bytes = row.checked_mul(u64::from(height))?;
+    (bytes <= MAX_BUFFER_BYTES).then_some(bytes)
 }
 
 /// W6 diagnostic: copy the stored buffer's pixels out of the memfd that C1 kept.
@@ -1266,8 +1324,11 @@ fn dump_latest_buffer(layer_id: i32, buf: &LatestBuffer, dir: &std::path::Path) 
     use std::io::Write;
     use std::os::unix::fs::FileExt;
 
-    let row = buf.row_bytes();
-    let size = row.saturating_mul(buf.height as usize);
+    let Some(size) = checked_buffer_bytes(buf.width, buf.height, buf.stride)
+        .and_then(|b| usize::try_from(b).ok())
+    else {
+        return;
+    };
     if size == 0 {
         return;
     }
@@ -1486,13 +1547,23 @@ fn read_transaction_state_body(
 ) -> SResult<TransactionState> {
     skip_bytes(data, i32::try_from(timeline_body).unwrap_or(0))?;
 
-    let composer_count = data.read_uint32().map_err(perr)? as usize;
-    let mut composers = Vec::with_capacity(composer_count.min(64));
+    let composer_count = data.read_uint32().map_err(perr)?;
+    if composer_count > MAX_COMPOSERS {
+        return Err(bad_transaction(format!(
+            "composer count {composer_count} exceeds {MAX_COMPOSERS}"
+        )));
+    }
+    let mut composers = Vec::with_capacity(composer_count.min(64) as usize);
     for _ in 0..composer_count {
         composers.push(read_layer_state(data)?);
     }
 
-    let display_count = data.read_uint32().map_err(perr)? as usize;
+    let display_count = data.read_uint32().map_err(perr)?;
+    if display_count > MAX_DISPLAYS {
+        return Err(bad_transaction(format!(
+            "display count {display_count} exceeds {MAX_DISPLAYS}"
+        )));
+    }
     for _ in 0..display_count {
         read_display_state(data)?;
     }
@@ -1508,7 +1579,13 @@ fn read_transaction_state_body(
     let is_auto_timestamp = data.read_bool().map_err(perr)?;
     if dbg { eprintln!("ACOSDBG tail uncache at {}", data.data_position()); }
 
-    let uncache_count = data.read_uint32().map_err(perr)? as usize;
+    let uncache_count = data.read_uint32().map_err(perr)?;
+    if uncache_count > MAX_UNCACHE_BUFFERS {
+        return Err(bad_transaction(format!(
+            "uncacheBuffers count {uncache_count} exceeds {MAX_UNCACHE_BUFFERS}"
+        )));
+    }
+    let uncache_count = uncache_count as usize;
     for _ in 0..uncache_count {
         let _token = data.read_strong_binder().map_err(perr)?;
         let _id = data.read_uint64().map_err(perr)?;
@@ -1517,16 +1594,19 @@ fn read_transaction_state_body(
     if dbg { eprintln!("ACOSDBG tail listeners at {}", data.data_position()); }
     let has_listener_callbacks = data.read_bool().map_err(perr)?;
     let listener_count = data.read_int32().map_err(perr)?;
+    if listener_count > MAX_LISTENERS {
+        return Err(bad_transaction(format!(
+            "listener count {listener_count} exceeds {MAX_LISTENERS}"
+        )));
+    }
     let mut listener_callbacks = Vec::new();
-    if listener_count > 0 {
-        for _ in 0..listener_count {
-            let listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
-            let callback_ids = read_callback_id_vector(data)?;
-            listener_callbacks.push(ListenerCallbacks {
-                listener,
-                callback_ids,
-            });
-        }
+    for _ in 0..listener_count.max(0) {
+        let listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
+        let callback_ids = read_callback_id_vector(data)?;
+        listener_callbacks.push(ListenerCallbacks {
+            listener,
+            callback_ids,
+        });
     }
 
     if dbg { eprintln!("ACOSDBG tail txnid at {}", data.data_position()); }
@@ -1540,7 +1620,7 @@ fn read_transaction_state_body(
     Ok(TransactionState {
         frame_timeline_size,
         composers,
-        displays: display_count,
+        displays: display_count as usize,
         flags,
         apply_token,
         desired_present_time,
@@ -1650,6 +1730,11 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let _ = data.read_bool().map_err(perr)?; // colorSpaceAgnostic
 
     let listener_count = data.read_int32().map_err(perr)?;
+    if listener_count > MAX_LISTENERS {
+        return Err(bad_transaction(format!(
+            "layer listener count {listener_count} exceeds {MAX_LISTENERS}"
+        )));
+    }
     let mut listeners = Vec::new();
     for _ in 0..listener_count.max(0) {
         let listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
@@ -1871,6 +1956,18 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
             detail: format!("bad GraphicBuffer flatten header len={len} fds={fd_count}"),
         });
     }
+    // The header length and fd count are guest-declared sizes: bound them before
+    // they become an allocation (`vec![0i32; len/4]`) or a read loop.
+    if len % 4 != 0 || len > MAX_GRAPHIC_BUFFER_HEADER_BYTES {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer header len {len} is outside 52..={MAX_GRAPHIC_BUFFER_HEADER_BYTES} bytes"
+        )));
+    }
+    if fd_count > MAX_GRAPHIC_BUFFER_FDS {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer fd count {fd_count} exceeds {MAX_GRAPHIC_BUFFER_FDS}"
+        )));
+    }
     let words = len as usize / 4;
     let mut header = vec![0i32; words];
     for w in &mut header {
@@ -1898,6 +1995,13 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let height = header[2] as u32;
     let stride = header[3] as u32;
     let format = header[4];
+    if checked_buffer_bytes(width, height, stride).is_none() {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer geometry {width}x{height} stride {stride} is outside the accepted \
+             {MAX_BUFFER_DIMENSION}px / {MAX_BUFFER_STRIDE}px / {MAX_BUFFER_BYTES}-byte bounds \
+             (or overflows)"
+        )));
+    }
     let usage_lo = header[6] as u32 as u64;
     let id = ((header[7] as u32 as u64) << 32) | (header[8] as u32 as u64);
     let usage_hi = if magic == tag_gbfr {
@@ -1922,9 +2026,14 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
                 Some(borrowed) => borrowed.try_clone_to_owned().map_err(|e| e.to_string()),
                 None => received_file_descriptor(raw).map_err(|e| e.to_string()),
             };
-            fd = Some(cloned.map_err(|e| {
-                ServiceError::Internal(format!("dup(GraphicBuffer fd {raw}): {e}"))
-            })?);
+            let cloned = cloned
+                .map_err(|e| ServiceError::Internal(format!("dup(GraphicBuffer fd {raw}): {e}")))?;
+            // Type check: a frame must be an anonymous (memfd/unlinked) regular
+            // file the producer owns, never a live path or a non-file descriptor.
+            // Otherwise a guest could make the compositor read a named file (its
+            // own APK, a framework file) or a pipe/socket/device as "pixels".
+            validate_guest_buffer_fd(raw)?;
+            fd = Some(cloned);
         }
     }
     let fd = fd.ok_or_else(|| ServiceError::BadRequest {
@@ -1941,6 +2050,56 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
         id,
         usage: usage_lo | (usage_hi << 32),
     })
+}
+
+/// Reject a descriptor that is not an anonymous regular file.
+///
+/// The guest sends `BINDER_TYPE_FD` numbers and the compositor duplicates them
+/// by number (`/proc/self/fd/<n>`). Without a type check that reopen is a
+/// confused deputy: it would happily read a directory, a pipe, a socket (logd,
+/// binder) or a **linked** file inside the guest's view (the app's own APK, a
+/// framework resource) and store its bytes as a "frame". A `GraphicBuffer` is
+/// always a `memfd_create()` object (the ACOS gralloc shim) or an unlinked
+/// scratch file, so the accepted set is: regular file **and** an anonymous path
+/// (`/memfd:...` or `... (deleted)`).
+fn validate_guest_buffer_fd(raw: RawFd) -> SResult<()> {
+    if raw < 0 {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer fd number {raw} is negative"
+        )));
+    }
+    let proc_path = format!("/proc/self/fd/{raw}");
+    let meta = std::fs::metadata(&proc_path).map_err(|e| {
+        ServiceError::Internal(format!("stat({proc_path}) for a GraphicBuffer fd: {e}"))
+    })?;
+    if !meta.is_file() {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer fd {raw} is not a regular file (mode {:o})",
+            std::os::unix::fs::MetadataExt::mode(&meta)
+        )));
+    }
+    let target = std::fs::read_link(&proc_path).map_err(|e| {
+        ServiceError::Internal(format!("readlink({proc_path}) for a GraphicBuffer fd: {e}"))
+    })?;
+    let shown = target.to_string_lossy();
+    if !(shown.starts_with("/memfd:") || shown.ends_with(" (deleted)")) {
+        return Err(bad_transaction(format!(
+            "GraphicBuffer fd {raw} names a live path ({shown}); a frame must be an anonymous \
+             memfd/unlinked regular file"
+        )));
+    }
+    // Keep the borrow honest: the descriptor we validated is the descriptor the
+    // caller stores.
+    Ok(())
+}
+
+/// A malformed guest `setTransactionState` (bounds, type or shape).
+fn bad_transaction(detail: String) -> ServiceError {
+    ServiceError::BadRequest {
+        interface: LEGACY_COMPOSER_DESCRIPTOR.to_string(),
+        method: "setTransactionState".into(),
+        detail,
+    }
 }
 
 fn read_fence(data: &mut Parcel) -> SResult<()> {
@@ -2026,6 +2185,13 @@ fn read_layer_metadata(data: &mut Parcel) -> SResult<()> {
 
 fn read_callback_id_vector(data: &mut Parcel) -> SResult<Vec<CallbackId>> {
     let count = data.read_int32().map_err(perr)?;
+    // A guest-declared count must not size the allocation before any element
+    // has been read (`with_capacity(i32::MAX)` is a 34 GiB reservation).
+    if count > MAX_CALLBACK_IDS {
+        return Err(bad_transaction(format!(
+            "callback id count {count} exceeds {MAX_CALLBACK_IDS}"
+        )));
+    }
     let mut out = Vec::with_capacity(count.max(0) as usize);
     for _ in 0..count.max(0) {
         let present = data.read_int32().map_err(perr)?;
