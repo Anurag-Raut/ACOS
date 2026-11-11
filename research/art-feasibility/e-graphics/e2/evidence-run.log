@@ -1,0 +1,36 @@
+LOG(6) cutils-trace: Error opening trace file: Permission denied (13)
+LOGM(7) : Check failed: !location.empty() No mainline framework library found
+ABORTER: Check failed: !location.empty() No mainline framework library found
+LOGM(4) : Using CollectorTypeCC GC.
+LOGM(5) : FaultHandler: MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED failed: 38 Function not implemented
+LOG(3) nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so:libhwui.so:libandroid_runtime.so
+LOG(3) : Time zone APEX ICU file found: /apex/com.google.android.tzdata5/etc/icu/icu_tzdata.dat
+LOG(3) : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+LOG(5) ziparchive: Unable to open '/system/framework/framework.dm': No such file or directory
+LOG(5) ziparchive: Unable to open '/system/framework/framework.dm': No such file or directory
+LOG(5) ziparchive: Unable to open '/data/dex/e2/classes.dm': No such file or directory
+LOG(3) nativeloader: InitApexLibraries:
+  com_android_art: libnativehelper.so
+  com_android_i18n: libicui18n.so:libicuuc.so:libicu.so
+  com_android_neuralnetworks: libneuralnetworks.so
+LOG(3) nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so:libhwui.so:libandroid_runtime.so
+LOG(3) nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/opt/cuda/lib64:/tmp/.mount_Paseo.lFQ6QM/usr/lib, permitted_path=/data:/mnt/expand
+LOG(3) nativeloader: InitExtendedPublicLibraries: 
+LOG(4) nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+LOG(3) nativeloader: InitProductPublicLibraries: 
+libhwui base=0x7ff694000000 path=/system/lib64/libhwui.so natives=888
+libhwui native entries extracted: 888
+calling register_android_graphics_classes @0x7ff69467d8f0
+register_android_graphics_classes returned 0
+dlopen libandroid_runtime -> OK
+  _ZN7android36register_android_os_SystemPropertiesEP7_JNIEnv -> 0
+  _ZN7android25register_android_util_LogEP7_JNIEnv -> 0
+  _ZN7android31register_android_os_SystemClockEP7_JNIEnv -> 0
+  _ZN7android34register_android_util_CharsetUtilsEP7_JNIEnv -> 0
+register_android_graphics_classes rc=0
+DRAW-OK 64x64 nonzero=3136 exactRed=2804 exactGreen=276 px(0,0)=00000000 px(4,4)=ffff0000 px(32,32)=ff00ff00
+draw+readback: 1.86 ms
+drawRect x1000: 0.31 ms  (0.31 us/op scale)  0.3 us/op
+bitmap+canvas create: 7.2 us/op
+RenderNode+RecordingCanvas: OK w=100 h=100
+RESULT done

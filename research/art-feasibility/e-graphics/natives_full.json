@@ -1,0 +1,4442 @@
+[
+{
+"name": "createAccelerateDecelerateInterpolator",
+"sig": "()J",
+"fn": 7961696
+},
+{
+"name": "createAccelerateInterpolator",
+"sig": "(F)J",
+"fn": 7961728
+},
+{
+"name": "createAnticipateInterpolator",
+"sig": "(F)J",
+"fn": 7961792
+},
+{
+"name": "createAnticipateOvershootInterpolator",
+"sig": "(F)J",
+"fn": 7961840
+},
+{
+"name": "createBounceInterpolator",
+"sig": "()J",
+"fn": 7961888
+},
+{
+"name": "createCycleInterpolator",
+"sig": "(F)J",
+"fn": 7961920
+},
+{
+"name": "createDecelerateInterpolator",
+"sig": "(F)J",
+"fn": 7961968
+},
+{
+"name": "createLinearInterpolator",
+"sig": "()J",
+"fn": 7962016
+},
+{
+"name": "createOvershootInterpolator",
+"sig": "(F)J",
+"fn": 7962048
+},
+{
+"name": "createPathInterpolator",
+"sig": "([F[F)J",
+"fn": 7178944
+},
+{
+"name": "createLutInterpolator",
+"sig": "([F)J",
+"fn": 7096608
+},
+{
+"name": "nCreateAnimator",
+"sig": "(IF)J",
+"fn": 7020528
+},
+{
+"name": "nCreateCanvasPropertyFloatAnimator",
+"sig": "(JF)J",
+"fn": 7144464
+},
+{
+"name": "nCreateCanvasPropertyPaintAnimator",
+"sig": "(JIF)J",
+"fn": 7237904
+},
+{
+"name": "nCreateRevealAnimator",
+"sig": "(IIFF)J",
+"fn": 7962144
+},
+{
+"name": "nSetStartValue",
+"sig": "(JF)V",
+"fn": 7962384
+},
+{
+"name": "nSetDuration",
+"sig": "(JJ)V",
+"fn": 7962448
+},
+{
+"name": "nGetDuration",
+"sig": "(J)J",
+"fn": 7962528
+},
+{
+"name": "nSetStartDelay",
+"sig": "(JJ)V",
+"fn": 7962544
+},
+{
+"name": "nSetInterpolator",
+"sig": "(JJ)V",
+"fn": 7017200
+},
+{
+"name": "nSetAllowRunningAsync",
+"sig": "(JZ)V",
+"fn": 7962624
+},
+{
+"name": "nSetListener",
+"sig": "(JLandroid/graphics/animation/RenderNodeAnimator;)V",
+"fn": 7655376
+},
+{
+"name": "nStart",
+"sig": "(J)V",
+"fn": 7092672
+},
+{
+"name": "nEnd",
+"sig": "(J)V",
+"fn": 7091968
+},
+{
+"name": "nGetNativeFinalizer",
+"sig": "()J",
+"fn": 7962816
+},
+{
+"name": "nFreeCaches",
+"sig": "()V",
+"fn": 7962832
+},
+{
+"name": "nFreeTextLayoutCaches",
+"sig": "()V",
+"fn": 7962864
+},
+{
+"name": "nSetCompatibilityVersion",
+"sig": "(I)V",
+"fn": 6804496
+},
+{
+"name": "nInitRaster",
+"sig": "(J)J",
+"fn": 4875216
+},
+{
+"name": "nSetBitmap",
+"sig": "(JJ)V",
+"fn": 7655488
+},
+{
+"name": "nGetClipBounds",
+"sig": "(JLandroid/graphics/Rect;)Z",
+"fn": 7140816
+},
+{
+"name": "nIsOpaque",
+"sig": "(J)Z",
+"fn": 7962880
+},
+{
+"name": "nGetWidth",
+"sig": "(J)I",
+"fn": 7962896
+},
+{
+"name": "nGetHeight",
+"sig": "(J)I",
+"fn": 7962912
+},
+{
+"name": "nSave",
+"sig": "(JI)I",
+"fn": 7962928
+},
+{
+"name": "nSaveLayer",
+"sig": "(JFFFFJ)I",
+"fn": 7962944
+},
+{
+"name": "nSaveLayerAlpha",
+"sig": "(JFFFFI)I",
+"fn": 7962960
+},
+{
+"name": "nSaveUnclippedLayer",
+"sig": "(JIIII)I",
+"fn": 7962976
+},
+{
+"name": "nRestoreUnclippedLayer",
+"sig": "(JIJ)V",
+"fn": 7962992
+},
+{
+"name": "nGetSaveCount",
+"sig": "(J)I",
+"fn": 7963008
+},
+{
+"name": "nRestore",
+"sig": "(J)Z",
+"fn": 7963024
+},
+{
+"name": "nRestoreToCount",
+"sig": "(JI)V",
+"fn": 7963072
+},
+{
+"name": "nGetMatrix",
+"sig": "(JJ)V",
+"fn": 7963088
+},
+{
+"name": "nSetMatrix",
+"sig": "(JJ)V",
+"fn": 7963104
+},
+{
+"name": "nConcat",
+"sig": "(JJ)V",
+"fn": 7963136
+},
+{
+"name": "nRotate",
+"sig": "(JF)V",
+"fn": 7963152
+},
+{
+"name": "nScale",
+"sig": "(JFF)V",
+"fn": 7963168
+},
+{
+"name": "nSkew",
+"sig": "(JFF)V",
+"fn": 7963184
+},
+{
+"name": "nTranslate",
+"sig": "(JFF)V",
+"fn": 7963200
+},
+{
+"name": "nQuickReject",
+"sig": "(JJ)Z",
+"fn": 7963216
+},
+{
+"name": "nQuickReject",
+"sig": "(JFFFF)Z",
+"fn": 7963232
+},
+{
+"name": "nClipRect",
+"sig": "(JFFFFI)Z",
+"fn": 7963248
+},
+{
+"name": "nClipPath",
+"sig": "(JJI)Z",
+"fn": 7963392
+},
+{
+"name": "nSetDrawFilter",
+"sig": "(JJ)V",
+"fn": 7963536
+},
+{
+"name": "nDrawColor",
+"sig": "(JII)V",
+"fn": 7963664
+},
+{
+"name": "nDrawColor",
+"sig": "(JJJI)V",
+"fn": 7963696
+},
+{
+"name": "nDrawPaint",
+"sig": "(JJ)V",
+"fn": 7964432
+},
+{
+"name": "nDrawPoint",
+"sig": "(JFFJ)V",
+"fn": 7964464
+},
+{
+"name": "nDrawPoints",
+"sig": "(J[FIIJ)V",
+"fn": 7964496
+},
+{
+"name": "nDrawLine",
+"sig": "(JFFFFJ)V",
+"fn": 7964944
+},
+{
+"name": "nDrawLines",
+"sig": "(J[FIIJ)V",
+"fn": 7964976
+},
+{
+"name": "nDrawRect",
+"sig": "(JFFFFJ)V",
+"fn": 7965248
+},
+{
+"name": "nDrawRegion",
+"sig": "(JJJ)V",
+"fn": 7965280
+},
+{
+"name": "nDrawRoundRect",
+"sig": "(JFFFFFFJ)V",
+"fn": 7965312
+},
+{
+"name": "nDrawDoubleRoundRect",
+"sig": "(JFFFFFFFFFFFFJ)V",
+"fn": 7965344
+},
+{
+"name": "nDrawDoubleRoundRect",
+"sig": "(JFFFF[FFFFF[FJ)V",
+"fn": 7422816
+},
+{
+"name": "nDrawCircle",
+"sig": "(JFFFJ)V",
+"fn": 7965360
+},
+{
+"name": "nDrawOval",
+"sig": "(JFFFFJ)V",
+"fn": 7965392
+},
+{
+"name": "nDrawArc",
+"sig": "(JFFFFFFZJ)V",
+"fn": 7965424
+},
+{
+"name": "nDrawPath",
+"sig": "(JJJ)V",
+"fn": 7965456
+},
+{
+"name": "nDrawVertices",
+"sig": "(JII[FI[FI[II[SIIJ)V",
+"fn": 7965488
+},
+{
+"name": "nDrawMesh",
+"sig": "(JJIJ)V",
+"fn": 7967152
+},
+{
+"name": "nDrawNinePatch",
+"sig": "(JJJFFFFJII)V",
+"fn": 7967280
+},
+{
+"name": "nDrawBitmapMatrix",
+"sig": "(JJJJ)V",
+"fn": 7967904
+},
+{
+"name": "nDrawBitmapMesh",
+"sig": "(JJII[FI[IIJ)V",
+"fn": 7967968
+},
+{
+"name": "nDrawBitmap",
+"sig": "(JJFFJIII)V",
+"fn": 7968416
+},
+{
+"name": "nDrawBitmap",
+"sig": "(JJFFFFFFFFJII)V",
+"fn": 7969120
+},
+{
+"name": "nDrawBitmap",
+"sig": "(J[IIIFFIIZJ)V",
+"fn": 5740528
+},
+{
+"name": "nDrawGlyphs",
+"sig": "(J[I[FIIIJJ)V",
+"fn": 7365824
+},
+{
+"name": "nDrawText",
+"sig": "(J[CIIFFIJ)V",
+"fn": 7505056
+},
+{
+"name": "nDrawText",
+"sig": "(JLjava/lang/String;IIFFIJ)V",
+"fn": 7029296
+},
+{
+"name": "nDrawTextRun",
+"sig": "(J[CIIIIFFZJJ)V",
+"fn": 7057632
+},
+{
+"name": "nDrawTextRun",
+"sig": "(JLjava/lang/String;IIIIFFZJ)V",
+"fn": 7655648
+},
+{
+"name": "nDrawTextOnPath",
+"sig": "(J[CIIJFFIJ)V",
+"fn": 7969568
+},
+{
+"name": "nDrawTextOnPath",
+"sig": "(JLjava/lang/String;JFFIJ)V",
+"fn": 7969760
+},
+{
+"name": "nPunchHole",
+"sig": "(JFFFFFFF)V",
+"fn": 7655888
+},
+{
+"name": "nativeGetNativeFinalizer",
+"sig": "()J",
+"fn": 7969952
+},
+{
+"name": "nativeCreate",
+"sig": "(FFFFFFF[F)J",
+"fn": 7258384
+},
+{
+"name": "nCreateAnimatorSet",
+"sig": "()J",
+"fn": 7259648
+},
+{
+"name": "nSetVectorDrawableTarget",
+"sig": "(JJ)V",
+"fn": 6851488
+},
+{
+"name": "nAddAnimator",
+"sig": "(JJJJJII)V",
+"fn": 7260928
+},
+{
+"name": "nSetPropertyHolderData",
+"sig": "(J[FI)V",
+"fn": 7309136
+},
+{
+"name": "nSetPropertyHolderData",
+"sig": "(J[II)V",
+"fn": 7969984
+},
+{
+"name": "nStart",
+"sig": "(JLandroid/graphics/drawable/AnimatedVectorDrawable$VectorDrawableAnimatorRT;I)V",
+"fn": 6761968
+},
+{
+"name": "nReverse",
+"sig": "(JLandroid/graphics/drawable/AnimatedVectorDrawable$VectorDrawableAnimatorRT;I)V",
+"fn": 7970624
+},
+{
+"name": "nCreateGroupPropertyHolder",
+"sig": "(JIFF)J",
+"fn": 7970752
+},
+{
+"name": "nCreatePathDataPropertyHolder",
+"sig": "(JJJ)J",
+"fn": 6847760
+},
+{
+"name": "nCreatePathColorPropertyHolder",
+"sig": "(JIII)J",
+"fn": 7970896
+},
+{
+"name": "nCreatePathPropertyHolder",
+"sig": "(JIFF)J",
+"fn": 7971024
+},
+{
+"name": "nCreateRootAlphaPropertyHolder",
+"sig": "(JFF)J",
+"fn": 7971168
+},
+{
+"name": "nEnd",
+"sig": "(J)V",
+"fn": 7971296
+},
+{
+"name": "nReset",
+"sig": "(J)V",
+"fn": 7971312
+},
+{
+"name": "nDraw",
+"sig": "(JJJLandroid/graphics/Rect;ZZ)I",
+"fn": 7338720
+},
+{
+"name": "nGetFullPathProperties",
+"sig": "(J[BI)Z",
+"fn": 7195776
+},
+{
+"name": "nGetGroupProperties",
+"sig": "(J[FI)Z",
+"fn": 7192176
+},
+{
+"name": "nSetPathString",
+"sig": "(JLjava/lang/String;I)V",
+"fn": 5874672
+},
+{
+"name": "nSetName",
+"sig": "(JLjava/lang/String;)V",
+"fn": 7971424
+},
+{
+"name": "nCreateTree",
+"sig": "(J)J",
+"fn": 7061168
+},
+{
+"name": "nCreateTreeFromCopy",
+"sig": "(JJ)J",
+"fn": 7095024
+},
+{
+"name": "nSetRendererViewportSize",
+"sig": "(JFF)V",
+"fn": 7971520
+},
+{
+"name": "nSetRootAlpha",
+"sig": "(JF)Z",
+"fn": 7971600
+},
+{
+"name": "nGetRootAlpha",
+"sig": "(J)F",
+"fn": 7971680
+},
+{
+"name": "nSetAntiAlias",
+"sig": "(JZ)V",
+"fn": 7971696
+},
+{
+"name": "nSetAllowCaching",
+"sig": "(JZ)V",
+"fn": 7971728
+},
+{
+"name": "nCreateFullPath",
+"sig": "()J",
+"fn": 7338208
+},
+{
+"name": "nCreateFullPath",
+"sig": "(J)J",
+"fn": 7342352
+},
+{
+"name": "nUpdateFullPathProperties",
+"sig": "(JFIFIFFFFFIII)V",
+"fn": 7971744
+},
+{
+"name": "nUpdateFullPathFillGradient",
+"sig": "(JJ)V",
+"fn": 7030592
+},
+{
+"name": "nUpdateFullPathStrokeGradient",
+"sig": "(JJ)V",
+"fn": 7030688
+},
+{
+"name": "nCreateClipPath",
+"sig": "()J",
+"fn": 7236784
+},
+{
+"name": "nCreateClipPath",
+"sig": "(J)J",
+"fn": 7440000
+},
+{
+"name": "nCreateGroup",
+"sig": "()J",
+"fn": 7090656
+},
+{
+"name": "nCreateGroup",
+"sig": "(J)J",
+"fn": 7196000
+},
+{
+"name": "nUpdateGroupProperties",
+"sig": "(JFFFFFFF)V",
+"fn": 7971872
+},
+{
+"name": "nAddChild",
+"sig": "(JJ)V",
+"fn": 7319136
+},
+{
+"name": "nGetRotation",
+"sig": "(J)F",
+"fn": 7971936
+},
+{
+"name": "nSetRotation",
+"sig": "(JF)V",
+"fn": 7971952
+},
+{
+"name": "nGetPivotX",
+"sig": "(J)F",
+"fn": 7972000
+},
+{
+"name": "nSetPivotX",
+"sig": "(JF)V",
+"fn": 7972016
+},
+{
+"name": "nGetPivotY",
+"sig": "(J)F",
+"fn": 7972064
+},
+{
+"name": "nSetPivotY",
+"sig": "(JF)V",
+"fn": 7972080
+},
+{
+"name": "nGetScaleX",
+"sig": "(J)F",
+"fn": 7972128
+},
+{
+"name": "nSetScaleX",
+"sig": "(JF)V",
+"fn": 7972144
+},
+{
+"name": "nGetScaleY",
+"sig": "(J)F",
+"fn": 7972192
+},
+{
+"name": "nSetScaleY",
+"sig": "(JF)V",
+"fn": 7972208
+},
+{
+"name": "nGetTranslateX",
+"sig": "(J)F",
+"fn": 7972256
+},
+{
+"name": "nSetTranslateX",
+"sig": "(JF)V",
+"fn": 7972272
+},
+{
+"name": "nGetTranslateY",
+"sig": "(J)F",
+"fn": 7972320
+},
+{
+"name": "nSetTranslateY",
+"sig": "(JF)V",
+"fn": 7972336
+},
+{
+"name": "nSetPathData",
+"sig": "(JJ)V",
+"fn": 7656032
+},
+{
+"name": "nGetStrokeWidth",
+"sig": "(J)F",
+"fn": 7972384
+},
+{
+"name": "nSetStrokeWidth",
+"sig": "(JF)V",
+"fn": 7972400
+},
+{
+"name": "nGetStrokeColor",
+"sig": "(J)I",
+"fn": 7972464
+},
+{
+"name": "nSetStrokeColor",
+"sig": "(JI)V",
+"fn": 7972480
+},
+{
+"name": "nGetStrokeAlpha",
+"sig": "(J)F",
+"fn": 7972528
+},
+{
+"name": "nSetStrokeAlpha",
+"sig": "(JF)V",
+"fn": 7972544
+},
+{
+"name": "nGetFillColor",
+"sig": "(J)I",
+"fn": 7972608
+},
+{
+"name": "nSetFillColor",
+"sig": "(JI)V",
+"fn": 7972624
+},
+{
+"name": "nGetFillAlpha",
+"sig": "(J)F",
+"fn": 7972672
+},
+{
+"name": "nSetFillAlpha",
+"sig": "(JF)V",
+"fn": 7972688
+},
+{
+"name": "nGetTrimPathStart",
+"sig": "(J)F",
+"fn": 7972752
+},
+{
+"name": "nSetTrimPathStart",
+"sig": "(JF)V",
+"fn": 7972768
+},
+{
+"name": "nGetTrimPathEnd",
+"sig": "(J)F",
+"fn": 7972848
+},
+{
+"name": "nSetTrimPathEnd",
+"sig": "(JF)V",
+"fn": 7972864
+},
+{
+"name": "nGetTrimPathOffset",
+"sig": "(J)F",
+"fn": 7972944
+},
+{
+"name": "nSetTrimPathOffset",
+"sig": "(JF)V",
+"fn": 7972960
+},
+{
+"name": "nCreateObserver",
+"sig": "(Ljava/lang/ref/WeakReference;Z)J",
+"fn": 7973680
+},
+{
+"name": "nGetNextBuffer",
+"sig": "(J[J)I",
+"fn": 7268480
+},
+{
+"name": "nGetNativeFinalizer",
+"sig": "()J",
+"fn": 7974016
+},
+{
+"name": "nCreate",
+"sig": "(J)J",
+"fn": 7974032
+},
+{
+"name": "nMapPoints",
+"sig": "(J[FI[FIIZ)V",
+"fn": 6907728
+},
+{
+"name": "nMapRect",
+"sig": "(JLandroid/graphics/RectF;Landroid/graphics/RectF;)Z",
+"fn": 7098448
+},
+{
+"name": "nSetRectToRect",
+"sig": "(JLandroid/graphics/RectF;Landroid/graphics/RectF;I)Z",
+"fn": 7055664
+},
+{
+"name": "nSetPolyToPoly",
+"sig": "(J[FI[FII)Z",
+"fn": 7375472
+},
+{
+"name": "nGetValues",
+"sig": "(J[F)V",
+"fn": 7656048
+},
+{
+"name": "nSetValues",
+"sig": "(J[F)V",
+"fn": 7656256
+},
+{
+"name": "nIsIdentity",
+"sig": "(J)Z",
+"fn": 7974112
+},
+{
+"name": "nIsAffine",
+"sig": "(J)Z",
+"fn": 7974400
+},
+{
+"name": "nRectStaysRect",
+"sig": "(J)Z",
+"fn": 7656480
+},
+{
+"name": "nReset",
+"sig": "(J)V",
+"fn": 7974496
+},
+{
+"name": "nSet",
+"sig": "(JJ)V",
+"fn": 7974528
+},
+{
+"name": "nSetTranslate",
+"sig": "(JFF)V",
+"fn": 7974560
+},
+{
+"name": "nSetScale",
+"sig": "(JFFFF)V",
+"fn": 7165408
+},
+{
+"name": "nSetScale",
+"sig": "(JFF)V",
+"fn": 7030784
+},
+{
+"name": "nSetRotate",
+"sig": "(JFFF)V",
+"fn": 7196224
+},
+{
+"name": "nSetRotate",
+"sig": "(JF)V",
+"fn": 7104928
+},
+{
+"name": "nSetSinCos",
+"sig": "(JFFFF)V",
+"fn": 7974640
+},
+{
+"name": "nSetSinCos",
+"sig": "(JFF)V",
+"fn": 7974752
+},
+{
+"name": "nSetSkew",
+"sig": "(JFFFF)V",
+"fn": 7974816
+},
+{
+"name": "nSetSkew",
+"sig": "(JFF)V",
+"fn": 7974896
+},
+{
+"name": "nSetConcat",
+"sig": "(JJJ)V",
+"fn": 7656512
+},
+{
+"name": "nPreTranslate",
+"sig": "(JFF)V",
+"fn": 7656528
+},
+{
+"name": "nPreScale",
+"sig": "(JFFFF)V",
+"fn": 7656544
+},
+{
+"name": "nPreScale",
+"sig": "(JFF)V",
+"fn": 7656560
+},
+{
+"name": "nPreRotate",
+"sig": "(JFFF)V",
+"fn": 7322096
+},
+{
+"name": "nPreRotate",
+"sig": "(JF)V",
+"fn": 7656576
+},
+{
+"name": "nPreSkew",
+"sig": "(JFFFF)V",
+"fn": 7974960
+},
+{
+"name": "nPreSkew",
+"sig": "(JFF)V",
+"fn": 7975104
+},
+{
+"name": "nPreConcat",
+"sig": "(JJ)V",
+"fn": 7656592
+},
+{
+"name": "nPostTranslate",
+"sig": "(JFF)V",
+"fn": 7656608
+},
+{
+"name": "nPostScale",
+"sig": "(JFFFF)V",
+"fn": 7656624
+},
+{
+"name": "nPostScale",
+"sig": "(JFF)V",
+"fn": 7656640
+},
+{
+"name": "nPostRotate",
+"sig": "(JFFF)V",
+"fn": 7095472
+},
+{
+"name": "nPostRotate",
+"sig": "(JF)V",
+"fn": 7171088
+},
+{
+"name": "nPostSkew",
+"sig": "(JFFFF)V",
+"fn": 7975216
+},
+{
+"name": "nPostSkew",
+"sig": "(JFF)V",
+"fn": 7975360
+},
+{
+"name": "nPostConcat",
+"sig": "(JJ)V",
+"fn": 7656656
+},
+{
+"name": "nInvert",
+"sig": "(JJ)Z",
+"fn": 7656672
+},
+{
+"name": "nMapRadius",
+"sig": "(JF)F",
+"fn": 7656688
+},
+{
+"name": "nEquals",
+"sig": "(JJ)Z",
+"fn": 7656704
+},
+{
+"name": "nativeGetWidth",
+"sig": "(J)I",
+"fn": 6769616
+},
+{
+"name": "nativeGetHeight",
+"sig": "(J)I",
+"fn": 6769648
+},
+{
+"name": "nativeConstructor",
+"sig": "(J)J",
+"fn": 7141504
+},
+{
+"name": "nativeCreateFromStream",
+"sig": "(Ljava/io/InputStream;[B)J",
+"fn": 7975568
+},
+{
+"name": "nativeBeginRecording",
+"sig": "(JII)J",
+"fn": 6617888
+},
+{
+"name": "nativeEndRecording",
+"sig": "(J)V",
+"fn": 6549312
+},
+{
+"name": "nativeDraw",
+"sig": "(JJ)V",
+"fn": 7975632
+},
+{
+"name": "nativeWriteToStream",
+"sig": "(JLjava/io/OutputStream;[B)Z",
+"fn": 7975696
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 7975824
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 7976960
+},
+{
+"name": "nativeMake",
+"sig": "(JILjava/nio/Buffer;ZIIFFFF)J",
+"fn": 7976976
+},
+{
+"name": "nativeMakeIndexed",
+"sig": "(JILjava/nio/Buffer;ZIILjava/nio/ShortBuffer;ZIIFFFF)J",
+"fn": 7977584
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;[FZ)V",
+"fn": 7978352
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;FFFFI)V",
+"fn": 7978736
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;[I)V",
+"fn": 7979104
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;IIIII)V",
+"fn": 7979472
+},
+{
+"name": "nCreate",
+"sig": "(Ljava/lang/String;)J",
+"fn": 4561872
+},
+{
+"name": "nGetNativeFinalizer",
+"sig": "()J",
+"fn": 7982288
+},
+{
+"name": "nOutput",
+"sig": "(J)V",
+"fn": 7982304
+},
+{
+"name": "nGetUsageSize",
+"sig": "(J)I",
+"fn": 7982320
+},
+{
+"name": "nGetAllocatedSize",
+"sig": "(J)I",
+"fn": 7982400
+},
+{
+"name": "nAddAnimator",
+"sig": "(JJ)V",
+"fn": 6716672
+},
+{
+"name": "nEndAllAnimators",
+"sig": "(J)V",
+"fn": 7982480
+},
+{
+"name": "nForceEndAnimators",
+"sig": "(J)V",
+"fn": 7982496
+},
+{
+"name": "nRequestPositionUpdates",
+"sig": "(JLjava/lang/ref/WeakReference;)V",
+"fn": 7656720
+},
+{
+"name": "nDiscardDisplayList",
+"sig": "(J)V",
+"fn": 7267488
+},
+{
+"name": "nIsValid",
+"sig": "(J)Z",
+"fn": 7982512
+},
+{
+"name": "nSetLayerType",
+"sig": "(JI)Z",
+"fn": 7982528
+},
+{
+"name": "nGetLayerType",
+"sig": "(J)I",
+"fn": 7982656
+},
+{
+"name": "nSetLayerPaint",
+"sig": "(JJ)Z",
+"fn": 7263856
+},
+{
+"name": "nSetStaticMatrix",
+"sig": "(JJ)Z",
+"fn": 7982672
+},
+{
+"name": "nSetAnimationMatrix",
+"sig": "(JJ)Z",
+"fn": 7062896
+},
+{
+"name": "nGetAnimationMatrix",
+"sig": "(JJ)Z",
+"fn": 7982768
+},
+{
+"name": "nSetClipToBounds",
+"sig": "(JZ)Z",
+"fn": 7982816
+},
+{
+"name": "nGetClipToBounds",
+"sig": "(J)Z",
+"fn": 7982864
+},
+{
+"name": "nSetClipBounds",
+"sig": "(JIIII)Z",
+"fn": 7982880
+},
+{
+"name": "nSetClipBoundsEmpty",
+"sig": "(J)Z",
+"fn": 7983040
+},
+{
+"name": "nSetProjectBackwards",
+"sig": "(JZ)Z",
+"fn": 7983072
+},
+{
+"name": "nSetProjectionReceiver",
+"sig": "(JZ)Z",
+"fn": 7983104
+},
+{
+"name": "nSetOutlineRoundRect",
+"sig": "(JIIIIFF)Z",
+"fn": 5682384
+},
+{
+"name": "nSetOutlinePath",
+"sig": "(JJF)Z",
+"fn": 7292272
+},
+{
+"name": "nSetOutlineEmpty",
+"sig": "(J)Z",
+"fn": 7656848
+},
+{
+"name": "nSetOutlineNone",
+"sig": "(J)Z",
+"fn": 7656896
+},
+{
+"name": "nClearStretch",
+"sig": "(J)Z",
+"fn": 7983136
+},
+{
+"name": "nStretch",
+"sig": "(JFFFF)Z",
+"fn": 7144848
+},
+{
+"name": "nHasShadow",
+"sig": "(J)Z",
+"fn": 7983216
+},
+{
+"name": "nSetSpotShadowColor",
+"sig": "(JI)Z",
+"fn": 7983280
+},
+{
+"name": "nGetSpotShadowColor",
+"sig": "(J)I",
+"fn": 7983312
+},
+{
+"name": "nSetAmbientShadowColor",
+"sig": "(JI)Z",
+"fn": 7983328
+},
+{
+"name": "nGetAmbientShadowColor",
+"sig": "(J)I",
+"fn": 7983360
+},
+{
+"name": "nSetClipToOutline",
+"sig": "(JZ)Z",
+"fn": 7983376
+},
+{
+"name": "nSetRevealClip",
+"sig": "(JZFFF)Z",
+"fn": 4765984
+},
+{
+"name": "nSetAlpha",
+"sig": "(JF)Z",
+"fn": 7983392
+},
+{
+"name": "nSetRenderEffect",
+"sig": "(JJ)Z",
+"fn": 7983488
+},
+{
+"name": "nSetHasOverlappingRendering",
+"sig": "(JZ)Z",
+"fn": 7983584
+},
+{
+"name": "nSetUsageHint",
+"sig": "(JI)V",
+"fn": 7983616
+},
+{
+"name": "nSetElevation",
+"sig": "(JF)Z",
+"fn": 7983632
+},
+{
+"name": "nSetTranslationX",
+"sig": "(JF)Z",
+"fn": 7983680
+},
+{
+"name": "nSetTranslationY",
+"sig": "(JF)Z",
+"fn": 7983744
+},
+{
+"name": "nSetTranslationZ",
+"sig": "(JF)Z",
+"fn": 7983808
+},
+{
+"name": "nSetRotation",
+"sig": "(JF)Z",
+"fn": 7983856
+},
+{
+"name": "nSetRotationX",
+"sig": "(JF)Z",
+"fn": 7983904
+},
+{
+"name": "nSetRotationY",
+"sig": "(JF)Z",
+"fn": 7983952
+},
+{
+"name": "nSetScaleX",
+"sig": "(JF)Z",
+"fn": 7984016
+},
+{
+"name": "nSetScaleY",
+"sig": "(JF)Z",
+"fn": 7984064
+},
+{
+"name": "nSetPivotX",
+"sig": "(JF)Z",
+"fn": 7984112
+},
+{
+"name": "nSetPivotY",
+"sig": "(JF)Z",
+"fn": 7984176
+},
+{
+"name": "nResetPivot",
+"sig": "(J)Z",
+"fn": 7984240
+},
+{
+"name": "nSetCameraDistance",
+"sig": "(JF)Z",
+"fn": 7984272
+},
+{
+"name": "nSetLeft",
+"sig": "(JI)Z",
+"fn": 7984384
+},
+{
+"name": "nSetTop",
+"sig": "(JI)Z",
+"fn": 7984448
+},
+{
+"name": "nSetRight",
+"sig": "(JI)Z",
+"fn": 7984512
+},
+{
+"name": "nSetBottom",
+"sig": "(JI)Z",
+"fn": 7984576
+},
+{
+"name": "nGetLeft",
+"sig": "(J)I",
+"fn": 7984640
+},
+{
+"name": "nGetTop",
+"sig": "(J)I",
+"fn": 7984656
+},
+{
+"name": "nGetRight",
+"sig": "(J)I",
+"fn": 7984672
+},
+{
+"name": "nGetBottom",
+"sig": "(J)I",
+"fn": 7984688
+},
+{
+"name": "nSetLeftTopRightBottom",
+"sig": "(JIIII)Z",
+"fn": 7086256
+},
+{
+"name": "nOffsetLeftAndRight",
+"sig": "(JI)Z",
+"fn": 7984704
+},
+{
+"name": "nOffsetTopAndBottom",
+"sig": "(JI)Z",
+"fn": 7984736
+},
+{
+"name": "nHasOverlappingRendering",
+"sig": "(J)Z",
+"fn": 7984768
+},
+{
+"name": "nGetClipToOutline",
+"sig": "(J)Z",
+"fn": 7984784
+},
+{
+"name": "nGetAlpha",
+"sig": "(J)F",
+"fn": 7984800
+},
+{
+"name": "nGetCameraDistance",
+"sig": "(J)F",
+"fn": 7984816
+},
+{
+"name": "nGetScaleX",
+"sig": "(J)F",
+"fn": 7984848
+},
+{
+"name": "nGetScaleY",
+"sig": "(J)F",
+"fn": 7984864
+},
+{
+"name": "nGetElevation",
+"sig": "(J)F",
+"fn": 7984880
+},
+{
+"name": "nGetTranslationX",
+"sig": "(J)F",
+"fn": 7984896
+},
+{
+"name": "nGetTranslationY",
+"sig": "(J)F",
+"fn": 7984912
+},
+{
+"name": "nGetTranslationZ",
+"sig": "(J)F",
+"fn": 7984928
+},
+{
+"name": "nGetRotation",
+"sig": "(J)F",
+"fn": 7984944
+},
+{
+"name": "nGetRotationX",
+"sig": "(J)F",
+"fn": 7984960
+},
+{
+"name": "nGetRotationY",
+"sig": "(J)F",
+"fn": 7984976
+},
+{
+"name": "nIsPivotExplicitlySet",
+"sig": "(J)Z",
+"fn": 7984992
+},
+{
+"name": "nHasIdentityMatrix",
+"sig": "(J)Z",
+"fn": 7063280
+},
+{
+"name": "nGetTransformMatrix",
+"sig": "(JJ)V",
+"fn": 7226896
+},
+{
+"name": "nGetInverseTransformMatrix",
+"sig": "(JJ)V",
+"fn": 7656944
+},
+{
+"name": "nGetPivotX",
+"sig": "(J)F",
+"fn": 7657008
+},
+{
+"name": "nGetPivotY",
+"sig": "(J)F",
+"fn": 7657040
+},
+{
+"name": "nGetWidth",
+"sig": "(J)I",
+"fn": 7985008
+},
+{
+"name": "nGetHeight",
+"sig": "(J)I",
+"fn": 7985024
+},
+{
+"name": "nSetAllowForceDark",
+"sig": "(JZ)Z",
+"fn": 7985040
+},
+{
+"name": "nGetAllowForceDark",
+"sig": "(J)Z",
+"fn": 7985072
+},
+{
+"name": "nGetUniqueId",
+"sig": "(J)J",
+"fn": 7985088
+},
+{
+"name": "nSetIsTextureView",
+"sig": "(J)V",
+"fn": 7985104
+},
+{
+"name": "nParseStringForPath",
+"sig": "(JLjava/lang/String;I)V",
+"fn": 5159920
+},
+{
+"name": "nCreatePathDataFromString",
+"sig": "(Ljava/lang/String;I)J",
+"fn": 7661792
+},
+{
+"name": "nCreateEmptyPathData",
+"sig": "()J",
+"fn": 7985408
+},
+{
+"name": "nCreatePathData",
+"sig": "(J)J",
+"fn": 7662048
+},
+{
+"name": "nInterpolatePathData",
+"sig": "(JJJF)Z",
+"fn": 7060240
+},
+{
+"name": "nFinalize",
+"sig": "(J)V",
+"fn": 7985456
+},
+{
+"name": "nCanMorph",
+"sig": "(JJ)Z",
+"fn": 7048352
+},
+{
+"name": "nSetPathData",
+"sig": "(JJ)V",
+"fn": 7037328
+},
+{
+"name": "nCreatePathFromPathData",
+"sig": "(JJ)V",
+"fn": 7985536
+},
+{
+"name": "nativeCreate",
+"sig": "([IIIIIIZJ)Landroid/graphics/Bitmap;",
+"fn": 4855952
+},
+{
+"name": "nativeCopy",
+"sig": "(JIZ)Landroid/graphics/Bitmap;",
+"fn": 7985584
+},
+{
+"name": "nativeCopyAshmem",
+"sig": "(J)Landroid/graphics/Bitmap;",
+"fn": 6670880
+},
+{
+"name": "nativeCopyAshmemConfig",
+"sig": "(JI)Landroid/graphics/Bitmap;",
+"fn": 7987088
+},
+{
+"name": "nativeGetAshmemFD",
+"sig": "(J)I",
+"fn": 7987536
+},
+{
+"name": "nativeGetNativeFinalizer",
+"sig": "()J",
+"fn": 7987568
+},
+{
+"name": "nativeRecycle",
+"sig": "(J)V",
+"fn": 7178736
+},
+{
+"name": "nativeReconfigure",
+"sig": "(JIIIZ)V",
+"fn": 7234112
+},
+{
+"name": "nativeCompress",
+"sig": "(JIILjava/io/OutputStream;[B)Z",
+"fn": 7987584
+},
+{
+"name": "nativeErase",
+"sig": "(JI)V",
+"fn": 7662128
+},
+{
+"name": "nativeErase",
+"sig": "(JJJ)V",
+"fn": 7987776
+},
+{
+"name": "nativeRowBytes",
+"sig": "(J)I",
+"fn": 7988928
+},
+{
+"name": "nativeConfig",
+"sig": "(J)I",
+"fn": 7988960
+},
+{
+"name": "nativeHasAlpha",
+"sig": "(J)Z",
+"fn": 7989040
+},
+{
+"name": "nativeIsPremultiplied",
+"sig": "(J)Z",
+"fn": 7989104
+},
+{
+"name": "nativeSetHasAlpha",
+"sig": "(JZZ)V",
+"fn": 7663376
+},
+{
+"name": "nativeSetPremultiplied",
+"sig": "(JZ)V",
+"fn": 5194896
+},
+{
+"name": "nativeHasMipMap",
+"sig": "(J)Z",
+"fn": 7989136
+},
+{
+"name": "nativeSetHasMipMap",
+"sig": "(JZ)V",
+"fn": 7989168
+},
+{
+"name": "nativeCreateFromParcel",
+"sig": "(Landroid/os/Parcel;)Landroid/graphics/Bitmap;",
+"fn": 5988288
+},
+{
+"name": "nativeWriteToParcel",
+"sig": "(JILandroid/os/Parcel;)Z",
+"fn": 7517200
+},
+{
+"name": "nativeExtractAlpha",
+"sig": "(JJ[I)Landroid/graphics/Bitmap;",
+"fn": 7524016
+},
+{
+"name": "nativeGenerationId",
+"sig": "(J)I",
+"fn": 7989216
+},
+{
+"name": "nativeGetPixel",
+"sig": "(JII)I",
+"fn": 7663456
+},
+{
+"name": "nativeGetColor",
+"sig": "(JII)J",
+"fn": 7989280
+},
+{
+"name": "nativeGetPixels",
+"sig": "(J[IIIIIII)V",
+"fn": 7663728
+},
+{
+"name": "nativeSetPixel",
+"sig": "(JIII)V",
+"fn": 7664080
+},
+{
+"name": "nativeSetPixels",
+"sig": "(J[IIIIIII)V",
+"fn": 7664672
+},
+{
+"name": "nativeCopyPixelsToBuffer",
+"sig": "(JLjava/nio/Buffer;)V",
+"fn": 7664864
+},
+{
+"name": "nativeCopyPixelsFromBuffer",
+"sig": "(JLjava/nio/Buffer;)V",
+"fn": 7116864
+},
+{
+"name": "nativeSameAs",
+"sig": "(JJ)Z",
+"fn": 7665120
+},
+{
+"name": "nativePrepareToDraw",
+"sig": "(J)V",
+"fn": 7989808
+},
+{
+"name": "nativeGetAllocationByteCount",
+"sig": "(J)I",
+"fn": 7990528
+},
+{
+"name": "nativeCopyPreserveInternalConfig",
+"sig": "(J)Landroid/graphics/Bitmap;",
+"fn": 7990592
+},
+{
+"name": "nativeWrapHardwareBufferBitmap",
+"sig": "(Landroid/hardware/HardwareBuffer;J)Landroid/graphics/Bitmap;",
+"fn": 7255920
+},
+{
+"name": "nativeGetHardwareBuffer",
+"sig": "(J)Landroid/hardware/HardwareBuffer;",
+"fn": 7202704
+},
+{
+"name": "nativeComputeColorSpace",
+"sig": "(J)Landroid/graphics/ColorSpace;",
+"fn": 7991184
+},
+{
+"name": "nativeSetColorSpace",
+"sig": "(JJ)V",
+"fn": 7991232
+},
+{
+"name": "nativeIsSRGB",
+"sig": "(J)Z",
+"fn": 7991440
+},
+{
+"name": "nativeIsSRGBLinear",
+"sig": "(J)Z",
+"fn": 7991584
+},
+{
+"name": "nativeSetImmutable",
+"sig": "(J)V",
+"fn": 7991744
+},
+{
+"name": "nativeExtractGainmap",
+"sig": "(J)Landroid/graphics/Gainmap;",
+"fn": 7991776
+},
+{
+"name": "nativeSetGainmap",
+"sig": "(JJ)V",
+"fn": 7991808
+},
+{
+"name": "nativeIsImmutable",
+"sig": "(J)Z",
+"fn": 7991920
+},
+{
+"name": "nativeIsBackedByAshmem",
+"sig": "(J)Z",
+"fn": 7991952
+},
+{
+"name": "nativeHasGainmap",
+"sig": "(J)Z",
+"fn": 7991984
+},
+{
+"name": "nativeDecodeStream",
+"sig": "(Ljava/io/InputStream;[BLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+"fn": 6163664
+},
+{
+"name": "nativeDecodeFileDescriptor",
+"sig": "(Ljava/io/FileDescriptor;Landroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+"fn": 7262224
+},
+{
+"name": "nativeDecodeAsset",
+"sig": "(JLandroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+"fn": 7039360
+},
+{
+"name": "nativeDecodeByteArray",
+"sig": "([BIILandroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+"fn": 7043328
+},
+{
+"name": "nativeIsSeekable",
+"sig": "(Ljava/io/FileDescriptor;)Z",
+"fn": 6992736
+},
+{
+"name": "nativeConstructor",
+"sig": "()V",
+"fn": 7177456
+},
+{
+"name": "nativeDestructor",
+"sig": "()V",
+"fn": 7998832
+},
+{
+"name": "save",
+"sig": "()V",
+"fn": 7029904
+},
+{
+"name": "restore",
+"sig": "()V",
+"fn": 6980192
+},
+{
+"name": "translate",
+"sig": "(FFF)V",
+"fn": 7998928
+},
+{
+"name": "rotateX",
+"sig": "(F)V",
+"fn": 7105728
+},
+{
+"name": "rotateY",
+"sig": "(F)V",
+"fn": 7141856
+},
+{
+"name": "rotateZ",
+"sig": "(F)V",
+"fn": 7999040
+},
+{
+"name": "rotate",
+"sig": "(FFF)V",
+"fn": 7288704
+},
+{
+"name": "setLocation",
+"sig": "(FFF)V",
+"fn": 7999200
+},
+{
+"name": "getLocationX",
+"sig": "()F",
+"fn": 7999312
+},
+{
+"name": "getLocationY",
+"sig": "()F",
+"fn": 7999344
+},
+{
+"name": "getLocationZ",
+"sig": "()F",
+"fn": 7999376
+},
+{
+"name": "nativeGetMatrix",
+"sig": "(J)V",
+"fn": 6662608
+},
+{
+"name": "nativeApplyToCanvas",
+"sig": "(J)V",
+"fn": 7999408
+},
+{
+"name": "dotWithNormal",
+"sig": "(FFF)F",
+"fn": 7999664
+},
+{
+"name": "nCreateFloat",
+"sig": "(F)J",
+"fn": 7999888
+},
+{
+"name": "nCreatePaint",
+"sig": "(J)J",
+"fn": 7666016
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 7999936
+},
+{
+"name": "native_CreateBlendModeFilter",
+"sig": "(II)J",
+"fn": 7666272
+},
+{
+"name": "native_CreateLightingFilter",
+"sig": "(II)J",
+"fn": 7256848
+},
+{
+"name": "nativeColorMatrixFilter",
+"sig": "([F)J",
+"fn": 7173664
+},
+{
+"name": "nInitBuilder",
+"sig": "(Ljava/lang/String;I)J",
+"fn": 8000928
+},
+{
+"name": "nCreateFamily",
+"sig": "(J)J",
+"fn": 8001360
+},
+{
+"name": "nGetBuilderReleaseFunc",
+"sig": "()J",
+"fn": 8001584
+},
+{
+"name": "nGetFamilyReleaseFunc",
+"sig": "()J",
+"fn": 8001600
+},
+{
+"name": "nAddFont",
+"sig": "(JLjava/nio/ByteBuffer;III)Z",
+"fn": 8001616
+},
+{
+"name": "nAddFontWeightStyle",
+"sig": "(JLjava/nio/ByteBuffer;III)Z",
+"fn": 8002112
+},
+{
+"name": "nAddAxisValue",
+"sig": "(JIF)V",
+"fn": 8002608
+},
+{
+"name": "nGetFinalizer",
+"sig": "()J",
+"fn": 8005680
+},
+{
+"name": "nCreateEmpty",
+"sig": "()J",
+"fn": 8005344
+},
+{
+"name": "nCreateCopy",
+"sig": "(J)J",
+"fn": 8005488
+},
+{
+"name": "nSetBitmap",
+"sig": "(JLandroid/graphics/Bitmap;)V",
+"fn": 8005696
+},
+{
+"name": "nSetRatioMin",
+"sig": "(JFFF)V",
+"fn": 8005776
+},
+{
+"name": "nGetRatioMin",
+"sig": "(J[F)V",
+"fn": 8005808
+},
+{
+"name": "nSetRatioMax",
+"sig": "(JFFF)V",
+"fn": 8005904
+},
+{
+"name": "nGetRatioMax",
+"sig": "(J[F)V",
+"fn": 8005936
+},
+{
+"name": "nSetGamma",
+"sig": "(JFFF)V",
+"fn": 8006032
+},
+{
+"name": "nGetGamma",
+"sig": "(J[F)V",
+"fn": 8006064
+},
+{
+"name": "nSetEpsilonSdr",
+"sig": "(JFFF)V",
+"fn": 8006160
+},
+{
+"name": "nGetEpsilonSdr",
+"sig": "(J[F)V",
+"fn": 8006192
+},
+{
+"name": "nSetEpsilonHdr",
+"sig": "(JFFF)V",
+"fn": 8006288
+},
+{
+"name": "nGetEpsilonHdr",
+"sig": "(J[F)V",
+"fn": 8006320
+},
+{
+"name": "nSetDisplayRatioHdr",
+"sig": "(JF)V",
+"fn": 8006416
+},
+{
+"name": "nGetDisplayRatioHdr",
+"sig": "(J)F",
+"fn": 8006432
+},
+{
+"name": "nSetDisplayRatioSdr",
+"sig": "(JF)V",
+"fn": 8006448
+},
+{
+"name": "nGetDisplayRatioSdr",
+"sig": "(J)F",
+"fn": 8006464
+},
+{
+"name": "nWriteGainmapToParcel",
+"sig": "(JLandroid/os/Parcel;)V",
+"fn": 8006480
+},
+{
+"name": "nReadGainmapFromParcel",
+"sig": "(JLandroid/os/Parcel;)V",
+"fn": 8007024
+},
+{
+"name": "nCreate",
+"sig": "(JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+"fn": 6387824
+},
+{
+"name": "nCreate",
+"sig": "(Ljava/nio/ByteBuffer;IIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+"fn": 8011440
+},
+{
+"name": "nCreate",
+"sig": "([BIIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+"fn": 7319552
+},
+{
+"name": "nCreate",
+"sig": "(Ljava/io/InputStream;[BZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+"fn": 7667936
+},
+{
+"name": "nCreate",
+"sig": "(Ljava/io/FileDescriptor;JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+"fn": 8011664
+},
+{
+"name": "nDecodeBitmap",
+"sig": "(JLandroid/graphics/ImageDecoder;ZIILandroid/graphics/Rect;ZIZZZJZ)Landroid/graphics/Bitmap;",
+"fn": 7478688
+},
+{
+"name": "nGetSampledSize",
+"sig": "(JI)Landroid/util/Size;",
+"fn": 7142192
+},
+{
+"name": "nGetPadding",
+"sig": "(JLandroid/graphics/Rect;)V",
+"fn": 6978064
+},
+{
+"name": "nClose",
+"sig": "(J)V",
+"fn": 7091296
+},
+{
+"name": "nGetMimeType",
+"sig": "(J)Ljava/lang/String;",
+"fn": 8012016
+},
+{
+"name": "nGetColorSpace",
+"sig": "(J)Landroid/graphics/ColorSpace;",
+"fn": 7668304
+},
+{
+"name": "nativeConstructor",
+"sig": "(II)J",
+"fn": 7144656
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8012096
+},
+{
+"name": "nativeReset",
+"sig": "(JII)V",
+"fn": 8012144
+},
+{
+"name": "nativeSetKeyFrame",
+"sig": "(JII[F[F)V",
+"fn": 7319968
+},
+{
+"name": "nativeSetRepeatMirror",
+"sig": "(JFZ)V",
+"fn": 8012304
+},
+{
+"name": "nativeTimeToValues",
+"sig": "(JI[F)I",
+"fn": 7477360
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 8013872
+},
+{
+"name": "nativeMake",
+"sig": "([Landroid/graphics/MeshSpecification$Attribute;I[Landroid/graphics/MeshSpecification$Varying;Ljava/lang/String;Ljava/lang/String;)J",
+"fn": 8013888
+},
+{
+"name": "nativeMakeWithCS",
+"sig": "([Landroid/graphics/MeshSpecification$Attribute;I[Landroid/graphics/MeshSpecification$Varying;Ljava/lang/String;Ljava/lang/String;J)J",
+"fn": 8014976
+},
+{
+"name": "nativeMakeWithAlpha",
+"sig": "([Landroid/graphics/MeshSpecification$Attribute;I[Landroid/graphics/MeshSpecification$Varying;Ljava/lang/String;Ljava/lang/String;JI)J",
+"fn": 8016192
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8018352
+},
+{
+"name": "nativeConstructor",
+"sig": "(FI)J",
+"fn": 7030000
+},
+{
+"name": "nativeConstructor",
+"sig": "([FFFF)J",
+"fn": 7371840
+},
+{
+"name": "nativeNewTable",
+"sig": "([B)J",
+"fn": 8018384
+},
+{
+"name": "nativeNewClip",
+"sig": "(II)J",
+"fn": 8018560
+},
+{
+"name": "nativeNewGamma",
+"sig": "(F)J",
+"fn": 8018576
+},
+{
+"name": "isNinePatchChunk",
+"sig": "([B)Z",
+"fn": 8018944
+},
+{
+"name": "validateNinePatchChunk",
+"sig": "([B)J",
+"fn": 7186528
+},
+{
+"name": "nativeFinalize",
+"sig": "(J)V",
+"fn": 8019072
+},
+{
+"name": "nativeGetTransparentRegion",
+"sig": "(JJLandroid/graphics/Rect;)J",
+"fn": 8019088
+},
+{
+"name": "nGetNativeFinalizer",
+"sig": "()J",
+"fn": 8021648
+},
+{
+"name": "nInit",
+"sig": "()J",
+"fn": 7011184
+},
+{
+"name": "nInitWithPaint",
+"sig": "(J)J",
+"fn": 7668624
+},
+{
+"name": "nBreakText",
+"sig": "(J[CIIFI[F)I",
+"fn": 8021664
+},
+{
+"name": "nBreakText",
+"sig": "(JLjava/lang/String;ZFI[F)I",
+"fn": 7368816
+},
+{
+"name": "nGetTextAdvances",
+"sig": "(J[CIIIII[FI)F",
+"fn": 7049328
+},
+{
+"name": "nGetTextAdvances",
+"sig": "(JLjava/lang/String;IIIII[FI)F",
+"fn": 7668672
+},
+{
+"name": "nGetTextRunCursor",
+"sig": "(J[CIIIII)I",
+"fn": 7140304
+},
+{
+"name": "nGetTextRunCursor",
+"sig": "(JLjava/lang/String;IIIII)I",
+"fn": 7668848
+},
+{
+"name": "nGetTextPath",
+"sig": "(JI[CIIFFJ)V",
+"fn": 8022048
+},
+{
+"name": "nGetTextPath",
+"sig": "(JILjava/lang/String;IIFFJ)V",
+"fn": 6391360
+},
+{
+"name": "nGetStringBounds",
+"sig": "(JLjava/lang/String;IIILandroid/graphics/Rect;)V",
+"fn": 5800304
+},
+{
+"name": "nGetCharArrayBounds",
+"sig": "(J[CIIILandroid/graphics/Rect;)V",
+"fn": 7668992
+},
+{
+"name": "nHasGlyph",
+"sig": "(JILjava/lang/String;)Z",
+"fn": 8022224
+},
+{
+"name": "nGetRunAdvance",
+"sig": "(J[CIIIIZI)F",
+"fn": 8023440
+},
+{
+"name": "nGetRunCharacterAdvance",
+"sig": "(J[CIIIIZI[FI)F",
+"fn": 4721552
+},
+{
+"name": "nGetOffsetForAdvance",
+"sig": "(J[CIIIIZF)I",
+"fn": 8024096
+},
+{
+"name": "nGetFontMetricsIntForText",
+"sig": "(J[CIIIIZLandroid/graphics/Paint$FontMetricsInt;)V",
+"fn": 7415776
+},
+{
+"name": "nGetFontMetricsIntForText",
+"sig": "(JLjava/lang/String;IIIIZLandroid/graphics/Paint$FontMetricsInt;)V",
+"fn": 7669152
+},
+{
+"name": "nSetTextLocales",
+"sig": "(JLjava/lang/String;)I",
+"fn": 7669360
+},
+{
+"name": "nSetFontFeatureSettings",
+"sig": "(JLjava/lang/String;)V",
+"fn": 8024672
+},
+{
+"name": "nGetFontMetrics",
+"sig": "(JLandroid/graphics/Paint$FontMetrics;)F",
+"fn": 4665536
+},
+{
+"name": "nGetFontMetricsInt",
+"sig": "(JLandroid/graphics/Paint$FontMetricsInt;)I",
+"fn": 7333760
+},
+{
+"name": "nReset",
+"sig": "(J)V",
+"fn": 7362864
+},
+{
+"name": "nSet",
+"sig": "(JJ)V",
+"fn": 7393440
+},
+{
+"name": "nGetFlags",
+"sig": "(J)I",
+"fn": 7028496
+},
+{
+"name": "nSetFlags",
+"sig": "(JI)V",
+"fn": 7029120
+},
+{
+"name": "nGetHinting",
+"sig": "(J)I",
+"fn": 8025072
+},
+{
+"name": "nSetHinting",
+"sig": "(JI)V",
+"fn": 6847712
+},
+{
+"name": "nSetAntiAlias",
+"sig": "(JZ)V",
+"fn": 6862160
+},
+{
+"name": "nSetSubpixelText",
+"sig": "(JZ)V",
+"fn": 6907008
+},
+{
+"name": "nSetLinearText",
+"sig": "(JZ)V",
+"fn": 6907072
+},
+{
+"name": "nSetUnderlineText",
+"sig": "(JZ)V",
+"fn": 8025088
+},
+{
+"name": "nSetStrikeThruText",
+"sig": "(JZ)V",
+"fn": 8025104
+},
+{
+"name": "nSetFakeBoldText",
+"sig": "(JZ)V",
+"fn": 8025120
+},
+{
+"name": "nSetFilterBitmap",
+"sig": "(JZ)V",
+"fn": 8025152
+},
+{
+"name": "nSetDither",
+"sig": "(JZ)V",
+"fn": 8025168
+},
+{
+"name": "nGetStyle",
+"sig": "(J)I",
+"fn": 8025200
+},
+{
+"name": "nSetStyle",
+"sig": "(JI)V",
+"fn": 8025216
+},
+{
+"name": "nSetColor",
+"sig": "(JI)V",
+"fn": 6905040
+},
+{
+"name": "nSetColor",
+"sig": "(JJJ)V",
+"fn": 8025248
+},
+{
+"name": "nSetAlpha",
+"sig": "(JI)V",
+"fn": 6764976
+},
+{
+"name": "nGetStrokeWidth",
+"sig": "(J)F",
+"fn": 8025568
+},
+{
+"name": "nSetStrokeWidth",
+"sig": "(JF)V",
+"fn": 6819104
+},
+{
+"name": "nGetStrokeMiter",
+"sig": "(J)F",
+"fn": 8025584
+},
+{
+"name": "nSetStrokeMiter",
+"sig": "(JF)V",
+"fn": 6819136
+},
+{
+"name": "nGetStrokeCap",
+"sig": "(J)I",
+"fn": 8025600
+},
+{
+"name": "nSetStrokeCap",
+"sig": "(JI)V",
+"fn": 6848976
+},
+{
+"name": "nGetStrokeJoin",
+"sig": "(J)I",
+"fn": 8025616
+},
+{
+"name": "nSetStrokeJoin",
+"sig": "(JI)V",
+"fn": 6923152
+},
+{
+"name": "nGetFillPath",
+"sig": "(JJJ)Z",
+"fn": 7057264
+},
+{
+"name": "nSetShader",
+"sig": "(JJ)J",
+"fn": 7116544
+},
+{
+"name": "nSetColorFilter",
+"sig": "(JJ)J",
+"fn": 7116704
+},
+{
+"name": "nSetXfermode",
+"sig": "(JI)V",
+"fn": 7669552
+},
+{
+"name": "nSetPathEffect",
+"sig": "(JJ)J",
+"fn": 8025632
+},
+{
+"name": "nSetMaskFilter",
+"sig": "(JJ)J",
+"fn": 7117504
+},
+{
+"name": "nSetTypeface",
+"sig": "(JJ)V",
+"fn": 8025680
+},
+{
+"name": "nGetTextAlign",
+"sig": "(J)I",
+"fn": 8025696
+},
+{
+"name": "nSetTextAlign",
+"sig": "(JI)V",
+"fn": 8025712
+},
+{
+"name": "nSetTextLocalesByMinikinLocaleListId",
+"sig": "(JI)V",
+"fn": 8025728
+},
+{
+"name": "nIsElegantTextHeight",
+"sig": "(J)Z",
+"fn": 8025744
+},
+{
+"name": "nSetElegantTextHeight",
+"sig": "(JZ)V",
+"fn": 8025760
+},
+{
+"name": "nGetTextSize",
+"sig": "(J)F",
+"fn": 8025776
+},
+{
+"name": "nSetTextSize",
+"sig": "(JF)V",
+"fn": 8025792
+},
+{
+"name": "nGetTextScaleX",
+"sig": "(J)F",
+"fn": 8025824
+},
+{
+"name": "nSetTextScaleX",
+"sig": "(JF)V",
+"fn": 6789040
+},
+{
+"name": "nGetTextSkewX",
+"sig": "(J)F",
+"fn": 8025840
+},
+{
+"name": "nSetTextSkewX",
+"sig": "(JF)V",
+"fn": 8025856
+},
+{
+"name": "nGetLetterSpacing",
+"sig": "(J)F",
+"fn": 8025872
+},
+{
+"name": "nSetLetterSpacing",
+"sig": "(JF)V",
+"fn": 8025888
+},
+{
+"name": "nGetWordSpacing",
+"sig": "(J)F",
+"fn": 8025904
+},
+{
+"name": "nSetWordSpacing",
+"sig": "(JF)V",
+"fn": 8025920
+},
+{
+"name": "nGetStartHyphenEdit",
+"sig": "(J)I",
+"fn": 8025936
+},
+{
+"name": "nGetEndHyphenEdit",
+"sig": "(J)I",
+"fn": 8025952
+},
+{
+"name": "nSetStartHyphenEdit",
+"sig": "(JI)V",
+"fn": 8025968
+},
+{
+"name": "nSetEndHyphenEdit",
+"sig": "(JI)V",
+"fn": 8026000
+},
+{
+"name": "nAscent",
+"sig": "(J)F",
+"fn": 7669744
+},
+{
+"name": "nDescent",
+"sig": "(J)F",
+"fn": 7669824
+},
+{
+"name": "nGetUnderlinePosition",
+"sig": "(J)F",
+"fn": 7669904
+},
+{
+"name": "nGetUnderlineThickness",
+"sig": "(J)F",
+"fn": 7670032
+},
+{
+"name": "nGetStrikeThruPosition",
+"sig": "(J)F",
+"fn": 8026032
+},
+{
+"name": "nGetStrikeThruThickness",
+"sig": "(J)F",
+"fn": 8026048
+},
+{
+"name": "nSetShadowLayer",
+"sig": "(JFFFJJ)V",
+"fn": 7365216
+},
+{
+"name": "nHasShadowLayer",
+"sig": "(J)Z",
+"fn": 8026064
+},
+{
+"name": "nEqualsForTextMeasurement",
+"sig": "(JJ)Z",
+"fn": 8026080
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8027760
+},
+{
+"name": "nativeConstructor",
+"sig": "(II)J",
+"fn": 8027792
+},
+{
+"name": "nInit",
+"sig": "()J",
+"fn": 7670592
+},
+{
+"name": "nInit",
+"sig": "(J)J",
+"fn": 7670624
+},
+{
+"name": "nGetFinalizer",
+"sig": "()J",
+"fn": 8027856
+},
+{
+"name": "nSet",
+"sig": "(JJ)V",
+"fn": 7670672
+},
+{
+"name": "nComputeBounds",
+"sig": "(JLandroid/graphics/RectF;)V",
+"fn": 7670688
+},
+{
+"name": "nIncReserve",
+"sig": "(JI)V",
+"fn": 8027872
+},
+{
+"name": "nMoveTo",
+"sig": "(JFF)V",
+"fn": 7670992
+},
+{
+"name": "nRMoveTo",
+"sig": "(JFF)V",
+"fn": 7159376
+},
+{
+"name": "nLineTo",
+"sig": "(JFF)V",
+"fn": 7671008
+},
+{
+"name": "nRLineTo",
+"sig": "(JFF)V",
+"fn": 7671024
+},
+{
+"name": "nQuadTo",
+"sig": "(JFFFF)V",
+"fn": 7671040
+},
+{
+"name": "nRQuadTo",
+"sig": "(JFFFF)V",
+"fn": 7671056
+},
+{
+"name": "nConicTo",
+"sig": "(JFFFFF)V",
+"fn": 8027936
+},
+{
+"name": "nRConicTo",
+"sig": "(JFFFFF)V",
+"fn": 8027952
+},
+{
+"name": "nCubicTo",
+"sig": "(JFFFFFF)V",
+"fn": 7671072
+},
+{
+"name": "nRCubicTo",
+"sig": "(JFFFFFF)V",
+"fn": 7671088
+},
+{
+"name": "nArcTo",
+"sig": "(JFFFFFFZ)V",
+"fn": 7671104
+},
+{
+"name": "nClose",
+"sig": "(J)V",
+"fn": 7671200
+},
+{
+"name": "nAddRect",
+"sig": "(JFFFFI)V",
+"fn": 7671216
+},
+{
+"name": "nAddOval",
+"sig": "(JFFFFI)V",
+"fn": 7036544
+},
+{
+"name": "nAddCircle",
+"sig": "(JFFFI)V",
+"fn": 7671296
+},
+{
+"name": "nAddArc",
+"sig": "(JFFFFFF)V",
+"fn": 7289760
+},
+{
+"name": "nAddRoundRect",
+"sig": "(JFFFFFFI)V",
+"fn": 7192400
+},
+{
+"name": "nAddRoundRect",
+"sig": "(JFFFF[FI)V",
+"fn": 5501472
+},
+{
+"name": "nAddPath",
+"sig": "(JJFF)V",
+"fn": 7138400
+},
+{
+"name": "nAddPath",
+"sig": "(JJ)V",
+"fn": 7671312
+},
+{
+"name": "nAddPath",
+"sig": "(JJJ)V",
+"fn": 7671328
+},
+{
+"name": "nInterpolate",
+"sig": "(JJFJ)Z",
+"fn": 8027968
+},
+{
+"name": "nOffset",
+"sig": "(JFF)V",
+"fn": 7117664
+},
+{
+"name": "nSetLastPoint",
+"sig": "(JFF)V",
+"fn": 8028000
+},
+{
+"name": "nTransform",
+"sig": "(JJJ)V",
+"fn": 7671344
+},
+{
+"name": "nTransform",
+"sig": "(JJ)V",
+"fn": 7671376
+},
+{
+"name": "nOp",
+"sig": "(JJIJ)Z",
+"fn": 4937760
+},
+{
+"name": "nApproximate",
+"sig": "(JF)[F",
+"fn": 4841264
+},
+{
+"name": "nIsRect",
+"sig": "(JLandroid/graphics/RectF;)Z",
+"fn": 8028240
+},
+{
+"name": "nGetGenerationID",
+"sig": "(J)I",
+"fn": 8028448
+},
+{
+"name": "nIsInterpolatable",
+"sig": "(JJ)Z",
+"fn": 8028528
+},
+{
+"name": "nReset",
+"sig": "(J)V",
+"fn": 7671392
+},
+{
+"name": "nRewind",
+"sig": "(J)V",
+"fn": 7671408
+},
+{
+"name": "nIsEmpty",
+"sig": "(J)Z",
+"fn": 8028720
+},
+{
+"name": "nIsConvex",
+"sig": "(J)Z",
+"fn": 6825712
+},
+{
+"name": "nGetFillType",
+"sig": "(J)I",
+"fn": 8028736
+},
+{
+"name": "nSetFillType",
+"sig": "(JI)V",
+"fn": 8028752
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8030000
+},
+{
+"name": "nativeCreate",
+"sig": "(JJ)J",
+"fn": 8030032
+},
+{
+"name": "nativeCreate",
+"sig": "(JJ)J",
+"fn": 8030192
+},
+{
+"name": "nativeCreate",
+"sig": "([FF)J",
+"fn": 7402000
+},
+{
+"name": "nativeCreate",
+"sig": "(JFFI)J",
+"fn": 8030352
+},
+{
+"name": "nativeCreate",
+"sig": "(F)J",
+"fn": 7120464
+},
+{
+"name": "nativeCreate",
+"sig": "(FF)J",
+"fn": 8030416
+},
+{
+"name": "nCreate",
+"sig": "(J)J",
+"fn": 8030544
+},
+{
+"name": "nGetFinalizer",
+"sig": "()J",
+"fn": 8030736
+},
+{
+"name": "nPeek",
+"sig": "(J)I",
+"fn": 8030752
+},
+{
+"name": "nNext",
+"sig": "(JJ)I",
+"fn": 8030784
+},
+{
+"name": "native_create",
+"sig": "(JZ)J",
+"fn": 8030848
+},
+{
+"name": "native_setPath",
+"sig": "(JJZ)V",
+"fn": 7389984
+},
+{
+"name": "native_getLength",
+"sig": "(J)F",
+"fn": 6859536
+},
+{
+"name": "native_getPosTan",
+"sig": "(JF[F[F)Z",
+"fn": 5961936
+},
+{
+"name": "native_getMatrix",
+"sig": "(JFJI)Z",
+"fn": 6907136
+},
+{
+"name": "native_getSegment",
+"sig": "(JFFJZ)Z",
+"fn": 7671552
+},
+{
+"name": "native_isClosed",
+"sig": "(J)Z",
+"fn": 8031104
+},
+{
+"name": "native_nextContour",
+"sig": "(J)Z",
+"fn": 7671584
+},
+{
+"name": "native_destroy",
+"sig": "(J)V",
+"fn": 7671600
+},
+{
+"name": "nativeConstructor",
+"sig": "()J",
+"fn": 8031920
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8031952
+},
+{
+"name": "nativeSetRegion",
+"sig": "(JJ)V",
+"fn": 7671744
+},
+{
+"name": "nativeSetRect",
+"sig": "(JIIII)Z",
+"fn": 7092816
+},
+{
+"name": "nativeSetPath",
+"sig": "(JJJ)Z",
+"fn": 7671760
+},
+{
+"name": "nativeGetBounds",
+"sig": "(JLandroid/graphics/Rect;)Z",
+"fn": 7671792
+},
+{
+"name": "nativeGetBoundaryPath",
+"sig": "(JJ)Z",
+"fn": 6838736
+},
+{
+"name": "nativeOp",
+"sig": "(JIIIII)Z",
+"fn": 5176736
+},
+{
+"name": "nativeOp",
+"sig": "(JLandroid/graphics/Rect;JI)Z",
+"fn": 7185088
+},
+{
+"name": "nativeOp",
+"sig": "(JJJI)Z",
+"fn": 7671824
+},
+{
+"name": "isEmpty",
+"sig": "()Z",
+"fn": 8032016
+},
+{
+"name": "isRect",
+"sig": "()Z",
+"fn": 8032048
+},
+{
+"name": "isComplex",
+"sig": "()Z",
+"fn": 8032080
+},
+{
+"name": "contains",
+"sig": "(II)Z",
+"fn": 7139248
+},
+{
+"name": "quickContains",
+"sig": "(IIII)Z",
+"fn": 8032128
+},
+{
+"name": "quickReject",
+"sig": "(IIII)Z",
+"fn": 7186752
+},
+{
+"name": "quickReject",
+"sig": "(Landroid/graphics/Region;)Z",
+"fn": 7159744
+},
+{
+"name": "scale",
+"sig": "(FLandroid/graphics/Region;)V",
+"fn": 7403520
+},
+{
+"name": "translate",
+"sig": "(IILandroid/graphics/Region;)V",
+"fn": 8032224
+},
+{
+"name": "nativeToString",
+"sig": "(J)Ljava/lang/String;",
+"fn": 6220272
+},
+{
+"name": "nativeCreateFromParcel",
+"sig": "(Landroid/os/Parcel;)J",
+"fn": 7671856
+},
+{
+"name": "nativeWriteToParcel",
+"sig": "(JLandroid/os/Parcel;)Z",
+"fn": 7672352
+},
+{
+"name": "nativeEquals",
+"sig": "(JJ)Z",
+"fn": 7092112
+},
+{
+"name": "nativeConstructor",
+"sig": "(J)J",
+"fn": 7055232
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8033232
+},
+{
+"name": "nativeNext",
+"sig": "(JLandroid/graphics/Rect;)Z",
+"fn": 8033296
+},
+{
+"name": "nativeRGBToHSV",
+"sig": "(III[F)V",
+"fn": 7307936
+},
+{
+"name": "nativeHSVToColor",
+"sig": "(I[F)I",
+"fn": 7380976
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 8033696
+},
+{
+"name": "nativeCreate",
+"sig": "(JJIIZZ)J",
+"fn": 6180624
+},
+{
+"name": "nativeCreateWithMaxAniso",
+"sig": "(JJIIIZ)J",
+"fn": 8033744
+},
+{
+"name": "nativeCreate",
+"sig": "(JFFFF[J[FIJ)J",
+"fn": 7097472
+},
+{
+"name": "nativeCreate",
+"sig": "(JFFFFFF[J[FIJ)J",
+"fn": 6465008
+},
+{
+"name": "nativeCreate",
+"sig": "(JFF[J[FJ)J",
+"fn": 6673520
+},
+{
+"name": "nativeCreate",
+"sig": "(JJJI)J",
+"fn": 7672976
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 8033872
+},
+{
+"name": "nativeCreateShader",
+"sig": "(JJ)J",
+"fn": 7673232
+},
+{
+"name": "nativeCreateBuilder",
+"sig": "(Ljava/lang/String;)J",
+"fn": 7217184
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;[FZ)V",
+"fn": 5872064
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;FFFFI)V",
+"fn": 7673376
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;[I)V",
+"fn": 8033888
+},
+{
+"name": "nativeUpdateUniforms",
+"sig": "(JLjava/lang/String;IIIII)V",
+"fn": 8034256
+},
+{
+"name": "nativeUpdateShader",
+"sig": "(JLjava/lang/String;J)V",
+"fn": 7673648
+},
+{
+"name": "nativeGetFinalizer",
+"sig": "()J",
+"fn": 8035344
+},
+{
+"name": "nativeCreateOffsetEffect",
+"sig": "(FFJ)J",
+"fn": 5744256
+},
+{
+"name": "nativeCreateBlurEffect",
+"sig": "(FFJI)J",
+"fn": 7358800
+},
+{
+"name": "nativeCreateBitmapEffect",
+"sig": "(JFFFFFFFF)J",
+"fn": 8035360
+},
+{
+"name": "nativeCreateColorFilterEffect",
+"sig": "(JJ)J",
+"fn": 7170112
+},
+{
+"name": "nativeCreateBlendModeEffect",
+"sig": "(JJI)J",
+"fn": 7337712
+},
+{
+"name": "nativeCreateChainEffect",
+"sig": "(JJ)J",
+"fn": 7326944
+},
+{
+"name": "nativeCreateShaderEffect",
+"sig": "(J)J",
+"fn": 8035856
+},
+{
+"name": "nativeCreateRuntimeShaderEffect",
+"sig": "(JLjava/lang/String;)J",
+"fn": 6966912
+},
+{
+"name": "nativeCreateFromTypeface",
+"sig": "(JI)J",
+"fn": 7229120
+},
+{
+"name": "nativeCreateFromTypefaceWithExactStyle",
+"sig": "(JIZ)J",
+"fn": 7189552
+},
+{
+"name": "nativeCreateFromTypefaceWithVariation",
+"sig": "(JLjava/util/List;)J",
+"fn": 7195120
+},
+{
+"name": "nativeCreateWeightAlias",
+"sig": "(JI)J",
+"fn": 8037792
+},
+{
+"name": "nativeGetReleaseFunc",
+"sig": "()J",
+"fn": 8037968
+},
+{
+"name": "nativeGetStyle",
+"sig": "(J)I",
+"fn": 8037984
+},
+{
+"name": "nativeGetWeight",
+"sig": "(J)I",
+"fn": 8038000
+},
+{
+"name": "nativeCreateFromArray",
+"sig": "([JJII)J",
+"fn": 7171696
+},
+{
+"name": "nativeSetDefault",
+"sig": "(J)V",
+"fn": 7013648
+},
+{
+"name": "nativeGetSupportedAxes",
+"sig": "(J)[I",
+"fn": 8038016
+},
+{
+"name": "nativeRegisterGenericFamily",
+"sig": "(Ljava/lang/String;J)V",
+"fn": 7391344
+},
+{
+"name": "nativeWriteTypefaces",
+"sig": "(Ljava/nio/ByteBuffer;I[J)I",
+"fn": 8038352
+},
+{
+"name": "nativeReadTypefaces",
+"sig": "(Ljava/nio/ByteBuffer;I)[J",
+"fn": 7421920
+},
+{
+"name": "nativeForceSetStaticFinalField",
+"sig": "(Ljava/lang/String;Landroid/graphics/Typeface;)V",
+"fn": 8042064
+},
+{
+"name": "nativeWarmUpCache",
+"sig": "(Ljava/lang/String;)V",
+"fn": 7673952
+},
+{
+"name": "nativeAddFontCollections",
+"sig": "(J)V",
+"fn": 7334240
+},
+{
+"name": "nativeRegisterLocaleList",
+"sig": "(Ljava/lang/String;)V",
+"fn": 7674160
+},
+{
+"name": "nativeCompressToJpeg",
+"sig": "([BIII[I[IILjava/io/OutputStream;[B)Z",
+"fn": 8048832
+},
+{
+"name": "nativeCompressToJpegR",
+"sig": "([BI[BIIIILjava/io/OutputStream;[B)Z",
+"fn": 8049248
+},
+{
+"name": "nInitBuilder",
+"sig": "()J",
+"fn": 8050176
+},
+{
+"name": "nAddAxis",
+"sig": "(JIF)V",
+"fn": 7301376
+},
+{
+"name": "nBuild",
+"sig": "(JLjava/nio/ByteBuffer;Ljava/lang/String;Ljava/lang/String;IZI)J",
+"fn": 7674336
+},
+{
+"name": "nClone",
+"sig": "(JJIZI)J",
+"fn": 6678384
+},
+{
+"name": "nGetMinikinFontPtr",
+"sig": "(J)J",
+"fn": 8050896
+},
+{
+"name": "nCloneFont",
+"sig": "(J)J",
+"fn": 7675520
+},
+{
+"name": "nNewByteBuffer",
+"sig": "(J)Ljava/nio/ByteBuffer;",
+"fn": 8050912
+},
+{
+"name": "nGetBufferAddress",
+"sig": "(J)J",
+"fn": 8050992
+},
+{
+"name": "nGetReleaseNativeFont",
+"sig": "()J",
+"fn": 8051024
+},
+{
+"name": "nGetGlyphBounds",
+"sig": "(JIJLandroid/graphics/RectF;)F",
+"fn": 8051040
+},
+{
+"name": "nGetFontMetrics",
+"sig": "(JJLandroid/graphics/Paint$FontMetrics;)F",
+"fn": 8051440
+},
+{
+"name": "nGetFontPath",
+"sig": "(J)Ljava/lang/String;",
+"fn": 8051856
+},
+{
+"name": "nGetLocaleList",
+"sig": "(J)Ljava/lang/String;",
+"fn": 8052160
+},
+{
+"name": "nGetPackedStyle",
+"sig": "(J)I",
+"fn": 8052352
+},
+{
+"name": "nGetIndex",
+"sig": "(J)I",
+"fn": 8052384
+},
+{
+"name": "nGetAxisCount",
+"sig": "(J)I",
+"fn": 8052448
+},
+{
+"name": "nGetAxisInfo",
+"sig": "(JI)J",
+"fn": 8052528
+},
+{
+"name": "nGetSourceId",
+"sig": "(J)I",
+"fn": 8052656
+},
+{
+"name": "nGetAvailableFontSet",
+"sig": "()[J",
+"fn": 8052688
+},
+{
+"name": "nGetFontRevision",
+"sig": "(Ljava/nio/ByteBuffer;I)J",
+"fn": 8053712
+},
+{
+"name": "nGetFontPostScriptName",
+"sig": "(Ljava/nio/ByteBuffer;I)Ljava/lang/String;",
+"fn": 8054096
+},
+{
+"name": "nIsPostScriptType1Font",
+"sig": "(Ljava/nio/ByteBuffer;I)I",
+"fn": 8054544
+},
+{
+"name": "nInitBuilder",
+"sig": "()J",
+"fn": 8054944
+},
+{
+"name": "nAddFont",
+"sig": "(JJ)V",
+"fn": 6716112
+},
+{
+"name": "nBuild",
+"sig": "(JLjava/lang/String;IZZ)J",
+"fn": 8054976
+},
+{
+"name": "nGetReleaseNativeFamily",
+"sig": "()J",
+"fn": 8055680
+},
+{
+"name": "nGetFontSize",
+"sig": "(J)I",
+"fn": 8055888
+},
+{
+"name": "nGetFont",
+"sig": "(JI)J",
+"fn": 7675664
+},
+{
+"name": "nGetLangTags",
+"sig": "(J)Ljava/lang/String;",
+"fn": 8055904
+},
+{
+"name": "nGetVariant",
+"sig": "(J)I",
+"fn": 8056048
+},
+{
+"name": "nInit",
+"sig": "(IIZ[I)J",
+"fn": 8056064
+},
+{
+"name": "nGetReleaseFunc",
+"sig": "()J",
+"fn": 8056352
+},
+{
+"name": "nComputeLineBreaks",
+"sig": "(J[CJIFIF[FFI)J",
+"fn": 7295248
+},
+{
+"name": "nGetLineCount",
+"sig": "(J)I",
+"fn": 8056368
+},
+{
+"name": "nGetLineBreakOffset",
+"sig": "(JI)I",
+"fn": 8056384
+},
+{
+"name": "nGetLineWidth",
+"sig": "(JI)F",
+"fn": 8056400
+},
+{
+"name": "nGetLineAscent",
+"sig": "(JI)F",
+"fn": 8056416
+},
+{
+"name": "nGetLineDescent",
+"sig": "(JI)F",
+"fn": 8056432
+},
+{
+"name": "nGetLineFlag",
+"sig": "(JI)I",
+"fn": 8056448
+},
+{
+"name": "nGetReleaseResultFunc",
+"sig": "()J",
+"fn": 8056464
+},
+{
+"name": "nGetWidth",
+"sig": "(JII)F",
+"fn": 8057024
+},
+{
+"name": "nGetBounds",
+"sig": "(J[CIILandroid/graphics/Rect;)V",
+"fn": 8057072
+},
+{
+"name": "nGetExtent",
+"sig": "(J[CII)J",
+"fn": 8057728
+},
+{
+"name": "nGetReleaseFunc",
+"sig": "()J",
+"fn": 8058288
+},
+{
+"name": "nGetMemoryUsage",
+"sig": "(J)I",
+"fn": 8058304
+},
+{
+"name": "nGetCharWidthAt",
+"sig": "(JI)F",
+"fn": 8058432
+},
+{
+"name": "nInitBuilder",
+"sig": "()J",
+"fn": 8058912
+},
+{
+"name": "nAddStyleRun",
+"sig": "(JJIIIIZ)V",
+"fn": 7429296
+},
+{
+"name": "nAddReplacementRun",
+"sig": "(JJIIF)V",
+"fn": 7320800
+},
+{
+"name": "nBuildMeasuredText",
+"sig": "(JJ[CZZZ)J",
+"fn": 7394144
+},
+{
+"name": "nFreeBuilder",
+"sig": "(J)V",
+"fn": 8058944
+},
+{
+"name": "nativeShapeTextRun",
+"sig": "([CIIIIZJ)J",
+"fn": 8059136
+},
+{
+"name": "nativeShapeTextRun",
+"sig": "(Ljava/lang/String;IIIIZJ)J",
+"fn": 4260544
+},
+{
+"name": "nGetGlyphCount",
+"sig": "(J)I",
+"fn": 8059600
+},
+{
+"name": "nGetTotalAdvance",
+"sig": "(J)F",
+"fn": 8059616
+},
+{
+"name": "nGetAscent",
+"sig": "(J)F",
+"fn": 8059632
+},
+{
+"name": "nGetDescent",
+"sig": "(J)F",
+"fn": 8059648
+},
+{
+"name": "nGetGlyphId",
+"sig": "(JI)I",
+"fn": 8059664
+},
+{
+"name": "nGetX",
+"sig": "(JI)F",
+"fn": 8059680
+},
+{
+"name": "nGetY",
+"sig": "(JI)F",
+"fn": 8059712
+},
+{
+"name": "nGetFont",
+"sig": "(JI)J",
+"fn": 7675920
+},
+{
+"name": "nReleaseFunc",
+"sig": "()J",
+"fn": 8059744
+},
+{
+"name": "nIsGraphemeBreak",
+"sig": "([F[CII[Z)V",
+"fn": 8059824
+},
+{
+"name": "nCreate",
+"sig": "(JLandroid/graphics/ImageDecoder;IIJZLandroid/graphics/Rect;)J",
+"fn": 8184416
+},
+{
+"name": "nGetNativeFinalizer",
+"sig": "()J",
+"fn": 8186400
+},
+{
+"name": "nDraw",
+"sig": "(JJ)J",
+"fn": 8186416
+},
+{
+"name": "nSetAlpha",
+"sig": "(JI)V",
+"fn": 8186448
+},
+{
+"name": "nGetAlpha",
+"sig": "(J)I",
+"fn": 8186464
+},
+{
+"name": "nSetColorFilter",
+"sig": "(JJ)V",
+"fn": 8186480
+},
+{
+"name": "nIsRunning",
+"sig": "(J)Z",
+"fn": 8186640
+},
+{
+"name": "nStart",
+"sig": "(J)Z",
+"fn": 8186656
+},
+{
+"name": "nStop",
+"sig": "(J)Z",
+"fn": 8186688
+},
+{
+"name": "nGetRepeatCount",
+"sig": "(J)I",
+"fn": 8186704
+},
+{
+"name": "nSetRepeatCount",
+"sig": "(JI)V",
+"fn": 8186720
+},
+{
+"name": "nSetOnAnimationEndListener",
+"sig": "(JLjava/lang/ref/WeakReference;)V",
+"fn": 8186736
+},
+{
+"name": "nNativeByteSize",
+"sig": "(J)J",
+"fn": 8187344
+},
+{
+"name": "nSetMirrored",
+"sig": "(JZ)V",
+"fn": 8187360
+},
+{
+"name": "nSetBounds",
+"sig": "(JLandroid/graphics/Rect;)V",
+"fn": 8187376
+},
+{
+"name": "nPrepare",
+"sig": "(JIIZ)Z",
+"fn": 8188880
+},
+{
+"name": "nSetLayerPaint",
+"sig": "(JJ)V",
+"fn": 8188944
+},
+{
+"name": "nSetTransform",
+"sig": "(JJ)V",
+"fn": 7042624
+},
+{
+"name": "nSetSurfaceTexture",
+"sig": "(JLandroid/graphics/SurfaceTexture;)V",
+"fn": 7202240
+},
+{
+"name": "nUpdateSurfaceTexture",
+"sig": "(J)V",
+"fn": 8189168
+},
+{
+"name": "nRotateProcessStatsBuffer",
+"sig": "()V",
+"fn": 8189312
+},
+{
+"name": "nSetProcessStatsBuffer",
+"sig": "(I)V",
+"fn": 7297504
+},
+{
+"name": "nGetRenderThreadTid",
+"sig": "(J)I",
+"fn": 6804528
+},
+{
+"name": "nCreateRootRenderNode",
+"sig": "()J",
+"fn": 7093664
+},
+{
+"name": "nCreateProxy",
+"sig": "(ZJ)J",
+"fn": 7373648
+},
+{
+"name": "nDeleteProxy",
+"sig": "(J)V",
+"fn": 8189328
+},
+{
+"name": "nLoadSystemProperties",
+"sig": "(J)Z",
+"fn": 7404288
+},
+{
+"name": "nSetName",
+"sig": "(JLjava/lang/String;)V",
+"fn": 7382208
+},
+{
+"name": "nSetSurface",
+"sig": "(JLandroid/view/Surface;Z)V",
+"fn": 7185712
+},
+{
+"name": "nSetSurfaceControl",
+"sig": "(JJ)V",
+"fn": 7312688
+},
+{
+"name": "nPause",
+"sig": "(J)Z",
+"fn": 6403776
+},
+{
+"name": "nSetStopped",
+"sig": "(JZ)V",
+"fn": 7356544
+},
+{
+"name": "nSetLightAlpha",
+"sig": "(JFF)V",
+"fn": 7182768
+},
+{
+"name": "nSetLightGeometry",
+"sig": "(JFFFF)V",
+"fn": 7203184
+},
+{
+"name": "nSetOpaque",
+"sig": "(JZ)V",
+"fn": 7003792
+},
+{
+"name": "nSetColorMode",
+"sig": "(JI)F",
+"fn": 8189344
+},
+{
+"name": "nSetTargetSdrHdrRatio",
+"sig": "(JF)V",
+"fn": 6804560
+},
+{
+"name": "nSetSdrWhitePoint",
+"sig": "(JF)V",
+"fn": 8189360
+},
+{
+"name": "nSetIsHighEndGfx",
+"sig": "(Z)V",
+"fn": 8189376
+},
+{
+"name": "nSetIsLowRam",
+"sig": "(Z)V",
+"fn": 8189392
+},
+{
+"name": "nSetIsSystemOrPersistent",
+"sig": "(Z)V",
+"fn": 8189408
+},
+{
+"name": "nSyncAndDrawFrame",
+"sig": "(J[JI)I",
+"fn": 8189424
+},
+{
+"name": "nDestroy",
+"sig": "(JJ)V",
+"fn": 7283520
+},
+{
+"name": "nRegisterAnimatingRenderNode",
+"sig": "(JJ)V",
+"fn": 7298272
+},
+{
+"name": "nRegisterVectorDrawableAnimator",
+"sig": "(JJ)V",
+"fn": 7213632
+},
+{
+"name": "nCreateTextureLayer",
+"sig": "(J)J",
+"fn": 6943872
+},
+{
+"name": "nBuildLayer",
+"sig": "(JJ)V",
+"fn": 7359392
+},
+{
+"name": "nCopyLayerInto",
+"sig": "(JJJ)Z",
+"fn": 7007920
+},
+{
+"name": "nPushLayerUpdate",
+"sig": "(JJ)V",
+"fn": 4874480
+},
+{
+"name": "nCancelLayerUpdate",
+"sig": "(JJ)V",
+"fn": 6824992
+},
+{
+"name": "nDetachSurfaceTexture",
+"sig": "(JJ)V",
+"fn": 6771232
+},
+{
+"name": "nDestroyHardwareResources",
+"sig": "(J)V",
+"fn": 7354864
+},
+{
+"name": "nTrimMemory",
+"sig": "(I)V",
+"fn": 6088000
+},
+{
+"name": "nOverrideProperty",
+"sig": "(Ljava/lang/String;Ljava/lang/String;)V",
+"fn": 8191936
+},
+{
+"name": "nFence",
+"sig": "(J)V",
+"fn": 8192064
+},
+{
+"name": "nStopDrawing",
+"sig": "(J)V",
+"fn": 8192080
+},
+{
+"name": "nNotifyFramePending",
+"sig": "(J)V",
+"fn": 7459760
+},
+{
+"name": "nDumpProfileInfo",
+"sig": "(JLjava/io/FileDescriptor;I)V",
+"fn": 8192096
+},
+{
+"name": "nDumpGlobalProfileInfo",
+"sig": "(Ljava/io/FileDescriptor;I)V",
+"fn": 8192160
+},
+{
+"name": "setupShadersDiskCache",
+"sig": "(Ljava/lang/String;Ljava/lang/String;)V",
+"fn": 7099504
+},
+{
+"name": "nAddRenderNode",
+"sig": "(JJZ)V",
+"fn": 8192208
+},
+{
+"name": "nRemoveRenderNode",
+"sig": "(JJ)V",
+"fn": 8192240
+},
+{
+"name": "nDrawRenderNode",
+"sig": "(JJ)V",
+"fn": 8192256
+},
+{
+"name": "nSetContentDrawBounds",
+"sig": "(JIIII)V",
+"fn": 8192272
+},
+{
+"name": "nForceDrawNextFrame",
+"sig": "(J)V",
+"fn": 6796048
+},
+{
+"name": "nSetPictureCaptureCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$PictureCapturedCallback;)V",
+"fn": 8192320
+},
+{
+"name": "nSetASurfaceTransactionCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$ASurfaceTransactionCallback;)V",
+"fn": 7448384
+},
+{
+"name": "nSetPrepareSurfaceControlForWebviewCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$PrepareSurfaceControlForWebviewCallback;)V",
+"fn": 7449488
+},
+{
+"name": "nSetFrameCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$FrameDrawingCallback;)V",
+"fn": 8192880
+},
+{
+"name": "nSetFrameCommitCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$FrameCommitCallback;)V",
+"fn": 8193440
+},
+{
+"name": "nSetFrameCompleteCallback",
+"sig": "(JLandroid/graphics/HardwareRenderer$FrameCompleteCallback;)V",
+"fn": 8193808
+},
+{
+"name": "nAddObserver",
+"sig": "(JJ)V",
+"fn": 7251968
+},
+{
+"name": "nRemoveObserver",
+"sig": "(JJ)V",
+"fn": 7252272
+},
+{
+"name": "nCopySurfaceInto",
+"sig": "(Landroid/view/Surface;IIIILandroid/graphics/HardwareRenderer$CopyRequest;)V",
+"fn": 7392032
+},
+{
+"name": "nCreateHardwareBitmap",
+"sig": "(JII)Landroid/graphics/Bitmap;",
+"fn": 7243536
+},
+{
+"name": "disableVsync",
+"sig": "()V",
+"fn": 8194352
+},
+{
+"name": "nSetHighContrastText",
+"sig": "(Z)V",
+"fn": 8194368
+},
+{
+"name": "nSetDebuggingEnabled",
+"sig": "(Z)V",
+"fn": 8194384
+},
+{
+"name": "nSetIsolatedProcess",
+"sig": "(Z)V",
+"fn": 8194400
+},
+{
+"name": "nSetContextPriority",
+"sig": "(I)V",
+"fn": 8194416
+},
+{
+"name": "nAllocateBuffers",
+"sig": "(J)V",
+"fn": 7284576
+},
+{
+"name": "nSetForceDark",
+"sig": "(JZ)V",
+"fn": 8194432
+},
+{
+"name": "nSetDisplayDensityDpi",
+"sig": "(I)V",
+"fn": 8194448
+},
+{
+"name": "nInitDisplayInfo",
+"sig": "(IIFIJJZZ)V",
+"fn": 7253168
+},
+{
+"name": "preload",
+"sig": "()V",
+"fn": 7292992
+},
+{
+"name": "isWebViewOverlaysEnabled",
+"sig": "()Z",
+"fn": 8194480
+},
+{
+"name": "nSetDrawingEnabled",
+"sig": "(Z)V",
+"fn": 8194496
+},
+{
+"name": "nIsDrawingEnabled",
+"sig": "()Z",
+"fn": 7048896
+},
+{
+"name": "nSetRtAnimationsEnabled",
+"sig": "(Z)V",
+"fn": 7297888
+},
+{
+"name": "nNotifyCallbackPending",
+"sig": "(J)V",
+"fn": 7711584
+},
+{
+"name": "nNotifyExpensiveFrame",
+"sig": "(J)V",
+"fn": 7284928
+},
+{
+"name": "nTrimCaches",
+"sig": "(I)V",
+"fn": 7300576
+},
+{
+"name": "nCreateHardwareBufferRenderer",
+"sig": "(Landroid/hardware/HardwareBuffer;J)J",
+"fn": 8204656
+},
+{
+"name": "nRender",
+"sig": "(JIIIJLjava/util/function/Consumer;)I",
+"fn": 8204832
+},
+{
+"name": "nCreateRootRenderNode",
+"sig": "()J",
+"fn": 7712480
+},
+{
+"name": "nSetLightGeometry",
+"sig": "(JFFFF)V",
+"fn": 8205856
+},
+{
+"name": "nSetLightAlpha",
+"sig": "(JFF)V",
+"fn": 8205936
+},
+{
+"name": "nGetFinalizer",
+"sig": "()J",
+"fn": 8205984
+},
+{
+"name": "nDestroyRootRenderNode",
+"sig": "(J)V",
+"fn": 8206000
+},
+{
+"name": "nativeDecodeRegion",
+"sig": "(JIIIILandroid/graphics/BitmapFactory$Options;JJ)Landroid/graphics/Bitmap;",
+"fn": 7030880
+},
+{
+"name": "nativeGetHeight",
+"sig": "(J)I",
+"fn": 8206800
+},
+{
+"name": "nativeGetWidth",
+"sig": "(J)I",
+"fn": 8206816
+},
+{
+"name": "nativeClean",
+"sig": "(J)V",
+"fn": 8206832
+},
+{
+"name": "nativeNewInstance",
+"sig": "([BII)Landroid/graphics/BitmapRegionDecoder;",
+"fn": 6774480
+},
+{
+"name": "nativeNewInstance",
+"sig": "(Ljava/io/InputStream;[B)Landroid/graphics/BitmapRegionDecoder;",
+"fn": 7344512
+},
+{
+"name": "nativeNewInstance",
+"sig": "(Ljava/io/FileDescriptor;)Landroid/graphics/BitmapRegionDecoder;",
+"fn": 8206992
+},
+{
+"name": "nativeNewInstance",
+"sig": "(J)Landroid/graphics/BitmapRegionDecoder;",
+"fn": 8207728
+},
+{
+"name": "nGetAshmemSize",
+"sig": "()I",
+"fn": 8211248
+},
+{
+"name": "nCreateDump",
+"sig": "(IZ)J",
+"fn": 7057392
+},
+{
+"name": "nAddToDump",
+"sig": "(JLjava/lang/String;Ljava/lang/String;JJJ[B)V",
+"fn": 8211264
+},
+{
+"name": "nAddToDump",
+"sig": "(JLjava/lang/String;)V",
+"fn": 8212208
+},
+{
+"name": "nFinishDump",
+"sig": "(J)V",
+"fn": 8212656
+},
+{
+"name": "nFinishDumpInMemory",
+"sig": "(JJZ)V",
+"fn": 8212672
+},
+{
+"name": "nSaveBuffer",
+"sig": "(Ljava/lang/String;Ljava/lang/String;JJJ[B)V",
+"fn": 7008784
+},
+{
+"name": "nativeInit",
+"sig": "()V",
+"fn": 8212704
+},
+{
+"name": "nativeDestructor",
+"sig": "()V",
+"fn": 8213136
+},
+{
+"name": "width",
+"sig": "()I",
+"fn": 8213440
+},
+{
+"name": "height",
+"sig": "()I",
+"fn": 8213632
+},
+{
+"name": "isOpaque",
+"sig": "()Z",
+"fn": 8213824
+},
+{
+"name": "duration",
+"sig": "()I",
+"fn": 8214016
+},
+{
+"name": "setTime",
+"sig": "(I)Z",
+"fn": 8214192
+},
+{
+"name": "nDraw",
+"sig": "(JFFJ)V",
+"fn": 8214416
+},
+{
+"name": "nativeDecodeAsset",
+"sig": "(J)Landroid/graphics/Movie;",
+"fn": 8214720
+},
+{
+"name": "nativeDecodeStream",
+"sig": "(Ljava/io/InputStream;)Landroid/graphics/Movie;",
+"fn": 8214848
+},
+{
+"name": "nativeDestructor",
+"sig": "(J)V",
+"fn": 8215264
+},
+{
+"name": "decodeByteArray",
+"sig": "([BII)Landroid/graphics/Movie;",
+"fn": 8215280
+},
+{
+"name": "nativeCreateDocument",
+"sig": "()J",
+"fn": 8216064
+},
+{
+"name": "nativeStartPage",
+"sig": "(JIIIIII)J",
+"fn": 8216096
+},
+{
+"name": "nativeFinishPage",
+"sig": "(J)V",
+"fn": 8216640
+},
+{
+"name": "nativeWriteTo",
+"sig": "(JLjava/io/OutputStream;[B)V",
+"fn": 8216848
+},
+{
+"name": "nativeClose",
+"sig": "(J)V",
+"fn": 8216976
+},
+{
+"name": "nativeOpen",
+"sig": "(IJ)J",
+"fn": 8220880
+},
+{
+"name": "nativeClose",
+"sig": "(J)V",
+"fn": 8221280
+},
+{
+"name": "nativeGetPageCount",
+"sig": "(J)I",
+"fn": 8221328
+},
+{
+"name": "nativeRemovePage",
+"sig": "(JI)I",
+"fn": 8217184
+},
+{
+"name": "nativeWrite",
+"sig": "(JI)V",
+"fn": 8217216
+},
+{
+"name": "nativeSetTransformAndClip",
+"sig": "(JIJIIII)V",
+"fn": 8217344
+},
+{
+"name": "nativeGetPageSize",
+"sig": "(JILandroid/graphics/Point;)V",
+"fn": 8218352
+},
+{
+"name": "nativeScaleForPrinting",
+"sig": "(J)Z",
+"fn": 8221344
+},
+{
+"name": "nativeGetPageMediaBox",
+"sig": "(JILandroid/graphics/Rect;)Z",
+"fn": 8218816
+},
+{
+"name": "nativeSetPageMediaBox",
+"sig": "(JILandroid/graphics/Rect;)V",
+"fn": 8218832
+},
+{
+"name": "nativeGetPageCropBox",
+"sig": "(JILandroid/graphics/Rect;)Z",
+"fn": 8218848
+},
+{
+"name": "nativeSetPageCropBox",
+"sig": "(JILandroid/graphics/Rect;)V",
+"fn": 8218880
+},
+{
+"name": "nativeCreate",
+"sig": "(IJ)J",
+"fn": 8220880
+},
+{
+"name": "nativeRenderPage",
+"sig": "(JJJIIIIJI)V",
+"fn": 7290832
+},
+{
+"name": "nativeOpenPageAndGetSize",
+"sig": "(JILandroid/graphics/Point;)J",
+"fn": 8220128
+},
+{
+"name": "nativeClosePage",
+"sig": "(J)V",
+"fn": 8220448
+},
+{
+"name": "nCreateDisplayListCanvas",
+"sig": "(JII)J",
+"fn": 6417472
+},
+{
+"name": "nResetDisplayListCanvas",
+"sig": "(JJII)V",
+"fn": 7976752
+},
+{
+"name": "nGetMaximumTextureWidth",
+"sig": "()I",
+"fn": 7026112
+},
+{
+"name": "nGetMaximumTextureHeight",
+"sig": "()I",
+"fn": 7026112
+},
+{
+"name": "nEnableZ",
+"sig": "(JZ)V",
+"fn": 7976784
+},
+{
+"name": "nFinishRecording",
+"sig": "(JJ)V",
+"fn": 7976816
+},
+{
+"name": "nDrawRenderNode",
+"sig": "(JJ)V",
+"fn": 7976832
+},
+{
+"name": "nDrawTextureLayer",
+"sig": "(JJ)V",
+"fn": 7976848
+},
+{
+"name": "nDrawCircle",
+"sig": "(JJJJJ)V",
+"fn": 7976864
+},
+{
+"name": "nDrawRoundRect",
+"sig": "(JJJJJJJJ)V",
+"fn": 7976880
+},
+{
+"name": "nDrawWebViewFunctor",
+"sig": "(JI)V",
+"fn": 7976896
+},
+{
+"name": "nDrawRipple",
+"sig": "(JJJJJJJIJ)V",
+"fn": 6102976
+}
+]
