@@ -1,0 +1,3 @@
+  guest read /home/Qui/Projects/acos/.cache/w190a/scratch/allowed.txt -> 15 bytes: allowed-inside   guest read /home/Qui/Projects/acos/.cache/w190a/../w190a-private/secret.txt -> 24 bytes: secret-outside-landlock hello aarch64 pid=539915 thread_ret=42 allowed_read=15 outside_read=24
+  deny checks: unshare=-1/errno=22 ptrace=-1/errno=38 setuid=-1/errno=1
+exit=0

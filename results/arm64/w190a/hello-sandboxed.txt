@@ -1,0 +1,12 @@
+[launch] landlock ABI=10 active (ro=6, rw=/home/Qui/Projects/acos/.cache/w190a/scratch)
+[launch] pre-exec open(/etc/hostname) -> -1 (Permission denied)
+[launch] LD_PRELOAD=/home/Qui/Projects/acos/.cache/w190a/libw190_guard.so
+[launch] exec /home/Qui/Projects/acos/.cache/w190a/qemu/usr/bin/qemu-aarch64
+[guard] constructor entered
+[guard] seccomp installed (55 deny rules)
+[guard] host ptrace() -> -1 errno=13 (denied)
+[guard] host unshare(NEWUSER) -> -1 errno=13 (denied)
+  guest read /home/Qui/Projects/acos/.cache/w190a/scratch/allowed.txt -> 15 bytes: allowed-inside   (a read was denied)
+hello aarch64 pid=539919 thread_ret=42 allowed_read=15 outside_read=-1
+  deny checks: unshare=-1/errno=13 ptrace=-1/errno=38 setuid=-1/errno=13
+exit=0
