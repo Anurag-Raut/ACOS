@@ -3,6 +3,7 @@
 // It deliberately does not import package:flutter: ACOS only needs a real
 // Flutter engine (libflutter.so) plus a real AOT app snapshot (libapp.so),
 // and this keeps the fixture buildable without the 1.5 GB Flutter SDK.
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 ui.PlatformDispatcher get _dispatcher => ui.PlatformDispatcher.instance;
@@ -22,7 +23,67 @@ void main() {
   _dispatcher.onDrawFrame = _onDrawFrame;
   _dispatcher.onPointerDataPacket = _onPointerDataPacket;
   _dispatcher.onMetricsChanged = () => _dispatcher.scheduleFrame();
+  _dispatcher.onSemanticsEnabledChanged = _onSemanticsEnabledChanged;
   _dispatcher.scheduleFrame();
+}
+
+/// W149-A: publish a semantic node for the counter button so the engine's
+/// accessibility stream is non-empty. Raw `dart:ui` apps must build semantics
+/// themselves; a widget app gets this from the framework.
+void _onSemanticsEnabledChanged() {
+  if (!_dispatcher.semanticsEnabled) {
+    return;
+  }
+  final ui.SemanticsUpdateBuilder builder = ui.SemanticsUpdateBuilder();
+  final ui.Rect rect = _buttonRect;
+  final Float64List identity = Float64List.fromList(const <double>[
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ]);
+  builder.updateNode(
+    id: 1,
+    flags: ui.SemanticsFlags(isButton: true),
+    actions: 1 << ui.SemanticsAction.tap.index,
+    maxValueLength: -1,
+    currentValueLength: -1,
+    textSelectionBase: -1,
+    textSelectionExtent: -1,
+    platformViewId: -1,
+    scrollChildren: 0,
+    scrollIndex: 0,
+    traversalParent: 0,
+    scrollPosition: 0,
+    scrollExtentMax: 0,
+    scrollExtentMin: 0,
+    rect: rect,
+    identifier: '',
+    label: 'Increment',
+    labelAttributes: const <ui.StringAttribute>[],
+    value: 'counter: $_counter',
+    valueAttributes: const <ui.StringAttribute>[],
+    increasedValue: '',
+    increasedValueAttributes: const <ui.StringAttribute>[],
+    decreasedValue: '',
+    decreasedValueAttributes: const <ui.StringAttribute>[],
+    hint: '',
+    hintAttributes: const <ui.StringAttribute>[],
+    tooltip: '',
+    textDirection: ui.TextDirection.ltr,
+    transform: identity,
+    hitTestTransform: identity,
+    childrenInTraversalOrder: Int32List(0),
+    childrenInHitTestOrder: Int32List(0),
+    additionalActions: Int32List(0),
+    controlsNodes: null,
+    inputType: ui.SemanticsInputType.none,
+    locale: null,
+    minValue: '',
+    maxValue: '',
+  );
+  _dispatcher.updateSemantics(builder.build());
+  print('ACOS_DART_SEMANTICS nodes=1 label=Increment rect=$rect');
 }
 
 void _onBeginFrame(Duration _) {

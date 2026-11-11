@@ -35,6 +35,8 @@ use serde_json::{json, Value};
 
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
 use crate::daemon::{self, DaemonClient};
+use crate::flutter_backend::{self, FlutterSessions};
+use acos_jni::FlutterSessionError;
 
 /// Commands the session backend serves itself (bypassing the CLI capability
 /// probe, which cannot see them).
@@ -63,6 +65,8 @@ pub struct SessionBackend {
     next_child: AtomicU64,
     /// Optional running session daemon to forward session tools to (F-08).
     daemon: Option<Mutex<DaemonClient>>,
+    /// Flutter sessions owned by this process (the confined child).
+    flutter: FlutterSessions,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -87,6 +91,7 @@ impl SessionBackend {
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
             daemon: None,
+            flutter: FlutterSessions::default(),
         }
     }
 
@@ -100,6 +105,7 @@ impl SessionBackend {
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
             daemon: None,
+            flutter: FlutterSessions::default(),
         }
     }
 
@@ -145,7 +151,7 @@ impl SessionBackend {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .len();
-        local + native
+        local + native + self.flutter.len()
     }
 
     /// A `session_list` result: every held session's status (native included).
@@ -183,6 +189,35 @@ impl SessionBackend {
                     "published_frames": result["published_frames"],
                     "native": true,
                 }));
+            }
+        }
+        // Flutter sessions are read over their worker channels so a wedged
+        // session shows `live: false` rather than hanging the list.
+        {
+            for id in self.flutter.ids() {
+                match self.flutter.status(&id) {
+                    Ok(status) => out.push(json!({
+                        "session_id": id,
+                        "launched": true,
+                        "package": "",
+                        "stage_reached": "first_frame",
+                        "published_frames": status.frames,
+                        "semantics": status.semantics,
+                        "launch_ms": status.launch_ms,
+                        "apk": status.apk.display().to_string(),
+                        "native": true,
+                        "flutter": true,
+                    })),
+                    Err(e) => out.push(json!({
+                        "session_id": id,
+                        "launched": false,
+                        "stage_reached": "unknown",
+                        "published_frames": 0,
+                        "native": true,
+                        "flutter": true,
+                        "error": e.to_string(),
+                    })),
+                }
             }
         }
         json!({"sessions": out, "count": out.len()})
@@ -273,8 +308,30 @@ impl SessionBackend {
         if let Some(parent) = apk.parent() {
             read_only.push(parent.to_path_buf());
         }
+        // A Flutter APK needs its extracted engine + AOT snapshot readable; the
+        // engine lives under the workspace `.cache`, not the APK directory.
+        let mut flutter_lib: Option<PathBuf> = None;
+        if flutter_backend::is_flutter(apk) {
+            let lib_dir = flutter_backend::default_lib_dir();
+            if lib_dir.is_dir() {
+                // Landlock rules are per-inode and ancestors need EXECUTE; a
+                // symlinked `.cache/flutter-1` must be canonicalised so the
+                // grant covers the real target's ancestor chain. The child is
+                // told the same absolute path (`--flutter-lib` -> profile env,
+                // because the sandbox `clearenv`s inherited variables) so it
+                // never has to resolve the symlink under confinement.
+                let lib_dir = std::fs::canonicalize(&lib_dir).unwrap_or(lib_dir);
+                read_only.push(lib_dir.clone());
+                flutter_lib = Some(lib_dir);
+            }
+        }
 
-        let mut child = match ConfinedChild::spawn(&self.child_binary, &root, &read_only) {
+        let mut child = match ConfinedChild::spawn(
+            &self.child_binary,
+            &root,
+            &read_only,
+            flutter_lib.as_deref(),
+        ) {
             Ok(child) => child,
             Err(e) => {
                 return native_child_error(request_id, id, "CONFINEMENT_UNAVAILABLE", &e);
@@ -294,6 +351,272 @@ impl SessionBackend {
             .unwrap_or_else(|e| e.into_inner())
             .insert(id.to_string(), child);
         envelope
+    }
+
+    // --- Flutter sessions (W149-A) -----------------------------------------
+    //
+    // A detected Flutter APK is driven by a `FlutterSession` on its own worker
+    // thread inside this (confined) process. Every tool below marshals to that
+    // worker, so the engine's looper thread identity is stable across tool
+    // calls.
+
+    /// Launch a Flutter APK and pump until the first frame.
+    fn launch_flutter(&self, request_id: &str, id: &str, apk: &std::path::Path) -> Envelope {
+        let scratch = flutter_scratch();
+        if let Err(e) = std::fs::create_dir_all(&scratch) {
+            return flutter_error(
+                request_id,
+                Some(id),
+                "CONFINEMENT_UNAVAILABLE",
+                &format!("cannot create Flutter scratch {}: {e}", scratch.display()),
+            );
+        }
+        if let Err(e) = self.flutter.launch(id, apk, scratch) {
+            return flutter_session_error(request_id, Some(id), &e);
+        }
+        let status = self.flutter.status(id).ok();
+        let observed = self.flutter.observe(id, false);
+        let (frames, seq, width, height) = match &observed {
+            Ok(o) => (o.frames, o.seq, o.width, o.height),
+            Err(_) => (status.as_ref().map(|s| s.frames).unwrap_or(0), 0, 0, 0),
+        };
+        let launch_ms = status.as_ref().map(|s| s.launch_ms).unwrap_or(0);
+        let engine = status.as_ref().map(|s| s.engine).unwrap_or((0, 0, 0));
+        let first_frame_ok = frames > 0;
+        let blocker = if first_frame_ok {
+            Value::Null
+        } else {
+            json!({
+                "code": observed.as_ref().err().map_or("TIMEOUT", |e| e.code()),
+                "message": observed
+                    .as_ref()
+                    .err()
+                    .map_or_else(|| "no frame presented".to_string(), ToString::to_string),
+                "details": {},
+            })
+        };
+        let result = json!({
+            "stages": [
+                {"stage": "apk_parsed", "ok": true, "status": "ok", "blocker": null},
+                {"stage": "flutter_engine", "ok": true, "status": "ok", "blocker": null},
+                {"stage": "first_frame", "ok": first_frame_ok,
+                 "status": if first_frame_ok { "ok" } else { "blocked" }, "blocker": blocker},
+            ],
+            "reached_stage": if first_frame_ok { "first_frame" } else { "flutter_engine" },
+            "package": "",
+            "activity": null,
+            "classes_loaded": 0,
+            "events": ["flutter=1", format!("frames={frames}")],
+            "wall_ms": launch_ms,
+            "peak_rss_bytes": 0,
+            "engine": {
+                "imports_total": engine.0,
+                "imports_missing": engine.1,
+                "relocations": engine.2,
+            },
+            "frame": if first_frame_ok {
+                json!({"frame_seq": seq, "width": width, "height": height,
+                       "meaningful": width > 0 && height > 0})
+            } else {
+                Value::Null
+            },
+        });
+        let envelope = if first_frame_ok {
+            Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(launch_ms as u64),
+            )
+        } else {
+            Envelope::failure(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                ProtocolError::new(
+                    ErrorCode::Timeout,
+                    "Flutter engine did not present a frame".to_string(),
+                )
+                .with_details(json!({"stage": "first_frame"})),
+                Metrics::wall_ms(launch_ms as u64),
+            )
+        };
+        envelope
+            .with_session_id(id.to_string())
+            .with_value_result(result)
+            .with_capabilities(["apk.inspect", "lifecycle", "ui.frame"])
+    }
+
+    fn observe_flutter(&self, request_id: &str, id: &str, args: &Value) -> Envelope {
+        let wants_png = args.get("png").and_then(Value::as_bool).unwrap_or(false)
+            || args.get("screenshot").is_some_and(|v| !v.is_null());
+        let observed = match self.flutter.observe(id, wants_png) {
+            Ok(o) => o,
+            Err(e) => return flutter_session_error(request_id, Some(id), &e),
+        };
+        let mut result = json!({
+            "session_id": id,
+            "package": "",
+            "stage_reached": "first_frame",
+            "published_frames": observed.frames,
+            "semantics": observed.semantics,
+            "frame": {
+                "frame_seq": observed.seq,
+                "width": observed.width,
+                "height": observed.height,
+                "density": 0,
+                "content_hash": null,
+                "meaningful": observed.width > 0 && observed.height > 0,
+            },
+        });
+        let mut capabilities = vec!["ui.frame"];
+        if let Some(png) = &observed.png {
+            result["png_base64"] = json!(crate::base64::encode(png));
+            result["png_bytes"] = json!(png.len());
+            capabilities.push("ui.screenshot");
+            if let Some(path) = args.get("screenshot").and_then(Value::as_str) {
+                match std::fs::write(path, png) {
+                    Ok(()) => result["screenshot"] = json!({"path": path, "bytes": png.len()}),
+                    Err(e) => result["screenshot_error"] = json!(e.to_string()),
+                }
+            }
+        }
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(result)
+        .with_capabilities(capabilities)
+    }
+
+    fn observe_tree_flutter(
+        &self,
+        request_id: &str,
+        id: &str,
+        max_nodes: usize,
+    ) -> Envelope {
+        let nodes = match self.flutter.semantics(id) {
+            Ok(nodes) => nodes,
+            Err(e) => return flutter_session_error(request_id, Some(id), &e),
+        };
+        let truncated = nodes.len() > max_nodes;
+        let nodes: Vec<Value> = nodes
+            .iter()
+            .take(max_nodes)
+            .map(|n| {
+                json!({
+                    "id": n.id,
+                    "text": n.text(),
+                    "label": n.label,
+                    "value": n.value,
+                    "hint": n.hint,
+                    "bounds": n.bounds(),
+                    "clickable": n.clickable(),
+                    "enabled": n.enabled(),
+                    "role": n.role,
+                })
+            })
+            .collect();
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(json!({
+            "session_id": id,
+            "package": "",
+            "stage_reached": "first_frame",
+            "windows": 1,
+            "truncated": truncated,
+            "tree": nodes,
+        }))
+        .with_capabilities(["ui.tree"])
+    }
+
+    fn tap_flutter(&self, request_id: &str, id: &str, text: Option<&str>, point: Option<(f64, f64)>) -> Envelope {
+        let outcome = match (text, point) {
+            (Some(label), _) => self
+                .flutter
+                .tap_text(id, label)
+                .map(|p| (p, Some(label.to_string()), "tap_text")),
+            (None, Some((x, y))) => self.flutter.tap(id, x, y).map(|()| ([x, y], None, "tap")),
+            (None, None) => {
+                return invalid_argument(request_id, "action", "tap needs `x` and `y`, or `text`")
+            }
+        };
+        match outcome {
+            Ok(([x, y], resolved, kind)) => Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.to_string())
+            .with_value_result(json!({
+                "session_id": id,
+                "action": kind,
+                "accepted": true,
+                "state_changed": true,
+                "tapped": [x, y],
+                "resolved_text": resolved,
+            }))
+            .with_capabilities(["input"]),
+            Err(e) => flutter_session_error(request_id, Some(id), &e),
+        }
+    }
+
+    fn logs_flutter(&self, request_id: &str, id: &str) -> Envelope {
+        let lines = self.flutter.logs(id);
+        let records: Vec<Value> = lines
+            .iter()
+            .map(|line| json!({"priority": "info", "tag": "flutter", "message": line, "line": line}))
+            .collect();
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(json!({
+            "session_id": id,
+            "launched": true,
+            "stage_reached": "first_frame",
+            "count": records.len(),
+            "logs": records,
+        }))
+        .with_capabilities(["logs"])
+    }
+
+    fn status_flutter(&self, request_id: &str, id: &str) -> Envelope {
+        match self.flutter.status(id) {
+            Ok(status) => Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.to_string())
+            .with_value_result(json!({
+                "session_id": id,
+                "launched": true,
+                "package": "",
+                "apk": status.apk.display().to_string(),
+                "stage_reached": "first_frame",
+                "published_frames": status.frames,
+                "semantics": status.semantics,
+                "launch_ms": status.launch_ms,
+                "elapsed_ms": status.elapsed_ms,
+                "live": true,
+                "flutter": true,
+            })),
+            Err(e) => flutter_session_error(request_id, Some(id), &e),
+        }
     }
 
     fn call_run(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
@@ -318,9 +641,18 @@ impl SessionBackend {
         // `CONFINEMENT_UNAVAILABLE` otherwise. This server is multi-threaded and
         // cannot enter seccomp itself, so it re-execs a confined child session
         // process instead of failing (or confining mid-flight).
-        limits.native = args.get("native").and_then(Value::as_bool).unwrap_or(false);
+        // `--flutter` or a structural Flutter APK implies native: the engine is
+        // host native code and must run under the confined child. Auto-detect is
+        // structural (libflutter.so / flutter_assets), never a manifest guess.
+        let explicit_flutter = args.get("flutter").and_then(Value::as_bool).unwrap_or(false);
+        let native_flag = args.get("native").and_then(Value::as_bool).unwrap_or(false);
+        let native = native_flag || explicit_flutter || flutter_backend::is_flutter(&apk);
+        limits.native = native;
         if limits.native && !acos_sandbox::confinement_active() {
             return self.launch_native_child(request_id, &id, &apk, &limits, ctx);
+        }
+        if limits.native && flutter_backend::is_flutter(&apk) {
+            return self.launch_flutter(request_id, &id, &apk);
         }
         // Replace any prior session for this id so a second launch is a clean
         // task (the process-global transport/surface seams tolerate only one
@@ -347,6 +679,9 @@ impl SessionBackend {
 
     fn call_observe(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            return self.observe_flutter(request_id, &id, args);
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_observe", args) {
                 return env;
@@ -404,6 +739,13 @@ impl SessionBackend {
         _ctx: &CallContext,
     ) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            let max_nodes = args
+                .get("max_nodes")
+                .and_then(Value::as_u64)
+                .unwrap_or(2000) as usize;
+            return self.observe_tree_flutter(request_id, &id, max_nodes);
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_observe_tree", args) {
                 return env;
@@ -469,6 +811,29 @@ impl SessionBackend {
 
     fn call_action(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            let action = args.get("action").cloned().unwrap_or(Value::Null);
+            let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
+            return match kind {
+                "tap" => {
+                    let text = action.get("text").and_then(Value::as_str);
+                    let point = match (
+                        action.get("x").and_then(Value::as_f64),
+                        action.get("y").and_then(Value::as_f64),
+                    ) {
+                        (Some(x), Some(y)) => Some((x, y)),
+                        _ => None,
+                    };
+                    self.tap_flutter(request_id, &id, text, point)
+                }
+                other => flutter_error(
+                    request_id,
+                    Some(&id),
+                    "UNSUPPORTED_BACKEND",
+                    &format!("Flutter session does not support action kind {other:?}"),
+                ),
+            };
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_action", args) {
                 return env;
@@ -530,6 +895,24 @@ impl SessionBackend {
 
     fn call_reset(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            self.flutter.remove(&id);
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.clone())
+            .with_value_result(json!({
+                "session_id": id,
+                "scope": "all",
+                "state_reset": true,
+                "data_cleared": true,
+                "isolation": "dedicated-worker",
+                "stage_reached": "none",
+            }));
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_reset", args) {
                 return env;
@@ -560,7 +943,8 @@ impl SessionBackend {
         let id = session_id(args);
         let local = self.remove_session(&id);
         let native = self.remove_native_child(&id);
-        let destroyed = local || native;
+        let flutter = self.flutter.remove(&id);
+        let destroyed = local || native || flutter;
         Envelope::pass(
             request_id,
             ProtocolBackend::AcosNative,
@@ -617,6 +1001,9 @@ impl SessionBackend {
 
     fn call_logs(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            return self.logs_flutter(request_id, &id);
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_logs", args) {
                 return env;
@@ -667,6 +1054,9 @@ impl SessionBackend {
 
     fn call_status(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.flutter.contains(&id) {
+            return self.status_flutter(request_id, &id);
+        }
         if self.has_native_child(&id) {
             if let Some(env) = self.forward_native(&id, "acos_status", args) {
                 return env;
@@ -751,6 +1141,48 @@ fn session_id(args: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or(DEFAULT_SESSION)
         .to_string()
+}
+
+/// Where a confined Flutter session stages its snapshot/assets. The confined
+/// child exposes its only writable path as `ACOS_SESSION_ROOT`.
+fn flutter_scratch() -> PathBuf {
+    std::env::var_os("ACOS_SESSION_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("ACOS_FLUTTER_SCRATCH").map(PathBuf::from))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("flutter")
+}
+
+/// A structured failure envelope for a Flutter-session error code.
+fn flutter_error(
+    request_id: &str,
+    session_id: Option<&str>,
+    code: &str,
+    message: &str,
+) -> Envelope {
+    let error = ProtocolError::new(
+        ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal),
+        message.to_string(),
+    );
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        error,
+        Metrics::wall_ms(0),
+    );
+    match session_id {
+        Some(id) => envelope.with_session_id(id.to_string()),
+        None => envelope,
+    }
+}
+
+fn flutter_session_error(
+    request_id: &str,
+    session_id: Option<&str>,
+    err: &FlutterSessionError,
+) -> Envelope {
+    flutter_error(request_id, session_id, err.code(), &err.to_string())
 }
 
 /// The original `base` object, so a synthesized action request keeps the
@@ -1013,11 +1445,23 @@ impl ConfinedChild {
         binary: &std::path::Path,
         read_write: &std::path::Path,
         read_only: &[PathBuf],
+        flutter_lib: Option<&std::path::Path>,
     ) -> Result<Self, String> {
         let mut command = Command::new(binary);
         command.arg("--confined-child").arg("--rw").arg(read_write);
         for path in read_only {
             command.arg("--ro").arg(path);
+        }
+        if let Some(lib) = flutter_lib {
+            command.arg("--flutter-lib").arg(lib);
+            // Dart's compressed-pointer heap reserves a multi-GiB virtual
+            // region up front; the 4 GiB guest default is too small and the VM
+            // aborts in `virtual_memory_compressed.cc`. Raise it for Flutter
+            // children (the W130-A harness runs the engine under an 8 GiB
+            // address-space budget).
+            command
+                .arg("--as-bytes")
+                .arg((16u64 * 1024 * 1024 * 1024).to_string());
         }
         command
             .env("ACOS_MCP_QUIET", "1")

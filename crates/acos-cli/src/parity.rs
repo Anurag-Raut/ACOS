@@ -97,6 +97,52 @@ pub struct ParityReport {
 }
 
 /// Normalize a node to its matching key.
+/// The Flutter frame preset: reference device screenshot vs an ACOS frame,
+/// masking the system status and navigation bars.
+///
+/// The reference and the ACOS frame are both 1080x2400 at 400 dpi. The mask
+/// rectangles come from the W130-A measurement: rows `0..108` are the opaque
+/// status band and rows `2304..2400` the navigation band. The pass threshold is
+/// the same the W130-A harness asserts (`global_ssim >= 0.98` and
+/// `mean_ssim >= 0.99`).
+fn flutter_frame_parity(candidate: &Path) -> Value {
+    use acos_render::diff::{self, DiffOptions};
+    use acos_render::image;
+
+    let reference = repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
+    let load = |path: &Path| -> Result<image::DecodedImage, String> {
+        let bytes = std::fs::read(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+        image::decode(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let (reference_img, candidate_img) = match (load(&reference), load(candidate)) {
+        (Ok(r), Ok(c)) => (r, c),
+        (Err(e), _) | (_, Err(e)) => {
+            return json!({"ok": false, "code": "RENDER_INVALID_ARGUMENT", "message": e})
+        }
+    };
+    let opts = DiffOptions {
+        pixel_threshold: 8,
+        ssim_window: 8,
+        block_size: 8,
+        mask: vec![[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+    };
+    match diff::diff(&reference_img, &candidate_img, &opts) {
+        Ok(report) => {
+            let identical = report.global_ssim >= 0.98 && report.mean_ssim >= 0.99;
+            json!({
+                "ok": true,
+                "identical": identical,
+                "reference": reference.display().to_string(),
+                "candidate": candidate.display().to_string(),
+                "masks": [[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+                "threshold": {"global_ssim": 0.98, "mean_ssim": 0.99},
+                "diff": report,
+            })
+        }
+        Err(e) => json!({"ok": false, "code": "RENDER_INVALID_ARGUMENT", "message": e.to_string()}),
+    }
+}
+
 fn match_key(node: &ViewNode) -> String {
     if !node.resource_id.is_empty() {
         format!("id:{}", node.resource_id)
@@ -319,6 +365,12 @@ pub struct ParityArgs {
     #[arg(long)]
     pub keep: bool,
 
+    /// Flutter preset: compare this ACOS frame PNG against
+    /// `fixtures/reference-device/flutter-hello/screenshot_initial.png` with
+    /// the status bar (rows `0..108`) and navigation bar (`2304..2400`) masked.
+    #[arg(long = "flutter-frame")]
+    pub flutter_frame: Option<PathBuf>,
+
     /// Emit the JSON report (always true in practice; kept for symmetry).
     #[arg(long)]
     pub json: bool,
@@ -326,6 +378,25 @@ pub struct ParityArgs {
 
 /// Run `acos parity`.
 pub fn run(args: ParityArgs) -> ExitCode {
+    if let Some(frame) = args.flutter_frame.clone() {
+        let report = flutter_frame_parity(&frame);
+        let identical = report["identical"].as_bool().unwrap_or(false);
+        if args.json {
+            crate::print_json(&report);
+        } else {
+            println!(
+                "flutter parity: identical={identical} global_ssim={:.4} mean_ssim={:.4} differing={:.5}",
+                report["diff"]["global_ssim"].as_f64().unwrap_or(0.0),
+                report["diff"]["mean_ssim"].as_f64().unwrap_or(0.0),
+                report["diff"]["differing_fraction"].as_f64().unwrap_or(0.0),
+            );
+        }
+        return if identical {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+    }
     let opts = CompareOptions {
         bounds_tolerance: args.bounds_tolerance,
         bounds_scale: args.bounds_scale,

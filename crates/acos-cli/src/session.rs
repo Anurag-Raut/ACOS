@@ -160,16 +160,24 @@ pub struct ObserveArgs {
 
 /// Run `acos observe`.
 pub fn observe(args: ObserveArgs) -> ExitCode {
-    if args.apk.is_none() && args.screenshot.is_none() {
+    if args.apk.is_none() {
         let tool = if args.tree || args.text {
             "acos_observe_tree"
         } else {
             "acos_observe"
         };
+        // Route `--screenshot` through the daemon too: the live Flutter session
+        // only exists there. The daemon writes the PNG to this absolute path.
+        let screenshot = args
+            .screenshot
+            .as_ref()
+            .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone()));
         let daemon_args = json!({
             "base": daemon_base(&args.session),
             "tree": args.tree,
             "text": args.text,
+            "png": screenshot.is_some(),
+            "screenshot": screenshot.as_ref().map(|p| p.display().to_string()),
         });
         if let Some(code) = call_running_daemon(tool, &daemon_args, args.json) {
             return code;

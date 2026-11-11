@@ -124,7 +124,16 @@ fn daemon_holds_a_native_session_across_cli_invocations_and_idles_out() {
     let observe = run(&["session", "observe", "--json"]);
     let observe_json = parse_json(&observe.stdout);
     assert_eq!(observe_json["status"], "pass", "{observe_json:#?}");
-    assert_eq!(observe_json["result"]["published_frames"], 1);
+    // The native renderer keeps presenting while the session is live, so the
+    // count is monotonic; the launch already saw `frame=1`. Assert presence,
+    // not an exact count (the old `== 1` was a stale assumption, same as
+    // `native_session.rs`).
+    assert!(
+        observe_json["result"]["published_frames"]
+            .as_u64()
+            .unwrap_or(0)
+            >= 1
+    );
     assert!(
         observe_json["result"]["frame"]["width"]
             .as_u64()

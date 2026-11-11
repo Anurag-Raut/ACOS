@@ -353,23 +353,39 @@ full wire format):
   `PointerData` packet; the caller scales by `devicePixelRatio` and passes
   `packet.len()` as `position`.
 
-### 7.3 Current boundary (2026-11-11, HEAD `a202c87`, W141-A)
+### 7.3 Flutter product path (2026-11-11, W149-A)
 
-`acos launch <flutter.apk> --native`, `acos observe`, `acos tap --text` and the
-MCP session tools do **not** drive the Flutter engine yet: the product wiring is
-still missing. W141-A moved the W130-A driver into a library type,
-`acos_jni::FlutterSession` (`crates/acos-jni/src/flutter_session.rs`):
-`launch(apk, opts)` → `pump()` / `pump_until_frames(n)` → `frame()` (RGBA/PNG) →
-`semantics()` → `tap(x,y)` / `tap_text(label)` → `shutdown()`, with bounded
-pumping, geometry/density from `opts` (default 1080×2400 @ 2.5) and structured
-`UNSUPPORTED_*`/`ENGINE_*` errors. Semantics capture is wired through the
-`FlutterJNI.AccessibilityDelegate` (`updateSemantics` is private, so the
-delegate is the supported hook) into the W137-A decoder. It is **not** yet held
-by the confined child, so `acos launch --native` on a Flutter APK still runs the
-framework ladder. The `tests/flutter_hello.rs` harness (Vm + raw loader +
-software GLES + `ALooper` pump + `FlutterJNI` host) remains the working evidence
-for the engine path (counter `0 → 1`, masked SSIM 0.9987 / 0.9968). Also note the
-raw `dart:ui` probe declares no semantics, so the engine's semantics stream is
-empty until the snapshot calls `PlatformDispatcher.updateSemantics`. Do not
-report a Flutter `pass` until the confined-child wiring and the fixture-gated
-product e2e land (see FLUTTER_PARITY.md §W141-A).
+`acos launch <flutter.apk>` now drives the engine end to end. A Flutter APK is
+detected structurally (`--flutter` or auto-detect), implied native, and routed
+through the `acos serve` daemon into a confined `acos --confined-child`, where a
+`FlutterSessions` table owns one `acos_jni::FlutterSession` per session on a
+**dedicated long-lived worker thread** (64 MiB stack). Every MCP/CLI tool
+(`acos_launch/observe/observe_tree/tap/logs/status/reset/destroy`) marshals a
+command to that worker and waits with a bounded timeout, so the engine's
+`ALooper`/platform thread identity is stable across calls.
+
+```bash
+# Launch (daemon-held; separate observe/tap invocations address the same session)
+acos launch fixtures/build/apps/flutter-hello.apk --flutter
+acos observe --screenshot /tmp/flutter.png
+acos tap --text Increment      # or: acos tap 375 600
+acos logs
+acos session list
+acos destroy
+
+# Frame parity (status bar 0..108 and navigation bar 2304..2400 masked)
+acos parity --flutter-frame /tmp/flutter.png
+```
+
+Measured (fixture-gated e2e `crates/acos-mcp/tests/flutter_session.rs`,
+`ACOS_REQUIRE_FIXTURES=1`): launch reaches `first_frame` in **~2.8 s**, the
+confined child's RSS is ~500 MiB, `acos observe` returns a 1080×2400 frame+PNG,
+and `acos tap` produces `ACOS_DART_COUNTER counter=1` plus a new frame sequence.
+
+**Current boundary:** the engine's `AccessibilityBridge` is not established by
+the `FlutterJNI`-only driver, so `acos observe --tree` is empty even though the
+raw `dart:ui` snapshot now publishes an `Increment` node; `acos tap --text` is
+wired but the e2e falls back to the physical centre until that lands. The
+software GLES sink in the child also republishes the first RGBA buffer, so
+tap-frame pixels are identical (the counter is proven by the Dart log). See
+`results/flutter/FLUTTER_PARITY.md` §W149-A.

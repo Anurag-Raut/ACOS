@@ -259,7 +259,11 @@ impl Default for FlutterSessionOptions {
 
 /// A live Flutter engine, driven through the real Java embedding.
 pub struct FlutterSession {
-    vm: Vm,
+    /// Boxed so its address is stable: `JniRuntime::bind` stores a raw `Vm`
+    /// pointer in the thread-local JNI slot, and moving an inline `Vm` into this
+    /// struct (or moving the struct) would leave that pointer dangling. The
+    /// engine's JNI callbacks then dereference a stale `Heap` header.
+    vm: Box<Vm>,
     rt: JniRuntime,
     _loader: Loader,
     _handle: LibraryHandle,
@@ -322,8 +326,13 @@ fn category(e: &LoaderError) -> &'static str {
 
 /// Extract `lib/<abi>/{libflutter,libapp}.so` from the APK when absent.
 fn ensure_libs(apk: &Path, libdir: &Path, abi: &str) -> Result<(), FlutterSessionError> {
-    std::fs::create_dir_all(libdir)
-        .map_err(|e| setup("ensure-libs", format!("{}: {e}", libdir.display())))?;
+    // The engine dir is usually a pre-populated, read-only `.cache` mount under
+    // the ADR-0022 sandbox; `mkdir` on it is denied (EACCES) even though the
+    // directory exists, so only create it when it is genuinely absent.
+    if !libdir.is_dir() {
+        std::fs::create_dir_all(libdir)
+            .map_err(|e| setup("ensure-libs", format!("{}: {e}", libdir.display())))?;
+    }
     let bytes = std::fs::read(apk)
         .map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
@@ -446,21 +455,26 @@ impl FlutterSession {
         // Software GLES + NDK host so the engine's egl/gl/window imports answer.
         crate::ndk_host::install_forced();
 
-        // Vision: build the VM. The `ACOS_BOOT_DIR` is set by the caller's
-        // confinement profile; fall back to CoreLib::Bootstrap when absent.
-        let boot_dir = std::env::var_os("ACOS_BOOT_DIR").map(PathBuf::from);
+        // Vision: build the VM. Resolve the boot-classpath cache exactly like
+        // the framework runtime (`$ACOS_BOOT_DIR`, then a `.cache/boot/android-34`
+        // walk-up): under ADR-0022 confinement the environment is cleared, so
+        // the env var alone is not reliable. Fall back to `CoreLib::Bootstrap`
+        // when no cache is present.
+        let boot_dir = acos_vm::vm::default_boot_dir(None);
         let boot_ok = boot_dir
             .as_ref()
             .map(|d| d.join("BOOTCLASSPATH").is_file())
             .unwrap_or(false);
         let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
-        let mut vm = Vm::new(VmOptions {
-            heap_max_bytes: opts.ram_budget_bytes,
-            corelib,
-            boot_dir: if boot_ok { boot_dir } else { None },
-            ..VmOptions::default()
-        })
-        .map_err(|e| setup("vm", format!("{e:?}")))?;
+        let mut vm = Box::new(
+            Vm::new(VmOptions {
+                heap_max_bytes: opts.ram_budget_bytes,
+                corelib,
+                boot_dir: if boot_ok { boot_dir } else { None },
+                ..VmOptions::default()
+            })
+            .map_err(|e| setup("vm", format!("{e:?}")))?,
+        );
         load_apk_dex(&apk, &mut vm)?;
 
         let rt = JniRuntime::new(
@@ -826,8 +840,11 @@ impl FlutterSession {
                 ),
             })?;
         let b = node.bounds();
-        let x = (b[0] + b[2]) as f64 / 2.0;
-        let y = (b[1] + b[3]) as f64 / 2.0;
+        // Semantics rects are logical pixels; the driver's `tapAt` packet holds
+        // physical pixels (the Dart handler divides by `devicePixelRatio`).
+        let dpr = self.opts.dpr;
+        let x = ((b[0] + b[2]) as f64 / 2.0) * dpr;
+        let y = ((b[1] + b[3]) as f64 / 2.0) * dpr;
         self.tap(x, y)?;
         Ok([x, y])
     }
@@ -857,6 +874,12 @@ impl FlutterSession {
     #[must_use]
     pub fn vsync_delivered(&self) -> usize {
         self.vsync_delivered
+    }
+
+    /// The geometry/budget options this session was created with.
+    #[must_use]
+    pub fn opts(&self) -> &FlutterSessionOptions {
+        &self.opts
     }
 
     /// Engine import/relocation diagnostics from the raw loader.

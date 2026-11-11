@@ -105,7 +105,15 @@ fn native_launch_runs_in_a_confined_child_session() {
         observed["status"], "pass",
         "observe must read the confined child's frame: {observed:#?}"
     );
-    assert_eq!(observed["result"]["published_frames"], 1);
+    // The native renderer keeps presenting while the session is live, so the
+    // frame count is monotonic, not exactly 1: the launch ladder already saw
+    // `frame=1`, and a subsequent pump can publish another frame before
+    // `observe` samples the store. Assert the frame is present, not the exact
+    // count (the old `== 1` was a stale assumption).
+    assert!(
+        observed["result"]["published_frames"].as_u64().unwrap_or(0) >= 1,
+        "observe must see at least the launch frame: {observed:#?}"
+    );
     assert!(
         observed["result"]["frame"]["width"].as_u64().unwrap_or(0) > 0
             && observed["result"]["frame"]["height"].as_u64().unwrap_or(0) > 0,

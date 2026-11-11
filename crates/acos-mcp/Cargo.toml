@@ -15,6 +15,7 @@ name = "acos_mcp"
 path = "src/lib.rs"
 
 [dependencies]
+acos-jni = { path = "../acos-jni" }
 acos-protocol = { path = "../acos-protocol" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }

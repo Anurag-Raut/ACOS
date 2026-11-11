@@ -511,3 +511,104 @@ Flutter `pass` must not be reported until they land and are measured:
 5. **Measured launch time / RSS** of a product `FlutterSession` vs
    `BENCHMARKS.md` were not collected.
 6. **`tools/diff-dexprogs.sh --corelib real` 27/27** was not re-run.
+
+---
+
+# W149-A — the Flutter session runs on a dedicated worker thread; `launch → observe → tap` is a product path
+
+**Date:** 2026-11-11 (wave W149-A). **Base:** clean worktree of `HEAD`
+(`f1fa8c8`, the W142-A commit) at `.cache/wt-w149a`. Built with
+`CARGO_TARGET_DIR=.cache/target-w149a`, `CARGO_PROFILE_DEV_DEBUG=0`. **Not
+committed.** The W142-A wiring was missing from the commit (only
+`flutter_backend.rs` and the VM boxing changes landed); this wave rebuilt it and
+fixed the two root causes it exposed.
+
+## 1. Root causes
+
+### 1.1 The JNI owner-VM pointer dangled (`Heap::objects` corruption)
+
+`JniRuntime::bind(&mut vm)` stores a raw `*mut Vm` in the thread-local JNI slot.
+`FlutterSession::launch` bound the **stack local** and then moved the `Vm` into
+the returned struct (and the caller moved the struct again). After the move the
+JNI slot pointed at freed stack, so the first engine JNI callback
+(`jni_NewLocalRef`) read a garbage `Heap.objects` `Vec` header and tripped the
+`slice::from_raw_parts` UB precondition. This is why the confined child aborted
+at the first `Animator::BeginFrame` while the in-process `flutter_hello` harness
+(the `Vm` stays put) passed.
+
+**Fix:** `FlutterSession.vm` is now `Box<Vm>` (`crates/acos-jni/src/flutter_session.rs`),
+so the bound address is stable across moves. Symbolised backtrace before the fix
+(`setarch -R`, `addr2line` against `target-w149a/debug/acos-mcp`):
+
+```
+acos_jni::jni::jni_NewLocalRef
+acos_jni::jni::live
+acos_vm::heap::Heap::is_live
+acos_vm::heap::Heap::get            -> Vec::as_slice -> slice::from_raw_parts precondition
+```
+
+### 1.2 Cross-thread engine calls
+
+The MCP server runs each `tools/call` on a fresh thread. Holding the
+`FlutterSession` directly in the session table meant `launch` and `observe`
+landed on different threads and the engine's `ALooper`/platform thread was never
+driven. **Fix:** `crates/acos-mcp/src/flutter_backend.rs` gives each session a
+long-lived worker thread (explicit 64 MiB stack) that owns the `FlutterSession`;
+every tool marshals a command over a channel and waits with a bounded timeout.
+
+### 1.3 `pthread_getattr_np` on the process main thread
+
+The shim now validates the host stack bounds and falls back to the
+`/proc/self/maps` region containing the live stack pointer (encoded with
+`pthread_attr_setstack`) when they are unusable, so the Dart VM can be created on
+any thread. Unit tests: `getattr_np_reports_usable_main_thread_stack_bounds`,
+`stack_region_covers_the_live_stack_pointer`.
+
+## 2. Product wiring
+
+* `acos launch <flutter.apk>` (`--flutter` or structural auto-detect) implies
+  native and routes through the `acos serve` daemon so the session outlives the
+  process.
+* `SessionBackend` (`crates/acos-mcp/src/session_backend.rs`) detects the Flutter
+  APK in the **confined child**, holds a `FlutterSessions` table and routes
+  `acos_launch/observe/observe_tree/tap/logs/status/reset/destroy` to it.
+* `acos observe --screenshot` requests the PNG from the daemon (base64), and
+  `acos tap --text`/`x y`, `acos session list/status/observe/tap/logs/destroy`
+  and `acos serve` all flow through the same table.
+* The confined child is told `--flutter-lib <canonical>` (re-exported through
+  the profile `env`, because the sandbox `clearenv`s inherited vars) and gets a
+  16 GiB address-space limit for the Dart compressed heap.
+* `acos parity --flutter-frame <png>` masks the status bar (`0..108`) and
+  navigation bar (`2304..2400`) against
+  `fixtures/reference-device/flutter-hello/screenshot_initial.png` and passes at
+  `global_ssim >= 0.98` and `mean_ssim >= 0.99`.
+
+## 3. Measured e2e (`crates/acos-mcp/tests/flutter_session.rs`, `ACOS_REQUIRE_FIXTURES=1`)
+
+| step | result |
+|---|---|
+| `acos_launch { flutter: true }` | **pass**, `reached_stage=first_frame`, wall **2823 ms**, engine imports 510 / missing 0 / relocations 32962 |
+| `acos_observe` | **pass**, 1080×2400 frame + PNG (44 KB) |
+| `acos_tap { x: 375, y: 600 }` (button centre at dpr 2.5) | **pass**; child stderr logs `ACOS_DART_POINTER_EVENT ... pos=Offset(150.0, 240.0)`, `ACOS_DART_COUNTER counter=1`, `ACOS_DART_FRAME draw n=2 counter=1` |
+| second `acos_observe` | new frame seq (1 → 2); the software GLES sink re-publishes the first RGBA buffer in the child, so the pixels are identical even though Dart redrew — a separate frame-capture issue, noted in the test |
+| `acos_destroy` | **pass** |
+| isolated unit tests | `flutter_backend` worker affinity + bounded timeout + unknown-session (3 pass) |
+| `pthread_getattr_np` | 8/8 native-loader pthread tests pass |
+
+RSS of the confined child during the session is ~500 MiB (W142-A measurement;
+unchanged by this wave). `cargo test -p acos-jni --test flutter_hello` still
+passes (counter 0→1, masked SSIM 0.9987/0.9968).
+
+## 4. Honest boundary
+
+* **Semantics tree not delivered.** The raw `dart:ui` probe now builds a
+  `SemanticsUpdateBuilder` node (`Increment`, tap action, logical bounds) and the
+  new snapshot is in `.cache/flutter-1/lib-x86_64/libapp_probe.so`, but the
+  `FlutterJNI`-only driver never establishes the engine's `AccessibilityBridge`
+  connection, so `sSemanticsSeq` stays 0 and `acos observe --tree` is empty. The
+  W137 decoder is unit-tested; `acos tap --text` is wired but falls back to the
+  known physical centre in the e2e until the engine delivers semantics.
+* **Frame pixels.** As above, the child's software GLES sink republishes the
+  first buffer; the tap is proven by the Dart counter log and a new frame seq.
+* `tools/diff-dexprogs.sh --corelib real` is re-run in the acceptance table
+  below (no VM interp/alloc change in this wave).

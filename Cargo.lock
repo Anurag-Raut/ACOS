@@ -101,6 +101,7 @@ dependencies = [
 name = "acos-mcp"
 version = "0.1.0"
 dependencies = [
+ "acos-jni",
  "acos-protocol",
  "acos-runtime",
  "acos-sandbox",

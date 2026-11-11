@@ -124,6 +124,22 @@ fn confined_child_profile() -> Option<ConfineProfile> {
                 }
                 i += 2;
             }
+            // The extracted Flutter engine dir; the sandbox clears the
+            // environment, so it must be re-exported through the profile.
+            "--flutter-lib" => {
+                if let Some(path) = args.get(i + 1) {
+                    profile
+                        .env
+                        .push(("ACOS_FLUTTER_LIB_DIR".to_string(), path.clone()));
+                }
+                i += 2;
+            }
+            "--as-bytes" => {
+                if let Some(bytes) = args.get(i + 1).and_then(|v| v.parse::<u64>().ok()) {
+                    profile.rlimits.address_space_bytes = Some(bytes);
+                }
+                i += 2;
+            }
             _ => i += 1,
         }
     }
