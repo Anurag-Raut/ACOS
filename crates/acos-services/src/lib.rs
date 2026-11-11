@@ -53,6 +53,7 @@ pub mod exception;
 pub mod host;
 pub mod ime;
 pub mod input;
+pub mod input_channel;
 pub mod misc;
 pub mod parcelable;
 pub mod pms;
