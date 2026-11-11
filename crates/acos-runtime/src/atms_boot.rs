@@ -46,10 +46,23 @@ pub type AttachLog = Arc<Mutex<Vec<AttachRecord>>>;
 /// machine (process record, lifecycle stream) still runs; it only adds the
 /// observation the boot test needs.
 pub fn install_recording_atms(host: &mut ServiceHost) -> AttachLog {
+    // Reuse the host's ATMS state. It carries the process/attach records *and*
+    // the `ProviderRegistry` that `IActivityManager.getContentProvider` answers
+    // from (Q2b); a fresh `AtmsState` would silently empty the provider set, so
+    // `ContentResolver.acquireProvider("settings")` would return null and the
+    // first `Settings.Global.getInt` would NPE.
+    let shared = host
+        .ensure("android.app.IActivityManager")
+        .ok()
+        .and_then(|object| object.as_any_mut())
+        .and_then(|any| any.downcast_mut::<AtmsService>())
+        .map(|service| service.shared_state());
     let log: AttachLog = Arc::new(Mutex::new(Vec::new()));
     let log_for_factory = Arc::clone(&log);
     host.register("activity", "android.app.IActivityManager", move |wiring| {
-        let state = Arc::new(Mutex::new(AtmsState::new()));
+        let state = shared
+            .clone()
+            .unwrap_or_else(|| Arc::new(Mutex::new(AtmsState::new())));
         let inner = AtmsService::new(AtmsInterface::ActivityManager, state, wiring);
         Box::new(RecordingAtms {
             inner,

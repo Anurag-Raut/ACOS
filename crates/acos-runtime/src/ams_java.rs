@@ -31,9 +31,16 @@
 //!
 //! An extra whose runtime type is not `String`/`int`/`boolean` is a structured
 //! `UNSUPPORTED_ANDROID_API`, not a silently dropped value. An activity whose
-//! launch cannot be materialised is a structured error. `IContentProvider`
-//! query/insert/update/delete without a provider implementation is a structured
-//! `UNSUPPORTED_ANDROID_API` (see [`transact_content_provider`]).
+//! launch cannot be materialised is a structured error.
+//!
+//! # Content providers
+//!
+//! The provider set is **not** owned here: `getContentProvider` and
+//! `IContentProvider.call`/`query` are forwarded to the runtime [`ServiceHost`],
+//! which answers from `acos_services::provider::ProviderRegistry` (Q2b). The
+//! Rust VM route and the ART binder-peer route therefore share one
+//! implementation, and no `ProviderInfo`/holder/`Bundle`/`CursorWindow` byte is
+//! written by this module.
 //!
 //! # State
 //!
@@ -42,12 +49,14 @@
 //! launched APK with [`install_manifest_from_apk`].
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use acos_parcel::{binder::BinderId, Parcel};
 use acos_services::ams::{
     AmsState, Extra, IntentFacts, PendingBind, PendingLaunch, PendingReceiver,
 };
 use acos_services::pms::{ActivityInfo as PmsActivityInfo, AppInfo};
+use acos_services::ServiceHost;
 use acos_vm::heap::{Handle, NULL};
 use acos_vm::javabridge::{class_descriptor, JavaValue};
 use acos_vm::natives::binder::BinderDelivery;
@@ -61,11 +70,37 @@ fn err(e: impl std::fmt::Display) -> String {
 
 thread_local! {
     static STATE: RefCell<AmsState> = RefCell::new(AmsState::new());
+    /// The process-wide `ServiceHost`, so the provider transactions this module
+    /// answers go through the same registry the ART binder-peer dispatches to.
+    ///
+    /// Interior mutability and the thread-local slot mirror [`STATE`]: the VM is
+    /// single-threaded, and a nested binder transaction (a provider calling
+    /// `notifyChange`, say) must be able to re-enter.
+    static HOST: RefCell<Option<Rc<RefCell<ServiceHost>>>> = const { RefCell::new(None) };
 }
 
 /// Forget all AMS state (tests / a fresh launch).
 pub fn reset() {
     STATE.with(|s| *s.borrow_mut() = AmsState::new());
+}
+
+/// Install the `ServiceHost` the provider transactions are answered from.
+///
+/// Called by [`crate::Runtime::with_host`]: the runtime owns one host, its
+/// `ServiceTransport` dispatches to it, and this module forwards the content
+/// provider transactions to the very same instance so the provider set lives in
+/// exactly one place (`acos_services::provider::ProviderRegistry`).
+pub fn install_host(host: Rc<RefCell<ServiceHost>>) {
+    HOST.with(|slot| *slot.borrow_mut() = Some(host));
+}
+
+/// Drop the installed host (tests / teardown).
+pub fn clear_host() {
+    HOST.with(|slot| *slot.borrow_mut() = None);
+}
+
+fn installed_host() -> Option<Rc<RefCell<ServiceHost>>> {
+    HOST.with(|slot| slot.borrow().clone())
 }
 
 /// Seed the AMS manifest table from an installed APK.
@@ -604,9 +639,16 @@ pub(crate) fn app_provider_info(
 /// and (when known) a real `android.content.ContentProviderProxy` for the
 /// provider.
 ///
+/// This is the **app-published** holder path only (`publishContentProviders` at
+/// bind time): those providers live in [`AmsState::providers`], not in the
+/// `acos-services` registry, and carry `noReleaseNeeded = true` with no
+/// connection token because the app owns them in this process. A registry-served
+/// provider (the `settings` authority) never reaches this function — its holder
+/// is written by `AtmsService` (Q2b).
+///
 /// The proxy wraps a `BinderProxy` whose `mNativeData` is the binder id, so
 /// `IContentProvider.asBinder()` (called by `writeToParcel`) returns a binder
-/// the ACOS transport routes to the `settings` handler.
+/// the ACOS transport routes to the app's local `ContentProvider.Transport`.
 fn content_provider_holder(
     vm: &mut Vm,
     package: &str,
@@ -797,11 +839,11 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
 /// Handle one `IActivityManager`/`IActivityTaskManager` transaction.
 pub fn transact(
     vm: &mut Vm,
-    _binder: BinderId,
+    binder: BinderId,
     code: u32,
     data: &mut Parcel,
     reply: &mut Parcel,
-    _flags: u32,
+    flags: u32,
 ) -> JResult<Vec<BinderDelivery>> {
     let descriptor = data
         .peek_interface_token()
@@ -811,7 +853,13 @@ pub fn transact(
         .ok_or_else(|| err(format!("unknown method code {code} for {descriptor}")))?;
 
     if descriptor == "android.content.IContentProvider" {
-        return transact_content_provider(vm, method, data, reply);
+        return transact_content_provider(vm, binder, method, data, reply, flags);
+    }
+    if method.name == "getContentProvider" {
+        // The provider set is the `acos-services` registry's, not this module's:
+        // delegate before the generic request decoding runs, so the host sees
+        // the untouched request parcel.
+        return transact_get_content_provider(vm, binder, method, data, reply, flags);
     }
     if !owns_method(&method.name) {
         return Err(err(format!("method {} is not owned here", method.name)));
@@ -908,30 +956,6 @@ pub fn transact(
             reply.write_int32(count);
             Ok(Vec::new())
         }
-        "getContentProvider" => {
-            // `getContentProvider(IApplicationThread caller, String callingPackage,
-            // String name, int userId, boolean stable)`: the requested authority
-            // is the *second* string (arg 2), not the calling package.
-            let authority = args.get(2).and_then(Arg::string).unwrap_or_default();
-            match state.get_content_provider(authority) {
-                Some(p) => {
-                    // The hardcoded `settings` record carries no binder id (it
-                    // is not published by an app); use the binder the host
-                    // registered for the `IContentProvider` service so the
-                    // holder's `provider` is real and `Settings` can call it.
-                    let binder = if p.binder != 0 {
-                        p.binder
-                    } else {
-                        acos_services::provider::settings_provider_binder()
-                    };
-                    let holder =
-                        content_provider_holder(vm, &p.package, &p.class, authority, binder)?;
-                    crate::pms_java::typed_object(vm, Some(holder), reply)?;
-                }
-                None => crate::pms_java::typed_object(vm, None, reply)?,
-            }
-            Ok(Vec::new())
-        }
         "publishContentProviders" => {
             // `ActivityThread.installContentProviders` reports every provider it
             // created for this process. Decode the real holders and record the
@@ -1002,31 +1026,159 @@ fn intent_at(args: &[Arg], index: usize) -> JResult<IntentFacts> {
 }
 
 // ---------------------------------------------------------------------------
-// IContentProvider
+// Content providers (answered by `acos-services`)
 // ---------------------------------------------------------------------------
 
-/// `IContentProvider` query/insert/update/delete.
+/// `IActivityManager.getContentProvider`, answered from the `acos-services`
+/// provider registry.
 ///
-/// ACOS V1 has no guest-hosted provider process, so there is no real
-/// `ContentProviderNative`/`Transport` to marshal against. Rather than return a
-/// faked `Cursor`, every mutating/reading method raises a structured
-/// `UNSUPPORTED_ANDROID_API`.
-fn transact_content_provider(
+/// The authority list lives in exactly one place: [`acos_services::provider::ProviderRegistry`]
+/// behind the `ServiceHost`. The Rust VM route (here) and the ART binder-peer
+/// route (`acos-binder-peer` -> `ServiceHost::transact`) therefore return the
+/// *same* holder, built by `AtmsService`: a real API-34
+/// `ContentProviderHolder` (`ProviderInfo`, the local `IContentProvider`
+/// binder, the `ContentProviderConnection` token, `noReleaseNeeded=0`,
+/// `mLocal=1`).
+///
+/// The fallback is the app's *own* providers: `publishContentProviders` records
+/// those in [`AmsState::providers`] because they are Java `Binder`s installed at
+/// bind time, not registry entries.
+fn transact_get_content_provider(
     vm: &mut Vm,
+    binder: BinderId,
     method: &acos_aidl::MethodInfo,
     data: &mut Parcel,
     reply: &mut Parcel,
+    flags: u32,
 ) -> JResult<Vec<BinderDelivery>> {
-    let _ = vm;
-    let _ = data;
+    let descriptor = data
+        .peek_interface_token()
+        .map_err(err)?
+        .ok_or_else(|| err("missing interface token"))?;
+
+    if let Some(host) = installed_host() {
+        let mut request = data.clone();
+        let deliveries = dispatch_to_host(
+            &host,
+            binder,
+            &descriptor,
+            method.code,
+            &mut request,
+            reply,
+            flags,
+        )?;
+        // A registry hit is `writeNoException()` + a present typed object; only
+        // a recorded miss falls through to the app-published provider table.
+        if reply_has_typed_object(reply) {
+            return Ok(deliveries);
+        }
+    }
+
+    // `getContentProvider(IApplicationThread caller, String callingPackage,
+    // String name, int userId, boolean stable)`: the requested authority is the
+    // *second* string (arg 2), not the calling package.
+    data.enforce_interface(&descriptor).map_err(err)?;
+    let args = decode_args(vm, method, data)?;
+    let authority = args.get(2).and_then(Arg::string).unwrap_or_default();
+    let record = with_state(|state| state.providers.get(authority).cloned());
     reply.reset();
     acos_services::exception::write_no_exception(reply);
-    Err(err(format!(
-        "IContentProvider.{}: no guest provider process; query/insert/update/delete require a \
-         real ContentProviderNative marshaller (CursorWindow/BulkCursorDescriptor) that ACOS \
-         does not have yet (UNSUPPORTED_ANDROID_API)",
-        method.name
-    )))
+    match record {
+        Some(p) => {
+            let holder = content_provider_holder(vm, &p.package, &p.class, authority, p.binder)?;
+            crate::pms_java::typed_object(vm, Some(holder), reply)?;
+        }
+        None => crate::pms_java::typed_object(vm, None, reply)?,
+    }
+    Ok(Vec::new())
+}
+
+/// Forward one transaction to the installed `ServiceHost`.
+///
+/// `binder` is used when the host knows it (the provider binder a
+/// `ContentProviderProxy` calls through); otherwise the target is resolved from
+/// the request's interface token, which is how the AMS bridge reaches
+/// `IActivityManager`/`IActivityTaskManager` without knowing their handles.
+fn dispatch_to_host(
+    host: &Rc<RefCell<ServiceHost>>,
+    binder: BinderId,
+    descriptor: &str,
+    code: u32,
+    request: &mut Parcel,
+    reply: &mut Parcel,
+    flags: u32,
+) -> JResult<Vec<BinderDelivery>> {
+    let mut host = host.borrow_mut();
+    let target = if host.descriptor_of(binder).is_some() {
+        binder
+    } else {
+        host.binder_for_descriptor(descriptor).ok_or_else(|| {
+            err(format!(
+                "UNSUPPORTED_ANDROID_API: no ServiceHost entry for {descriptor}"
+            ))
+        })?
+    };
+    host.transact(target, code, request, reply, flags).map_err(err)?;
+    let pending = host.take_deliveries();
+    Ok(pending
+        .into_iter()
+        .map(|d| BinderDelivery {
+            target: d.target.0,
+            code: d.code,
+            flags: 0,
+            data: d.data,
+        })
+        .collect())
+}
+
+/// True when `reply` (as the host just wrote it) carries a non-null typed
+/// object: `writeNoException()` + `writeTypedObject(object)`.
+fn reply_has_typed_object(reply: &Parcel) -> bool {
+    let mut probe = reply.clone();
+    probe.set_data_position(0);
+    matches!(probe.read_int32(), Ok(0)) && matches!(probe.read_int32(), Ok(present) if present != 0)
+}
+
+// ---------------------------------------------------------------------------
+// IContentProvider
+// ---------------------------------------------------------------------------
+
+/// `IContentProvider` query/insert/update/delete/call.
+///
+/// Answered by the same [`ServiceHost`] the ART binder-peer route dispatches to,
+/// so the provider implementation (`acos_services::provider::ProviderService`:
+/// `call` with `GET_*`/`PUT_*`/`GET_config`/`LIST_config`, and `query` with the
+/// real `BulkCursorDescriptor` + `CursorWindow` reply) is shared. This module
+/// hand-writes no provider payload: the request bytes go to the host untouched
+/// and the reply comes back in the framework's own shape.
+///
+/// `insert`/`update`/`delete`/`bulkInsert` stay a structured
+/// `UNSUPPORTED_ANDROID_API`, as the host answers them.
+fn transact_content_provider(
+    vm: &mut Vm,
+    binder: BinderId,
+    method: &acos_aidl::MethodInfo,
+    data: &mut Parcel,
+    reply: &mut Parcel,
+    flags: u32,
+) -> JResult<Vec<BinderDelivery>> {
+    let descriptor = data
+        .peek_interface_token()
+        .map_err(err)?
+        .ok_or_else(|| err("missing interface token"))?;
+    let host = installed_host().ok_or_else(|| {
+        err(format!(
+            "IContentProvider.{}: UNSUPPORTED_ANDROID_API: no ServiceHost installed, so there is \
+             no provider registry to answer from",
+            method.name
+        ))
+    })?;
+    let deliveries = dispatch_to_host(&host, binder, &descriptor, method.code, data, reply, flags)
+        .map_err(|e| format!("IContentProvider.{}: {e}", method.name))?;
+    // The framework instantiates the generation `MemoryIntArray` through its
+    // static `CREATOR`; make sure `<clinit>` ran before the Java reader does.
+    crate::settings_java::prepare_settings_reply(vm).map_err(err)?;
+    Ok(deliveries)
 }
 
 // ---------------------------------------------------------------------------

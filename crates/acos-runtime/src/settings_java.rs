@@ -20,6 +20,12 @@ use acos_vm::Vm;
 /// Initialise the framework classes the settings reply instantiates through
 /// their static `CREATOR` before the Java reader runs.
 pub fn prepare_settings_reply(vm: &mut Vm) -> Result<(), String> {
+    // `<clinit>` runs on the current thread's frame stack. Outside a VM run (a
+    // test driving a binder transaction directly) there is no thread, and no
+    // Java reader can consume the reply, so there is nothing to prepare.
+    if vm.threads.is_empty() {
+        return Ok(());
+    }
     for desc in [
         "Landroid/util/MemoryIntArray;",
         "Landroid/os/ParcelFileDescriptor;",

@@ -137,6 +137,9 @@ impl Runtime {
             FIXTURE_UID,
             pid,
         )));
+        // The AMS bridge answers `getContentProvider`/`IContentProvider` from
+        // this same host, so the provider registry has one owner.
+        crate::ams_java::install_host(Rc::clone(&host));
         // The real `InputEventReceiver` ack path (`nativeFinishInputEvent`)
         // forwards to the service input dispatcher.
         crate::input_java::install();

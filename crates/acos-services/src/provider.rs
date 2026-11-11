@@ -242,9 +242,6 @@ impl SettingsDefaults {
             ("bluetooth_on", "0"),
             ("stay_on_while_plugged_in", "0"),
             ("package_verifier_enable", "1"),
-            ("animator_duration_scale", "1.0"),
-            ("transition_animation_scale", "1.0"),
-            ("window_animation_scale", "1.0"),
             ("boot_count", "0"),
         ] {
             defaults.global.insert(key.into(), value.into());

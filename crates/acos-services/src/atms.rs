@@ -726,6 +726,19 @@ impl AtmsService {
 }
 
 impl AtmsService {
+    /// The ATMS state this service answers from (shared with every other user of
+    /// the same wiring).
+    ///
+    /// The state now owns more than the lifecycle stream: the process/attach
+    /// records and the [`crate::provider::ProviderRegistry`] that
+    /// `getContentProvider` answers from. A decorator that wraps this service
+    /// (the runtime's attach recorder) must reuse this `Arc` instead of a fresh
+    /// [`AtmsState`], or the served provider set silently disappears.
+    #[must_use]
+    pub fn shared_state(&self) -> Arc<Mutex<AtmsState>> {
+        Arc::clone(&self.state)
+    }
+
     /// The structured record of every content-provider transaction this service
     /// has answered, oldest first — including `getContentProvider` misses (an
     /// unknown authority is a real answer with `hit: false`, not an error).

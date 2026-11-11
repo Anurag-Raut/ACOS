@@ -1487,6 +1487,9 @@ impl Runtime {
             FIXTURE_UID,
             pid,
         )));
+        // The AMS bridge answers `getContentProvider`/`IContentProvider` from
+        // this same host, so the provider registry has one owner (Q2b).
+        crate::ams_java::install_host(Rc::clone(&host));
         crate::input_java::install();
         Runtime {
             vm,
