@@ -3,6 +3,8 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
+import android.content.pm.ProviderInfo;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.ServiceManager;
 
@@ -96,6 +98,25 @@ public final class PmsMain {
         out("act.theme", act.theme);
         out("act.applicationInfo.packageName", act.applicationInfo.packageName);
         out("act.applicationInfo.sourceDir", base(act.applicationInfo.sourceDir));
+
+        // W155-A: the `PackageInfo` member methods. hello-views declares no
+        // services or providers, so both are a genuine null (the codec writes
+        // the typed-object absence marker); instrumentation has no manifest
+        // source, so the service answers structured UNSUPPORTED.
+        ServiceInfo svc = pm.getServiceInfo(
+                new ComponentName(PKG, PKG + ".AbsentService"), 0L, 0);
+        out("svc.absent", svc == null ? "<null>" : "present");
+        ProviderInfo provider = pm.getProviderInfo(
+                new ComponentName(PKG, PKG + ".AbsentProvider"), 0L, 0);
+        out("provider.absent", provider == null ? "<null>" : "present");
+        boolean instrUnsupported = false;
+        try {
+            pm.getInstrumentationInfoAsUser(
+                    new ComponentName(PKG, PKG + ".AbsentInstrumentation"), 0, 0);
+        } catch (UnsupportedOperationException e) {
+            instrUnsupported = true;
+        }
+        out("instr.unsupported", instrUnsupported);
 
         out("feature.touchscreen", pm.hasSystemFeature("android.hardware.touchscreen", 0));
         out("feature.webview", pm.hasSystemFeature("android.software.webview", 0));

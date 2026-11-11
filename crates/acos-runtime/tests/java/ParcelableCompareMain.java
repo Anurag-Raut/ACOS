@@ -1,6 +1,10 @@
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PermissionInfo;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.os.LocaleList;
 import android.os.Parcel;
@@ -194,6 +198,30 @@ public final class ParcelableCompareMain {
                         break;
                     case "package_info":
                         got = PackageInfo.CREATOR.createFromParcel(p);
+                        break;
+                    case "service_info":
+                        got = ServiceInfo.CREATOR.createFromParcel(p);
+                        check(((ServiceInfo) got).permission.equals("dev.acos.fixtures.ECHO"),
+                                "service_info permission");
+                        check(((ServiceInfo) got).flags == 0, "service_info flags");
+                        check(((ServiceInfo) got).applicationInfo != null,
+                                "service_info applicationInfo");
+                        break;
+                    case "instrumentation_info":
+                        got = InstrumentationInfo.CREATOR.createFromParcel(p);
+                        check(((InstrumentationInfo) got).targetPackage.equals("dev.acos.fixtures"),
+                                "instrumentation_info targetPackage");
+                        check(((InstrumentationInfo) got).functionalTest, "instrumentation_info functionalTest");
+                        break;
+                    case "permission_info":
+                        got = PermissionInfo.CREATOR.createFromParcel(p);
+                        check(((PermissionInfo) got).group.equals("android.permission-group.NETWORK"),
+                                "permission_info group");
+                        break;
+                    case "resolve_info":
+                        got = ResolveInfo.CREATOR.createFromParcel(p);
+                        check(((ResolveInfo) got).activityInfo != null, "resolve_info activityInfo");
+                        check(((ResolveInfo) got).filter == null, "resolve_info filter is null");
                         break;
                     default:
                         throw new AssertionError("unknown case " + name);

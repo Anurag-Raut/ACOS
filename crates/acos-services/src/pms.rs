@@ -531,6 +531,74 @@ impl ProviderInfo {
     }
 }
 
+/// Typed `ServiceInfo` values (the subset the framework and the fixtures read).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServiceInfo {
+    /// Fully-qualified service class name.
+    pub name: String,
+    /// Owning package.
+    pub package_name: String,
+    /// `processName`.
+    pub process_name: String,
+    /// `permission` (empty when the manifest declares none).
+    pub permission: String,
+    /// `exported`.
+    pub exported: bool,
+    /// `flags`.
+    pub flags: i32,
+    /// `mForegroundServiceType`.
+    pub foreground_service_type: i32,
+}
+
+impl ServiceInfo {
+    /// Encode in the full `ServiceInfo.writeToParcel` order (20 fields).
+    #[must_use]
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+        Parcelable::ordered(
+            "android.content.pm.ServiceInfo",
+            vec![
+                // ComponentInfo prefix
+                Value::Str8(Some(self.name.clone())),
+                Value::Str8(Some(self.package_name.clone())),
+                Value::Int(0),    // banner
+                Value::Str(None), // label
+                Value::Int(0),    // icon
+                Value::Int(0),    // labelRes
+                Value::Bundle(None),
+                Value::Int(0), // showUser
+                Value::Int(0), // showBadge
+                Value::Parcelable(app.to_parcelable()),
+                Value::Str8(Some(self.process_name.clone())),
+                Value::Str8(None),        // splitName
+                Value::StringArray(None), // attributionTags
+                Value::Int(0),            // descriptionRes
+                Value::Int(1),            // enabled
+                Value::Int(i32::from(self.exported)),
+                Value::Int(0), // directBootAware
+                // ServiceInfo
+                Value::Str8(opt(self.permission.is_empty(), self.permission.clone())),
+                Value::Int(self.flags),
+                Value::Int(self.foreground_service_type),
+            ],
+        )
+    }
+
+    /// Decode a typed parcelable produced by [`ServiceInfo::to_parcelable`].
+    #[must_use]
+    pub fn from_parcelable(p: &Parcelable) -> Option<Self> {
+        let f = p.fields()?;
+        Some(Self {
+            name: f.first()?.as_str()?.to_string(),
+            package_name: f.get(1)?.as_str()?.to_string(),
+            process_name: f.get(10)?.as_str()?.to_string(),
+            permission: f.get(17)?.as_str().unwrap_or_default().to_string(),
+            exported: f.get(15)?.as_int()? != 0,
+            flags: f.get(18)?.as_int()?,
+            foreground_service_type: f.get(19)?.as_int()?,
+        })
+    }
+}
+
 fn opt(empty: bool, value: String) -> Option<String> {
     if empty {
         None
@@ -714,6 +782,8 @@ pub struct PmsState {
     pub granted_permissions: Vec<String>,
     /// Declared content providers (`<provider>` + `android:authorities`).
     pub providers: Vec<ProviderInfo>,
+    /// Declared services (`<service>`).
+    pub services: Vec<ServiceInfo>,
     /// uid -> package.
     pub uid_packages: Vec<(i32, String)>,
     /// dex-load notifications (oneway, recorded).
@@ -756,6 +826,7 @@ impl PmsState {
             features: FeatureTable::default(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
             providers: Vec::new(),
+            services: Vec::new(),
             dex_loads: Vec::new(),
             installer_package: None,
             apk_path: apk,
@@ -814,6 +885,26 @@ impl PmsState {
                 });
             }
         }
+        let services: Vec<ServiceInfo> = manifest
+            .services
+            .iter()
+            .map(|c| {
+                let name = acos_apk::manifest::fq_name(&manifest.package, &c.name);
+                let process = c
+                    .process
+                    .clone()
+                    .unwrap_or_else(|| manifest.package.clone());
+                ServiceInfo {
+                    name,
+                    package_name: manifest.package.clone(),
+                    process_name: process,
+                    permission: c.permission.clone().unwrap_or_default(),
+                    exported: c.exported.unwrap_or(false),
+                    flags: 0,
+                    foreground_service_type: 0,
+                }
+            })
+            .collect();
         let version_code = manifest.version_code.unwrap_or(1) as i32;
         let version_name = manifest.version_name.clone().unwrap_or_else(|| "1.0".into());
         let package = PackageInfo {
@@ -833,6 +924,7 @@ impl PmsState {
             features: FeatureTable::default(),
             granted_permissions: requested_permissions,
             providers,
+            services,
             dex_loads: Vec::new(),
             installer_package: None,
             apk_path: path.to_path_buf(),
@@ -988,6 +1080,32 @@ impl ServiceObject for PmsService {
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
+            "getServiceInfo" => {
+                // `getServiceInfo(ComponentName, long flags, int userId)`.
+                let component = args.first().and_then(Value::as_parcelable);
+                let name = component
+                    .and_then(|p| p.field(1))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let service = state.services.iter().find(|s| s.name == name).cloned();
+                vec![match service {
+                    Some(s) => Value::TypedObject(s.to_parcelable(&state.app)),
+                    None => Value::TypedObject(Parcelable::Null),
+                }]
+            }
+            "getProviderInfo" => {
+                // `getProviderInfo(ComponentName, long flags, int userId)`.
+                let component = args.first().and_then(Value::as_parcelable);
+                let name = component
+                    .and_then(|p| p.field(1))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let provider = state.providers.iter().find(|p| p.name == name).cloned();
+                vec![match provider {
+                    Some(p) => Value::TypedObject(p.to_parcelable(&state.app)),
+                    None => Value::TypedObject(Parcelable::Null),
+                }]
+            }
             "getPackagesForUid" => {
                 let uid = args.first().and_then(Value::as_int).unwrap_or(FIXTURE_UID);
                 let packages = state.packages_for_uid(uid);
@@ -1016,7 +1134,16 @@ impl ServiceObject for PmsService {
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
                 vec![Value::Int(state.check_permission(permission))]
             }
-            "getInstrumentationInfoAsUser" => vec![Value::TypedObject(Parcelable::Null)],
+            // `acos-apk` does not parse `<instrumentation>` yet, so there is no
+            // manifest-backed `InstrumentationInfo` to serve. A structured
+            // `UNSUPPORTED_ANDROID_API` is honest rather than a fabricated null.
+            "getInstrumentationInfo" | "getInstrumentationInfoAsUser" => {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface: interface.to_string(),
+                    code: method.code,
+                    method: method.name.clone(),
+                })
+            }
             "getInstallerPackageName" => {
                 let package = args.first().and_then(Value::as_str);
                 match Self::lookup(&state, package) {
@@ -1043,9 +1170,21 @@ impl ServiceObject for PmsService {
                 cache_provider_list(state.providers.clone());
                 vec![Value::TypedObject(Parcelable::Null)]
             }
-            "resolveIntent" | "queryIntentActivities" | "queryIntentServices" => {
-                // No intent resolution is on the hello-views launch path.
+            "resolveIntent" | "queryIntentActivities" => {
+                // The launcher `ResolveInfo` is materialised by `pms_java` from
+                // the cached description, so the generic reply is a placeholder.
                 vec![Value::TypedObject(Parcelable::Null)]
+            }
+            // A service `ResolveInfo` uses the component marker `2` and a
+            // `ParceledListSlice` for `queryIntentServices`; neither is modelled
+            // by the activity-branch `ResolveInfo` spec yet. Structured
+            // `UNSUPPORTED` instead of an empty/false match.
+            "resolveService" | "queryIntentServices" => {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface: interface.to_string(),
+                    code: method.code,
+                    method: method.name.clone(),
+                })
             }
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
@@ -1083,6 +1222,18 @@ mod tests {
         }
     }
 
+    fn sample_service() -> ServiceInfo {
+        ServiceInfo {
+            name: "dev.acos.fixtures.svcprovider.EchoService".into(),
+            package_name: "dev.acos.fixtures.svcprovider".into(),
+            process_name: "dev.acos.fixtures.svcprovider".into(),
+            permission: "dev.acos.fixtures.ECHO".into(),
+            exported: false,
+            flags: 0,
+            foreground_service_type: 0,
+        }
+    }
+
     #[test]
     fn provider_round_trips_through_the_prefix_codec() {
         let provider = sample_provider();
@@ -1090,6 +1241,15 @@ mod tests {
         let decoded =
             ProviderInfo::from_parcelable(&provider.to_parcelable(&app)).expect("decoded");
         assert_eq!(decoded, provider);
+    }
+
+    #[test]
+    fn service_round_trips_through_the_full_codec() {
+        let service = sample_service();
+        let app = AppInfo::hello_views_fallback(Path::new("hello-views.apk"));
+        let decoded =
+            ServiceInfo::from_parcelable(&service.to_parcelable(&app)).expect("decoded");
+        assert_eq!(decoded, service);
     }
 
     #[test]
@@ -1118,5 +1278,11 @@ mod tests {
             .expect("fixture authority declared in the manifest");
         assert_eq!(provider.name, "dev.acos.fixtures.svcprovider.EchoProvider");
         assert!(!provider.exported, "the fixture provider is not exported");
+        let service = state
+            .services
+            .iter()
+            .find(|s| s.name == "dev.acos.fixtures.svcprovider.EchoService")
+            .expect("fixture service declared in the manifest");
+        assert!(!service.exported, "the fixture service is not exported");
     }
 }

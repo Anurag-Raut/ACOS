@@ -20,6 +20,15 @@ public interface IPackageManager {
     ActivityInfo getActivityInfo(ComponentName className, long flags, int userId)
             throws RemoteException;
 
+    ServiceInfo getServiceInfo(ComponentName className, long flags, int userId)
+            throws RemoteException;
+
+    ProviderInfo getProviderInfo(ComponentName className, long flags, int userId)
+            throws RemoteException;
+
+    InstrumentationInfo getInstrumentationInfoAsUser(ComponentName className, int flags, int userId)
+            throws RemoteException;
+
     ResolveInfo resolveIntent(Intent intent, String resolvedType, long flags, int userId)
             throws RemoteException;
 

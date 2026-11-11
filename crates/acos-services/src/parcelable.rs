@@ -420,6 +420,135 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `ServiceInfo.writeToParcel` (API 34): the `ComponentInfo` prefix splice
+    // then `permission`, `flags` and `mForegroundServiceType`. The DEX confirms
+    // the `flags` write is second (the old prefix codec guessed `exported`).
+    ParcelableSpec {
+        class: "android.content.pm.ServiceInfo",
+        fields: &[
+            // ComponentInfo prefix (super.writeToParcel splice)
+            FieldOp::Str8,        // PackageItemInfo.name
+            FieldOp::Str8,        // packageName
+            FieldOp::Int,         // banner
+            FieldOp::CharSequence, // label
+            FieldOp::Int,         // icon
+            FieldOp::Int,         // labelRes
+            FieldOp::Bundle,      // metaData
+            FieldOp::Int,         // showUser
+            FieldOp::Int,         // showBadge
+            FieldOp::Nested("android.content.pm.ApplicationInfo"),
+            FieldOp::Str8,        // processName
+            FieldOp::Str8,        // splitName
+            FieldOp::StringArray, // attributionTags
+            FieldOp::Int,         // descriptionRes
+            FieldOp::Int,         // enabled
+            FieldOp::Int,         // exported (ComponentInfo)
+            FieldOp::Int,         // directBootAware
+            // ServiceInfo
+            FieldOp::Str8, // permission
+            FieldOp::Int,  // flags
+            FieldOp::Int,  // mForegroundServiceType
+        ],
+        verification: Verification::Full,
+    },
+    // `InstrumentationInfo.writeToParcel` (API 34): the `PackageItemInfo`
+    // prefix then 17 fields. `splitDependencies` is a `SparseArray` (ACOS
+    // models only its `null` encoding; a non-null array is structured
+    // `UnsupportedParcelable`).
+    ParcelableSpec {
+        class: "android.content.pm.InstrumentationInfo",
+        fields: &[
+            // PackageItemInfo prefix (super.writeToParcel splice)
+            FieldOp::Str8,        // PackageItemInfo.name
+            FieldOp::Str8,        // packageName
+            FieldOp::Int,         // banner
+            FieldOp::CharSequence, // label
+            FieldOp::Int,         // icon
+            FieldOp::Int,         // labelRes
+            FieldOp::Bundle,      // metaData
+            FieldOp::Int,         // showUser
+            FieldOp::Int,         // showBadge
+            // InstrumentationInfo
+            FieldOp::Str8,        // targetPackage
+            FieldOp::Str8,        // targetProcesses
+            FieldOp::Str8,        // sourceDir
+            FieldOp::Str8,        // publicSourceDir
+            FieldOp::StringArray, // splitNames
+            FieldOp::StringArray, // splitSourceDirs
+            FieldOp::StringArray, // splitPublicSourceDirs
+            FieldOp::SparseArray, // splitDependencies
+            FieldOp::Str8,        // dataDir
+            FieldOp::Str8,        // deviceProtectedDataDir
+            FieldOp::Str8,        // credentialProtectedDataDir
+            FieldOp::Str8,        // primaryCpuAbi
+            FieldOp::Str8,        // secondaryCpuAbi
+            FieldOp::Str8,        // nativeLibraryDir
+            FieldOp::Str8,        // secondaryNativeLibraryDir
+            FieldOp::Int,         // handleProfiling
+            FieldOp::Int,         // functionalTest
+        ],
+        verification: Verification::Full,
+    },
+    // `PermissionInfo.writeToParcel` (API 34): the `PackageItemInfo` prefix
+    // then 8 fields. `knownCerts` is a `Parcelling.ForStringSet`; the scanner
+    // only sees its leading `writeInt` (a null set writes `-1`), so the spec
+    // models the null form and a non-null set is a documented gap.
+    ParcelableSpec {
+        class: "android.content.pm.PermissionInfo",
+        fields: &[
+            // PackageItemInfo prefix (super.writeToParcel splice)
+            FieldOp::Str8,        // PackageItemInfo.name
+            FieldOp::Str8,        // packageName
+            FieldOp::Int,         // banner
+            FieldOp::CharSequence, // label
+            FieldOp::Int,         // icon
+            FieldOp::Int,         // labelRes
+            FieldOp::Bundle,      // metaData
+            FieldOp::Int,         // showUser
+            FieldOp::Int,         // showBadge
+            // PermissionInfo
+            FieldOp::Int,          // protectionLevel
+            FieldOp::Int,          // flags
+            FieldOp::Str8,         // group
+            FieldOp::Str8,         // backgroundPermission
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // requestRes
+            FieldOp::CharSequence, // nonLocalizedDescription
+            FieldOp::Int,          // knownCerts (ForStringSet leading int)
+        ],
+        verification: Verification::Full,
+    },
+    // `ResolveInfo.writeToParcel` (API 34): a component-type marker selects one
+    // of `ActivityInfo`/`ServiceInfo`/`ProviderInfo` (1/2/3), then an optional
+    // `IntentFilter`, then the scalar match metadata. ACOS models the launcher
+    // `ActivityInfo` branch (`Cond` writes the marker `1`); the `ServiceInfo`
+    // (`2`) and `ProviderInfo` (`3`) branches share the same marker slot and are
+    // not expressible with `Cond`. `IntentFilter` has no codec yet, so a present
+    // filter is a structured `UnsupportedParcelable`.
+    ParcelableSpec {
+        class: "android.content.pm.ResolveInfo",
+        fields: &[
+            FieldOp::Cond(&[FieldOp::Nested("android.content.pm.ActivityInfo")]),
+            FieldOp::Cond(&[FieldOp::Nested("android.content.IntentFilter")]),
+            FieldOp::Int,          // priority
+            FieldOp::Int,          // preferredOrder
+            FieldOp::Int,          // match
+            FieldOp::Int,          // specificIndex
+            FieldOp::Int,          // labelRes
+            FieldOp::CharSequence, // nonLocalizedLabel
+            FieldOp::Int,          // icon
+            FieldOp::Str8,         // resolvePackageName
+            FieldOp::Int,          // targetUserId
+            FieldOp::Int,          // system
+            FieldOp::Int,          // noResourceId
+            FieldOp::Int,          // iconResourceId
+            FieldOp::Int,          // handleAllWebDataURI
+            FieldOp::Int,          // mAutoResolutionAllowed
+            FieldOp::Int,          // isInstantAppAvailable
+            FieldOp::Int,          // userHandle identifier
+        ],
+        verification: Verification::Full,
+    },
     ParcelableSpec {
         class: "android.app.ContentProviderHolder",
         fields: &[

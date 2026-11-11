@@ -105,6 +105,130 @@ fn persistable_bundle_value() -> Parcelable {
     )
 }
 
+/// A `ServiceInfo` in the exact API-34 `writeToParcel` order, with the nested
+/// `ComponentInfo.applicationInfo` payload from the hello-views `AppInfo`.
+fn service_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
+    acos_services::pms::ServiceInfo {
+        name: "dev.acos.fixtures.svcprovider.EchoService".into(),
+        package_name: "dev.acos.fixtures.svcprovider".into(),
+        process_name: "dev.acos.fixtures.svcprovider".into(),
+        permission: "dev.acos.fixtures.ECHO".into(),
+        exported: false,
+        flags: 0,
+        foreground_service_type: 0,
+    }
+    .to_parcelable(app)
+}
+
+/// An `InstrumentationInfo` in the exact API-34 `writeToParcel` order.
+fn instrumentation_info_value() -> Parcelable {
+    Parcelable::ordered(
+        "android.content.pm.InstrumentationInfo",
+        vec![
+            // PackageItemInfo prefix
+            Value::Str8(Some("dev.acos.fixtures.EchoInstrumentation".into())),
+            Value::Str8(Some("dev.acos.fixtures".into())),
+            Value::Int(0),    // banner
+            Value::Str(None), // label
+            Value::Int(0),    // icon
+            Value::Int(0),    // labelRes
+            Value::Bundle(None),
+            Value::Int(0), // showUser
+            Value::Int(0), // showBadge
+            // InstrumentationInfo
+            Value::Str8(Some("dev.acos.fixtures".into())), // targetPackage
+            Value::Str8(None),                          // targetProcesses
+            Value::Str8(Some("/data/app/base.apk".into())), // sourceDir
+            Value::Str8(Some("/data/app/base.apk".into())), // publicSourceDir
+            Value::StringArray(None),                   // splitNames
+            Value::StringArray(None),                   // splitSourceDirs
+            Value::StringArray(None),                   // splitPublicSourceDirs
+            Value::List(None),                          // splitDependencies (SparseArray null)
+            Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // dataDir
+            Value::Str8(Some("/data/user_de/0/dev.acos.fixtures".into())), // deviceProtectedDataDir
+            Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // credentialProtectedDataDir
+            Value::Str8(None), // primaryCpuAbi
+            Value::Str8(None), // secondaryCpuAbi
+            Value::Str8(Some("/data/app/lib".into())), // nativeLibraryDir
+            Value::Str8(None), // secondaryNativeLibraryDir
+            Value::Int(0),     // handleProfiling
+            Value::Int(1),     // functionalTest
+        ],
+    )
+}
+
+/// A `PermissionInfo` in the exact API-34 `writeToParcel` order with a null
+/// `knownCerts` set.
+fn permission_info_value() -> Parcelable {
+    Parcelable::ordered(
+        "android.content.pm.PermissionInfo",
+        vec![
+            // PackageItemInfo prefix
+            Value::Str8(Some("android.permission.INTERNET".into())),
+            Value::Str8(Some("android".into())),
+            Value::Int(0),    // banner
+            Value::Str(None), // label
+            Value::Int(0),    // icon
+            Value::Int(0),    // labelRes
+            Value::Bundle(None),
+            Value::Int(0), // showUser
+            Value::Int(0), // showBadge
+            // PermissionInfo
+            Value::Int(0), // protectionLevel
+            Value::Int(0), // flags
+            Value::Str8(Some("android.permission-group.NETWORK".into())), // group
+            Value::Str8(None), // backgroundPermission
+            Value::Int(0),     // descriptionRes
+            Value::Int(0),     // requestRes
+            Value::Str(None),  // nonLocalizedDescription
+            Value::Int(0),     // knownCerts (empty ForStringSet: `unparcel` maps -1 to empty)
+        ],
+    )
+}
+
+/// A launcher `ResolveInfo` in the exact API-34 `writeToParcel` order: the
+/// activity branch and a null `IntentFilter`.
+fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
+    let act = acos_services::pms::ActivityInfo {
+        name: "dev.acos.fixtures.helloviews.MainActivity".into(),
+        package_name: app.package_name.clone(),
+        launch_mode: 0,
+        flags: 0,
+        theme: 0,
+        exported: true,
+        parent_activity_name: String::new(),
+    };
+    Parcelable::ordered(
+        "android.content.pm.ResolveInfo",
+        vec![
+            Value::Cond {
+                present: true,
+                values: vec![Value::Parcelable(act.to_parcelable(app))],
+            },
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            },
+            Value::Int(0),        // priority
+            Value::Int(0),        // preferredOrder
+            Value::Int(0x10_0000), // match
+            Value::Int(-1),       // specificIndex
+            Value::Int(0),        // labelRes
+            Value::Str(None),     // nonLocalizedLabel
+            Value::Int(0),        // icon
+            Value::Str8(None),    // resolvePackageName
+            Value::Int(0),        // targetUserId
+            Value::Int(0),        // system
+            Value::Int(0),        // noResourceId
+            Value::Int(0),        // iconResourceId
+            Value::Int(0),        // handleAllWebDataURI
+            Value::Int(0),        // mAutoResolutionAllowed
+            Value::Int(0),        // isInstantAppAvailable
+            Value::Int(-2),       // userHandle == USER_CURRENT
+        ],
+    )
+}
+
 fn encoded(value: &Parcelable) -> Vec<u8> {
     let mut parcel = acos_parcel::Parcel::new();
     parcelable::write_payload(&mut parcel, value).expect("encode payload");
@@ -194,6 +318,11 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         last_update_time: 0,
     };
     let pkg_bytes = encoded(&pkg.to_parcelable());
+    // W155-A: the PackageInfo member arrays + intent resolution specs.
+    let service_bytes = encoded(&service_info_value(&app));
+    let instrumentation_bytes = encoded(&instrumentation_info_value());
+    let permission_bytes = encoded(&permission_info_value());
+    let resolve_bytes = encoded(&resolve_info_value(&app));
 
     // Reverse: feed the Rust bytes to the real createFromParcel, then compare
     // the real `writeToParcel` re-emission byte-for-byte.
@@ -203,6 +332,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
+        format!("service_info={}", hex(&service_bytes)),
+        format!("instrumentation_info={}", hex(&instrumentation_bytes)),
+        format!("permission_info={}", hex(&permission_bytes)),
+        format!("resolve_info={}", hex(&resolve_bytes)),
     ];
     let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
     assert!(
@@ -218,6 +351,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "application_info",
         "activity_info",
         "package_info",
+        "service_info",
+        "instrumentation_info",
+        "permission_info",
+        "resolve_info",
     ] {
         assert!(
             outcome.stdout.contains(&format!("read.{name}=ok")),
@@ -232,6 +369,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
+        ("service_info", &service_bytes),
+        ("instrumentation_info", &instrumentation_bytes),
+        ("permission_info", &permission_bytes),
+        ("resolve_info", &resolve_bytes),
     ] {
         assert_eq!(
             roundtrips.get(name).map(String::as_str),
