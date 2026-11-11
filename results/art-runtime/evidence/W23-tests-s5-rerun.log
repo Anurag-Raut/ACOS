@@ -1,0 +1,60 @@
+warning: acos-binder-peer@0.1.0: built /home/Qui/Projects/acos/.cache/w23-target/debug/build/acos-binder-peer-289bbf28a19eb8fb/out/libacos_binder_driver.so
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:2160:4
+     |
+2160 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:686:20
+    |
+686 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+686 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: `acos-art` (lib) generated 2 warnings
+warning: unused variable: `rest`
+  --> crates/acos-art/src/main.rs:96:13
+   |
+96 |     let mut rest: Vec<String> = Vec::new();
+   |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-art/src/main.rs:96:9
+   |
+96 |     let mut rest: Vec<String> = Vec::new();
+   |         ----^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:132:13
+    |
+132 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-art` (bin "acos-art") generated 3 warnings (run `cargo fix --bin "acos-art"` to apply 2 suggestions)
+    Finished `test` profile [unoptimized] target(s) in 0.05s
+     Running tests/sandbox_s5.rs (.cache/w23-target/debug/deps/sandbox_s5-84c12bb3a90a439a)
+
+running 1 test
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.04s
+

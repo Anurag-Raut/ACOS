@@ -1,0 +1,239 @@
+{
+  "request_id": "req_3078d7_18e72253b24a5329",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_rn-hello",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W23-artifacts/w21-rn-hello",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.rnhello",
+        "path": "fixtures/build/apps/rn-hello.apk",
+        "sha256": "9ddb7acfa0912324aee65aba41014ae3f03d7d5a8b0af91ceebfa75b3090f6da"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W23-artifacts/w21-rn-hello",
+        "engine_report": "results/art-runtime/evidence/W23-artifacts/w21-rn-hello/engine.json",
+        "verdict": "results/art-runtime/evidence/W23-artifacts/w21-rn-hello/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T23:45:22.976Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/rn-hello.apk",
+        "apk_sha256": "9ddb7acfa0912324aee65aba41014ae3f03d7d5a8b0af91ceebfa75b3090f6da",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w21-rn-hello.yaml",
+        "scenario_sha256": "249c42d859962e34f665d956b09c17c1139d8ec38708978028ba11fef4067904"
+      },
+      "request_id": "req_3078d7_18e72253b24a5329",
+      "resources": {
+        "events": 112,
+        "frames_captured": 5,
+        "memory_mib": 77,
+        "peak_rss_bytes": 81125376,
+        "sessions": 1,
+        "steps": 5,
+        "wall_ms": 1075
+      },
+      "scenario": {
+        "name": "w21-rn-hello",
+        "path": "scenarios/w21-rn-hello.yaml",
+        "sha256": "249c42d859962e34f665d956b09c17c1139d8ec38708978028ba11fef4067904"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_rn-hello",
+      "started_at": "2026-11-11T23:45:21.901Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 534,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 1,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "text",
+              "matched_node_ids": [
+                "n7_"
+              ],
+              "passed": true
+            }
+          ],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-assert_text.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 2,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "assert_text"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "text",
+              "matched_node_ids": [
+                "n8_"
+              ],
+              "passed": true
+            }
+          ],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/03-assert_text.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 3,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "assert_text"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 524,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/04-capture.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 4,
+          "provenance": {
+            "frame": "host-observed"
+          },
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "results/art-runtime/evidence/W23-artifacts/w21-rn-hello/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 1075,
+    "peak_rss_bytes": 81125376
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

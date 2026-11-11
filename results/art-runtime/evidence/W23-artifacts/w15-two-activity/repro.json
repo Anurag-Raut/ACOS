@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/two-activity.apk",
+  "apk_sha256": "ef9c4c4cabd4f5deb809bf30b7586562573731ed2805ad3f3e3718edb39cfa33",
+  "scenario_path": "scenarios/w15-two-activity.yaml",
+  "scenario_sha256": "e030c28b36511baa9fa9fcd59171d21433fc9338988e29ec6c2eaba8fdb3a514",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

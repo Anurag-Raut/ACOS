@@ -1,0 +1,40 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+program                        pass    exit   exp wall_ms notes
+/home/Qui/Projects/acos/.cache/art-locks/data-W23-3158749/shim/artshim.c:95:13: warning: unused function 'sys6' [-Wunused-function]
+   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/Projects/acos/.cache/art-locks/data-W23-3158749/shim/artshim.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
+  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+01_hello                       PASS       0     0      62 
+02_int_arith                   PASS       0     0      62 
+03_long_arith                  PASS       0     0      55 
+04_float_double                PASS       0     0      55 
+05_branches_loops              PASS       0     0      60 
+06_switch                      PASS       0     0      60 
+07_static_methods_recursion    PASS       0     0      57 
+08_arrays                      PASS       0     0      55 
+09_strings                     PASS       0     0      57 
+10_objects_fields              PASS       0     0      55 
+11_inheritance_virtual         PASS       0     0      60 
+12_interfaces                  PASS       0     0      55 
+13_exceptions                  PASS       0     0      55 
+14_instanceof_casts            PASS       0     0      57 
+15_inner_lambda                PASS       0     0      55 
+16_enums                       PASS       0     0      60 
+17_generics_collections        PASS       0     0      62 
+18_string_format_misc          PASS       0     0      55 
+19_threads_sync                PASS       0     0      75 
+20_uncaught                    PASS       1     1      55 
+21_regex_basic                 PASS       0     0      57 
+22_regex_advanced              PASS       0     0      60 
+23_regex_split_replace         PASS       0     0      62 
+24_zip_roundtrip               PASS       0     0      60 
+25_security_digest             PASS       0     0      60 
+26_regex_matrix                PASS       0     0      62 
+27_annotations_reflection      PASS       0     0      60 
+28_sqlite_basic                skip       -     -       - no dex built
+
+27/27 pass, 0 fail (1 skipped)
+fatal ART log entries recorded: 0

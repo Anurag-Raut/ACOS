@@ -62,6 +62,19 @@ ROOTS = [
     ("com.facebook.fresco", "fresco", "3.6.0"),
     ("com.facebook.fresco", "imagepipeline-okhttp3", "3.6.0"),
     ("com.facebook.fresco", "middleware", "3.6.0"),
+    # OkHttp is likewise `optional` in react-android's POM, but the Fresco module
+    # that RN initializes on every native-modules queue uses it at runtime.
+    # `okhttp3.JavaNetCookieJar` is NOT in the `okhttp` jar (4.9.2 or 4.12.0); it
+    # lives in `okhttp-urlconnection`. Without that artifact the DEX keeps only
+    # the type reference, `FrescoModule.initialize` throws
+    # `NoClassDefFoundError: Failed resolution of: Lokhttp3/JavaNetCookieJar;` on
+    # the mqt_native_modules thread, and every later UIManager/JS->native call is
+    # posted to a dead queue (W23: ReactRootView stayed empty with JS running).
+    # Both are pinned to the 4.9.2 the react-android 0.81.4 POM declares, so the
+    # family and okio 2.9.0 stay mutually consistent (a cached 4.12.0 `okhttp`
+    # core against okio 2.9.0 is not a combination RN ever resolves).
+    ("com.squareup.okhttp3", "okhttp", "4.9.2"),
+    ("com.squareup.okhttp3", "okhttp-urlconnection", "4.9.2"),
     # `androidx.activity:activity` declares `lifecycle-viewmodel-savedstate` as a
     # `compile` dependency, and `ComponentActivity.<init>` calls
     # `SavedStateHandleSupport.enableSavedStateHandles`. Without that artifact the

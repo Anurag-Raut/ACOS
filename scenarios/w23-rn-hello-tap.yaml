@@ -1,0 +1,67 @@
+# W23: rn-hello renders and reacts — the JS round trip through Paper's
+# UIManager batch, on real ART.
+#
+# W21 recorded the mount wall. W23 found its first deviation: the fixture APK's
+# DEX had only a *reference* to `okhttp3.JavaNetCookieJar` (the class lives in
+# okhttp-urlconnection, which is `optional` in react-android's POM and therefore
+# was never staged). `FrescoModule.initialize` threw
+# `NoClassDefFoundError: Failed resolution of: Lokhttp3/JavaNetCookieJar;` on the
+# `mqt_native_modules` thread, that Looper died, and every later UIManager call
+# from JS was posted to a dead queue — hence an empty ReactRootView even though
+# the bundle ran. With the artifact staged the tree mounts
+# (`ReactTextView='Hello ACOS'`), the C1 buffer draws it, and this scenario
+# checks the other half: a tap on the JS Button must reach React and repaint.
+#
+# Coordinates are display/screen space (the guest tree's `bounds`): the decor is
+# offset by the 128 px status bar, so the Button (window y 1103..1196) is
+# display y 1231..1324, centre (540, 1277). `w21-rn-hello.yaml`'s tap at
+# (540, 1100) is 150 px too high and cannot hit it.
+version: 1
+name: w23-rn-hello-tap
+description: >-
+  Launch rn-hello on real ART (Hermes bundle, legacy Paper UIManager), tap the
+  JS Button at its live bounds and require the React state update to repaint:
+  "count: 1" in the tree and a new C1 buffer.
+app: fixtures/build/apps/rn-hello.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {text: {exact: "Hello ACOS"}}
+      timeout_ms: 30000
+
+  - tap:
+      x: 540
+      y: 1277
+
+  - wait_for:
+      selector: {text: {exact: "count: 1"}}
+      timeout_ms: 15000
+
+  - assert_text:
+      selector: {text: {exact: "count: 1"}}
+      text: {exact: "count: 1"}
+
+  - capture:
+      name: rn-hello-tapped
+      format: png
+      fresh: true

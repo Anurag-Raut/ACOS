@@ -1,25 +1,33 @@
-# W21: rn-hello after the guest-side priority adapter.
+# W21/W23: rn-hello mounts — the live teeth for the React surface.
 #
-# W20's first error was `create_react_context` dying with
+# History. W20's first error was `create_react_context` dying with
 # `SecurityException: No permission to set the priority of 17`
-# (`setpriority(-4)` refused by the host's hard `RLIMIT_NICE=0`). W21 adds the
-# guest-only clamp in the LD_PRELOAD shim (`crates/acos-art/shim/artshim.c`), so
-# the thread lives. The bundle now loads (Hermes) and the JS entry point runs
-# (`ReactNativeJS: Running "rnhello"`).
+# (`setpriority(-4)` refused by the host's hard `RLIMIT_NICE=0`); W21 added the
+# guest-only clamp in the LD_PRELOAD shim (`crates/acos-art/shim/artshim.c`) so
+# the thread lives, the Hermes bundle loads and the JS entry point runs
+# (`ReactNativeJS: Running "rnhello"`). The surface still stayed empty.
 #
-# W21 measurement: the React surface still has no children after 20 s (see
-# results/art-runtime/W21.md) and the first ERROR logged after the JS entry is
-# libandroidfw `Invalid resource ID 0x0000000b.` (x2, empty tag, from
-# AssetManager2::FindEntry). This scenario is the live teeth for the mount: it
-# gives the UI thread a traversal (one tap) and then requires the app's own text.
-# It must FAIL honestly until that wall is fixed; it is not a pass-by-relaxation
-# row.
+# W23 found the first deviation: this fixture's DEX referenced
+# `okhttp3.JavaNetCookieJar` but did not define it (the class lives in
+# `okhttp-urlconnection`, which is `optional` in react-android's POM). Fresco's
+# module initializer therefore threw `NoClassDefFoundError` on the
+# `mqt_native_modules` thread, killing that Looper; every UIManager call JS made
+# afterwards was posted to a dead queue, so no view batch was ever dispatched.
+# With the artifact staged (`tools/rn-hello-deps.py`) the tree mounts. The
+# `Invalid resource ID 0x0000000b` lines W21 recorded were this launcher's own
+# view-walk probe resolving RN's `View.generateViewId()` ids, not an app error;
+# the probe now skips ids without a package byte.
+#
+# The tap this scenario used to perform (display y=1100) was a miss — the JS
+# Button sits at display y 1231..1324 — so it only proved input delivery. The
+# correct tap and the JS state round trip are `scenarios/w23-rn-hello-tap.yaml`;
+# this row is the mount: the app's own text plus a C1 frame that shows it.
 version: 1
 name: w21-rn-hello
 description: >-
-  Launch rn-hello on real ART, tap the surface to force a traversal, then wait
-  for the JS-rendered text "Hello ACOS". Honest pre-fix expectation: TIMEOUT /
-  empty ReactRootView (see results/art-runtime/W21.md §2).
+  Launch rn-hello on real ART (Hermes bundle, legacy Paper UIManager) and
+  require the JS-rendered tree ("Hello ACOS" and the Button title) plus a fresh
+  C1 buffer capture.
 app: fixtures/build/apps/rn-hello.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -43,17 +51,17 @@ steps:
       activity: dev.acos.fixtures.rnhello/.MainActivity
       clear_state: true
 
-  - tap:
-      x: 540
-      y: 1100
-
   - wait_for:
       selector: {text: {exact: "Hello ACOS"}}
-      timeout_ms: 8000
+      timeout_ms: 30000
 
   - assert_text:
-      selector: {text: {exact: "Hello ACOS"}}
-      text: {exact: "Hello ACOS"}
+      selector: {text: {exact: "React Native + Hermes"}}
+      text: {exact: "React Native + Hermes"}
+
+  - assert_text:
+      selector: {text: {exact: "TAP ME"}}
+      text: {exact: "TAP ME"}
 
   - capture:
       name: rn-hello-js

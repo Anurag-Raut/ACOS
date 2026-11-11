@@ -1,0 +1,34 @@
+{
+  "assertions": [
+    {
+      "kind": "text",
+      "matched_node_ids": [
+        "n7_"
+      ],
+      "passed": true
+    }
+  ],
+  "duration_ms": 2,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-assert_text.json"
+    }
+  ],
+  "frame_seq": 1,
+  "index": 1,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_text",
+  "trust": "trusted"
+}

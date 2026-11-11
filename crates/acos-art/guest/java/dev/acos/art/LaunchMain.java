@@ -314,12 +314,33 @@ public final class LaunchMain {
     static String sCountText = "<none>";
     static String sIncBounds = "<none>";
 
+    /**
+     * W23: only ask the resource table for names of ids that can carry a
+     * package id.
+     *
+     * <p>Android resource ids are {@code 0xPPTTEEEE} (package/type/entry); a
+     * package byte of 0 is not a resource id at all. Runtime ids produced by
+     * {@link View#generateViewId()} start at 1 and stay below 0x01000000, and
+     * React Native tags every view it creates with one. Resolving those through
+     * {@code Resources} makes libandroidfw log one ERROR per lookup
+     * (`AssetManager2::FindEntry`: "Invalid resource ID 0x%08x."), so the probe
+     * itself produced ~14 spurious error lines per 50 ms sample of an RN app
+     * (W23 measured 7 generated ids x 2 lookups x 327 samples = 4578 lines) and
+     * they looked like an app failure in every log review. On a device the same
+     * call throws {@code NotFoundException}, which is why the probe already
+     * treated it as "no name"; skipping the lookup keeps the tree identical and
+     * stops the probe from writing ERROR-level lines it did not earn.
+     */
+    static boolean isResourceId(int id) {
+        return id != View.NO_ID && (id >>> 24) != 0;
+    }
+
     static void walkViews(View v, int depth, StringBuilder tree) {
         try {
             String idName = "";
             try {
                 int id = v.getId();
-                if (id != View.NO_ID) {
+                if (isResourceId(id)) {
                     idName = v.getResources().getResourceEntryName(id);
                 }
             } catch (Throwable ignored) {
@@ -483,7 +504,7 @@ public final class LaunchMain {
         } catch (Throwable ignored) {
         }
         String idName = "";
-        if (id != View.NO_ID) {
+        if (isResourceId(id)) {
             try {
                 idName = v.getResources().getResourceName(id);
             } catch (Throwable t) {

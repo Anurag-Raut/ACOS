@@ -1,0 +1,223 @@
+--------- beginning of main
+1794440752140      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794440752140      2  I : Using CollectorTypeCC GC.
+1794440752140      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794440752140      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794440752140      5  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794440752140      6  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794440752140      7  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794440752140      8  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794440752140      9  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794440752140     10  D nativeloader: InitExtendedPublicLibraries: 
+1794440752140     11  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794440752140     12  D nativeloader: InitProductPublicLibraries: 
+1794440752140     13  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794440752140     14  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 1000; state: ENABLED
+1794440752140     15  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 1000; state: ENABLED
+1794440752140     16  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794440752140     17  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794440752140     18  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 1000; state: ENABLED
+1794440752140     19  W ziparchive: Unable to open '/data/app/rn-hello.dm': No such file or directory
+1794440752140     20  W ziparchive: Unable to open '/data/app/rn-hello.dm': No such file or directory
+1794440752140     21  D nativeloader: Configuring clns-2 for other apk /data/app/rn-hello.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.rnhello
+1794440752140     22  V GraphicsEnvironment: Currently set values for:
+1794440752140     23  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794440752140     24  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794440752140     25  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.rnhello: false
+1794440752140     26  V GraphicsEnvironment: dev.acos.fixtures.rnhello is not listed in per-application setting
+1794440752140     27  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794440752140     28  E SystemServiceRegistry: No service published for: netstats
+android.os.ServiceManager$ServiceNotFoundException: No service published for: netstats
+	at android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)
+	at android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+
+1794440752140     29  E AndroidRuntime: Error reporting WTF
+java.lang.IllegalArgumentException: bad request for android.app.IActivityManager::handleApplicationWtf: arg 3 (TypedObject(android.app.ApplicationErrorReport$ParcelableCrashInfo, nullable=true)): no parcelable codec for android.app.ApplicationErrorReport$ParcelableCrashInfo
+	at android.os.Parcel.createExceptionOrNull(Parcel.java:3061)
+	at android.os.Parcel.createException(Parcel.java:3041)
+	at android.os.Parcel.readException(Parcel.java:3024)
+	at android.os.Parcel.readException(Parcel.java:2966)
+	at android.app.IActivityManager$Stub$Proxy.handleApplicationWtf(IActivityManager.java:7248)
+	at com.android.internal.os.RuntimeInit.wtf(RuntimeInit.java:407)
+	at android.util.Log$1.onTerribleFailure(Log.java:129)
+	at android.util.Log.wtf(Log.java:337)
+	at android.util.Log.wtf(Log.java:326)
+	at android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+
+1794440752140     30  E AndroidRuntime: Original WTF:
+android.util.Log$TerribleFailure: No service published for: netstats
+	at android.util.Log.wtf(Log.java:332)
+	at android.util.Log.wtf(Log.java:326)
+	at android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+Caused by: android.os.ServiceManager$ServiceNotFoundException: No service published for: netstats
+	at android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)
+	at android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)
+	... 12 more
+
+1794440752140     31  E TrafficStats: TrafficStats not initialized, uid=1000
+1794440752140     32  I : WaitForGcToComplete blocked ClassLinker on Background for 8.642ms
+1794440752140     33  W SoLoader: Initializing SoLoader: 0
+1794440752140     34  W SoLoader: Recording new base apk path: /data/app/rn-hello.apk
+Previously recorded 0 base apk paths.
+1794440752140     35  I SoLoader: Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]
+1794440752140     36  I SoLoader: Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]
+1794440752140     37  I SoLoader: Preparing SO source: DirectApkSoSource[root = [/data/app/rn-hello.apk!/lib/x86_64]]
+1794440752140     38  I SoLoader: Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+1794440752140     39  I SoLoader: init finish: 4 SO sources prepared
+1794440752140     40  W SoLoader: SoLoader initialized: 8
+1794440752140     41  D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+1794440752140     42  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794440752140     43  D jni_lib_merge: Preparing 12 pre-merged libs (including stub)
+
+1794440752140     44  D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: a86b0ba0
+
+1794440752140     45  D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: a878c530
+
+1794440752140     46  D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: a879f0a0
+
+1794440752140     47  D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: a87c5fa0
+
+1794440752140     48  D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: a886da50
+
+1794440752140     49  D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: a88888c0
+
+1794440752140     50  D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: a888f150
+
+1794440752140     51  D jni_lib_merge: Preparing to register librninstance_so.  onload_func: a88ad450
+
+1794440752140     52  D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: a8958b90
+
+1794440752140     53  D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: a8960ac0
+
+1794440752140     54  D jni_lib_merge: Preparing to register libyoga_so.  onload_func: a8968140
+
+1794440752140     55  D jni_lib_merge: About to register 11 actual methods.
+
+1794440752140     56  W SoLoader: Running a recovery step for libappmodules.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libappmodules.so
+	existing SO sources: 
+		SoSource 0: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 1: DirectApkSoSource[root = [/data/app/rn-hello.apk!/lib/x86_64]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794440752140     57  W soloader.recovery.CheckBaseApkExists: Base apk exists: /data/app/rn-hello.apk
+1794440752140     58  W SoLoader: Running a recovery step for libappmodules.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libappmodules.so
+	existing SO sources: 
+		SoSource 0: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 1: DirectApkSoSource[root = [/data/app/rn-hello.apk!/lib/x86_64]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794440752140     59  E SoLoader: Checking /data/app missing libraries.
+1794440752140     60  E SoLoader: Successfully recovered from /data/app disk failure.
+1794440752140     61  W SoLoader: Running a recovery step for libappmodules.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libappmodules.so
+	existing SO sources: 
+		SoSource 0: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 1: DirectApkSoSource[root = [/data/app/rn-hello.apk!/lib/x86_64]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 3]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 3]
+	Native lib dir: /data/app-lib/x86_64
+
+1794440752140     62  E SoLoader: Checking /data/data missing libraries.
+1794440752140     63  E SoLoader: No libraries missing from unpacking so paths while recovering /data/data failure
+1794440752140     64  W SoLoader: Running a recovery step for libappmodules.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libappmodules.so
+	existing SO sources: 
+		SoSource 0: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 1: DirectApkSoSource[root = [/data/app/rn-hello.apk!/lib/x86_64]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 3]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 3]
+	Native lib dir: /data/app-lib/x86_64
+
+1794440752140     65  W SoLoader: Failed to recover
+1794440752140     66  W SoLoader: SoLoader already initialized
+1794440752140     67  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794440752140     68  D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+1794440752140     69  D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: b201d730
+
+1794440752140     70  D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: b2024db0
+
+1794440752140     71  D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: b2025540
+
+1794440752140     72  D jni_lib_merge: About to register 3 actual methods.
+
+1794440752140     73  W SoLoader: SoLoader already initialized
+1794440752140     74  W AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794440752140     75  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794440752140     76  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794440752140     77  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794440752140     78  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 1000; state: ENABLED
+1794440752140     79  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+1794440752140     80  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+1794440752140     81  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+1794440752140     82  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+1794440752140     83  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+1794440752140     84  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ProgressBarShadowNode
+1794440752140     85  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+1794440752140     86  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+1794440752140     87  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchShadowNode
+1794440752140     88  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+1794440752140     89  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewShadowNode
+1794440752140     90  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+1794440752140     91  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+1794440752140     92  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageShadowNode
+1794440752140     93  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+1794440752140     94  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+1794440752140     95  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+1794440752140     96  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextShadowNode
+1794440752140     97  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+1794440752140     98  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputShadowNode
+1794440752140     99  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+1794440752140    100  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextShadowNode
+1794440752140    101  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+1794440752140    102  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+1794440752140    103  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextShadowNode
+1794440752140    104  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+1794440752140    105  I ReactNativeJS: Running "rnhello"
+1794440752140    106  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/2024/10/23/the-new-architecture-is-here
+1794440752140    107  W unknown:ReactNative: Tried to update non-existent root tag: 1
+1794440752140    108  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 1000; state: ENABLED

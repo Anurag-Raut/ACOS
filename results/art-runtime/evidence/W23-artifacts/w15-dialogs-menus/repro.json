@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/dialogs-menus.apk",
+  "apk_sha256": "e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6",
+  "scenario_path": "scenarios/w15-dialogs-menus.yaml",
+  "scenario_sha256": "b13465c96afaf4c4cd67151f750de12c6d77c6c97dc0b17876f43fc9ecbb26ce",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
