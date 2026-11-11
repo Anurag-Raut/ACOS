@@ -6,7 +6,20 @@
 # This file deliberately has no `assert_log`/`back`/`rotate`/`type` steps: the
 # ART session protocol has no log, rotate or text-input command yet, so those
 # steps would be reported `unsupported` with the missing capability named.
-# Add them here only when the session exposes the command (results/art-runtime/V2.md).
+# Add them here only when the session exposes the command
+# (results/art-runtime/V2.md, results/art-runtime/V3-session-loop.md).
+#
+# Enforced by the engine seam, not by convention:
+#   * each `tap` must complete its own frame (`frame_seq` advances); a reused
+#     frame fails with NO_FRESH_FRAME / STALE_FRAME and is never a pass;
+#   * `capture: fresh` must complete a newer frame than the preceding step and
+#     carries the frame sequence + host capture time as evidence;
+#   * `assert_text` after `tap`/`reset` observes the frame that action produced
+#     (the engine does not invent a newer traversal for a pure assertion);
+#   * `reset` relaunches the Activity; the following `wait_for` binds the fresh
+#     frame, and the second tap must beat it;
+#   * the session's whole process group is torn down and checked (a survivor is
+#     reported, never silently ignored).
 version: 1
 name: v2-art-counter
 description: >-

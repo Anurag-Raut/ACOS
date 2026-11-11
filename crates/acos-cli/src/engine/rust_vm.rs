@@ -14,7 +14,9 @@ use acos_verify::{
     Backend, BackendError, InputAction, LaunchOutcome, SessionObservation,
 };
 
-use super::{Engine, Mode, ObservedFrame, SessionBackend, SessionCapabilities};
+use super::{
+    stale_frame, Engine, FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities,
+};
 
 /// The Rust VM (native runtime) behind the session protocol.
 ///
@@ -25,7 +27,7 @@ use super::{Engine, Mode, ObservedFrame, SessionBackend, SessionCapabilities};
 pub struct RustVmSession {
     backend: Box<dyn Backend>,
     package: String,
-    cached_png: Option<Vec<u8>>,
+    cached: Option<ObservedFrame>,
     frame_seq: u64,
 }
 
@@ -36,14 +38,13 @@ impl RustVmSession {
         RustVmSession {
             backend,
             package: String::new(),
-            cached_png: None,
+            cached: None,
             frame_seq: 0,
         }
     }
 
     fn observation(&mut self, observation: SessionObservation) -> SessionObservation {
-        self.cached_png = observation.screenshot_png.clone();
-        self.frame_seq = observation.frame.frame_seq;
+        self.frame_seq = self.frame_seq.max(observation.frame.frame_seq);
         observation
     }
 
@@ -54,10 +55,28 @@ impl RustVmSession {
         let png = observation
             .screenshot_png
             .clone()
-            .ok_or_else(|| BackendError::unsupported("screenshot", "the VM published no frame"))?;
+            .filter(|png| !png.is_empty())
+            .ok_or_else(|| {
+                super::live_frame_unavailable("the VM published no frame pixels for this tree")
+            })?;
+        let previous = self.frame_seq;
         let tree = observation.tree.clone();
-        self.observation(observation);
-        Ok(ObservedFrame { tree, png })
+        let captured_at_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let frame = FrameEvidence {
+            frame_seq: observation.frame.frame_seq,
+            previous_seq: previous,
+            captured_at_ms,
+            captured_at: acos_verify::clock::rfc3339_from_unix_ms(captured_at_ms as i64),
+            md5: observation.frame.content_hash.clone(),
+            png,
+        };
+        let observed = ObservedFrame { tree, frame };
+        self.cached = Some(observed.clone());
+        self.frame_seq = self.frame_seq.max(observed.frame_seq());
+        Ok(observed)
     }
 
     fn unsupported<T>(&self, capability: &str, detail: &str) -> Result<T, BackendError> {
@@ -111,8 +130,28 @@ impl SessionBackend for RustVmSession {
         if !outcome.package.is_empty() {
             self.package = outcome.package.clone();
         }
-        self.cached_png = outcome.screenshot_png.clone();
         self.frame_seq = outcome.frame.as_ref().map(|f| f.frame_seq).unwrap_or(0);
+        if let (Some(frame), Some(png)) = (&outcome.frame, &outcome.screenshot_png) {
+            let captured_at_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            self.cached = Some(ObservedFrame {
+                tree: acos_protocol::UiTree::new(
+                    frame.clone(),
+                    self.package.clone(),
+                    Vec::new(),
+                ),
+                frame: FrameEvidence {
+                    frame_seq: frame.frame_seq,
+                    previous_seq: 0,
+                    captured_at_ms,
+                    captured_at: acos_verify::clock::rfc3339_from_unix_ms(captured_at_ms as i64),
+                    md5: frame.content_hash.clone(),
+                    png: png.clone(),
+                },
+            });
+        }
         Ok(outcome)
     }
 
@@ -126,14 +165,26 @@ impl SessionBackend for RustVmSession {
     }
 
     fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
+        let previous = self.frame_seq;
         let observation = self.backend.capture()?;
-        self.observed(observation)
+        let observed = self.observed(observation)?;
+        if observed.frame_seq() <= previous {
+            return Err(stale_frame(previous, observed.frame_seq(), "capture"));
+        }
+        Ok(observed)
     }
 
-    fn screenshot(&mut self) -> Result<Vec<u8>, BackendError> {
-        self.cached_png
-            .clone()
-            .ok_or_else(|| BackendError::unsupported("screenshot", "the VM has published no frame"))
+    fn last_frame(&self) -> Option<ObservedFrame> {
+        self.cached.clone()
+    }
+
+    fn last_frame_seq(&self) -> u64 {
+        self.frame_seq
+    }
+
+    fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
+        // A fresh capture, not the last cached PNG.
+        Ok(self.capture()?.frame)
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {

@@ -1,0 +1,13 @@
+{
+  "index": 7,
+  "step": "reset",
+  "status": "pass",
+  "duration_ms": 0,
+  "assertions": [],
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/07-reset.json"
+    }
+  ]
+}

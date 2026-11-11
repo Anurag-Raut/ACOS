@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "type_text",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "key",
+        "reset",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/v3-session-loop",
+      "engine_report": "results/art-runtime/v3-session-loop/engine.json",
+      "verdict": "results/art-runtime/v3-session-loop/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": []
+  },
+  "request_id": "req_250ddc_18e70872ffde530e",
+  "verdict_status": "pass"
+}

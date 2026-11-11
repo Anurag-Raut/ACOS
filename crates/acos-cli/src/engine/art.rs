@@ -36,7 +36,8 @@ use acos_protocol::{FrameMeta, Selector};
 use acos_verify::{BackendError, LaunchOutcome};
 
 use super::{
-    key_code, ui_tree_from_json, Engine, Mode, ObservedFrame, SessionBackend, SessionCapabilities,
+    key_code, live_frame_unavailable, stale_frame, ui_tree_from_json, Engine, FrameEvidence, Mode,
+    ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport, LIVE_FRAME_UNAVAILABLE,
 };
 
 /// Largest single protocol line accepted (a full View tree fits easily).
@@ -58,8 +59,12 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
-    /// The newest frame seen, with the tree and PNG that belong to it.
+    /// The newest *bound* frame seen (tree and PNG of one traversal).
     cached: Option<CachedFrame>,
+    /// The highest frame sequence any reply has reported.
+    seen_seq: u64,
+    /// The process group the session child leads (its pid).
+    process_group: Option<i32>,
     closed: bool,
 }
 
@@ -68,6 +73,41 @@ struct CachedFrame {
     md5: String,
     png: Vec<u8>,
     tree: UiTree,
+    captured_at_ms: u64,
+    captured_at: String,
+}
+
+impl CachedFrame {
+    fn evidence(&self, previous_seq: u64) -> FrameEvidence {
+        FrameEvidence {
+            frame_seq: self.seq,
+            previous_seq,
+            captured_at_ms: self.captured_at_ms,
+            captured_at: self.captured_at.clone(),
+            md5: self.md5.clone(),
+            png: self.png.clone(),
+        }
+    }
+
+    fn observed(&self, previous_seq: u64) -> ObservedFrame {
+        ObservedFrame {
+            tree: self.tree.clone(),
+            frame: self.evidence(previous_seq),
+        }
+    }
+}
+
+/// Host milliseconds since the Unix epoch.
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// RFC 3339 UTC for a host millisecond timestamp.
+fn rfc3339(unix_ms: u64) -> String {
+    acos_verify::clock::rfc3339_from_unix_ms(unix_ms as i64)
 }
 
 impl ArtSession {
@@ -184,10 +224,30 @@ impl ArtSession {
             height: 2400,
             density: 420,
             cached: None,
+            seen_seq: 0,
+            process_group: Some(_pid as i32),
             closed: false,
         };
-        // The ready line is the protocol's first reply.
-        let ready = session.read_line(Duration::from_secs(90), "startup")?;
+        // The ready line is the protocol's first reply. If the session dies
+        // before it, there is no live frame at all: say so by name and keep the
+        // child's own stderr tail (the crash cause) in the error.
+        let ready = session
+            .read_line(Duration::from_secs(90), "startup")
+            .map_err(|error| match error {
+                BackendError::Error { code, detail } => BackendError::Error {
+                    code,
+                    detail: format!(
+                        "{LIVE_FRAME_UNAVAILABLE}: the ART session ended before its ready line \
+                         (no live frame exists): {detail}"
+                    ),
+                },
+                BackendError::Timeout { detail } => BackendError::Timeout {
+                    detail: format!(
+                        "{LIVE_FRAME_UNAVAILABLE}: the ART session produced no ready line: {detail}"
+                    ),
+                },
+                other => other,
+            })?;
         let ready: serde_json::Value = serde_json::from_str(&ready).map_err(|error| {
             BackendError::Error {
                 code: acos_protocol::ErrorCode::Internal,
@@ -311,8 +371,9 @@ impl ArtSession {
     /// Absorb a reply's frame: sequence, PNG bytes and tree, all or nothing.
     ///
     /// A reply that carries a `frame_seq` also carries that frame's PNG; a tree
-    /// reply carries the tree as well. A frame with no tree is not cached as an
-    /// observation (it would bind an older tree to newer pixels).
+    /// reply carries the tree as well. A tree-less reply (a pure `screenshot`)
+    /// only advances `seen_seq`; the bound tree keeps the sequence it was
+    /// captured with, so a tree can never be bound to newer pixels.
     fn absorb(&mut self, reply: &serde_json::Value) -> Result<(), BackendError> {
         let seq = reply
             .get("frame_seq")
@@ -328,23 +389,31 @@ impl ArtSession {
             Some(path) => read_png(Path::new(path))?,
             None => Vec::new(),
         };
+        self.seen_seq = self.seen_seq.max(seq);
         let Some(tree_value) = reply.get("tree") else {
-            // No tree in this reply (for example `key`); keep the cached tree
-            // only for the frame it was bound to. A newer frame without a tree
-            // is not turned into an observation.
+            // No tree in this reply (for example `key` or `screenshot`); keep the
+            // cached tree only for the frame it was bound to.
             if let Some(cached) = self.cached.as_mut() {
                 if cached.seq == seq && !png.is_empty() {
                     cached.png = png;
+                    if !md5.is_empty() {
+                        cached.md5 = md5;
+                    }
+                    cached.captured_at_ms = now_unix_ms();
+                    cached.captured_at = rfc3339(cached.captured_at_ms);
                 }
             }
             return Ok(());
         };
         let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
+        let captured_at_ms = now_unix_ms();
         self.cached = Some(CachedFrame {
             seq,
             md5,
             png,
             tree,
+            captured_at_ms,
+            captured_at: rfc3339(captured_at_ms),
         });
         Ok(())
     }
@@ -363,10 +432,17 @@ impl ArtSession {
         self.cached
             .as_ref()
             .map(|frame| frame.tree.clone())
-            .ok_or_else(|| BackendError::Unsupported {
-                capability: "ui.tree".into(),
-                detail: "the ART session has not produced a tree yet".into(),
+            .ok_or_else(|| {
+                live_frame_unavailable(
+                    "the ART session has not completed a live frame yet (no tree)",
+                )
             })
+    }
+
+    fn require_cached_frame(&self) -> Result<&CachedFrame, BackendError> {
+        self.cached.as_ref().ok_or_else(|| {
+            live_frame_unavailable("the ART session has not completed a live frame yet")
+        })
     }
 
     fn kill_group(&mut self) {
@@ -382,6 +458,38 @@ impl ArtSession {
             let _ = child.wait();
         }
         self.stdin = None;
+    }
+
+    /// Kill any process left in the session's group, even after the leader
+    /// exited: a guest that forked a helper must not outlive its session.
+    fn kill_process_group(&self) {
+        let Some(group) = self.process_group else {
+            return;
+        };
+        if processes_in_group(group).is_empty() {
+            return;
+        }
+        // SAFETY: `group` was the child's own process group id
+        // (`process_group(0)`), so `-group` names that group and no other.
+        unsafe {
+            libc::kill(-group, libc::SIGKILL);
+        }
+    }
+
+    /// Processes still alive in the session's process group.
+    ///
+    /// Scans `/proc/<pid>/stat` for the group id (field 5). Zombies count as
+    /// alive here: a process that has not been reaped still owns resources, and
+    /// the caller must see it rather than a clean report.
+    fn teardown_report(&self) -> TeardownReport {
+        let Some(group) = self.process_group else {
+            return TeardownReport::unverified();
+        };
+        TeardownReport {
+            process_group: Some(group),
+            survivors: processes_in_group(group),
+            verified: true,
+        }
     }
 }
 
@@ -416,23 +524,29 @@ impl SessionBackend for ArtSession {
     }
 
     fn launch(&mut self, _apk: &Path) -> Result<LaunchOutcome, BackendError> {
+        let previous = self.seen_seq;
         let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
         self.absorb(&reply)?;
-        let cached = self.cached.as_ref().ok_or_else(|| BackendError::Error {
-            code: acos_protocol::ErrorCode::Internal,
-            detail: "the ART session started but produced no frame".to_string(),
-        })?;
+        let cached = self.require_cached_frame()?;
+        let frame = cached.observed(previous);
         Ok(LaunchOutcome {
-            session_id: format!("s_art_{}", self.apk.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()),
+            session_id: format!(
+                "s_art_{}",
+                self.apk
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            ),
             package: self.package.clone(),
-            frame: Some(self.frame_meta(cached.seq, &cached.md5)),
-            screenshot_png: Some(cached.png.clone()),
+            frame: Some(frame.tree.frame.clone()),
+            screenshot_png: Some(frame.frame.png.clone()),
             crashed: None,
             detail: serde_json::json!({
                 "engine": "art",
                 "mode": "live",
                 "activity": self.activity,
                 "apk": self.apk.display().to_string(),
+                "frame": frame.frame.label(),
             }),
         })
     }
@@ -443,38 +557,72 @@ impl SessionBackend for ArtSession {
     }
 
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
-        self.tree()?;
-        let png = self
-            .cached
-            .as_ref()
-            .map(|frame| frame.png.clone())
-            .filter(|png| !png.is_empty())
-            .ok_or_else(|| BackendError::Unsupported {
-                capability: "screenshot".into(),
-                detail: "the ART tree reply carried no PNG".into(),
-            })?;
-        let tree = self.require_cached_tree()?;
-        Ok(ObservedFrame { tree, png })
-    }
-
-    fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
         // `tree` re-traverses and publishes a new frame; its reply carries both
         // the tree and the PNG of that frame.
-        self.frame()
+        let previous = self.seen_seq;
+        self.request_tree()?;
+        let cached = self.require_cached_frame()?;
+        if cached.png.is_empty() {
+            return Err(live_frame_unavailable(
+                "the ART tree reply carried no PNG; refusing to bind a tree to absent pixels",
+            ));
+        }
+        Ok(cached.observed(previous))
     }
 
-    fn screenshot(&mut self) -> Result<Vec<u8>, BackendError> {
-        if self.cached.is_none() {
-            self.request_tree()?;
-        }
+    fn last_frame(&self) -> Option<ObservedFrame> {
         self.cached
             .as_ref()
-            .map(|frame| frame.png.clone())
-            .filter(|png| !png.is_empty())
-            .ok_or_else(|| BackendError::Unsupported {
-                capability: "screenshot".into(),
-                detail: "the ART session reply carried no PNG".into(),
-            })
+            .map(|frame| frame.observed(self.seen_seq.min(frame.seq.saturating_sub(1))))
+    }
+
+    fn last_frame_seq(&self) -> u64 {
+        self.seen_seq
+    }
+
+    fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
+        // A pure capture command: no tree is returned, so the bound tree keeps
+        // its own sequence. Freshness is proven by the sequence advancing.
+        let previous = self.seen_seq;
+        let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
+        let seq = reply
+            .get("frame_seq")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| {
+                live_frame_unavailable(
+                    "the ART screenshot reply carried no frame_seq; it cannot be tied to a frame",
+                )
+            })?;
+        let md5 = reply
+            .get("md5")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let png_path = reply
+            .get("png")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                live_frame_unavailable("the ART screenshot reply carried no PNG path")
+            })?;
+        if seq <= previous {
+            return Err(stale_frame(previous, seq, "screenshot"));
+        }
+        let png = read_png(Path::new(png_path))?;
+        if png.is_empty() {
+            return Err(live_frame_unavailable(
+                "the ART screenshot frame file is empty",
+            ));
+        }
+        self.seen_seq = seq;
+        let captured_at_ms = now_unix_ms();
+        Ok(FrameEvidence {
+            frame_seq: seq,
+            previous_seq: previous,
+            captured_at_ms,
+            captured_at: rfc3339(captured_at_ms),
+            md5,
+            png,
+        })
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
@@ -533,20 +681,52 @@ impl SessionBackend for ArtSession {
         }
         self.stdin = None;
         let deadline = Instant::now() + Duration::from_secs(10);
+        let mut exited = false;
         if let Some(child) = self.child.as_mut() {
             while Instant::now() < deadline {
                 match child.try_wait() {
                     Ok(Some(_)) => {
                         self.child = None;
-                        return Ok(());
+                        exited = true;
+                        break;
                     }
                     Ok(None) => std::thread::sleep(Duration::from_millis(50)),
                     Err(_) => break,
                 }
             }
         }
-        self.kill_group();
+        if !exited {
+            self.kill_group();
+        }
+        // Teardown guarantee: the whole process group is gone, not just the
+        // direct child. A child the guest forked is killed here too; a survivor
+        // that ignores SIGKILL is reported, never silently ignored.
+        self.kill_process_group();
+        let mut report = self.teardown_report();
+        if !report.is_clean() {
+            let grace = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < grace && !report.survivors.is_empty() {
+                std::thread::sleep(Duration::from_millis(50));
+                report = self.teardown_report();
+            }
+        }
+        if !report.survivors.is_empty() {
+            return Err(BackendError::Error {
+                code: acos_protocol::ErrorCode::Internal,
+                detail: format!(
+                    "PROCESS_TREE_DIRTY: {} process(es) still alive in session group {:?}: {:?}",
+                    report.survivors.len(),
+                    report.process_group,
+                    report.survivors
+                ),
+            });
+        }
         Ok(())
+    }
+
+    fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
+        self.close()?;
+        Ok(self.teardown_report())
     }
 }
 
@@ -607,6 +787,43 @@ fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
     Ok(bytes)
 }
 
+/// Pids currently in process group `group`.
+///
+/// Reads field 5 (`pgrp`) of `/proc/<pid>/stat`. The command name can contain
+/// spaces and parentheses, so parsing starts after the last `)`. `/proc` is
+/// Linux-only, which is the only place ACOS runs.
+pub(crate) fn processes_in_group(group: i32) -> Vec<u32> {
+    let mut pids = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return pids;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str().and_then(|name| name.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            continue;
+        };
+        let Some(rest) = stat.rfind(')').map(|index| &stat[index + 1..]) else {
+            continue;
+        };
+        let mut fields = rest.split_whitespace();
+        // state, ppid, pgrp
+        let _state = fields.next();
+        let _ppid = fields.next();
+        if fields
+            .next()
+            .and_then(|pgrp| pgrp.parse::<i32>().ok())
+            == Some(group)
+        {
+            pids.push(pid);
+        }
+    }
+    pids.sort_unstable();
+    pids
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -637,5 +854,45 @@ mod tests {
     fn keycodes_cover_the_art_protocol() {
         assert_eq!(key_code("back"), 4);
         assert_eq!(key_code("enter"), 66);
+    }
+
+    /// The teardown guarantee is a real scan of the whole process group: a
+    /// direct child plus a grandchild, both killed, and no survivor left. This
+    /// is the same check `close` performs on an ART session.
+    #[test]
+    fn teardown_scan_sees_the_whole_process_group_and_ends_clean() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("sleep 30 & sleep 30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn a process group");
+        let group = child.id() as i32;
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline && processes_in_group(group).len() < 2 {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let seen = processes_in_group(group);
+        assert!(
+            seen.contains(&(group as u32)) && seen.len() >= 2,
+            "the scan must see the group leader and its child: {seen:?}"
+        );
+        // SAFETY: the child leads this group; `-group` names it and nothing else.
+        unsafe {
+            libc::kill(-group, libc::SIGKILL);
+        }
+        let _ = child.wait();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline && !processes_in_group(group).is_empty() {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(
+            processes_in_group(group),
+            Vec::<u32>::new(),
+            "a killed process group must leave no survivors"
+        );
     }
 }

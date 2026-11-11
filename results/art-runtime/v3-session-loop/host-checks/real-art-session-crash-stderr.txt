@@ -1,0 +1,32 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+acos-art: session=s2428736-86408737 commands=0 frames=0 frame_seq=0 wall=339ms peak_rss=-MB outcome=Crash
+acos-art: provisioned 208 system fonts into /home/Qui/Projects/acos/.cache/art/sysroot/system/fonts (0 hard links, 0 copies)
+acos-art: static overlays: 5 applied (0 idmaps generated, 5 cached, 2952 B)
+acos-art: logd: 1004 entries
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=58MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2428745-i6524861.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: guest dex: /home/Qui/Projects/acos/.cache/art/data/app/session-guest (cached)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSTRACE display: id=0 1080x2400@420 (argv panel, no DisplayManagerService)
+guest stderr: ACOSTRACE ActivityThread.sPackageManager = local IPackageManager (was null)
+guest stderr: ACOSTRACE reset ActivityTaskManager.IActivityTaskManagerSingleton (was null)
+guest stderr: ACOSTRACE reset ActivityTaskManager.sInstance (was null)
+guest stderr: ACOSTRACE ActivityTaskManager -> local IActivityTaskManager (+IActivityClientController)
+guest stderr: ACOSTRACE setup in 29 ms
+guest stderr: ACOSTRACE loaded dev.acos.fixtures.counter.MainActivity from the APK's classes.dex (dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/counter.apk"],nativeLibraryDirectories=[/system/lib64]]])
+guest stderr: ACOSTRACE stub IPackageManager.hasSystemFeature(android.software.picture_in_picture) -> false
+guest stderr: ACOSTRACE Activity.attach() -> com.android.internal.policy.PhoneWindow
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSTRACE stub IActivityTaskManager.getActivityClientController -> local controller
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSTRACE activity onCreate in 2761 us, lifecycle onCreate->onStart->onResume, decor=com.android.internal.policy.DecorView
+guest stderr: ACOSTRACE dispatchApplyWindowInsets(system=Insets{left=0, top=128, right=0, bottom=63})
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)
+guest stderr: ACOSART[render]: ioctl(fd=110, req=0xc0306201) -> ENOTTY (no binder transport)

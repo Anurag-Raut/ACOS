@@ -5,6 +5,12 @@
 //! `count=0`) so the engine plumbing, the verdict, the capability reporting and
 //! the mode rule can be tested without an ART sysroot. It is compiled only for
 //! tests, so it can never be selected by `acos verify`.
+//!
+//! It models the protocol's frame rules too: every command publishes a **new**
+//! frame, so `frame_seq` advances on each reply. The failure modes
+//! ([`FakeSession::stale_tap`], [`FakeSession::stale_capture`],
+//! [`FakeSession::no_live_frame`]) deliberately break one rule each, so the
+//! engine tests can prove the error is reported instead of passed.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -13,7 +19,10 @@ use acos_protocol::ui::{Bounds, UiNode, UiTree};
 use acos_protocol::{FrameMeta, Selector};
 use acos_verify::{BackendError, LaunchOutcome};
 
-use super::{Engine, Mode, ObservedFrame, SessionBackend, SessionCapabilities};
+use super::{
+    live_frame_unavailable, Engine, FrameEvidence, Mode, ObservedFrame, SessionBackend,
+    SessionCapabilities,
+};
 
 /// A 1x1 PNG, so capture evidence is a real image file.
 pub const TINY_PNG: &[u8] = &[
@@ -25,36 +34,69 @@ pub const TINY_PNG: &[u8] = &[
 /// Every command the fake received, for assertions about routing.
 pub type Calls = Arc<Mutex<Vec<String>>>;
 
+/// How the fake misbehaves, if it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fault {
+    None,
+    /// A tap returns without publishing a new frame (a dropped/unhandled tap
+    /// that a careless backend could report as a successful action).
+    StaleTap,
+    /// `capture` returns the previous frame instead of a new one.
+    StaleCapture,
+    /// No frame is ever produced (a session that cannot show anything).
+    NoLiveFrame,
+}
+
 /// The fake counter session.
 pub struct FakeSession {
     mode: Mode,
+    fault: Fault,
     count: u32,
     seq: u64,
     launched: bool,
     calls: Calls,
     /// When false, `type_text` reports the same gap the real ART protocol has.
     supports_type: bool,
+    /// The bound frame of the most recent completed command.
+    cached: Option<ObservedFrame>,
 }
 
 impl FakeSession {
     /// A live fake (real-Activity semantics, so `mode: live`).
     pub fn live() -> Self {
-        Self::with_mode(Mode::Live)
+        Self::with_mode(Mode::Live, Fault::None)
     }
 
     /// A preview fake: renders offline, so it can never pass.
     pub fn preview() -> Self {
-        Self::with_mode(Mode::Preview)
+        Self::with_mode(Mode::Preview, Fault::None)
     }
 
-    fn with_mode(mode: Mode) -> Self {
+    /// A live fake whose tap never completes a new frame.
+    pub fn stale_tap() -> Self {
+        Self::with_mode(Mode::Live, Fault::StaleTap)
+    }
+
+    /// A live fake whose `capture` reuses the previous frame.
+    pub fn stale_capture() -> Self {
+        Self::with_mode(Mode::Live, Fault::StaleCapture)
+    }
+
+    /// A live session that never produces a frame at all.
+    pub fn no_live_frame() -> Self {
+        Self::with_mode(Mode::Live, Fault::NoLiveFrame)
+    }
+
+    fn with_mode(mode: Mode, fault: Fault) -> Self {
         FakeSession {
             mode,
+            fault,
             count: 0,
             seq: 0,
             launched: false,
             calls: Arc::new(Mutex::new(Vec::new())),
             supports_type: false,
+            cached: None,
         }
     }
 
@@ -70,7 +112,7 @@ impl FakeSession {
     fn frame_meta(&self) -> FrameMeta {
         FrameMeta::new(
             self.seq,
-            "2026-11-11T00:00:00Z",
+            rfc3339(now_ms()),
             "fake",
             1080,
             2400,
@@ -125,6 +167,31 @@ impl FakeSession {
         bytes
     }
 
+    fn evidence(&self, previous: u64) -> FrameEvidence {
+        let captured_at_ms = now_ms();
+        FrameEvidence {
+            frame_seq: self.seq,
+            previous_seq: previous,
+            captured_at_ms,
+            captured_at: rfc3339(captured_at_ms),
+            md5: format!("fake-{}-{}", self.count, self.seq),
+            png: self.png(),
+        }
+    }
+
+    fn observation(&self, previous: u64) -> ObservedFrame {
+        ObservedFrame {
+            tree: self.build_tree(),
+            frame: self.evidence(previous),
+        }
+    }
+
+    /// Publish a frame: the sequence number and the pixels are assigned together.
+    fn publish(&mut self, previous: u64) {
+        self.seq += 1;
+        self.cached = Some(self.observation(previous));
+    }
+
     fn bump(&mut self) {
         self.seq += 1;
     }
@@ -135,15 +202,16 @@ impl FakeSession {
             code: acos_protocol::ErrorCode::AssertionFailed,
             detail: format!("fake tree has no node {selector:?}"),
         })?;
+        let previous = self.seq;
         match node.resource_id.as_str() {
             id if id.ends_with(":id/inc") => {
                 self.count += 1;
-                self.bump();
+                self.publish(previous);
                 Ok(())
             }
             id if id.ends_with(":id/reset") => {
                 self.count = 0;
-                self.bump();
+                self.publish(previous);
                 Ok(())
             }
             other => Err(BackendError::Failed {
@@ -152,6 +220,17 @@ impl FakeSession {
             }),
         }
     }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn rfc3339(unix_ms: u64) -> String {
+    acos_verify::clock::rfc3339_from_unix_ms(unix_ms as i64)
 }
 
 impl SessionBackend for FakeSession {
@@ -184,7 +263,18 @@ impl SessionBackend for FakeSession {
         self.record("launch");
         self.launched = true;
         self.count = 0;
-        self.bump();
+        if self.fault == Fault::NoLiveFrame {
+            return Ok(LaunchOutcome {
+                session_id: "s_fake".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                frame: None,
+                screenshot_png: None,
+                crashed: None,
+                detail: serde_json::json!({"engine": "fake", "mode": self.mode.as_str()}),
+            });
+        }
+        let previous = self.seq;
+        self.publish(previous);
         let frame = self.frame_meta();
         Ok(LaunchOutcome {
             session_id: "s_fake".to_string(),
@@ -198,31 +288,59 @@ impl SessionBackend for FakeSession {
 
     fn tree(&mut self) -> Result<UiTree, BackendError> {
         self.record("tree");
-        Ok(self.build_tree())
+        self.frame().map(|frame| frame.tree)
     }
 
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
         self.record("frame");
-        Ok(ObservedFrame {
-            tree: self.build_tree(),
-            png: self.png(),
-        })
+        if self.fault == Fault::NoLiveFrame {
+            return Err(live_frame_unavailable(
+                "the fake session never completed a frame",
+            ));
+        }
+        let previous = self.seq;
+        self.publish(previous);
+        Ok(self.cached.clone().expect("just published"))
     }
 
     fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
         self.record("capture");
-        // A fresh capture completes a new frame.
-        self.bump();
+        if self.fault == Fault::StaleCapture {
+            // Reuse the previous frame: the engine must detect the missing
+            // sequence advance instead of reporting a fresh capture.
+            return self.cached.clone().ok_or_else(|| {
+                live_frame_unavailable("the fake session has no frame to reuse")
+            });
+        }
         self.frame()
     }
 
-    fn screenshot(&mut self) -> Result<Vec<u8>, BackendError> {
+    fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
         self.record("screenshot");
-        Ok(self.png())
+        if self.fault == Fault::NoLiveFrame {
+            return Err(live_frame_unavailable(
+                "the fake session never completed a frame",
+            ));
+        }
+        let previous = self.seq;
+        self.bump();
+        Ok(self.evidence(previous))
+    }
+
+    fn last_frame(&self) -> Option<ObservedFrame> {
+        self.cached.clone()
+    }
+
+    fn last_frame_seq(&self) -> u64 {
+        self.seq
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
         self.record(&format!("tap({x},{y})"));
+        if self.fault == Fault::StaleTap {
+            // The command is accepted but completes no new frame.
+            return Ok(());
+        }
         let tree = self.build_tree();
         let node = tree.all_nodes().into_iter().find(|node| {
             node.clickable
@@ -231,15 +349,16 @@ impl SessionBackend for FakeSession {
                 && node.bounds.top() <= y
                 && y <= node.bounds.bottom()
         });
+        let previous = self.seq;
         match node.map(|node| node.resource_id.clone()) {
             Some(id) if id.ends_with(":id/inc") => {
                 self.count += 1;
-                self.bump();
+                self.publish(previous);
                 Ok(())
             }
             Some(id) if id.ends_with(":id/reset") => {
                 self.count = 0;
-                self.bump();
+                self.publish(previous);
                 Ok(())
             }
             _ => Err(BackendError::Failed {
@@ -251,6 +370,10 @@ impl SessionBackend for FakeSession {
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
         self.record(&format!("tap_text({text})"));
+        if self.fault == Fault::StaleTap {
+            // Same dropped tap as `tap`: accepted, but no new frame.
+            return Ok(());
+        }
         self.tap_selector(&Selector::by_text(text))
     }
 
@@ -263,19 +386,31 @@ impl SessionBackend for FakeSession {
 
     fn key(&mut self, key: &str) -> Result<(), BackendError> {
         self.record(&format!("key({key})"));
-        self.bump();
+        let previous = self.seq;
+        self.publish(previous);
         Ok(())
     }
 
     fn reset(&mut self) -> Result<(), BackendError> {
         self.record("reset");
         self.count = 0;
-        self.bump();
+        let previous = self.seq;
+        self.publish(previous);
         Ok(())
     }
 
     fn close(&mut self) -> Result<(), BackendError> {
         self.record("close");
         Ok(())
+    }
+
+    fn teardown(&mut self) -> Result<super::TeardownReport, BackendError> {
+        self.record("teardown");
+        self.close()?;
+        Ok(super::TeardownReport {
+            process_group: None,
+            survivors: Vec::new(),
+            verified: true,
+        })
     }
 }

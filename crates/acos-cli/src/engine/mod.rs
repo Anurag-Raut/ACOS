@@ -180,20 +180,139 @@ impl SessionCapabilities {
     }
 }
 
+/// The engine-level code for "there is no live frame right now".
+///
+/// It is never a pass: it means the session could not hand over a completed live
+/// frame (no frame yet, the capture reply carried no pixels, or the engine has
+/// no capture command). The protocol code is `NO_FRESH_FRAME`, and this string is
+/// the first thing in the detail so an agent sees the exact cause.
+pub const LIVE_FRAME_UNAVAILABLE: &str = "LIVE_FRAME_UNAVAILABLE";
+/// The engine-level code for "the frame handed back is the one we already had".
+///
+/// A fresh capture or an input action must complete a *new* frame; a reply whose
+/// `frame_seq` did not advance is rejected instead of being reported as fresh
+/// evidence (protocol code `NO_FRESH_FRAME`).
+pub const STALE_FRAME: &str = "STALE_FRAME";
+
+/// Build the honest "no live frame" error (never a pass, never a preview).
+pub fn live_frame_unavailable(detail: impl Into<String>) -> BackendError {
+    BackendError::Error {
+        code: ErrorCode::NoFreshFrame,
+        detail: format!("{LIVE_FRAME_UNAVAILABLE}: {}", detail.into()),
+    }
+}
+
+/// Build the honest "that frame is not new" error.
+pub fn stale_frame(previous: u64, current: u64, context: &str) -> BackendError {
+    BackendError::Error {
+        code: ErrorCode::NoFreshFrame,
+        detail: format!(
+            "{STALE_FRAME}: {context} completed frame {current}, which is not newer than the \
+             previous completed frame {previous}; refusing to hand a reused frame back as fresh \
+             evidence"
+        ),
+    }
+}
+
+/// One completed frame and the evidence that it is new.
+///
+/// `frame_seq` is the engine's own monotonic sequence number, `captured_at_ms`
+/// is the host time at which the pixels were complete (the PNG was read), and
+/// `previous_seq` is the sequence the engine had before this capture. A capture
+/// is fresh exactly when `frame_seq > previous_seq`; a backend that cannot prove
+/// that must fail with [`STALE_FRAME`] rather than return the PNG it cached.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrameEvidence {
+    /// Monotonic frame sequence assigned by the engine.
+    pub frame_seq: u64,
+    /// The previous sequence the engine had (0 when none).
+    pub previous_seq: u64,
+    /// Host time the pixels were complete, milliseconds since the Unix epoch.
+    pub captured_at_ms: u64,
+    /// The same instant as an RFC 3339 UTC string.
+    pub captured_at: String,
+    /// Encoded-pixel hash as the engine reported it (the ART guest's MD5).
+    pub md5: String,
+    /// PNG bytes of exactly this frame.
+    pub png: Vec<u8>,
+}
+
+impl FrameEvidence {
+    /// The stale-frame rule: this capture completed a new frame.
+    pub const fn is_fresh(&self) -> bool {
+        self.frame_seq > self.previous_seq
+    }
+
+    /// Stable label for logs/evidence (`frame 7 after 6 at <time>`).
+    pub fn label(&self) -> String {
+        format!(
+            "frame {} after {} at {}",
+            self.frame_seq, self.previous_seq, self.captured_at
+        )
+    }
+}
+
 /// One completed frame: the tree and the PNG describe the same traversal.
 #[derive(Debug, Clone)]
 pub struct ObservedFrame {
     /// The live View tree, with its frame metadata.
     pub tree: UiTree,
-    /// PNG bytes of exactly that frame.
-    pub png: Vec<u8>,
+    /// The pixels of that traversal, with freshness evidence.
+    pub frame: FrameEvidence,
+}
+
+impl ObservedFrame {
+    /// PNG bytes of this frame.
+    pub fn png(&self) -> &[u8] {
+        &self.frame.png
+    }
+
+    /// The frame sequence of this observation.
+    pub fn frame_seq(&self) -> u64 {
+        self.frame.frame_seq
+    }
+}
+
+/// Whether closing a session left its process tree clean.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeardownReport {
+    /// The process group the session owned, when it had one.
+    pub process_group: Option<i32>,
+    /// Processes still alive in that group after teardown (empty is clean).
+    pub survivors: Vec<u32>,
+    /// False when this backend cannot verify its process tree.
+    pub verified: bool,
+}
+
+impl TeardownReport {
+    /// A backend that closed but cannot inspect its process tree.
+    pub const fn unverified() -> Self {
+        TeardownReport {
+            process_group: None,
+            survivors: Vec::new(),
+            verified: false,
+        }
+    }
+
+    /// True only when the tree was actually inspected and found empty.
+    pub fn is_clean(&self) -> bool {
+        self.verified && self.survivors.is_empty()
+    }
 }
 
 /// One engine's command surface.
 ///
 /// Implementations own their process/session and are responsible for cleaning it
 /// up in `close` and on drop. Every unsupported command returns
-/// [`BackendError::Unsupported`] naming the missing capability.
+/// [`BackendError::Unsupported`] naming the missing capability. Three rules are
+/// part of the contract, not caller convention:
+///
+/// * `screenshot`/`capture` return a **fresh** frame: a new `frame_seq` strictly
+///   greater than the previous one, otherwise [`STALE_FRAME`];
+/// * an input action must leave behind its own completed frame, otherwise the
+///   action is reported as [`STALE_FRAME`] instead of being claimed as taken;
+/// * `close` reaps the whole process tree and `teardown` says whether it is clean;
+///   a session that cannot prove it must not report clean.
 pub trait SessionBackend {
     /// Which engine this is.
     fn engine(&self) -> Engine;
@@ -207,29 +326,52 @@ pub trait SessionBackend {
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
-    /// The live View tree bound to the most recent frame.
+    /// Traverse now and return the live tree bound to the new frame.
     fn tree(&mut self) -> Result<UiTree, BackendError>;
 
-    /// Fresh PNG bytes (issued as a new capture command when the engine has one).
-    fn screenshot(&mut self) -> Result<Vec<u8>, BackendError>;
-
-    /// One bound observation: a tree and the PNG of the same completed frame.
+    /// A **fresh** capture: a new capture command, and evidence that the frame
+    /// sequence advanced. The default has no capture command of its own and says so.
     ///
-    /// Backends that can answer both from one command override this; the
-    /// default composes `tree()` and `screenshot()`.
-    fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
-        let tree = self.tree()?;
-        let png = self.screenshot()?;
-        Ok(ObservedFrame { tree, png })
+    /// The seam's tests drive this directly; `acos verify` reaches a fresh frame
+    /// through `capture`, which returns the same evidence bundled with the tree.
+    #[allow(dead_code)]
+    fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
+        Err(BackendError::unsupported(
+            "screenshot",
+            "this session engine has no fresh-capture command",
+        ))
+    }
+
+    /// One bound observation of a new traversal: the tree and the PNG of the
+    /// same completed frame.
+    fn frame(&mut self) -> Result<ObservedFrame, BackendError>;
+
+    /// The bound frame the most recent command completed, if any.
+    ///
+    /// This is the live tree/pixels pair of the last completed traversal — it is
+    /// returned without issuing a command, so a pure observation never invents a
+    /// newer frame than the one an action produced.
+    fn last_frame(&self) -> Option<ObservedFrame>;
+
+    /// The highest completed frame sequence this session has seen (0 when none).
+    ///
+    /// A tree-less reply (a pure screenshot) can advance the sequence past the
+    /// bound tree, so freshness checks use this, not [`Self::last_frame`].
+    fn last_frame_seq(&self) -> u64 {
+        self.last_frame().map(|frame| frame.frame_seq()).unwrap_or(0)
     }
 
     /// A *fresh* capture that must complete a new frame (a `capture` step).
     ///
-    /// Defaults to [`SessionBackend::frame`]; a backend whose capture does not
-    /// advance `frame_seq` inherits that honesty and the executor reports
-    /// `NO_FRESH_FRAME` instead of accepting a stale image.
+    /// Implementations must fail with [`STALE_FRAME`] when the new traversal
+    /// does not advance the frame sequence.
     fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
-        self.frame()
+        let previous = self.last_frame_seq();
+        let observed = self.frame()?;
+        if observed.frame_seq() <= previous {
+            return Err(stale_frame(previous, observed.frame_seq(), "capture"));
+        }
+        Ok(observed)
     }
 
     /// Tap a screen point.
@@ -247,8 +389,17 @@ pub trait SessionBackend {
     /// Reset app state (fresh Activity).
     fn reset(&mut self) -> Result<(), BackendError>;
 
-    /// Stop the session and reap the process.
+    /// Stop the session and reap the process tree.
     fn close(&mut self) -> Result<(), BackendError>;
+
+    /// Close and report whether the whole process tree is gone.
+    ///
+    /// The default cannot inspect the tree, so it honestly reports
+    /// `verified: false`; [`EngineBackend`] never turns that into "clean".
+    fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
+        self.close()?;
+        Ok(TeardownReport::unverified())
+    }
 }
 
 /// The verifier backend over one [`SessionBackend`].
@@ -264,8 +415,6 @@ pub enum EngineBackend {
         manifest: Option<ManifestInfo>,
         /// Package of the launched app.
         package: Option<String>,
-        /// Frame sequence of the most recent observation.
-        frame_seq: u64,
         /// Cause id recorded on synthesized frame metadata.
         cause_id: String,
     },
@@ -283,7 +432,6 @@ impl EngineBackend {
             session,
             manifest: None,
             package: None,
-            frame_seq: 0,
             cause_id: "req_engine".to_string(),
         }
     }
@@ -325,40 +473,102 @@ impl EngineBackend {
         }
     }
 
-    /// One bound observation: refresh the frame, then read the tree that belongs
-    /// to it. Backends cache the tree of the frame their capture produced, so
-    /// the two channels cannot describe different traversals.
-    fn observe_session(&mut self) -> Result<SessionObservation, BackendError> {
-        let (seq, tree, png, package) = match self {
-            EngineBackend::Native(backend) => return backend.observe(),
-            EngineBackend::Session {
-                session,
-                package,
-                frame_seq,
-                ..
-            } => {
-                let observed = session.frame()?;
-                let mut tree = observed.tree;
-                let png = observed.png;
-                let seq = tree.frame.frame_seq.max(*frame_seq);
-                *frame_seq = seq;
-                tree.frame.frame_seq = seq;
-                let package = package
-                    .clone()
-                    .unwrap_or_else(|| tree.package.clone());
-                (seq, tree, png, package)
-            }
-        };
+    /// The frame sequence the session currently holds (0 when it has none).
+    fn current_frame_seq(&self) -> u64 {
+        match self {
+            EngineBackend::Native(_) => 0,
+            EngineBackend::Session { session, .. } => session.last_frame_seq(),
+        }
+    }
+
+    /// Bind one completed frame into a session observation for the executor.
+    ///
+    /// The tree and the pixels must be one traversal: a backend that hands over
+    /// a tree whose `frame_seq` differs from the capture's is a backend defect
+    /// and is reported, never patched over.
+    fn bind_observation(
+        &self,
+        observed: ObservedFrame,
+    ) -> Result<SessionObservation, BackendError> {
+        let seq = observed.frame_seq();
+        let evidence = observed.frame.clone();
+        let png = observed.png().to_vec();
+        let ObservedFrame { tree, .. } = observed;
+        if tree.frame.frame_seq != seq {
+            return Err(BackendError::Error {
+                code: ErrorCode::Internal,
+                detail: format!(
+                    "unbound observation: tree frame_seq {} but capture frame_seq {}; a tree and \
+                     its pixels must come from one completed traversal",
+                    tree.frame.frame_seq, seq
+                ),
+            });
+        }
         let mut tree = tree;
-        tree.frame.frame_seq = seq;
+        // The engine's own capture time and cause are the evidence identity.
+        tree.frame.produced_at = evidence.captured_at.clone();
+        if !evidence.md5.is_empty() {
+            tree.frame.content_hash = evidence.md5.clone();
+        }
+        let package = self.package();
+        let package = if package.is_empty() {
+            tree.package.clone()
+        } else {
+            package
+        };
         Ok(SessionObservation {
-            session_id: format!("s_{}_{}", "art", seq),
-            package: package.clone(),
+            session_id: format!("s_art_{seq}"),
+            package,
             frame: tree.frame.clone(),
             tree,
             screenshot_png: Some(png),
             crashed: None,
         })
+    }
+
+    /// The cached live observation. No command is issued: the executor's
+    /// frame-binding rule requires a pure assertion to describe the frame the
+    /// preceding action produced, not a newer traversal.
+    fn observe_session(&mut self) -> Result<SessionObservation, BackendError> {
+        match self {
+            EngineBackend::Native(backend) => backend.observe(),
+            EngineBackend::Session { session, .. } => {
+                let observed = session.last_frame().ok_or_else(|| {
+                    live_frame_unavailable(
+                        "this session has not completed a frame yet; launch or capture first",
+                    )
+                })?;
+                self.bind_observation(observed)
+            }
+        }
+    }
+
+    /// The completed frame an action produced, proving it advanced the sequence.
+    fn action_result(
+        &mut self,
+        previous: u64,
+        context: &str,
+    ) -> Result<SessionObservation, BackendError> {
+        let observed = match self {
+            EngineBackend::Native(_) => unreachable!("native input forwards"),
+            EngineBackend::Session { session, .. } => session.last_frame().ok_or_else(|| {
+                live_frame_unavailable(format!(
+                    "{context} completed no live frame; the session did not hand one back"
+                ))
+            })?,
+        };
+        if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
+            return Err(stale_frame(previous, observed.frame_seq(), context));
+        }
+        self.bind_observation(observed)
+    }
+
+    /// Close the session and report whether its process tree is clean.
+    pub fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
+        match self {
+            EngineBackend::Native(_) => Ok(TeardownReport::unverified()),
+            EngineBackend::Session { session, .. } => session.teardown(),
+        }
     }
 
     /// Resolve a selector to a screen point from the current tree.
@@ -385,15 +595,7 @@ impl EngineBackend {
                 "input.tap_text",
                 "the native forwarding path takes selectors, not text",
             )),
-            EngineBackend::Session {
-                session,
-                frame_seq,
-                cause_id,
-                ..
-            } => {
-                let _ = (frame_seq, cause_id);
-                session.tap_text(text)
-            }
+            EngineBackend::Session { session, .. } => session.tap_text(text),
         }
     }
 }
@@ -455,18 +657,13 @@ impl Backend for EngineBackend {
             EngineBackend::Session {
                 session,
                 package,
-                frame_seq,
                 cause_id,
                 ..
             } => {
                 *cause_id = request.cause_id.clone();
-                *frame_seq = 0;
                 let outcome = session.launch(&request.apk)?;
                 if !outcome.package.is_empty() {
                     *package = Some(outcome.package.clone());
-                }
-                if let Some(frame) = &outcome.frame {
-                    *frame_seq = frame.frame_seq;
                 }
                 Ok(outcome)
             }
@@ -504,12 +701,18 @@ impl Backend for EngineBackend {
                     EngineBackend::Session { session, .. } => session.capabilities(),
                     EngineBackend::Native(_) => unreachable!(),
                 };
+                // Resolve the target first: a selector traversal is not the
+                // action's frame and must not count as the action's progress.
+                enum Target {
+                    Text(String),
+                    Point(i32, i32),
+                }
                 match action {
                     InputAction::Tap { selector, x, y } => {
                         if !caps.tap {
                             return Err(BackendError::unsupported("input.tap", "no tap command"));
                         }
-                        if let (Some(text), true) = (
+                        let target = if let (Some(text), true) = (
                             selector
                                 .as_ref()
                                 .and_then(|selector| selector.id.is_none().then_some(selector))
@@ -517,7 +720,7 @@ impl Backend for EngineBackend {
                                 .and_then(|text| text.exact.clone()),
                             caps.tap_text,
                         ) {
-                            self.tap_node(&text)?;
+                            Target::Text(text)
                         } else {
                             let point = match (x, y) {
                                 (Some(x), Some(y)) => (*x, *y),
@@ -531,10 +734,19 @@ impl Backend for EngineBackend {
                                     self.point_for(selector)?
                                 }
                             };
-                            if let EngineBackend::Session { session, .. } = self {
-                                session.tap(point.0, point.1)?;
+                            Target::Point(point.0, point.1)
+                        };
+                        // The action starts here; `previous` is the frame before it.
+                        let previous = self.current_frame_seq();
+                        match target {
+                            Target::Text(text) => self.tap_node(&text)?,
+                            Target::Point(x, y) => {
+                                if let EngineBackend::Session { session, .. } = self {
+                                    session.tap(x, y)?;
+                                }
                             }
                         }
+                        self.action_result(previous, action.kind())
                     }
                     InputAction::Type { text, .. } => {
                         if !caps.type_text {
@@ -544,34 +756,37 @@ impl Backend for EngineBackend {
                                  (`type_text`); a scenario `type` step cannot run on this engine",
                             ));
                         }
+                        let previous = self.current_frame_seq();
                         if let EngineBackend::Session { session, .. } = self {
                             session.type_text(text)?;
                         }
+                        self.action_result(previous, action.kind())
                     }
                     InputAction::Key(key) => {
                         if !caps.key {
                             return Err(BackendError::unsupported("input.key", "no key command"));
                         }
+                        let previous = self.current_frame_seq();
                         if let EngineBackend::Session { session, .. } = self {
                             session.key(key_name(*key))?;
                         }
+                        self.action_result(previous, action.kind())
                     }
                     InputAction::Back => {
                         if !caps.key {
                             return Err(BackendError::unsupported("input.back", "no key command"));
                         }
+                        let previous = self.current_frame_seq();
                         if let EngineBackend::Session { session, .. } = self {
                             session.key("back")?;
                         }
+                        self.action_result(previous, action.kind())
                     }
-                    InputAction::Rotate(_) => {
-                        return Err(BackendError::unsupported(
-                            "input.rotate",
-                            "the ART session protocol has no rotate command yet",
-                        ));
-                    }
+                    InputAction::Rotate(_) => Err(BackendError::unsupported(
+                        "input.rotate",
+                        "the ART session protocol has no rotate command yet",
+                    )),
                 }
-                self.observe_session()
             }
         }
     }
@@ -615,23 +830,15 @@ impl Backend for EngineBackend {
                         "no screenshot command",
                     ));
                 }
+                let previous = self.current_frame_seq();
                 let observed = match self {
-                    EngineBackend::Session { session, frame_seq, .. } => {
-                        let observed = session.capture()?;
-                        *frame_seq = observed.tree.frame.frame_seq.max(*frame_seq);
-                        observed
-                    }
+                    EngineBackend::Session { session, .. } => session.capture()?,
                     EngineBackend::Native(_) => unreachable!(),
                 };
-                let package = self.package();
-                Ok(SessionObservation {
-                    session_id: format!("s_art_{}", observed.tree.frame.frame_seq),
-                    package: package.clone(),
-                    frame: observed.tree.frame.clone(),
-                    tree: observed.tree,
-                    screenshot_png: Some(observed.png),
-                    crashed: None,
-                })
+                if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
+                    return Err(stale_frame(previous, observed.frame_seq(), "capture"));
+                }
+                self.bind_observation(observed)
             }
         }
     }
@@ -639,9 +846,10 @@ impl Backend for EngineBackend {
 
 impl Drop for EngineBackend {
     fn drop(&mut self) {
-        if let EngineBackend::Session { session, .. } = self {
-            let _ = session.close();
-        }
+        // The teardown guarantee: close the session and confirm the process
+        // tree is gone. A failure here cannot be returned from `drop`; the
+        // engine has already refused to report clean.
+        let _ = self.teardown();
     }
 }
 
@@ -1144,5 +1352,175 @@ mod engine_tests {
         }
         // `Capability` is the executor's name for the same gap.
         assert_eq!(Capability::UiTree.as_str(), "ui.tree");
+    }
+
+    fn launch_request(artifacts: &std::path::Path) -> LaunchRequest {
+        LaunchRequest {
+            apk: artifacts.join("counter.apk"),
+            activity: Some("dev.acos.fixtures.counter/.MainActivity".to_string()),
+            intent_action: None,
+            data: None,
+            extras: Default::default(),
+            clear_state: true,
+            isolation: acos_protocol::identity::IsolationLevel::Process,
+            display: acos_protocol::identity::DisplaySpec::offscreen(1080, 2400, 420),
+            cause_id: "req_engine_test:launch:0".to_string(),
+        }
+    }
+
+    #[test]
+    fn fresh_screenshot_carries_a_new_sequence_and_a_capture_time() {
+        let dir = artifacts("fresh-shot");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        backend
+            .launch(&launch_request(&dir))
+            .expect("fake launch");
+        // `SessionBackend::screenshot` is a fresh capture, not the cached PNG.
+        let shot = |engine: &mut EngineBackend| {
+            match engine {
+                EngineBackend::Session { session, .. } => session.screenshot(),
+                EngineBackend::Native(_) => unreachable!(),
+            }
+        };
+        let first = shot(&mut backend).expect("first fresh screenshot");
+        let second = shot(&mut backend).expect("second fresh screenshot");
+        assert!(first.is_fresh(), "{}", first.label());
+        assert!(second.is_fresh(), "{}", second.label());
+        assert!(
+            second.frame_seq > first.frame_seq,
+            "a fresh capture must complete a newer frame ({} -> {})",
+            first.frame_seq,
+            second.frame_seq
+        );
+        assert_eq!(second.previous_seq, first.frame_seq);
+        assert!(second.captured_at_ms >= first.captured_at_ms);
+        assert!(
+            second.captured_at.contains('T') && second.captured_at.ends_with('Z'),
+            "capture time must be an RFC 3339 UTC instant: {}",
+            second.captured_at
+        );
+        assert!(!second.png.is_empty());
+    }
+
+    #[test]
+    fn stale_tap_is_rejected_as_no_fresh_frame() {
+        let dir = artifacts("stale-tap");
+        // Both selector styles: a text selector is host-side, an id selector
+        // resolves through a traversal first. That traversal is *not* the
+        // action's frame and must not mask a tap that completes nothing.
+        for selector in [
+            Selector::by_text("Increment"),
+            Selector {
+                id: Some("inc".to_string()),
+                ..Selector::default()
+            },
+        ] {
+            let mut backend = EngineBackend::session(Box::new(FakeSession::stale_tap()));
+            backend
+                .launch(&launch_request(&dir))
+                .expect("fake launch");
+            let error = backend
+                .input(&InputAction::Tap {
+                    selector: Some(selector.clone()),
+                    x: None,
+                    y: None,
+                })
+                .expect_err("a tap that completes no new frame must not be accepted");
+            assert_eq!(error.code(), ErrorCode::NoFreshFrame);
+            assert!(
+                error.to_string().contains(STALE_FRAME),
+                "the error must name the stale frame ({selector:?}): {error}"
+            );
+            assert!(!error.status().is_pass());
+        }
+    }
+
+    #[test]
+    fn stale_capture_is_rejected_as_no_fresh_frame() {
+        let dir = artifacts("stale-capture");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::stale_capture()));
+        backend
+            .launch(&launch_request(&dir))
+            .expect("fake launch");
+        let error = backend
+            .capture()
+            .expect_err("a capture that reuses the previous frame must fail");
+        assert_eq!(error.code(), ErrorCode::NoFreshFrame);
+        assert!(error.to_string().contains(STALE_FRAME), "{error}");
+    }
+
+    #[test]
+    fn no_live_frame_is_an_honest_error_never_a_pass() {
+        let dir = artifacts("no-live-frame");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::no_live_frame()));
+        // Launch can legitimately succeed without a first frame.
+        backend
+            .launch(&launch_request(&dir))
+            .expect("fake launch without a frame");
+        let observe = backend.observe().expect_err("observe must not invent a frame");
+        assert_eq!(observe.code(), ErrorCode::NoFreshFrame);
+        assert!(
+            observe.to_string().contains(LIVE_FRAME_UNAVAILABLE),
+            "{observe}"
+        );
+        let capture = backend.capture().expect_err("capture must not invent a frame");
+        assert_eq!(capture.code(), ErrorCode::NoFreshFrame);
+        assert!(
+            capture.to_string().contains(LIVE_FRAME_UNAVAILABLE),
+            "{capture}"
+        );
+        assert!(!observe.status().is_pass() && !capture.status().is_pass());
+    }
+
+    #[test]
+    fn the_whole_scenario_fails_honestly_when_no_live_frame_arrives() {
+        let dir = artifacts("no-live-frame-scenario");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::no_live_frame()));
+        let req = request("scenarios/v2-art-counter.yaml", &dir);
+        let envelope = acos_verify::verify(&req, &mut backend);
+        assert!(!envelope.status().is_pass(), "must not pass: {:?}", envelope.status());
+        let error = envelope.error().expect("a structured failure");
+        assert_eq!(error.code, ErrorCode::NoFreshFrame);
+        assert!(
+            error.message.contains(LIVE_FRAME_UNAVAILABLE),
+            "{}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_pure_observation_does_not_invent_a_newer_frame() {
+        let dir = artifacts("observe-no-advance");
+        let fake = FakeSession::live();
+        let calls = fake.calls();
+        let mut backend = EngineBackend::session(Box::new(fake));
+        let launched = backend.launch(&launch_request(&dir)).expect("fake launch");
+        let launch_seq = launched.frame.as_ref().unwrap().frame_seq;
+        let first = backend.observe().expect("observe after launch");
+        let second = backend.observe().expect("second observe");
+        assert_eq!(first.frame.frame_seq, launch_seq);
+        assert_eq!(second.frame.frame_seq, launch_seq);
+        assert_eq!(first.tree.frame.frame_seq, first.frame.frame_seq);
+        assert_eq!(second.tree.frame.frame_seq, second.frame.frame_seq);
+        assert!(first.binding_violation().is_none());
+        assert!(second.binding_violation().is_none());
+        // No new traversal was issued by a pure observation.
+        let calls = calls.lock().unwrap();
+        assert!(
+            !calls.iter().any(|call| call == "frame" || call == "tree"),
+            "observe must not traverse: {calls:?}"
+        );
+    }
+
+    #[test]
+    fn teardown_says_whether_the_process_tree_is_clean() {
+        let dir = artifacts("teardown");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        backend.launch(&launch_request(&dir)).expect("fake launch");
+        let report = backend.teardown().expect("teardown");
+        assert!(report.verified, "the fake verifies its (empty) tree");
+        assert!(report.is_clean());
+        // Closing again is harmless.
+        assert!(backend.teardown().expect("second teardown").is_clean());
     }
 }

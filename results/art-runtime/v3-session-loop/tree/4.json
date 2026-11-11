@@ -1,0 +1,102 @@
+{
+  "frame": {
+    "frame_seq": 4,
+    "produced_at": "2026-11-11T15:51:06.565Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2400,
+    "density": 420,
+    "content_hash": "e09f8ecdb126674f0cfa17cc43b4a257",
+    "meaningful": true
+  },
+  "package": "",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "android.widget.LinearLayout",
+      "resource_id": "",
+      "text": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "children": [
+        {
+          "id": "n1_dev.acos.fixtures.counter:id/count",
+          "class": "android.widget.TextView",
+          "resource_id": "dev.acos.fixtures.counter:id/count",
+          "text": "1",
+          "content_desc": "",
+          "bounds": [
+            42,
+            317,
+            63,
+            368
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "children": [],
+          "package": ""
+        },
+        {
+          "id": "n1_dev.acos.fixtures.counter:id/inc",
+          "class": "android.widget.Button",
+          "resource_id": "dev.acos.fixtures.counter:id/inc",
+          "text": "Increment",
+          "content_desc": "",
+          "bounds": [
+            42,
+            368,
+            273,
+            494
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": true,
+          "scrollable": false,
+          "checked": false,
+          "children": [],
+          "package": ""
+        },
+        {
+          "id": "n1_dev.acos.fixtures.counter:id/reset",
+          "class": "android.widget.Button",
+          "resource_id": "dev.acos.fixtures.counter:id/reset",
+          "text": "Reset",
+          "content_desc": "",
+          "bounds": [
+            42,
+            494,
+            273,
+            620
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": true,
+          "scrollable": false,
+          "checked": false,
+          "children": [],
+          "package": ""
+        }
+      ],
+      "package": ""
+    }
+  ],
+  "truncated": false,
+  "text_available": true
+}
