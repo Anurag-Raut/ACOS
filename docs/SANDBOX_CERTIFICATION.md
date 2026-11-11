@@ -216,3 +216,12 @@ All of these, in this order:
 | S5/S6 corpus | `… cargo test -q -p acos-art --test sandbox_s5 --test sandbox_s6 -- --test-threads=1` | **5 + 5 passed** (21:10:28Z) |
 | milestone (interactive path) | `tools/art-runtime/run-exclusive.sh --task S7 -- tools/guarded.sh --mem 8G --time 900 -- ./target/debug/acos verify --scenario scenarios/v2-art-counter.yaml --apk fixtures/build/apps/counter.apk --engine art --json` | **pass, 11/11 steps, engine=art, mode=live**, rc=0 (21:10:02–21:10:13Z) |
 | teardown | `pgrep -a -f 'acos-art\|LaunchMain'` after the milestone | no ACOS survivor (21:10:56Z) |
+
+## 7. Decision on verdict integrity (2026-11-11, codex advisor gpt-6.1-sol, orchestrator decision)
+
+Chosen path: **A with stricter pass semantics** (B optional, C deferred, D as complement).
+- Tree, lifecycle markers, resource ids, launch outcome lines, input `handled` acks and guest logs are **guest-asserted**; they are labelled so in results and may be used for navigation (finding tap targets) but never alone justify a pass on an untrusted-APK run.
+- A pass for an untrusted APK needs host-controlled evidence that independently satisfies the assertion: C1 pixels (reference/region match, OCR with uncertainty), host-injected input, host-observed binder transactions. "Pixels changed" never substitutes for "expected text appeared". Tree-only assertions on untrusted runs return an insufficient-evidence result (fail closed).
+- A per-run nonce is an accident tripwire only; it is not a security boundary (the app shares the probe's process).
+- Stale text above: the sizeCompatScale cap landed in e55b3ec.
+- Planned work (S8, after W15/W16 free `engine/art.rs`): provenance field on every evidence item (host-observed | guest-asserted), fail-closed rules for untrusted runs, a pixel/region assertion, live hostile fixture (forged probe/marker lines, hostile parcels), then re-certify. Untrusted APKs stay disabled until all section 5 gates pass.
