@@ -1,0 +1,475 @@
+//! `acos-art` — run DEX on real ART inside the ACOS mini-Android root.
+//!
+//! ```text
+//! acos-art run   --dex classes.dex [--class Main] [--json]
+//! acos-art verify [--fixtures DIR] [--json OUT]      # the 27-program corpus
+//! acos-art build-image [--out DIR] [--force]         # AOT boot image (dex2oat64)
+//! acos-art build-shim                                # libartshim.so
+//! acos-art props [print|write|get KEY]
+//! acos-art doctor                                    # layout/capability report
+//! ```
+
+use acos_art::{launcher, ArtRoot, Error, JitMode, LogMode, Props, Result, RunOpts};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::time::Duration;
+
+const USAGE: &str = "\
+acos-art — real Android 14 ART as an ACOS DEX engine (bwrap mini-Android root)
+
+USAGE:
+  acos-art run   --dex FILE [--dex FILE]... [--class NAME] [ARGS...]
+  acos-art verify [--programs DIR] [--expected DIR] [--json FILE]
+  acos-art build-image [--out DIR] [--force]
+  acos-art build-shim
+  acos-art props [print|write|get KEY]
+  acos-art doctor
+
+COMMON OPTIONS:
+  --sysroot DIR      ART sysroot (default: $ACOS_ART_SYSROOT, .cache/art/sysroot,
+                     .cache/art-exp/sysroot)
+  --data DIR         writable /data (default: $ACOS_ART_DATA, .cache/art/data)
+  --timeout SECS     wall-clock budget (default 60)
+  --rlimit-as-mb N   RLIMIT_AS in MiB, 0 = unlimited (default 0: Scudo
+                     reserves ~8.6 TB of virtual address space)
+  --mode MODE        default | int  (-Xint)
+  --log MODE         logd | stderr   (default logd)
+  --no-shim          do not LD_PRELOAD libartshim.so (no props, no logd sink)
+  --no-props         do not write the property table
+  --image DIR        boot image dir (contains x86_64/boot.art); `none` disables
+  --json             print the structured RunResult instead of a summary
+";
+
+fn main() -> ExitCode {
+    match real_main() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("acos-art: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn real_main() -> Result<ExitCode> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+        print!("{USAGE}");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let cmd = args[0].clone();
+    // Common options are allowed anywhere; parse them out first.
+    let mut rest: Vec<String> = Vec::new();
+    let mut sysroot = None;
+    let mut data = None;
+    let mut timeout = 60u64;
+    let mut rlimit_as_mb = 0u64;
+    let mut mode = JitMode::Default;
+    let mut log = LogMode::Logd;
+    let mut shim = true;
+    let mut props = true;
+    let mut image: Option<PathBuf> = None;
+    let mut use_image = true;
+    let mut json = false;
+    let mut class = "Main".to_string();
+    let mut dex: Vec<PathBuf> = Vec::new();
+    let mut program_args: Vec<String> = Vec::new();
+    let mut force = false;
+    let mut out: Option<PathBuf> = None;
+    let mut json_out: Option<PathBuf> = None;
+    let mut programs: Option<PathBuf> = None;
+    let mut expected: Option<PathBuf> = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        let a = args[i].as_str();
+        let mut next = |i: &mut usize| -> Result<String> {
+            *i += 1;
+            args.get(*i)
+                .cloned()
+                .ok_or_else(|| Error::Layout(format!("option {a} needs a value")))
+        };
+        match a {
+            "--sysroot" => sysroot = Some(PathBuf::from(next(&mut i)?)),
+            "--data" => data = Some(PathBuf::from(next(&mut i)?)),
+            "--timeout" => timeout = next(&mut i)?.parse().unwrap_or(60),
+            "--rlimit-as-mb" => rlimit_as_mb = next(&mut i)?.parse().unwrap_or(8192),
+            "--mode" => {
+                mode = match next(&mut i)?.as_str() {
+                    "int" | "xint" => JitMode::Int,
+                    _ => JitMode::Default,
+                }
+            }
+            "--log" => {
+                log = match next(&mut i)?.as_str() {
+                    "stderr" => LogMode::Stderr,
+                    _ => LogMode::Logd,
+                }
+            }
+            "--no-shim" => shim = false,
+            "--no-props" => props = false,
+            "--image" => {
+                let v = next(&mut i)?;
+                if v == "none" {
+                    use_image = false;
+                    image = None;
+                } else {
+                    use_image = true;
+                    image = Some(PathBuf::from(v));
+                }
+            }
+            "--json" => json = true,
+            "--json-out" => json_out = Some(PathBuf::from(next(&mut i)?)),
+            "--class" => class = next(&mut i)?,
+            "--dex" => dex.push(PathBuf::from(next(&mut i)?)),
+            "--programs" | "--fixtures" => programs = Some(PathBuf::from(next(&mut i)?)),
+            "--expected" => expected = Some(PathBuf::from(next(&mut i)?)),
+            "--out" => out = Some(PathBuf::from(next(&mut i)?)),
+            "--force" => force = true,
+            "--" => {
+                program_args.extend(args[i + 1..].iter().cloned());
+                break;
+            }
+            other if other.starts_with('-') => {
+                return Err(Error::Layout(format!("unknown option {other}")));
+            }
+            other => program_args.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let root = ArtRoot::resolve(sysroot, data)?;
+    match cmd.as_str() {
+        "run" => {
+            if dex.is_empty() {
+                return Err(Error::Layout("run needs --dex FILE".into()));
+            }
+            let opts = RunOpts {
+                dex,
+                class,
+                class_args: program_args,
+                jit: mode,
+                timeout: Duration::from_secs(timeout),
+                rlimit_as_mb,
+                log,
+                image,
+                use_image,
+                shim,
+                props,
+                extra_env: Vec::new(),
+            };
+            let res = launcher::run(&root, &opts)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&res).unwrap());
+            } else {
+                print!("{}", res.stdout);
+                eprint!("{}", res.stderr);
+                eprintln!(
+                    "acos-art: outcome={} code={} exit={:?} signal={:?} wall={}ms",
+                    format!("{:?}", res.outcome).to_lowercase(),
+                    res.code.as_deref().unwrap_or("-"),
+                    res.exit,
+                    res.signal,
+                    res.wall_ms
+                );
+                for d in &res.diagnostics {
+                    eprintln!("acos-art: {d}");
+                }
+            }
+            Ok(if res.succeeded() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+        }
+        "verify" => verify(&root, programs, expected, json_out, timeout, rlimit_as_mb, json),
+        "build-image" => {
+            let dir = build_image(&root, out, force)?;
+            println!("{}", dir.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        "build-shim" => {
+            let p = acos_art::build_shim(&root.data.join("shim"))?;
+            println!("{}", p.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        "props" => {
+            let what = program_args.first().map(String::as_str).unwrap_or("print");
+            match what {
+                "print" => print!("{}", Props::android34().to_string()),
+                "write" => {
+                    let p = root.data.join(acos_art::props::PROPS_FILE);
+                    Props::android34().write(&p)?;
+                    println!("{}", p.display());
+                }
+                "get" => {
+                    let key = program_args.get(1).cloned().unwrap_or_default();
+                    let p = root.data.join(acos_art::props::PROPS_FILE);
+                    let props = Props::from_file(&p).unwrap_or_else(|_| Props::android34());
+                    println!("{}", props.get(&key).unwrap_or(""));
+                }
+                other => return Err(Error::Layout(format!("props: unknown action {other}"))),
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        "doctor" => {
+            doctor(&root);
+            Ok(ExitCode::SUCCESS)
+        }
+        other => Err(Error::Layout(format!("unknown command {other}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// verify: the 27-program correctness corpus against fixtures/expected-art
+// ---------------------------------------------------------------------------
+
+fn verify(
+    root: &ArtRoot,
+    programs: Option<PathBuf>,
+    expected: Option<PathBuf>,
+    json_out: Option<PathBuf>,
+    timeout: u64,
+    rlimit_as_mb: u64,
+    json: bool,
+) -> Result<ExitCode> {
+    let programs = programs.unwrap_or_else(|| root.repo_root.join("fixtures/build/dexprogs"));
+    let expected = expected.unwrap_or_else(|| root.repo_root.join("fixtures/expected-art/dexprogs"));
+    let mut names: Vec<String> = std::fs::read_dir(&expected)?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let p = e.path();
+            if p.extension()?.to_str()? == "exit" {
+                Some(p.file_stem()?.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    names.sort();
+    if names.is_empty() {
+        return Err(Error::Layout(format!("no .exit fixtures in {}", expected.display())));
+    }
+
+    println!(
+        "{:<30} {:<5} {:>6} {:>5} {:>7} {}",
+        "program", "pass", "exit", "exp", "wall_ms", "notes"
+    );
+    let mut rows = Vec::new();
+    let mut pass = 0usize;
+    let mut skipped = 0usize;
+    for name in &names {
+        let dex = programs.join(name).join("classes.dex");
+        if !dex.is_file() {
+            println!("{name:<30} {:<5} {:>6} {:>5} {:>7} {}", "skip", "-", "-", "-", "no dex built");
+            rows.push(serde_json::json!({"program": name, "skip": true, "note": "no dex built"}));
+            skipped += 1;
+            continue;
+        }
+        let exp_out = std::fs::read_to_string(expected.join(format!("{name}.stdout"))).unwrap_or_default();
+        let exp_exit: i32 = std::fs::read_to_string(expected.join(format!("{name}.exit")))
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(0);
+        let opts = RunOpts {
+            dex: vec![dex],
+            class: "Main".into(),
+            class_args: Vec::new(),
+            jit: JitMode::Default,
+            timeout: Duration::from_secs(timeout),
+            rlimit_as_mb,
+            log: LogMode::Logd,
+            image: None,
+            use_image: true,
+            shim: true,
+            props: true,
+            extra_env: Vec::new(),
+        };
+        let res = launcher::run(root, &opts)?;
+        let stdout_ok = res.stdout == exp_out;
+        let exit_ok = res.exit == Some(exp_exit) && res.outcome == acos_art::Outcome::Ok;
+        let ok = stdout_ok && exit_ok;
+        if ok {
+            pass += 1;
+        }
+        let mut notes = Vec::new();
+        if !stdout_ok {
+            notes.push("stdout differs".to_string());
+        }
+        if !exit_ok {
+            notes.push(format!("outcome={:?} code={}", res.outcome, res.code.as_deref().unwrap_or("-")));
+        }
+        // Soft check: every fixture stderr line should appear in the real stderr.
+        let exp_err = std::fs::read_to_string(expected.join(format!("{name}.stderr"))).unwrap_or_default();
+        let stderr_ok = exp_err
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .all(|l| res.stderr.contains(l));
+        if !stderr_ok && !exp_err.trim().is_empty() {
+            notes.push("stderr differs".into());
+        }
+        println!(
+            "{:<30} {:<5} {:>6} {:>5} {:>7} {}",
+            name,
+            if ok { "PASS" } else { "FAIL" },
+            res.exit.map(|c| c.to_string()).unwrap_or_else(|| "sig".into()),
+            exp_exit,
+            res.wall_ms,
+            notes.join(", ")
+        );
+        rows.push(serde_json::json!({
+            "program": name,
+            "pass": ok,
+            "stdout_ok": stdout_ok,
+            "stderr_ok": stderr_ok,
+            "exit": res.exit,
+            "expected_exit": exp_exit,
+            "outcome": res.outcome,
+            "code": res.code,
+            "wall_ms": res.wall_ms,
+            "logs": res.logs.len(),
+        }));
+    }
+
+    let total = names.len() - skipped;
+    println!("\n{pass}/{total} pass, {} fail ({} skipped)", total - pass, skipped);
+    let summary = serde_json::json!({
+        "engine": "art-dalvikvm64",
+        "sysroot": root.sysroot.display().to_string(),
+        "programs": total,
+        "skipped": skipped,
+        "pass": pass,
+        "fail": total - pass,
+        "results": rows,
+    });
+    if let Some(p) = json_out {
+        if let Some(d) = p.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        std::fs::write(&p, serde_json::to_string_pretty(&summary).unwrap() + "\n")?;
+        eprintln!("wrote {}", p.display());
+    } else if json {
+        println!("{}", serde_json::to_string_pretty(&summary).unwrap());
+    }
+    Ok(if pass == total { ExitCode::SUCCESS } else { ExitCode::from(1) })
+}
+
+// ---------------------------------------------------------------------------
+// build-image: AOT boot image with the image's own dex2oat64
+// ---------------------------------------------------------------------------
+
+fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<PathBuf> {
+    let out = out.unwrap_or_else(|| root.data.join("img"));
+    let named = out.join("x86_64");
+    std::fs::create_dir_all(&named)?;
+    if !force && named.join("boot.art").is_file() && named.join("boot.oat").is_file() {
+        eprintln!("acos-art: boot image already built at {}", named.display());
+        return Ok(out);
+    }
+    root.ensure_linkerconfig(false)?;
+    let jars = root.device_bootclasspath()?;
+    if jars.is_empty() {
+        return Err(Error::Layout("empty BOOTCLASSPATH".into()));
+    }
+    let mut argv = vec![
+        "--image=/data/img/x86_64/boot.art".to_string(),
+        "--base=0x70000000".to_string(),
+        "--oat-file=/data/img/x86_64/boot.oat".to_string(),
+        "--instruction-set=x86_64".to_string(),
+        "--image-format=lz4".to_string(),
+    ];
+    for j in &jars {
+        argv.push(format!("--dex-file={j}"));
+        argv.push(format!("--dex-location={j}"));
+    }
+    let mut sb = root.sandbox();
+    sb.rw_bind(&out, "/data/img");
+    sb.env(
+        "LD_LIBRARY_PATH",
+        "/apex/com.android.art/lib64:/apex/com.android.os.statsd/lib64:\
+         /apex/com.android.i18n/lib64:/system/lib64:/apex/sharedlibs/lib64",
+    );
+    let started = std::time::Instant::now();
+    let mut cmd = sb.command("/apex/com.android.art/bin/dex2oat64", &argv)?;
+    eprintln!("acos-art: dex2oat64 ({} boot jars) …", jars.len());
+    let output = cmd.output()?;
+    eprintln!(
+        "acos-art: dex2oat64 rc={:?} in {} ms",
+        output.status.code(),
+        started.elapsed().as_millis()
+    );
+    if !output.status.success() {
+        let mut log = String::from_utf8_lossy(&output.stderr).to_string();
+        log.push_str(&String::from_utf8_lossy(&output.stdout));
+        std::fs::write(root.data.join("dex2oat.log"), &log)?;
+        return Err(Error::Tool(format!(
+            "dex2oat64 failed (log: {})",
+            root.data.join("dex2oat.log").display()
+        )));
+    }
+    if !named.join("boot.art").is_file() {
+        return Err(Error::Layout(format!("dex2oat produced no {}", named.join("boot.art").display())));
+    }
+    std::fs::write(
+        out.join("MANIFEST.txt"),
+        format!(
+            "boot image for {} built {} from {} boot classpath jars\n",
+            "android-34 x86_64",
+            chrono_like_now(),
+            jars.len()
+        ),
+    )?;
+    Ok(out)
+}
+
+fn chrono_like_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("unix:{secs}")
+}
+
+// ---------------------------------------------------------------------------
+// doctor
+// ---------------------------------------------------------------------------
+
+fn doctor(root: &ArtRoot) {
+    let ok = |b: bool| if b { "ok" } else { "MISSING" };
+    println!("repo root      {}", root.repo_root.display());
+    println!("sysroot        {}", root.sysroot.display());
+    println!("data           {}", root.data.display());
+    println!("apex modules   {} ({})", root.modules.len(), ok(root.modules.len() > 30));
+    let bwrap = which("bwrap");
+    println!("bwrap          {}", bwrap.as_deref().map(Path::display).map(|d| d.to_string()).unwrap_or("MISSING".into()));
+    let dalvik = root.sysroot.join("system/apex/com.android.art/bin/dalvikvm64");
+    println!("dalvikvm64     {} {}", dalvik.display(), if dalvik.is_file() { "" } else { "(MISSING)" });
+    let dex2oat = root.sysroot.join("system/apex/com.android.art/bin/dex2oat64");
+    println!("dex2oat64      {} {}", dex2oat.display(), if dex2oat.is_file() { "" } else { "(MISSING)" });
+    match root.device_bootclasspath() {
+        Ok(jars) => println!("bootclasspath  {} jars, first={}", jars.len(), jars.first().cloned().unwrap_or_default()),
+        Err(e) => println!("bootclasspath  ERROR: {e}"),
+    }
+    let ld = root.data.join("linkerconfig/ld.config.txt");
+    println!("linkerconfig   {} {}", ld.display(), if ld.is_file() { "" } else { "(not generated yet)" });
+    let img = root.data.join("img/x86_64/boot.art");
+    println!("boot image     {} {}", img.display(), if img.is_file() { "" } else { "(absent: imageless JIT)" });
+    println!("shim source    {} bytes (compiled on demand with $CC/clang)", acos_art::SHIM_SOURCE.len());
+    let virt = root.sysroot.join("system/lib64/libartshim.so");
+    let _ = virt;
+    println!("userns         {}", userns_enabled());
+}
+
+fn userns_enabled() -> &'static str {
+    match std::fs::read_to_string("/proc/sys/user/max_user_namespaces") {
+        Ok(s) if s.trim().parse::<u64>().unwrap_or(0) > 0 => "enabled",
+        _ => "DISABLED (bwrap will fail)",
+    }
+}
+
+fn which(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())
+}
+
+#[allow(dead_code)]
+fn is_dir(p: &Path) -> bool {
+    p.is_dir()
+}

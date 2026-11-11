@@ -1,0 +1,21 @@
+[package]
+name = "acos-art"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Reproducible launcher for real Google ART (dalvikvm64 from the API-34 ART APEX) inside an unprivileged bwrap mini-Android root: sysroot layout, /apex mounts, linkerconfig, apex-info-list, properties, logd sink, structured run results (ADR: docs/DECISION_ART_RUNTIME.md)."
+
+[lib]
+name = "acos_art"
+path = "src/lib.rs"
+
+[[bin]]
+name = "acos-art"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
