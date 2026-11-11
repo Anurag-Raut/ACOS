@@ -1745,6 +1745,14 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
 pub const BUNDLE_MAGIC: u32 = 0x4c44_4e42;
 
 /// Write a `writeBundle` payload in the real `BaseBundle` layout.
+/// Android's `String.hashCode` (`s[0]*31^(n-1) + ...`). `ArrayMap` keeps its
+/// `mHashes` sorted by this value, and `Parcel.readArrayMap` appends entries in
+/// wire order, so the writer must emit them in ascending-hash order.
+fn java_string_hash(s: &str) -> i32 {
+    s.encode_utf16()
+        .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(c as i32))
+}
+
 pub fn write_bundle(parcel: &mut Parcel, bundle: Option<&Bundle>) -> Result<()> {
     match bundle {
         None => {
@@ -1756,12 +1764,19 @@ pub fn write_bundle(parcel: &mut Parcel, bundle: Option<&Bundle>) -> Result<()> 
             // descriptors in the map stay in this parcel's object table (an
             // `appendFrom` of a scratch parcel would lose them). The length is
             // backpatched, exactly like `BaseBundle.writeToParcelInner`.
+            //
+            // Entries are emitted in `ArrayMap` order: ascending by the key's
+            // Java `hashCode`. `Parcel.readArrayMap` calls `ArrayMap.append` in
+            // wire order and warns ("New hash ... is before end of array hash")
+            // when that order is violated, so insertion order is not enough.
             let start = parcel.data_size();
             parcel.write_int32(0);
             parcel.write_int32(BUNDLE_MAGIC as i32);
             let payload_start = parcel.data_size();
             parcel.write_int32(i32::try_from(b.len()).map_err(|_| bad("bundle too large"))?);
-            for (key, value) in &b.entries {
+            let mut entries: Vec<&(String, Value)> = b.entries.iter().collect();
+            entries.sort_by_key(|(key, _)| java_string_hash(key));
+            for (key, value) in entries {
                 parcel.write_string16(key)?;
                 write_dynamic(parcel, &value_to_dynamic(value)?)?;
             }

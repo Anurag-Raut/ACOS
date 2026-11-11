@@ -106,15 +106,46 @@ pub struct ParityReport {
 /// the same the W130-A harness asserts (`global_ssim >= 0.98` and
 /// `mean_ssim >= 0.99`).
 fn flutter_frame_parity(candidate: &Path) -> Value {
+    let reference = repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
+    frame_parity(&reference, candidate, &[[0, 0, 1080, 108], [0, 2304, 1080, 2400]])
+}
+
+/// The framework-app frame preset: the ART reference screenshot for a fixture
+/// app vs an ACOS frame, masking the status and navigation bars.
+///
+/// The reference is `fixtures/reference/<app>/art-api34-x86_64/screenshot_initial.png`
+/// (1080x2400 @ 420 dpi). The status bar is 24 dp (`24 * 420 / 160 = 63` px,
+/// rounded to 64); the navigation band is the W130-A measured `2304..2400`.
+fn framework_frame_parity(app: &str, candidate: &Path) -> Value {
+    let reference = repo_root()
+        .join("fixtures/reference")
+        .join(app)
+        .join("art-api34-x86_64/screenshot_initial.png");
+    if !reference.is_file() {
+        return json!({
+            "ok": false,
+            "code": "RENDER_INVALID_ARGUMENT",
+            "message": format!(
+                "no ART reference screenshot for app {app:?} at {}; \
+                 pass `--recorded <app>` with one of the fixtures that have a reference",
+                reference.display()
+            ),
+        });
+    }
+    frame_parity(&reference, candidate, &[[0, 0, 1080, 64], [0, 2304, 1080, 2400]])
+}
+
+/// Compare `candidate` against `reference`, masking `masks`, and report the
+/// same SSIM verdict the W130-A harness asserts.
+fn frame_parity(reference: &Path, candidate: &Path, masks: &[[u32; 4]]) -> Value {
     use acos_render::diff::{self, DiffOptions};
     use acos_render::image;
 
-    let reference = repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
     let load = |path: &Path| -> Result<image::DecodedImage, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
         image::decode(&bytes).map_err(|e| format!("{}: {e}", path.display()))
     };
-    let (reference_img, candidate_img) = match (load(&reference), load(candidate)) {
+    let (reference_img, candidate_img) = match (load(reference), load(candidate)) {
         (Ok(r), Ok(c)) => (r, c),
         (Err(e), _) | (_, Err(e)) => {
             return json!({"ok": false, "code": "RENDER_INVALID_ARGUMENT", "message": e})
@@ -124,7 +155,7 @@ fn flutter_frame_parity(candidate: &Path) -> Value {
         pixel_threshold: 8,
         ssim_window: 8,
         block_size: 8,
-        mask: vec![[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+        mask: masks.to_vec(),
     };
     match diff::diff(&reference_img, &candidate_img, &opts) {
         Ok(report) => {
@@ -134,7 +165,7 @@ fn flutter_frame_parity(candidate: &Path) -> Value {
                 "identical": identical,
                 "reference": reference.display().to_string(),
                 "candidate": candidate.display().to_string(),
-                "masks": [[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+                "masks": masks,
                 "threshold": {"global_ssim": 0.98, "mean_ssim": 0.99},
                 "diff": report,
             })
@@ -316,6 +347,19 @@ fn scale_bounds(bounds: [i32; 4], scale: f64) -> [i32; 4] {
     ]
 }
 
+/// Frame parity preset: `framework` (ART reference for a fixture app) or
+/// `flutter` (the reference device capture).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum FramePreset {
+    /// Framework-app preset: the ART reference for `--recorded <app>`, which
+    /// defaults to `counter`. Masks the status bar (`0..64`, 24 dp at 420 dpi)
+    /// and the navigation band (`2304..2400`).
+    Framework,
+    /// Flutter preset: `fixtures/reference-device/flutter-hello` with the
+    /// W130-A status (`0..108`) and navigation (`2304..2400`) bands masked.
+    Flutter,
+}
+
 /// Arguments for `acos parity`.
 #[derive(Debug, clap::Args)]
 pub struct ParityArgs {
@@ -371,6 +415,15 @@ pub struct ParityArgs {
     #[arg(long = "flutter-frame")]
     pub flutter_frame: Option<PathBuf>,
 
+    /// Frame parity preset (analogous to `--flutter-frame`): compare the PNG in
+    /// `--frame` against the preset reference with the system bars masked.
+    #[arg(long = "frame-preset", value_enum)]
+    pub frame_preset: Option<FramePreset>,
+
+    /// Candidate ACOS frame PNG for `--frame-preset`.
+    #[arg(long)]
+    pub frame: Option<PathBuf>,
+
     /// Emit the JSON report (always true in practice; kept for symmetry).
     #[arg(long)]
     pub json: bool,
@@ -378,6 +431,41 @@ pub struct ParityArgs {
 
 /// Run `acos parity`.
 pub fn run(args: ParityArgs) -> ExitCode {
+    if let Some(preset) = args.frame_preset {
+        let Some(candidate) = args.frame.clone() else {
+            let report = json!({
+                "ok": false,
+                "code": "INVALID_ARGUMENT",
+                "message": "`--frame-preset` needs a candidate PNG via `--frame <path>`",
+            });
+            crate::print_json(&report);
+            return ExitCode::FAILURE;
+        };
+        let report = match preset {
+            FramePreset::Flutter => flutter_frame_parity(&candidate),
+            FramePreset::Framework => framework_frame_parity(
+                args.recorded.as_deref().unwrap_or("counter"),
+                &candidate,
+            ),
+        };
+        let identical = report["identical"].as_bool().unwrap_or(false);
+        if args.json {
+            crate::print_json(&report);
+        } else {
+            println!(
+                "frame parity ({}): identical={identical} global_ssim={:.4} mean_ssim={:.4} differing={:.5}",
+                args.recorded.as_deref().unwrap_or("counter"),
+                report["diff"]["global_ssim"].as_f64().unwrap_or(0.0),
+                report["diff"]["mean_ssim"].as_f64().unwrap_or(0.0),
+                report["diff"]["differing_fraction"].as_f64().unwrap_or(0.0),
+            );
+        }
+        return if identical {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+    }
     if let Some(frame) = args.flutter_frame.clone() {
         let report = flutter_frame_parity(&frame);
         let identical = report["identical"].as_bool().unwrap_or(false);
