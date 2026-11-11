@@ -95,7 +95,15 @@ pub struct WmsState {
     /// Session created for the app's `IWindowSession`.
     pub session: SessionId,
     /// The synthetic `IWindowSession` binder returned by `openSession`.
+    ///
+    /// `acos-wm` allocates this id for its own state machine; it is **not** a
+    /// `ServiceHost` binder. The binder the wire carries is
+    /// [`WmsState::host_session`](Self::host_session).
     pub session_binder: BinderId,
+    /// The `ServiceHost` node `IWindowManager.openSession` answers with
+    /// (`registry` registers `android.view.IWindowSession` dynamically and
+    /// stores its id here; `0` until then).
+    pub host_session: BinderId,
     /// Number of `finishDrawing` calls recorded.
     pub finish_drawing_count: u64,
     /// Number of real buffer submissions published through the compositor
@@ -134,6 +142,7 @@ impl WmsState {
             facts: DisplayFacts::reference(),
             session,
             session_binder,
+            host_session: BinderId(0),
             finish_drawing_count: 0,
             frames_published: 0,
             input: crate::input::InputDispatcher::new(),
@@ -338,6 +347,10 @@ impl WmsService {
 }
 
 impl ServiceObject for WmsService {
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn call(
         &mut self,
         interface: &str,
@@ -367,6 +380,20 @@ impl ServiceObject for WmsService {
                 let display = args.get(1).and_then(Value::as_int).unwrap_or(0);
                 state.set_in_touch_mode(on, display);
                 vec![]
+            }
+            // `IWindowManager.openSession(IWindowSessionCallback)` answers the
+            // host's `IWindowSession` node, so `ViewRootImpl`'s next call
+            // (`addToDisplayAsUser`) is routable (W1). A new session record is
+            // allocated on every call, exactly like the real WMS.
+            "openSession" => {
+                state.open_session();
+                let binder = state.host_session;
+                if binder.0 == 0 {
+                    return Err(crate::error::ServiceError::Internal(
+                        "android.view.IWindowSession is not registered on the host".into(),
+                    ));
+                }
+                vec![Value::Binder(Some(binder))]
             }
             // The parcelable-bearing methods are served by `wms_java`.
             _ => return Err(Self::unsupported(method)),

@@ -397,6 +397,14 @@ impl ServiceHost {
             .get(descriptor)
             .map(|e| e.binder)
             .or_else(|| self.aux.get(descriptor).copied())
+            .or_else(|| {
+                // A dynamically registered node (e.g. the `IWindowSession` the
+                // `window` service's `openSession` answers, W1).
+                self.binder_descriptors
+                    .iter()
+                    .find(|(id, d)| **d == descriptor && self.dynamic.contains_key(id))
+                    .map(|(id, _)| BinderId(*id))
+            })
     }
 
     /// The descriptor a binder handle was registered under.
@@ -602,14 +610,23 @@ impl ServiceHost {
         };
 
         if let Some(owner) = crate::registry::owner_of(&descriptor) {
-            let method = acos_aidl::lookup(&descriptor, code)
-                .map(|m| m.name.clone())
-                .unwrap_or_else(|| format!("code {code}"));
-            return Err(ServiceError::NotOwned {
-                interface: descriptor,
-                method,
-                owner,
-            });
+            // The ownership table is a marker for "another component owns this
+            // policy", not a lock: when that component has installed a real
+            // node on this host (the `window` service's `IWindowManager`, W1's
+            // `IWindowSession`), the node is what must answer. Only a
+            // descriptor with no node at all reports the owner.
+            let served = self.entries.contains_key(descriptor.as_str())
+                || self.dynamic.contains_key(&binder.0);
+            if !served {
+                let method = acos_aidl::lookup(&descriptor, code)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| format!("code {code}"));
+                return Err(ServiceError::NotOwned {
+                    interface: descriptor,
+                    method,
+                    owner,
+                });
+            }
         }
 
         // A dynamically registered object (the `IBulkCursor` handed back by a

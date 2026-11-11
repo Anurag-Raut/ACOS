@@ -508,12 +508,12 @@ fn interaction_cases() -> Vec<Case> {
                 Value::Int(0),
             ],
         },
-        Case {
-            name: "IWindowSession.onRectangleOnScreenRequested (acos-wm)",
-            interface: "android.view.IWindowSession",
-            method: "onRectangleOnScreenRequested",
-            args: vec![],
-        },
+        // W1: `android.view.IWindowSession` is now a real `ServiceHost` node
+        // (`src/window_session.rs`) with a raw, byte-exact parcel path, so it is
+        // no longer a "not owned" row here. Its acceptance (hand-built requests
+        // in the image's own order, exact reply consumption) lives in
+        // `tests/window_session_api34.rs`; the decoded-`Value` replay harness
+        // cannot express `LayoutParams`/`InsetsState` payloads.
         Case {
             name: "IInputMethodManager.reportPerceptibleAsync",
             interface: "com.android.internal.view.IInputMethodManager",

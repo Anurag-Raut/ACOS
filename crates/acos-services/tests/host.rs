@@ -101,13 +101,13 @@ fn interface_token_mismatch_is_rejected() {
 
 #[test]
 fn not_owned_interfaces_name_the_owner() {
-    for descriptor in [
-        "android.view.IWindowManager",
-        "android.view.IWindowSession",
-        "android.view.IWindow",
-    ] {
+    for descriptor in ["android.view.IWindowManager", "android.view.IWindow"] {
         assert_eq!(registry::owner_of(descriptor), Some("acos-wm"));
     }
+    // W1: `IWindowSession` is no longer only an ownership marker — the host
+    // registers a real node for it (`window_session.rs`), so `openSession` can
+    // answer a binder the dispatcher routes.
+    assert_eq!(registry::owner_of("android.view.IWindowSession"), None);
     // T-38: the IME is served by `acos-services::ime`; only the app-side
     // delivery targets stay with the VM.
     assert_eq!(registry::owner_of("com.android.internal.view.IInputMethodManager"), None);

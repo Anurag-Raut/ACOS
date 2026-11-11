@@ -16,7 +16,9 @@ use crate::host::ServiceHost;
 /// Descriptors implemented by another component.
 pub const NOT_OWNED: &[(&str, &str)] = &[
     ("android.view.IWindowManager", "acos-wm"),
-    ("android.view.IWindowSession", "acos-wm"),
+    // `android.view.IWindowSession` is served by `crate::window_session` over
+    // the same `WmsState` (W1): the `ServiceHost` registers it as a dynamic
+    // node so the binder `IWindowManager.openSession` returns is routable.
     ("android.view.IWindow", "acos-wm"),
     ("android.view.IWindowSessionCallback", "acos-wm"),
     // IME app-side objects: these are *delivered* to the app by the VM, they
@@ -143,7 +145,25 @@ pub fn install(host: &mut ServiceHost) {
     let provider = host.register_aux("android.content.IContentProvider");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
-    let _wms_state = crate::wms::install(host);
+    let wms_state = crate::wms::install(host);
+
+    // W1: the `IWindowSession` node. `IWindowManager.openSession` answers this
+    // binder; every `ViewRootImpl` window call lands here, byte-exact (see
+    // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
+    // returns a routable handle instead of a fabricated id.
+    let window_id = host.register_aux("android.view.IWindowId");
+    let session_state = Arc::clone(&wms_state);
+    let session_binder = host.register_dynamic(
+        "android.view.IWindowSession",
+        Box::new(crate::window_session::WindowSessionService::new(
+            session_state,
+            window_id,
+        )),
+    );
+    wms_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .host_session = session_binder;
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
