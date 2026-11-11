@@ -580,6 +580,32 @@ impl ArtRoot {
     }
 }
 
+/// Hardening flags every ART run gets, in this order, **before** the first
+/// mount (`--tmpfs /`): the namespace has to exist before any mount is set up.
+///
+/// Measured, not assumed (`results/art-runtime/S2.md`, `S1-sandbox-review.md`
+/// §5 #1): the corpus is 27/27 with these and the `/proc`, network, IPC, UTS
+/// and cgroup views are the guest's own. `--die-with-parent` is the *only*
+/// orphan protection that works here, because bwrap's credential changes clear
+/// the launcher's `PR_SET_PDEATHSIG`. `--clearenv` means the guest environment
+/// is exactly the `--setenv` list below (plus bwrap's `PWD`/`_`) — nothing
+/// inherited from the host. `--cap-drop ALL` is redundant (bwrap's implicit
+/// user namespace already zeroes the capability sets) but costs nothing.
+///
+/// Deliberately absent: `--unshare-user` (bwrap already does it implicitly),
+/// `--disable-userns` and `--new-session` (untested against ART; see S2).
+const SANDBOX_FLAGS: &[&str] = &[
+    "--unshare-pid",
+    "--unshare-net",
+    "--unshare-ipc",
+    "--unshare-uts",
+    "--unshare-cgroup-try",
+    "--die-with-parent",
+    "--clearenv",
+    "--cap-drop",
+    "ALL",
+];
+
 /// Builder for the `bwrap` command line: the mini-Android root, its
 /// environment, and any extra host directories the task needs.
 pub struct Sandbox<'a> {
@@ -662,6 +688,11 @@ impl<'a> Sandbox<'a> {
         let r = self.root;
         let mut b = Command::new("bwrap");
         let mut a: Vec<OsString> = Vec::new();
+        // Namespaces, env clearing and pid-1 supervision first: bwrap applies
+        // options in order, so these must precede every mount and `--setenv`.
+        for f in SANDBOX_FLAGS {
+            a.push((*f).into());
+        }
         a.push("--tmpfs".into());
         a.push("/".into());
         a.push("--ro-bind".into());
@@ -992,6 +1023,84 @@ fn simple_hash(s: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Tiny scratch dir under the repo `.cache/` (never `/tmp`: the directives
+    /// keep ART scratch on the repo volume).
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let base = match repo_root() {
+            Ok(r) => r.join(".cache/test-scratch"),
+            Err(_) => std::env::temp_dir().join("acos-art-test-scratch"),
+        };
+        let dir = base.join(format!("{}-{tag}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// The argv `Sandbox::command` builds: hardening flags are the prefix (so
+    /// they precede `--tmpfs /` and every bind), the guest environment is the
+    /// `--setenv` list and nothing else, and the debug/exec tail is intact.
+    #[test]
+    fn sandbox_argv_hardens_before_first_mount() {
+        let data = scratch_dir("argv");
+        fs::create_dir_all(data.join("system/environ")).unwrap();
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        let sb = root.sandbox();
+        let cmd = sb.command("/system/bin/prog", &["one".into(), "two".into()]).expect("argv");
+        let argv: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+
+        // 1. The exact flag prefix, in order, before anything else.
+        assert_eq!(&argv[..SANDBOX_FLAGS.len()], SANDBOX_FLAGS, "argv: {argv:?}");
+        // 2. No mount, bind or exec may precede the namespace setup.
+        let first_mount = argv.iter().position(|a| a == "--tmpfs").expect("--tmpfs /");
+        assert_eq!(first_mount, SANDBOX_FLAGS.len(), "flags must be the argv prefix");
+        for flag in ["--unshare-pid", "--unshare-net", "--die-with-parent", "--clearenv"] {
+            let at = argv.iter().position(|a| a == flag).expect(flag);
+            assert!(at < first_mount, "{flag} must precede --tmpfs /");
+        }
+        // 3. `--unshare-pid` without a fresh /proc would show the host's pids.
+        assert!(argv.iter().any(|a| a == "--proc"), "--unshare-pid needs --proc /proc");
+        // 4. `--clearenv` + explicit `--setenv` only: every var is set after the
+        //    clear, and the list is the complete set the guest needs.
+        let keys: Vec<String> = argv
+            .windows(2)
+            .filter(|w| w[0] == "--setenv")
+            .map(|w| w[1].clone())
+            .collect();
+        for k in [
+            "ANDROID_ROOT",
+            "ANDROID_RUNTIME_ROOT",
+            "ANDROID_ART_ROOT",
+            "ANDROID_I18N_ROOT",
+            "ANDROID_TZDATA_ROOT",
+            "ANDROID_DATA",
+            "ANDROID_STORAGE",
+            "ANDROID_TMP",
+            "ANDROID_ART_PROPERTIES",
+            "BOOTCLASSPATH",
+            "DEX2OATBOOTCLASSPATH",
+        ] {
+            assert!(keys.iter().any(|x| x == k), "missing --setenv {k}");
+        }
+        let clearenv = argv.iter().position(|a| a == "--clearenv").expect("--clearenv");
+        let last_setenv = argv.iter().rposition(|a| a == "--setenv").expect("--setenv");
+        assert!(clearenv < last_setenv, "--setenv after --clearenv");
+        // 5. The exec tail (program + its args) still ends the argv.
+        let sep = argv.iter().rposition(|a| a == "--").expect("--");
+        assert_eq!(&argv[sep + 1..], &["/system/bin/prog", "one", "two"]);
+        let _ = fs::remove_dir_all(&data);
+    }
 
     #[test]
     fn classpath_env_parses_device_environ() {
