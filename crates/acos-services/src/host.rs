@@ -75,6 +75,47 @@ pub trait ServiceObject: Send {
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
         None
     }
+
+    /// Handle a transaction whose wire format the decoded `WireOp` vocabulary
+    /// cannot express. `data` is positioned just after the interface token and
+    /// the implementation writes the **whole** reply (exception header first).
+    ///
+    /// The one interface that needs this today is `IBulkCursor`: it is a
+    /// hand-written `Binder` subclass (no generated `$Stub`), so it has no
+    /// entry in the `acos-aidl` tables, and its `getWindow` reply is a
+    /// `CursorWindow` frame rather than an AIDL type.
+    fn raw_transact(
+        &mut self,
+        interface: &str,
+        code: u32,
+        data: &mut Parcel,
+        reply: &mut Parcel,
+    ) -> Result<bool> {
+        let _ = (interface, code, data, reply);
+        Ok(false)
+    }
+
+    /// `IContentProvider.query`: a provider returns its rows here and the host
+    /// allocates the `IBulkCursor` binder and writes the framework's
+    /// `BulkCursorDescriptor` + `CursorWindow` reply.
+    ///
+    /// `data` is positioned after the interface token. `Ok(None)` means the
+    /// object does not serve `query` (the dispatcher then reports the usual
+    /// structured unsupported error).
+    fn content_query(
+        &mut self,
+        interface: &str,
+        data: &mut Parcel,
+    ) -> Result<Option<crate::cursor::CursorResult>> {
+        let _ = (interface, data);
+        Ok(None)
+    }
+
+    /// `true` when a dynamically registered object (an `IBulkCursor`) is done
+    /// and the host may drop it after this transaction.
+    fn finished(&self) -> bool {
+        false
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -118,6 +159,9 @@ pub struct ServiceHost {
     /// Extra binders that are not top-level services (`IActivityClientController`,
     /// `IContentProvider`).
     aux: HashMap<&'static str, BinderId>,
+    /// Binders created while answering a transaction (the `IBulkCursor` a
+    /// `query` hands back), keyed by binder id.
+    dynamic: HashMap<u64, Box<dyn ServiceObject>>,
     deliveries: Vec<PendingDelivery>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
@@ -159,6 +203,7 @@ impl ServiceHost {
             binder_descriptors: HashMap::new(),
             names: HashMap::new(),
             aux: HashMap::new(),
+            dynamic: HashMap::new(),
             deliveries: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
@@ -186,6 +231,28 @@ impl ServiceHost {
             },
         );
         binder
+    }
+
+    /// Register an object under a binder created now (a binder a service
+    /// returns inside a reply, e.g. the `IBulkCursor` of a `query`).
+    ///
+    /// The object is addressed by id only; it has no `ServiceManager` name and
+    /// is not a lazily constructed service.
+    pub fn register_dynamic(
+        &mut self,
+        descriptor: &'static str,
+        object: Box<dyn ServiceObject>,
+    ) -> BinderId {
+        let binder = self.registry.register_local(descriptor);
+        self.binder_descriptors.insert(binder.0, descriptor);
+        self.dynamic.insert(binder.0, object);
+        binder
+    }
+
+    /// Number of live dynamic binder objects.
+    #[must_use]
+    pub fn dynamic_objects(&self) -> usize {
+        self.dynamic.len()
     }
 
     /// Register an auxiliary binder (a binder returned by another service).
@@ -336,6 +403,24 @@ impl ServiceHost {
     #[must_use]
     pub fn descriptor_of(&self, binder: BinderId) -> Option<&'static str> {
         self.binder_descriptors.get(&binder.0).copied()
+    }
+
+    /// The `IContentProvider` binder for `authority`, plus the structured record
+    /// of the lookup (a miss is `holder = null`, exactly what Android returns).
+    ///
+    /// This is the seam a service object uses to materialise a
+    /// `ContentProviderHolder`; the registry itself lives in
+    /// [`crate::provider::ProviderRegistry`].
+    #[must_use]
+    pub fn provider_lookups(&mut self) -> Vec<crate::provider::ProviderLookup> {
+        let Ok(object) = self.ensure("android.app.IActivityManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(crate::atms::AtmsService::provider_lookups)
+            .unwrap_or_default()
     }
 
     /// Construct the service for `descriptor` if it is not built yet.
@@ -527,6 +612,36 @@ impl ServiceHost {
             });
         }
 
+        // A dynamically registered object (the `IBulkCursor` handed back by a
+        // `query`) is not in the decoded `acos-aidl` tables: it is a
+        // hand-written `Binder` subclass in the framework. Its transactions are
+        // answered by the object itself, in the framework's own reply shape.
+        if self.dynamic.contains_key(&binder.0) {
+            data.enforce_interface(&descriptor)?;
+            let object = self
+                .dynamic
+                .get_mut(&binder.0)
+                .expect("checked above");
+            let handled = object.raw_transact(&descriptor, code, data, reply)?;
+            let finished = object.finished();
+            if finished {
+                self.dynamic.remove(&binder.0);
+            }
+            if !handled {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface: descriptor,
+                    code,
+                    method: format!("code {code}"),
+                });
+            }
+            return Ok(CallInfo {
+                interface: descriptor,
+                method: format!("code {code}"),
+                args: "<raw>".into(),
+                reply: "<raw>".into(),
+            });
+        }
+
         let method = acos_aidl::lookup(&descriptor, code).ok_or_else(|| {
             ServiceError::UnsupportedAndroidApi {
                 interface: descriptor.clone(),
@@ -549,6 +664,48 @@ impl ServiceHost {
 
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
+
+        // `IContentProvider.query` is the one decoded reply the generic codec
+        // cannot express: `ContentProviderNative` writes a hand-rolled
+        // `BulkCursorDescriptor` + `CursorWindow`, and the proxy writes the
+        // projection as `writeInt(count)` + strings (the generated table records
+        // a single `Str16`). The provider returns rows; the host allocates the
+        // `IBulkCursor` binder and writes the framework reply.
+        if descriptor == "android.content.IContentProvider" && method.name == "query" {
+            let cursor = {
+                let object = self.ensure_for_binder(binder, &descriptor)?;
+                object.content_query(&descriptor, data)?
+            };
+            if let Some(cursor) = cursor {
+                let summary = format!(
+                    "rows={} columns={}",
+                    cursor.rows.len(),
+                    cursor.columns.len()
+                );
+                let cursor_binder = self.register_dynamic(
+                    crate::cursor::BULK_CURSOR_DESCRIPTOR,
+                    Box::new(crate::cursor::BulkCursorService::new(cursor.clone())),
+                );
+                if oneway {
+                    return Ok(CallInfo {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        args: summary,
+                        reply: "<oneway>".into(),
+                    });
+                }
+                reply.reset();
+                write_no_exception(reply);
+                cursor.write_query_reply(reply, cursor_binder)?;
+                return Ok(CallInfo {
+                    interface: descriptor,
+                    method: method.name.clone(),
+                    args: summary.clone(),
+                    reply: summary,
+                });
+            }
+        }
+
         let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
         let args_summary = trace::summary_args(&args);
 

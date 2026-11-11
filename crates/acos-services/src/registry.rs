@@ -423,6 +423,37 @@ pub fn install(host: &mut ServiceHost) {
         },
     );
     crate::provider::set_settings_provider_binder(settings_binder.0);
+    // The `ContentProviderConnection` token a `getContentProvider` holder
+    // carries; the framework writes it back to `removeContentProvider` /
+    // `refContentProvider`, never transacts on it.
+    let connection = host.register_dynamic(
+        "com.android.server.am.ContentProviderConnection",
+        Box::new(crate::provider::ProviderConnectionService),
+    );
+    // Serve `settings` from the provider registry: `IActivityManager`
+    // `getContentProvider("settings")` answers with this binder and the
+    // Settings-backed `IContentProvider` behind it.
+    if let Ok(mut state) = atms.lock() {
+        state
+            .provider_registry
+            .register(crate::provider::ProviderEntry {
+                authority: "settings".into(),
+                package: "com.android.providers.settings".into(),
+                class: "SettingsProvider".into(),
+                process_name: "android.process.settings".into(),
+                read_permission: "android.permission.READ_SETTINGS".into(),
+                write_permission: "android.permission.WRITE_SETTINGS".into(),
+                exported: false,
+                grant_uri_permissions: false,
+                init_order: 0,
+                binder: settings_binder.0,
+                connection: connection.0,
+                // The provider is served in-process, but the holder still
+                // carries a real connection token so the framework's own
+                // reference counting and release path are exercised.
+                no_release_needed: false,
+            });
+    }
     // Point the aux binder at the registered controller entry.
     let _ = (controller, provider);
 }

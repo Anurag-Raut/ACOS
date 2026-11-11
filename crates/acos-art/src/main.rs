@@ -8,6 +8,7 @@
 //! acos-art props [print|write|get KEY]
 //! acos-art doctor                                    # layout/capability report
 //! acos-art render-app --apk FILE [--out DIR]          # first frame + view tree
+//! acos-art launch --apk FILE [--until application-created]  # framework startup
 //! acos-art build-app                                  # guest dex + substrate shim
 //! ```
 
@@ -30,7 +31,20 @@ USAGE:
                      [--width PX] [--panel-height PX] [--content-height PX]
                      [--status-inset PX] [--nav-inset PX] [--density DPI]
                      [--text-allcaps device|theme]
+  acos-art session --apk FILE [--out DIR] [--package PKG] [--activity CLASS]
+                     [--width PX] [--panel-height PX] [--status-inset PX]
+                     [--nav-inset PX] [--density DPI] [--session-id ID]
+                     [--socket PATH]
+                     # line-JSON on stdin/stdout, or on --socket PATH:
+                     # screenshot|tree|tap|key|reset|close
   acos-art build-app
+
+RESOURCE LIMITS (ADR-0018 / R1):
+  ACOS_ART_RSS_MAX   launcher RSS ceiling (default 2G, 0 = off): crossing it
+                     kills the guest process group and reports HOST_MEMORY_LIMIT
+  ACOS_ART_RLIMIT_DATA  soft RLIMIT_DATA backstop (default 1.25 x the above, 0 = off)
+  ACOS_ART_STREAM_CAP   captured guest stdout/stderr bytes (default 8M)
+  ACOS_ART_LOG_CAP      logd entries retained (default 50000, drop-oldest)
 
 COMMON OPTIONS:
   --sysroot DIR      ART sysroot (default: $ACOS_ART_SYSROOT, .cache/art/sysroot,
@@ -58,10 +72,23 @@ fn main() -> ExitCode {
 }
 
 fn real_main() -> Result<ExitCode> {
+    // Defence in depth, once per process: the launcher's own soft RLIMIT_DATA
+    // backstop plus the RSS watchdog (ACOS_ART_RSS_MAX, default 2 GiB). Every
+    // guest `pre_exec` raises the rlimit again, so ART is never bounded by it.
+    let (mut _watchdog, data_limit) = acos_art::watchdog::install_process_guards();
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
         print!("{USAGE}");
         return Ok(ExitCode::SUCCESS);
+    }
+    if data_limit > 0 && std::env::var_os("ACOS_ART_QUIET_GUARD").is_none() {
+        eprintln!(
+            "acos-art: guards rss_max={}MiB rlimit_data={}MiB stream_cap={}MiB log_cap={}",
+            acos_art::watchdog::rss_max_from_env() / 1024 / 1024,
+            data_limit / 1024 / 1024,
+            acos_art::capture::stream_cap_from_env() / 1024 / 1024,
+            acos_art::capture::log_cap_from_env(),
+        );
     }
     let cmd = args[0].clone();
     // Common options are allowed anywhere; parse them out first.
@@ -86,6 +113,7 @@ fn real_main() -> Result<ExitCode> {
     let mut programs: Option<PathBuf> = None;
     let mut expected: Option<PathBuf> = None;
     let mut apk: Option<PathBuf> = None;
+    let mut until = "application-created".to_string();
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
@@ -93,6 +121,9 @@ fn real_main() -> Result<ExitCode> {
     let mut status_inset = 128u32;
     let mut nav_inset = 63u32;
     let mut all_caps = acos_art::app::AllCaps::Device;
+    let mut activity: Option<String> = None;
+    let mut session_id: Option<String> = None;
+    let mut socket: Option<PathBuf> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -140,7 +171,11 @@ fn real_main() -> Result<ExitCode> {
             "--expected" => expected = Some(PathBuf::from(next(&mut i)?)),
             "--out" => out = Some(PathBuf::from(next(&mut i)?)),
             "--apk" => apk = Some(PathBuf::from(next(&mut i)?)),
+            "--until" => until = next(&mut i)?,
             "--package" => package = Some(next(&mut i)?),
+            "--activity" => activity = Some(next(&mut i)?),
+            "--session-id" => session_id = Some(next(&mut i)?),
+            "--socket" => socket = Some(PathBuf::from(next(&mut i)?)),
             "--layout" => layout = Some(next(&mut i)?),
             "--width" => size.0 = next(&mut i)?.parse().unwrap_or(1080),
             "--panel-height" => panel_height = next(&mut i)?.parse().unwrap_or(2400),
@@ -269,6 +304,42 @@ fn real_main() -> Result<ExitCode> {
                 }
             }
             Ok(if res.succeeded() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+        }
+        "session" => {
+            let apk = apk.ok_or_else(|| Error::Layout("session needs --apk FILE".into()))?;
+            let opts = acos_art::session::SessionOpts {
+                apk,
+                package,
+                activity,
+                out,
+                width: size.0,
+                panel_height,
+                content_height: size.1,
+                status_inset,
+                nav_inset,
+                density_dpi: size.2,
+                timeout: Duration::from_secs(timeout),
+                session_id,
+                socket,
+            };
+            let code = acos_art::session::session_cli(&root, &opts)?;
+            Ok(ExitCode::from(code as u8))
+        }
+        "launch" => {
+            let apk = apk.ok_or_else(|| Error::Layout("launch needs --apk FILE".into()))?;
+            let opts = acos_art::launch::LaunchOpts {
+                apk,
+                until,
+                out,
+                timeout: Duration::from_secs(timeout),
+            };
+            let res = acos_art::launch::launch(&root, &opts)?;
+            println!("{}", serde_json::to_string_pretty(&res).unwrap());
+            Ok(if res.outcome == acos_art::Outcome::Ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
         "props" => {
             let what = program_args.first().map(String::as_str).unwrap_or("print");

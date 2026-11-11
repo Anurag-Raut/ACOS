@@ -308,6 +308,9 @@ pub struct AtmsState {
     pub provider_binder: u64,
     /// Guest-initiated activity/service/broadcast/provider state (W50-A).
     pub ams: crate::ams::AmsState,
+    /// The authorities backed by Rust providers (`settings`, …), with the
+    /// reference counts `getContentProvider` maintains.
+    pub provider_registry: crate::provider::ProviderRegistry,
 }
 
 impl AtmsState {
@@ -327,6 +330,7 @@ impl AtmsState {
             controller_binder: 0,
             provider_binder: 0,
             ams: crate::ams::AmsState::new(),
+            provider_registry: crate::provider::ProviderRegistry::new(),
         }
     }
 
@@ -666,44 +670,73 @@ impl AtmsService {
         }
     }
 
+    /// `IActivityManager.getContentProvider` / `getContentProviderExternal`.
+    ///
+    /// The registry of Rust providers ([`crate::provider::ProviderRegistry`])
+    /// decides the answer; an unknown authority records a miss and returns
+    /// `None`, which the caller turns into the `null` holder Android returns.
+    /// The provider in the holder is the local `IContentProvider` binder
+    /// `ServiceHost` dispatches to, and the connection is the real
+    /// `ContentProviderConnection` token the framework writes back on release.
     fn content_provider_holder(
         &self,
+        method: &str,
         authority: &str,
-        state: &AtmsState,
+        caller: &str,
+        state: &mut AtmsState,
     ) -> Option<Parcelable> {
-        if authority != "settings" {
-            return None;
-        }
-        let app =
-            crate::pms::AppInfo::hello_views_fallback(std::path::Path::new("settings.apk"));
+        let entry = state
+            .provider_registry
+            .acquire(method, authority, caller)?;
+        let app = crate::pms::AppInfo::hello_views_fallback(std::path::Path::new(&format!(
+            "{}.apk",
+            entry.package
+        )));
         let provider_info = crate::pms::ProviderInfo {
-            name: "SettingsProvider".into(),
-            package_name: "com.android.providers.settings".into(),
-            authority: "settings".into(),
-            process_name: "android.process.settings".into(),
-            read_permission: "android.permission.READ_SETTINGS".into(),
-            write_permission: "android.permission.WRITE_SETTINGS".into(),
-            exported: false,
-            grant_uri_permissions: false,
-            init_order: 0,
+            name: entry.class.clone(),
+            package_name: entry.package.clone(),
+            authority: entry.authority.clone(),
+            process_name: entry.process_name.clone(),
+            read_permission: entry.read_permission.clone(),
+            write_permission: entry.write_permission.clone(),
+            exported: entry.exported,
+            grant_uri_permissions: entry.grant_uri_permissions,
+            init_order: entry.init_order,
         }
         .to_parcelable(&app);
+        // `ContentProviderHolder.writeToParcel` (API 34):
+        // `info.writeToParcel` (no marker), provider `writeStrongBinder`,
+        // connection `writeStrongBinder`, `noReleaseNeeded`, `mLocal`.
         Some(Parcelable::ordered(
             "android.app.ContentProviderHolder",
             vec![
-                Value::TypedObject(provider_info),                Value::TypedObject(Parcelable::ordered(
-                    "android.os.IBinder",
-                    vec![Value::Int(
-                        i32::try_from(state.provider_binder).unwrap_or(-1),
-                    )],
-                )),
-                Value::Bool(false),
+                Value::Parcelable(provider_info),
+                Value::Binder(Some(acos_parcel::BinderId(entry.binder))),
+                Value::Binder(if entry.connection != 0 {
+                    Some(acos_parcel::BinderId(entry.connection))
+                } else {
+                    None
+                }),
+                Value::Int(i32::from(entry.no_release_needed)),
+                // The provider is served in this process, so `mLocal` is true.
+                Value::Int(1),
             ],
         ))
     }
 }
 
 impl AtmsService {
+    /// The structured record of every content-provider transaction this service
+    /// has answered, oldest first — including `getContentProvider` misses (an
+    /// unknown authority is a real answer with `hit: false`, not an error).
+    #[must_use]
+    pub fn provider_lookups(&mut self) -> Vec<crate::provider::ProviderLookup> {
+        self.state
+            .lock()
+            .map(|state| state.provider_registry.lookups().to_vec())
+            .unwrap_or_default()
+    }
+
     /// The attached process record, if any: `(app thread binder id, attach
     /// seq, package)` (T-43 restore re-seed).
     #[must_use]
@@ -777,12 +810,63 @@ impl ServiceObject for AtmsService {
                 // `dev.acos.fixtures.counter` for the `settings` lookup,
                 // `ContentResolver.acquireProvider` got `null`, and
                 // `Settings$NameValueCache` NPE'd before `Activity.onCreate`.
+                let caller = args.get(1).and_then(Value::as_str).unwrap_or_default();
                 let authority = args.get(2).and_then(Value::as_str).unwrap_or_default();
-                let holder = self.content_provider_holder(authority, &state);
+                let holder =
+                    self.content_provider_holder("getContentProvider", authority, caller, &mut state);
                 vec![match holder {
                     Some(h) => Value::TypedObject(h),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
+            }
+            (AtmsInterface::ActivityManager, "getContentProviderExternal") => {
+                // `getContentProviderExternal(String name, int userId,
+                // IBinder token, String callingPackage)`.
+                let authority = args.first().and_then(Value::as_str).unwrap_or_default();
+                let caller = args.get(3).and_then(Value::as_str).unwrap_or_default();
+                let holder = self.content_provider_holder(
+                    "getContentProviderExternal",
+                    authority,
+                    caller,
+                    &mut state,
+                );
+                vec![match holder {
+                    Some(h) => Value::TypedObject(h),
+                    None => Value::TypedObject(Parcelable::Null),
+                }]
+            }
+            (AtmsInterface::ActivityManager, "removeContentProvider") => {
+                // One-way: `removeContentProvider(IBinder connection, boolean
+                // stable)`. The connection is the token this host handed out in
+                // the holder, so the registry resolves the authority from it.
+                let connection = args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                state
+                    .provider_registry
+                    .release("removeContentProvider", None, connection, "");
+                Vec::new()
+            }
+            (AtmsInterface::ActivityManager, "removeContentProviderExternal") => {
+                // `removeContentProviderExternal(String name, IBinder token)`.
+                let authority = args.first().and_then(Value::as_str).unwrap_or_default();
+                state.provider_registry.release(
+                    "removeContentProviderExternal",
+                    Some(authority),
+                    0,
+                    "",
+                );
+                Vec::new()
+            }
+            (AtmsInterface::ActivityManager, "refContentProvider") => {
+                // `refContentProvider(IBinder connection, int stable, int
+                // unstable)`: the framework asserts on a `false` reply.
+                let connection = args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                let stable = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                let unstable = args.get(2).and_then(Value::as_int).unwrap_or(0);
+                vec![Value::Bool(state.provider_registry.ref_content_provider(
+                    connection,
+                    stable,
+                    unstable,
+                ))]
             }
             (AtmsInterface::ActivityManager, "setRenderThread") => {
                 let tid = args.first().and_then(Value::as_int);

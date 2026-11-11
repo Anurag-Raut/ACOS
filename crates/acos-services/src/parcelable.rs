@@ -549,14 +549,25 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `android.app.ContentProviderHolder.writeToParcel` (API 34): the
+    // `ProviderInfo` payload with **no** presence marker (the framework calls
+    // `info.writeToParcel(dest, 0)` directly), the provider as a strong binder,
+    // the `ContentProviderConnection` token as a strong binder, then
+    // `noReleaseNeeded` and `mLocal`. The earlier spec wrote a typed
+    // `ProviderInfo` and a typed `IBinder`, which shifted every following field
+    // by one int and hid the connection token.
     ParcelableSpec {
         class: "android.app.ContentProviderHolder",
         fields: &[
-            FieldOp::Typed("android.content.pm.ProviderInfo"),
-            FieldOp::Typed("android.os.IBinder"),
-            FieldOp::Bool, // delay
+            FieldOp::Nested("android.content.pm.ProviderInfo"),
+            FieldOp::Binder, // provider (IContentProvider)
+            FieldOp::Binder, // connection (ContentProviderConnection)
+            // `writeInt(noReleaseNeeded ? 1 : 0)` and `writeInt(mLocal ? 1 : 0)`
+            // — `writeInt`, not `writeBoolean` (the DEX scan is authoritative).
+            FieldOp::Int, // noReleaseNeeded
+            FieldOp::Int, // mLocal
         ],
-        verification: Verification::Curated,
+        verification: Verification::Full,
     },
     // DisplayInfo: the scalar leading order is transcribed from
     // `classes4.dex:Landroid/view/DisplayInfo;->writeToParcel`. The nested

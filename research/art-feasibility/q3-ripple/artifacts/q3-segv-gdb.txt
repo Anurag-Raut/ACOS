@@ -1,0 +1,555 @@
+[New LWP 2049479 (id 2)]
+[New LWP 2049478 (id 3)]
+[New LWP 2049477 (id 4)]
+[New LWP 2049476 (id 5)]
+[New LWP 2049475 (id 6)]
+[New LWP 2049474 (id 7)]
+[New LWP 2049473 (id 8)]
+[New LWP 2049472 (id 9)]
+[New LWP 2049471 (id 10)]
+[New LWP 2049470 (id 11)]
+
+warning: "target:/system/apex/com.android.art/bin/dalvikvm64": could not open as an executable file: Input/output error.
+
+warning: `target:/system/apex/com.android.art/bin/dalvikvm64': can't open to read symbols: Input/output error.
+Error reading attached process's symbol file.
+/system/apex/com.android.art/bin/dalvikvm64: No such file or directory.
+Error while mapping shared library sections:
+Could not open `target:/system/bin/linker64' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/liblogshim.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/data/lib/libq3prop.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/data/lib/libbindershim.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/data/lib/libcrashtrace.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/liblog.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libc++.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.runtime/lib64/bionic/libc.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.runtime/lib64/bionic/libm.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.runtime/lib64/bionic/libdl.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libnativehelper.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libsigchain.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnetd_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libandroid_runtime.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libharfbuzz_ng.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libminikin.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libz.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.media.audio.common.types-V2-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/audioclient-types-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/audioflinger-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/audiopolicy-types-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/spatializer-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/av-types-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.camera.device@3.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libandroid_net.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbattery.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnetdutils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmemtrack.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libandroidfw.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libappfuse.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcrypto.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcutils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libdebuggerd_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libutils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbinder.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbinder_ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libui.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libgraphicsenv.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libgui.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhwui.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediandk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpermission.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libPlatformProperties.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libsensor.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libinput.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcamera_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcamera_metadata.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libprocinfo.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libsqlite.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libEGL.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libGLESv1_CM.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libGLESv2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libGLESv3.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libincfs.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libdataloader.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libvulkan.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libETC1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libjpeg.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhardware.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhardware_legacy.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libselinux.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia_helper.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediametrics.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmeminfo.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudioclient.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudioclient_aidl_conversion.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudiofoundation.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudiopolicy.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libusbhost.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpdfium.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libimg_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libprocessgroup.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnativebridge_lazy.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnativeloader_lazy.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmemunreachable.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhidlbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libvintf.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnativedisplay.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnativewindow.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.runtime/lib64/bionic/libdl_android.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libtimeinstate.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/server_configurable_flags.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libimage_io.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libultrahdr.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/framework-permission-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/effect-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/shared-file-region-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.camera.common@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.common@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.memtrack@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.memtrack-V1-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libvndksupport.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.common-V4-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.allocator-V2-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.allocator@2.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.allocator@3.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.allocator@4.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.common@1.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.mapper@2.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.mapper@2.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.mapper@3.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.mapper@4.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libgralloctypes.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libsync.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.bufferqueue@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.bufferqueue@2.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.common@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.token@1.0-utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpng.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libdng_sdk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpiex.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libexpat.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.graphics.composer3-V2-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libheif.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libprotobuf-cpp-lite.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libft2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libandroid_runtime_lazy.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libdatasource.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediadrm.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia_omx.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia_jni_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_foundation.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediandk_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm-V1-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/lib-platform-compat-native-api.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.configstore@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.configstore-utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libSurfaceFlingerProp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libunwindstack.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libziparchive.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.system.suspend-V1-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpcre2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpackagelistparser.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia_codeclist.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/mediametricsservice-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/audiopolicy-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/capture_state_listener-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudio_aidl_conversion_common_cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudioutils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaudiomanager.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediautils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libnblog.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libshmemcompat.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/packagemanager_aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcgrouprc.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libtinyxml2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbpf_bcc.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libbpf_minimal.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libjpegencoder.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libjpegdecoder.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.common-V2-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.token@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmediadrmmetrics_lite.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm@1.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm@1.3.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.drm@1.4.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhidlallocatorutils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.omx@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_framecapture_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2_vndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libmedia_omx_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libsfplugin_ccodec.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libsfplugin_ccodec_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_codecbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_omx_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libhidlmemory.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.allocator@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.cas.native@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.configstore@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/liblzma.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libspeexresampler.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libshmemutil.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.memory@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.common.fmq-V1-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.bufferpool@2.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.bufferpool2-V1-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libdmabufheap.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libfmq.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libion.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_bufferpool@2.0.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_aidl_bufferpool2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.c2@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_bufferqueue_helper.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_omx.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_surface_utils.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_xmlparser.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.memory.token@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.cas@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hidl.safe_union@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.c2@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.media.c2@1.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2_hidl_client@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2_hidl_client@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcodec2_hidl_client@1.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libicu.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libicuuc.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libicui18n.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libc++.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libandroidicu.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libart.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libartpalette.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb6cc5e93475522f033f9807fa5f8ad346840deb8c6475491b3425ed7ef34094fb412761afd70b2205820f67d8a4c71c39832/libbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/liblz4.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/liblzma.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libnativebridge.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libnativeloader.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libunwindstack.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libartbase.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libdexfile.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libprofile.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.os.statsd/lib64/libstatssocket.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/heapprofd_client_api.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libartpalette-system.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libtombstoned_client.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libandroid.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libactivitymanager_aidl.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libxml2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libpowermanager.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power-V4-ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power@1.1.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power@1.2.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power@1.3.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.power-V4-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaaudio.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libaaudio_internal.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/aaudio-aidl-cpp.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libamidi.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libcamera2ndk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libjnigraphics.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libOpenMAXAL.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libwilhelm.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstagefright_http_support.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libOpenSLES.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libRS.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libutilscallstack.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/android.hardware.renderscript@1.0.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libstdc++.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/system/lib64/libwebviewchromium_plat_support.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.i18n/lib64/libicu_jni.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libjavacore.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libandroidio.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libexpat.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libopenjdk.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libopenjdkjvm.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.art/lib64/libart-compiler.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/com.android.conscrypt/lib64/libjavacrypto.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libssl.so/67f8686cf2e22860c9ce69fbc0a70e4900e2975438e9fc3ab2f93abd60adf1c2fa2044a361a7f38378f07191e06dab004151cbba6d21749f8b0b0325156f89ec/libssl.so' as an executable file: Input/output error
+Error while mapping shared library sections:
+Could not open `target:/apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so' as an executable file: Input/output error
+
+warning: Unable to find dynamic linker breakpoint function.
+GDB will be unable to debug shared library initializers
+and track explicitly loaded dynamic code.
+
+warning: Could not load vsyscall page because no executable was specified
+[Switching to thread 1 (LWP 2049468)]
+0x00007f12a9a8ab98 in ?? ()
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.archlinux.org>
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+Error reading attached process's symbol file.
+/system/apex/com.android.art/bin/dalvikvm64: No such file or directory.
+warning: Unable to find dynamic linker breakpoint function.
+GDB will be unabl

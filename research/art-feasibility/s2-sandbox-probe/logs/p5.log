@@ -1,0 +1,25 @@
+
+===== P5 guest writes to the rw /data bind, and a canary standing in for boot.art =====
+host: canary .cache/art/data/s2probe/img/x86_64/boot.art sha256=8e8cf30dc8095615
+--- plain ---
+new file in /data: WRITTEN
+new file in /data/local/tmp: WRITTEN
+overwrite canary /data/s2probe/img/x86_64/boot.art: OVERWRITTEN
+append to /data/acos.properties: APPENDED
+write /system/framework/framework.jar: denied (ro)
+test -w /linkerconfig/ld.config.txt (test only, no write): WRITABLE
+test -w /data/img (boot-image dir): WRITABLE
+test -w /data/shim/libartshim.so: not writable
+test -w /dev/socket/logdw: WRITABLE
+host: canary sha256 after plain = 311a638d7e9b1852 -> MODIFIED
+--- hard ---
+new file in /data: WRITTEN
+new file in /data/local/tmp: WRITTEN
+overwrite canary /data/s2probe/img/x86_64/boot.art: OVERWRITTEN
+append to /data/acos.properties: APPENDED
+write /system/framework/framework.jar: denied (ro)
+test -w /linkerconfig/ld.config.txt (test only, no write): WRITABLE
+test -w /data/img (boot-image dir): WRITABLE
+test -w /data/shim/libartshim.so: not writable
+test -w /dev/socket/logdw: WRITABLE
+host: canary sha256 after hard = 311a638d7e9b1852 -> MODIFIED

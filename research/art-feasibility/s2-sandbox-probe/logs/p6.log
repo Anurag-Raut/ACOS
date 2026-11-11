@@ -1,0 +1,10 @@
+=== P6 orphan survival: SIGKILL the launcher -- does the guest live on? ===
+A = SIGKILL bwrap itself; B = SIGKILL bwrap's parent (the launcher, PDEATHSIG chain)
+--- plain (acos-art argv as of today) ---
+plain kill=A launcher=1972684 bwrap=1972725 guest=1972732  after: bwrap=no guest=yes(ppid=1) => guest SURVIVES (orphan)
+plain kill=B launcher=1974654 bwrap=1974689 guest=1974698  research/art-feasibility/s2-sandbox-probe/p6-orphan.sh: line 51: 1974654 Killed                     ( S2_EXTRA="$extra" python3 -c "$PDEATHSIG" "$RAW" -- /system/bin/sh -c "export PATH=/system/bin; sleep $n" > /dev/null 2>&1 )
+after: bwrap=yes guest=yes(ppid=1974689) => guest SURVIVES (orphan)
+--- hard (S1 flag set added) ---
+hard  kill=A launcher=1976633 bwrap=1976671 guest=1976676  after: bwrap=no guest=no(ppid=) => guest DIES
+hard  kill=B launcher=1978614 bwrap=1978654 guest=1978660  research/art-feasibility/s2-sandbox-probe/p6-orphan.sh: line 51: 1978614 Killed                     ( S2_EXTRA="$extra" python3 -c "$PDEATHSIG" "$RAW" -- /system/bin/sh -c "export PATH=/system/bin; sleep $n" > /dev/null 2>&1 )
+after: bwrap=no guest=no(ppid=) => guest DIES

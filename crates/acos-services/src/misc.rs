@@ -641,6 +641,12 @@ impl ServiceObject for GameService {
         }
         let reply = match method.name.as_str() {
             "isAngleEnabled" => vec![Value::Bool(false)],
+            // One-way notification from `ActivityThread.setupGraphicsSupport`:
+            // the process finished its graphics bootstrap. ACOS has no game
+            // mode / ANGLE policy to update, so recording the notification and
+            // returning nothing is the service's real answer (the framework
+            // discards the reply).
+            "notifyGraphicsEnvironmentSetup" => Vec::new(),
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),

@@ -305,3 +305,103 @@ fn error_code_is_the_stable_host_code() {
     let err = ServiceError::UnknownBinder { handle: 0x1234 };
     assert_eq!(err.code(), acos_services::codes::SERVICE_UNKNOWN_BINDER);
 }
+
+// --- bounded queues (R1) ----------------------------------------------------
+//
+// The peer's own queues grow with what the guest does. On 2026-11-11 an
+// unbounded host-side structure in the ART launcher reached 36 GB anon-rss and
+// the kernel OOM killer took the desktop session (results/art-runtime/R1.md).
+// These tests pin the ceilings: the peer must refuse work with a structured
+// `ART_RESOURCE_LIMIT` and keep its own memory flat, never grow silently.
+
+#[test]
+fn the_unsupported_log_is_bounded_and_counts_the_drops() {
+    let mut peer = Peer::new();
+    let activity = peer
+        .host()
+        .binder_for_descriptor("android.app.IActivityManager")
+        .expect("activity service");
+    let mut data = Parcel::new();
+    data.write_interface_token("android.app.IActivityManager").unwrap();
+    let total = acos_binder_peer::peer::MAX_UNSUPPORTED_RECORDS + 250;
+    for _ in 0..total {
+        let req = Frame {
+            ty: F_REQ,
+            seq: 7,
+            code: 4_000_001,
+            flags: 0,
+            target: NODE_TAG | activity.0,
+            data: data.marshall(),
+            offs: vec![],
+            fds: vec![],
+        };
+        let _ = peer.handle(req);
+    }
+    assert_eq!(
+        peer.unsupported.len(),
+        acos_binder_peer::peer::MAX_UNSUPPORTED_RECORDS,
+        "the record log must stop at its cap"
+    );
+    assert_eq!(
+        peer.unsupported_dropped(),
+        (total - acos_binder_peer::peer::MAX_UNSUPPORTED_RECORDS) as u64,
+        "every refused record is counted, never silently dropped"
+    );
+    assert!(peer.resource_limits() > 0);
+}
+
+#[test]
+fn the_java_binder_table_is_bounded_with_a_structured_refusal() {
+    let mut peer = Peer::new();
+    let cap = acos_binder_peer::peer::MAX_JAVA_BINDERS;
+    let mut last_exception = 0;
+    for i in 0..=cap {
+        let req = request(
+            0,
+            "android.os.IServiceManager",
+            "addService",
+            &[
+                Value::Str(Some(format!("acos.java.{i}"))),
+                Value::Binder(Some(java(0x1_0000 + i as u64))),
+                Value::Bool(false),
+                Value::Int(0),
+            ],
+            0,
+        );
+        let (reply, _) = read_reply(&mut peer, req);
+        last_exception = exception_code(&reply);
+    }
+    assert_eq!(peer.java_binders().len(), cap, "the binder table must stop at its cap");
+    // `Parcel.EX_UNSUPPORTED_OPERATION`: the guest sees a refusal, not silence.
+    assert_eq!(last_exception, -7, "overflow must be a structured ART_RESOURCE_LIMIT");
+    assert!(peer.resource_limits() > 0);
+    let last = peer.unsupported.last().expect("an overflow record");
+    assert_eq!(last.error, acos_services::codes::ART_RESOURCE_LIMIT);
+}
+
+#[test]
+fn the_forwarded_transaction_log_is_bounded() {
+    let mut peer = Peer::new();
+    let package = peer
+        .host()
+        .binder_for_descriptor("android.content.pm.IPackageManager")
+        .expect("package service");
+    let cap = acos_binder_peer::peer::MAX_SERVICE_CALLS;
+    let total = cap + 500;
+    for _ in 0..total {
+        let req = request(
+            NODE_TAG | package.0,
+            "android.content.pm.IPackageManager",
+            "getPackagesForUid",
+            &[Value::Int(1000)],
+            0,
+        );
+        let _ = peer.handle(req);
+    }
+    assert!(
+        peer.service_calls().len() <= cap,
+        "forwarded-transaction log kept {} entries (cap {cap})",
+        peer.service_calls().len()
+    );
+    assert!(peer.resource_limits() >= 500, "the evictions are counted");
+}

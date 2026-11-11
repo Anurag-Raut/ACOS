@@ -25,18 +25,24 @@
 //! choice (see `docs/DECISION_ART_RUNTIME.md`).
 
 pub mod app;
+pub mod capture;
+pub mod launch;
+pub mod session;
 pub mod launcher;
 pub mod logd;
 pub mod props;
+pub mod watchdog;
 
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub use capture::{TailBuffer, DEFAULT_LOG_CAP, DEFAULT_STREAM_CAP};
 pub use launcher::{run, JitMode, LogMode, Outcome, RunOpts, RunResult};
-pub use logd::{LogEntry, Logd};
+pub use logd::{LogBatch, LogEntry, LogStats, Logd};
 pub use props::Props;
+pub use watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 
 /// The SDK system image the sysroot comes from (API 34, x86_64).
 pub const DEFAULT_IMAGE_REL: &str = "system-images/android-34/google_apis/x86_64";

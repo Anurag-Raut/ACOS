@@ -20,7 +20,19 @@
 //! Because liblog's `logd_log_msg` header is a private, versioned struct with no
 //! public spec; getting it wrong loses messages silently, and the whole point of
 //! the sink is that nothing is lost. See `results/art-runtime/F.md` §3.
+//!
+//! ## Bounded by construction (R1)
+//!
+//! A guest that loops on `__android_log_write` can emit tens of thousands of
+//! entries per second; retaining all of them is an unbounded allocation owned by
+//! the guest, and it OOM-killed `acos-art` (`results/art-runtime/R1.md`). The
+//! sink therefore keeps at most [`crate::capture::DEFAULT_LOG_CAP`] (50 000)
+//! entries — the **newest** ones, since that is what diagnoses a crash — drops
+//! the oldest, and counts every drop. [`Logd::finish_capped`] returns the
+//! retained entries together with [`LogStats`], so a truncated capture reports
+//! itself instead of looking complete.
 
+use crate::capture::log_cap_from_env;
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::os::unix::net::UnixDatagram;
@@ -65,9 +77,56 @@ impl LogEntry {
 
 /// A running logd sink. Dropping it without [`Logd::finish`] still stops the
 /// thread (the socket file stays in the data dir and is truncated on next start).
+/// What the bounded sink did, independent of what it kept.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogStats {
+    /// Entries the sink parsed (retained + dropped).
+    pub total: u64,
+    /// Entries retained and returned.
+    pub kept: usize,
+    /// Entries dropped because they fell out of the cap (oldest first).
+    pub dropped: u64,
+    /// The configured entry ceiling.
+    pub cap: usize,
+}
+
+impl LogStats {
+    #[must_use]
+    pub fn truncated(&self) -> bool {
+        self.dropped > 0
+    }
+
+    /// One line for a diagnostics list (never silent; a capped sink says so).
+    #[must_use]
+    pub fn summary(&self) -> String {
+        if self.truncated() {
+            format!(
+                "logd: {} entries kept of {} ({} dropped, cap {} entries)",
+                self.kept, self.total, self.dropped, self.cap
+            )
+        } else {
+            format!("logd: {} entries", self.kept)
+        }
+    }
+}
+
+/// The retained entries plus the accounting of what they cost.
+#[derive(Debug, Clone, Default)]
+pub struct LogBatch {
+    pub entries: Vec<LogEntry>,
+    pub stats: LogStats,
+    /// The first entry that fell out of the cap (a log-spam loop's first message
+    /// is usually the diagnosis, and it is the part a tail capture loses).
+    pub first_dropped: Option<LogEntry>,
+}
+
+/// A running logd sink. Dropping it without [`Logd::finish`] still stops the
+/// thread (the socket file stays in the data dir and is truncated on next start).
 pub struct Logd {
     path: PathBuf,
     entries: Arc<Mutex<Vec<LogEntry>>>,
+    stats: Arc<Mutex<LogStats>>,
+    first_dropped: Arc<Mutex<Option<LogEntry>>>,
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
     received: u64,
@@ -77,15 +136,25 @@ impl Logd {
     /// Bind `<dir>/logdw` and start the reader thread. `<dir>` is bound at
     /// `/dev/socket` inside the sandbox.
     pub fn start(dir: &Path) -> io::Result<Self> {
+        Self::start_with_cap(dir, log_cap_from_env())
+    }
+
+    /// [`Logd::start`] with an explicit entry ceiling (tests, deliberate runs).
+    pub fn start_with_cap(dir: &Path, cap: usize) -> io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let path = dir.join("logdw");
         let _ = std::fs::remove_file(&path);
         let sock = UnixDatagram::bind(&path)?;
         sock.set_read_timeout(Some(Duration::from_millis(100)))?;
-        let entries = Arc::new(Mutex::new(Vec::new()));
+        let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
+        let stats = Arc::new(Mutex::new(LogStats { cap, ..LogStats::default() }));
+        let first_dropped: Arc<Mutex<Option<LogEntry>>> = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
         let e = Arc::clone(&entries);
+        let st = Arc::clone(&stats);
+        let fd = Arc::clone(&first_dropped);
         let s = Arc::clone(&stop);
+        let cap = cap.max(1);
         let handle = thread::spawn(move || {
             let mut buf = vec![0u8; 4096];
             let mut draining = false;
@@ -93,7 +162,37 @@ impl Logd {
                 match sock.recv(&mut buf) {
                     Ok(n) => {
                         if let Some(entry) = parse_frame(&buf[..n]) {
-                            e.lock().unwrap().push(entry);
+                            let mut v = e.lock().unwrap();
+                            let mut s = st.lock().unwrap();
+                            s.total = s.total.saturating_add(1);
+                            // Drop in batches so a spammer does not turn every
+                            // push into an O(n) memmove of the whole window.
+                            if v.len() >= cap {
+                                let drop_n = (v.len() / 8).max(1).min(v.len());
+                                if fd.lock().unwrap().is_none() {
+                                    *fd.lock().unwrap() = Some(v[0].clone());
+                                }
+                                v.drain(..drop_n);
+                                s.dropped = s.dropped.saturating_add(drop_n as u64);
+                            }
+                            // `ACOS_ART_LOG_TRACE=1` names the flood in-band: this
+                            // is how R1's trigger (`ServiceManagerCppClient`
+                            // waiting for servicemanager in a loop) was identified.
+                            let trace = s.total % 10_000 == 0
+                                && std::env::var_os("ACOS_ART_LOG_TRACE").is_some();
+                            if trace {
+                                let e = &entry;
+                                eprintln!(
+                                    "acos-art: logd trace: {} entries, {} dropped, cap {} — [{}] {}: {}",
+                                    s.total,
+                                    s.dropped,
+                                    s.cap,
+                                    e.priority_name(),
+                                    crate::capture::head(&e.tag, 32),
+                                    crate::capture::head(&e.message, 120)
+                                );
+                            }
+                            v.push(entry);
                         }
                     }
                     Err(ref err)
@@ -114,15 +213,31 @@ impl Logd {
                 }
             }
         });
-        Ok(Self { path, entries, stop, handle: Some(handle), received: 0 })
+        Ok(Self {
+            path,
+            entries,
+            stats,
+            first_dropped,
+            stop,
+            handle: Some(handle),
+            received: 0,
+        })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Stop the thread and return every entry captured so far, in order.
-    pub fn finish(mut self) -> Vec<LogEntry> {
+    /// Stop the thread and return the retained entries, newest-last.
+    ///
+    /// The cap always applies; use [`Logd::finish_capped`] to see how much was
+    /// dropped.
+    pub fn finish(self) -> Vec<LogEntry> {
+        self.finish_capped().entries
+    }
+
+    /// Stop the thread and return the retained entries **and** the accounting.
+    pub fn finish_capped(mut self) -> LogBatch {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(h) = self.handle.take() {
             let _ = h.join();
@@ -132,7 +247,10 @@ impl Logd {
         let mut v = self.entries.lock().unwrap().clone();
         self.received = v.len() as u64;
         v.shrink_to_fit();
-        v
+        let mut stats = *self.stats.lock().unwrap();
+        stats.kept = v.len();
+        let first_dropped = self.first_dropped.lock().unwrap().take();
+        LogBatch { entries: v, stats, first_dropped }
     }
 
     fn drain(&self) {
@@ -146,6 +264,13 @@ impl Logd {
     /// Live snapshot (useful while a long run is in flight).
     pub fn snapshot(&self) -> Vec<LogEntry> {
         self.entries.lock().unwrap().clone()
+    }
+
+    /// Live accounting, without stopping the sink.
+    pub fn stats(&self) -> LogStats {
+        let mut s = *self.stats.lock().unwrap();
+        s.kept = self.entries.lock().unwrap().len();
+        s
     }
 }
 
@@ -214,6 +339,47 @@ mod tests {
         assert_eq!(e.message, "hello");
         assert_eq!(e.priority_name(), "E");
         assert!(!e.is_fatal());
+    }
+
+    /// The R1 regression: a guest that loops on liblog must not be able to grow
+    /// the launcher's heap. 200 000 entries through a 1 000-entry sink keep
+    /// exactly the cap (the newest ones) and account for every drop.
+    #[test]
+    fn spammer_is_capped_and_drop_oldest() {
+        let dir = std::env::temp_dir().join(format!("acos-art-logd-spam-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let logd = Logd::start_with_cap(&dir, 1000).unwrap();
+        let path = logd.path().to_path_buf();
+        let s = UnixDatagram::unbound().unwrap();
+        s.connect(&path).unwrap();
+        let n: u32 = 200_000;
+        for i in 0..n {
+            let msg = format!("spam {i}");
+            let mut f = vec![6u8, 3, 0];
+            f.extend_from_slice(&(msg.len() as u16).to_le_bytes());
+            f.push(0);
+            f.extend_from_slice(b"art");
+            f.extend_from_slice(msg.as_bytes());
+            // The socket buffer is finite: a burst can drop datagrams at the
+            // transport, which is why the assertions are about the host-side
+            // ceiling and the accounting, not about n.
+            let _ = s.send(&f);
+            if i % 64 == 0 {
+                std::thread::sleep(Duration::from_micros(50));
+            }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+        let batch = logd.finish_capped();
+        assert!(
+            batch.entries.len() <= 1000,
+            "sink kept {} entries, cap is 1000",
+            batch.entries.len()
+        );
+        assert_eq!(batch.stats.cap, 1000);
+        assert_eq!(batch.stats.total, batch.stats.kept as u64 + batch.stats.dropped);
+        assert!(batch.stats.dropped > 0, "a spammer must trip the cap: {:?}", batch.stats);
+        assert!(batch.first_dropped.is_some(), "the first dropped entry is kept as a sample");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -1,5 +1,123 @@
 # ACOS — Status
 
+## Current direction (ART)
+
+Direction set 2026-11-11 in `docs/DECISION_ART_RUNTIME.md`, `docs/PLAN_V2.md`
+and `docs/ENGINEERING_POLICY.md`. ACOS is an agent-first environment for
+running real Android APKs and verifying app changes, not a replacement OS. The
+agent-day estimates and kill criteria in `docs/ART_RUNTIME_PLAN.md` are void
+(its header says so). The Rust VM track is frozen; its old status is kept
+below under "Rust VM track (frozen)".
+
+### Engine and rules
+
+- **Engine:** real Google ART from the API-34 image (`dalvikvm64`, `com.android.art`
+  APEX, device boot classpath) inside a bwrap user+mount namespace. No init,
+  zygote, system_server, servicemanager or kernel `/dev/binder`
+  (`results/art-feasibility/E1A.md`, `results/art-runtime/P2a.md`). Product
+  sysroot: `tools/art-sysroot.sh`; crate `crates/acos-art`.
+- **Reuse ladder:** stock `libandroid_runtime`, stock `libbinder` with a
+  userspace `/dev/binder` emulation (`LD_PRELOAD`), stock `libhwui` on the
+  CPU Skia path, stock `AssetManager`/idmap2 overlays. Rust owns the services
+  (`crates/acos-services`, `crates/acos-binder-peer`), window/frame and
+  verify tooling (`docs/PLAN_V2.md` §2, `docs/ENGINEERING_POLICY.md`).
+- **Frozen:** the Rust VM stays in the tree as the fallback and deterministic
+  reference, with no new features (`docs/PLAN_V2.md` §1).
+- **No silent fallback** between engines. No snapshot or virtual-time
+  determinism claims on the ART path (`docs/DECISION_ART_RUNTIME.md`).
+- **One-hour rule:** no task runs more than 60 min without justification and
+  approval; at 60 min the agent reports, and is not killed. No time-based
+  abandonment of ART (`docs/ENGINEERING_POLICY.md`).
+
+### Proven on ART
+
+| Claim | Result | Evidence |
+|---|---|---|
+| Console corpus on real ART | **27/27** pass, normal run, 0 fatal ART log entries | `results/art-runtime/verify-27-f2.json`, `results/art-runtime/F2.md` |
+| Fatal mainline CHECK removed | ART starts on the device-accurate `BOOTCLASSPATH`/`DEX2OATBOOTCLASSPATH`; the abort is no longer suppressed | `results/art-runtime/F2.md` |
+| Stock framework natives on ART | `Bundle`, `Parcel`, `Looper`, `Resources`, `ServiceManager` run on ART, no Android boot | `results/art-feasibility/E2D.md` |
+| Stock `libbinder` + userspace driver | `getService`, `transact`, fd passing and reverse calls to a Rust peer on real `ServiceHost` | `results/art-feasibility/E3G.md`, `results/art-runtime/P2d.md`, `results/art-runtime/P2f.md` (committed `9a8e70a`) |
+| Binder reverse delivery | 9/9 checks, 5/5 consecutive runs, including 10 deliveries to a parcel-only binder | `results/art-runtime/P2f.md` |
+| Stock `libhwui` draws on ART | Bitmap `Canvas` draws correct pixels, no GPU | `results/art-feasibility/E2E.md` |
+| `counter.apk` first frame, software path | SSIM **0.99685** vs ART oracle, 4/4 content bounds exact, md5 stable over 5 runs, with image static RROs applied by stock path | `results/art-feasibility/E4H.md`, `results/art-runtime/P2c.md`, `results/art-runtime/P2e.md` |
+| Real window chrome | `PhoneWindow`/`DecorView` built by stock `setContentView`; full frame SSIM **0.99290** (P3b), **0.99351** (P3c), tree 12/12, structural 8/8 | `results/art-runtime/P3b.md`, `results/art-runtime/P3c.md` |
+| Fonts | `sSystemFontMap` built from `/system/etc/fonts.xml`; ActionBar title bounds exact (189 px) | `results/art-runtime/P3c.md` |
+| Launch reaches `bindApplication` | `attachApplication` answered by `ServiceHost`; `bindApplication` delivered (1492 bytes); `handleBindApplication` runs up to instrumentation init | `results/art-runtime/P4a.md` |
+| Memory, measured | Cold path: 16–21 MiB private per session; AOT boot image: 64–66 MiB; shared file-backed part 100–113 MiB (cold) / 60–83 MiB (AOT), whole host | `results/art-runtime/BASELINE.md` |
+
+Caveats: the `counter` frame comes from a one-shot `render-app` run, not a
+live session. P3c's numbers are uncommitted at the time of writing.
+
+### In progress (not verified)
+
+- **Launch past `bindApplication`.** `counter.apk` stops at
+  `ActivityThread.initInstrumentation`: the instrumentation class is not
+  loadable from the APK class loader (split APK does not reach
+  `LoadedApk.makePaths`). `Application.onCreate` is **not** reached. Three
+  options are written in `results/art-runtime/P4a.md` §4; no decision is recorded.
+  Code: `crates/acos-art/src/launch.rs`, `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`
+  (both uncommitted).
+- **Content provider (Settings).** `hello-views` fails in `EditText` →
+  `Settings.Config` → `IActivityManager.getContentProvider`
+  (`results/art-runtime/P2a.md` §4, `results/art-runtime/P3c.md` §4). An
+  uncommitted local `IContentProvider` for `Settings.Config` sits in
+  `crates/acos-art/guest/java/dev/acos/art/AppMain.java` (around lines 681–736).
+  No result file records whether it works.
+- **Sessions.** `crates/acos-art/src/session.rs`, `tools/art-session-drive.py`
+  and `tools/art-runtime/bench.sh` (ART engine row) are untracked. There is no
+  ART session result file in `results/`.
+- **`results/art-runtime/p3d/`** holds a frame, tree and `compare.json`
+  (tree identical to `p3c`). There is no `P3d.md` report, so its status is unknown.
+- **Working tree.** Most ART work is uncommitted (`git status`: `crates/acos-art`,
+  `results/art-runtime/P3c.md`, `P4a.md`, `p3c/`, `p3d/`, `tools/art-runtime/`).
+
+### Milestones (`docs/PLAN_V2.md` §3, `docs/ART_RUNTIME_PLAN.md` §5)
+
+| Gate | State | Evidence |
+|---|---|---|
+| M-A framework classes run | **Not accepted.** Most pieces are proven (above); no runner exists: `tools/art-runtime/accept.sh` is absent (only `bench.sh`) | `docs/PLAN_V2.md` §3 |
+| M-B `counter.apk` first frame | **Partial.** Frame via `render-app` (SSIM 0.99685 / 0.99351); the real Activity launch is blocked (P4a) | P2e, P3c, P4a |
+| M-C tap + UI tree | **Not started on ART (unknown).** No ART tap or live-tree result file | — |
+| M-D V1 parity + M1–M11 on ART | **Not started.** M1–M11 have not been measured on ART; `results/` has only memory numbers | `results/art-runtime/BASELINE.md` |
+
+### Open gaps
+
+1. `hello-views` cannot inflate `EditText` (Settings content provider, above).
+2. `counter.apk` `Application.onCreate` is not reached (P4a §4).
+3. Two framework arg tables are stale: `IPackageManager.notifyDexLoad` (code 106) and
+   `IActivityManager.handleApplicationWtf` (code 101) return `SERVICE_BAD_REQUEST`.
+   The peer also logs `descriptor "<unknown>"` (P4a §5).
+4. No ART input path (tap, type, back) and no ART reset or recreate is recorded
+   (unknown).
+5. The `acos verify --engine art` selector is required by `docs/PLAN_V2.md`
+   (phase 2, T2.5). Whether it exists is unknown; no ART verify result is recorded.
+6. Fixed-core memory and N=10 measurements (M12, `docs/ENGINEERING_POLICY.md`)
+   on the ART path are not measured.
+7. Warm-fork pool: not started. Gated after M-C (`docs/ART_RUNTIME_PLAN.md` §4,
+   `docs/PLAN_V2.md` §3 phase 4).
+8. Flutter, React Native and Gaten: deferred until `counter.apk` runs on ART
+   (`docs/PLAN_V2.md` §1).
+9. Image ships no `/product/fonts` (`results/art-runtime/P3c.md`).
+
+### Rust VM track: last V1 gate
+
+- Last V1 gate: `results/v1/GATE-f0c9fdb.md`, HEAD `f0c9fdb`. **V1 not done.**
+- Passing: hello-views 13/13, counter 13/13, recreate 17/17, reset 11/11,
+  hello-jni 13/13 with `--native`, dexprogs 27/27 (normal and GC-stress),
+  negative suite with zero false passes. M1–M5, M7, M8 and M10 pass; M11 passes
+  by script rule on one task.
+- Failing: 1.4 (hello-views title 1 px narrow), 1.9 (`--reference` path stale,
+  `UNSUPPORTED_BACKEND`), 5.1 (no `--concurrency`; independence unproven), M6
+  (1.5× legacy), M9. The launch RSS guard trips intermittently (2067 MiB vs 2048).
+- Dropped follow-ups (`docs/PLAN_V2.md` §1): M9 fixes, 1 px title, list_scroll,
+  `--concurrency`, VM speed, and JNI fidelity W188/W197/W199 (partial edits not
+  committed).
+
+## Rust VM track (frozen)
+
+Recorded before 2026-11-11. Kept as written. Where it conflicts with "Current
+direction (ART)" above, the section above wins.
+
 **As of 2026-11-11, HEAD `fd1a887`** (W165-A; `main` also carries W161-A through
 W171-A). `git log` is authoritative, and `tools/status-check.sh` fails when this
 line drifts more than 3 commits (`tools/verify-all.sh` now **fails** on it, not

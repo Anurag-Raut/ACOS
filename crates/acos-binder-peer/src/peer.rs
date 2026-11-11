@@ -45,6 +45,55 @@ use crate::protocol::{
 pub const JAVA_TAG: u64 = 1 << 32;
 /// Bit 33 marks one of this peer's service nodes.
 pub const NODE_TAG: u64 = 1 << 33;
+/// The `acos.launch` peer node (P4a): the ART guest pushes the marshalled
+/// `IApplicationThread.bindApplication` request here, and the peer delivers it
+/// to the real `ApplicationThread` binder after `attachApplication`.
+pub const LAUNCH_NODE: u64 = 1 << 40;
+
+// --- bounded queues (R1 defence in depth) ---------------------------------
+//
+// Every structure below grows with what the *guest* does: a guest that retries a
+// reverse delivery, registers binders, or asks for unsupported transactions in a
+// loop would otherwise own an unbounded allocation in the host process. The
+// ceilings are generous (a real launch is a few hundred transactions), and an
+// overflow is a structured `ART_RESOURCE_LIMIT` outcome, never a silent drop.
+
+/// Pending reverse deliveries held for the driver in one turn.
+pub const MAX_PENDING_DELIVERIES: usize = 4096;
+/// Recorded unsupported-transaction records (memory + the JSONL log).
+pub const MAX_UNSUPPORTED_RECORDS: usize = 4096;
+/// Recorded forwarded service transactions (the minimal-surface evidence).
+pub const MAX_SERVICE_CALLS: usize = 8192;
+/// Java binders the guest may register under one peer.
+pub const MAX_JAVA_BINDERS: usize = 4096;
+/// Framework-marshalled replies the guest may stash.
+pub const MAX_LAUNCH_REPLIES: usize = 256;
+/// `IServiceManager.getService` transaction codes seen on API 34 images.
+/// (`getService`=1; the image build's `checkService`=2, which also returns the
+/// binder for an existing name.)
+const SM_GET_SERVICE: u32 = 1;
+const SM_CHECK_SERVICE: u32 = 2;
+/// `IApplicationThread.bindApplication` transaction code (API 34).
+pub const BIND_APPLICATION_CODE: u32 = 5;
+/// `acos.launch` transaction codes: push the marshalled bind request, then
+/// framework-marshalled reply parcels for service calls whose ACOS codec is not
+/// API-34-exact yet (see [`Peer::launch_reply_for`]).
+pub const LAUNCH_PUSH_BIND: u32 = 1;
+/// Push `(descriptor, code, reply bytes)`; the reply is produced by the
+/// framework's own `writeToParcel` in the guest.
+pub const LAUNCH_PUSH_REPLY: u32 = 2;
+
+/// One transaction the peer forwarded during the launch, for the minimal
+/// service-surface report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceCall {
+    /// AIDL descriptor from the request's interface token.
+    pub descriptor: String,
+    /// Transaction code.
+    pub code: u32,
+    /// AIDL method name (`code N` when the table has no entry).
+    pub method: String,
+}
 
 const MASK32: u64 = 0xffff_ffff;
 
@@ -89,6 +138,25 @@ pub struct Peer {
     next_txn_seq: u32,
     /// Records written (also kept in memory for tests/evidence).
     pub unsupported: Vec<UnsupportedRecord>,
+    /// Every request transaction the peer forwarded (the service surface).
+    service_calls: Vec<ServiceCall>,
+    /// Records/queues refused because a ceiling was reached (bounded queues).
+    resource_limits: u64,
+    /// Unsupported records dropped from the in-memory log once it was full.
+    unsupported_dropped: u64,
+    /// JSONL log lines written (`MAX_UNSUPPORTED_RECORDS` worth, at most).
+    log_lines: usize,
+    /// `IApplicationThread.bindApplication` bytes stashed by the guest.
+    launch_bind: Option<Vec<u8>>,
+    /// The `IDisplayManager.getDisplayInfo` reply, marshalled by the framework's
+    /// own `DisplayInfo.writeToParcel` in the guest.
+    launch_display_reply: Option<Vec<u8>>,
+    /// Framework-marshalled reply parcels keyed by `(descriptor, code)`.
+    launch_replies: HashMap<(String, u32), Vec<u8>>,
+    /// The `IApplicationThread` wire handle named by `attachApplication`.
+    launch_app_thread: Option<u32>,
+    /// The launch delivery was queued (once).
+    launch_delivered: bool,
     /// Reverse replies received from Java (peer-initiated transactions are
     /// two-way here, matching the runtime's `BinderDelivery`).
     pub reverse_replies: u64,
@@ -142,6 +210,15 @@ impl Peer {
             local_deliveries: Vec::new(),
             next_txn_seq: 1,
             unsupported: Vec::new(),
+            service_calls: Vec::new(),
+            resource_limits: 0,
+            unsupported_dropped: 0,
+            log_lines: 0,
+            launch_bind: None,
+            launch_display_reply: None,
+            launch_replies: HashMap::new(),
+            launch_app_thread: None,
+            launch_delivered: false,
             reverse_replies: 0,
             reverse_failed: 0,
         }
@@ -165,6 +242,58 @@ impl Peer {
         &self.java_binders
     }
 
+    /// Transactions forwarded to the `ServiceHost` so far, in order (at most
+    /// [`MAX_SERVICE_CALLS`]: the oldest are dropped and counted).
+    #[must_use]
+    pub fn service_calls(&self) -> &[ServiceCall] {
+        &self.service_calls
+    }
+
+    /// How many requests were refused/evicted because a peer queue was full
+    /// (`ART_RESOURCE_LIMIT`).
+    #[must_use]
+    pub fn resource_limits(&self) -> u64 {
+        self.resource_limits
+    }
+
+    /// How many unsupported records fell out of the bounded evidence log.
+    #[must_use]
+    pub fn unsupported_dropped(&self) -> u64 {
+        self.unsupported_dropped
+    }
+
+    /// The guest pushed the `bindApplication` request bytes.
+    #[must_use]
+    pub fn launch_bind_len(&self) -> Option<usize> {
+        self.launch_bind.as_ref().map(Vec::len)
+    }
+
+    /// The `attachApplication` binder wire handle.
+    #[must_use]
+    pub fn launch_app_thread(&self) -> Option<u32> {
+        self.launch_app_thread
+    }
+
+    /// True when `bindApplication` was delivered to the app thread.
+    #[must_use]
+    pub fn launch_delivered(&self) -> bool {
+        self.launch_delivered
+    }
+
+    /// The framework-marshalled `getDisplayInfo` reply, if the guest pushed one.
+    #[must_use]
+    pub fn launch_display_reply(&self) -> Option<&[u8]> {
+        self.launch_display_reply.as_deref()
+    }
+
+    /// A framework-marshalled reply pushed by the guest for `(descriptor, code)`.
+    #[must_use]
+    pub fn launch_reply_for(&self, descriptor: &str, code: u32) -> Option<&[u8]> {
+        self.launch_replies
+            .get(&(descriptor.to_string(), code))
+            .map(Vec::as_slice)
+    }
+
     /// Handle one incoming frame and return the frames to send back.
     pub fn handle(&mut self, frame: Frame) -> Vec<Frame> {
         let mut out = Vec::new();
@@ -185,6 +314,22 @@ impl Peer {
                          (TF_STATUS_CODE reply: libbinder never reached onTransact)",
                         frame.seq
                     );
+                } else if !frame.data.is_empty() {
+                    // A non-empty reply body is the binder exception parcel
+                    // (status word != 0): print its printable run so a guest
+                    // exception is never mistaken for a silent delivery.
+                    let text: String = frame
+                        .data
+                        .iter()
+                        .filter(|b| (0x20..0x7f).contains(*b))
+                        .map(|b| *b as char)
+                        .collect();
+                    eprintln!(
+                        "acos-binder-peer: reverse delivery seq={} reply {} bytes: {}",
+                        frame.seq,
+                        frame.data.len(),
+                        text
+                    );
                 }
             }
             other => {
@@ -192,6 +337,9 @@ impl Peer {
             }
         }
         out.extend(self.take_delivery_frames());
+        if let Some(frame) = self.take_launch_delivery() {
+            out.push(frame);
+        }
         out
     }
 
@@ -212,7 +360,11 @@ impl Peer {
             return Some(self.service_manager(frame));
         }
         if frame.target & NODE_TAG != 0 {
-            return Some(self.service_transaction(frame, frame.target & !NODE_TAG));
+            let host_id = frame.target & !NODE_TAG;
+            if host_id == LAUNCH_NODE {
+                return Some(self.launch_push(frame));
+            }
+            return Some(self.service_transaction(frame, host_id));
         }
         // A transaction for a handle the driver never mapped to a peer node.
         let (descriptor, _) = peek(frame);
@@ -234,6 +386,22 @@ impl Peer {
         // answer: it registers a binder that lives in the *app* process.
         if frame.code == 3 {
             return self.add_service(frame);
+        }
+        // `acos.launch` is a peer-owned node (the ART launch path needs one
+        // binder the ServiceHost does not model); everything else is the host's.
+        if frame.code == SM_GET_SERVICE || frame.code == SM_CHECK_SERVICE {
+            let mut data = import_parcel(frame);
+            if let Ok(Some(name)) = data
+                .enforce_interface("android.os.IServiceManager")
+                .and_then(|()| data.read_string16())
+            {
+                if name == "acos.launch" {
+                    let mut reply = Parcel::new();
+                    exception::write_no_exception(&mut reply);
+                    reply.write_strong_binder(BinderId(NODE_TAG | LAUNCH_NODE));
+                    return frame_from_parcel(F_RSP, frame, &reply);
+                }
+            }
         }
         let mut data = import_parcel(frame);
         let mut reply = Parcel::new();
@@ -269,6 +437,15 @@ impl Peer {
             Ok((name, binder)) => {
                 if binder.0 & JAVA_TAG != 0 {
                     let wire = (binder.0 & MASK32) as u32;
+                    if !self.java_binders.contains_key(&wire)
+                        && self.java_binders.len() >= MAX_JAVA_BINDERS
+                    {
+                        let err = ServiceError::ResourceLimit {
+                            what: "peer java binder table".into(),
+                            limit: MAX_JAVA_BINDERS,
+                        };
+                        return self.limit_reply(frame, &err);
+                    }
                     self.java_binders.insert(wire, name.clone());
                     eprintln!(
                         "acos-binder-peer: addService({name:?}) -> java binder wire={wire} ({} registered)",
@@ -295,6 +472,64 @@ impl Peer {
         let mut data = import_parcel(frame);
         let mut reply = Parcel::new();
         let descriptor = data.peek_interface_token().ok().flatten();
+        let method = descriptor
+            .as_deref()
+            .and_then(|d| acos_aidl::lookup(d, frame.code))
+            .cloned();
+        self.service_calls.push(ServiceCall {
+            descriptor: descriptor.clone().unwrap_or_else(|| "<unknown>".into()),
+            code: frame.code,
+            method: method
+                .as_ref()
+                .map(|m| m.name.clone())
+                .unwrap_or_else(|| format!("code {}", frame.code)),
+        });
+        self.bound_service_calls();
+        // A guest-pushed, framework-marshalled reply (see `launch_push`). The
+        // service call is still recorded above, so the transaction stays
+        // visible in the minimal-surface list; only the parcel writer is the
+        // framework's instead of `acos-services`'.
+        if let (Some(d), Some(m)) = (descriptor.as_deref(), method.as_ref()) {
+            if let Some(bytes) = self.launch_reply_for(d, frame.code) {
+                eprintln!(
+                    "acos-binder-peer: {d}.{} answered from a framework-marshalled reply ({} bytes)",
+                    m.name,
+                    bytes.len()
+                );
+                return Frame::plain(F_RSP, frame.seq, 0, 0, 0, bytes.to_vec());
+            }
+        }
+        // The attach handshake is where the launch path learns the real
+        // `IApplicationThread` binder it must answer with `bindApplication`.
+        let attach_thread = if method.as_ref().map(|m| m.name.as_str()) == Some("attachApplication") {
+            let mut args_data = import_parcel(frame);
+            descriptor
+                .as_deref()
+                .zip(method.as_ref())
+                .and_then(|(d, m)| {
+                    args_data.enforce_interface(d).ok()?;
+                    acos_services::codec::read_args(&mut args_data, &m.args, d, &m.name).ok()
+                })
+                .and_then(|args| args.first().and_then(acos_services::value::Value::as_binder))
+                .and_then(java_wire)
+        } else {
+            None
+        };
+        // `getDisplayInfo`: replay the reply the framework's own
+        // `DisplayInfo.writeToParcel` produced in the guest. The service call is
+        // still recorded above, so the transaction stays visible in the
+        // minimal-surface list.
+        if descriptor.as_deref() == Some("android.hardware.display.IDisplayManager")
+            && method.as_ref().map(|m| m.name.as_str()) == Some("getDisplayInfo")
+        {
+            if let Some(bytes) = self.launch_display_reply.clone() {
+                eprintln!(
+                    "acos-binder-peer: IDisplayManager.getDisplayInfo answered from the framework-marshalled reply ({} bytes)",
+                    bytes.len()
+                );
+                return Frame::plain(F_RSP, frame.seq, 0, 0, 0, bytes);
+            }
+        }
         // `IWindowManager` is listed as `acos-wm`-owned in the registry, but the
         // host registers a real `WmsService` for the ServiceManager name
         // `window`; its scalar methods (`hasNavigationBar`, `useBLAST`, ...) are
@@ -318,7 +553,12 @@ impl Peer {
                 .transact(binder, frame.code, &mut data, &mut reply, frame.flags),
         };
         match result {
-            Ok(()) => frame_from_parcel(F_RSP, frame, &reply),
+            Ok(()) => {
+                if let Some(wire) = attach_thread {
+                    self.launch_app_thread = Some(wire);
+                }
+                frame_from_parcel(F_RSP, frame, &reply)
+            }
             Err(err) => {
                 self.record_error(frame, &mut data, &err);
                 let reply = if reply.data_size() == 0 {
@@ -360,6 +600,14 @@ impl Peer {
                 .ok_or_else(|| ServiceError::UnknownBinder { handle: binder.0 })?,
         )?;
         let call = object.call(descriptor, method, &args)?;
+        // The host may have produced reverse deliveries; queueing them without a
+        // ceiling is how a retry loop becomes a 36 GB host (R1).
+        if self.local_deliveries.len() + call.deliveries.len() > MAX_PENDING_DELIVERIES {
+            return Err(ServiceError::ResourceLimit {
+                what: "peer delivery queue".into(),
+                limit: MAX_PENDING_DELIVERIES,
+            });
+        }
         self.local_deliveries.extend(call.deliveries);
         reply.reset();
         exception::write_no_exception(reply);
@@ -392,18 +640,173 @@ impl Peer {
     }
 
     fn log_unsupported(&mut self, record: &UnsupportedRecord) {
+        // Keep the *first* records (they are the diagnosis of what the launch
+        // needed), bound the in-memory copy and the JSONL file, and count what
+        // was refused. A guest cannot turn this log into unbounded memory/disk.
+        if self.unsupported.len() >= MAX_UNSUPPORTED_RECORDS {
+            self.unsupported_dropped = self.unsupported_dropped.saturating_add(1);
+            self.resource_limits = self.resource_limits.saturating_add(1);
+            if self.unsupported_dropped == 1 {
+                eprintln!(
+                    "acos-binder-peer: ART_RESOURCE_LIMIT: unsupported-record log is full \
+                     ({MAX_UNSUPPORTED_RECORDS} records); further records are counted only"
+                );
+            }
+            return;
+        }
         let line = record.to_json();
         eprintln!("acos-binder-peer: UNSUPPORTED_ANDROID_API {line}");
         if let Some(file) = self.log.as_mut() {
-            let _ = writeln!(file, "{line}");
-            let _ = file.flush();
+            if self.log_lines < MAX_UNSUPPORTED_RECORDS {
+                self.log_lines += 1;
+                let _ = writeln!(file, "{line}");
+                if self.log_lines == MAX_UNSUPPORTED_RECORDS {
+                    let _ = writeln!(
+                        file,
+                        "{{\"kind\":\"ART_RESOURCE_LIMIT\",\"limit\":{MAX_UNSUPPORTED_RECORDS}}}"
+                    );
+                }
+                let _ = file.flush();
+            }
         }
         self.unsupported.push(record.clone());
+    }
+
+    /// Keep the forwarded-transaction evidence bounded (drop-oldest, counted).
+    fn bound_service_calls(&mut self) {
+        if self.service_calls.len() > MAX_SERVICE_CALLS {
+            let drop_n = self.service_calls.len() - MAX_SERVICE_CALLS;
+            self.service_calls.drain(..drop_n);
+            self.resource_limits = self.resource_limits.saturating_add(drop_n as u64);
+        }
+    }
+
+    /// A reply that refuses the request with `ART_RESOURCE_LIMIT`, recording it so
+    /// the overflow is visible in the run's evidence (never a silent drop).
+    fn limit_reply(&mut self, frame: &Frame, err: &ServiceError) -> Frame {
+        self.resource_limits = self.resource_limits.saturating_add(1);
+        eprintln!("acos-binder-peer: {}: {err}", err.code());
+        let record = UnsupportedRecord {
+            descriptor: "<peer>".into(),
+            code: frame.code,
+            method: format!("code {}", frame.code),
+            error: err.code().to_string(),
+            message: err.to_string(),
+        };
+        self.log_unsupported(&record);
+        self.error_reply(frame, err)
+    }
+
+    /// `acos.launch` node: the guest pushes the marshalled `bindApplication`
+    /// request (code 1) and framework-marshalled reply parcels (code 2). Both
+    /// are replayed verbatim later; nothing is invented in Rust.
+    fn launch_push(&mut self, frame: &Frame) -> Frame {
+        let mut data = import_parcel(frame);
+        let mut reply = Parcel::new();
+        let parsed = (|| -> Result<(Option<(String, u32)>, Vec<u8>), ServiceError> {
+            let mut key = None;
+            if frame.code == LAUNCH_PUSH_REPLY {
+                // The request's interface token *is* the target descriptor:
+                // strict-mode policy, work-source uid, token header, string16.
+                let _policy = data.read_int32()?;
+                let _work_source = data.read_int32()?;
+                let _header = data.read_int32()?;
+                let descriptor = data.read_string16()?.ok_or_else(|| ServiceError::BadRequest {
+                    interface: "dev.acos.art.ILaunch".into(),
+                    method: "pushReply".into(),
+                    detail: "missing descriptor".into(),
+                })?;
+                let code = data.read_int32()? as u32;
+                key = Some((descriptor, code));
+            } else {
+                data.enforce_interface("dev.acos.art.ILaunch")?;
+            }
+            let bytes = data.read_byte_array()?.ok_or_else(|| ServiceError::BadRequest {
+                interface: "dev.acos.art.ILaunch".into(),
+                method: "pushBindApplication".into(),
+                detail: "missing parcel bytes".into(),
+            })?;
+            Ok((key, bytes))
+        })();
+        match parsed {
+            Ok((Some((descriptor, code)), bytes)) => {
+                if self.launch_replies.len() >= MAX_LAUNCH_REPLIES
+                    && !self.launch_replies.contains_key(&(descriptor.clone(), code))
+                {
+                    let err = ServiceError::ResourceLimit {
+                        what: "peer launch reply table".into(),
+                        limit: MAX_LAUNCH_REPLIES,
+                    };
+                    return self.limit_reply(frame, &err);
+                }
+                eprintln!(
+                    "acos-binder-peer: launch reply template stashed for {descriptor} code {code} ({} bytes, framework-marshalled)",
+                    bytes.len()
+                );
+                if descriptor == "android.hardware.display.IDisplayManager" && code == 1 {
+                    self.launch_display_reply = Some(bytes.clone());
+                }
+                self.launch_replies.insert((descriptor, code), bytes);
+                exception::write_no_exception(&mut reply);
+                frame_from_parcel(F_RSP, frame, &reply)
+            }
+            Ok((None, bytes)) => {
+                eprintln!(
+                    "acos-binder-peer: launch bindApplication request stashed ({} bytes)",
+                    bytes.len()
+                );
+                self.launch_bind = Some(bytes);
+                exception::write_no_exception(&mut reply);
+                frame_from_parcel(F_RSP, frame, &reply)
+            }
+            Err(err) => {
+                self.record_error(frame, &mut data, &err);
+                self.error_reply(frame, &err)
+            }
+        }
+    }
+
+    /// Queue the one `bindApplication` delivery, after `attachApplication`.
+    fn take_launch_delivery(&mut self) -> Option<Frame> {
+        if self.launch_delivered {
+            return None;
+        }
+        let wire = self.launch_app_thread?;
+        let bytes = self.launch_bind.clone()?;
+        let seq = self.next_txn_seq;
+        self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
+        self.launch_delivered = true;
+        eprintln!(
+            "acos-binder-peer: delivering bindApplication ({} bytes, code {}) to java binder wire={wire}",
+            bytes.len(),
+            BIND_APPLICATION_CODE
+        );
+        Some(Frame::plain(
+            F_TXN,
+            seq,
+            BIND_APPLICATION_CODE,
+            0,
+            u64::from(wire),
+            bytes,
+        ))
     }
 
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
+        // Defence in depth: even the frames produced in one turn are bounded, so a
+        // single transaction that fans out into thousands of reverse deliveries
+        // cannot grow this turn's `out` without limit.
+        if pending.len() > MAX_PENDING_DELIVERIES {
+            let dropped = pending.len() - MAX_PENDING_DELIVERIES;
+            self.resource_limits = self.resource_limits.saturating_add(dropped as u64);
+            self.unsupported_dropped = self.unsupported_dropped.saturating_add(dropped as u64);
+            eprintln!(
+                "acos-binder-peer: ART_RESOURCE_LIMIT: {dropped} reverse deliveries dropped \
+                 (cap {MAX_PENDING_DELIVERIES} per turn)"
+            );
+            pending.truncate(MAX_PENDING_DELIVERIES);
+        }
         let mut out = Vec::new();
         for d in pending {
             let Some(wire) = java_wire(d.target) else {

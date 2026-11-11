@@ -1431,17 +1431,19 @@ fn provider_holder_parcelable(provider: &ProviderRecord) -> Parcelable {
         init_order: 0,
     }
     .to_parcelable(&app);
+    // `ContentProviderHolder.writeToParcel` (API 34).
     Parcelable::ordered(
         "android.app.ContentProviderHolder",
         vec![
-            Value::TypedObject(info),
-            Value::TypedObject(Parcelable::ordered(
-                "android.os.IBinder",
-                vec![Value::Int(
-                    i32::try_from(provider.binder).unwrap_or(-1),
-                )],
-            )),
-            Value::Bool(false),
+            Value::Parcelable(info),
+            Value::Binder(if provider.binder != 0 {
+                Some(acos_parcel::BinderId(provider.binder))
+            } else {
+                None
+            }),
+            Value::Binder(None),
+            Value::Int(1), // noReleaseNeeded
+            Value::Int(1), // mLocal
         ],
     )
 }
@@ -1453,11 +1455,9 @@ fn provider_from_holder(holder: &Parcelable) -> Option<ProviderRecord> {
         package: info.field(1)?.as_str()?.to_string(),
         authority: info.field(17)?.as_str()?.to_string(),
         binder: holder
-            .field(1)?
-            .as_parcelable()?
-            .field(0)
-            .and_then(Value::as_int)
-            .and_then(|v| u64::try_from(v).ok())
+            .field(1)
+            .and_then(Value::as_binder)
+            .map(|b| b.0)
             .unwrap_or(0),
     })
 }

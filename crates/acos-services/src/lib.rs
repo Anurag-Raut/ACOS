@@ -44,6 +44,7 @@ pub mod atms;
 pub mod clipboard;
 pub mod declared;
 pub mod codec;
+pub mod cursor;
 pub mod display;
 pub mod error;
 pub mod exception;

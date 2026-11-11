@@ -12,7 +12,11 @@
 # binds):
 #   <out>/system/{bin,etc,framework,lib,lib64}/...        real /system
 #   <out>/system/apex/<module>/...                        APEX payloads, <module> == /apex/<module>
-#   <out>/APEX_MODULES.txt                                module <TAB> apex file name
+#   <out>/{product,system_ext,vendor}/fonts/...           the other partitions' font sets
+#   <out>/{product,system_ext,vendor}/etc/fonts_customization.xml   (when present;
+#                                                        `.no-fonts` marks a
+#                                                        partition without /fonts)
+#   <out>/FONTS.txt, <out>/APEX_MODULES.txt               module <TAB> count/file name
 #   <out>/BOOTCLASSPATH                                   device paths, real boot order
 #   <out>/bootimg/x86_64/boot.{art,oat,vdex}              AOT boot image (optional)
 #   <out>/MANIFEST.txt, <out>/READY                       integrity + completion stamps
@@ -106,6 +110,19 @@ if [ "$FORCE" -eq 1 ]; then
 fi
 mkdir -p "$OUT" "$WORK"
 
+extra_missing() {
+    local p
+    for p in product system_ext vendor; do
+        [ -d "$OUT/$p/fonts" ] || [ -f "$OUT/$p/.no-fonts" ] || return 0
+    done
+    return 1
+}
+
+if [ -f "$SYSIMG" ] && extra_missing; then
+    log "system.img present but the font partitions are not provisioned yet: re-extracting"
+    rm -f "$SYSIMG"
+fi
+
 if [ ! -f "$SYSIMG" ]; then
     read -r SUPER_START SUPER_SECTORS <<<"$(super_geometry)" || die "GPT parse failed"
     log "dd super.img (start=$SUPER_START sectors=$SUPER_SECTORS)"
@@ -113,7 +130,14 @@ if [ ! -f "$SYSIMG" ]; then
         count="$SUPER_SECTORS" conv=sparse status=none || die "dd failed"
     log "lpunpack system"
     mkdir -p "$WORK/lp"
-    lpunpack -p system "$WORK/super.img" "$WORK/lp" >"$WORK/lpunpack.log" 2>&1 \
+    # The other read-only partitions are only unpacked when their font set has
+    # not been provisioned yet (see step 2b); on a fully provisioned sysroot
+    # this call is skipped and the run stays cheap.
+    extra_parts=()
+    for p in product system_ext vendor; do
+        [ -d "$OUT/$p/fonts" ] || [ -f "$OUT/$p/.no-fonts" ] || extra_parts+=("-p" "$p")
+    done
+    lpunpack -p system "${extra_parts[@]}" "$WORK/super.img" "$WORK/lp" >"$WORK/lpunpack.log" 2>&1 \
         || die "lpunpack failed (see $WORK/lpunpack.log)"
     mv "$WORK/lp/system.img" "$SYSIMG"
     rm -f "$WORK/super.img"
@@ -144,6 +168,72 @@ if [ ! -d "$OUT/system/framework" ] || [ -z "$(ls -A "$OUT/system/framework" 2>/
     export_system
 fi
 [ -f "$OUT/system/framework/framework.jar" ] || die "no framework.jar: /system extraction failed"
+
+# ---------------------------------------------------------------------------
+# 2b. the other read-only partitions' font sets (/product, /system_ext,
+#     /vendor): `fonts/` + `etc/fonts_customization.xml`, nothing else.
+#
+#     On a device the Google families the image's static RROs point
+#     `config_*FontFamily` at (`google-sans`, `google-sans-text`, ...) live in
+#     `/product/fonts`, and `SystemFonts.getSystemPreinstalledFontConfig()`
+#     reads `/product/etc/fonts_customization.xml` (verified in the image's
+#     `SystemFonts` bytecode: the four constants are `/system/etc/fonts.xml`,
+#     `/system/fonts/`, `/product/etc/fonts_customization.xml`,
+#     `/product/fonts/`). Neither is under `/system`, so a sysroot that carries
+#     only `/system/fonts` cannot resolve those families.
+#
+#     Extracted with the same read-only `debugfs` path as `/system` -- no
+#     mounts, no root, no sudo -- and kept next to the partition they come from
+#     (`<out>/product/...`), which is what `ensure_system_fonts` links into the
+#     sandbox's `/system` bind. A partition without `/fonts` gets a `.no-fonts`
+#     marker so a re-run does not unpack it again (idempotency).
+# ---------------------------------------------------------------------------
+export_partition_fonts() {
+    local part img dest count n
+    : >"$WORK/FONTS.txt"
+    for part in product system_ext vendor; do
+        img="$WORK/lp/$part.img"
+        dest="$OUT/$part"
+        count=0
+        if [ -f "$img" ]; then
+            # `ls -l` always lists `.` and `..`.
+            count="$(debugfs -R 'ls -l /fonts' "$img" 2>/dev/null \
+                | grep -cE '^ *[0-9]+ ' || true)"
+            count=$((count > 2 ? count - 2 : 0))
+        fi
+        if [ "$count" -eq 0 ]; then
+            log "  $part: no /fonts (image ships none)"
+            mkdir -p "$dest"
+            : >"$dest/.no-fonts"
+            printf '%s\t%s\n' "$part" "0" >>"$WORK/FONTS.txt"
+            rm -f "$img"
+            continue
+        fi
+        rm -rf "$dest/fonts"
+        mkdir -p "$dest"
+        debugfs -R "rdump /fonts $dest" "$img" >"$WORK/debugfs-$part-fonts.log" 2>&1 || true
+        mkdir -p "$dest/etc"
+        debugfs -R "dump /etc/fonts_customization.xml $dest/etc/fonts_customization.xml" \
+            "$img" >>"$WORK/debugfs-$part-fonts.log" 2>&1 || true
+        # `dump` leaves a 0-byte file behind when the image has no such file.
+        [ -s "$dest/etc/fonts_customization.xml" ] || rm -f "$dest/etc/fonts_customization.xml"
+        rm -rf "$dest/lost+found" "$dest/.#"* 2>/dev/null || true
+        n="$(find "$dest/fonts" -type f 2>/dev/null | wc -l)"
+        printf '%s\t%s\n' "$part" "$n" >>"$WORK/FONTS.txt"
+        if [ -f "$dest/etc/fonts_customization.xml" ]; then
+            log "  $part: $n font(s), fonts_customization.xml"
+        else
+            log "  $part: $n font(s)"
+        fi
+        rm -f "$img"
+    done
+    sort -u "$WORK/FONTS.txt" >"$OUT/FONTS.txt"
+}
+
+if extra_missing; then
+    log "extracting the font sets of /product /system_ext /vendor"
+    export_partition_fonts
+fi
 
 # ---------------------------------------------------------------------------
 # 3. every APEX payload -> <out>/system/apex/<module>/

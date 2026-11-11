@@ -1522,6 +1522,53 @@ static void* looper_main(void* p) {
     return NULL;
 }
 
+// ------------------------------------------------- AndroidRuntime bootstrap
+// A bare dalvikvm never ran `app_main`, so libandroid_runtime's `gCurRuntime`
+// is null and `android_os_Process_setArgV0` (called by
+// ActivityThread.handleBindApplication) dereferences null. Construct the real
+// AndroidRuntime the way app_main does: its constructor publishes `this` into
+// gCurRuntime. The slot is found from `getRuntime`'s own RIP-relative load, so
+// no build offset is hardcoded.
+JNIEXPORT jint JNICALL Java_dev_acos_art_LaunchMain_initAndroidRuntime(
+        JNIEnv* env, jclass klass, jstring argv0) {
+    (void)klass;
+    void* h = dlopen("libandroid_runtime.so", RTLD_NOW | RTLD_NOLOAD);
+    if (h == NULL) h = dlopen("libandroid_runtime.so", RTLD_NOW | RTLD_GLOBAL);
+    if (h == NULL) {
+        WARN("initAndroidRuntime: libandroid_runtime.so unavailable");
+        return -1;
+    }
+    void* get = dlsym(h, "_ZN7android14AndroidRuntime10getRuntimeEv");
+    void* ctor = dlsym(h, "_ZN7android14AndroidRuntimeC2EPcm");
+    Dl_info di;
+    if (get == NULL || ctor == NULL || dladdr(get, &di) == 0) {
+        WARN("initAndroidRuntime: symbols missing (get=%p ctor=%p)", get, ctor);
+        return -2;
+    }
+    typedef void* (*get_fn)(void);
+    if (((get_fn)get)() != NULL) return 0;  // already initialised
+    // getRuntime: 48 8b 05 <disp32>  (mov rax, [rip+disp]); slot = get+7+disp.
+    const unsigned char* code = (const unsigned char*)get;
+    if (code[0] != 0x48 || code[1] != 0x8b || code[2] != 0x05) {
+        WARN("initAndroidRuntime: getRuntime prologue unexpected");
+        return -3;
+    }
+    int32_t disp;
+    memcpy(&disp, code + 3, sizeof(disp));
+    void** slot = (void**)((char*)get + 7 + disp);
+    if (*slot != NULL) return 0;
+    const char* name = (*env)->GetStringUTFChars(env, argv0, NULL);
+    char* a0 = strdup(name != NULL ? name : "acos");
+    if (name != NULL) (*env)->ReleaseStringUTFChars(env, argv0, name);
+    typedef void (*ctor_fn)(void*, char*, size_t);
+    void* mem = calloc(1, 0x200);
+    if (a0 == NULL || mem == NULL) return -4;
+    ((ctor_fn)ctor)(mem, a0, strlen(a0));
+    DBG("initAndroidRuntime: AndroidRuntime=%p argv0=%s slot=%p now=%p", mem, a0,
+        (void*)slot, *slot);
+    return *slot != NULL ? 1 : -5;
+}
+
 JNIEXPORT jint JNICALL Java_dev_acos_e3g_Nat_startBinderLooper(JNIEnv* env, jclass klass) {
     (void)klass;
     static struct looper_arg arg;
@@ -1551,4 +1598,22 @@ JNIEXPORT jstring JNICALL Java_dev_acos_e3g_Nat_state(JNIEnv* env, jclass klass)
              g.sock, g.fd, (void*)g.map, g.map_size, g.n_nodes, g.n_handles,
              g.in_head ? "non-empty" : "empty");
     return (*env)->NewStringUTF(env, buf);
+}
+
+// --------------------------------------------------- dev.acos.art.Nat aliases
+// The shared Java-side bridge now lives under `guest/java/dev/acos/art/Nat.java`
+// (the launch/session guests are not allowed to depend on another crate's test
+// dex). These forward to the original entry points, so the P2f acceptance dex
+// (`dev.acos.e3g.Nat`) keeps working with exactly one implementation.
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_register(JNIEnv* env, jclass klass,
+                                                     jstring name) {
+    return Java_dev_acos_e3g_Nat_register(env, klass, name);
+}
+
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_startBinderLooper(JNIEnv* env, jclass klass) {
+    return Java_dev_acos_e3g_Nat_startBinderLooper(env, klass);
+}
+
+JNIEXPORT jstring JNICALL Java_dev_acos_art_Nat_state(JNIEnv* env, jclass klass) {
+    return Java_dev_acos_e3g_Nat_state(env, klass);
 }

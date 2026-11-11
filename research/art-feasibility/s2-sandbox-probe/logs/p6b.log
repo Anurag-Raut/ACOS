@@ -1,0 +1,43 @@
+with-pdeathsig   launcher=1986137 child=1986140 child_ppid=1986137  research/art-feasibility/s2-sandbox-probe/p6b-pdeathsig.sh: line 26: 1986137 Killed                     bash -c "python3 -c '$SPAWN' $N & wait"
+after SIGKILL(launcher): child alive=no => DIED (pdeathsig fired)
+without-pdeathsig launcher=1986899 child=none child_ppid=2043894
+125099
+122897
+69370
+52747
+125248
+87589
+47157
+37920
+74602
+61010
+50410
+41324
+43035
+37843
+62812
+33508
+139169
+107035
+66873
+46758
+144301
+100670
+39245
+33068
+50009
+39126
+36376
+32905
+34232
+31914
+35417
+34211
+0
+
+
+
+
+
+28676486  research/art-feasibility/s2-sandbox-probe/p6b-pdeathsig.sh: line 26: 1986899 Killed                     bash -c "/bin/sleep $N & wait"
+after SIGKILL(launcher): child alive=no => DIED (pdeathsig fired)

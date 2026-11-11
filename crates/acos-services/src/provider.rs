@@ -17,8 +17,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
-use acos_parcel::ParcelFd;
+use acos_parcel::{Parcel, ParcelFd};
 
+use crate::cursor::{CursorResult, Field, QueryRequest};
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::{Bundle, DynamicValue, Parcelable, RawFdValue, Value};
@@ -201,6 +202,109 @@ impl GenerationBacking for MemfdGeneration {
     }
 }
 
+/// The seeded `Settings` / `DeviceConfig` tables.
+///
+/// The values are the stock API-34 emulator's (the reference ART image) and are
+/// only defaults: a harness overrides any of them with [`SettingsState::seed`] /
+/// [`SettingsState::seed_config`], and the runtime can pass a whole map through
+/// [`SettingsState::with_defaults`].
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SettingsDefaults {
+    /// `Settings.Global` rows.
+    pub global: BTreeMap<String, String>,
+    /// `Settings.Secure` rows.
+    pub secure: BTreeMap<String, String>,
+    /// `Settings.System` rows.
+    pub system: BTreeMap<String, String>,
+    /// `DeviceConfig` rows, composite `namespace/name`.
+    pub config: BTreeMap<String, String>,
+}
+
+impl SettingsDefaults {
+    /// A stock Android 14 (API-34) emulator image.
+    ///
+    /// Values an `adb shell settings` / `adb shell device_config` session would
+    /// show on a freshly booted emulator, including the `ime/` DeviceConfig
+    /// namespace `Settings$Config.getStrings` reads while the IME initialises
+    /// (the path `hello-views`'s `EditText` blocked on, P2a §4).
+    #[must_use]
+    pub fn api34() -> Self {
+        let mut defaults = Self::default();
+        for (key, value) in [
+            // Provisioned, debuggable emulator.
+            ("device_provisioned", "1"),
+            ("adb_enabled", "1"),
+            ("development_settings_enabled", "1"),
+            ("airplane_mode_on", "0"),
+            ("auto_time", "1"),
+            ("auto_time_zone", "1"),
+            ("wifi_on", "1"),
+            ("bluetooth_on", "0"),
+            ("stay_on_while_plugged_in", "0"),
+            ("package_verifier_enable", "1"),
+            ("animator_duration_scale", "1.0"),
+            ("transition_animation_scale", "1.0"),
+            ("window_animation_scale", "1.0"),
+            ("boot_count", "0"),
+        ] {
+            defaults.global.insert(key.into(), value.into());
+        }
+        for (key, value) in [
+            ("android_id", "acos0000000000ff"),
+            ("user_setup_complete", "1"),
+            ("install_non_market_apps", "0"),
+            ("mock_location", "0"),
+            ("accessibility_enabled", "0"),
+            ("touch_exploration_enabled", "0"),
+            ("bluetooth_name", "ACOS"),
+            ("bluetooth_address", "02:00:00:00:00:00"),
+            ("default_input_method", "com.android.inputmethod.latin/.LatinIME"),
+            (
+                "enabled_input_methods",
+                "com.android.inputmethod.latin/.LatinIME",
+            ),
+            ("show_ime_with_hard_keyboard", "0"),
+            ("selected_input_method_subtype", "-1"),
+        ] {
+            defaults.secure.insert(key.into(), value.into());
+        }
+        for (key, value) in [
+            ("screen_brightness", "102"),
+            ("screen_brightness_mode", "1"),
+            ("screen_off_timeout", "60000"),
+            ("sound_effects_enabled", "0"),
+            ("vibrate_when_ringing", "1"),
+            ("haptic_feedback_enabled", "1"),
+            ("font_scale", "1.0"),
+            ("accelerometer_rotation", "1"),
+            ("user_rotation", "0"),
+            ("time_12_24", "12"),
+            ("date_format", ""),
+            ("text_show_password", "0"),
+        ] {
+            defaults.system.insert(key.into(), value.into());
+        }
+        // `DeviceConfig` as a stock emulator has it: the IME namespace exists
+        // (the framework asks for it), the textclassifier one does not.
+        for (key, value) in [
+            ("ime/enabled_input_methods", "com.android.inputmethod.latin/.LatinIME"),
+            ("ime/default_input_method", "com.android.inputmethod.latin/.LatinIME"),
+            ("ime/show_ime_with_hard_keyboard", "false"),
+        ] {
+            defaults.config.insert(key.into(), value.into());
+        }
+        defaults
+    }
+
+    /// Merge `other` over `self` (harness overrides).
+    pub fn override_with(&mut self, other: &SettingsDefaults) {
+        self.global.extend(other.global.clone());
+        self.secure.extend(other.secure.clone());
+        self.system.extend(other.system.clone());
+        self.config.extend(other.config.clone());
+    }
+}
+
 /// The Settings provider state.
 pub struct SettingsState {
     /// `Settings.Global`.
@@ -227,32 +331,56 @@ pub struct SettingsState {
 }
 
 impl SettingsState {
-    /// Seed the measured keys (`settings_keys.tsv`).
+    /// The API-34 device defaults (a stock emulator image).
     #[must_use]
     pub fn new() -> Self {
+        Self::with_defaults(SettingsDefaults::api34())
+    }
+
+    /// A state seeded from `defaults` (the configurable map the harness can
+    /// point at a different device or test).
+    #[must_use]
+    pub fn with_defaults(defaults: SettingsDefaults) -> Self {
         let mut state = Self {
-            global: BTreeMap::new(),
-            secure: BTreeMap::new(),
-            system: BTreeMap::new(),
-            config: BTreeMap::new(),
+            global: defaults.global,
+            secure: defaults.secure,
+            system: defaults.system,
+            config: defaults.config,
             generation: Box::new(MemfdGeneration::new()),
             generation_sent: [false; 3],
             observers: Vec::new(),
             changes: Vec::new(),
         };
-        // Stock Android 14 (API-34) emulator defaults for the keys the
-        // framework reads while inflating a themed `EditText`/`ListView`.
-        // `settings_keys.tsv` (captured from the reference ART run) records
-        // the four `System.*` text-keyboard preferences as set to `1`; the
+        // `settings_keys.tsv` (captured from the reference ART run) records the
+        // four `System.*` text-keyboard preferences as set to `1`; the
         // `Global.*` keys the launch reads (`force_resizable_activities`,
         // `render_shadows_in_compositor`, `show_angle_in_use_dialog_box`) are
         // unset on the reference, so they stay absent and `Settings.getInt`
         // falls back to the caller's default exactly as on device.
-        state.system.insert("auto_caps".into(), "1".into());
-        state.system.insert("auto_punctuate".into(), "1".into());
-        state.system.insert("auto_replace".into(), "1".into());
-        state.system.insert("show_password".into(), "1".into());
+        for (key, value) in [
+            ("auto_caps", "1"),
+            ("auto_punctuate", "1"),
+            ("auto_replace", "1"),
+            ("show_password", "1"),
+        ] {
+            state
+                .system
+                .entry(key.to_string())
+                .or_insert_with(|| value.to_string());
+        }
         state
+    }
+
+    /// Override one seeded value without recording a change (harness setup).
+    pub fn seed(&mut self, namespace: Namespace, key: &str, value: &str) {
+        self.map_mut(namespace)
+            .insert(key.to_string(), value.to_string());
+    }
+
+    /// Override one DeviceConfig value (`namespace/name`).
+    pub fn seed_config(&mut self, composite_name: &str, value: &str) {
+        self.config
+            .insert(composite_name.to_string(), value.to_string());
     }
 
     /// A state with an injected generation backing (the native boundary).
@@ -262,7 +390,6 @@ impl SettingsState {
         state.generation = generation;
         state
     }
-
     /// The map for a namespace.
     #[must_use]
     pub fn map(&self, namespace: Namespace) -> &BTreeMap<String, String> {
@@ -395,6 +522,167 @@ impl SettingsState {
         }
         Ok(bundle)
     }
+
+    /// `IContentProvider.query` for the `settings` authority.
+    ///
+    /// Supported URIs and arguments are the ones the framework itself sends:
+    /// `content://settings/<system|secure|global>` with `projection` (`_id`,
+    /// `name`, `value`; `null` means all three), the SQL selection `name=?`
+    /// (+ one argument) or none, and the `content://settings/config` table with
+    /// `name=?` in composite `namespace/name` form. Anything else is a
+    /// structured [`ServiceError::UnsupportedAndroidApi`], never an empty
+    /// cursor that would read like "the key does not exist".
+    pub fn query(
+        &self,
+        uri: &str,
+        projection: Option<&[String]>,
+        query_args: Option<&Bundle>,
+    ) -> Result<CursorResult> {
+        let table = uri
+            .strip_prefix("content://settings/")
+            .ok_or_else(|| invalid_uri(uri))?;
+        let (table, key_from_path) = match table.split_once('/') {
+            Some((table, item)) => (table, Some(item.to_string())),
+            None => (table, None),
+        };
+
+        let columns = projection_columns(projection)?;
+        let selection = selection_key(query_args)?;
+        if key_from_path.is_some() && selection.is_some() {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: "android.content.IContentProvider".into(),
+                code: 1,
+                method: "query(item uri with a name= ? selection)".into(),
+            });
+        }
+        let wanted = key_from_path.or(selection);
+
+        let rows: Vec<(&str, &str)> = match table {
+            "system" | "secure" | "global" => {
+                let namespace = Namespace::from_method(&format!("GET_{table}"))
+                    .map(|(_, ns)| ns)
+                    .ok_or_else(|| invalid_uri(uri))?;
+                self.map(namespace)
+                    .iter()
+                    .filter(|(name, _)| wanted.as_ref().is_none_or(|key| key == *name))
+                    .map(|(name, value)| (name.as_str(), value.as_str()))
+                    .collect()
+            }
+            "config" => self
+                .config
+                .iter()
+                .filter(|(name, _)| wanted.as_ref().is_none_or(|key| key == *name))
+                .map(|(name, value)| (name.as_str(), value.as_str()))
+                .collect(),
+            other => {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface: "android.content.IContentProvider".into(),
+                    code: 1,
+                    method: format!("query(table {other})"),
+                })
+            }
+        };
+
+        let width = columns.len();
+        let mut out_rows = Vec::with_capacity(rows.len());
+        for (index, (name, value)) in rows.iter().enumerate() {
+            let mut row = Vec::with_capacity(width);
+            for column in &columns {
+                row.push(match column.as_str() {
+                    "_id" => Field::Long(i64::try_from(index + 1).unwrap_or(i64::MAX)),
+                    "name" => Field::text(*name),
+                    "value" => Field::text(*value),
+                    _ => unreachable!("projection validated above"),
+                });
+            }
+            out_rows.push(row);
+        }
+        Ok(CursorResult::new(columns, out_rows))
+    }
+}
+
+/// `content://settings/<table>` with no table is not a query the provider
+/// serves; say exactly that instead of returning an empty cursor.
+fn invalid_uri(uri: &str) -> ServiceError {
+    ServiceError::BadRequest {
+        interface: "android.content.IContentProvider".into(),
+        method: "query".into(),
+        detail: format!("not a settings content uri: {uri}"),
+    }
+}
+
+/// The columns of a settings row (`Settings.NameValueTable`: `_id`, `name`,
+/// `value`). `null` or an empty projection means all of them, exactly like
+/// `SQLiteQueryBuilder` + `ContentProvider.query`.
+fn projection_columns(projection: Option<&[String]>) -> Result<Vec<String>> {
+    let all = ["_id", "name", "value"];
+    let Some(projection) = projection.filter(|p| !p.is_empty()) else {
+        return Ok(all.iter().map(|c| (*c).to_string()).collect());
+    };
+    let mut columns = Vec::with_capacity(projection.len());
+    for column in projection {
+        if !all.contains(&column.as_str()) {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: "android.content.IContentProvider".into(),
+                code: 1,
+                method: format!("query(projection column {column})"),
+            });
+        }
+        columns.push(column.clone());
+    }
+    Ok(columns)
+}
+
+/// `ContentResolver.createSqlQueryBundle("name=?", [key], null)` → the key.
+///
+/// The framework's `Settings$NameValueCache` uses exactly this selection for a
+/// single-row read; anything richer is a structured
+/// [`ServiceError::UnsupportedAndroidApi`] rather than a silently ignored
+/// filter (which would read as "the key does not exist").
+fn selection_key(query_args: Option<&Bundle>) -> Result<Option<String>> {
+    const SELECTION: &str = "android:query-arg-sql-selection";
+    const SELECTION_ARGS: &str = "android:query-arg-sql-selection-args";
+    let Some(query_args) = query_args else {
+        return Ok(None);
+    };
+    let selection = query_args.get(SELECTION).and_then(Value::as_str);
+    let Some(selection) = selection else {
+        // No SQL selection: the caller wants every row of the table.
+        if query_args.get(SELECTION_ARGS).is_some() {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: "android.content.IContentProvider".into(),
+                code: 1,
+                method: "query(selection args without a selection)".into(),
+            });
+        }
+        return Ok(None);
+    };
+    let normalised: String = selection.chars().filter(|c| !c.is_whitespace()).collect();
+    if normalised != "name=?" {
+        return Err(ServiceError::UnsupportedAndroidApi {
+            interface: "android.content.IContentProvider".into(),
+            code: 1,
+            method: format!("query(selection {selection:?})"),
+        });
+    }
+    let args = match query_args.get(SELECTION_ARGS) {
+        Some(Value::StringArray(Some(args))) => args,
+        _ => {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: "android.content.IContentProvider".into(),
+                code: 1,
+                method: "query(name=? without selection args)".into(),
+            })
+        }
+    };
+    match args.as_slice() {
+        [Some(key)] => Ok(Some(key.clone())),
+        other => Err(ServiceError::UnsupportedAndroidApi {
+            interface: "android.content.IContentProvider".into(),
+            code: 1,
+            method: format!("query(name=? with {} arguments)", other.len()),
+        }),
+    }
 }
 
 impl Default for SettingsState {
@@ -428,7 +716,6 @@ impl ProviderService {
         Self { state }
     }
 }
-
 impl ServiceObject for ProviderService {
     fn call(
         &mut self,
@@ -472,6 +759,286 @@ impl ServiceObject for ProviderService {
         Ok(CallResult {
             reply,
             deliveries: Vec::new(),
+        })
+    }
+
+    /// `IContentProvider.query` for the `settings` authority.
+    ///
+    /// The request is decoded with the framework's own `ContentProviderNative`
+    /// layout ([`QueryRequest`]), not the generated AIDL table (which records
+    /// the projection as a single `Str16`); the host then writes the
+    /// `BulkCursorDescriptor` + `CursorWindow` reply and allocates the
+    /// `IBulkCursor` binder.
+    fn content_query(
+        &mut self,
+        interface: &str,
+        data: &mut Parcel,
+    ) -> Result<Option<CursorResult>> {
+        if interface != "android.content.IContentProvider" {
+            return Ok(None);
+        }
+        let request = QueryRequest::read(data)?;
+        let state = self.state.lock().map_err(|_| ServiceError::Internal(
+            "settings state poisoned".into(),
+        ))?;
+        Ok(Some(state.query(
+            &request.uri,
+            request.projection.as_deref(),
+            request.query_args.as_ref(),
+        )?))
+    }
+}
+
+/// One content provider the host serves.
+///
+/// `authority` is the key the framework asks `IActivityManager.getContentProvider`
+/// for; `binder` is the `IContentProvider` handle `ServiceHost` dispatches to and
+/// `connection` is the `ContentProviderConnection` token handed back in the
+/// holder (the framework only ever writes it back to
+/// `removeContentProvider`/`refContentProvider`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderEntry {
+    /// `android:authorities`.
+    pub authority: String,
+    /// Owning package (`com.android.providers.settings`).
+    pub package: String,
+    /// Provider class (`SettingsProvider`).
+    pub class: String,
+    /// `ProviderInfo.processName`.
+    pub process_name: String,
+    /// `ProviderInfo.readPermission`.
+    pub read_permission: String,
+    /// `ProviderInfo.writePermission`.
+    pub write_permission: String,
+    /// `ProviderInfo.exported`.
+    pub exported: bool,
+    /// `ProviderInfo.grantUriPermissions`.
+    pub grant_uri_permissions: bool,
+    /// `ProviderInfo.initOrder`.
+    pub init_order: i32,
+    /// The `android.content.IContentProvider` binder.
+    pub binder: u64,
+    /// The `ContentProviderConnection` binder (`0` when untracked).
+    pub connection: u64,
+    /// `ContentProviderHolder.noReleaseNeeded`.
+    pub no_release_needed: bool,
+}
+
+/// The structured record of one provider transaction.
+///
+/// Every `getContentProvider`, `getContentProviderExternal`,
+/// `removeContentProvider`, `removeContentProviderExternal` and
+/// `refContentProvider` appends one of these, so a miss is evidence (a null
+/// holder) instead of an unexplained null.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderLookup {
+    /// `getContentProvider`, `removeContentProvider`, …
+    pub method: String,
+    /// The authority asked for (empty when the call carried a connection only).
+    pub authority: String,
+    /// `callingPackage` (`""` when the transaction does not carry one).
+    pub caller: String,
+    /// Whether the registry answered with a provider.
+    pub hit: bool,
+    /// The `IContentProvider` binder in the holder (`0` on a miss).
+    pub binder: u64,
+    /// The stable reference count after this transaction.
+    pub refcount: i32,
+}
+
+/// The authorities the host serves, and their reference counts.
+///
+/// This is the registry `IActivityManager.getContentProvider` consults. It is a
+/// plain value (no I/O): a miss appends a [`ProviderLookup`] with `hit: false`
+/// and the caller returns a `null` holder, which is what Android returns for an
+/// unknown authority.
+/// The most provider lookups [`ProviderRegistry`] retains. A guest that loops on
+/// `getContentProvider` must not be able to grow the host's heap through the
+/// evidence log (the same class of bug as the logd sink: `R1`).
+pub const MAX_PROVIDER_LOOKUPS: usize = 10_000;
+
+#[derive(Debug, Default)]
+pub struct ProviderRegistry {
+    entries: BTreeMap<String, ProviderEntry>,
+    refcounts: BTreeMap<String, i32>,
+    /// `ContentProviderConnection` binder -> authority.
+    connections: BTreeMap<u64, String>,
+    lookups: Vec<ProviderLookup>,
+    /// Lookups evicted from the front of `lookups` once it hit the cap.
+    lookups_dropped: u64,
+}
+
+impl ProviderRegistry {
+    /// An empty registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Serve `entry` under its authority.
+    pub fn register(&mut self, entry: ProviderEntry) {
+        if entry.connection != 0 {
+            self.connections
+                .insert(entry.connection, entry.authority.clone());
+        }
+        self.refcounts.entry(entry.authority.clone()).or_insert(0);
+        self.entries.insert(entry.authority.clone(), entry);
+    }
+
+    /// The entry for `authority`, if served.
+    #[must_use]
+    pub fn get(&self, authority: &str) -> Option<&ProviderEntry> {
+        self.entries.get(authority)
+    }
+
+    /// Served authorities (sorted).
+    #[must_use]
+    pub fn authorities(&self) -> Vec<&str> {
+        self.entries.keys().map(String::as_str).collect()
+    }
+
+    /// The stable reference count for `authority`.
+    #[must_use]
+    pub fn refcount(&self, authority: &str) -> i32 {
+        self.refcounts.get(authority).copied().unwrap_or(0)
+    }
+
+    /// Append a lookup to the evidence log, dropping the oldest once the cap is
+    /// reached and counting the drops (never growing without bound).
+    fn record(&mut self, lookup: ProviderLookup) {
+        if self.lookups.len() >= MAX_PROVIDER_LOOKUPS {
+            let drop_n = (self.lookups.len() / 8).max(1);
+            self.lookups.drain(..drop_n);
+            self.lookups_dropped = self.lookups_dropped.saturating_add(drop_n as u64);
+        }
+        self.lookups.push(lookup);
+    }
+
+    /// `getContentProvider(…)` / `getContentProviderExternal(…)`: the entry plus
+    /// a bumped reference count, or `None` with a recorded miss.
+    pub fn acquire(
+        &mut self,
+        method: &str,
+        authority: &str,
+        caller: &str,
+    ) -> Option<ProviderEntry> {
+        let entry = self.entries.get(authority).cloned();
+        let (hit, binder, refcount) = match &entry {
+            Some(entry) => {
+                let count = self.refcounts.entry(authority.to_string()).or_insert(0);
+                *count += 1;
+                (true, entry.binder, *count)
+            }
+            None => (false, 0, 0),
+        };
+        self.record(ProviderLookup {
+            method: method.to_string(),
+            authority: authority.to_string(),
+            caller: caller.to_string(),
+            hit,
+            binder,
+            refcount,
+        });
+        entry
+    }
+
+    /// `removeContentProvider`/`removeContentProviderExternal`: drop one stable
+    /// reference. Returns the authority the connection/name resolved to.
+    pub fn release(
+        &mut self,
+        method: &str,
+        authority: Option<&str>,
+        connection: u64,
+        caller: &str,
+    ) -> Option<String> {
+        let resolved = authority
+            .map(str::to_string)
+            .or_else(|| self.connections.get(&connection).cloned());
+        let (hit, binder, refcount) = match resolved.as_deref().and_then(|a| {
+            self.entries.get(a).map(|e| (a, e.binder))
+        }) {
+            Some((authority, binder)) => {
+                let count = self.refcounts.entry(authority.to_string()).or_insert(0);
+                *count = (*count - 1).max(0);
+                (true, binder, *count)
+            }
+            None => (false, 0, 0),
+        };
+        self.record(ProviderLookup {
+            method: method.to_string(),
+            authority: resolved.clone().unwrap_or_default(),
+            caller: caller.to_string(),
+            hit,
+            binder,
+            refcount,
+        });
+        resolved
+    }
+
+    /// `refContentProvider(IBinder connection, int stable, int unstable)`.
+    ///
+    /// `true` when the connection belongs to a served authority (the framework
+    /// asserts on a `false` reply), after adjusting the count by
+    /// `stable + unstable`.
+    pub fn ref_content_provider(&mut self, connection: u64, stable: i32, unstable: i32) -> bool {
+        let authority = self.connections.get(&connection).cloned();
+        let (hit, binder, refcount) = match authority.as_deref().and_then(|a| {
+            self.entries.get(a).map(|e| (a, e.binder))
+        }) {
+            Some((authority, binder)) => {
+                let count = self.refcounts.entry(authority.to_string()).or_insert(0);
+                *count = (*count + stable + unstable).max(0);
+                (true, binder, *count)
+            }
+            None => (false, 0, 0),
+        };
+        self.record(ProviderLookup {
+            method: "refContentProvider".to_string(),
+            authority: authority.unwrap_or_default(),
+            caller: String::new(),
+            hit,
+            binder,
+            refcount,
+        });
+        hit
+    }
+
+    /// Every recorded transaction, oldest first (at most
+    /// [`MAX_PROVIDER_LOOKUPS`]).
+    #[must_use]
+    pub fn lookups(&self) -> &[ProviderLookup] {
+        &self.lookups
+    }
+
+    /// How many lookups fell out of the evidence log.
+    #[must_use]
+    pub fn lookups_dropped(&self) -> u64 {
+        self.lookups_dropped
+    }
+}
+
+/// The `ContentProviderConnection` token handed back in a
+/// [`crate::atms`] `ContentProviderHolder`.
+///
+/// The framework's `ContentProviderHolder.connection` is a real Binder object
+/// (`com.android.server.am.ContentProviderConnection extends Binder`); the
+/// client never transacts on it, it only writes it back as the identity token of
+/// `IActivityManager.removeContentProvider` / `refContentProvider`. ACOS serves
+/// it from `ServiceHost` so the holder carries a real handle, and any attempted
+/// transaction is the structured unsupported error (the token has no interface).
+pub struct ProviderConnectionService;
+
+impl ServiceObject for ProviderConnectionService {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
+        Err(ServiceError::UnsupportedAndroidApi {
+            interface: interface.to_string(),
+            code: method.code,
+            method: format!("{} on a ContentProviderConnection token", method.name),
         })
     }
 }

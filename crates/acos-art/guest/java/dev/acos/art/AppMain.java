@@ -458,7 +458,13 @@ public final class AppMain {
         // 1. What zygote builds: the preinstalled FontConfig -> sSystemFontMap /
         //    sSystemFallbackMap. Both are @hide statics on SystemFonts.
         java.util.Map<String, Typeface> map = new android.util.ArrayMap<>();
-        java.util.Map<String, Typeface> fallback = new android.util.ArrayMap<>();
+        java.util.Map<String, Object> fallback = new android.util.ArrayMap<>();
+        // API 34 shut the fallback builder's second parameter: it is the
+        // *font-file ByteBuffer cache* (`ArrayMap<String, ByteBuffer>`), not an
+        // output map. Passing the output map there used to poison it with
+        // path -> DirectByteBuffer entries and made the later
+        // `initSystemDefaultTypefaces` cast blow up.
+        java.util.Map<String, java.nio.ByteBuffer> fontBuffers = new android.util.ArrayMap<>();
         String source = "none";
         try {
             Class<?> sf = Class.forName("android.graphics.fonts.SystemFonts");
@@ -473,15 +479,34 @@ public final class AppMain {
                      + " (font files the map/fallback are built from)");
             } catch (Throwable ignored) {
             }
-            Method bst = sf.getDeclaredMethod("buildSystemTypefaces", fcc, java.util.Map.class);
-            bst.setAccessible(true);
-            bst.invoke(null, fc, map);
+            // Order matters: on API 34 `buildSystemTypefaces(FontConfig, Map)`
+            // takes the **fallback map** (family name -> FontFamily[]) as its
+            // second argument and *returns* a new `name -> Typeface` map; it
+            // does not fill the argument. Called with an empty map (as P3b
+            // did) every alias in `/system/etc/fonts.xml` (`sans-serif-medium`,
+            // `sans-serif-light`, `serif`, ...) resolves against nothing, so
+            // the returned map -- and therefore `sSystemFontMap` -- is empty
+            // and every named family silently collapses to `sDefaults[0]`
+            // (Roboto Regular), not to the weight the config asks for.
             try {
                 Method bsf = sf.getDeclaredMethod("buildSystemFallback", fcc, android.util.ArrayMap.class);
                 bsf.setAccessible(true);
-                bsf.invoke(null, fc, fallback);
+                Object fb = bsf.invoke(null, fc, fontBuffers);
+                if (fb instanceof java.util.Map) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> named = (java.util.Map<String, Object>) fb;
+                    fallback.putAll(named);
+                }
             } catch (NoSuchMethodException e) {
                 note("SystemFonts.buildSystemFallback(FontConfig,ArrayMap) missing");
+            }
+            Method bst = sf.getDeclaredMethod("buildSystemTypefaces", fcc, java.util.Map.class);
+            bst.setAccessible(true);
+            Object built = bst.invoke(null, fc, fallback);
+            if (built instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Typeface> named = (java.util.Map<String, Typeface>) built;
+                map.putAll(named);
             }
             source = "SystemFonts";
         } catch (Throwable t) {

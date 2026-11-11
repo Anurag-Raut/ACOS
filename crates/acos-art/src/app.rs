@@ -79,8 +79,10 @@
 //! a guest exception and an ART crash are all structured, never a silent
 //! fallback.
 
+use crate::capture::{stream_cap_from_env, TailBuffer};
 use crate::launcher::{self, Outcome};
 use crate::logd::Logd;
+use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -331,6 +333,9 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
             libc::setrlimit(libc::RLIMIT_CORE, &core);
             let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
             libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+            // The launcher's memory backstops are soft limits for *this* process;
+            // ART needs terabytes of address space and is never the bounded one.
+            crate::watchdog::relax_child_limits();
             Ok(())
         });
     }
@@ -344,21 +349,29 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         .spawn()
         .map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
     let pid = child.id() as i32;
-    let (tx, rx) = mpsc::channel::<(u8, Vec<u8>)>();
-    let mut out_pipe = child.stdout.take().expect("piped stdout");
+    // Bounded capture (R1): the guest's stdout/stderr are diagnostic tails, not
+    // a data channel, so a printing loop costs at most the cap.
+    let cap = stream_cap_from_env();
+    let (tx, rx) = mpsc::channel::<(u8, TailBuffer)>();
+    let out_pipe = child.stdout.take().expect("piped stdout");
     let tx_out = tx.clone();
     let out_thread = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = out_pipe.read_to_end(&mut buf);
+        let buf = crate::capture::drain_to_tail(out_pipe, cap);
         let _ = tx_out.send((0u8, buf));
     });
-    let mut err_pipe = child.stderr.take().expect("piped stderr");
+    let err_pipe = child.stderr.take().expect("piped stderr");
     let tx_err = tx.clone();
     let err_thread = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = err_pipe.read_to_end(&mut buf);
+        let buf = crate::capture::drain_to_tail(err_pipe, cap);
         let _ = tx_err.send((1u8, buf));
     });
+
+    // The launcher's own ceiling (ACOS_ART_RSS_MAX, default 2 GiB). A leak the
+    // caps do not know about ends as HOST_MEMORY_LIMIT, never as a kernel OOM.
+    let dog = MemoryWatchdog::from_env();
+    if let Some(d) = &dog {
+        d.arm_process_group(pid);
+    }
 
     let mut timed_out = false;
     let status = loop {
@@ -368,6 +381,12 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
             Err(e) => {
                 let _ = child.kill();
                 return Err(Error::Io(e));
+            }
+        }
+        if let Some(d) = &dog {
+            if d.trip().is_some() {
+                let _ = child.wait();
+                break None;
             }
         }
         if started.elapsed() >= opts.timeout {
@@ -383,8 +402,8 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     };
     let wall_ms = started.elapsed().as_millis() as u64;
 
-    let mut stdout_buf = Vec::new();
-    let mut stderr_buf = Vec::new();
+    let mut stdout_buf = TailBuffer::with_cap(cap);
+    let mut stderr_buf = TailBuffer::with_cap(cap);
     for _ in 0..2 {
         match rx.recv_timeout(Duration::from_secs(3)) {
             Ok((0, b)) => stdout_buf = b,
@@ -396,9 +415,12 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     let _ = err_thread.join();
     drop(tx);
 
-    let logs = logd.finish();
-    let stdout = String::from_utf8_lossy(&stdout_buf).to_string();
-    let stderr = String::from_utf8_lossy(&stderr_buf).to_string();
+    let batch = logd.finish_capped();
+    let log_stats = batch.stats;
+    let log_first_dropped = batch.first_dropped.clone();
+    let logs = batch.entries;
+    let stdout = stdout_buf.to_text();
+    let stderr = stderr_buf.to_text();
 
     // bwrap re-exits with 128+signal when the guest died of a signal.
     let raw_exit = status.and_then(|s| s.code());
@@ -416,6 +438,19 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     }
     let (mut outcome, mut code, mut diags) =
         launcher::classify(exit, signal, timed_out, &stderr, &logs, opts.timeout);
+    if let Some(d) = &dog {
+        if let Some(trip) = d.trip() {
+            outcome = Outcome::Unsupported;
+            code = Some(HOST_MEMORY_LIMIT.to_string());
+            diags.push(format!(
+                "{HOST_MEMORY_LIMIT}: launcher RSS {} MiB exceeded the {} MiB ceiling \
+                 (ACOS_ART_RSS_MAX); guest process group {:?} killed",
+                trip.rss_bytes / 1024 / 1024,
+                trip.limit_bytes / 1024 / 1024,
+                trip.killed_pgid
+            ));
+        }
+    }
     // The provisioning diagnostics (fonts, static overlays) belong to the
     // result too; they used to be collected and dropped (P2e fix).
     diags.splice(0..0, diagnostics);
@@ -499,7 +534,15 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         frame_md5 = Some(md5_file(&frame)?);
     }
     let _ = (&art_shim, &apk);
-    diags.push(format!("logd: {} entries", logs.len()));
+    diags.push(log_stats.summary());
+    if let Some(e) = &log_first_dropped {
+        diags.push(format!(
+            "logd: oldest entries dropped; first dropped was [{}] {}: {}",
+            e.priority_name(),
+            e.tag,
+            crate::capture::head(&e.message, 200)
+        ));
+    }
     diags.push(format!(
         "guest dex: {} ({})",
         guest.dex_dir.display(),
@@ -530,8 +573,8 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         guest_wall_ms,
         wall_ms,
         peak_rss_mb: rss_mb,
-        stdout: tail(&stdout, 8192),
-        stderr: tail(&stderr, 8192),
+        stdout: crate::capture::tail_text(&stdout, 8192),
+        stderr: crate::capture::tail_text(&stderr, 8192),
         logs,
         diagnostics: diags,
         notes,
@@ -541,27 +584,45 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
 
 // -------------------------------------------------------------- system fonts
 
-/// Provision `/system/fonts` **into the sysroot**.
+/// Provision `/system/fonts` **into the sysroot**, and the image's *other*
+/// font sets with it.
 ///
 /// `Typeface`/`SystemFonts` read `/system/etc/fonts.xml` (present in the
-/// extracted sysroot) and the font files it names (not present — the extraction
-/// only carries `/system`, and on a device the fonts are in the product
-/// partition). They cannot be bind-mounted at `/system/fonts`: bwrap cannot
-/// create a mount point inside a read-only bind (`bwrap: Can't create file
-/// /system/fonts: Read-only file system`), and `fonts.xml` uses absolute
-/// `/system/fonts/...` paths. So they are hard-linked from the extracted boot
-/// image font set into the sysroot, exactly like
-/// `research/art-feasibility/h-view/scripts/hroot.sh` does for the spike
-/// (0 bytes copied, idempotent, undo with `rm -rf <sysroot>/system/fonts`).
+/// extracted sysroot) and the font files it names. On a device there are two
+/// more font roots, neither of which the sandbox can see:
 ///
-/// Without them text layout produces nothing and `TextView`'s constructor NPEs;
-/// the run is then reported as `NoSysroot`/`UNSUPPORTED` rather than silently
-/// rendering blank text.
+/// * `/product/fonts` + `/product/etc/fonts_customization.xml` (`google-sans`,
+///   `google-sans-text`, ... — what the static RROs point
+///   `config_*FontFamily` at), and
+/// * the same pair under `/system_ext` and `/vendor`.
+///
+/// `tools/art-sysroot.sh` extracts all of them next to the partitions they come
+/// from (`<sysroot>/{product,system_ext,vendor}/{fonts,etc}`), read-only and
+/// without mounting anything. This function makes them reachable through the
+/// **existing** `/system` bind:
+///
+/// 1. every partition font file is hard-linked into `<sysroot>/system/fonts`
+///    (0 bytes copied; `fonts.xml` names files relative to `/system/fonts`),
+/// 2. `new-named-family` entries of a `fonts_customization.xml` are merged into
+///    `<sysroot>/system/etc/fonts.xml` with their paths rewritten to
+///    `/system/fonts/<file>` (idempotent: a family whose name is already in the
+///    config is not added twice). Other customization types
+///    (`replace`, `additional-named-fallback`) would need the real
+///    `/product/etc/fonts_customization.xml` path, which is a mount the sandbox
+///    does not have; they are reported in the diagnostics, never silently
+///    dropped.
+///
+/// Nothing here is bind-mounted at `/system/fonts`: bwrap cannot create a mount
+/// point inside a read-only bind (`bwrap: Can't create file /system/fonts:
+/// Read-only file system`). Undo with `rm -rf <sysroot>/system/fonts` (and
+/// `git checkout`-free: the fonts.xml additions are regenerated from the base
+/// file, which is left in place).
+///
+/// Without the `/system` set text layout produces nothing and `TextView`'s
+/// constructor NPEs; the run is then reported as `NoSysroot`/`UNSUPPORTED`
+/// rather than silently rendering blank text.
 pub fn ensure_system_fonts(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Result<PathBuf> {
     let dest = root.sysroot.join("system/fonts");
-    if dest.join("Roboto-Regular.ttf").is_file() {
-        return Ok(dest);
-    }
     let src = root.repo_root.join(".cache/boot/android-34/fonts");
     if !src.is_dir() {
         diagnostics.push(format!(
@@ -596,12 +657,169 @@ pub fn ensure_system_fonts(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Res
             let _ = fs::hard_link(&xml, &to).or_else(|_| fs::copy(&xml, &to).map(|_| ()));
         }
     }
-    let n = fs::read_dir(&dest).map(|d| d.count()).unwrap_or(0);
+    let n_base = fs::read_dir(&dest).map(|d| d.count()).unwrap_or(0);
+
+    // The image's other font roots (P3c): the same one-way provision, from the
+    // partitions `tools/art-sysroot.sh` extracts next to `system/`.
+    let base_xml = root.sysroot.join("system/etc/fonts.xml");
+    let mut base = fs::read_to_string(&base_xml).unwrap_or_default();
+    let mut extra = 0usize;
+    let mut merged_families = 0usize;
+    for part in ["product", "system_ext", "vendor"] {
+        let pdir = root.sysroot.join(part);
+        let fdir = pdir.join("fonts");
+        if fdir.is_dir() {
+            for e in fs::read_dir(&fdir)?.filter_map(|e| e.ok()) {
+                let from = e.path();
+                if !from.is_file() {
+                    continue;
+                }
+                let to = dest.join(e.file_name());
+                if to.exists() {
+                    continue;
+                }
+                if fs::hard_link(&from, &to).is_ok() {
+                    linked += 1;
+                } else {
+                    fs::copy(&from, &to)?;
+                    copied += 1;
+                }
+                extra += 1;
+            }
+        }
+        let cust = pdir.join("etc/fonts_customization.xml");
+        if !cust.is_file() {
+            continue;
+        }
+        match merge_font_customization(&base, &fs::read_to_string(&cust)?, &dest) {
+            Ok((next, added, skipped)) => {
+                if added > 0 {
+                    base = next;
+                    merged_families += added;
+                }
+                if skipped > 0 {
+                    diagnostics.push(format!(
+                        "{part}/etc/fonts_customization.xml: {skipped} family/ies use a \
+                         customization type that needs the real /{part} mount (not applied; \
+                         `new-named-family` only)"
+                    ));
+                }
+            }
+            Err(e) => diagnostics.push(format!(
+                "{part}/etc/fonts_customization.xml: could not merge ({e}); \
+                 families it declares will not resolve"
+            )),
+        }
+    }
+    if merged_families > 0 {
+        fs::write(&base_xml, &base)?;
+        diagnostics.push(format!(
+            "merged {merged_families} product/system_ext/vendor font famil(y/ies) into {}",
+            base_xml.display()
+        ));
+    }
+    if extra > 0 {
+        diagnostics.push(format!(
+            "provisioned {extra} partition font(s) (product/system_ext/vendor) into {}",
+            dest.display()
+        ));
+    }
+
+    let n = fs::read_dir(&dest).map(|d| d.count()).unwrap_or(n_base);
     diagnostics.push(format!(
         "provisioned {n} system fonts into {} ({linked} hard links, {copied} copies)",
         dest.display()
     ));
     Ok(dest)
+}
+
+/// Merge `new-named-family` entries of a `fonts_customization.xml` into a
+/// `fonts.xml` body, rewriting each `<font>` path to `/system/fonts/<basename>`
+/// (the files themselves are hard-linked there by [`ensure_system_fonts`]).
+///
+/// Returns `(new_xml, added, skipped)`; families whose `name` already occurs in
+/// `base` are not added again, so re-running is a no-op. Anything that is not a
+/// plain `new-named-family` (or a `<font>` with no filename, or a font file that
+/// is not in `fonts_dir`) is counted in `skipped` and left out — reported by the
+/// caller, never silently mangled.
+fn merge_font_customization(
+    base: &str,
+    customization: &str,
+    fonts_dir: &Path,
+) -> Result<(String, usize, usize)> {
+    let close = base
+        .rfind("</families>")
+        .ok_or_else(|| Error::Layout("fonts.xml has no </families>".into()))?;
+    let mut added_xml = String::new();
+    let (mut added, mut skipped) = (0usize, 0usize);
+    let mut rest = customization;
+    while let Some(start) = rest.find("<family") {
+        rest = &rest[start..];
+        let Some(end) = rest.find("</family>") else { break };
+        let block = &rest[..end + "</family>".len()];
+        rest = &rest[end + "</family>".len()..];
+        let open_end = block.find('>').unwrap_or(0);
+        let open = &block[..=open_end];
+        let is_new = open.contains("new-named-family");
+        let name = open
+            .find("name=\"")
+            .and_then(|i| {
+                let s = &open[i + 6..];
+                s.find('"').map(|j| s[..j].to_string())
+            })
+            .unwrap_or_default();
+        if !is_new || name.is_empty() {
+            skipped += 1;
+            continue;
+        }
+        if base.contains(&format!("name=\"{name}\"")) || added_xml.contains(&format!("name=\"{name}\"")) {
+            continue;
+        }
+        // Rewrite every <font ...>path</font> to an absolute /system/fonts path.
+        let mut out = open.to_string();
+        let mut inner = &block[open_end + 1..end];
+        let mut bad = false;
+        loop {
+            let Some(fs) = inner.find("<font") else { break };
+            let before = &inner[..fs];
+            let Some(fe) = inner[fs..].find("</font>").map(|i| i + fs) else {
+                bad = true;
+                break;
+            };
+            let font_open_end = inner[fs..].find('>').map(|i| i + fs).unwrap_or(fe);
+            let path = inner[font_open_end + 1..fe].trim();
+            let base_name = Path::new(path)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if base_name.is_empty() || !fonts_dir.join(&base_name).is_file() {
+                bad = true;
+                break;
+            }
+            out.push_str(before);
+            out.push_str(&inner[fs..=font_open_end]);
+            out.push_str(&format!("/system/fonts/{base_name}"));
+            out.push_str("</font>");
+            inner = &inner[fe + "</font>".len()..];
+        }
+        if bad {
+            skipped += 1;
+            continue;
+        }
+        out.push_str(inner);
+        out.push_str("</family>\n");
+        added_xml.push_str(&out);
+        added += 1;
+    }
+    if added == 0 {
+        return Ok((base.to_string(), 0, skipped));
+    }
+    let mut merged = String::with_capacity(base.len() + added_xml.len());
+    merged.push_str(&base[..close]);
+    merged.push_str("\n<!-- merged from the image's fonts_customization.xml by acos-art -->\n");
+    merged.push_str(&added_xml);
+    merged.push_str(&base[close..]);
+    Ok((merged, added, skipped))
 }
 
 // ------------------------------------------------------- static RRO overlays
@@ -896,13 +1114,28 @@ pub struct GuestDex {
     pub cached: bool,
 }
 
+/// Sources of the `render-app` guest: its own entry point and the natives it
+/// calls, and nothing else. `guest/java/dev/acos/art` also holds the entry
+/// points of the *other* commands (`LaunchMain`, `SessionMain`); those are
+/// separate processes with separate classpaths, and compiling them here would
+/// let an unrelated in-flight guest file break `render-app` (exactly what a
+/// `LaunchMain` referencing a not-yet-present `dev.acos.e3g` did in P3c).
+pub fn render_guest_sources() -> Vec<PathBuf> {
+    let dir = PathBuf::from(GUEST_SOURCE).join("dev/acos/art");
+    ["AppMain.java", "RenderNat.java"]
+        .iter()
+        .map(|f| dir.join(f))
+        .filter(|p| p.is_file())
+        .collect()
+}
+
 /// Build `dev.acos.art.AppMain` (javac + d8) into `<data>/app/guest`, cached by
 /// source hash. Also returns the SDK paths used, for the result diagnostics.
 pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     let src_dir = PathBuf::from(GUEST_SOURCE);
     let out_dir = root.data.join("app/guest");
     fs::create_dir_all(&out_dir)?;
-    let sources = java_sources(&src_dir)?;
+    let sources = render_guest_sources();
     if sources.is_empty() {
         return Err(Error::Layout(format!("no guest Java sources under {}", src_dir.display())));
     }
@@ -1006,7 +1239,7 @@ pub fn build_render_shim(root: &ArtRoot) -> Result<PathBuf> {
 
 // --------------------------------------------------------------- apk metadata
 
-fn android_sdk() -> Result<PathBuf> {
+pub(crate) fn android_sdk() -> Result<PathBuf> {
     for var in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] {
         if let Some(p) = std::env::var_os(var) {
             let p = PathBuf::from(p);
@@ -1027,7 +1260,7 @@ fn android_sdk() -> Result<PathBuf> {
     ))
 }
 
-fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
+pub(crate) fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
     let mut best: Option<(Vec<u32>, PathBuf)> = None;
     for e in fs::read_dir(sdk.join("build-tools")).map_err(|_| {
         Error::Tool(format!("no build-tools under {}", sdk.display()))
@@ -1262,6 +1495,7 @@ fn parse_guest_line(stdout: &str) -> Option<GuestLine> {
         .find_map(|l| l.strip_prefix("ACOSAPP ").and_then(|j| serde_json::from_str(j).ok()))
 }
 
+#[allow(dead_code)] // kept for callers that genuinely want the whole tree
 fn java_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(walk(dir, "java"))
 }
@@ -1351,5 +1585,46 @@ mod tests {
     fn no_layout_is_a_tool_error() {
         let e = pick_layout(Path::new("/nonexistent.apk"), "pkg");
         assert!(e.is_err());
+    }
+
+    #[test]
+    fn font_customization_merges_new_named_families_only() {
+        let dir = std::env::temp_dir().join(format!("acos-art-fonts-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("GoogleSans-Regular.ttf"), b"x").unwrap();
+        fs::write(dir.join("GoogleSans-Medium.ttf"), b"x").unwrap();
+
+        let base = r#"<families><family name="sans-serif">
+<font weight="400">Roboto-Regular.ttf</font></family></families>"#;
+        let cust = r#"<?xml version="1.0"?><families>
+<family customizationType="new-named-family" name="google-sans">
+  <font weight="400" style="normal">/product/fonts/GoogleSans-Regular.ttf</font>
+  <font weight="500" style="normal">/product/fonts/GoogleSans-Medium.ttf</font>
+</family>
+<family customizationType="replace" name="sans-serif">
+  <font weight="400">/product/fonts/Missing.ttf</font>
+</family>
+<family customizationType="new-named-family" name="dangling">
+  <font weight="400">/product/fonts/NotThere.ttf</font>
+</family>
+</families>"#;
+
+        let (merged, added, skipped) = merge_font_customization(base, cust, &dir).expect("merge");
+        assert_eq!(added, 1, "only the resolvable new-named-family is added");
+        assert_eq!(skipped, 2, "replace + a family whose file is absent are reported");
+        assert!(merged.contains(r#"<family customizationType="new-named-family" name="google-sans">"#));
+        assert!(merged.contains("/system/fonts/GoogleSans-Regular.ttf"));
+        assert!(merged.contains("/system/fonts/GoogleSans-Medium.ttf"));
+        assert!(!merged.contains("/product/fonts/"));
+        assert!(merged.contains("<families><family name=\"sans-serif\">")); // base untouched
+        assert!(merged.trim_end().ends_with("</families>"));
+
+        // Idempotent: the same customization against the merged body adds nothing.
+        let (again, added2, _) = merge_font_customization(&merged, cust, &dir).expect("merge 2");
+        assert_eq!(added2, 0);
+        assert_eq!(again, merged);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

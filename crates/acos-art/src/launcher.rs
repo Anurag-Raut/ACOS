@@ -8,10 +8,11 @@
 //! process **group** kill on expiry, and rlimits applied in the child before
 //! `exec` (`RLIMIT_AS`, `RLIMIT_CORE=0`, `RLIMIT_NOFILE`, `PDEATHSIG`).
 
-use crate::logd::{LogEntry, Logd};
+use crate::capture::{stream_cap_from_env, TailBuffer};
+use crate::logd::{LogEntry, LogStats, Logd};
+use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
 use serde::{Deserialize, Serialize};
-use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -242,21 +243,29 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     let mut child = command.spawn().map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
     let pid = child.id() as i32;
 
-    let (tx, rx) = mpsc::channel::<(u8, Vec<u8>)>();
-    let mut out_pipe = child.stdout.take().expect("piped stdout");
+    // Captured with a hard ceiling: a guest that loops on printf must not be
+    // able to grow this process (R1: read_to_end was the unbounded allocation).
+    let cap = stream_cap_from_env();
+    let (tx, rx) = mpsc::channel::<(u8, TailBuffer)>();
+    let out_pipe = child.stdout.take().expect("piped stdout");
     let tx_out = tx.clone();
     let out_thread = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = out_pipe.read_to_end(&mut buf);
+        let buf = crate::capture::drain_to_tail(out_pipe, cap);
         let _ = tx_out.send((0u8, buf));
     });
-    let mut err_pipe = child.stderr.take().expect("piped stderr");
+    let err_pipe = child.stderr.take().expect("piped stderr");
     let tx_err = tx.clone();
     let err_thread = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = err_pipe.read_to_end(&mut buf);
+        let buf = crate::capture::drain_to_tail(err_pipe, cap);
         let _ = tx_err.send((1u8, buf));
     });
+
+    // The launcher's own ceiling: a leak the caps do not know about still ends
+    // as a structured HOST_MEMORY_LIMIT instead of a kernel OOM kill.
+    let dog = MemoryWatchdog::from_env();
+    if let Some(d) = &dog {
+        d.arm_process_group(pid);
+    }
 
     let mut timed_out = false;
     let status = loop {
@@ -266,6 +275,14 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
             Err(e) => {
                 let _ = child.kill();
                 return Err(Error::Io(e));
+            }
+        }
+        if let Some(d) = &dog {
+            if d.trip().is_some() {
+                // The watchdog already SIGKILLed the group; reap it and report
+                // the structured outcome.
+                let _ = child.wait();
+                break None;
             }
         }
         if started.elapsed() >= opts.timeout {
@@ -282,8 +299,8 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     };
     let wall_ms = started.elapsed().as_millis() as u64;
 
-    let mut stdout_buf = Vec::new();
-    let mut stderr_buf = Vec::new();
+    let mut stdout_buf = TailBuffer::with_cap(cap);
+    let mut stderr_buf = TailBuffer::with_cap(cap);
     for _ in 0..2 {
         match rx.recv_timeout(Duration::from_secs(3)) {
             Ok((0, b)) => stdout_buf = b,
@@ -295,9 +312,12 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     let _ = err_thread.join();
     drop(tx);
 
-    let logs = logd.map(|l| l.finish()).unwrap_or_default();
-    let stdout = String::from_utf8_lossy(&stdout_buf).to_string();
-    let stderr = String::from_utf8_lossy(&stderr_buf).to_string();
+    let batch = logd.map(|l| l.finish_capped()).unwrap_or_default();
+    let log_stats: LogStats = batch.stats;
+    let batch_log_first_dropped = batch.first_dropped.clone();
+    let logs = batch.entries;
+    let stdout = stdout_buf.to_text();
+    let stderr = stderr_buf.to_text();
 
     // bwrap re-exits with 128+signal when the *guest* died from a signal, so
     // undo that remap: ART dying of SIGSEGV must read as signal 11, not "exit
@@ -325,8 +345,24 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
             }
         }
     }
-    let (outcome, code, mut diagnostics) =
+    let (mut outcome, mut code, mut diagnostics) =
         classify(exit, signal, timed_out, &stderr, &logs, opts.timeout);
+    // A watchdog kill is a host-side resource outcome, not a guest crash: it
+    // outranks whatever the missing exit status looked like.
+    if let Some(d) = &dog {
+        if let Some(trip) = d.trip() {
+            outcome = Outcome::Unsupported;
+            code = Some(HOST_MEMORY_LIMIT.to_string());
+            diagnostics.push(format!(
+                "{HOST_MEMORY_LIMIT}: launcher RSS {} MiB exceeded the {} MiB ceiling \
+                 (ACOS_ART_RSS_MAX); guest process group {:?} killed",
+                trip.rss_bytes / 1024 / 1024,
+                trip.limit_bytes / 1024 / 1024,
+                trip.killed_pgid
+            ));
+        }
+    }
+    let _ = &mut code;
     if let Some(img) = &image {
         if image_ready {
             diagnostics.push(format!("boot image: {}", img.display()));
@@ -341,8 +377,19 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
         diagnostics.push(format!("shim: {}", s.display()));
     }
     if opts.log == LogMode::Logd {
-        diagnostics.push(format!("logd: {} entries", logs.len()));
+        diagnostics.push(log_stats.summary());
+        if log_stats.truncated() {
+            if let Some(e) = &batch_log_first_dropped {
+                diagnostics.push(format!(
+                    "logd: oldest entries dropped; first dropped was [{}] {}: {}",
+                    e.priority_name(),
+                    e.tag,
+                    crate::capture::head(&e.message, 200)
+                ));
+            }
+        }
     }
+    let _ = &mut diagnostics;
 
     Ok(RunResult {
         exit,

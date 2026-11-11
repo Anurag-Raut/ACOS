@@ -31,11 +31,27 @@ pub mod codes {
     pub const SERVICE_UNSUPPORTED_PARCELABLE: &str = "SERVICE_UNSUPPORTED_PARCELABLE";
     /// A handler raised an explicit Android exception.
     pub const SERVICE_ANDROID_EXCEPTION: &str = "SERVICE_ANDROID_EXCEPTION";
+    /// A host-side queue/buffer ceiling was reached (bounded peer queues, R1).
+    ///
+    /// The host refuses the work instead of growing without bound; the guest
+    /// sees a remote exception, and the peer records this code, so an overflow is
+    /// an observable outcome and never a silent drop.
+    pub const ART_RESOURCE_LIMIT: &str = "ART_RESOURCE_LIMIT";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ServiceError {
+    /// A host-side ceiling was reached: a bounded queue (`what`) is full at
+    /// `limit` entries. The host stops accepting work instead of growing.
+    #[error("host resource limit: {what} is full at {limit} entries")]
+    ResourceLimit {
+        /// The bounded structure that overflowed (e.g. `peer delivery queue`).
+        what: String,
+        /// Its configured ceiling.
+        limit: usize,
+    },
+
     /// No decoded transaction for `(interface, code)`.
     #[error("unsupported Android API: {interface} code {code} ({method})")]
     UnsupportedAndroidApi {
@@ -137,6 +153,7 @@ impl ServiceError {
                 codes::SERVICE_PARCEL
             }
             Self::Internal(_) => codes::SERVICE_INTERNAL,
+            Self::ResourceLimit { .. } => codes::ART_RESOURCE_LIMIT,
         }
     }
 
@@ -154,6 +171,7 @@ impl ServiceError {
             | Self::UnsupportedParcelable { .. } => EX_UNSUPPORTED_OPERATION,
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,
+            Self::ResourceLimit { .. } => EX_UNSUPPORTED_OPERATION,
             Self::IllegalState { .. } => EX_ILLEGAL_STATE,
             Self::Android { code, .. } => *code,
             Self::Parcel(_) | Self::Internal(_) => EX_ILLEGAL_ARGUMENT,

@@ -1,0 +1,31 @@
+
+===== P2 host PIDs visible in guest /proc, and /proc/<pid>/root of a same-uid host process =====
+host: own pid=1682089, same-uid sleep pid=1682095, host numeric /proc entries=657
+--- plain ---
+guest numeric /proc entries: 658
+host sleep visible (-d /proc/1682095): YES
+readlink /proc/1682095/root: (none)
+stat -L /proc/1682095/root: stat: '/proc/1682095/root': Permission denied
+stat -L /proc/1682095/root/home/Qui (host-only path): stat: '/proc/1682095/root/home/Qui': Permission denied
+stat -L /proc/1/root/etc/shadow: stat: '/proc/1/root/etc/shadow': Permission denied
+readlink /proc/self/root (own root): /
+stat /proc/self/root/etc/hostname (host-only path): stat: '/proc/self/root/etc/hostname': No such file or directory
+stat /proc/1682095/cmdline: 0
+stat /proc/1682095/environ: 0
+opendir /proc/1682095/fd: denied
+stat -L /proc/1682095/cwd: stat: '/proc/1682095/cwd': Permission denied
+kill -0 host same-uid pid: SIGNALLABLE
+--- hard ---
+guest numeric /proc entries: 4
+host sleep visible (-d /proc/1682095): no
+readlink /proc/1682095/root: (none)
+stat -L /proc/1682095/root: stat: '/proc/1682095/root': No such file or directory
+stat -L /proc/1682095/root/home/Qui (host-only path): stat: '/proc/1682095/root/home/Qui': No such file or directory
+stat -L /proc/1/root/etc/shadow: stat: '/proc/1/root/etc/shadow': No such file or directory
+readlink /proc/self/root (own root): /
+stat /proc/self/root/etc/hostname (host-only path): stat: '/proc/self/root/etc/hostname': No such file or directory
+stat /proc/1682095/cmdline: stat: '/proc/1682095/cmdline': No such file or directory
+stat /proc/1682095/environ: stat: '/proc/1682095/environ': No such file or directory
+opendir /proc/1682095/fd: denied
+stat -L /proc/1682095/cwd: stat: '/proc/1682095/cwd': No such file or directory
+kill -0 host same-uid pid: denied

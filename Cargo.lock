@@ -37,6 +37,8 @@ dependencies = [
 name = "acos-art"
 version = "0.1.0"
 dependencies = [
+ "acos-binder-peer",
+ "acos-services",
  "libc",
  "serde",
  "serde_json",

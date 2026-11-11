@@ -1,0 +1,21 @@
+
+===== P3 network: localhost listener, /proc/net/tcp, abstract unix sockets =====
+host: listener pid=1682616 port=34567 ; abstract socket @s2-abstract-canary bound
+--- plain ---
+tcp connect 127.0.0.1:34567: CONNECTED
+/proc/net/tcp readable: YES
+/proc/net/tcp entries: 39
+/proc/net/unix readable: YES
+abstract sockets in /proc/net/unix: 34
+canary @s2-abstract-canary visible: YES
+abstract unix connect to @s2-abstract-canary: blocked/failed
+--- hard ---
+tcp connect 127.0.0.1:34567: blocked/failed
+/proc/net/tcp readable: YES
+/proc/net/tcp entries: 1
+/proc/net/unix readable: YES
+abstract sockets in /proc/net/unix: 0
+0
+canary @s2-abstract-canary visible: no
+abstract unix connect to @s2-abstract-canary: blocked/failed
+host listener log: listening CONNECTED from ('127.0.0.1', 53302) 

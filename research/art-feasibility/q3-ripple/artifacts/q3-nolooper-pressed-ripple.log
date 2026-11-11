@@ -1,0 +1,1612 @@
+E2D[preload]: dlopen(libandroid_runtime.so) ok @0x1f3db5e36ca5ebdb (default namespace, RTLD_GLOBAL)
+E2D[preload]: dlopen(libhwui.so) ok @0xa9961b866ec24abd (default namespace, RTLD_GLOBAL)
+LOG(6) cutils-trace: Error opening trace file: Permission denied (13)
+LOGM(7) : Check failed: !location.empty() No mainline framework library found
+ABORTER: Check failed: !location.empty() No mainline framework library found
+LOGM(4) : Using CollectorTypeCC GC.
+LOG(3) nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+LOG(3) : Time zone APEX ICU file found: /apex/com.google.android.tzdata5/etc/icu/icu_tzdata.dat
+LOG(3) : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+LOG(5) ziparchive: Unable to open '/system/framework/framework.dm': No such file or directory
+LOG(5) ziparchive: Unable to open '/system/framework/framework.dm': No such file or directory
+LOG(5) ziparchive: Unable to open '/data/dex/e2d/classes.dm': No such file or directory
+LOG(5) ziparchive: Unable to open '/data/dex/q3/classes.dm': No such file or directory
+== E4H step=draw ==
+LOG(3) nativeloader: InitApexLibraries:
+  com_android_art: libnativehelper.so
+  com_android_i18n: libicui18n.so:libicuuc.so:libicu.so
+  com_android_neuralnetworks: libneuralnetworks.so
+LOG(3) nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+LOG(3) nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+LOG(3) nativeloader: InitExtendedPublicLibraries: 
+LOG(4) nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+LOG(3) nativeloader: InitProductPublicLibraries: 
+E2D[preload]: register: calling register_android_graphics_classes @ 0x7fb13b67d8f0
+REG graphics ok=1 missing=0 of 1
+PASS [gfx] libhwui register_android_graphics_classes -> HardwareRenderer.nSetIsSystemOrPersistent(false) OK (register ok=true)
+E2D[preload]: register: calling register_android_util_Log @ 0x7fb150a8ba10
+E2D[preload]: register: calling register_android_os_SystemProperties @ 0x7fb150a86e50
+E2D[preload]: register: calling register_android_os_SystemClock @ 0x7fb150a86d60
+E2D[preload]: register: calling register_android_os_Trace @ 0x7fb150a886e0
+E2D[preload]: register: calling register_android_os_Parcel @ 0x7fb150b23030
+E2D[preload]: register: calling register_android_os_Binder @ 0x7fb150b34ac0
+E2D[preload]: register: calling register_android_os_MessageQueue @ 0x7fb150b22cf0
+E2D[preload]: register: calling register_android_os_Process @ 0x7fb150b3b7a0
+E2D[preload]: register: calling register_android_os_GraphicsEnvironment @ 0x7fb150b13000
+E2D[preload]: register: calling register_android_content_StringBlock @ 0x7fb150a8c390
+E2D[preload]: register: calling register_android_content_XmlBlock @ 0x7fb150a8ca90
+E2D[preload]: register: calling register_android_content_AssetManager @ 0x7fb150b2c380
+E2D[preload]: register: calling register_android_content_res_ApkAssets @ 0x7fb150b7dc40
+E2D[preload]: register: calling register_android_content_res_Configuration @ 0x7fb150b81bf0
+E2D[preload]: register: calling register_android_view_DisplayEventReceiver @ 0x7fb150aec040
+E2D[preload]: register: calling register_android_text_AndroidCharacter @ 0x7fb150a896b0
+E2D[preload]: register: calling register_android_text_Hyphenator @ 0x7fb150b0d460
+E2D[preload]: register: calling register_android_util_CharsetUtils @ 0x7fb150b37880
+REG runtime ok=18 missing=0 of 18
+PASS [runtime] libandroid_runtime register_android_* (all=true)
+LOG(6) ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+E2D[preload]: open(/dev/binder) -> memfd 90 (1040384 bytes, stands in for the binder driver)
+E2D[preload]: ioctl(fd=90, BINDER_VERSION) -> 8
+E2D[preload]: ioctl(fd=90, BINDER_SET_MAX_THREADS=15) -> 0
+E2D[preload]: ioctl(fd=90, BINDER_ENABLE_ONEWAY_SPAM_DETECTION=1) -> 0
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+LOG(5) IPCThreadState: mOut.dataSize() > 0 after flushCommands()
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+LOG(5) IPCThreadState: mOut.dataSize() > 0 after flushCommands()
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+LOG(6) JavaBinder: Unknown binder error code. 0xffffffe7
+BUFLOG(6) ServiceManager: error in getService
+android.os.RemoteException: Unknown binder error code. 0xffffffe7
+	at android.os.BinderProxy.transactNative(Native Method)
+	at android.os.BinderProxy.transact(BinderProxy.java:584)
+	at android.os.IServiceManager$Stub$Proxy.checkService(IServiceManager.java:443)
+	at android.os.ServiceManagerProxy.getService(ServiceManagerNative.java:63)
+	at android.os.ServiceManager.rawGetService(ServiceManager.java:378)
+	at android.os.ServiceManager.getService(ServiceManager.java:147)
+	at android.hardware.display.DisplayManagerGlobal.getInstance(DisplayManagerGlobal.java:163)
+	at android.app.ResourcesManager.getDisplayMetrics(ResourcesManager.java:339)
+	at android.app.ResourcesManager.getDisplayMetrics(ResourcesManager.java:331)
+	at android.app.ContextImpl.createSystemContext(ContextImpl.java:3291)
+	at android.app.ActivityThread.getSystemContext(ActivityThread.java:2851)
+	at android.app.ActivityThread.attach(ActivityThread.java:7900)
+	at android.app.ActivityThread.systemMain(ActivityThread.java:7935)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at dev.acos.e4h.Main.ensureActivity(Main.java:217)
+	at dev.acos.e4h.Main.main(Main.java:76)
+
+PASS [activity] ActivityThread.systemMain() -> android.app.ActivityThread@24ed759 getSystemContext() -> android.app.ContextImpl@904ff1e res=android.content.res.Resources@7f9435c
+PASS [resources] AssetManager cookies 0x1/0x2 app_name=Counter layout/main=0x7f020000 density=2.625 0x0
+NOTE [resources] layout root tag <LinearLayout>
+PASS [resources] Theme = android:style/Theme.DeviceDefault.Light (0x103012b)
+PASS [services] WindowManagerGlobal.sWindowManagerService = reflective stub
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+DIAG font families=149
+NOTE [diag] SystemFonts -> java.lang.ClassCastException: android.text.FontConfig$Font[] cannot be cast to java.util.List
+BUFLOG(4) Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+BUFLOG(4) Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+DIAG Typeface#sDefaultTypeface = null
+DIAG Typeface#sDefaults = null
+DIAG Typeface#sDynamicCacheLock = java.lang.Object@37c0264
+DIAG Typeface#sDynamicTypefaceCache = LruCache[maxSize=16,hits=0,misses=0,hitRate=0%]
+DIAG Typeface#sRegistry = libcore.util.NativeAllocationRegistry@1dfaccd
+DIAG Typeface#sStyledCacheLock = java.lang.Object@6713982
+DIAG Typeface#sStyledTypefaceCache = {}
+DIAG Typeface#sSystemFallbackMap = map size=0 {}
+DIAG Typeface#sSystemFontMap = map size=0 {}
+DIAG Typeface#sSystemFontMapBuffer = null
+DIAG Typeface#sSystemFontMapSharedMemory = null
+DIAG Typeface#sWeightCacheLock = java.lang.Object@a474893
+DIAG Typeface#sWeightTypefaceCache = {}
+DIAG Font.Builder.build() -> Font {path=/system/fonts/Roboto-Regular.ttf, style=FontStyle { weight=400, slant=0}, ttcIndex=0, axes=, localeList=[], buffer=java.nio.DirectByteBuffer[pos=0 lim=2371712 cap=2371712]}
+DIAG FontFamily.build() -> android.graphics.fonts.FontFamily@fc748c9
+NOTE [text] Typeface statics -> java.lang.NullPointerException: Attempt to read from field 'int android.graphics.Typeface.mStyle' on a null object reference in method 'android.graphics.Typeface android.graphics.Typeface.create(android.graphics.Typeface, int)'
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+SEED FontConfig=FontConfig{mFamilies=[FontFamily{mFonts=[Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=100, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 100.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=200, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 200.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=300, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 300.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=800, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 800.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=900, slant=0}, mIndex=0, mFontVariationSettings=''ital' 0.0,'wdth' 100.0,'wght' 900.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=100, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 100.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=200, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 200.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=300, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 300.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=800, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 800.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/Roboto-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=900, slant=1}, mIndex=0, mFontVariationSettings=''ital' 1.0,'wdth' 100.0,'wght' 900.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoNaskhArabic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoNaskhArabic-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoNaskhArabicUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoNaskhArabicUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifEthiopic-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansHebrew-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansHebrew-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifHebrew-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifHebrew-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansThai-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansThai-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifThai-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifThai-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansThaiUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansThaiUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifArmenian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGeorgian-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[,], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifDevanagari-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansDevanagariUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagariUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagariUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansDevanagariUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGujarati-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGujarati-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifGujarati-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGujarati-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGujarati-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGujarati-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGujaratiUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGujaratiUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifGurmukhi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGurmukhiUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhiUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhiUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansGurmukhiUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTamil-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTamilUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamilUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamilUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTamilUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifMalayalam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMalayalamUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalamUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalamUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMalayalamUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifBengali-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBengaliUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengaliUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengaliUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansBengaliUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifTelugu-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTeluguUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTeluguUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTeluguUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTeluguUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifKannada-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKannadaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannadaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannadaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKannadaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOriya-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansOriya-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOriyaUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansOriyaUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifSinhala-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSinhalaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhalaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhalaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSinhalaUI-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=100, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 26.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=200, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 39.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=300, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 58.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 90.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 108.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 128.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 151.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=800, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 169.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmer-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=900, slant=0}, mIndex=0, mFontVariationSettings=''wdth' 100.0,'wght' 190.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifKhmer-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifKhmer-Bold.otf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKhmerUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansKhmerUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLao-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansLao-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifLao-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifLao-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLaoUI-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansLaoUI-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMyanmar-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMyanmar-Medium.otf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMyanmar-Bold.otf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifMyanmar-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}, Font{mFile=/system/fonts/NotoSerifMyanmar-Bold.otf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[], mVariant=2}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMyanmarUI-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMyanmarUI-Medium.otf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMyanmarUI-Bold.otf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=1}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansThaana-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansThaana-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCham-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansCham-Bold.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansAhom-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansAdlam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansAdlam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansAdlam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansAdlam-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansAvestan-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBalinese-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBamum-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBatak-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBrahmi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBuginese-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBuhid-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCanadianAboriginal-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCarian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansChakma-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCherokee-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCoptic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCuneiform-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCypriot-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansDeseret-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansEgyptianHieroglyphs-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansElbasan-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGlagolitic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGothic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansHanunoo-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansImperialAramaic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansInscriptionalPahlavi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansInscriptionalParthian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansJavanese-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKaithi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKayahLi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKharoshthi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLepcha-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLimbu-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLinearB-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLisu-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLycian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLydian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMandaic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMeeteiMayek-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansNewTaiLue-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansNKo-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOgham-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOlChiki-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldItalic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldPersian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldSouthArabian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldTurkic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOsage-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOsmanya-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansPhoenician-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansRejang-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansRunic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSamaritan-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSaurashtra-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansShavian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSundanese-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSylotiNagri-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSyriacEstrangela-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSyriacEastern-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSyriacWestern-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTagalog-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTagbanwa-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTaiTham-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTaiViet-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSerifTibetan-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifTibetan-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifTibetan-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifTibetan-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTifinagh-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansUgaritic-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansVai-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=2, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=2, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[zh__#Hans], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=3, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=3, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[zh__#Hant,zh__#Bopo], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[ja], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=1, mFontVariationSettings='', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifCJK-Regular.ttc, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=1, mFontVariationSettings='', mFontFamilyName='serif'}], mLocaleList=[ko], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoColorEmoji.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoColorEmojiFlags.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSymbols-Regular-Subsetted2.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTaiLe-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansYi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMongolian-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansPhagsPa-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansAnatolianHieroglyphs-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBassaVah-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansBhaiksuki-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansHatran-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansLinearA-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansManichaean-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMarchen-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMeroitic-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMiao-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMro-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMultani-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansNabataean-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansNewa-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldNorthArabian-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansOldPermic-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansPahawhHmong-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansPalmyrene-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansPauCinHau-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSharada-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSoraSompeng-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGunjalaGondi-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansHanifiRohingya-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansKhojki-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMasaramGondi-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansWancho-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansWarangCiti-Regular.otf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansGrantha-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansModi-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSerifDogra-Regular.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings='', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansMedefaidrin-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMedefaidrin-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMedefaidrin-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansMedefaidrin-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansSoyombo-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSoyombo-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSoyombo-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansSoyombo-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSansTakri-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTakri-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTakri-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSansTakri-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSerifNyiakengPuachueHmong-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifNyiakengPuachueHmong-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifNyiakengPuachueHmong-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifNyiakengPuachueHmong-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}, FontFamily{mFonts=[Font{mFile=/system/fonts/NotoSerifYezidi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=400, slant=0}, mIndex=0, mFontVariationSettings=''wght' 400.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifYezidi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=500, slant=0}, mIndex=0, mFontVariationSettings=''wght' 500.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifYezidi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=600, slant=0}, mIndex=0, mFontVariationSettings=''wght' 600.0', mFontFamilyName='null'}, Font{mFile=/system/fonts/NotoSerifYezidi-VF.ttf, mOriginalFile=null, mStyle=FontStyle { weight=700, slant=0}, mIndex=0, mFontVariationSettings=''wght' 700.0', mFontFamilyName='null'}], mLocaleList=[], mVariant=0}], mAliases=[Alias{mName='sans-serif-thin', mOriginal='sans-serif', mWeight=100}, Alias{mName='sans-serif-light', mOriginal='sans-serif', mWeight=300}, Alias{mName='sans-serif-medium', mOriginal='sans-serif', mWeight=500}, Alias{mName='sans-serif-black', mOriginal='sans-serif', mWeight=900}, Alias{mName='arial', mOriginal='sans-serif', mWeight=400}, Alias{mName='helvetica', mOriginal='sans-serif', mWeight=400}, Alias{mName='tahoma', mOriginal='sans-serif', mWeight=400}, Alias{mName='verdana', mOriginal='sans-serif', mWeight=400}, Alias{mName='sans-serif-condensed-light', mOriginal='sans-serif-condensed', mWeight=300}, Alias{mName='sans-serif-condensed-medium', mOriginal='sans-serif-condensed', mWeight=500}, Alias{mName='serif-bold', mOriginal='serif', mWeight=700}, Alias{mName='times', mOriginal='serif', mWeight=400}, Alias{mName='times new roman', mOriginal='serif', mWeight=400}, Alias{mName='palatino', mOriginal='serif', mWeight=400}, Alias{mName='georgia', mOriginal='serif', mWeight=400}, Alias{mName='baskerville', mOriginal='serif', mWeight=400}, Alias{mName='goudy', mOriginal='serif', mWeight=400}, Alias{mName='fantasy', mOriginal='serif', mWeight=400}, Alias{mName='ITC Stone Serif', mOriginal='serif', mWeight=400}, Alias{mName='sans-serif-monospace', mOriginal='monospace', mWeight=400}, Alias{mName='monaco', mOriginal='monospace', mWeight=400}, Alias{mName='courier', mOriginal='serif-monospace', mWeight=400}, Alias{mName='courier new', mOriginal='serif-monospace', mWeight=400}, Alias{mName='source-sans-pro-semi-bold', mOriginal='source-sans-pro', mWeight=600}], mLastModifiedTimeMillis=0, mConfigVersion=0}
+SEED typefaces=0 sans-serif=null fallback=202
+SEED createFromFamilies("sans-serif", /system/fonts/Roboto-Regular.ttf) -> android.graphics.Typeface@374563f0
+SEED Typeface.setDefault(android.graphics.Typeface@374563f0) (java+native)
+PASS [text] seeded Typeface.sSystemFontMap (8 families), sSystemFallbackMap (202), sDefaultTypeface=android.graphics.Typeface@374563f0
+PASS [text] seeded Typeface.sDefaultTypeface/sDefaults from /system/fonts (createFromFile -> null, null)
+PASS [text] measureText("Increment") = 126.0 fontMetrics ascent=-26 descent=7
+CTX application=android targetSdk=0
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+LOG(6) JavaBinder: Unknown binder error code. 0xffffffe7
+BUFLOG(6) ServiceManager: error in getService
+android.os.RemoteException: Unknown binder error code. 0xffffffe7
+	at android.os.BinderProxy.transactNative(Native Method)
+	at android.os.BinderProxy.transact(BinderProxy.java:584)
+	at android.os.IServiceManager$Stub$Proxy.checkService(IServiceManager.java:443)
+	at android.os.ServiceManagerProxy.getService(ServiceManagerNative.java:63)
+	at android.os.ServiceManager.rawGetService(ServiceManager.java:378)
+	at android.os.ServiceManager.getService(ServiceManager.java:147)
+	at android.hardware.display.DisplayManagerGlobal.getInstance(DisplayManagerGlobal.java:163)
+	at android.app.ResourcesManager.getAdjustedDisplay(ResourcesManager.java:411)
+	at android.app.ContextImpl.getDisplayNoVerify(ContextImpl.java:3059)
+	at android.app.ContextImpl.getDisplayId(ContextImpl.java:3068)
+	at android.content.ContextWrapper.getDisplayId(ContextWrapper.java:1206)
+	at android.view.ViewConfiguration.<init>(ViewConfiguration.java:478)
+	at android.view.ViewConfiguration.get(ViewConfiguration.java:575)
+	at android.view.View.<init>(View.java:5493)
+	at android.view.View.<init>(View.java:5638)
+	at android.view.ViewGroup.<init>(ViewGroup.java:704)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:254)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:250)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:246)
+	at java.lang.reflect.Constructor.newInstance0(Native Method)
+	at java.lang.reflect.Constructor.newInstance(Constructor.java:343)
+	at android.view.LayoutInflater.createView(LayoutInflater.java:866)
+	at android.view.LayoutInflater.createView(LayoutInflater.java:788)
+	at com.android.internal.policy.PhoneLayoutInflater.onCreateView(PhoneLayoutInflater.java:58)
+	at android.view.LayoutInflater.onCreateView(LayoutInflater.java:942)
+	at android.view.LayoutInflater.onCreateView(LayoutInflater.java:962)
+	at android.view.LayoutInflater.createViewFromTag(LayoutInflater.java:1016)
+	at android.view.LayoutInflater.createViewFromTag(LayoutInflater.java:973)
+	at android.view.LayoutInflater.inflate(LayoutInflater.java:667)
+	at android.view.LayoutInflater.inflate(LayoutInflater.java:538)
+	at dev.acos.e4h.Main.stepDraw(Main.java:680)
+	at dev.acos.e4h.Main.main(Main.java:80)
+
+STUB IWindowManager.hasNavigationBar -> default(boolean)
+E2D[preload]: ioctl(fd=90, req=0xc0306201) -> ENOTTY (no transport yet)
+LOG(6) IPCThreadState: Driver returned error (-25 (Inappropriate ioctl for device)). This is a bug in either libbinder or the driver. This thread's connection to /dev/binder will no longer work.
+LOG(6) JavaBinder: Unknown binder error code. 0xffffffe7
+BUFLOG(6) ServiceManager: error in getService
+android.os.RemoteException: Unknown binder error code. 0xffffffe7
+	at android.os.BinderProxy.transactNative(Native Method)
+	at android.os.BinderProxy.transact(BinderProxy.java:584)
+	at android.os.IServiceManager$Stub$Proxy.checkService(IServiceManager.java:443)
+	at android.os.ServiceManagerProxy.getService(ServiceManagerNative.java:63)
+	at android.os.ServiceManager.rawGetService(ServiceManager.java:378)
+	at android.os.ServiceManager.getService(ServiceManager.java:147)
+	at android.view.accessibility.AccessibilityManager.tryConnectToServiceLocked(AccessibilityManager.java:2180)
+	at android.view.accessibility.AccessibilityManager.<init>(AccessibilityManager.java:554)
+	at android.view.accessibility.AccessibilityManager.getInstance(AccessibilityManager.java:531)
+	at android.view.ViewGroup.notifySubtreeAccessibilityStateChangedIfNeeded(ViewGroup.java:3878)
+	at android.view.View.invalidateOutline(View.java:19259)
+	at android.view.View.internalSetPadding(View.java:25948)
+	at android.view.ViewGroup.internalSetPadding(ViewGroup.java:3992)
+	at android.view.View.<init>(View.java:6306)
+	at android.view.ViewGroup.<init>(ViewGroup.java:704)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:254)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:250)
+	at android.widget.LinearLayout.<init>(LinearLayout.java:246)
+	at java.lang.reflect.Constructor.newInstance0(Native Method)
+	at java.lang.reflect.Constructor.newInstance(Constructor.java:343)
+	at android.view.LayoutInflater.createView(LayoutInflater.java:866)
+	at android.view.LayoutInflater.createView(LayoutInflater.java:788)
+	at com.android.internal.policy.PhoneLayoutInflater.onCreateView(PhoneLayoutInflater.java:58)
+	at android.view.LayoutInflater.onCreateView(LayoutInflater.java:942)
+	at android.view.LayoutInflater.onCreateView(LayoutInflater.java:962)
+	at android.view.LayoutInflater.createViewFromTag(LayoutInflater.java:1016)
+	at android.view.LayoutInflater.createViewFromTag(LayoutInflater.java:973)
+	at android.view.LayoutInflater.inflate(LayoutInflater.java:667)
+	at android.view.LayoutInflater.inflate(LayoutInflater.java:538)
+	at dev.acos.e4h.Main.stepDraw(Main.java:680)
+	at dev.acos.e4h.Main.main(Main.java:80)
+
+LOG(5) System: No Compatibility callbacks set! Querying change 210923482
+LOG(5) System: No Compatibility callbacks set! Querying change 210923482
+LOG(5) System: No Compatibility callbacks set! Querying change 210923482
+PASS [inflate] LayoutInflater.inflate(0x7f020000) -> android.widget.LinearLayout in 28314 us
+PASS [layout] measure+layout 1080x2062 @density 420 in 1582 us -> measured 1080x2062
+TREE
+{"bounds":"[0,0][1080,2062]","nodes":[{"class":"android.widget.FrameLayout","id":"","text":"","bounds":"[0,0][1080,2062]","measured":"1080x2062","textSize":0.0,"clickable":false,"visibility":0,"padding":"0,0,0,0","children":[{"class":"android.widget.LinearLayout","id":"","text":"","bounds":"[0,0][1080,2062]","measured":"1080x2062","textSize":0.0,"clickable":false,"visibility":0,"padding":"42,42,42,42","children":[{"class":"android.widget.TextView","id":"dev.acos.fixtures.counter:id/count","text":"0","bounds":"[42,42][63,93]","measured":"21x51","textSize":37.0,"clickable":false,"visibility":0,"padding":"0,0,0,0","textWidth":21.0,"fontMetrics":"-40,-34,9,11"},{"class":"android.widget.Button","id":"dev.acos.fixtures.counter:id/inc","text":"Increment","bounds":"[42,93][309,219]","measured":"267x126","textSize":37.0,"clickable":true,"visibility":0,"padding":"31,25,31,25","textWidth":166.0,"fontMetrics":"-40,-34,9,11"},{"class":"android.widget.Button","id":"dev.acos.fixtures.counter:id/reset","text":"Reset","bounds":"[42,219][273,345]","measured":"231x126","textSize":37.0,"clickable":true,"visibility":0,"padding":"31,25,31,25","textWidth":94.0,"fontMetrics":"-40,-34,9,11"}]}]}]}
+NOTE [q3] mode=nolooper+pressed isHwAccel=false
+NOTE [q3] Looper.myLooper() -> null
+NOTE [q3] inc pressed=true bg=android.graphics.drawable.RippleDrawable drawableState=[16842910, 16842919, 16843597]
+NOTE [q3] reset bg=android.graphics.drawable.RippleDrawable forced state_focused on the drawable
+BUFLOG(5) RippleDrawable: Thread doesn't have a looper. Skipping animation.
+FAIL [layout/draw] measure+layout+draw : android.util.AndroidRuntimeException: Animators may only be run on Looper threads
+     at android.animation.ValueAnimator.start(ValueAnimator.java:1119)
+     at android.animation.ValueAnimator.start(ValueAnimator.java:1173)
+     at android.graphics.drawable.RippleAnimationSession.startAnimation(RippleAnimationSession.java:192)
+     at android.graphics.drawable.RippleAnimationSession.enterSoftware(RippleAnimationSession.java:218)
+     at android.graphics.drawable.RippleAnimationSession.enter(RippleAnimationSession.java:73)
+     at android.graphics.drawable.RippleDrawable.drawPatterned(RippleDrawable.java:925)
+TIME wall_ms=183
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+LOG(5) System: No Compatibility callbacks set! Querying change 247079863
+RSS peak_kb=208416
+== E4H done failures=1 wall_ms=183 ==
+LOGM(4) : System.exit called, status: 1
