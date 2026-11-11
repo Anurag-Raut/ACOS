@@ -111,6 +111,11 @@
           "description": "Whether the node has input focus.",
           "type": "boolean"
         },
+        "hint": {
+          "default": "",
+          "description": "`TextView.getHint()` (empty when absent); the placeholder an EditText shows while its text is empty.",
+          "type": "string"
+        },
         "id": {
           "description": "Tree-local node id, stable for one tree snapshot.",
           "type": "string"
@@ -127,6 +132,11 @@
         },
         "scrollable": {
           "description": "Whether the node can scroll.",
+          "type": "boolean"
+        },
+        "selected": {
+          "default": false,
+          "description": "Whether the node is selected (`View.isSelected()`).",
           "type": "boolean"
         },
         "text": {

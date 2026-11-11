@@ -1,0 +1,181 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.hellojni",
+    "path": "fixtures/build/apps/hello-jni.apk",
+    "sha256": "2331b16795d21166de196c1d872c18d225954afeff04ce226bf1c77fc71ce568"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/Projects/acos/results/art-runtime/evidence/W19-artifacts/hello-jni",
+    "engine_report": "/home/Qui/Projects/acos/results/art-runtime/evidence/W19-artifacts/hello-jni/engine.json",
+    "verdict": "/home/Qui/Projects/acos/results/art-runtime/evidence/W19-artifacts/hello-jni/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "ELEMENT_NOT_FOUND",
+    "error": {
+      "code": "ELEMENT_NOT_FOUND",
+      "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+      "message": "selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello JNI\"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node",
+      "retryable": false
+    },
+    "step_index": 2,
+    "summary": "step 2 (assert_text) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T22:50:21.160Z",
+  "isolation": "sandbox",
+  "mode": "live",
+  "notes": [
+    "stopped at step 2 (assert_text): fail; later steps were not executed",
+    "scenario expected `pass`, engine produced `fail` — result is a truthful partial"
+  ],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/hello-jni.apk",
+    "apk_sha256": "2331b16795d21166de196c1d872c18d225954afeff04ce226bf1c77fc71ce568",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "sandbox",
+    "scenario_path": "scenarios/hello-jni.yaml",
+    "scenario_sha256": "0e2285b8cbb33e47d7c0b3c547a3ed8b517a173d36a74378d1d56352cade3798"
+  },
+  "request_id": "req_2ed8a9_18e71f5391500f18",
+  "resources": {
+    "events": 3,
+    "frames_captured": 3,
+    "memory_mib": 72,
+    "peak_rss_bytes": 76013568,
+    "sessions": 1,
+    "steps": 3,
+    "wall_ms": 500
+  },
+  "scenario": {
+    "name": "hello-jni",
+    "path": "scenarios/hello-jni.yaml",
+    "sha256": "0e2285b8cbb33e47d7c0b3c547a3ed8b517a173d36a74378d1d56352cade3798"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_hello-jni",
+  "started_at": "2026-11-11T22:50:20.660Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 493,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/1.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/1.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 1,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "diff": {
+            "actual": null,
+            "detail": "selector matched no node",
+            "expected": {
+              "selector": {
+                "text": {
+                  "exact": "Hello JNI"
+                }
+              },
+              "text": {
+                "exact": "Hello JNI"
+              }
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 2,
+      "error": {
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello JNI\"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/1.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/1.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ],
+      "frame_seq": 1,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "status": "fail",
+      "step": "assert_text"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

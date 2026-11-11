@@ -1,0 +1,23 @@
+counter-v2	pass	live	11	None			
+w15-dialog-menu	pass	live	3	None			
+w15-dialogs-menus	pass	live	3	None			
+w15-fragments-nav	pass	live	3	None			
+w15-list-adapter	pass	live	3	None			
+w15-list-scroll	pass	live	2	None			
+w15-todo-dogfood	pass	live	4	None			
+w15-widget-gallery	pass	live	3	None			
+w15-sqlite-crud	pass	live	2	None			
+w15-canvas-shapes	pass	live	2	None			
+w15-two-activity	pass	live	3	None			
+w16-text-input	pass	live	7	None			
+w15-text-input	pass	live	5	None			
+w17-form-hint	pass	live	4	None			
+w17-todo-hint	pass	live	4	None			
+w17-multi-hint	pass	live	3	None			
+w17-hello-views-hint	pass	live	5	None			
+form-validation	unsupported	live	6	5	assert_log	UNSUPPORTED_BACKEND	the backend cannot expose logs (missing capability `logs`)
+hello-views	unsupported	live	7	6	assert_log	UNSUPPORTED_BACKEND	the backend cannot expose logs (missing capability `logs`)
+multi-activity	unsupported	live	5	4	assert_log	UNSUPPORTED_BACKEND	the backend cannot expose logs (missing capability `logs`)
+todo-list	fail	live	5	4	assert_text	ASSERTION_FAILED	expected bounds [273,435][504,561], got [273,435][522,561]
+hello-jni	fail	live	3	2	assert_text	ELEMENT_NOT_FOUND	selector Selector { id: None, text: Some(TextMatch { exact: Some("Hello JNI"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node
+rn-hello	fail	live	2	1	assert_text	ELEMENT_NOT_FOUND	selector Selector { id: None, text: Some(TextMatch { exact: Some("Hello ACOS"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node

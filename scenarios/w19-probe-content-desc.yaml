@@ -1,0 +1,40 @@
+# W19: selectors by accessibility content description.
+#
+# The action-bar overflow button has no id and no text; only
+# `View.getContentDescription()` ("More options") identifies it. The engine
+# now carries the probe's `content_description` into the tree, so a selector
+# can use it for wait_for/assert_* (and a tap point can be resolved from it).
+version: 1
+name: w19-probe-content-desc
+description: >-
+  Launch dialog-menu on real ART and locate the action-bar overflow button by
+  its content description, with screen-space bounds.
+app: fixtures/build/apps/dialog-menu.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.dialogmenu/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {content_desc: {exact: "More options"}}
+      timeout_ms: 5000
+
+  - assert_visible:
+      selector: {content_desc: {exact: "More options"}}
+      bounds: [975, 138, 1080, 264]

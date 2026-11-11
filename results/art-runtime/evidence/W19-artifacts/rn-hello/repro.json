@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/rn-hello.apk",
+  "apk_sha256": "a03155f1a85e59a8ac9c70b4a0bfaf8f1528c690b152b580ecfdbb78950023aa",
+  "scenario_path": "scenarios/w15-rn-hello.yaml",
+  "scenario_sha256": "ee0eb2283882cbf312382726f0a15d6f6e92e030c8202390fdbf0685886aeb69",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

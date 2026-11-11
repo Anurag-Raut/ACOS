@@ -1,0 +1,224 @@
+{
+  "request_id": "req_2ef807_18e71f9ca227039d",
+  "ok": false,
+  "status": "timeout",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_rn-hello",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "code": "TIMEOUT",
+    "message": "wait_for timed out after 3000 ms: selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello ACOS\"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } did not satisfy the condition (require_visible=true)",
+    "hint": "The live tree kept being re-traversed until the deadline. Increase                              `timeout_ms` if the app is genuinely slow, or fix the selector/state;                              a timeout is a structured failure, never a pass.",
+    "retryable": true,
+    "details": {
+      "elapsed_ms": 3001,
+      "last_frame_seq": 1,
+      "polls": 9,
+      "require_visible": true,
+      "selector": {
+        "text": {
+          "exact": "Hello ACOS"
+        }
+      },
+      "timeout_ms": 3000
+    }
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W19-artifacts/w19-rn-wait-timeout",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.rnhello",
+        "path": "fixtures/build/apps/rn-hello.apk",
+        "sha256": "a03155f1a85e59a8ac9c70b4a0bfaf8f1528c690b152b580ecfdbb78950023aa"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W19-artifacts/w19-rn-wait-timeout",
+        "engine_report": "results/art-runtime/evidence/W19-artifacts/w19-rn-wait-timeout/engine.json",
+        "verdict": "results/art-runtime/evidence/W19-artifacts/w19-rn-wait-timeout/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "TIMEOUT",
+        "error": {
+          "code": "TIMEOUT",
+          "details": {
+            "elapsed_ms": 3001,
+            "last_frame_seq": 1,
+            "polls": 9,
+            "require_visible": true,
+            "selector": {
+              "text": {
+                "exact": "Hello ACOS"
+              }
+            },
+            "timeout_ms": 3000
+          },
+          "hint": "The live tree kept being re-traversed until the deadline. Increase                              `timeout_ms` if the app is genuinely slow, or fix the selector/state;                              a timeout is a structured failure, never a pass.",
+          "message": "wait_for timed out after 3000 ms: selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello ACOS\"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } did not satisfy the condition (require_visible=true)",
+          "retryable": true
+        },
+        "step_index": 1,
+        "summary": "step 1 (wait_for) timeout"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T22:55:40.203Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 1 (wait_for): timeout; later steps were not executed",
+        "scenario expected `pass`, engine produced `timeout` — result is a truthful partial"
+      ],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/rn-hello.apk",
+        "apk_sha256": "a03155f1a85e59a8ac9c70b4a0bfaf8f1528c690b152b580ecfdbb78950023aa",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w19-rn-wait-timeout.yaml",
+        "scenario_sha256": "0dee89dc206c5d40574ba6effee2c3f5bed518a5922257058d549420bffdde74"
+      },
+      "request_id": "req_2ef807_18e71f9ca227039d",
+      "resources": {
+        "events": 2,
+        "frames_captured": 2,
+        "memory_mib": 74,
+        "peak_rss_bytes": 77852672,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 3595
+      },
+      "scenario": {
+        "name": "w19-rn-wait-timeout",
+        "path": "scenarios/w19-rn-wait-timeout.yaml",
+        "sha256": "0dee89dc206c5d40574ba6effee2c3f5bed518a5922257058d549420bffdde74"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_rn-hello",
+      "started_at": "2026-11-11T22:55:36.608Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 486,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [
+            {
+              "diff": {
+                "actual": null,
+                "detail": "selector matched no node",
+                "expected": {
+                  "text": {
+                    "exact": "Hello ACOS"
+                  }
+                }
+              },
+              "kind": "wait_for",
+              "matched_node_ids": [],
+              "passed": false
+            }
+          ],
+          "duration_ms": 3002,
+          "error": {
+            "code": "TIMEOUT",
+            "details": {
+              "elapsed_ms": 3001,
+              "last_frame_seq": 1,
+              "polls": 9,
+              "require_visible": true,
+              "selector": {
+                "text": {
+                  "exact": "Hello ACOS"
+                }
+              },
+              "timeout_ms": 3000
+            },
+            "hint": "The live tree kept being re-traversed until the deadline. Increase                              `timeout_ms` if the app is genuinely slow, or fix the selector/state;                              a timeout is a structured failure, never a pass.",
+            "message": "wait_for timed out after 3000 ms: selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello ACOS\"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } did not satisfy the condition (require_visible=true)",
+            "retryable": true
+          },
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "timeout",
+          "step": "wait_for"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "timeout"
+    },
+    "verdict_path": "results/art-runtime/evidence/W19-artifacts/w19-rn-wait-timeout/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 3595,
+    "peak_rss_bytes": 77852672
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

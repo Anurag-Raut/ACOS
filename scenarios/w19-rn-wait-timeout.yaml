@@ -1,0 +1,37 @@
+# W19: wait_for really waits on the live ART tree.
+#
+# W17 observed `wait_for` returning in ~1 ms on rn-hello, so an asynchronous
+# React surface had no observation window. This is the live teeth: the RN JS
+# content is still absent, so the step must poll the real tree until its
+# timeout and end with a structured TIMEOUT (never an immediate ELEMENT_NOT_FOUND
+# and never a pass). The scenario still declares `expectation: pass`: until the
+# RN JS content lands, the run is reported as a truthful TIMEOUT partial.
+version: 1
+name: w19-rn-wait-timeout
+description: >-
+  Wait up to 3 s for rn-hello's React text on the real ART tree; the engine
+  must keep polling and report TIMEOUT with elapsed_ms/polls evidence.
+app: fixtures/build/apps/rn-hello.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {exact: "Hello ACOS"}}
+      timeout_ms: 3000

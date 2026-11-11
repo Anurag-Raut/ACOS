@@ -688,6 +688,19 @@ impl Backend for EngineBackend {
         self.observe_session()
     }
 
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        match self {
+            EngineBackend::Native(backend) => backend.refresh(),
+            EngineBackend::Session { session, .. } => {
+                // `frame()` issues the live `tree` command and returns the tree
+                // and PNG of that completed traversal; a pure `observe()` would
+                // only replay the previous frame and can never start waiting.
+                let observed = session.frame()?;
+                self.bind_observation(observed)
+            }
+        }
+    }
+
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.logs_since(since),
@@ -944,8 +957,14 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    // Prefer display-space bounds: W17 measured every failing bounds case as a
+    // constant +128 px y delta (the status-bar inset) because the probe's
+    // `bounds` is window-local while the reference scenarios are screen-space.
+    // `bounds_on_screen` is the same node's stock `getLocationOnScreen()`; a
+    // probe that predates the field falls back to the window-local `bounds`.
     let bounds = value
-        .get("bounds")
+        .get("bounds_on_screen")
+        .or_else(|| value.get("bounds"))
         .and_then(|v| v.as_str())
         .and_then(parse_bounds)
         .unwrap_or_else(|| Bounds::new(0, 0, 0, 0));
@@ -961,6 +980,29 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
     let mut node = UiNode::new(id, class, bounds)
         .with_resource_id(resource_id)
         .with_text(value.get("text").and_then(|v| v.as_str()).unwrap_or(""));
+    node.hint = value
+        .get("hint")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    node.content_desc = value
+        .get("content_description")
+        .or_else(|| value.get("content_desc"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    node.checked = value
+        .get("checked")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    node.selected = value
+        .get("selected")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    node.scrollable = value
+        .get("scrollable")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     node.clickable = value
         .get("clickable")
         .and_then(|v| v.as_bool())
@@ -988,7 +1030,7 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
 }
 
 /// `[l,t][r,b]` as protocol bounds.
-fn parse_bounds(text: &str) -> Option<Bounds> {
+pub(crate) fn parse_bounds(text: &str) -> Option<Bounds> {
     let cleaned = text
         .trim()
         .trim_start_matches('[')
@@ -1112,6 +1154,47 @@ mod tests {
             .find_one(&Selector::by_text("Increment"))
             .expect("inc node");
         assert!(inc.clickable);
+    }
+
+    #[test]
+    fn ui_tree_prefers_screen_bounds_and_carries_hint_and_state() {
+        let value = serde_json::json!({
+            "nodes": [{
+                "class": "android.widget.EditText",
+                "id": "dev.acos.fixtures.form:id/name",
+                "text": "",
+                "hint": "Name",
+                "content_description": "player-name",
+                "bounds": "[42,189][1038,307]",
+                "bounds_on_screen": "[42,317][1038,435]",
+                "checked": true,
+                "selected": true,
+                "visibility": 0
+            }]
+        });
+        let frame = FrameMeta::new(1, "2026-11-11T00:00:00Z", "req", 1080, 2400, 420, "h", true);
+        let tree = ui_tree_from_json("dev.acos.fixtures.form", frame, &value).unwrap();
+        let node = tree
+            .find_one(&Selector {
+                hint: Some(acos_protocol::TextMatch::exact("Name")),
+                ..Selector::default()
+            })
+            .expect("hint selector finds the EditText");
+        assert_eq!(node.hint, "Name");
+        assert_eq!(node.content_desc, "player-name");
+        assert_eq!(node.bounds, Bounds::new(42, 317, 1038, 435));
+        assert!(node.checked);
+        assert!(node.selected);
+        // Selector text also matches a hint, and content-desc selectors work.
+        assert!(tree
+            .find_one(&Selector::by_text("Name"))
+            .is_some());
+        assert!(tree
+            .find_one(&Selector {
+                content_desc: Some(acos_protocol::TextMatch::exact("player-name")),
+                ..Selector::default()
+            })
+            .is_some());
     }
 
     #[test]

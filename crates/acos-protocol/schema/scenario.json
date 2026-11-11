@@ -953,6 +953,17 @@
           ],
           "description": "Content-description matcher."
         },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hint matcher (`TextView.getHint()`, e.g. an EditText placeholder)."
+        },
         "id": {
           "description": "Android resource id (`pkg:id/name`), or a bare local id (`name`).",
           "type": [
@@ -1016,6 +1027,13 @@
         },
         "scrollable": {
           "description": "Expected scrollable flag.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selected": {
+          "description": "Expected selected flag (`View.isSelected()`).",
           "type": [
             "boolean",
             "null"

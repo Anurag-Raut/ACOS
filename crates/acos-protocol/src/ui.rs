@@ -231,6 +231,9 @@ pub struct Selector {
     /// Text matcher.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<TextMatch>,
+    /// Hint matcher (`TextView.getHint()`, e.g. an EditText placeholder).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<TextMatch>,
     /// Content-description matcher.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_desc: Option<TextMatch>,
@@ -274,6 +277,7 @@ impl Selector {
     pub fn is_empty(&self) -> bool {
         self.id.is_none()
             && self.text.is_none()
+            && self.hint.is_none()
             && self.content_desc.is_none()
             && self.class.is_none()
             && self.bounds.is_none()
@@ -285,7 +289,7 @@ impl Selector {
         let mut errors = Vec::new();
         if self.is_empty() {
             errors.push(
-                "selector is empty; set at least one of id/text/content_desc/class/bounds"
+                "selector is empty; set at least one of id/text/hint/content_desc/class/bounds"
                     .to_string(),
             );
             return errors;
@@ -303,6 +307,11 @@ impl Selector {
         if let Some(text) = &self.text {
             if let Some(err) = text.validate() {
                 errors.push(format!("selector.text: {err}"));
+            }
+        }
+        if let Some(hint) = &self.hint {
+            if let Some(err) = hint.validate() {
+                errors.push(format!("selector.hint: {err}"));
             }
         }
         if let Some(desc) = &self.content_desc {
@@ -334,7 +343,12 @@ impl Selector {
             }
         }
         if let Some(text) = &self.text {
-            if !text.matches(&node.text) {
+            if !text.matches(&node.text) && !text.matches(&node.hint) {
+                return false;
+            }
+        }
+        if let Some(hint) = &self.hint {
+            if !hint.matches(&node.hint) {
                 return false;
             }
         }
@@ -373,6 +387,10 @@ pub struct UiNode {
     /// Visible text (empty when absent).
     #[serde(default)]
     pub text: String,
+    /// `TextView.getHint()` (empty when absent); the placeholder an EditText
+    /// shows while its text is empty.
+    #[serde(default)]
+    pub hint: String,
     /// Accessibility content description (empty when absent).
     #[serde(default)]
     pub content_desc: String,
@@ -390,6 +408,9 @@ pub struct UiNode {
     pub scrollable: bool,
     /// Whether the node is checked (checkboxes/switches).
     pub checked: bool,
+    /// Whether the node is selected (`View.isSelected()`).
+    #[serde(default)]
+    pub selected: bool,
     /// Child nodes, in layout order.
     #[serde(default)]
     pub children: Vec<UiNode>,
@@ -406,6 +427,7 @@ impl UiNode {
             class: class.into(),
             resource_id: String::new(),
             text: String::new(),
+            hint: String::new(),
             content_desc: String::new(),
             bounds,
             visible: true,
@@ -414,6 +436,7 @@ impl UiNode {
             clickable: false,
             scrollable: false,
             checked: false,
+            selected: false,
             children: Vec::new(),
             package: String::new(),
         }

@@ -1,0 +1,27 @@
+{
+  "assertions": [],
+  "duration_ms": 0,
+  "error": {
+    "code": "UNSUPPORTED_BACKEND",
+    "details": {
+      "capability": "logs",
+      "detail": "the backend cannot expose logs"
+    },
+    "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+    "message": "the backend cannot expose logs (missing capability `logs`)",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/06-assert_log.json"
+    }
+  ],
+  "index": 6,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "unsupported",
+  "step": "assert_log",
+  "trust": "trusted"
+}

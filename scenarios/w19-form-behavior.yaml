@@ -1,0 +1,72 @@
+# W19: the full live-probe path on a previously blocked fixture app.
+#
+# This is the W15 form-validation flow up to its first behavioural assertion,
+# without the log steps that the ART session protocol does not support yet:
+#   * the EditText is found by `hint` (TextView.getHint() through the engine),
+#   * the hint text and its screen-space bounds match the reference,
+#   * a selector tap resolves from `bounds_on_screen` and the guest receives the
+#     correct window-local point (the engine translates by the measured window
+#     origin),
+#   * the app's inline error appears in a fresh tree and matches the reference
+#     text and bounds.
+# The full scenarios/form-validation.yaml still stops later at `assert_log`
+# (UNSUPPORTED_BACKEND), which is unrelated to the probe changes.
+version: 1
+name: w19-form-behavior
+description: >-
+  Launch form-validation on real ART, resolve the Name field by hint, assert its
+  screen-space bounds, submit the empty form and verify the inline
+  "Name is required" error text and bounds.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {hint: {exact: Name}}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: name}
+      text: {exact: Name}
+      bounds: [42, 317, 1038, 435]
+
+  - assert_text:
+      selector: {id: email}
+      text: {exact: Email}
+      bounds: [42, 435, 1038, 553]
+
+  - assert_text:
+      selector: {id: submit}
+      text: {exact: Submit}
+      bounds: [42, 553, 273, 679]
+
+  - tap:
+      selector: {id: submit}
+
+  - wait_for:
+      selector: {id: error}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: error}
+      text: {exact: "Name is required"}
+      bounds: [42, 679, 323, 730]

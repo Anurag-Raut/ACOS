@@ -10,6 +10,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use acos_protocol::assertion::{
     AssertionDiff, AssertionResult, RegionAssertion, ScreenshotAssertion,
@@ -36,6 +37,13 @@ use crate::error::VerifyError;
 use crate::manifest::sha256_file;
 use crate::screenshot;
 use sha2::{Digest, Sha256};
+
+/// Pacing between `wait_for` live-tree polls. Each poll is a fresh traversal,
+/// so this only bounds how often the engine asks; the first sample is immediate.
+const WAIT_FOR_POLL_INTERVAL_MS: u64 = 25;
+/// Upper bound for the `wait_for` poll backoff (one observation per second
+/// once the early fast polls have missed).
+const WAIT_FOR_MAX_POLL_INTERVAL_MS: u64 = 1000;
 
 /// Everything the executor needs about one run.
 #[derive(Debug, Clone)]
@@ -602,46 +610,82 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
-            match backend.observe() {
-                Ok(observation) => {
-                    if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                        return failure;
-                    }
-                    if let Some(failure) = meaningful_error(&observation) {
-                        return failure;
-                    }
-                    let matched = observation.tree.find_one(&wait.selector).cloned();
-                    match matched {
-                        None => {
-                            let mut exec = StepExec::failed(assertions::element_missing(
-                                "wait_for",
-                                &wait.selector,
-                            ));
-                            exec.observation = Some(observation);
-                            exec
+            // W17 measured the old behaviour: one `observe()` and a return in
+            // ~1 ms even though the scenario asked for a 15 s wait. Poll a
+            // *fresh* traversal until the condition holds or the deadline
+            // passes. The first attempt is immediate; later attempts are
+            // paced, and the failure is a structured TIMEOUT.
+            let timeout = Duration::from_millis(wait.timeout_ms);
+            let started = Instant::now();
+            // Each poll is a fresh traversal and, on ART, a stored frame. Back
+            // off so a long timeout cannot exhaust the guest's buffer pool: a
+            // 15 s wait makes ~19 observations, not 600.
+            let mut interval = Duration::from_millis(WAIT_FOR_POLL_INTERVAL_MS);
+            let mut polls = 0u64;
+            // Assigned on every successful poll before it can be read; the
+            // initialiser only exists so the timeout branch can move it.
+            #[allow(unused_assignments)]
+            let mut last: Option<SessionObservation> = None;
+            loop {
+                polls += 1;
+                match backend.refresh() {
+                    Ok(observation) => {
+                        if let Some(failure) = observation_binding_error(backend.id(), &observation)
+                        {
+                            return failure;
                         }
-                        Some(node) => {
-                            if wait.require_visible && !node.visible {
-                                let mut exec = StepExec::pass();
-                                exec.observation = Some(observation);
-                                exec.status = Status::Fail;
-                                exec.error = Some(
-                                    ProtocolError::new(
-                                        ErrorCode::AssertionFailed,
-                                        "matched node is not visible".to_string(),
-                                    )
-                                    .with_details(serde_json::json!({"node": node.id})),
-                                );
-                                exec
-                            } else {
-                                let mut exec = StepExec::pass();
-                                exec.observation = Some(observation);
-                                exec
-                            }
+                        if let Some(failure) = meaningful_error(&observation) {
+                            return failure;
                         }
+                        let matched = observation.tree.find_one(&wait.selector).cloned();
+                        let satisfied = matched
+                            .as_ref()
+                            .is_some_and(|node| !wait.require_visible || node.visible);
+                        last = Some(observation);
+                        if satisfied {
+                            let mut exec = StepExec::pass();
+                            exec.observation = last;
+                            return exec;
+                        }
+                    }
+                    Err(error) => {
+                        return StepExec::backend_error(&error, backend.id(), "wait_for");
                     }
                 }
-                Err(error) => StepExec::backend_error(&error, backend.id(), "wait_for"),
+                let elapsed = started.elapsed();
+                if elapsed >= timeout {
+                    let mut exec =
+                        StepExec::failed(assertions::element_missing("wait_for", &wait.selector));
+                    exec.status = Status::Timeout;
+                    exec.error = Some(
+                        ProtocolError::new(
+                            ErrorCode::Timeout,
+                            format!(
+                                "wait_for timed out after {} ms: selector {:?} did not satisfy the condition (require_visible={})",
+                                wait.timeout_ms, wait.selector, wait.require_visible
+                            ),
+                        )
+                        .with_hint(
+                            "The live tree kept being re-traversed until the deadline. Increase                              `timeout_ms` if the app is genuinely slow, or fix the selector/state;                              a timeout is a structured failure, never a pass.",
+                        )
+                        .with_details(serde_json::json!({
+                            "timeout_ms": wait.timeout_ms,
+                            "elapsed_ms": elapsed.as_millis() as u64,
+                            "polls": polls,
+                            "require_visible": wait.require_visible,
+                            "selector": wait.selector,
+                            "last_frame_seq": last.as_ref().map(|observation| observation.frame.frame_seq),
+                        })),
+                    );
+                    exec.observation = last;
+                    return exec;
+                }
+                let remaining = timeout.saturating_sub(elapsed);
+                if remaining.is_zero() {
+                    continue;
+                }
+                std::thread::sleep(interval.min(remaining));
+                interval = (interval * 2).min(Duration::from_millis(WAIT_FOR_MAX_POLL_INTERVAL_MS));
             }
         }
         StepRef::Tap(tap) => {

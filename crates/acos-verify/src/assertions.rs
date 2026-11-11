@@ -112,25 +112,30 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
         );
     };
     let matched = vec![node.id.clone()];
-    if !assertion.text.matches(&node.text) {
+    // An EditText exposes its placeholder through `getHint()`; a scenario that
+    // asks for the hint text ("Name", "Enter your name") must match it even
+    // when the widget also has literal text. The guest-asserted provenance of
+    // the tree is unchanged (S8).
+    if !assertion.text.matches(&node.text) && !assertion.text.matches(&node.hint) {
         return Evaluated::fail(
             "text",
             matched,
             AssertionDiff {
                 expected: json!(assertion.text),
-                actual: json!(node.text),
+                actual: json!({"text": node.text, "hint": node.hint}),
                 path: Some(node_path(index, "text")),
                 detail: Some(format!(
-                    "text did not match ({})",
+                    "text/hint did not match ({})",
                     assertion.text.describe()
                 )),
             },
             BackendError::Failed {
                 code: ErrorCode::AssertionFailed,
                 detail: format!(
-                    "expected text {}, got {:?}",
+                    "expected text {}, got text {:?} / hint {:?}",
                     assertion.text.describe(),
-                    node.text
+                    node.text,
+                    node.hint
                 ),
             },
         );
@@ -263,13 +268,14 @@ pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) 
         );
     };
     let matched = vec![node.id.clone()];
-    let checks: [(&str, Option<bool>, bool); 6] = [
+    let checks: [(&str, Option<bool>, bool); 7] = [
         ("visible", assertion.visible, node.visible),
         ("enabled", assertion.enabled, node.enabled),
         ("focused", assertion.focused, node.focused),
         ("clickable", assertion.clickable, node.clickable),
         ("scrollable", assertion.scrollable, node.scrollable),
         ("checked", assertion.checked, node.checked),
+        ("selected", assertion.selected, node.selected),
     ];
     for (field, expected, actual) in checks {
         if let Some(expected) = expected {

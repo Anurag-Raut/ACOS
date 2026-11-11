@@ -51,6 +51,7 @@ fn selector() -> Selector {
     Selector {
         id: Some("dev.acos.fixtures.helloviews:id/result".to_string()),
         text: Some(TextMatch::contains("clicks")),
+        hint: Some(TextMatch::exact("Name")),
         content_desc: Some(TextMatch::regex(".*")),
         class: Some("android.widget.TextView".to_string()),
         bounds: Some(bounds()),
@@ -410,6 +411,7 @@ fn assertion_round_trips() {
         clickable: Some(true),
         scrollable: Some(false),
         checked: Some(false),
+        selected: Some(false),
         timeout_ms: Some(5000),
     });
     round_trip(&LogAssertion {
@@ -446,6 +448,7 @@ fn assertion_round_trips() {
             clickable: None,
             scrollable: None,
             checked: None,
+            selected: None,
             timeout_ms: None,
         }),
         Assertion::Log(LogAssertion {
@@ -949,6 +952,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             clickable: Some(true),
             scrollable: Some(false),
             checked: Some(false),
+            selected: Some(false),
             timeout_ms: None,
         }),
         ..Step::default()

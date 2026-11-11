@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/list-scroll.apk",
+  "apk_sha256": "a01042018b380f73f93f726cedaf9559f6ad58ee29e5bcf179dacacbf4b0263a",
+  "scenario_path": "scenarios/w15-list-scroll.yaml",
+  "scenario_sha256": "b909091a21731e23c2a821086664764bfc2a32b7caf62c766895495ac3371040",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

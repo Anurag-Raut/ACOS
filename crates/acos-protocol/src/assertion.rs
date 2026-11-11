@@ -116,6 +116,9 @@ pub struct StateAssertion {
     /// Expected checked flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checked: Option<bool>,
+    /// Expected selected flag (`View.isSelected()`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
     /// Event-driven timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,

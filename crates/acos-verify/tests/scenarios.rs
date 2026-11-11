@@ -714,3 +714,191 @@ fn screenshot_assertion_fails_beyond_tolerance() {
     assert_eq!(outcome.verdict.steps.last().unwrap().status, Status::Fail);
 }
 
+
+// ---------------------------------------------------------------------------
+// wait_for must poll a fresh tree until the condition holds or the deadline
+// passes. These two tests are the teeth: a never-true condition fails with a
+// structured TIMEOUT (and really consumes its timeout), while a condition that
+// becomes true on a later traversal returns early instead of waiting forever.
+// ---------------------------------------------------------------------------
+
+struct WaitBackend {
+    manifest: Option<ManifestInfo>,
+    polls: u64,
+    match_after: u64,
+}
+
+impl WaitBackend {
+    fn new(match_after: u64) -> Self {
+        WaitBackend {
+            manifest: None,
+            polls: 0,
+            match_after,
+        }
+    }
+
+    fn observation(&self) -> SessionObservation {
+        let matched = self.match_after > 0 && self.polls >= self.match_after;
+        let id = if matched { "result" } else { "placeholder" };
+        let text = if matched { "clicks: 0" } else { "waiting" };
+        let frame = FrameMeta::new(
+            1 + self.polls,
+            "2026-11-11T00:00:00.000Z",
+            format!("wait:{}", self.polls),
+            1080,
+            2400,
+            420,
+            format!("wait-hash-{}-{matched}", self.polls),
+            true,
+        );
+        let node = UiNode::new(
+            "n1",
+            "android.widget.TextView",
+            Bounds::new(42, 612, 175, 663),
+        )
+        .with_resource_id(format!("dev.acos.fixtures.helloviews:id/{id}"))
+        .with_text(text);
+        let tree = UiTree::new(
+            frame.clone(),
+            "dev.acos.fixtures.helloviews",
+            vec![node],
+        );
+        SessionObservation {
+            session_id: "s_wait".to_string(),
+            package: "dev.acos.fixtures.helloviews".to_string(),
+            frame,
+            tree,
+            screenshot_png: Some(b"waiting".to_vec()),
+            crashed: None,
+            input: None,
+        }
+    }
+}
+
+impl Backend for WaitBackend {
+    fn id(&self) -> &'static str {
+        "wait-mock"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            ui_tree: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        let observation = self.observation();
+        Ok(LaunchOutcome {
+            session_id: "s_wait".to_string(),
+            package: "dev.acos.fixtures.helloviews".to_string(),
+            frame: Some(observation.frame.clone()),
+            screenshot_png: observation.screenshot_png.clone(),
+            crashed: None,
+            detail: serde_json::json!({"backend": "wait-mock"}),
+        })
+    }
+
+    fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+        Ok(self.observation())
+    }
+
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        self.polls += 1;
+        Ok(self.observation())
+    }
+}
+
+fn run_wait_for(match_after: u64, timeout_ms: u64) -> (RunOutcome, u64) {
+    let yaml = format!(
+        r#"
+version: 1
+name: wait-for-teeth
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+expectation: pass
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+  - wait_for: {{selector: {{id: result}}, timeout_ms: {timeout_ms}}}
+"#
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+    let artifacts = scratch("wait-for-teeth");
+    let mut backend = WaitBackend::new(match_after);
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/hello-views.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_wait_for_teeth".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
+    let polls = backend.polls;
+    let _ = std::fs::remove_dir_all(&artifacts);
+    (outcome, polls)
+}
+
+#[test]
+fn wait_for_condition_that_never_appears_is_a_structured_timeout() {
+    let started = std::time::Instant::now();
+    let (outcome, polls) = run_wait_for(0, 120);
+    let elapsed = started.elapsed();
+    assert_eq!(outcome.verdict.verdict, Status::Timeout);
+    let failure = outcome.verdict.failure.as_ref().expect("timeout failure");
+    assert_eq!(failure.error.code, acos_protocol::ErrorCode::Timeout);
+    let details = failure.error.details.as_ref().expect("timeout details");
+    assert_eq!(details["timeout_ms"], 120);
+    assert!(
+        details["elapsed_ms"].as_u64().unwrap_or(0) >= 120,
+        "the wait must consume its timeout: {details}"
+    );
+    assert!(polls >= 2, "the live tree must be polled repeatedly, got {polls}");
+    assert!(
+        elapsed >= std::time::Duration::from_millis(120),
+        "wait_for returned in {:?}, before its timeout",
+        elapsed
+    );
+    assert!(
+        !outcome.verdict.verdict.is_pass(),
+        "a timeout must never be reported as a pass"
+    );
+}
+
+#[test]
+fn wait_for_returns_as_soon_as_the_condition_appears() {
+    let started = std::time::Instant::now();
+    let (outcome, polls) = run_wait_for(2, 4000);
+    let elapsed = started.elapsed();
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "condition appeared on poll {polls}: {:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(polls, 2, "must stop at the first satisfying traversal");
+    assert!(
+        elapsed < std::time::Duration::from_secs(2),
+        "wait_for did not return early: {:?}",
+        elapsed
+    );
+}

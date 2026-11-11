@@ -95,7 +95,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ISOLATION_UNSATISFIED` | The requested isolation level is advertised but its guarantees are unmet. | acos-runtime / acos-sandbox | 1 |
 | `RAM_GUARD` | A memory admission/guard rule was triggered. | acos-runtime / acos-art | 1 / 2 |
 | `RAM_ABORT` | Execution was aborted by the RAM guard. | acos-runtime / acos-art | 1 / 2 |
-| `TIMEOUT` | The operation exceeded its wall/CPU budget. | acos-runtime / acos-art | 1 / 2 |
+| `TIMEOUT` | The operation exceeded its wall/CPU budget. `wait_for` also uses it when its live-tree condition is never satisfied by `timeout_ms`; the failure details carry `timeout_ms`, `elapsed_ms`, `polls`, and `last_frame_seq`. | acos-runtime / acos-art / acos-verify | 1 / 2 |
 | `RESOURCE_LIMIT` | A declared resource budget was exhausted. | acos-runtime / acos-art | 1 / 2 |
 | `UNTRUSTED_APK_NOT_CERTIFIED` | An untrusted APK run was requested while the product path is not certified for untrusted APKs; only the labelled hostile-fixture test override may run it. | acos-cli | 1 |
 | `INVALID_SCENARIO` | The scenario is structurally or semantically invalid. | acos-verify | 1 |

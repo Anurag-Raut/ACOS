@@ -467,6 +467,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 clickable: None,
                 scrollable: None,
                 checked: None,
+                selected: None,
                 timeout_ms: None,
             }),
             ..Step::default()

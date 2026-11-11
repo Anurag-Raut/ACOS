@@ -1,0 +1,72 @@
+# W19: the engine consumes the rich live probe.
+#
+# Teeth for the engine-side changes:
+#   * `assert_text` with screen-space `bounds` (`bounds_on_screen`), not the
+#     window-local `bounds` the probe also reports (W17 measured a constant
+#     +128 px y delta / status inset);
+#   * a selector by `hint` (`TextView.getHint()`), not only by text/id;
+#   * `checked` state from `Checkable.isChecked()` in `assert_state`.
+#
+# Expected bounds are the screen-space values the W17 probe reports for the
+# API-34 1080x2400 @ 420 dpi reference (base window origin y=128).
+version: 1
+name: w19-probe-widgets
+description: >-
+  Launch widget-gallery on real ART and verify the EditText hint by selector,
+  screen-space bounds, and the checked state of checkboxes, the switch and the
+  radio buttons from the live probe.
+app: fixtures/build/apps/widget-gallery.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.widgetgallery/.MainActivity
+      clear_state: true
+
+  # A selector by hint: the EditText has no literal text.
+  - wait_for:
+      selector: {hint: {exact: "Enter text"}}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: "Enter text"}
+      bounds: [42, 1089, 1038, 1207]
+
+  - assert_state:
+      selector: {id: check_on}
+      checked: true
+
+  - assert_state:
+      selector: {id: check_off}
+      checked: false
+
+  - assert_state:
+      selector: {id: switch_on}
+      checked: true
+
+  - assert_state:
+      selector: {id: switch_off}
+      checked: false
+
+  - assert_state:
+      selector: {id: radio_a}
+      checked: true
+
+  - assert_state:
+      selector: {id: radio_b}
+      checked: false

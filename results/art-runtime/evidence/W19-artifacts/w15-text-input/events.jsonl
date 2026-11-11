@@ -1,0 +1,5 @@
+{"seq":1,"timestamp_ms":1000,"session_id":"s_art_text-input","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"b7bcb02291b788c8c158b8eb0913ff77"}
+{"seq":2,"timestamp_ms":2000,"session_id":"s_art_text-input","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"b7bcb02291b788c8c158b8eb0913ff77"}
+{"seq":3,"timestamp_ms":3000,"session_id":"s_art_text-input","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"b7bcb02291b788c8c158b8eb0913ff77"}
+{"seq":4,"timestamp_ms":4000,"session_id":"s_art_text-input","kind":"frame","frame_seq":4,"cause_id":"art","meaningful":true,"content_hash":"354633325315930e96ebbb1bc74648d4"}
+{"seq":5,"timestamp_ms":5000,"session_id":"s_art_text-input","kind":"frame","frame_seq":4,"cause_id":"art","meaningful":true,"content_hash":"354633325315930e96ebbb1bc74648d4"}

@@ -627,6 +627,16 @@ pub trait Backend {
         ))
     }
 
+    /// Re-traverse the live UI and return the tree bound to a newly completed
+    /// frame. This is the polling seam for `wait_for`: unlike [`Self::observe`],
+    /// which answers from the frame the previous action completed, it asks the
+    /// backend to look again. A backend that cannot re-traverse may keep the
+    /// default (the current observation), but `wait_for` still honours its
+    /// timeout instead of treating the first sample as final.
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        self.observe()
+    }
+
     /// Log records with `seq > since`.
     fn logs_since(&mut self, _since: u64) -> Result<Vec<LogRecord>, BackendError> {
         Err(BackendError::unsupported(

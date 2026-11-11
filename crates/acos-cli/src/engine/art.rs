@@ -48,8 +48,9 @@ use acos_verify::backend::{InputAck, InputDelivery};
 use acos_verify::{BackendError, LaunchOutcome};
 
 use super::{
-    key_code, live_frame_unavailable, stale_frame, ui_tree_from_json, Engine, FrameEvidence, Mode,
-    ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport, LIVE_FRAME_UNAVAILABLE,
+    key_code, live_frame_unavailable, parse_bounds, stale_frame, ui_tree_from_json, Engine,
+    FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport,
+    LIVE_FRAME_UNAVAILABLE,
 };
 
 /// Largest single protocol line accepted (a full View tree fits easily).
@@ -79,6 +80,11 @@ pub struct ArtSession {
     process_group: Option<i32>,
     /// Host-observed delivery of the most recent input action.
     last_input: Option<InputDelivery>,
+    /// `(dx, dy)` from display/screen coordinates to the input channel's
+    /// window-local convention, measured from the probe's `bounds_on_screen`
+    /// minus `bounds` (normally the status-bar inset). The engine resolves tap
+    /// points from screen bounds; `inject_tap` takes window-local points.
+    input_offset: (i32, i32),
     closed: bool,
 }
 
@@ -109,6 +115,35 @@ impl CachedFrame {
             frame: self.evidence(previous_seq),
         }
     }
+}
+
+/// Measure the display-to-window offset from one probe tree: the difference
+/// between a node's `bounds_on_screen` and its window-local `bounds`. The
+/// decor root is the first node and carries both; a single offset is enough
+/// because every node in one window shares the window origin.
+fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
+    fn walk(node: &serde_json::Value) -> Option<(i32, i32)> {
+        let window = node
+            .get("bounds")
+            .and_then(|value| value.as_str())
+            .and_then(parse_bounds);
+        let screen = node
+            .get("bounds_on_screen")
+            .and_then(|value| value.as_str())
+            .and_then(parse_bounds);
+        if let (Some(window), Some(screen)) = (window, screen) {
+            if screen.width() > 0 && screen.height() > 0 {
+                return Some((screen.left() - window.left(), screen.top() - window.top()));
+            }
+        }
+        node.get("children")
+            .and_then(|children| children.as_array())
+            .and_then(|children| children.iter().find_map(walk))
+    }
+    tree.get("nodes")
+        .and_then(|nodes| nodes.as_array())
+        .and_then(|nodes| nodes.iter().find_map(walk))
+        .or_else(|| walk(tree))
 }
 
 /// Build a host-observed delivery record from a session reply.
@@ -303,6 +338,7 @@ impl ArtSession {
             seen_seq: 0,
             process_group: Some(_pid as i32),
             last_input: None,
+            input_offset: (0, 0),
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -549,6 +585,9 @@ impl ArtSession {
             }
             return Ok(());
         };
+        if let Some(offset) = probe_input_offset(tree_value) {
+            self.input_offset = offset;
+        }
         let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
         let captured_at_ms = now_unix_ms();
         self.cached = Some(CachedFrame {
@@ -780,7 +819,15 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
-        self.input_command(serde_json::json!({"cmd":"tap","x":x,"y":y}), "input.tap")
+        // The engine's tap coordinates are display/screen coordinates (resolved
+        // from the probe's `bounds_on_screen`). The interactive input channel's
+        // transform is window-local (W10/I2), so subtract the measured window
+        // origin here, once, in the backend that owns that convention.
+        let (dx, dy) = self.input_offset;
+        self.input_command(
+            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
+            "input.tap",
+        )
     }
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
@@ -996,6 +1043,32 @@ mod tests {
             caps.missing(),
             vec!["reset", "logs", "environment", "crash_reports"]
         );
+    }
+
+    #[test]
+    fn probe_input_offset_reads_the_window_origin_from_the_tree_envelope() {
+        // The probe wraps nodes in `{"nodes": [...]}`; the value is
+        // window-local and `bounds_on_screen` adds the status-bar inset.
+        let tree = serde_json::json!({
+            "nodes": [{
+                "class": "android.widget.FrameLayout",
+                "id": "",
+                "bounds": "[0,0][1080,2209]",
+                "bounds_on_screen": "[0,128][1080,2337]",
+                "children": [{
+                    "class": "android.widget.TextView",
+                    "id": "count",
+                    "bounds": "[42,189][63,240]",
+                    "bounds_on_screen": "[42,317][63,368]"
+                }]
+            }]
+        });
+        assert_eq!(probe_input_offset(&tree), Some((0, 128)));
+        // A probe without `bounds_on_screen` has no measured offset.
+        let legacy = serde_json::json!({
+            "nodes": [{"class": "android.view.View", "bounds": "[0,0][10,10]"}]
+        });
+        assert_eq!(probe_input_offset(&legacy), None);
     }
 
     #[test]
