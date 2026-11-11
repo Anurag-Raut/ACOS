@@ -34,10 +34,12 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::os::fd::RawFd;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// The guest class that performs the framework startup.
@@ -90,6 +92,15 @@ pub struct LaunchResult {
     pub until: String,
     pub application_created: bool,
     pub activity_launched: bool,
+    /// Guest exit code, when the guest (or its bwrap wrapper) exited normally.
+    /// `None` when it was killed by a signal or is still running (timeout).
+    pub guest_exit: Option<i32>,
+    /// Signal that terminated the guest, when it was killed. bwrap's
+    /// `128+signal` exit-code remap is undone here, so a SIGSYS kill reads as
+    /// `31`, not as an exit code of `159`.
+    pub guest_signal: Option<i32>,
+    /// Wall time from spawning the guest to observing its end (or timeout).
+    pub wall_ms: u64,
     /// The APK's launcher activity (`aapt2 dump badging`), the class the
     /// `LaunchActivityItem` names.
     pub activity: Option<String>,
@@ -112,6 +123,10 @@ pub struct LaunchResult {
     pub stderr: String,
     /// ART/logd entries (exceptions, CHECKs) from the run.
     pub logs: Vec<crate::LogEntry>,
+    /// Host-side notes: cgroup accounting, the guest guard/Landlock evidence,
+    /// and any fail-closed reason (a dead guest is still a structured result,
+    /// never a hang).
+    pub notes: Vec<String>,
     pub marker: Option<String>,
 }
 
@@ -191,15 +206,59 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let sock = run.dir("sock").join("acos-launch.sock");
     let _ = fs::remove_file(&sock);
     let listener = listen(&sock.to_string_lossy()).map_err(Error::Io)?;
+    // A guest that dies before connecting (fail-closed guard, SIGSYS audit)
+    // leaves a blocking `accept()` with no peer to finish it. Make the listener
+    // pollable and give the accepted connection a receive timeout, so the peer
+    // thread can always observe the guest's end; `launch` then joins it with a
+    // deadline instead of waiting forever.
+    unsafe {
+        let flags = libc::fcntl(listener, libc::F_GETFL);
+        if flags < 0 || libc::fcntl(listener, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
+            let e = std::io::Error::last_os_error();
+            libc::close(listener);
+            return Err(Error::Io(e));
+        }
+    }
+    let stop = Arc::new(AtomicBool::new(false));
+    let peer_stop = Arc::clone(&stop);
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
-            let client = accept(listener)?;
+            let client = loop {
+                if peer_stop.load(Ordering::Acquire) {
+                    unsafe {
+                        libc::close(listener);
+                    }
+                    return Ok(PeerSummary::default());
+                }
+                match accept(listener) {
+                    Ok(fd) => break fd,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                    Err(e) => {
+                        unsafe {
+                            libc::close(listener);
+                        }
+                        return Err(e);
+                    }
+                }
+            };
             unsafe {
                 libc::close(listener);
+                // A 100 ms receive timeout lets `serve` notice `stop` without
+                // changing the frame protocol; a live guest simply continues.
+                let tv = libc::timeval { tv_sec: 0, tv_usec: 100_000 };
+                libc::setsockopt(
+                    client,
+                    libc::SOL_SOCKET,
+                    libc::SO_RCVTIMEO,
+                    &tv as *const _ as *const libc::c_void,
+                    std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+                );
             }
             // The real ServiceHost, with its package manager pointed at the APK
             // being launched: `handleBindApplication` asks for its
@@ -210,7 +269,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
             }
             let mut peer = Peer::with_host(host, Some(peer_log));
-            let rc = serve(&mut peer, client);
+            let rc = serve(&mut peer, client, &peer_stop);
             unsafe {
                 libc::close(client);
             }
@@ -369,8 +428,16 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         cgroup.sample();
         std::thread::sleep(Duration::from_millis(5));
     };
-    let wall_ms = started.elapsed().as_millis() as u64;
+    // The guest has ended (or was killed by the timeout/watchdog). Nothing
+    // else may keep the peer thread alive, and nothing may outlive the guest
+    // inside its scope. Both actions are idempotent and happen before any
+    // capture/join, which is what bounds teardown after a guest death.
+    stop.store(true, Ordering::Release);
     cgroup.sample();
+    if status.is_some() {
+        cgroup.kill();
+    }
+    let wall_ms = started.elapsed().as_millis() as u64;
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -389,8 +456,19 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let logs = batch.entries;
     let stdout = stdout_buf.to_text();
     let stderr = stderr_buf.to_text();
-    let summary = rx.recv_timeout(Duration::from_secs(5)).unwrap_or_default();
-    let _ = peer_thread.join();
+    // Bound the peer join: `stop` alone is enough unless the peer is wedged in
+    // a service handler. A missing summary becomes the default (no delivered
+    // bind), never a blocked `launch`.
+    let summary = match rx.recv_timeout(Duration::from_secs(2)) {
+        Ok(s) => {
+            let _ = peer_thread.join();
+            s
+        }
+        Err(_) => {
+            drop(peer_thread);
+            PeerSummary::default()
+        }
+    };
 
     let marker_path = staging.join("application-created.marker");
     let marker = fs::read_to_string(&marker_path).ok();
@@ -429,6 +507,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         }
     }
     let guest_ok = status.map(|s| s.success()).unwrap_or(false);
+    // bwrap re-exits with 128+signal when the guest died from a signal; undo
+    // that remap so the structured outcome names the guest's real signal.
+    let (guest_exit, guest_signal) = split_exit_status(status);
     let application_created = marker.is_some() && summary.delivered;
     let activity_resumed = activity_marker.is_some();
     let activity_wanted = opts.until == "activity-resumed";
@@ -440,8 +521,19 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     {
         (Outcome::Ok, None)
     } else if timed_out {
+        // The guest never reached its milestone within the budget: a distinct
+        // outcome, not "still running".
         (Outcome::Timeout, Some("TIMEOUT".to_string()))
-    } else if application_created && activity_resumed {
+    } else if guest_signal.is_some() {
+        // A guest killed by the guard/Landlock (fail closed), the audit filter
+        // or the kernel is reported by signal, even when a milestone marker
+        // was already written.
+        (Outcome::Crash, Some("GUEST_KILLED_BY_SIGNAL".to_string()))
+    } else if guest_exit.is_some()
+        && application_created
+        && activity_resumed
+        && (activity_wanted || !guest_ok)
+    {
         // The requested lifecycle milestone was reached (the marker is written
         // from `Activity.mResumed`), but the guest then failed: the *next*
         // blocker, reported rather than folded into "not resumed".
@@ -449,12 +541,20 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             Outcome::Crash,
             Some("GUEST_EXIT_AFTER_RESUME".to_string()),
         )
-    } else if application_created && activity_wanted && summary.txn_bytes.is_some() {
+    } else if guest_exit.is_some()
+        && application_created
+        && activity_wanted
+        && summary.txn_bytes.is_some()
+    {
         // Application.onCreate ran; the activity step did not reach onResume.
         (
             Outcome::Crash,
             Some("NO_ACTIVITY_RESUMED".to_string()),
         )
+    } else if guest_exit.is_some() {
+        // The guest ended before the requested milestone. `guest_exit` carries
+        // the code; this is the distinct "guest exited early" outcome.
+        (Outcome::Crash, Some("GUEST_EXITED".to_string()))
     } else if application_created {
         (
             Outcome::Crash,
@@ -498,8 +598,25 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             cgroup.path().display()
         ));
     } else if dog.as_ref().and_then(|d| d.trip()).is_none() {
-        let line = crate::seccomp::require_guard(run.path())?;
-        unsupported_notes.push(format!("seccomp: {line}"));
+        // The guard is still fail-closed, but a refusal is a *structured*
+        // outcome carrying the guest's exit/signal and the guard's own ERR
+        // line: a dead guest must never turn into a blocked or opaque launch.
+        let guard_log = fs::read_to_string(run.path().join("out/seccomp.log")).unwrap_or_default();
+        for line in guard_log.lines().filter(|l| !l.trim().is_empty()) {
+            if line.starts_with("ERR ") || line.starts_with("DENY ") {
+                unsupported_notes.push(format!("seccomp: {line}"));
+            }
+        }
+        match crate::seccomp::require_guard(run.path()) {
+            Ok(line) => unsupported_notes.push(format!("seccomp: {line}")),
+            Err(e) => {
+                unsupported_notes.push(e.to_string());
+                if outcome == Outcome::Ok {
+                    outcome = Outcome::Unsupported;
+                    code = Some("SECCOMP_UNAVAILABLE".to_string());
+                }
+            }
+        }
     }
     unsupported_notes.push(log_stats.summary());
     if let Some(e) = &log_first_dropped {
@@ -524,6 +641,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         until: opts.until.clone(),
         application_created,
         activity_launched: activity_resumed,
+        guest_exit,
+        guest_signal,
+        wall_ms,
         activity: activity.clone(),
         application_marker: marker.clone(),
         activity_marker: activity_marker
@@ -541,6 +661,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         stdout: crate::capture::tail_text(&stdout, 4096),
         stderr: crate::capture::tail_text(&stderr, 4096),
         logs,
+        notes: unsupported_notes,
         marker,
     };
     eprintln!(
@@ -557,10 +678,26 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         log_stats.summary(),
         summary.resource_limits
     );
-    for note in unsupported_notes {
+    for note in &result.notes {
         eprintln!("acos-art: {note}");
     }
     Ok(result)
+}
+
+/// Undo bwrap's `128+signal` remap and return the guest's real termination.
+fn split_exit_status(status: Option<std::process::ExitStatus>) -> (Option<i32>, Option<i32>) {
+    let raw_exit = status.and_then(|s| s.code());
+    let mut signal = status.and_then(|s| s.signal());
+    let mut exit = raw_exit;
+    if signal.is_none() {
+        if let Some(code) = raw_exit {
+            if (129..=192).contains(&code) {
+                signal = Some(code - 128);
+                exit = None;
+            }
+        }
+    }
+    (exit, signal)
 }
 
 #[derive(Default)]
@@ -577,11 +714,26 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
+fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
     loop {
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e)
+                if (e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut)
+                    && stop.load(Ordering::Acquire) =>
+            {
+                return Ok(())
+            }
+            // A live guest may be idle; the timeout only exists to observe
+            // `stop`, not to end the session.
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue
+            }
             Err(e) => return Err(e),
         };
         // `ACOS_PEER_DEBUG=1` prints every frame the peer reads and writes. The
