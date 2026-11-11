@@ -435,12 +435,23 @@ fn handle_session(
             encode_add_result(result.result, Some(&result), reply)?;
         }
         "relayout" => {
-            let params = args
-                .params
-                .clone()
-                .ok_or_else(|| err("relayout: missing LayoutParams"))?;
             let window = window.ok_or_else(|| err("relayout: null IWindow"))?;
-            let sync_seq = args.ints.first().copied().unwrap_or(-1);
+            // `ViewRootImpl` may call `relayout` with a null `attrs` when the
+            // window attributes did not change; the real WMS keeps the last
+            // stored `LayoutParams` in that case. Fall back to the window
+            // record's params instead of dropping the whole reply (which would
+            // leave the client's out-params stale).
+            let params = match args.params.clone() {
+                Some(p) => p,
+                None => with_wms(|s| {
+                    s.wm.windows.get(&window.0).map(|rec| rec.params.clone())
+                })
+                .ok_or_else(|| err("relayout: missing LayoutParams and unknown window"))?,
+            };
+            // The relayout argument order is `requestedWidth, requestedHeight,
+            // viewVisibility, flags, seq, lastSyncSeqId`; the sync seq is the
+            // fifth int, not the first.
+            let sync_seq = args.ints.get(4).copied().unwrap_or(-1);
             let r = with_wms(|s| s.relayout(window.0, params, sync_seq)).map_err(err)?;
             encode_relayout(&r, reply)?;
         }
@@ -512,9 +523,15 @@ fn handle_session(
             // Oneway form of `relayout`. The app does not read a reply; keep the
             // window state in sync by running the same relayout and dropping
             // the result.
-            if let (Some(w), Some(params)) = (window, args.params.clone()) {
-                let sync_seq = args.ints.first().copied().unwrap_or(-1);
-                let _ = with_wms(|s| s.relayout(w.0, params, sync_seq)).map_err(err)?;
+            if let Some(w) = window {
+                let params = match args.params.clone() {
+                    Some(p) => Some(p),
+                    None => with_wms(|s| s.wm.windows.get(&w.0).map(|rec| rec.params.clone())),
+                };
+                if let Some(params) = params {
+                    let sync_seq = args.ints.get(4).copied().unwrap_or(-1);
+                    let _ = with_wms(|s| s.relayout(w.0, params, sync_seq)).map_err(err)?;
+                }
             }
         }
         "clearTouchableRegion" => {

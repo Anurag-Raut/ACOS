@@ -230,6 +230,21 @@ impl InputDispatcher {
 
     fn deliver(&mut self, window: WindowId, event: InputEvent) -> Result<u32, InputError> {
         let writer = self.writer_for(window)?;
+        // `inject_*` takes display (screen) coordinates, matching the real
+        // input system. A window receives events in its own coordinate space:
+        // the dispatcher records the window origin as a negative
+        // `mXOffset`/`mYOffset`, and the VM applies it to the event before
+        // dispatch, so `MotionEvent.getX()` is window-local while `getRawX()`
+        // (which is `getX() - mXOffset`) stays in display coordinates.
+        let origin = self.windows.get(&window).map(|w| w.frame);
+        let event = match (event, origin) {
+            (InputEvent::Motion(mut m), Some(f)) => {
+                m.x_offset = -(f.left as f32);
+                m.y_offset = -(f.top as f32);
+                InputEvent::Motion(m)
+            }
+            (e, _) => e,
+        };
         let seq = self.next_seq;
         let frame = DispatchFrame {
             seq: seq as i32,

@@ -129,7 +129,7 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
 }
 
 #[test]
-#[ignore = "blocked: the injected MotionEvent now reaches ViewRootImpl and the tap pump runs, but the framework re-delivers an `InsetsSourceControl` whose IME animation-leash `SurfaceControl` was already Java-released (`SurfaceControl.checkNotReleased` NPE in `InsetsSourceConsumer.applyRequestedVisibilityToControl`); see results/m2/M2_LOG.md §W144-A"]
+#[ignore = "blocked: the leash NPE is fixed and the injected MotionEvent now reaches the app in window-local coordinates, but the Button's `View.onTouchEvent`/`performClick` does not run (no `AcosCounter: increment` log and `state_changed=false`); the remaining gap is in `ViewRootImpl` input delivery, not the WMS reply fan-out. See results/m2/M2_LOG.md §W152-A"]
 fn counter_tap_increment_updates_the_tree() {
     seed_boot_dir();
     let Some(apk) = counter_apk() else {

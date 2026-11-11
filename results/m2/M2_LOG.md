@@ -2693,3 +2693,149 @@ Unchanged from W138-A; the W147-A change does not touch the render pipeline.
 * No commit. Patch touches `crates/` only and was copied back with
   `git apply --check` green; scratch `fixtures/build`/`.cache/boot` symlinks were
   deleted from the worktree.
+
+---
+
+# W152-A session — tap leash NPE cleared; input delivered in window coordinates; click still not fired
+
+Worktree: clean HEAD `00950ce`, `CARGO_TARGET_DIR=.cache/target-w152a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_BOOT_DIR=.cache/boot/android-34`. No commits.
+Owned/edited files: `crates/acos-runtime/src/wms_java.rs`,
+`crates/acos-services/src/input.rs`, `crates/acos-vm/src/natives/fwk_input.rs`,
+the `counter_interaction` ignore reason, and this log.
+
+## Bottom line
+
+The `InsetsSourceControl` leash NPE that W144-A left open is **gone**. Its real
+cause was not the reply fan-out sharing a Java object: `ViewRootImpl` calls
+`relayout` with a **null `attrs`** on the second/third traversal (attribute
+unchanged), and ACOS's WMS rejected the whole call with
+`relayout: missing LayoutParams`. Because the WMS error was returned *after*
+`write_no_exception`, the client's reply was truncated, so `mTempControls` kept
+the previous (already-released) control array and `setControl` fed a released
+leash to `Transaction.show`. The fix keeps the window's stored `LayoutParams`
+when `attrs` is null, so every relayout replies in full; the framework now
+refreshes `mTempControls` and never reuses a released control.
+
+The injected tap is now built in the right coordinate space: `getX()/getY()` are
+window-local (`218.5/531`) and `getRawX()/getRawY()` stay in display coordinates
+(`218.5/659`), verified with a trace. The Button still does **not** call
+`performClick` (no `AcosCounter: increment` log, `state_changed=false`), so the
+e2e test stays `#[ignore]`d — but the remaining blocker is in `ViewRootImpl`
+input-event delivery, not in the WMS reply/leash lifetime.
+
+## Fix 1 — `relayout` with a null `attrs` keeps the stored `LayoutParams`
+
+`IWindowSession$Stub$Proxy.relayout` writes `writeTypedObject(attrs, 0)`, so the
+request carries the LayoutParams only when the framework changed them.
+`ViewRootImpl.performTraversals` passes its local `params`, which is null on the
+traversals where `mWindowAttributesChanged` is false (the smali labels the
+register `.local ... "params"` and guards it with `if-eqz`). The real WMS keeps
+the last stored attributes. `wms_java::handle_session` now falls back to the
+window record's params:
+
+```rust
+let params = match args.params.clone() {
+    Some(p) => p,
+    None => with_wms(|s| s.wm.windows.get(&window.0).map(|r| r.params.clone()))
+        .ok_or_else(|| err("relayout: missing LayoutParams and unknown window"))?,
+};
+```
+
+Evidence (`ACOS_W152A_TRACE`): before, `W152A handler error relayout:
+wms_java: relayout: missing LayoutParams args=Args { binders: [Some(51)], ints:
+[1080, 2209, 0, 0, 2, 0], params: None }` for relayouts #2/#3, then the W144-A
+NPE; after, every `relayout` reaches `encode_relayout` and the NPE is absent.
+
+The relayout argument order is `requestedWidth, requestedHeight, viewVisibility,
+flags, seq, lastSyncSeqId`; the sync seq is `ints[4]`, not `ints[0]`. The
+`relayout`/`relayoutAsync` handlers now read the fifth int (the `resized`
+callback's `sync_seq_id` was previously the requested width).
+
+## Fix 2 — input events are window-local with a display-space `getRawX/Y`
+
+`InputDispatcher::inject_*` takes display (screen) coordinates, matching the
+real input system (`hit_test` uses `WindowRecord.frame`). The window must
+receive the event in its own space. `deliver` now records the window origin as a
+negative `mXOffset`/`mYOffset`, the VM applies it before dispatch, and
+`nativeOffsetLocation` uses the AOSP sign (`pointers += d`, `mXOffset += d`):
+
+* `acos-services/src/input.rs::deliver` sets
+  `m.x_offset = -frame.left`, `m.y_offset = -frame.top` for motion events;
+* `acos-vm/src/natives/fwk_input.rs::build_motion_event` calls
+  `MotionEvent.offsetLocation(m.x_offset, m.y_offset)` after `obtain`;
+* `me_offset_location` adds `dx/dy` to the pointers (was subtracting, which made
+  `getRawX()` change by `-2*dx` across `offsetLocation`).
+
+Trace for the `Increment` tap at display `(218.5, 659)`, window origin `(0,128)`:
+
+```
+W152A motion action=0 offset=(-0, -128) getX/Y=Some(218.5)/Some(531.0) rawX/Y=Some(218.5)/Some(659.0)
+W152A motion action=1 offset=(-0, -128) getX/Y=Some(218.5)/Some(531.0) rawX/Y=Some(218.5)/Some(659.0)
+```
+
+The Button's window-local frame is `(84,468)-(353,594)`, so the point is inside;
+the `acos-services` `input` unit tests and the four `acos-vm input_natives`
+tests still pass.
+
+## Remaining blocker (tap round trip)
+
+The MotionEvents are dispatched (`W152A dispatch frame kind=1 seq=1/2`,
+`ack_seqs=[1,2]`) and built with the correct coordinates, but the Button's
+`View.onTouchEvent`/`performClick` does not run: no `AcosCounter: increment`
+log line and `state_changed=false` after the pump. This is downstream of the
+WMS reply handling (no `err` reaches the client; `finishDrawing` runs). The
+next step is to trace `ViewRootImpl$WindowInputEventReceiver.onInputEvent` →
+`enqueueInputEvent` → `processInputEvents` delivery (whether the
+`MSG_PROCESS_INPUT_EVENTS`/`mPerformClick` messages are drained by the pump).
+
+## Independent blocker — ICU `.dat` `DatPackageReader` flake
+
+The `counter.apk` launch itself is **flaky** on this host: ~1 in 3 runs dies in
+`Button.<init> -> AllCapsTransformationMethod -> CaseMap -> UCaseProps.<clinit>`
+with
+
+```
+java.lang.IndexOutOfBoundsException: index=-2108489900 out of bounds (limit=28431696, nb=4)
+  at java.nio.DirectByteBuffer.getInt(586)
+  at android.icu.impl.ICUBinary$DatPackageReader.getNameOffset(155)
+  at android.icu.impl.ICUBinary$DatPackageReader.binarySearch(134)
+```
+
+The mapped size equals `icudt72l.dat` (28431696 bytes) and the ICU header magic
+is read correctly, so `map0` returns the file; the `ByteBuffer.position()`-based
+`getNameOffset` (`getInt(base + 4 + index*8)`) gets a corrupted base/index. The
+value is deterministic per run but the success/failure is not, so it is an
+allocation/GC-layout dependence, not the WMS. A no-op `unmap0` did not change
+the rate, so it is not a simple use-after-free; it is left for the ICU/native
+session owner. It is the reason the `counter_launch`/`counter_tap` results vary
+run to run (the tap test was observed to reach the tap assertion in the lucky
+runs).
+
+## Gates (this worktree)
+
+| Item | Result |
+|---|---|
+| `cargo check --workspace --all-targets` | clean |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo test -p acos-services --lib input` | 5 pass / 0 fail |
+| `cargo test -p acos-vm --test input_natives` | 4 pass / 0 fail |
+| `cargo test --workspace --no-fail-fast` | `counter_launch` pass (when the ICU map succeeds), `counter_tap` ignored; failures are the pre-existing `acos-runtime::pms` golden, the `acos-mcp` stdio/e2e set (`native_session` environment), `acos-cli` `native_launch`/`serve_daemon`, `flutter_hello_under_confinement`, and `acos-vm::inflate_layout` (`MockContext.isRestricted` UOE) — none touched here |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail** |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | **27 pass / 0 fail** |
+
+`cargo test --workspace` needed `CARGO_BUILD_JOBS=2`/`RUST_TEST_THREADS=2`: the
+default parallelism exceeded `tools/guarded.sh`'s `TasksMax=512` and rustc
+aborted with `posix_spawn: Resource temporarily unavailable`.
+
+## Honesty
+
+* The leash NPE fix is real: it removes the WMS error and the stale out-params;
+  the `SurfaceControl` refcount from W144-A is untouched.
+* The coordinate fix is real: `getX/Y` are window-local and `getRawX/Y` display
+  coordinates, matching AOSP's `MotionEvent` offset convention; the
+  `offsetLocation` sign now matches `getRawX() == getX() - mXOffset`.
+* The tap test is **not** un-ignored: `performClick` does not run. No fake
+  `state_changed` was introduced.
+* The ICU `.dat` failure is a separate, pre-existing VM blocker and is named
+  above; it is not caused by the WMS or input changes.

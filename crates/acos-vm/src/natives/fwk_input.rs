@@ -1124,8 +1124,8 @@ fn me_offset_location(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         s.x_offset += dx;
         s.y_offset += dy;
         for p in &mut s.pointers {
-            p.x -= dx;
-            p.y -= dy;
+            p.x += dx;
+            p.y += dy;
         }
     });
     Ok(())
@@ -2294,7 +2294,24 @@ fn build_motion_event(vm: &mut Vm, frame: &InputFrame) -> VmResult<Option<Handle
     vm.release_bridge_root(props);
     vm.release_bridge_root(coords);
     match ev {
-        JavaValue::Object(h) if h != crate::heap::NULL => Ok(Some(h)),
+        JavaValue::Object(h) if h != crate::heap::NULL => {
+            // The frame carries the window origin as a negative offset. Apply
+            // it now so `getX()` is window-local while `getRawX()` (which is
+            // `getX() - mXOffset`) stays in display coordinates.
+            if frame.x_offset != 0.0 || frame.y_offset != 0.0 {
+                vm.call_method(
+                    h,
+                    "offsetLocation",
+                    "(FF)V",
+                    &[
+                        JavaValue::Float(frame.x_offset),
+                        JavaValue::Float(frame.y_offset),
+                    ],
+                )
+                .map_err(bridge_err)?;
+            }
+            Ok(Some(h))
+        }
         _ => Ok(None),
     }
 }
