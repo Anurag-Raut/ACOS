@@ -1,0 +1,9 @@
+READY {"ok": true, "frame_seq": null, "activity_resumed": null, "protocol": null}
+TREE1 ok= True seq= 1
+TREE KEYS ['nodes'] {"nodes": [{"bounds": "[0,0][1080,2209]", "children": [{"bounds": "[0,0][1080,2209]", "children": [{"bounds": "[0,147][1080,2209]", "children": [{"bounds": "[0,147][1080,2209]", "children": [{"bounds": "[42,189][1038,307]", "class": "android.widget.EditText", "clickable": true, "enabled": true, "focused": true, "id": "dev.acos.fixtures.textinput:id/input", "text": "", "visibility": 0}, {"bounds": "[42,307][273,433]", "class": "android.widget.Button", "clickable": true, "enabled": true, "focused": false, "id": "dev.acos.fixtures.textinput:id/save", "text": "Save", "visibility": 0}, {"bounds": "
+INPUT NODE {"bounds": "[42,189][1038,307]", "class": "android.widget.EditText", "clickable": true, "enabled": true, "focused": true, "id": "dev.acos.fixtures.textinput:id/input", "text": "", "visibility": 0}
+TAP ok= True code= None seq= 2
+TYPE ok= True code= None seq= 3 err= None gesture= {"acks": [{"handled": true, "latency_us": 630624, "seq": 3}, {"handled": true, "latency_us": 630623, "seq": 4}, {"handled": true, "latency_us": 5102, "seq": 5}, {"handled": false, "latency_us": 5099, "seq": 6}, {"handled": true, "latency_us": 5094, "seq": 7}, {"handled": false, "latency_us": 5094, "
+TREE2 ok= True input= {"bounds": "[42,189][1038,307]", "class": "android.widget.EditText", "clickable": true, "enabled": true, "focused": true, "id": "dev.acos.fixtures.textinput:id/input", "text": "hi", "visibility": 0}
+CLOSE True
+rc 0

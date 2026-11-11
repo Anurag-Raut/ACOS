@@ -55,6 +55,7 @@ pub mod ime;
 pub mod ime_wire;
 pub mod input;
 pub mod input_channel;
+pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod misc;
 pub mod parcelable;
 pub mod pms;

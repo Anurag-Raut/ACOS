@@ -57,6 +57,13 @@ pub enum FieldOp {
     FloatArray,
     /// `writeByteArray`.
     ByteArray,
+    /// Bytes written verbatim (no length prefix, no padding added). This is for
+    /// payloads the peer's own native code reads directly from the parcel, not
+    /// through a Java `writeToParcel`: the image's
+    /// `KeyCharacterMap.nativeReadFromParcel` / `readFromParcel` is the one
+    /// user (W16). Reading such a payload back is unsupported, because its
+    /// length is not on the wire.
+    Raw,
     /// `writeSparseArray`. ACOS only models the `null` encoding (`-1`); a
     /// non-null `SparseArray` is a structured `UnsupportedParcelable`.
     SparseArray,
@@ -857,6 +864,10 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str16,  // mName
             FieldOp::Int,    // mVendorId
             FieldOp::Int,    // mProductId
+            // NOTE: the image's `InputDevice(Parcel)` has **no mDeviceBus** here
+            // (read from the image's classes4.dex; the r75 tag does), so a field
+            // for it desynchronises every later field and stops the first
+            // traversal. Do not add one.
             FieldOp::Str16,  // mDescriptor
             FieldOp::Int,    // mIsExternal
             FieldOp::Int,    // mSources
@@ -871,16 +882,22 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.hardware.input.HostUsiVersion"),
             FieldOp::Int,    // mAssociatedDisplayId
             FieldOp::Int,    // numRanges
+            // The image's reader stops after the motion ranges: no view
+            // behaviour boolean on the wire.
         ],
         verification: Verification::Prefix,
     },
-    // The private ACOS wire shape for a `KeyCharacterMap` payload: the
-    // keyboard type and the layout name. The Java reader is the
-    // `KeyCharacterMap.nativeReadFromParcel` native, so the bytes only have to
-    // agree with that native (and `nativeWriteToParcel`).
+    // The image's native `KeyCharacterMap` payload (W16). The Java reader is
+    // `KeyCharacterMap.nativeReadFromParcel` -> `KeyCharacterMap::readFromParcel`
+    // in the image's libinput: `int32 deviceId`, `bool hasMap`, a raw
+    // NUL-terminated+4-byte-padded `loadFileName` (`Parcel::writeCString`, no
+    // length prefix), then the native map (type, overlay flag, keys with
+    // behaviour lists, remap tables). It is not a Java `writeToParcel`, so the
+    // bytes come from `keychars::KeyMap::parcel_bytes` (parsed from the stock
+    // `/system/usr/keychars/*.kcm` the sysroot ships) and are written verbatim.
     ParcelableSpec {
         class: "android.view.KeyCharacterMap",
-        fields: &[FieldOp::Int, FieldOp::Str8],
+        fields: &[FieldOp::Raw],
         verification: Verification::Curated,
     },
     ParcelableSpec {
@@ -1389,6 +1406,21 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         FieldOp::LongArray => Value::LongArray(parcel.read_int64_array()?),
         FieldOp::FloatArray => Value::FloatArray(parcel.read_float_array()?),
         FieldOp::ByteArray => Value::ByteArray(parcel.read_byte_array()?),
+        FieldOp::Raw => {
+            // The native `KeyCharacterMap` payload has no wire length, but it is
+            // self-describing (`libs/input/KeyCharacterMap.cpp`): deviceId,
+            // hasMap, cstring name, type, overlay, key records and three remap
+            // tables. Walk it so a captured `InputDevice` reply is decodable
+            // (the replay oracle) and hand the bytes back verbatim.
+            let start = parcel.data_position();
+            skip_native_key_character_map(parcel)?;
+            let end = parcel.data_position();
+            let all = parcel.marshall();
+            if end > all.len() || start > end {
+                return Err(unsupported("native KeyCharacterMap (truncated)"));
+            }
+            Value::ByteArray(Some(all[start..end].to_vec()))
+        }
         FieldOp::SparseArray => {
             let n = parcel.read_int32()?;
             if n < 0 {
@@ -1568,6 +1600,64 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
     })
 }
 
+/// Skip one native `KeyCharacterMap` payload (`nativeReadFromParcel` ->
+/// `KeyCharacterMap::readFromParcel`), with count bounds so a corrupt parcel is
+/// a structured error, never a long loop.
+fn skip_native_key_character_map(parcel: &mut Parcel) -> Result<()> {
+    const MAX_KEYS: i32 = 8192;
+    let _device_id = parcel.read_int32()?;
+    let has_map = parcel.read_int32()?;
+    if has_map == 0 {
+        return Ok(());
+    }
+    // cstring: raw bytes + NUL, 4-byte padded (`Parcel::readCString` scans).
+    let start = parcel.data_position();
+    let data = parcel.marshall();
+    let nul = data[start..]
+        .iter()
+        .position(|b| *b == 0)
+        .ok_or_else(|| bad("native KeyCharacterMap: unterminated load file name"))?;
+    let padded = (nul + 1 + 3) & !3;
+    parcel.set_data_position(start + padded);
+    let keyboard_type = parcel.read_int32()?;
+    if !(0..=6).contains(&keyboard_type) {
+        return Err(bad("native KeyCharacterMap: bad keyboard type"));
+    }
+    let _overlay = parcel.read_int32()?;
+    let num_keys = parcel.read_int32()?;
+    if !(0..=MAX_KEYS).contains(&num_keys) {
+        return Err(bad("native KeyCharacterMap: bad key count"));
+    }
+    for _ in 0..num_keys {
+        let _key_code = parcel.read_int32()?;
+        let _label = parcel.read_int32()?;
+        let _number = parcel.read_int32()?;
+        loop {
+            match parcel.read_int32()? {
+                0 => break,
+                1 => {
+                    let _meta = parcel.read_int32()?;
+                    let _character = parcel.read_int32()?;
+                    let _fallback = parcel.read_int32()?;
+                    let _replacement = parcel.read_int32()?;
+                }
+                _ => return Err(bad("native KeyCharacterMap: bad behaviour marker")),
+            }
+        }
+    }
+    for _ in 0..3 {
+        let count = parcel.read_int32()?;
+        if count < 0 || count as usize > parcel.remaining() / 8 {
+            return Err(bad("native KeyCharacterMap: bad remap table count"));
+        }
+        for _ in 0..count {
+            let _from = parcel.read_int32()?;
+            let _to = parcel.read_int32()?;
+        }
+    }
+    Ok(())
+}
+
 fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()> {
     match field {
         FieldOp::Int => parcel.write_int32(expect_int(value)?),
@@ -1592,6 +1682,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::LongArray => parcel.write_int64_array(expect_long_array(value)?)?,
         FieldOp::FloatArray => parcel.write_float_array(expect_float_array(value)?)?,
         FieldOp::ByteArray => parcel.write_byte_array(expect_byte_array(value)?)?,
+        FieldOp::Raw => {
+            let bytes = expect_byte_array(value)?.ok_or_else(|| {
+                ServiceError::BadReply {
+                    interface: "parcelable".into(),
+                    method: "raw payload".into(),
+                    detail: "null raw bytes".into(),
+                }
+            })?;
+            if bytes.len() % 4 != 0 {
+                return Err(ServiceError::BadReply {
+                    interface: "parcelable".into(),
+                    method: "raw payload".into(),
+                    detail: format!("raw payload is {} bytes, not 4-byte aligned", bytes.len()),
+                });
+            }
+            let mut source = Parcel::new();
+            source.unmarshall(bytes);
+            parcel.append_from(&source, 0, bytes.len())?;
+        }
         FieldOp::SparseArray => match value {
             Value::Skipped | Value::List(None) => parcel.write_int32(-1),
             // `DisplayInfo.thermalRefreshRateThrottling` defaults to an empty
@@ -2484,6 +2593,9 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // helper, which the scanner records as a nested `writeToParcel` call.
         FieldOp::Cutout => call == "writeParcelable",
         FieldOp::CountedNested(_) => call == "writeInt",
+        // No Java `writeToParcel` call emits these bytes (the peer's native
+        // reader consumes them), so a DEX scan cannot verify them.
+        FieldOp::Raw => false,
         FieldOp::Unsupported(_) => false,
     }
 }

@@ -1,0 +1,22 @@
+{
+  "index": 6,
+  "step": "capture",
+  "status": "pass",
+  "duration_ms": 522,
+  "frame_seq": 6,
+  "assertions": [],
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/6.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/6.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/06-capture.json"
+    }
+  ]
+}

@@ -132,13 +132,22 @@ impl InputService {
         Self { state }
     }
 
-    /// The `KeyCharacterMap` payload for the ACOS virtual keyboard: the AOSP
-    /// generic full layout (`KeyCharacterMap.FULL`). The Java reader is the
-    /// `nativeReadFromParcel` native in `acos-vm`, which parses the layout name.
-    fn key_character_map() -> Parcelable {
+    /// The `KeyCharacterMap` payload for a synthetic `InputDevice` (W16).
+    ///
+    /// The image's reader is `KeyCharacterMap.nativeReadFromParcel` ->
+    /// `KeyCharacterMap::readFromParcel`, i.e. the *native* map parcel: a
+    /// `deviceId`, a `hasMap` marker and then the map's keys. The host builds
+    /// that payload from the stock `/system/usr/keychars/Virtual.kcm`
+    /// (virtual keyboard, id `-1`) or `Generic.kcm` (touchscreen, id `0`) that
+    /// `tools/art-sysroot.sh` ships. A device whose stock file is missing gets
+    /// the honest `hasMap = false` payload (no characters), never a guessed
+    /// layout.
+    fn key_character_map(id: i32) -> Parcelable {
+        let bytes =
+            crate::keychars::stock_parcel(id < 0).unwrap_or_else(|| crate::keychars::null_parcel(id));
         Parcelable::ordered(
             "android.view.KeyCharacterMap",
-            vec![Value::Int(4), Value::Str8(Some("Generic".into()))],
+            vec![Value::ByteArray(Some(bytes))],
         )
     }
 
@@ -163,7 +172,7 @@ impl InputService {
         let sources = if virtual_keyboard {
             0x0000_0101 // SOURCE_KEYBOARD
         } else {
-            0x1002 | 0x0001 // SOURCE_TOUCHSCREEN | SOURCE_KEYBOARD
+            0x0000_1002 // SOURCE_TOUCHSCREEN
         };
         let keyboard_type = if virtual_keyboard {
             2 // InputDevice.KEYBOARD_TYPE_ALPHABETIC
@@ -173,7 +182,7 @@ impl InputService {
         Parcelable::ordered(
             "android.view.InputDevice",
             vec![
-                Value::Parcelable(Self::key_character_map()), // mKeyCharacterMap
+                Value::Parcelable(Self::key_character_map(id)), // mKeyCharacterMap
                 Value::Int(id),                                // mId
                 Value::Int(1),                                 // mGeneration
                 Value::Int(0),                                 // mControllerNumber
@@ -221,7 +230,25 @@ impl ServiceObject for InputService {
             "getInputDevice" => {
                 let id = args.first().and_then(Value::as_int).unwrap_or(0);
                 if id == 0 || id == -1 {
-                    vec![Value::TypedObject(Self::input_device(id))]
+                    let device = Self::input_device(id);
+                    if std::env::var_os("ACOS_W16_TRACE").is_some() {
+                        let kcm = crate::keychars::stock_parcel(id < 0)
+                            .map(|b| b.len())
+                            .unwrap_or(0);
+                        let mut scratch = acos_parcel::Parcel::new();
+                        let reply_bytes = crate::parcelable::write_payload(&mut scratch, &device)
+                            .map(|()| scratch.data_size())
+                            .unwrap_or(0);
+                        eprintln!(
+                            "ACOSW16 getInputDevice id={id} kcm_bytes={kcm} keys={} reply_bytes={reply_bytes}",
+                            crate::keychars::stock()
+                                .generic
+                                .as_ref()
+                                .map(|m| m.keys.len())
+                                .unwrap_or(0)
+                        );
+                    }
+                    vec![Value::TypedObject(device)]
                 } else {
                     vec![Value::TypedObject(Parcelable::Null)]
                 }
@@ -904,4 +931,127 @@ pub type ContentServiceState = ();
 #[must_use]
 pub fn empty_bundle() -> Bundle {
     Bundle::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// W16: the `IInputManager.getInputDevice` reply carries the image's native
+    /// `KeyCharacterMap` payload (from the stock `Virtual.kcm`) and the field
+    /// order matches the image's `InputDevice(Parcel)` (no `mDeviceBus` and no
+    /// view-behaviour boolean; see the spec comment). A reply
+    /// that is one word off makes the Java reader shift every later field, which
+    /// is how W13's synthetic device ended up with `mSources == 2`.
+    #[test]
+    fn the_virtual_keyboard_input_device_matches_the_image_field_order() {
+        let device = InputService::input_device(-1);
+        let mut parcel = acos_parcel::Parcel::new();
+        crate::parcelable::write_payload(&mut parcel, &device).expect("write InputDevice");
+        let bytes = parcel.marshall();
+        assert_eq!(bytes.len() % 4, 0);
+        let mut p = Reader { bytes: &bytes, pos: 0 };
+
+        // mKeyCharacterMap: FieldOp::Raw -> nativeReadFromParcel payload.
+        assert_eq!(p.i32(), -1, "KCM deviceId is the virtual keyboard");
+        assert_eq!(p.i32(), 1, "KCM hasMap");
+        let load_file = p.cstring();
+        assert!(
+            load_file == "/system/usr/keychars/Virtual.kcm"
+                || load_file == "/system/usr/keychars/Generic.kcm",
+            "stock KCM file, got {load_file}"
+        );
+        assert_eq!(p.i32(), 4, "type FULL");
+        assert_eq!(p.i32(), 0, "no overlay");
+        let num_keys = p.i32();
+        assert!(num_keys > 60, "parsed {num_keys} keys");
+        for _ in 0..num_keys {
+            let _key_code = p.i32();
+            let _label = p.i32();
+            let _number = p.i32();
+            while p.i32() == 1 {
+                let _ = (p.i32(), p.i32(), p.i32(), p.i32());
+            }
+        }
+        assert_eq!((p.i32(), p.i32(), p.i32()), (0, 0, 0), "empty remap tables");
+
+        // The InputDevice scalar fields, in Java `readFromParcel` order.
+        assert_eq!(p.i32(), -1, "mId");
+        assert_eq!(p.i32(), 1, "mGeneration");
+        assert_eq!(p.i32(), 0, "mControllerNumber");
+        assert_eq!(p.string16(), "ACOS Virtual Keyboard");
+        assert_eq!(p.i32(), 0, "mVendorId");
+        assert_eq!(p.i32(), 0, "mProductId");
+        assert_eq!(p.string16(), "acos-virtual-keyboard");
+        assert_eq!(p.i32(), 0, "mIsExternal");
+        assert_eq!(p.i32(), 0x101, "mSources = SOURCE_KEYBOARD");
+        assert_eq!(p.i32(), 2, "mKeyboardType = ALPHABETIC");
+        assert_eq!(p.i32(), -1, "mKeyboardLanguageTag null");
+        assert_eq!(p.i32(), -1, "mKeyboardLayoutType null");
+        for field in ["vibrator", "microphone", "buttonUnderPad", "sensor", "battery"] {
+            assert_eq!(p.i32(), 0, "mHas{field}");
+        }
+        assert_eq!(p.i32(), -1, "HostUsiVersion major");
+        assert_eq!(p.i32(), -1, "HostUsiVersion minor");
+        assert_eq!(p.i32(), -1, "mAssociatedDisplayId");
+        assert_eq!(p.i32(), 0, "numRanges");
+        assert!(p.pos == bytes.len(), "consumed {} of {}", p.pos, bytes.len());
+    }
+
+    /// The native KCM payload has no wire length; the codec's `Raw` reader must
+    /// walk it (deviceId, cstring, key records, remap tables) so a captured
+    /// `InputDevice` reply decodes back to the same value (the replay oracle).
+    #[test]
+    fn the_input_device_reply_round_trips_through_the_codec() {
+        let device = InputService::input_device(-1);
+        let mut parcel = acos_parcel::Parcel::new();
+        crate::parcelable::write_payload(&mut parcel, &device).expect("write");
+        parcel.set_data_position(0);
+        let decoded = crate::parcelable::read_payload("android.view.InputDevice", &mut parcel)
+            .expect("decode");
+        assert_eq!(decoded, device, "InputDevice must round-trip byte for byte");
+        parcel.enforce_no_data_avail().expect("no trailing bytes");
+    }
+
+    struct Reader<'a> {
+        bytes: &'a [u8],
+        pos: usize,
+    }
+
+    impl Reader<'_> {
+        fn i32(&mut self) -> i32 {
+            let v = i32::from_le_bytes(self.bytes[self.pos..self.pos + 4].try_into().unwrap());
+            self.pos += 4;
+            v
+        }
+        fn string16(&mut self) -> String {
+            let len = self.i32();
+            assert!(len >= 0, "non-null string");
+            let start = self.pos;
+            let utf16: Vec<u16> = (0..len as usize)
+                .map(|i| {
+                    u16::from_le_bytes(
+                        self.bytes[start + i * 2..start + i * 2 + 2].try_into().unwrap(),
+                    )
+                })
+                .collect();
+            self.pos += (len as usize + 1) * 2;
+            while self.pos % 4 != 0 {
+                self.pos += 1;
+            }
+            String::from_utf16(&utf16).unwrap()
+        }
+        fn cstring(&mut self) -> &str {
+            let start = self.pos;
+            while self.bytes[self.pos] != 0 {
+                self.pos += 1;
+            }
+            let s = std::str::from_utf8(&self.bytes[start..self.pos]).unwrap();
+            self.pos += 1;
+            while self.pos % 4 != 0 {
+                self.pos += 1;
+            }
+            s
+        }
+    }
 }

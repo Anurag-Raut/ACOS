@@ -1,0 +1,67 @@
+# w16-text-input: live `type_text` on the real ART session (W16).
+#
+# The W13 wall was guest character resolution: `KeyEvent.getUnicodeChar()` ->
+# `KeyCharacterMap.load(-1)` -> the synthetic `InputDevice`'s KCM had no keys.
+# W16 ships the stock `/system/usr/keychars/{Virtual,Generic}.kcm` in the
+# sysroot and makes the synthetic device carry the image's *native*
+# `KeyCharacterMap` parcel, so the typed keys insert text.
+#
+# This scenario is the end-to-end proof: launch the text-input fixture, tap the
+# `EditText`, type `hi`, and require the live tree to read exactly `hi` *and*
+# the type step to produce a fresh C1 frame (the engine binds text and pixels;
+# a stale frame fails with NO_FRESH_FRAME). Requires no external IME: the
+# EditText has window focus, and keys are published on the virtual keyboard
+# device exactly as a physical keyboard would be.
+version: 1
+name: w16-text-input
+description: >-
+  Launch text-input on real ART, tap the EditText, type "hi" through the live
+  InputChannel, assert the tree text equals "hi", and capture fresh frames
+  before and after (the type step must advance the frame generation).
+app: fixtures/build/apps/text-input.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.textinput/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: input}
+      timeout_ms: 5000
+
+  - capture:
+      name: w16-before-typing
+      format: png
+      fresh: true
+
+  - tap:
+      selector: {id: input}
+
+  - type:
+      selector: {id: input}
+      text: "hi"
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: "hi"}
+
+  - capture:
+      name: w16-after-typing
+      format: png
+      fresh: true

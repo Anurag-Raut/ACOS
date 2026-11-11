@@ -635,8 +635,20 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
 
 static void* reader_main(void* arg) {
     (void)arg;
-    size_t cap = 4096;
+    // SOCK_SEQPACKET returns one whole frame per `recvmsg`; a buffer smaller
+    // than the frame silently truncates it (the kernel then sets MSG_TRUNC) and
+    // this reader used to `return` on that, killing every later binder
+    // transaction and hanging the app's main thread. Size the buffer like the
+    // host (`acos_binder_peer::protocol::read_frame`: HEADER_SIZE + MAX_FRAME)
+    // so a legitimate reply (e.g. the 6.7 KB `InputDevice` + `KeyCharacterMap`
+    // reply, W16) is delivered whole. The host rejects frames above MAX_FRAME,
+    // so this cap matches the wire contract instead of a 4 KiB guess.
+    size_t cap = sizeof(struct fhdr) + E3G_MAX_FRAME + 64;
     uint8_t* buf = malloc(cap);
+    if (buf == NULL) {
+        WARN("reader buffer allocation failed (%zu bytes)", cap);
+        return NULL;
+    }
     for (;;) {
         struct fhdr h;
         char cbuf[CMSG_SPACE(sizeof(int) * E3G_MAX_FD)];
@@ -1666,6 +1678,30 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_LaunchMain_initAndroidRuntime(
             *jvm_slot = vm;
         } else {
             WARN("initAndroidRuntime: no AndroidRuntime::mJavaVM symbol");
+        }
+    }
+    // `AndroidRuntime::startReg` normally installs `javaCreateThreadEtc` as the
+    // `androidCreateThreadEtc` hook, which is what makes `canCallJava` threads
+    // (libbinder's `binder:<pid>_<n>` pool threads) attach to the VM before
+    // their entry runs. ACOS registers natives through its own allowlist and
+    // never calls `startReg`, so without this hook a host transaction that
+    // targets a *Java* binder (e.g. the `IResultReceiver` autofill answers after
+    // tapping an `EditText`) reaches `JavaBBinder::onTransact` on an unattached
+    // thread and aborts: "Binder thread started or Java binder used, but env
+    // null. Attach JVM?" (W13's tap SIGABRT, W16 root cause). Install the
+    // image's own thread shell after publishing `mJavaVM`, exactly as
+    // `startReg` does.
+    {
+        typedef void (*set_create_thread_fn)(void*);
+        set_create_thread_fn set_fn =
+            (set_create_thread_fn)dlsym(RTLD_DEFAULT, "androidSetCreateThreadFunc");
+        void* jct = dlsym(h, "_ZN7android14AndroidRuntime19javaCreateThreadEtcEPFiPvES1_PKcimPS1_");
+        if (set_fn != NULL && jct != NULL) {
+            set_fn(jct);
+            DBG("initAndroidRuntime: installed AndroidRuntime::javaCreateThreadEtc");
+        } else {
+            WARN("initAndroidRuntime: cannot install the java thread shell (set=%p jct=%p)",
+                 (void*)set_fn, jct);
         }
     }
     DBG("initAndroidRuntime: AndroidRuntime=%p argv0=%s slot=%p now=%p vm=%p", mem, a0,

@@ -10,7 +10,12 @@
 #
 # Output layout (mirrors the device after apexd, which is what the bwrap sandbox
 # binds):
-#   <out>/system/{bin,etc,framework,lib,lib64}/...        real /system
+#   <out>/system/{bin,etc,framework,lib,lib64,usr}/...    real /system
+#                                                        (`usr/keychars` carries the
+#                                                        stock KeyCharacterMap the
+#                                                        guest's KeyCharacterMap.load
+#                                                        reads through the synthetic
+#                                                        InputDevice; W16)
 #   <out>/system/apex/<module>/...                        APEX payloads, <module> == /apex/<module>
 #   <out>/{product,system_ext,vendor}/fonts/...           the other partitions' font sets
 #   <out>/{product,system_ext,vendor}/etc/fonts_customization.xml   (when present;
@@ -158,7 +163,10 @@ fi
 export_system() {
     local d
     mkdir -p "$OUT/system"
-    for d in bin etc framework lib lib64; do
+    # `usr` holds keychars/keylayout/idc: the stock KeyCharacterMap files the
+    # guest needs (KeyCharacterMap.load reads the map the synthetic InputDevice
+    # carries, whose source of truth is /system/usr/keychars/Generic.kcm).
+    for d in bin etc framework lib lib64 usr; do
         # debugfs rdump needs the destination *parent* to exist and creates
         # <dest>/<basename(source)>; pre-creating <out>/system/<d> makes it fail
         # with "File exists while making directory".
@@ -169,10 +177,12 @@ export_system() {
     rm -rf "$OUT/system/lost+found" "$OUT/system/.#*" 2>/dev/null || true
 }
 
-if [ ! -d "$OUT/system/framework" ] || [ -z "$(ls -A "$OUT/system/framework" 2>/dev/null)" ]; then
-    log "extracting /system (bin, etc, framework, lib, lib64)"
+if [ ! -d "$OUT/system/framework" ] || [ -z "$(ls -A "$OUT/system/framework" 2>/dev/null)" ] \
+    || [ ! -d "$OUT/system/usr/keychars" ]; then
+    log "extracting /system (bin, etc, framework, lib, lib64, usr)"
     export_system
 fi
+[ -d "$OUT/system/usr/keychars" ] || log "warning: the image has no /system/usr/keychars (guest text input will stay unavailable)"
 [ -f "$OUT/system/framework/framework.jar" ] || die "no framework.jar: /system extraction failed"
 
 # ---------------------------------------------------------------------------

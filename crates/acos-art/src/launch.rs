@@ -150,6 +150,15 @@ pub struct UnsupportedCall {
 
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
+    // W16: the synthetic `IInputManager` devices carry the image's native
+    // `KeyCharacterMap` payload built from the stock `/system/usr/keychars/*.kcm`
+    // files. `acos-services` resolves them from `ACOS_KEYCHARS_DIR`; publish the
+    // sysroot this launch actually uses (an explicit `--sysroot` need not match
+    // the productised `.cache/art/sysroot`).
+    std::env::set_var(
+        "ACOS_KEYCHARS_DIR",
+        root.sysroot.join("system/usr/keychars"),
+    );
     if !opts.apk.is_file() {
         return Err(Error::Layout(format!("no APK at {}", opts.apk.display())));
     }
