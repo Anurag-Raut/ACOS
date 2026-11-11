@@ -1,0 +1,69 @@
+# W22: `reset` clears app state and returns to the initial UI on the ART engine.
+#
+# The proof is deliberately independent of the app's own Reset control: the
+# counter is driven to 1 with a tap on Increment, then the *scenario* reset step
+# runs (the engine stops the guest and relaunches the same APK in a fresh process
+# with an empty app-data directory), and a pure assertion reads 0. No tap on
+# `id/reset` is used anywhere in this file.
+version: 1
+name: w22-counter-reset
+description: >-
+  Launch counter, increment to 1, run the reset step (fresh guest process +
+  cleared app state), and assert the counter is back to 0 without tapping the
+  app's Reset button.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - reset
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 10000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+
+  # The scenario reset step: fresh process, empty app-data, initial UI.
+  - reset:
+      scope: app
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - capture:
+      name: after-reset
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}

@@ -17,11 +17,11 @@ use acos_protocol::commands::VerifyRequest;
 use acos_protocol::scenario::{Expectation, Scenario};
 use acos_protocol::ui::{Bounds, UiNode};
 use acos_protocol::{
-    Backend as ProtocolBackend, Envelope, Fidelity, FrameMeta, Status, UiTree,
+    Backend as ProtocolBackend, Envelope, Fidelity, FrameMeta, LogLevel, Status, UiTree,
 };
 use acos_verify::backend::{
-    Backend, BackendError, Capabilities, InputAction, LaunchOutcome, LaunchRequest, ManifestInfo,
-    SessionObservation,
+    Backend, BackendError, Capabilities, InputAction, LaunchOutcome, LaunchRequest, LogRecord,
+    ManifestInfo, SessionObservation,
 };
 use acos_verify::clock::FixedClock;
 use acos_verify::executor::{run_scenario, RunOptions};
@@ -901,4 +901,188 @@ fn wait_for_returns_as_soon_as_the_condition_appears() {
         "wait_for did not return early: {:?}",
         elapsed
     );
+}
+
+// ---------------------------------------------------------------------------
+// W22: `assert_log.timeout_ms` is a real wait, and a refused log channel is a
+// structured failure (never "no line matched", never a pass).
+// ---------------------------------------------------------------------------
+
+struct LogBackend {
+    manifest: Option<ManifestInfo>,
+    /// The `logs_since` call number at which the line appears.
+    emit_at: u64,
+    polls: u64,
+    /// When set, every `logs_since` is refused with this code (the shape of
+    /// `TrustGuard`'s untrusted-run refusal).
+    refuse: Option<acos_protocol::ErrorCode>,
+}
+
+impl LogBackend {
+    fn new(emit_at: u64) -> Self {
+        LogBackend {
+            manifest: None,
+            emit_at,
+            polls: 0,
+            refuse: None,
+        }
+    }
+}
+
+impl Backend for LogBackend {
+    fn id(&self) -> &'static str {
+        "log-poll-mock"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            logs: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        Ok(LaunchOutcome {
+            session_id: "s_log".to_string(),
+            package: self
+                .manifest
+                .as_ref()
+                .map(|m| m.package.clone())
+                .unwrap_or_default(),
+            frame: None,
+            screenshot_png: None,
+            crashed: None,
+            detail: serde_json::json!({}),
+        })
+    }
+
+    fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        self.polls += 1;
+        if let Some(code) = self.refuse {
+            return Err(BackendError::Failed {
+                code,
+                detail: "UNTRUSTED_LOG_ASSERTION: logs are guest-asserted".to_string(),
+            });
+        }
+        if self.polls < self.emit_at || since >= 1 {
+            return Ok(Vec::new());
+        }
+        Ok(vec![LogRecord {
+            seq: 1,
+            timestamp_ms: 1_794_318_674_000,
+            level: LogLevel::Info,
+            tag: "AcosFixture".to_string(),
+            message: "onResume".to_string(),
+        }])
+    }
+}
+
+fn log_scenario(timeout_ms: u64) -> (Scenario, PathBuf) {
+    let yaml = format!(
+        r#"
+version: 1
+name: log-poll
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+expectation: pass
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+  - assert_log:
+      tag: AcosFixture
+      patterns: ['^onResume$']
+      timeout_ms: {timeout_ms}
+"#
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+    (scenario, scratch("log-poll"))
+}
+
+fn run_log_scenario(
+    scenario: &Scenario,
+    artifacts: &Path,
+    backend: &mut dyn Backend,
+) -> RunOutcome {
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/v2-art-counter.yaml"),
+        artifacts_dir: artifacts.to_path_buf(),
+        required_fidelity: None,
+        request_id: "req_log_poll".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    run_scenario(scenario, &options, backend, &clock).expect("run_scenario succeeds")
+}
+
+#[test]
+fn assert_log_polls_until_the_line_appears_or_the_deadline_passes() {
+    // The line appears on the third fetch: the first is the normal per-step
+    // flush, the second the first wait poll. A single-shot implementation would
+    // fail this.
+    let (scenario, artifacts) = log_scenario(2000);
+    let mut backend = LogBackend::new(3);
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(outcome.verdict.steps[1].step, "assert_log");
+    assert_eq!(outcome.verdict.steps[1].status, Status::Pass);
+    assert!(
+        backend.polls >= 3,
+        "assert_log must poll the log stream, got {} fetches",
+        backend.polls
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // Negative: a line that never appears is an assertion failure at the
+    // deadline, never a pass and never a hang.
+    let (scenario, artifacts) = log_scenario(50);
+    let mut backend = LogBackend::new(u64::MAX);
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(!outcome.verdict.verdict.is_pass());
+    assert_eq!(
+        outcome
+            .verdict
+            .failure
+            .as_ref()
+            .map(|failure| failure.code),
+        Some(acos_protocol::ErrorCode::AssertionFailed)
+    );
+    assert!(backend.polls >= 2, "the wait must poll at least twice");
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn a_refused_log_channel_fails_closed_with_the_backend_code() {
+    // This is the untrusted-run shape: the backend refuses guest-asserted logs.
+    // The step must carry INSUFFICIENT_HOST_EVIDENCE, not a generic "no line".
+    let (scenario, artifacts) = log_scenario(1);
+    let mut backend = LogBackend::new(1);
+    backend.refuse = Some(acos_protocol::ErrorCode::InsufficientHostEvidence);
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let failure = outcome.verdict.failure.as_ref().expect("a structured failure");
+    assert_eq!(
+        failure.code,
+        acos_protocol::ErrorCode::InsufficientHostEvidence
+    );
+    assert!(failure.error.message.contains("UNTRUSTED_LOG_ASSERTION"));
+    let _ = std::fs::remove_dir_all(&artifacts);
 }

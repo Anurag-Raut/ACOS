@@ -1,0 +1,268 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.formvalidation",
+    "path": "fixtures/build/apps/form-validation.apk",
+    "sha256": "5528815228b63e3e29a5fda7aa45532024d0da056637daa2a7d98264b64efa10"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/art-runtime/evidence/W22-artifacts/w22-type-clear",
+    "engine_report": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/engine.json",
+    "verdict": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T23:41:40.178Z",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/form-validation.apk",
+    "apk_sha256": "5528815228b63e3e29a5fda7aa45532024d0da056637daa2a7d98264b64efa10",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/w22-type-clear.yaml",
+    "scenario_sha256": "1c94d62aa00769e3984202547c06e0f11bce645abbd95e9777b9ded99efe790e"
+  },
+  "request_id": "req_3066bc_18e7221d6e3c279b",
+  "resources": {
+    "events": 101,
+    "frames_captured": 6,
+    "memory_mib": 86,
+    "peak_rss_bytes": 90337280,
+    "sessions": 1,
+    "steps": 7,
+    "wall_ms": 12043
+  },
+  "scenario": {
+    "name": "w22-type-clear",
+    "path": "scenarios/w22-type-clear.yaml",
+    "sha256": "1c94d62aa00769e3984202547c06e0f11bce645abbd95e9777b9ded99efe790e"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_form-validation",
+  "started_at": "2026-11-11T23:41:28.135Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 500,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/1.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/1.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 1,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1101,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 2,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 566,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-type.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 3,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "type"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 7882,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/18.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/18.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-type.json"
+        }
+      ],
+      "frame_seq": 18,
+      "index": 4,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "type"
+    },
+    {
+      "assertions": [
+        {
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1980,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/20.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/20.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-tap.json"
+        }
+      ],
+      "frame_seq": 20,
+      "index": 5,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-assert_log.json"
+        }
+      ],
+      "index": 6,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

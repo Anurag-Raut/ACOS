@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/sqlite-crud.apk",
+  "apk_sha256": "0e50ebbd2ea3c037f1e92dc87cab370c5132af7890db80df971d9b050f0ef412",
+  "scenario_path": "scenarios/w15-sqlite-crud.yaml",
+  "scenario_sha256": "279be858f13e0f81f001fbfe43562c9804fbe7f0570478a7a614e42affec4456",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -165,6 +165,20 @@ impl StepExec {
         }
     }
 
+    /// A step failed because the backend refused the evidence channel (for
+    /// example an untrusted run refusing guest-asserted logs). The backend's
+    /// own code (`INSUFFICIENT_HOST_EVIDENCE`, ...) is preserved.
+    fn failed_backend(error: &BackendError) -> Self {
+        StepExec {
+            status: Status::Fail,
+            error: Some(error.to_protocol_error()),
+            assertions: Vec::new(),
+            observation: None,
+            produced_frame: None,
+            session: None,
+        }
+    }
+
     fn passed_assertion(evaluated: Evaluated) -> Self {
         StepExec {
             status: Status::Pass,
@@ -212,17 +226,70 @@ pub fn run_scenario(
     let mut bound_frame_seq: Option<u64> = None;
     let mut last_frame_seq: Option<u64> = None;
 
+    // A log fetch that failed (for example the untrusted-run refusal from
+    // `TrustGuard`) is remembered so an `assert_log` step reports that exact
+    // structured error instead of a misleading "no matching line".
+    let mut log_failure: Option<BackendError> = None;
+
     for (index, step) in scenario.steps.iter().enumerate() {
         // Flush any logs the previous step produced.
         if caps.logs {
-            if let Ok(new) = backend.logs_since(last_log_seq) {
-                for record in new {
-                    last_log_seq = last_log_seq.max(record.seq);
-                    all_logs.push(record);
+            match backend.logs_since(last_log_seq) {
+                Ok(new) => {
+                    for record in new {
+                        last_log_seq = last_log_seq.max(record.seq);
+                        all_logs.push(record);
+                    }
+                    log_failure = None;
                 }
+                Err(error) => log_failure = Some(error),
             }
         }
         step_log_cursors.push(all_logs.len());
+
+        // `assert_log.timeout_ms` is the wait-for-log semantic: the line the
+        // triggering action produced may still be in flight when the step
+        // starts (buffered liblog write, logd reader thread). Poll the log
+        // stream until the assertion holds or the deadline passes; the
+        // assertion below still decides pass/fail, so a missing line is a
+        // normal assertion failure, never a fake pass.
+        if caps.logs {
+            if let Some(StepRef::AssertLog(assertion)) = step.as_step() {
+                if let Some(timeout_ms) = assertion.timeout_ms {
+                    let start = if index > 0 {
+                        step_log_cursors[index - 1]
+                    } else {
+                        0
+                    };
+                    // Real elapsed time, not the injected evidence clock: a
+                    // `FixedClock` never advances, and a wait must not depend
+                    // on the clock a test uses to stamp evidence.
+                    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+                    let mut backoff_ms = 10u64;
+                    loop {
+                        if eval_log(assertion, &all_logs[start..]).result.passed {
+                            break;
+                        }
+                        if Instant::now() >= deadline {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                        backoff_ms = (backoff_ms * 2).min(100);
+                        match backend.logs_since(last_log_seq) {
+                            Ok(new) => {
+                                for record in new {
+                                    last_log_seq = last_log_seq.max(record.seq);
+                                    all_logs.push(record);
+                                }
+                                log_failure = None;
+                            }
+                            Err(error) => log_failure = Some(error),
+                        }
+                    }
+                }
+            }
+        }
+
         let since_logs: &[LogRecord] = if index > 0 {
             &all_logs[step_log_cursors[index - 1]..]
         } else {
@@ -242,6 +309,7 @@ pub fn run_scenario(
             &cause_id,
             since_logs,
             &all_logs,
+            log_failure.as_ref(),
             crashed.as_ref(),
             previous_observation.as_ref(),
             bound_frame_seq,
@@ -545,6 +613,7 @@ fn execute_step(
     cause_id: &str,
     since_logs: &[LogRecord],
     all_logs: &[LogRecord],
+    log_failure: Option<&BackendError>,
     crashed: Option<&CrashRecord>,
     previous: Option<&SessionObservation>,
     bound_frame_seq: Option<u64>,
@@ -828,6 +897,11 @@ fn execute_step(
             if !caps.logs {
                 return StepExec::unsupported(Capability::Logs, "the backend cannot expose logs");
             }
+            // A refused log stream (untrusted run: guest-asserted logs cannot
+            // justify a pass) is the failure, not "no line matched".
+            if let Some(error) = log_failure {
+                return StepExec::failed_backend(error);
+            }
             let scoped: &[LogRecord] = if assertion.since_previous_step {
                 since_logs
             } else {
@@ -955,7 +1029,29 @@ fn execute_step(
                 return StepExec::unsupported(Capability::Reset, "the backend cannot reset state");
             }
             match backend.reset(ResetScope::App) {
-                Ok(()) => StepExec::pass(),
+                Ok(()) => {
+                    // A reset leaves the app in its initial state, i.e. a new
+                    // completed frame. Bind that frame as this step's
+                    // observation, so a following pure assertion describes the
+                    // post-reset state instead of the pre-reset frame (and a
+                    // frame-advancing ledger entry). If the backend cannot
+                    // observe after the reset (an untrusted run refuses the
+                    // guest-asserted tree), the reset itself still passed; only
+                    // the ledger stays where it was, so a later tree assertion
+                    // fails closed as usual.
+                    let mut exec = StepExec::pass();
+                    if let Ok(observation) = backend.observe() {
+                        if let Some(failure) =
+                            observation_binding_error(backend.id(), &observation)
+                        {
+                            return failure;
+                        }
+                        if meaningful_error(&observation).is_none() {
+                            exec.observation = Some(observation);
+                        }
+                    }
+                    exec
+                }
                 Err(error) => StepExec::backend_error(&error, backend.id(), "reset"),
             }
         }
@@ -1082,6 +1178,7 @@ fn frame_advancing_step(step: &Step) -> bool {
                 | StepRef::Key(_)
                 | StepRef::Back(_)
                 | StepRef::Rotate(_)
+                | StepRef::Reset(_)
                 | StepRef::Capture(_)
                 | StepRef::AssertScreenshot(_)
                 | StepRef::AssertRegion(_)

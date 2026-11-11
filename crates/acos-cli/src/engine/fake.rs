@@ -72,6 +72,14 @@ impl FakeSession {
         Self::with_mode(Mode::Preview, Fault::None)
     }
 
+    /// A live fake that also accepts `type_text` (models an engine with the
+    /// full input path, for engine-side `clear` handling).
+    pub fn live_with_type() -> Self {
+        let mut fake = Self::with_mode(Mode::Live, Fault::None);
+        fake.supports_type = true;
+        fake
+    }
+
     /// A live fake whose tap never completes a new frame.
     pub fn stale_tap() -> Self {
         Self::with_mode(Mode::Live, Fault::StaleTap)
@@ -377,7 +385,14 @@ impl SessionBackend for FakeSession {
         self.tap_selector(&Selector::by_text(text))
     }
 
-    fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
+    fn type_text(&mut self, text: &str) -> Result<(), BackendError> {
+        if self.supports_type {
+            self.record(&format!("type_text({text})"));
+            let previous = self.seq;
+            self.publish(previous);
+            return Ok(());
+        }
+        self.record("type_text-unsupported");
         Err(BackendError::unsupported(
             "input.type_text",
             "the fake models the ART protocol's missing `type_text` command",

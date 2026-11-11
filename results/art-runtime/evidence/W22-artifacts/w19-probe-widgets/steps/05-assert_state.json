@@ -1,0 +1,34 @@
+{
+  "assertions": [
+    {
+      "kind": "state",
+      "matched_node_ids": [
+        "n5_dev.acos.fixtures.widgetgallery:id/switch_on"
+      ],
+      "passed": true
+    }
+  ],
+  "duration_ms": 2,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/05-assert_state.json"
+    }
+  ],
+  "frame_seq": 1,
+  "index": 5,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_state",
+  "trust": "trusted"
+}

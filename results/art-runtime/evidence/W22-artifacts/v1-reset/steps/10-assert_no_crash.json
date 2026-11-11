@@ -1,0 +1,28 @@
+{
+  "assertions": [
+    {
+      "kind": "no_crash",
+      "matched_node_ids": [],
+      "message": "no crash recorded",
+      "passed": true
+    }
+  ],
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/10-assert_no_crash.json"
+    }
+  ],
+  "index": 10,
+  "provenance": {
+    "crash_reports": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_no_crash",
+  "trust": "trusted"
+}

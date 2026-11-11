@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/widget-gallery.apk",
+  "apk_sha256": "bad162f7928da534e4d4ef149b003bb3823ff9a72583699de583bb3ad2a08d76",
+  "scenario_path": "scenarios/w15-widget-gallery.yaml",
+  "scenario_sha256": "dd76e713cf7a64d4fde93c4a22d30bc9a7f5fd6d5510f153d5e1759dfb76d130",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

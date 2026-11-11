@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/todo-dogfood.apk",
+  "apk_sha256": "bddc047b0a0e4354e104059b51d41b2ab4551dedfb1ff7676dc0ea66a6aada93",
+  "scenario_path": "scenarios/w15-todo-dogfood.yaml",
+  "scenario_sha256": "acef331081c9c78b3d0610c622dcb7cff6919bf77af2decc422a4374432565f8",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

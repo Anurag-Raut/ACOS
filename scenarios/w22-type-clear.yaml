@@ -1,0 +1,60 @@
+# W22: `type.clear: true` really clears the focused field on the ART engine.
+#
+# Fill Email with an invalid value, replace it with a valid one using
+# `clear: true`, submit with Name still empty, and require the Name-required log
+# line. If clear did not work the Email would stay malformed and the app would log
+# `validation_failed reason=email_format` instead.
+version: 1
+name: w22-type-clear
+description: >-
+  Prove `clear: true` on ART: the Email field is replaced (not appended), so a
+  valid address survives and validation reaches the Name error.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: submit}
+      timeout_ms: 10000
+
+  - tap:
+      selector: {id: email}
+  - type:
+      selector: {id: email}
+      text: not-an-email
+
+  - type:
+      selector: {id: email}
+      text: ada@example.com
+      clear: true
+
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns:
+        - '^validation_failed reason=name message=Name is required$'

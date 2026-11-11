@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/todo-list.apk",
+  "apk_sha256": "4a8c72bac5c642af7ed766f495b8775a7f8a5414cc4afdb7bf435356689cabcf",
+  "scenario_path": "scenarios/w17-todo-hint.yaml",
+  "scenario_sha256": "9fb006daece5e3dd92d1ca991029e9e59381fee839bf2b1ad4d7346484b99c24",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

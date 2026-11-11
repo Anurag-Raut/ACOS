@@ -1,0 +1,29 @@
+{
+  "assertions": [],
+  "duration_ms": 547,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/6.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/6.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/10-type.json"
+    }
+  ],
+  "frame_seq": 6,
+  "index": 10,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "type",
+  "trust": "trusted"
+}

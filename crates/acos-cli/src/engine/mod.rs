@@ -389,6 +389,27 @@ pub trait SessionBackend {
     /// Type UTF-8 text into the focused field.
     fn type_text(&mut self, text: &str) -> Result<(), BackendError>;
 
+    /// The first fatal crash signature this session has observed, if any.
+    ///
+    /// Guest-asserted on ART (from the guest log); an untrusted run must not
+    /// expose it. `None` means no signature was seen, never "proven no crash".
+    fn last_crash(&self) -> Option<acos_verify::backend::CrashRecord> {
+        None
+    }
+
+    /// Log records newer than `since` (monotonic per-session sequence).
+    ///
+    /// A backend that reports `logs: true` must implement this; the default is
+    /// the honest "no log command" answer. Provenance is the backend's to
+    /// declare (the ART guest log is guest-asserted), and an untrusted run must
+    /// refuse it.
+    fn logs_since(&mut self, _since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        Err(BackendError::unsupported(
+            "logs",
+            "this session engine has no log-stream command",
+        ))
+    }
+
     /// Press a symbolic key (`back`, `enter`, ...).
     fn key(&mut self, key: &str) -> Result<(), BackendError>;
 
@@ -522,13 +543,17 @@ impl EngineBackend {
         } else {
             package
         };
+        let crashed = match self {
+            EngineBackend::Session { session, .. } => session.last_crash(),
+            EngineBackend::Native(_) => None,
+        };
         Ok(SessionObservation {
             session_id: format!("s_art_{seq}"),
             package,
             frame: tree.frame.clone(),
             tree,
             screenshot_png: Some(png),
-            crashed: None,
+            crashed,
             input: None,
         })
     }
@@ -705,17 +730,13 @@ impl Backend for EngineBackend {
         match self {
             EngineBackend::Native(backend) => backend.logs_since(since),
             EngineBackend::Session { session, .. } => {
-                if session.capabilities().logs {
-                    Err(BackendError::unsupported(
+                if !session.capabilities().logs {
+                    return Err(BackendError::unsupported(
                         "logs",
-                        "this session engine has no log-stream command wired",
-                    ))
-                } else {
-                    Err(BackendError::unsupported(
-                        "logs",
-                        "the ART session protocol has no log command yet",
-                    ))
+                        "this session engine has no log-stream command",
+                    ));
                 }
+                session.logs_since(since)
             }
         }
     }
@@ -775,7 +796,11 @@ impl Backend for EngineBackend {
                         }
                         self.action_result(previous, action.kind())
                     }
-                    InputAction::Type { text, .. } => {
+                    InputAction::Type {
+                        selector,
+                        text,
+                        clear,
+                    } => {
                         if !caps.type_text {
                             return Err(BackendError::unsupported(
                                 "input.type_text",
@@ -785,6 +810,28 @@ impl Backend for EngineBackend {
                         }
                         let previous = self.current_frame_seq();
                         if let EngineBackend::Session { session, .. } = self {
+                            if *clear {
+                                // `clear: true` is part of the protocol, so the
+                                // engine owes the scenario a cleared field. The
+                                // ART session has no clear command; erase the
+                                // field's current text with real DEL key events
+                                // through the same input channel (host-injected,
+                                // then one type_text for the replacement text).
+                                let length = match selector {
+                                    Some(selector) => session
+                                        .tree()?
+                                        .find_one(selector)
+                                        .map(|node| node.text.chars().count())
+                                        .unwrap_or(0),
+                                    None => 0,
+                                };
+                                // A field can hold more characters than its
+                                // on-screen text if the probe truncates; a small
+                                // margin avoids a leftover tail.
+                                for _ in 0..length {
+                                    session.key("delete")?;
+                                }
+                            }
                             session.type_text(text)?;
                         }
                         self.action_result(previous, action.kind())
@@ -1612,6 +1659,96 @@ mod engine_tests {
             !calls.iter().any(|call| call == "frame" || call == "tree"),
             "observe must not traverse: {calls:?}"
         );
+    }
+
+    #[test]
+    fn reset_step_binds_the_post_reset_frame_for_the_next_assertion() {
+        // W22: the reset step leaves a new completed frame (fresh process,
+        // initial UI). Without the executor's post-reset binding, the next pure
+        // `assert_text` fails with "observation is frame N but the bound
+        // completed frame is N-1" even though the reset really happened.
+        let dir = artifacts("reset-binding");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        let req = request("scenarios/w22-counter-reset.yaml", &dir);
+        let envelope = acos_verify::verify(&req, &mut backend);
+        assert!(
+            envelope.status().is_pass(),
+            "expected a live pass, got {:?}: {:?}",
+            envelope.status(),
+            envelope.error()
+        );
+        let verdict = envelope.result().unwrap().get("verdict").unwrap();
+        let reset = verdict["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|step| step["step"] == "reset")
+            .expect("the scenario has a reset step");
+        assert_eq!(reset["status"], "pass");
+        let after: Vec<&serde_json::Value> = verdict["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip_while(|step| step["step"] != "reset")
+            .collect();
+        assert!(
+            after.iter().skip(1).all(|step| step["status"] == "pass"),
+            "every step after the reset must be bound to the post-reset frame: {after:?}"
+        );
+    }
+
+    #[test]
+    fn type_with_clear_erases_the_field_with_keys_before_typing() {
+        // `clear: true` is protocol, not a hint. The ART session has no clear
+        // command, so the engine must erase the field with real DEL key events
+        // through the same input channel before typing the replacement.
+        let dir = artifacts("clear");
+        let fake = FakeSession::live_with_type();
+        let calls = fake.calls();
+        let mut backend = EngineBackend::session(Box::new(fake));
+        backend.launch(&launch_request(&dir)).expect("fake launch");
+        let selector = Selector {
+            id: Some("count".to_string()),
+            ..Selector::default()
+        };
+        // The fake's count node reads "0": exactly one character to erase.
+        backend
+            .input(&InputAction::Type {
+                selector: Some(selector.clone()),
+                text: "7".to_string(),
+                clear: true,
+            })
+            .expect("type with clear");
+        {
+            let calls = calls.lock().unwrap();
+            let deletes: Vec<usize> = calls
+                .iter()
+                .enumerate()
+                .filter(|(_, call)| *call == "key(delete)")
+                .map(|(index, _)| index)
+                .collect();
+            let typed = calls
+                .iter()
+                .position(|call| call == "type_text(7)")
+                .expect("the replacement text is typed");
+            assert_eq!(deletes.len(), 1, "one DEL per existing character: {calls:?}");
+            assert!(deletes[0] < typed, "clear must precede typing: {calls:?}");
+        }
+        // Negative control: without clear, no DEL is sent.
+        backend
+            .input(&InputAction::Type {
+                selector: Some(selector),
+                text: "8".to_string(),
+                clear: false,
+            })
+            .expect("type without clear");
+        let calls = calls.lock().unwrap();
+        assert_eq!(
+            calls.iter().filter(|call| *call == "key(delete)").count(),
+            1,
+            "clear: false must not delete anything: {calls:?}"
+        );
+        assert!(calls.iter().any(|call| call == "type_text(8)"));
     }
 
     #[test]

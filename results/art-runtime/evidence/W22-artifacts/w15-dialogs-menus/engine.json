@@ -1,0 +1,47 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-artifacts/w15-dialogs-menus",
+      "engine_report": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-artifacts/w15-dialogs-menus/engine.json",
+      "verdict": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-artifacts/w15-dialogs-menus/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_307042_18e7223787a9aa8b",
+  "verdict_status": "pass"
+}

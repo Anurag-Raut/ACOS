@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/multi-activity.apk",
+  "apk_sha256": "322566465b3b48126b8cb0fa442bd66ef9ce9b5cd994907a415343f3b55778b1",
+  "scenario_path": "scenarios/multi-activity.yaml",
+  "scenario_sha256": "dfd3fa1e1740f6ea721caa80e7bd2668da1c7b6520fa951d130884bf5709d563",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

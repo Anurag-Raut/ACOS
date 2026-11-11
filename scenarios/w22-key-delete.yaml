@@ -1,0 +1,62 @@
+# W22: the ART key path delivers real DEL events to a focused EditText.
+#
+# Type three characters into the Email field, delete them with three `key: delete`
+# steps, then submit: if (and only if) the deletes reached the field, validation
+# falls through to the Name error instead of the email-format error.
+version: 1
+name: w22-key-delete
+description: >-
+  Proves key events travel the existing ART input path: type into Email, delete
+  it with three DEL keys, submit, and assert the Name-required log line.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: submit}
+      timeout_ms: 10000
+
+  - tap:
+      selector: {id: email}
+
+  - type:
+      selector: {id: email}
+      text: abc
+
+  - key:
+      key: delete
+  - key:
+      key: delete
+  - key:
+      key: delete
+
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns:
+        - '^validation_failed reason=name message=Name is required$'

@@ -1,0 +1,63 @@
+# W22: `assert_log` reads the guest logd sink on the ART engine.
+#
+# The ART session now serves a `logs` command (the guest's own logd sink,
+# snapshotted live). Provenance is guest-asserted: a trusted fixture may use it;
+# an untrusted run fails closed with INSUFFICIENT_HOST_EVIDENCE.
+version: 1
+name: w22-counter-log
+description: >-
+  Launch counter on ART, assert the AcosCounter cold-start lifecycle order from
+  the guest log, tap Increment, and assert the increment line appeared after
+  that step (since_previous_step).
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 10000
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: false
+      ordered: true
+      timeout_ms: 5000
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - tap:
+      selector: {id: inc}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns:
+        - '^increment value=1$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

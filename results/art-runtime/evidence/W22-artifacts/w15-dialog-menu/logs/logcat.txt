@@ -1,0 +1,105 @@
+--------- beginning of main
+1794440597799      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794440597799      2  I : Using CollectorTypeCC GC.
+1794440597799      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794440597799      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794440597799      5  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794440597799      6  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794440597799      7  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794440597799      8  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794440597799      9  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794440597799     10  D nativeloader: InitExtendedPublicLibraries: 
+1794440597799     11  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794440597799     12  D nativeloader: InitProductPublicLibraries: 
+1794440597799     13  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794440597799     14  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 1000; state: ENABLED
+1794440597799     15  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 1000; state: ENABLED
+1794440597799     16  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794440597799     17  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794440597799     18  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 1000; state: ENABLED
+1794440597799     19  W ziparchive: Unable to open '/data/app/dialog-menu.dm': No such file or directory
+1794440597799     20  W ziparchive: Unable to open '/data/app/dialog-menu.dm': No such file or directory
+1794440597799     21  D nativeloader: Configuring clns-2 for other apk /data/app/dialog-menu.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.dialogmenu
+1794440597799     22  V GraphicsEnvironment: Currently set values for:
+1794440597799     23  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794440597799     24  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794440597799     25  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.dialogmenu: false
+1794440597799     26  V GraphicsEnvironment: dev.acos.fixtures.dialogmenu is not listed in per-application setting
+1794440597799     27  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794440597799     28  E SystemServiceRegistry: No service published for: netstats
+android.os.ServiceManager$ServiceNotFoundException: No service published for: netstats
+	at android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)
+	at android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+
+1794440597799     29  E AndroidRuntime: Error reporting WTF
+java.lang.IllegalArgumentException: bad request for android.app.IActivityManager::handleApplicationWtf: arg 3 (TypedObject(android.app.ApplicationErrorReport$ParcelableCrashInfo, nullable=true)): no parcelable codec for android.app.ApplicationErrorReport$ParcelableCrashInfo
+	at android.os.Parcel.createExceptionOrNull(Parcel.java:3061)
+	at android.os.Parcel.createException(Parcel.java:3041)
+	at android.os.Parcel.readException(Parcel.java:3024)
+	at android.os.Parcel.readException(Parcel.java:2966)
+	at android.app.IActivityManager$Stub$Proxy.handleApplicationWtf(IActivityManager.java:7248)
+	at com.android.internal.os.RuntimeInit.wtf(RuntimeInit.java:407)
+	at android.util.Log$1.onTerribleFailure(Log.java:129)
+	at android.util.Log.wtf(Log.java:337)
+	at android.util.Log.wtf(Log.java:326)
+	at android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+
+1794440597799     30  E AndroidRuntime: Original WTF:
+android.util.Log$TerribleFailure: No service published for: netstats
+	at android.util.Log.wtf(Log.java:332)
+	at android.util.Log.wtf(Log.java:326)
+	at android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)
+	at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)
+	at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)
+	at android.content.Context.getSystemService(Context.java:4420)
+	at android.net.TrafficStats.init(TrafficStats.java:216)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:192)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:96)
+Caused by: android.os.ServiceManager$ServiceNotFoundException: No service published for: netstats
+	at android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)
+	at android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)
+	at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)
+	... 12 more
+
+1794440597799     31  E TrafficStats: TrafficStats not initialized, uid=1000
+1794440597799     32  I AcosDialog: onCreate
+1794440597799     33  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 1000; state: ENABLED
+1794440597799     34  E logdw: dev.acos.fixtures.dialogmenu.MainActivity
+1794440597799     35  E logdw: dev.acos.fixtures.dialogmenu.MainActivity
+1794440597799     36  I AcosDialog: onResume
+1794440597799     37  E logdw: dev.acos.fixtures.dialogmenu.MainActivity
+1794440597799     38  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 1000; state: ENABLED
+1794440597799     39  I AcosDialog: options_menu_created size=2

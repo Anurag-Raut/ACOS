@@ -1,0 +1,26 @@
+{
+  "assertions": [],
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/5.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/5.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/07-wait_for.json"
+    }
+  ],
+  "frame_seq": 5,
+  "index": 7,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "wait_for",
+  "trust": "trusted"
+}

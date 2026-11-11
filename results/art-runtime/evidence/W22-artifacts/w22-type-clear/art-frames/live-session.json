@@ -1,0 +1,403 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.formvalidation.MainActivity",
+      "buffer_generation": 7,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "height": 2209,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.formvalidation",
+      "probe_seq": 1,
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 40,
+      "ok": true,
+      "total": 40
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 4
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 40,
+      "ok": true,
+      "total": 40
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 40,
+      "ok": true,
+      "total": 40
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 2,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "probe_seq": 14
+    },
+    {
+      "buffer_generation": 9,
+      "cmd": "tap",
+      "frame_number": 9,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-9-g9-c3.png",
+      "probe_seq": 25,
+      "x": 540.0,
+      "y": 366.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 42,
+      "ok": true,
+      "total": 42
+    },
+    {
+      "buffer_generation": 11,
+      "cmd": "type_text",
+      "frame_number": 11,
+      "frame_seq": 4,
+      "handled": [
+        true,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-11-g11-c4.png",
+      "probe_seq": 36,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 42,
+      "ok": true,
+      "total": 42
+    },
+    {
+      "buffer_generation": 12,
+      "cmd": "tree",
+      "frame_number": 12,
+      "frame_seq": 5,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-12-g12-c5.png",
+      "probe_seq": 47
+    },
+    {
+      "buffer_generation": 14,
+      "cmd": "key",
+      "frame_number": 14,
+      "frame_seq": 6,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-14-g14-c6.png",
+      "probe_seq": 58,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 16,
+      "cmd": "key",
+      "frame_number": 16,
+      "frame_seq": 7,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-16-g16-c7.png",
+      "probe_seq": 69,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 18,
+      "cmd": "key",
+      "frame_number": 18,
+      "frame_seq": 8,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-18-g18-c8.png",
+      "probe_seq": 80,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 20,
+      "cmd": "key",
+      "frame_number": 20,
+      "frame_seq": 9,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-20-g20-c9.png",
+      "probe_seq": 92,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 22,
+      "cmd": "key",
+      "frame_number": 22,
+      "frame_seq": 10,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-22-g22-c10.png",
+      "probe_seq": 103,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 24,
+      "cmd": "key",
+      "frame_number": 24,
+      "frame_seq": 11,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-24-g24-c11.png",
+      "probe_seq": 114,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 26,
+      "cmd": "key",
+      "frame_number": 26,
+      "frame_seq": 12,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-26-g26-c12.png",
+      "probe_seq": 126,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 28,
+      "cmd": "key",
+      "frame_number": 28,
+      "frame_seq": 13,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-28-g28-c13.png",
+      "probe_seq": 137,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 30,
+      "cmd": "key",
+      "frame_number": 30,
+      "frame_seq": 14,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-30-g30-c14.png",
+      "probe_seq": 149,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 32,
+      "cmd": "key",
+      "frame_number": 32,
+      "frame_seq": 15,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-32-g32-c15.png",
+      "probe_seq": 160,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 34,
+      "cmd": "key",
+      "frame_number": 34,
+      "frame_seq": 16,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-34-g34-c16.png",
+      "probe_seq": 171,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 36,
+      "cmd": "key",
+      "frame_number": 36,
+      "frame_seq": 17,
+      "handled": [
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-36-g36-c17.png",
+      "probe_seq": 182,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "buffer_generation": 38,
+      "cmd": "type_text",
+      "frame_number": 38,
+      "frame_seq": 18,
+      "handled": [
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-38-g38-c18.png",
+      "probe_seq": 193,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 42,
+      "ok": true,
+      "total": 42
+    },
+    {
+      "buffer_generation": 39,
+      "cmd": "tree",
+      "frame_number": 39,
+      "frame_seq": 19,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-39-g39-c19.png",
+      "probe_seq": 205
+    },
+    {
+      "buffer_generation": 93,
+      "cmd": "tap",
+      "frame_number": 93,
+      "frame_seq": 20,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W22-artifacts/w22-type-clear/art-frames/live-frames/acos-c1-layer3-frame-93-g93-c20.png",
+      "probe_seq": 233,
+      "x": 157.0,
+      "y": 488.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 95,
+      "ok": true,
+      "total": 95
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 20,
+      "ok": true
+    }
+  ]
+}

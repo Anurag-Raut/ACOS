@@ -9,6 +9,7 @@
 //! caller  ->  {"cmd":"tap","x":..,"y":..}     reply: tree + frame_seq + png + md5
 //! caller  ->  {"cmd":"key","code":..}         reply: tree + frame_seq + png + md5
 //! caller  ->  {"cmd":"type_text","text":".."} reply: tree + frame_seq + png + md5
+//! caller  ->  {"cmd":"logs"}                reply: the guest logd snapshot
 //! caller  ->  {"cmd":"close"}                 reply: ok, then exit
 //!
 //! `frame_seq` is the session's capture sequence (one per capture), and the
@@ -27,11 +28,15 @@
 //! exactly like a physical keyboard. `type_text` is ASCII-only (the US/QWERTY
 //! virtual-keyboard map) and a character with no key is a structured error.
 //!
-//! The protocol has no `rotate` and no log command.
-//! [`SessionCapabilities`] says so, and a scenario step that needs one fails with
-//! `UNSUPPORTED_BACKEND` naming it. Nothing here renders offline: this engine is
-//! [`Mode::Live`]; if the binary, the sysroot or a command is unavailable the
-//! caller gets a structured error, never a preview pass.
+//! The protocol has no `rotate`. `reset` is implemented **host-side**: the
+//! session stops the guest and starts the same APK again in a fresh process
+//! with a fresh run directory (empty app-data), which is the honest meaning of
+//! "clear app state, back to the initial UI" on this channel. The guest's own
+//! reset command is not used and the app's Reset button is never tapped.
+//! [`SessionCapabilities`] names anything still missing, and a scenario step
+//! that needs it fails with `UNSUPPORTED_BACKEND` naming it. Nothing here renders
+//! offline: this engine is [`Mode::Live`]; if the binary, the sysroot or a command
+//! is unavailable the caller gets a structured error, never a preview pass.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -43,8 +48,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use acos_protocol::ui::UiTree;
-use acos_protocol::{ErrorCode, FrameMeta, Selector};
-use acos_verify::backend::{InputAck, InputDelivery};
+use acos_protocol::{ErrorCode, FrameMeta, LogLevel, Selector};
+use acos_verify::backend::{CrashRecord, InputAck, InputDelivery, LogRecord};
 use acos_verify::{BackendError, LaunchOutcome};
 
 use super::{
@@ -67,6 +72,8 @@ pub struct ArtSession {
     timeout: Duration,
     /// The APK this session was started for (a session serves one app).
     apk: PathBuf,
+    /// Where captured frames are mirrored (a `reset` relaunch reuses it).
+    artifacts: PathBuf,
     package: String,
     activity: Option<String>,
     width: u32,
@@ -76,6 +83,20 @@ pub struct ArtSession {
     cached: Option<CachedFrame>,
     /// The highest frame sequence any reply has reported.
     seen_seq: u64,
+    /// Added to every reply's `frame_seq`. A `reset` starts a new guest whose
+    /// sequence restarts at 1; the engine's own sequence must stay monotonic so
+    /// a frame captured after the relaunch is still provably newer than the one
+    /// before it (the stale-frame rule).
+    seq_offset: u64,
+    /// Added to every log entry's absolute ordinal. A relaunched guest's logd
+    /// sink starts counting at 0 again; without this, records written after a
+    /// reset would collide with records already consumed before it.
+    log_offset: u64,
+    /// The raw entry count the current guest's logd sink has reported.
+    logs_total_raw: u64,
+    /// The first fatal log entry the guest's logd sink carried (a real crash
+    /// signature), if any. Guest-asserted: an untrusted run never sees it.
+    crash: Option<CrashRecord>,
     /// The process group the session child leads (its pid).
     process_group: Option<i32>,
     /// Host-observed delivery of the most recent input action.
@@ -206,11 +227,11 @@ impl ArtSession {
     /// `ActivityThread`, the peer serves the real framework, C1 stores the
     /// app's BLAST buffers, and the launcher keeps the guest alive and serves
     /// the same line-JSON commands this engine already speaks (`tree`,
-    /// `screenshot`, `tap`, `close`). `tree`/`tap` replies carry the in-guest
-    /// view-tree probe and a C1 buffer capture; `screenshot` is a C1 buffer
-    /// capture labelled `acos-c1-buffer`. `reset` and `key` are reported
-    /// unsupported (the app's Reset control is a tap; key activation still
-    /// needs the IME `EditorInfo` codec).
+    /// `screenshot`, `tap`, `key`, `type_text`, `logs`, `close`). `tree`/`tap`
+    /// replies carry the in-guest view-tree probe and a C1 buffer capture;
+    /// `screenshot` is a C1 buffer capture labelled `acos-c1-buffer`; `logs` is
+    /// the guest's logd snapshot (guest-asserted). `reset` is a host-side
+    /// relaunch in a fresh guest process with an empty app-data directory.
     ///
     /// `artifacts` is where the engine mirrors captured frames. The binary is
     /// `$ACOS_ART_BIN`, else `acos-art` on `PATH`, else `target/{debug,release}/
@@ -329,6 +350,7 @@ impl ArtSession {
             stderr_tail,
             timeout,
             apk: apk.to_path_buf(),
+            artifacts: artifacts.to_path_buf(),
             package: String::new(),
             activity: None,
             width: 1080,
@@ -336,6 +358,10 @@ impl ArtSession {
             density: 420,
             cached: None,
             seen_seq: 0,
+            seq_offset: 0,
+            log_offset: 0,
+            logs_total_raw: 0,
+            crash: None,
             process_group: Some(_pid as i32),
             last_input: None,
             input_offset: (0, 0),
@@ -555,11 +581,13 @@ impl ArtSession {
     /// only advances `seen_seq`; the bound tree keeps the sequence it was
     /// captured with, so a tree can never be bound to newer pixels.
     fn absorb(&mut self, reply: &serde_json::Value) -> Result<(), BackendError> {
-        let seq = reply
-            .get("frame_seq")
-            .and_then(|v| v.as_u64())
-            .or_else(|| self.cached.as_ref().map(|frame| frame.seq))
-            .unwrap_or(0);
+        let raw_seq = reply.get("frame_seq").and_then(|v| v.as_u64());
+        // A relaunched guest restarts its own sequence at 1; the engine's
+        // sequence stays monotonic across the reset (see `seq_offset`).
+        let seq = match raw_seq {
+            Some(raw) => raw.saturating_add(self.seq_offset),
+            None => self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
+        };
         let md5 = reply
             .get("md5")
             .and_then(|v| v.as_str())
@@ -659,6 +687,58 @@ impl ArtSession {
         }
     }
 
+    /// Stop the guest and prove its whole process group is gone. Shared by
+    /// `close` and `reset` (the latter relaunches in a fresh process).
+    fn shutdown(&mut self) -> Result<(), BackendError> {
+        if let Some(stdin) = self.stdin.as_mut() {
+            let _ = writeln!(stdin, "{}", serde_json::json!({"cmd":"close"}));
+            let _ = stdin.flush();
+        }
+        self.stdin = None;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut exited = false;
+        if let Some(child) = self.child.as_mut() {
+            while Instant::now() < deadline {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        self.child = None;
+                        exited = true;
+                        break;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                    Err(_) => break,
+                }
+            }
+        }
+        if !exited {
+            self.kill_group();
+        }
+        // Teardown guarantee: the whole process group is gone, not just the
+        // direct child. A child the guest forked is killed here too; a survivor
+        // that ignores SIGKILL is reported, never silently ignored.
+        self.kill_process_group();
+        let mut report = self.teardown_report();
+        if !report.is_clean() {
+            let grace = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < grace && !report.survivors.is_empty() {
+                std::thread::sleep(Duration::from_millis(50));
+                report = self.teardown_report();
+            }
+        }
+        if !report.survivors.is_empty() {
+            return Err(BackendError::Error {
+                code: acos_protocol::ErrorCode::Internal,
+                detail: format!(
+                    "PROCESS_TREE_DIRTY: {} process(es) still alive in session group {:?}: {:?}",
+                    report.survivors.len(),
+                    report.process_group,
+                    report.survivors
+                ),
+            });
+        }
+        Ok(())
+    }
+
     /// Processes still alive in the session's process group.
     ///
     /// Scans `/proc/<pid>/stat` for the group id (field 5). Zombies count as
@@ -699,13 +779,16 @@ impl SessionBackend for ArtSession {
             // key stroke per character (ASCII / US layout).
             type_text: true,
             key: true,
-            // The real launch session has no `reset` command; the scenario taps
-            // the app's own Reset control instead.
-            reset: false,
+            // Host-side: stop the guest, relaunch the same APK in a fresh
+            // process with an empty app-data directory (a real reset).
+            reset: true,
             close: true,
-            logs: false,
+            // The guest logd sink, snapshotted live (provenance guest-asserted).
+            logs: true,
             environment: false,
-            crash_reports: false,
+            // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
+            // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
+            crash_reports: true,
         }
     }
 
@@ -772,6 +855,37 @@ impl SessionBackend for ArtSession {
         self.last_input.clone()
     }
 
+    fn last_crash(&self) -> Option<CrashRecord> {
+        self.crash.clone()
+    }
+
+    /// Read the guest's own logd snapshot and map it to protocol log records.
+    ///
+    /// The logd sink drops oldest first when its cap is reached, so an entry's
+    /// **absolute ordinal** is `total - kept + index`; that ordinal + 1 is the
+    /// record `seq`, which stays stable across snapshots (the executor asks for
+    /// "everything after `since`"). The timestamp is the host time at which the
+    /// snapshot was read: the sink carries no guest timestamp, so this is an
+    /// ordering fact, not an emission instant. Entries are guest-asserted
+    /// (S8 §7): a trusted fixture may use them; an untrusted run must refuse
+    /// them (`trust::TrustGuard`).
+    fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        let reply = self.command(serde_json::json!({"cmd":"logs"}))?;
+        let total = reply.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+        self.logs_total_raw = self.logs_total_raw.max(total);
+        if self.crash.is_none() {
+            self.crash = fatal_log(&reply);
+        }
+        // `since` and the returned `seq` are both absolute (guest ordinal +
+        // `log_offset`), so a cursor from before a reset stays meaningful.
+        Ok(log_records_from_reply(
+            &reply,
+            since,
+            now_unix_ms(),
+            self.log_offset,
+        ))
+    }
+
     fn last_frame_seq(&self) -> u64 {
         self.seen_seq
     }
@@ -781,7 +895,7 @@ impl SessionBackend for ArtSession {
         // its own sequence. Freshness is proven by the sequence advancing.
         let previous = self.seen_seq;
         let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
-        let seq = reply
+        let raw_seq = reply
             .get("frame_seq")
             .and_then(|v| v.as_u64())
             .ok_or_else(|| {
@@ -789,6 +903,7 @@ impl SessionBackend for ArtSession {
                     "the ART screenshot reply carried no frame_seq; it cannot be tied to a frame",
                 )
             })?;
+        let seq = raw_seq.saturating_add(self.seq_offset);
         let md5 = reply
             .get("md5")
             .and_then(|v| v.as_str())
@@ -865,8 +980,33 @@ impl SessionBackend for ArtSession {
     }
 
     fn reset(&mut self) -> Result<(), BackendError> {
-        let reply = self.command(serde_json::json!({"cmd":"reset"}))?;
-        self.absorb(&reply)
+        // Honest reset on this channel: stop the guest and launch the same APK
+        // in a fresh `acos-art` process. `acos-art` gives every launch its own
+        // run directory (dalvik-cache, tmp, and an **empty** app-data), so this
+        // is a fresh process, a fresh Activity and cleared app state — not the
+        // app's own Reset control. The engine keeps its own frame sequence, so
+        // the frame after the reset is provably newer than the one before it.
+        let offset = self.seen_seq;
+        // Flush once so the absolute log ordinal of the old guest is exact
+        // before its sink dies with the process.
+        let _ = self.logs_since(0);
+        let log_offset = self.log_offset.saturating_add(self.logs_total_raw);
+        let apk = self.apk.clone();
+        let artifacts = self.artifacts.clone();
+        // Same teardown rule as `close`: the old guest's whole process group
+        // must be gone before the replacement starts (one ART guest at a time).
+        self.closed = true;
+        self.shutdown()?;
+        let mut fresh = ArtSession::start(&apk, &artifacts)?;
+        fresh.seq_offset = offset;
+        fresh.log_offset = log_offset;
+        // Leave a live frame bound: the step after `reset` may be a pure
+        // assertion (`assert_text`), which reads the last completed frame.
+        let reply = fresh.command(serde_json::json!({"cmd":"tree"}))?;
+        fresh.absorb(&reply)?;
+        fresh.last_input = None;
+        *self = fresh;
+        Ok(())
     }
 
     fn close(&mut self) -> Result<(), BackendError> {
@@ -874,53 +1014,7 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
-        if let Some(stdin) = self.stdin.as_mut() {
-            let _ = writeln!(stdin, "{}", serde_json::json!({"cmd":"close"}));
-            let _ = stdin.flush();
-        }
-        self.stdin = None;
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let mut exited = false;
-        if let Some(child) = self.child.as_mut() {
-            while Instant::now() < deadline {
-                match child.try_wait() {
-                    Ok(Some(_)) => {
-                        self.child = None;
-                        exited = true;
-                        break;
-                    }
-                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                    Err(_) => break,
-                }
-            }
-        }
-        if !exited {
-            self.kill_group();
-        }
-        // Teardown guarantee: the whole process group is gone, not just the
-        // direct child. A child the guest forked is killed here too; a survivor
-        // that ignores SIGKILL is reported, never silently ignored.
-        self.kill_process_group();
-        let mut report = self.teardown_report();
-        if !report.is_clean() {
-            let grace = Instant::now() + Duration::from_secs(2);
-            while Instant::now() < grace && !report.survivors.is_empty() {
-                std::thread::sleep(Duration::from_millis(50));
-                report = self.teardown_report();
-            }
-        }
-        if !report.survivors.is_empty() {
-            return Err(BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
-                detail: format!(
-                    "PROCESS_TREE_DIRTY: {} process(es) still alive in session group {:?}: {:?}",
-                    report.survivors.len(),
-                    report.process_group,
-                    report.survivors
-                ),
-            });
-        }
-        Ok(())
+        self.shutdown()
     }
 
     fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
@@ -928,7 +1022,6 @@ impl SessionBackend for ArtSession {
         Ok(self.teardown_report())
     }
 }
-
 impl Drop for ArtSession {
     fn drop(&mut self) {
         let _ = self.close();
@@ -944,6 +1037,97 @@ impl std::fmt::Debug for ArtSession {
             .field("closed", &self.closed)
             .finish()
     }
+}
+
+/// The first fatal entry in a logd snapshot, as a crash record.
+///
+/// The signature matches `acos-art`'s own `LogEntry::is_fatal`: ART's
+/// `LOG(FATAL)`, `CHECK`/`CHECK_EQ` failures (tags `art_aborter`,
+/// `abort_message`), and the JVM's uncaught-exception line. An ordinary `E`
+/// entry (RippleDrawable, StrictMode, ...) is *not* a crash and must not be
+/// reported as one.
+fn fatal_log(reply: &serde_json::Value) -> Option<CrashRecord> {
+    let entries = reply.get("entries").and_then(|v| v.as_array())?;
+    for entry in entries {
+        let prio = entry.get("prio").and_then(|v| v.as_i64()).unwrap_or(4);
+        let tag = entry.get("tag").and_then(|v| v.as_str()).unwrap_or("");
+        let message = entry.get("message").and_then(|v| v.as_str()).unwrap_or("");
+        let fatal = prio >= 7
+            || tag == "art_aborter"
+            || tag == "abort_message"
+            || message.contains("Check failed")
+            || message.contains("CHECK failed")
+            || (tag == "AndroidRuntime"
+                && (message.starts_with("FATAL EXCEPTION")
+                    || message.contains("FATAL EXCEPTION")));
+        if fatal {
+            return Some(CrashRecord {
+                exception: if tag.is_empty() {
+                    "FATAL".to_string()
+                } else {
+                    tag.to_string()
+                },
+                message: message.to_string(),
+                stack: Vec::new(),
+                fatal: true,
+            });
+        }
+    }
+    None
+}
+
+/// Map a `{"cmd":"logs"}` reply to protocol records.
+///
+/// The logd sink drops oldest first at its cap, so the absolute ordinal of
+/// `entries[i]` is `total - kept + i`; ordinal + 1 is the record `seq`, stable
+/// across snapshots. `timestamp_ms` is the host read time (the sink carries no
+/// guest timestamp): it orders records, it is not an emission instant.
+fn log_records_from_reply(
+    reply: &serde_json::Value,
+    since: u64,
+    timestamp_ms: u64,
+    seq_offset: u64,
+) -> Vec<LogRecord> {
+    let total = reply.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+    let entries = reply
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let first = total.saturating_sub(entries.len() as u64);
+    let mut records = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let seq = first
+            .saturating_add(index as u64)
+            .saturating_add(1)
+            .saturating_add(seq_offset);
+        if seq <= since {
+            continue;
+        }
+        let level = match entry.get("prio").and_then(|v| v.as_i64()).unwrap_or(4) {
+            2 => LogLevel::Verbose,
+            3 => LogLevel::Debug,
+            5 => LogLevel::Warn,
+            6 | 7 => LogLevel::Error,
+            _ => LogLevel::Info,
+        };
+        records.push(LogRecord {
+            seq,
+            timestamp_ms,
+            level,
+            tag: entry
+                .get("tag")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            message: entry
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        });
+    }
+    records
 }
 
 fn resolve_binary() -> Result<PathBuf, BackendError> {
@@ -1033,16 +1217,48 @@ mod tests {
             tap_text: true,
             type_text: true,
             key: true,
-            reset: false,
+            reset: true,
             close: true,
-            logs: false,
+            logs: true,
             environment: false,
-            crash_reports: false,
+            // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
+            // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
+            crash_reports: true,
         };
-        assert_eq!(
-            caps.missing(),
-            vec!["reset", "logs", "environment", "crash_reports"]
-        );
+        assert_eq!(caps.missing(), vec!["environment"]);
+        // The executor sees the same two gaps through its capability names.
+        let protocol = caps.to_protocol();
+        assert!(protocol.logs && protocol.reset);
+        assert!(!protocol.environment && protocol.crash_reports);
+    }
+
+    #[test]
+    fn log_snapshot_maps_absolute_ordinals_not_array_indices() {
+        // The sink drops oldest first, so `total` (5) is larger than `kept` (2).
+        let reply = serde_json::json!({
+            "ok": true, "cmd": "logs", "total": 5, "kept": 2, "dropped": 3,
+            "entries": [
+                {"prio": 4, "tag": "AcosForm", "message": "onCreate"},
+                {"prio": 5, "tag": "AcosForm", "message": "onResume"}
+            ]
+        });
+        let all = log_records_from_reply(&reply, 0, 7, 0);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].seq, 4, "first retained entry keeps its ordinal");
+        assert_eq!(all[1].seq, 5);
+        assert_eq!(all[0].level, LogLevel::Info);
+        assert_eq!(all[1].level, LogLevel::Warn);
+        assert_eq!(all[0].tag, "AcosForm");
+        assert_eq!(all[0].timestamp_ms, 7);
+        // A cursor inside the retained window returns only the newer records.
+        let newer = log_records_from_reply(&reply, 4, 7, 0);
+        assert_eq!(newer.len(), 1);
+        assert_eq!(newer[0].message, "onResume");
+        // Nothing new is an empty list, never a re-delivery.
+        assert!(log_records_from_reply(&reply, 5, 7, 0).is_empty());
+        // An empty snapshot is valid (no logs yet).
+        let empty = serde_json::json!({"total": 0, "entries": []});
+        assert!(log_records_from_reply(&empty, 0, 7, 0).is_empty());
     }
 
     #[test]
@@ -1069,6 +1285,143 @@ mod tests {
             "nodes": [{"class": "android.view.View", "bounds": "[0,0][10,10]"}]
         });
         assert_eq!(probe_input_offset(&legacy), None);
+    }
+
+    /// A fake `acos-art` that speaks just enough of the interactive protocol to
+    /// prove `reset` really starts a new guest. Each process restarts its own
+    /// frame sequence at 1 and reports one log line, so a reset that reused the
+    /// old guest would be visible as a non-advancing engine sequence.
+    fn fake_art_binary(dir: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let png = dir.join("tiny.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let script = dir.join("fake-acos-art.sh");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
+        body.push_str("seq=0\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str("      seq=$((seq+1))\n");
+        body.push_str(&format!(
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            png.display()
+        ));
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"logs\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":1,\"kept\":1,\"dropped\":0,\"entries\":[{\"prio\":4,\"tag\":\"AcosTest\",\"message\":\"onCreate\"}]}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str("      echo '{\"ok\":false,\"code\":\"UNSUPPORTED_ANDROID_API\",\"error\":\"unsupported\"}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-art-reset-{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn reset_relaunches_a_fresh_guest_and_keeps_frames_and_logs_monotonic() {
+        let dir = scratch_dir("reset");
+        let script = fake_art_binary(&dir);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        // `resolve_binary` is the only reader of this variable in this crate, and
+        // only this test starts a session.
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        assert!(session.capabilities().reset);
+        assert!(session.capabilities().logs);
+
+        // Bind a first frame (seq 1 in the first guest) and read its log.
+        let first = session.frame().expect("first frame");
+        let first_seq = first.frame_seq();
+        assert_eq!(first_seq, 1);
+        let logs = session.logs_since(0).expect("first guest log");
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].seq, 1);
+        assert_eq!(logs[0].tag, "AcosTest");
+
+        // Reset: a new guest process, whose own frame/log sequences restart.
+        session.reset().expect("reset relaunches");
+        let after = session
+            .last_frame()
+            .expect("reset leaves a bound live frame");
+        assert!(
+            after.frame_seq() > first_seq,
+            "engine frame sequence must advance across reset: {} -> {}",
+            first_seq,
+            after.frame_seq()
+        );
+        assert!(after.frame.is_fresh(), "{}", after.frame.label());
+
+        // A log written by the new guest gets an ordinal after the old guest's,
+        // so a cursor from before the reset cannot swallow it.
+        let new_logs = session.logs_since(1).expect("new guest log");
+        assert_eq!(
+            new_logs.len(),
+            1,
+            "the post-reset line must not collide with the pre-reset seq"
+        );
+        assert_eq!(new_logs[0].seq, 2);
+        assert!(session.logs_since(2).unwrap().is_empty());
+
+        session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fatal_log_entries_are_crashes_and_ordinary_errors_are_not() {
+        // Negative case first: a routine E line must never look like a crash.
+        let benign = serde_json::json!({"entries": [
+            {"prio": 6, "tag": "RippleDrawable", "message": "STYLE_PATTERNED not supported"},
+            {"prio": 6, "tag": "OpenGLRenderer", "message": "Failed to initialize"}
+        ]});
+        assert!(fatal_log(&benign).is_none());
+        assert!(fatal_log(&serde_json::json!({"entries": []})).is_none());
+
+        // ART CHECK/abort (prio 7 and the abort tags).
+        let art = serde_json::json!({"entries": [
+            {"prio": 3, "tag": "art", "message": "start"},
+            {"prio": 7, "tag": "art_aborter", "message": "Check failed: x"}
+        ]});
+        let crash = fatal_log(&art).expect("a prio-7 entry is fatal");
+        assert_eq!(crash.exception, "art_aborter");
+        assert!(crash.fatal);
+        let check = serde_json::json!({"entries": [
+            {"prio": 4, "tag": "art", "message": "Check failed: ART"}
+        ]});
+        assert!(fatal_log(&check).is_some());
+
+        // The JVM's uncaught-exception line.
+        let jvm = serde_json::json!({"entries": [
+            {"prio": 6, "tag": "AndroidRuntime",
+             "message": "FATAL EXCEPTION: main\njava.lang.IllegalStateException"}
+        ]});
+        let crash = fatal_log(&jvm).expect("FATAL EXCEPTION is a crash");
+        assert_eq!(crash.exception, "AndroidRuntime");
     }
 
     #[test]

@@ -131,7 +131,15 @@ impl Backend for TrustGuard {
     }
 
     fn capabilities(&self) -> Capabilities {
-        self.inner.capabilities()
+        let mut caps = self.inner.capabilities();
+        if self.trust == Trust::Untrusted {
+            // Crash reports and logs are guest-asserted: on an untrusted run
+            // they can never justify a pass, so the step is unsupported rather
+            // than silently trusted.
+            caps.logs = false;
+            caps.crash_reports = false;
+        }
+        caps
     }
 
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
@@ -157,6 +165,19 @@ impl Backend for TrustGuard {
     }
 
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        if self.trust == Trust::Untrusted {
+            // Logs are guest-asserted (the APK decides what it writes). On an
+            // untrusted run they can never justify a pass; refuse the channel
+            // so `assert_log` fails closed with the precise code instead of
+            // matching a forged line.
+            return Err(BackendError::Failed {
+                code: ErrorCode::InsufficientHostEvidence,
+                detail: "UNTRUSTED_LOG_ASSERTION: this run is untrusted, so the guest log is \
+                         guest-asserted and cannot justify a pass. Use a host-observed assertion \
+                         (assert_region / assert_screenshot / capture)."
+                    .to_string(),
+            });
+        }
         self.inner.logs_since(since)
     }
 
@@ -213,6 +234,30 @@ mod tests {
             "version: 1\nname: x\napp: a.apk\nsteps:\n  - tap:\n      x: 1\n      y: 2\n      note: \"trust: untrusted\"\n",
         );
         assert_eq!(resolve(false, &path).unwrap(), Trust::Trusted);
+    }
+
+    #[test]
+    fn untrusted_logs_fail_closed_with_insufficient_host_evidence() {
+        use crate::engine::fake::FakeSession;
+        use crate::engine::EngineBackend;
+
+        let inner = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut untrusted = TrustGuard::new(Box::new(inner), Trust::Untrusted);
+        let error = untrusted
+            .logs_since(0)
+            .expect_err("an untrusted run must refuse guest-asserted logs");
+        assert_eq!(error.code(), ErrorCode::InsufficientHostEvidence);
+        assert!(
+            error.to_string().contains("UNTRUSTED_LOG_ASSERTION"),
+            "{error}"
+        );
+
+        let inner = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut trusted = TrustGuard::new(Box::new(inner), Trust::Trusted);
+        let error = trusted
+            .logs_since(0)
+            .expect_err("the fake has no log command; the point is the code forwarded");
+        assert_eq!(error.code(), ErrorCode::UnsupportedBackend);
     }
 
     #[test]

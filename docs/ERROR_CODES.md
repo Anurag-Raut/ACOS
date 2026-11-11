@@ -85,7 +85,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ASSERTION_FAILED` | An assertion ran and did not hold. | acos-verify | 1 |
 | `ELEMENT_NOT_FOUND` | A selector matched no node. | acos-runtime / acos-verify | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
-| `INSUFFICIENT_HOST_EVIDENCE` | A tree-only assertion ran on an untrusted APK run, where the tree is guest-asserted; fail closed and require host-observed evidence. | acos-cli / acos-verify | 1 |
+| `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. | acos-cli / acos-verify | 1 |
 | `UNSUPPORTED_ASSERTION` | The requested assertion kind has no implementation in this build (for example `assert_region.text_ocr` with no OCR engine). | acos-verify | 1 |
 | `SESSION_NOT_FOUND` | The requested session does not exist (or was already destroyed). | acos-runtime / MCP | 1 |
 | `SESSION_BUSY` | The session is busy with another request. | acos-runtime / MCP | 1 |
@@ -126,6 +126,26 @@ match the string. `acos-art` exits 2 for all of them.
 | `LANDLOCK_UNAVAILABLE` | The guest Landlock ruleset could not be assembled, applied, or proven. | acos-art | 2 |
 | `UNSUPPORTED_SYSCALL` | The guest guard observed a denied syscall during a run (structured run result). | acos-art | 1 |
 | `ARM64_UNAVAILABLE` | The arm64 qemu transport (qemu, bionic sysroot, or guard) could not be assembled. | acos-arm64 | 1 |
+
+### Engine capability notes (W22)
+
+* `UNSUPPORTED_BACKEND` for the ART engine now names only the capabilities that
+  are genuinely absent: `environment` (`set_*` steps) and `input.rotate`. Logs,
+  reset, key/back, `type_text` (including `clear: true`) and crash reports are
+  implemented; a missing one is still a named capability, never a fallback.
+* `assert_log` on the ART engine reads the guest's own logd sink
+  (`logd`/logcat). Its provenance is **guest-asserted**, recorded as
+  `steps[].provenance.logs = "guest-asserted"`; an untrusted run refuses the
+  channel with `INSUFFICIENT_HOST_EVIDENCE`. A record's `seq` is the entry's
+  absolute logd ordinal (+ a session offset that survives `reset`).
+* `assert_log.timeout_ms` waits for the line in real time (poll, backing off to
+  100 ms) and is the `wait_log` semantic; on deadline the assertion fails, never
+  passes.
+* `reset` on the ART engine is host-observed: the engine stops the guest and
+  relaunches the same APK in a fresh `acos-art` process with an empty app-data
+  directory (fresh process, fresh Activity, cleared state). It never taps the
+  app's own Reset control, and the engine's frame/log sequences stay monotonic
+  across the relaunch so post-reset evidence is provably newer.
 
 Adding a new code: add the `ErrorCode` variant + `as_str` + hint +
 `ALL_ERROR_CODES` (and `default_status` if it is not `error`), regenerate the

@@ -1,0 +1,36 @@
+{
+  "assertions": [
+    {
+      "kind": "input_delivery",
+      "matched_node_ids": [],
+      "message": "host-observed input delivery (2 guest ack(s)); no visual change; no state change claimed",
+      "passed": true
+    }
+  ],
+  "duration_ms": 15987,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/5.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/5.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/09-tap.json"
+    }
+  ],
+  "frame_seq": 5,
+  "index": 9,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

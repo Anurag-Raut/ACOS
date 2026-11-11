@@ -1,0 +1,357 @@
+{
+  "request_id": "req_308dcd_18e7227d12562202",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_form-validation",
+  "isolation": "process",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-shared-artifacts/w22-key-delete",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "path": "fixtures/build/apps/form-validation.apk",
+        "sha256": "5528815228b63e3e29a5fda7aa45532024d0da056637daa2a7d98264b64efa10"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-shared-artifacts/w22-key-delete",
+        "engine_report": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-shared-artifacts/w22-key-delete/engine.json",
+        "verdict": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-shared-artifacts/w22-key-delete/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T23:48:23.592Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/form-validation.apk",
+        "apk_sha256": "5528815228b63e3e29a5fda7aa45532024d0da056637daa2a7d98264b64efa10",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w22-key-delete.yaml",
+        "scenario_sha256": "a38ce6e6048940feb1f73e74cedfbbcad477096230e92f56235397240272cc59"
+      },
+      "request_id": "req_308dcd_18e7227d12562202",
+      "resources": {
+        "events": 103,
+        "frames_captured": 8,
+        "memory_mib": 80,
+        "peak_rss_bytes": 84426752,
+        "sessions": 1,
+        "steps": 9,
+        "wall_ms": 6138
+      },
+      "scenario": {
+        "name": "w22-key-delete",
+        "path": "scenarios/w22-key-delete.yaml",
+        "sha256": "a38ce6e6048940feb1f73e74cedfbbcad477096230e92f56235397240272cc59"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_form-validation",
+      "started_at": "2026-11-11T23:48:17.454Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 529,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "state_change",
+              "matched_node_ids": [],
+              "message": "UI tree and screenshot both changed",
+              "passed": true
+            }
+          ],
+          "duration_ms": 1143,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/3.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/3.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-tap.json"
+            }
+          ],
+          "frame_seq": 3,
+          "index": 2,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "tap"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 607,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/4.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/4.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/03-type.json"
+            }
+          ],
+          "frame_seq": 4,
+          "index": 3,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "type"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 623,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/5.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/5.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/04-key.json"
+            }
+          ],
+          "frame_seq": 5,
+          "index": 4,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "key"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 603,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/6.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/6.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/05-key.json"
+            }
+          ],
+          "frame_seq": 6,
+          "index": 5,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "key"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 610,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/7.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/7.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/06-key.json"
+            }
+          ],
+          "frame_seq": 7,
+          "index": 6,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "key"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "state_change",
+              "matched_node_ids": [],
+              "message": "UI tree and screenshot both changed",
+              "passed": true
+            }
+          ],
+          "duration_ms": 2002,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/9.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/9.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/07-tap.json"
+            }
+          ],
+          "frame_seq": 9,
+          "index": 7,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "tap"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "log",
+              "matched_node_ids": [],
+              "passed": true
+            }
+          ],
+          "duration_ms": 0,
+          "evidence": [
+            {
+              "kind": "log",
+              "path": "logs/logcat.txt"
+            },
+            {
+              "kind": "step",
+              "path": "steps/08-assert_log.json"
+            }
+          ],
+          "index": 8,
+          "provenance": {
+            "logs": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "assert_log"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "/home/Qui/Projects/acos/results/art-runtime/evidence/W22-shared-artifacts/w22-key-delete/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 6138,
+    "peak_rss_bytes": 84426752
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}
