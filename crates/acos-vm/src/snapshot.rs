@@ -64,8 +64,11 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"ACOSSNAP";
 ///
 /// Version 3 adds the native-memory region table (W154-A): a mapped ICU `.dat`
 /// `DirectByteBuffer` captured by a primed template otherwise restores to a
-/// stale synthetic address in a fresh process.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 3;
+/// stale synthetic address in a fresh process. Version 4 records a file-backed
+/// region's *source* (path/offset/hash/size/mtime) instead of its bytes and
+/// re-reads it on restore (W160-A), so the boot cache no longer carries the
+/// 28 MiB ICU mapping.
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 4;
 
 /// Process-native identity recovered from a restored `Vm` (T-43).
 #[derive(Clone, Debug, Default)]
@@ -1452,11 +1455,13 @@ impl Vm {
             crate::natives::icu_regex::stage_regex_state(regex);
         }
 
-        // ---- native-memory regions (W154-A) -----------------------------
+        // ---- native-memory regions (W154-A, source-recorded W160-A) ------
         // Re-establish the mapped regions the restored heap's direct buffers
-        // point at. `restore_regions` is idempotent, so the template's first
+        // point at. `read_native_regions` re-reads a file-backed region from
+        // its recorded source and validates size/mtime/hash, failing closed on
+        // any change. `restore_regions` is idempotent, so the template's first
         // restore (metadata recovery) and the launch restore share one table.
-        let regions = read_native_regions(&mut r)?;
+        let regions = read_native_regions(&mut r, &mut vm.vfs)?;
         crate::natives::native_mem::restore_regions(&regions);
 
         // Re-resolution caches refer to the *old* class/provider layout; drop
@@ -1733,25 +1738,52 @@ fn read_regex_state(r: &mut Reader<'_>) -> VmResult<crate::natives::icu_regex::R
     Ok(crate::natives::icu_regex::RegexState { next, patterns })
 }
 
-/// Serialise the native-memory region table (W154-A).
+/// Serialise the native-memory region table (W154-A; source-recorded W160-A).
 ///
-/// Layout: `u32 count`, then per region `u32 id`, `u8 readonly`, `u32 len`,
-/// `len` raw bytes. Sorted by id at capture so the stream is deterministic.
+/// Layout: `u32 count`, then per region `u32 id`, `u8 flags` (bit0 readonly,
+/// bit1 has source). A file-backed region stores `str path`, `u64 offset`,
+/// `u64 length`, `u64 hash`, `u64 file_size`, `i64 file_mtime` and **no
+/// bytes**; an anonymous region stores `u32 len` + `len` raw bytes. Sorted by
+/// id at capture so the stream is deterministic.
 fn write_native_regions(w: &mut Writer, regions: &[crate::natives::native_mem::RegionEntry]) {
     w.u32(regions.len() as u32);
     for r in regions {
         w.u32(r.id);
-        w.bool(r.readonly);
-        w.u32(r.data.len() as u32);
-        w.raw(&r.data);
+        let mut flags = 0u8;
+        if r.readonly {
+            flags |= 1;
+        }
+        if r.source.is_some() {
+            flags |= 2;
+        }
+        w.u8(flags);
+        match &r.source {
+            Some(s) => {
+                w.str(&s.path);
+                w.u64(s.offset);
+                w.u64(s.length);
+                w.u64(s.hash);
+                w.u64(s.file_size);
+                w.i64(s.file_mtime);
+            }
+            None => {
+                w.u32(r.data.len() as u32);
+                w.raw(&r.data);
+            }
+        }
     }
 }
 
+/// Read the native-region section and resolve every file-backed region by
+/// re-reading its recorded source (W160-A). A missing or changed file fails
+/// closed with [`VmError::SnapshotMismatch`], which the boot-cache caller
+/// treats as a miss and cold-boots.
 fn read_native_regions(
     r: &mut Reader<'_>,
+    vfs: &mut crate::vfs::Vfs,
 ) -> VmResult<Vec<crate::natives::native_mem::RegionEntry>> {
     // A crafted count is bounded by the remaining bytes: each entry needs at
-    // least 9 header bytes, so `count` can never exceed `len / 9` validly. Cap
+    // least 10 header bytes, so `count` can never exceed `len / 10` validly. Cap
     // at a sane ceiling and let `need` reject a short stream.
     const MAX_REGIONS: usize = 1 << 20;
     let n = r.u32()? as usize;
@@ -1763,16 +1795,61 @@ fn read_native_regions(
     let mut out = Vec::with_capacity(n.min(4096));
     for _ in 0..n {
         let id = r.u32()?;
-        let readonly = r.bool()?;
-        let len = r.u32()? as usize;
-        r.need(len)?;
-        let data = r.remaining()[..len].to_vec();
-        r.pos += len;
-        out.push(crate::natives::native_mem::RegionEntry {
-            id,
-            readonly,
-            data,
-        });
+        let flags = r.u8()?;
+        if flags & !3 != 0 {
+            return Err(VmError::SnapshotFormat(format!(
+                "native region {id} has unknown flags {flags:#x}"
+            )));
+        }
+        let readonly = flags & 1 != 0;
+        if flags & 2 != 0 {
+            let source = crate::natives::native_mem::RegionSource {
+                path: r.str()?,
+                offset: r.u64()?,
+                length: r.u64()?,
+                hash: r.u64()?,
+                file_size: r.u64()?,
+                file_mtime: r.i64()?,
+            };
+            if source.length > crate::natives::native_mem::cap_bytes() as u64 {
+                return Err(VmError::SnapshotFormat(format!(
+                    "native region {id} source length {} exceeds the native-memory cap",
+                    source.length
+                )));
+            }
+            let (data, size, mtime) = vfs
+                .read_mapped_region(&source.path, source.offset, source.length as usize)
+                .map_err(|e| {
+                    VmError::SnapshotMismatch(format!(
+                        "native region {id} source {:?} unreadable: {}",
+                        source.path,
+                        crate::vfs::errno_name(e)
+                    ))
+                })?;
+            if !source.matches(&data, size, mtime) {
+                return Err(VmError::SnapshotMismatch(format!(
+                    "native region {id} source {:?} changed since the snapshot",
+                    source.path
+                )));
+            }
+            out.push(crate::natives::native_mem::RegionEntry {
+                id,
+                readonly,
+                data,
+                source: Some(source),
+            });
+        } else {
+            let len = r.u32()? as usize;
+            r.need(len)?;
+            let data = r.remaining()[..len].to_vec();
+            r.pos += len;
+            out.push(crate::natives::native_mem::RegionEntry {
+                id,
+                readonly,
+                data,
+                source: None,
+            });
+        }
     }
     Ok(out)
 }

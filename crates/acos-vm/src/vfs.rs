@@ -55,6 +55,8 @@ pub const ENOENT: i32 = 2;
 pub const EIO: i32 = 5;
 /// `EBADF`: bad file descriptor.
 pub const EBADF: i32 = 9;
+/// `ENOMEM`: out of memory (here, a host allocation for a mapped region failed).
+pub const ENOMEM: i32 = 12;
 /// `EACCES`: permission denied.
 pub const EACCES: i32 = 13;
 /// `EFAULT`: bad address.
@@ -746,6 +748,49 @@ impl Vfs {
                 *pos = new as u64;
                 Ok(new)
             }
+        }
+    }
+
+    /// If `fd` is backed by a real host file, the guest path it was opened as.
+    ///
+    /// Synthetic descriptors (`/proc`, denied-write devices) return `None`:
+    /// their bytes are generated, not read from a stable file, so a snapshot
+    /// must embed them instead of recording a re-read source (W160-A).
+    #[must_use]
+    pub fn fd_file_guest_path(&self, fd: i32) -> Option<&str> {
+        match self.fd_table.get(&fd) {
+            Some(of) if matches!(of.source, Source::File(_)) => Some(of.guest_path.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Re-read a `FileChannelImpl.map0` byte range exactly as `map0` produced
+    /// it: open `guest` read-only, `pread` from `offset`, zero-fill past EOF,
+    /// close. Returns the bytes and the file's current `(size, mtime)` so the
+    /// caller can validate the mapping source (W160-A).
+    pub fn read_mapped_region(
+        &mut self,
+        guest: &str,
+        offset: u64,
+        len: usize,
+    ) -> Result<(Vec<u8>, u64, i64), i32> {
+        let fd = self.open(guest, O_RDONLY, 0)?;
+        let result = (|| {
+            let st = self.fstat(fd)?;
+            let mut buf: Vec<u8> = Vec::new();
+            if buf.try_reserve_exact(len).is_err() {
+                return Err(ENOMEM);
+            }
+            buf.resize(len, 0);
+            if len > 0 {
+                self.pread(fd, &mut buf, offset)?;
+            }
+            Ok((buf, st.size, st.mtime))
+        })();
+        let closed = self.close(fd);
+        match (result, closed) {
+            (Ok(v), Ok(())) => Ok(v),
+            (Err(e), _) | (Ok(_), Err(e)) => Err(e),
         }
     }
 
@@ -1921,6 +1966,39 @@ mod tests {
             .vfs
             .open("/system/apex/com.android.i18n/etc/icu/icudt72l.dat", O_RDONLY, 0)
             .expect("open icudt72l.dat under /system/apex");
+        sb.vfs.close(fd).unwrap();
+    }
+
+    /// W160-A: a real-file descriptor exposes a re-read source for a mapped
+    /// region, with `map0`'s byte/zero-fill semantics, and a missing file is a
+    /// structured error (the restore caller turns that into a cache miss).
+    #[test]
+    fn read_mapped_region_round_trips_the_map0_source() {
+        let mut sb = Sandbox::new("map-source", 8, 1 << 20);
+        let guest = "/system/fonts/Roboto-Regular.ttf";
+        let fd = sb.vfs.open(guest, O_RDONLY, 0).unwrap();
+        assert_eq!(sb.vfs.fd_file_guest_path(fd), Some(guest));
+
+        // 3-byte file mapped as 8 bytes: the tail is zero-filled.
+        let (data, size, mtime) = sb.vfs.read_mapped_region(guest, 0, 8).unwrap();
+        assert_eq!(&data, b"TTF\0\0\0\0\0");
+        assert_eq!(size, 3);
+        let (data2, size2, mtime2) = sb.vfs.read_mapped_region(guest, 0, 8).unwrap();
+        assert_eq!((data2, size2, mtime2), (data, size, mtime));
+
+        // An unreadable/missing source fails closed, never a zero region.
+        assert!(sb
+            .vfs
+            .read_mapped_region("/system/fonts/DoesNotExist.ttf", 0, 4)
+            .is_err());
+
+        // A synthetic descriptor is not a stable file source.
+        let mut sb2 = Sandbox::new("map-synth", 8, 1 << 20);
+        let synth = sb2.vfs.open("/proc/self/stat", O_RDONLY, 0);
+        if let Ok(sfd) = synth {
+            assert_eq!(sb2.vfs.fd_file_guest_path(sfd), None);
+            sb2.vfs.close(sfd).unwrap();
+        }
         sb.vfs.close(fd).unwrap();
     }
 

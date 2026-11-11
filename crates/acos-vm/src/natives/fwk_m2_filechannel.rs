@@ -134,7 +134,34 @@ fn map0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     }
     let readonly = prot == 0; // MAP_RO
-    let addr = native_mem::alloc_with(buf, readonly).map_err(|e| e.throw(vm))?;
+    // Record where the bytes came from so a snapshot can re-read the file on
+    // restore instead of embedding the mapping (W160-A). Only a *read-only*
+    // map over a real host file gives a safe source: a writable map is a
+    // private copy whose in-place mutations are not in the file, so it must
+    // embed. Synthetic descriptors embed their bytes too.
+    let source = if readonly {
+        vm.vfs
+            .fd_file_guest_path(fd)
+            .map(str::to_string)
+            .and_then(|path| {
+                vm.vfs.fstat(fd).ok().map(|st| {
+                    native_mem::RegionSource::capture(
+                        path,
+                        position as u64,
+                        &buf,
+                        st.size,
+                        st.mtime,
+                    )
+                })
+            })
+    } else {
+        None
+    };
+    let addr = match source {
+        Some(src) => native_mem::alloc_mapped(buf, readonly, src),
+        None => native_mem::alloc_with(buf, readonly),
+    }
+    .map_err(|e| e.throw(vm))?;
     vm.ret_i64(ctx, addr);
     Ok(())
 }

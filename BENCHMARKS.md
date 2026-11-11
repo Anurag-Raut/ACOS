@@ -1,7 +1,8 @@
 # ACOS — Benchmarks
 
-**Status:** methodology defined; **ACOS measurements exist** as of commit
-`2c682c7` (2026-11-11) in **§9**, the single authoritative V1 table. §8.x is the
+**Status:** methodology defined; **ACOS measurements exist** as of the W160-A
+run (2026-11-11, `20663b3` + W160-A patch) in **§9**, the single authoritative
+V1 table. §8.x is the
 wave-by-wave history that led there. The legacy baseline below is copied from
 the frozen ACVM repo and is a *reference*, not an ACOS result; nothing outside
 §9 may be used as an ACOS speed claim.
@@ -1113,26 +1114,32 @@ template hit, corrupt-entry repair); `cargo clippy -p acos-vm -p acos-runtime
 
 ---
 
-## 9. V1 measured benchmark (2026-11-11, commit `2c682c7`)
+## 9. V1 measured benchmark (2026-11-11, W160-A)
 
 This is the authoritative ACOS measurement table. Every number below was
-produced by `tools/bench-v1.sh --rounds 3` with a release build of **committed
-`2c682c7`** (W146-A) at `CARGO_TARGET_DIR=.cache/target-w148a`, under
-`tools/guarded.sh`; raw per-round samples are in
-`results/bench/v1-2026-11-11-051824.json`. The script's `commit` field is the
-built commit; `commit_at_run_head` records that `main` advanced to `f1fa8c8`
-(W142-A, another agent) while the run was in flight. Rows without a measurement
-are `NOT_MEASURED` with the reason; no estimate is present.
+produced by `tools/bench-v1.sh --rounds 3` with a release build at
+`CARGO_TARGET_DIR=.cache/target-w160a`, under `tools/guarded.sh`; raw per-round
+samples are in `results/bench/v1-2026-11-11-061354.json`. The binary was built
+from **committed `20663b3` (W152-A) plus the uncommitted W160-A working-tree
+patch** (source-recorded native regions), because W160-A is the change under
+test and this wave does not commit. The script's `commit` field is `b467193`
+(W158-A, HEAD when the run started); `main` advanced to `65856f2` (W159-A)
+while the run was in flight. Rows without a measurement are `NOT_MEASURED`
+with the reason; no estimate is present. **M3 now scores the default warm launch
+path** (`launch_default`, boot cache on); W148-A had to fall back to
+`ACOS_NO_BOOT_CACHE` because the restore path was broken, which W154-A fixed
+and W160-A keeps correct.
 
 **Method record**
 
 ```yaml
-date: 2026-11-11T05:18+05:30
-built_commit: 2c682c76424733aab4bb88bbe592b9b4f559e7a5
-commit_at_run_head: f1fa8c82bd49925180ffddcfaa40909d778eb223 (advanced mid-run)
+date: 2026-11-11T06:13+05:30
+built_from: 20663b3 (W152-A) + W160-A working-tree patch (uncommitted)
+commit_field: b46719379e92a7f60917915997be2f2e6ad6711f (W158-A, run start)
+commit_at_run_head: 65856f2 (W159-A, advanced mid-run)
 host: {kernel: 7.2.11-arch1-1, nproc: 32, mem_total: 61908 MiB,
-       mem_available_at_start: 38636 MiB, loadavg1: 4.07, loadavg5: 4.37,
-       uptime: other agents building/running concurrently}
+       mem_available_at_start: 35830 MiB, loadavg1: 1.99, loadavg5: 2.25,
+       uptime: other agents building/running concurrently (W150-A/W156-A/W159-A)}
 profile: release
 rounds: 3 (self-contained/new-capability rows: 5)
 interleaving: every metric timed in one host window; Bench* vs `java -Xint`
@@ -1142,6 +1149,8 @@ memory_type: anon+shmem (RssAnon+RssShmem) unless the row says PSS;
              never summed with PSS or a cgroup value
 report: min and median (p50); spread = (max-min)/median; p95 where n>=5
 noise: rows with spread > 15 % are flagged `noisy` (host load, not code)
+cache: ACOS_CACHE_DIR=results/tmp/w160a-bench-cache (private, fixed),
+       ACOS_PROFILE_OUT fixed so the snapshot property_hash is stable
 ```
 
 ### 9.1 Owner directive D2 — every legacy-tracked metric
@@ -1154,24 +1163,24 @@ measurement is `NOT_MEASURED` and never a pass. Reproduce with
 
 | # | Metric | ACOS (measured) | Legacy ACVM (§3) | Ratio | Verdict (D2) | Plan / caveat |
 |---|---|---|---|---|---|---|
-| M1 | Fixed idle core memory (anon+shmem, booted framework) | **133.85 MiB** (Vm-only 21.71; PSS 142.14) | 206.0 MiB (W1); 303.9 MiB (v9) | **0.650** | **PASS** | 33.9 MiB above the 100–150 MiB research target; not a D2 failure |
-| M2 | Incremental memory per session at N=5 (anon+shmem) | **39.45 MiB/session** (N=1 133.84, N=2 74.89, N=10 27.63; marginal ≈15.8) | 78.7 MiB (v9); 33.2 MiB (W2 opt-in) | **0.501** | **PASS** (vs v9; still loses to W2 opt-in) | Close the W2 gap with the zygote-like template (`results/bench/MEMORY_PROFILE.md` §5) |
-| M3 | Cold start → first correct frame | **0.903 s p50** framework-bound `acos launch counter.apk` → `first_frame`, boot cache **off** (5/5). Default (cache on): **1/5**, fails at `activity_on_create` | 3.620 s (v12) | **0.250** | **PASS** (cold path) | ⚠ Boot-image **restore** path is broken (warm launch fails 9–10/10 runs in the ICU `DatPackageReader`); fix it before quoting. Launched frame is **not** ART-scored. |
-| M4 | Worker create → correct frame | 1.24 ms SessionPool restore (N=5) — no frame | 1.251–1.343 s p50 | — | **FAIL** | Add a worker-create path that owns a frame; pool restore is a quiescent VM |
-| M5 | Fresh screenshot | daemon `observe --screenshot` `unsupported`; same-process `observe --apk --screenshot` 971 ms **incl. launch**; renderer-only warm encode 7.90 ms | 0.066–0.067 s p50 | — | **NOT_MEASURED** | Daemon screenshot routing not wired; the 971 ms value includes a full launch, so it is not comparable |
-| M6 | Reset-to-ready | 2.22 ms SessionPool reset-to-clean (N=5) — no app, no frame | 110.3 ms cmd / 748.1 ms → frame p50 | — | **FAIL** | Implement app-scoped reset → first frame; pool reset drops the VM only |
-| M7 | UI tree with text | **49.9 ms p50** live View tree from a kept daemon session (min 25.8, p95 50.3) | one-shot 538–768 ms; persistent 4.1 ms; structure 14–87 ms | **0.093** | **PASS** (vs one-shot) | Loses to the legacy *persistent* 4.1 ms; tree text is not yet diffed against `ui_initial.xml` |
-| M8 | Action-to-state latency | `acos tap --text Increment` 50.5 ms p50, `accepted: true`, **`state_changed: false`** | not cleanly published | — | **FAIL** | Tap is acked but does not land; W144-A leash fix pending |
-| M9 | Concurrent workloads | N=20 pool 57.5 MiB total (create 3.28 ms, reset 3.74 ms); independent state/input **not** proven | N=5 scorecard, N=10 measured | — | **FAIL** | Per-session Binder transports, then assert independent state/input at N |
+| M1 | Fixed idle core memory (anon+shmem, booted framework) | **133.86 MiB** (Vm-only 21.72; PSS 142.45) | 206.0 MiB (W1); 303.9 MiB (v9) | **0.650** | **PASS** | 33.9 MiB above the 100–150 MiB research target; not a D2 failure |
+| M2 | Incremental memory per session at N=5 (anon+shmem) | **39.47 MiB/session** (N=1 133.86, N=2 74.90, N=10 27.63) | 78.7 MiB (v9); 33.2 MiB (W2 opt-in) | **0.502** | **PASS** (vs v9; still loses to W2 opt-in) | Close the W2 gap with the zygote-like template (`results/bench/MEMORY_PROFILE.md` §5) |
+| M3 | Cold start → first correct frame | **0.8062 s p50** framework-bound `acos launch counter.apk` → `first_frame`, **DEFAULT warm path** (boot cache on, 5/5; min 0.7978, max 0.8303). Cold control (cache off): 1.0731 s p50, 5/5 | 3.620 s (v12) | **0.223** | **PASS** (default path) | ⚠ The launched frame is **not** ART-scored. The old boot-image restore bug is fixed (W154-A/W160-A). |
+| M4 | Worker create → correct frame | 1.19 ms SessionPool restore (N=5) — no frame | 1.251–1.343 s p50 | — | **FAIL** | Add a worker-create path that owns a frame; pool restore is a quiescent VM |
+| M5 | Fresh screenshot | **50.08 ms p50** daemon-session completed-frame retrieval (min 49.23, max 51.75; renderer-only warm encode 8.25 ms) | 0.066–0.067 s p50 | **0.753** | **PASS** | Process stdout is wall-timed and includes PNG encode+write; the value is not a pure retrieval |
+| M6 | Reset-to-ready | 2.26 ms SessionPool reset-to-clean (N=5) — no app, no frame | 110.3 ms cmd / 748.1 ms → frame p50 | — | **FAIL** | Implement app-scoped reset → first frame; pool reset drops the VM only |
+| M7 | UI tree with text | **49.81 ms p50** live View tree from a kept daemon session (min 28.01, p95 50.4) | one-shot 538–768 ms; persistent 4.1 ms; structure 14–87 ms | **0.093** | **PASS** (vs one-shot) | Loses to the legacy *persistent* 4.1 ms; tree text is not yet diffed against `ui_initial.xml` |
+| M8 | Action-to-state latency | `acos tap --text Increment` 49.87 ms p50, `accepted: true`, **`state_changed: false`** | not cleanly published | — | **FAIL** | Tap is acked but does not land; W144-A/W152-A leash work pending |
+| M9 | Concurrent workloads | N=20 pool 57.61 MiB total (create 3.24 ms, reset 4.10 ms); independent state/input **not** proven | N=5 scorecard, N=10 measured | — | **FAIL** | Per-session Binder transports, then assert independent state/input at N |
 | M10 | End-to-end verify wall | not measured (`acos verify` stops at the first UI step) | ~19 s install-bound dev loop | — | **NOT_MEASURED** | Land launch/assert/evidence/reset/cleanup |
 | M11 | Verified tasks / GiB-minute | not measured | not published | — | **NOT_MEASURED** | Run the T01–T12 suite with job-cgroup accounting |
 
-**Result against D2: 4 PASS / 4 FAIL / 3 NOT_MEASURED among the 11 legacy-gated
-metrics** (M1, M2, M3, M7 pass; M4, M6, M8, M9 fail; M5, M10, M11 not measured).
-Counting a non-measurement as a non-pass gives **4 PASS / 7 not-pass**. The
-single loud caveat is M3's broken default boot-image restore: the cold path the
-metric defines is clean (5/5), but a normal `acos launch` with a warm cache
-reaches `first_frame` only 1/5 times.
+**Result against D2: 5 PASS / 4 FAIL / 2 NOT_MEASURED among the 11 legacy-gated
+metrics** (M1, M2, M3, M5, M7 pass; M4, M6, M8, M9 fail; M10, M11 not
+measured). Counting a non-measurement as a non-pass gives **5 PASS / 6
+not-pass**. The M3 caveat from the previous run is closed: the **default**
+`acos launch` with a warm cache now reaches `first_frame` 5/5, at 0.8062 s p50
+(vs the 1.0731 s p50 cold control).
 
 ### 9.2 ACOS-native rows (no legacy baseline)
 
@@ -1180,34 +1189,36 @@ the paths ACOS has. min / p50 over the stated n.
 
 | Metric | min | p50 | p95 | Type / state | Evidence |
 |---|---:|---:|---:|---|---|
-| Cold process → `Vm` ready | 13.48 ms | **13.95 ms** | 14.55 | wall, cold | `process-start` |
-| Framework boot → `attachApplication` (warm boot cache) | 11.93 ms | **12.44 ms** | 12.84 | wall, warm | `boot-attach` |
-| Launch snapshot restore / before / after | — | `not_yet_measurable` this run | — | wall | §9.4 item 1 |
-| SessionPool create/session (N=1/5/20) | — | **1.28 / 1.24 / 3.28 ms** | — | wall, warm restore | `sessions-pool` |
-| SessionPool create rate (N=5 / N=20) | — | 2 885 / 5 752 sessions/s | — | wall | `sessions-pool` |
-| SessionPool reset-to-clean (N=5 / N=20) | — | **2.22 / 3.74 ms** | — | wall, warm | `sessions-pool` |
-| SessionPool total anon+shmem (N=1/5/10/20) | — | 23.8 / 30.9 / 39.8 / **57.5 MiB** | — | anon+shmem | `sessions-pool` |
-| Framework launch → `first_frame` (cache off) | 893.4 ms | **903.1 ms** | 936.9 | wall (process), cold | `fw.launch_nocache` |
-| Framework launch → `first_frame` (cache on) | 515.2 ms | 527.7 ms (1/5 reach it) | — | wall, warm restore | `fw.launch_default` |
-| Peak RSS, cold framework launch → `first_frame` | 616.3 | **617.0 MiB** | 618.6 | RSS (peak) | `fw.launch_nocache` |
-| Peak RSS, default (cache-on) launch | 490.7 | **490.8 MiB** (fails at `activity_on_create`) | 683.1 | RSS (peak) | `fw.launch_default` |
-| Live View tree, kept daemon session | 25.8 ms | **49.9 ms** | 50.3 | wall, warm session | `fw.daemon.tree` |
-| `acos tap --text` (kept daemon session) | 21.8 | **50.5 ms** | 124.1 | wall, warm; `state_changed=false` | `fw.daemon.tap` |
-| `acos observe --apk --tree` (launch + tree) | 884.5 | **892.1 ms** | — | wall, cold | `fw.observe_tree_apk` |
-| `acos observe --apk --screenshot` (launch + frame) | 953.6 | **970.7 ms** | — | wall, cold + PNG write | `fw.observe_screenshot_apk` |
-| Renderer cold first frame (hello-views, standalone) | 2.98 ms | **2.98 ms** | — | wall, cold | `bench_render.helloColdMs` |
-| Renderer warm re-render | 0.78 ms | **0.80 ms** | 0.91 | wall, warm | `bench_render.helloWarmMs` |
-| PNG `FastFiltered` 1080×2400 | 7.06 ms | **7.10 ms** | 7.21 | wall, warm | `bench_render.encoding` |
-| `acos observe --tree` (no session, not_ready path) | 1.49 ms | **1.53 ms** | 3.95 | wall, no tree `noisy` | `observe_tree_ms` |
-| `acos frame-diff` 1080×2400 | 167.4 ms | **171.2 ms** | 176.6 | wall | `frame_diff_ms` |
-| `acos inspect` hello-views APK | 0.99 ms | **1.43 ms** | 2.80 | wall, static `noisy` | `apk_inspect_ms` |
-| MCP `tools/call acos_inspect` / bare CLI | — | **3 ms / 2 ms** p50 | 4 / 2 | wall, warm server | `bench-overhead.sh` |
-| Daemon ping, reused connection | 0.0063 ms | **0.0069 ms** | 0.020 | wall, warm | `daemon.reuse_ms` |
-| `acos session list` process spawn through daemon | 49.96 ms | **50.07 ms** | 50.37 | wall, process spawn | `daemon.cli_process_ms` |
-| Interpreter `02_int_arith` / `05_branches_loops` | 15.08 / 15.27 | **15.23 / 15.44 ms** | — | wall, cold | `interpreter` |
+| Cold process → `Vm` ready | 19.87 ms | **21.83 ms** | 23.56 | wall, cold | `process-start` |
+| Framework boot → `attachApplication` (warm boot cache) | 12.25 ms | **14.35 ms** | 18.00 | wall, warm | `boot-attach` |
+| Launch snapshot restore (`Vm::restore`) | 43.50 ms | **45.36 ms** | 46.90 | wall, warm restore | `launch_restore` |
+| Launch before snapshot (`Vm::new` + boot) | 607.3 ms | **612.2 ms** | 617.4 | wall, cold | `launch_before` |
+| Launch after snapshot (restore + launch) | 382.4 ms | **405.0 ms** | 565.3 | wall, warm | `launch_after_total` |
+| SessionPool create/session (N=1/5/20) | — | **1.01 / 1.19 / 3.24 ms** | — | wall, warm restore | `sessions-pool` |
+| SessionPool create rate (N=5 / N=20) | — | 3 483 / 5 541 sessions/s | — | wall | `sessions-pool` |
+| SessionPool reset-to-clean (N=5 / N=20) | — | **2.26 / 4.10 ms** | — | wall, warm | `sessions-pool` |
+| SessionPool total anon+shmem (N=1/5/10/20) | — | 23.77 / 30.90 / 39.82 / **57.61 MiB** | — | anon+shmem | `sessions-pool` |
+| Framework launch → `first_frame` (cache off) | 1 042.7 ms | **1 073.1 ms** | 1 080.1 | wall (process), cold | `fw.launch_nocache` |
+| Framework launch → `first_frame` (cache on, default) | 797.8 ms | **806.2 ms** | 830.3 | wall, warm restore, 5/5 | `fw.launch_default` |
+| Peak RSS, cold framework launch → `first_frame` | 647.1 | **648.0 MiB** | 648.7 | RSS (peak) | `fw.launch_nocache` |
+| Peak RSS, default (cache-on) launch | 658.7 | **659.1 MiB** | 660.1 | RSS (peak) | `fw.launch_default` |
+| Live View tree, kept daemon session | 28.0 ms | **49.8 ms** | 50.4 | wall, warm session | `fw.daemon.tree` |
+| `acos tap --text` (kept daemon session) | 44.2 | **49.9 ms** | 55.0 | wall, warm; `state_changed=false` | `fw.daemon.tap` |
+| `acos observe --apk --tree` (launch + tree) | 1 048.2 | **1 059.9 ms** | 1 075.8 | wall, cold | `fw.observe_tree_apk` |
+| `acos observe --apk --screenshot` (launch + frame) | 1 134.1 | **1 140.3 ms** | 1 149.4 | wall, cold + PNG write | `fw.observe_screenshot_apk` |
+| Renderer cold first frame (hello-views, standalone) | 2.22 ms | **2.22 ms** | — | wall, cold | `bench_render.helloColdMs` |
+| Renderer warm re-render | 0.78 ms | **0.81 ms** | 1.14 | wall, warm | `bench_render.helloWarmMs` |
+| PNG `FastFiltered` 1080×2400 | 8.25 ms | **8.25 ms** | — | wall, warm | `bench_render.encoding` |
+| `acos observe --tree` (no session, not_ready path) | 1.16 ms | **1.50 ms** | 1.56 | wall, no tree `noisy` | `observe_tree_ms` |
+| `acos frame-diff` 1080×2400 | 145.2 ms | **146.9 ms** | 160.7 | wall | `frame_diff_ms` |
+| `acos inspect` hello-views APK | 1.23 ms | **1.61 ms** | 1.78 | wall, static `noisy` | `apk_inspect_ms` |
+| MCP `tools/call acos_inspect` / bare CLI | — | **3 ms / 1 ms** p50 | 4 / 2 | wall, warm server | `bench-overhead.sh` |
+| Daemon ping, reused connection | 0.0040 ms | **0.0049 ms** | 0.0112 | wall, warm | `daemon.reuse_ms` |
+| `acos session list` process spawn through daemon | 49.94 ms | **50.13 ms** | 50.34 | wall, process spawn | `daemon.cli_process_ms` |
+| Interpreter `02_int_arith` / `05_branches_loops` | 6.24 / 5.90 | **6.64 / 5.95 ms** | — | wall, cold | `interpreter` |
 
 Noisy rows (spread > 15 %): `observe_tree_ms`, `apk_inspect_ms`. The live-tree
-row is also spread-heavy (25.8–50.3 ms) because the first sample warms the tree
+row is also spread-heavy (28.0–50.4 ms) because the first sample warms the tree
 path.
 
 ### 9.3 VM throughput: `Bench*` vs `java -Xint` (3 interleaved rounds)
@@ -1218,17 +1229,20 @@ median (lower is better).
 
 | Program | ACOS p50 | `-Xint` p50 | x | Program | ACOS p50 | `-Xint` p50 | x |
 |---|---:|---:|---:|---|---:|---:|---:|
-| `BenchArith` | 1 523.7 | 1 282.1 | 1.188 | `BenchStaticCall` | 3 167.1 | 3 042.7 | 1.041 |
-| `BenchLoop` | 778.5 | 446.1 | 1.745 | `BenchVirtualCall` | 3 961.6 | 3 143.5 | 1.260 |
-| `BenchArray` | 498.3 | 350.4 | 1.422 | `BenchVirtual` | 1 543.5 | 1 190.9 | 1.296 |
-| `BenchFields` | 115.2 | 80.3 | 1.436 | `BenchAlloc` | 1 768.5 | 1 149.2 | 1.539 |
-| `BenchFib` | 516.5 | 345.2 | 1.496 | `BenchGc` | 413.5 | 154.1 | **2.683** |
-| `BenchString` | 128.2 | 595.5 | **0.215** | `BenchCollections` | see JSON | — | — |
+| `BenchArith` | 843.9 | 528.7 | 1.596 | `BenchStaticCall` | 3 100.6 | 2 936.1 | 1.056 |
+| `BenchLoop` | 655.1 | 418.3 | 1.566 | `BenchVirtualCall` | 3 069.4 | 2 938.6 | 1.044 |
+| `BenchArray` | 480.6 | 320.2 | 1.501 | `BenchVirtual` | 1 572.1 | 1 159.9 | 1.355 |
+| `BenchFields` | 110.3 | 76.9 | 1.434 | `BenchAlloc` | 1 546.1 | 1 124.9 | 1.374 |
+| `BenchFib` | 522.7 | 333.0 | 1.570 | `BenchGc` | 337.1 | 131.2 | **2.570** |
+| `BenchString` | 128.0 | 624.3 | **0.205** | `BenchCollections` | 132.1 | 81.4 | 1.622 |
 
-ACOS beats `java -Xint` only on `BenchString`; `BenchStaticCall` is near parity.
-The largest gaps are allocation/GC-bound (`BenchGc` 2.68×) and dispatch/loop
-(`BenchLoop` 1.75×, `BenchAlloc` 1.54×, `BenchFib` 1.50×). The IR tier
-(`ACOS_EXEC=ir`) is still not default-on.
+ACOS beats `java -Xint` only on `BenchString`; `BenchStaticCall` and
+`BenchVirtualCall` are near parity. The largest gaps are allocation/GC-bound
+(`BenchGc` 2.57×) and dispatch/loop (`BenchArith` 1.60×, `BenchLoop` 1.57×,
+`BenchFib` 1.57×). The IR tier (`ACOS_EXEC=ir`) is still not default-on. These
+`Bench*` medians are much lower than the §8/W148-A run because the host load at
+the start of this window was lower (loadavg1 1.99 vs 4.07); the *ratios* are the
+stable comparison.
 
 ### 9.4 Honest render provenance and SSIM
 
@@ -1247,19 +1261,18 @@ product routing is partial (W142-A).
 
 ### 9.5 Worse-than-legacy / gap list (explicit, with plan)
 
-1. **Boot-image restore is broken for launch.** `acos launch counter.apk` with a
-   populated cache reaches `first_frame` 1/5; the rest fail at
-   `activity_on_create` with `java.lang.ExceptionInInitializerError` →
-   ICU `DatPackageReader` index error. `ACOS_NO_BOOT_CACHE=1` is 5/5. This is the
-   top runtime bug; it does not affect M1/M2.
-2. **M5 screenshot routing.** `observe --apk --screenshot` publishes a
-   `CompletedFrame` in-process (971 ms incl. launch) but the kept-session
-   `observe --screenshot` path returns `unsupported`, so the pure retrieval
-   latency is not measured.
-3. **M8 tap does not land.** Input is accepted (`input_ack_seq=2`) but
-   `state_changed=false` and the counter stays `0`. Plan: land the W144-A leash
-   fix used by `crates/acos-vm/src/natives/fwk_input.rs` (in the working tree,
-   not at this commit).
+1. **[CLOSED] Boot-image restore for launch.** W154-A (embed regions) and
+   W160-A (source-recorded regions) fixed the ICU `DatPackageReader` warm-restore
+   crash. `acos launch counter.apk` now reaches `first_frame` **5/5** on the
+   default warm path at 0.8062 s p50; the cache entry is back to 25.58 MB.
+   Remaining caveat: the launched frame is still not ART-scored.
+2. **[CLOSED] M5 screenshot routing.** The kept-session `observe --screenshot`
+   path now returns a `CompletedFrame`; the daemon-session retrieval is
+   50.08 ms p50 (`status=pass`, stage `first_frame`), which beats the 66.5 ms
+   legacy value. The number includes PNG encode+write.
+3. **M8 tap does not land.** Input is accepted (`accepted=true`) but
+   `state_changed=false` and the counter stays `0`. Plan: land the W144-A/W152-A
+   leash fix (`crates/acos-vm/src/natives/fwk_input.rs`).
 4. **M9 is a memory experiment.** The process-global Binder transport means N
    pool sessions are not independent workers.
 5. **VM throughput is behind `java -Xint` on 11/12 programs.** Plan: make the IR
@@ -1267,30 +1280,36 @@ product routing is partial (W142-A).
 
 ### 9.6 What this run changed in the record
 
-- The V1 gate moved from **2 PASS / 9 FAIL** (§9 at `addd4e2`) to
-  **4 PASS / 7 FAIL**: M3 (framework-bound first frame) and M7 (live View tree)
-  are now genuinely measured and pass, and M1/M2 improved to 133.85 MiB /
-  39.45 MiB per session.
-- The launch snapshot metrics (`bench launch`) failed this run with
-  `SNAPSHOT_PRECONDITION: thread 0 is Sleeping`; they are reported as
-  `not_yet_measurable` here, not as a regression (pre-existing harness flake
-  under concurrent load).
-- Two audit items close: `STATUS.md`'s false "`acos launch` is not wired yet"
-  claim is removed, and `tools/status-check.sh` now fails a stale STATUS header.
+- The V1 gate moved from **4 PASS / 7 not-pass** (W148-A) to **5 PASS / 6
+  not-pass**: M3 still passes and now measures the **default warm path** (0.8062 s
+  p50, 5/5) instead of the cold fallback, and M5 (daemon-session screenshot)
+  is now measured and passes (50.08 ms p50). M1/M2 hold at 133.86 MiB /
+  39.47 MiB per session.
+- The launch snapshot restore metrics are now measured (`Vm::restore` 45.36 ms
+  p50; after-snapshot launch 405.0 ms p50) — W148-A could not measure them.
+- The W154-A/W160-A fix closes the top runtime bug (warm restore) and removes
+  the 28.4 MB embedded ICU region from the boot cache. See
+  `results/perf/BOOTIMAGE_CACHE.md` §W160-A.
+- `tools/bench-v1.sh` now takes the M3 verdict from `launch_default`; the cold
+  control is reported in the row note.
+- `STATUS.md` and `tools/status-check.sh` are refreshed for this run.
 
 **Reproduce:**
 
 ```sh
-# release build of committed 2c682c7 (main advanced to f1fa8c8 mid-run)
-CARGO_TARGET_DIR=$PWD/.cache/target-w148a CARGO_PROFILE_DEV_DEBUG=0 \
-  cargo build --release -p acos-cli -p acos-mcp \
+# release build from 20663b3 (W152-A) + the uncommitted W160-A patch
+# (main advanced to b467193/65856f2 while the run was in flight)
+CARGO_TARGET_DIR=$PWD/.cache/target-w160a CARGO_PROFILE_DEV_DEBUG=0 \
+  CARGO_BUILD_JOBS=2 cargo build --release -p acos-cli -p acos-mcp \
   -p acos-vm --example vmbench -p acos-render --example bench_render
-ACOS_BIN=$PWD/.cache/target-w148a/release/acos \
-ACOS_MCP_BIN=$PWD/.cache/target-w148a/release/acos-mcp \
-VMBENCH_BIN=$PWD/.cache/target-w148a/release/examples/vmbench \
-RENDER_BIN=$PWD/.cache/target-w148a/release/examples/bench_render \
+ACOS_BIN=$PWD/.cache/target-w160a/release/acos \
+ACOS_MCP_BIN=$PWD/.cache/target-w160a/release/acos-mcp \
+VMBENCH_BIN=$PWD/.cache/target-w160a/release/examples/vmbench \
+RENDER_BIN=$PWD/.cache/target-w160a/release/examples/bench_render \
+ACOS_CACHE_DIR=$PWD/results/tmp/w160a-bench-cache \
+ACOS_PROFILE_OUT=$PWD/results/tmp/w160a-profile.json \
   tools/bench-v1.sh --rounds 3
 ```
 
-The run writes `results/bench/v1-<date>.json`; the printed table is the one in
-§9.1.
+The run writes `results/bench/v1-2026-11-11-061354.json`; the printed table is
+the one in §9.1.

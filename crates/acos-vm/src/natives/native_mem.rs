@@ -79,9 +79,77 @@ impl MemError {
     }
 }
 
+/// A file-backed region's provenance (W160-A).
+///
+/// A snapshot must not embed a file mapping's bytes: the bytes already live on
+/// disk under the boot root, and re-reading them keeps the on-disk boot cache
+/// small. Instead the snapshot records *where* the mapping came from and
+/// re-reads it on restore, validating that the file has not changed. A missing
+/// or changed file fails closed (the restore errors and the boot-cache caller
+/// cold-boots) rather than serving stale bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RegionSource {
+    /// The guest path the descriptor was opened as.
+    pub path: String,
+    /// Byte offset of the mapping within the file.
+    pub offset: u64,
+    /// Number of bytes mapped.
+    pub length: u64,
+    /// FNV-1a hash of the exact mapped bytes (zero-fill past EOF included).
+    pub hash: u64,
+    /// File size in bytes at capture time.
+    pub file_size: u64,
+    /// File mtime in seconds at capture time.
+    pub file_mtime: i64,
+}
+
+impl RegionSource {
+    /// Capture a source for `bytes`, which were mapped from `path` at `offset`.
+    pub(crate) fn capture(
+        path: String,
+        offset: u64,
+        bytes: &[u8],
+        file_size: u64,
+        file_mtime: i64,
+    ) -> RegionSource {
+        RegionSource {
+            path,
+            offset,
+            length: bytes.len() as u64,
+            hash: content_hash(bytes),
+            file_size,
+            file_mtime,
+        }
+    }
+
+    /// Whether freshly re-read `bytes` with `(file_size, file_mtime)` still
+    /// match this source. Any difference fails validation.
+    pub(crate) fn matches(&self, bytes: &[u8], file_size: u64, file_mtime: i64) -> bool {
+        self.length == bytes.len() as u64
+            && self.file_size == file_size
+            && self.file_mtime == file_mtime
+            && self.hash == content_hash(bytes)
+    }
+}
+
+/// Stable FNV-1a 64-bit content hash. Stable across processes and builds (the
+/// on-disk boot cache outlives a single binary), unlike `DefaultHasher`.
+fn content_hash(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 struct Region {
     data: Vec<u8>,
     readonly: bool,
+    /// The file mapping this region came from, when it was produced by
+    /// `FileChannelImpl.map0` over a real file. `None` for anonymous regions
+    /// (`Unsafe.allocateMemory`, JNI `NewDirectByteBuffer`, ...).
+    source: Option<RegionSource>,
 }
 
 struct MemState {
@@ -146,12 +214,20 @@ pub(crate) struct RegionEntry {
     pub id: u32,
     /// Whether the region rejects writes (`MAP_RO`).
     pub readonly: bool,
-    /// Region contents, exactly as the live table holds them.
+    /// Region contents. Empty for a file-backed region whose `source` is set:
+    /// the bytes are re-read from the file on restore (W160-A), so they are not
+    /// embedded in the snapshot.
     pub data: Vec<u8>,
+    /// File provenance, when the region came from `FileChannelImpl.map0` over a
+    /// real file.
+    pub source: Option<RegionSource>,
 }
 
 /// Snapshot every live region, sorted by id so the byte stream is
 /// deterministic regardless of `HashMap` iteration order.
+///
+/// A file-backed region keeps its `source` and drops `data`: the snapshot
+/// stores the provenance (path/offset/hash/size/mtime), not the bytes.
 pub(crate) fn snapshot_regions() -> Vec<RegionEntry> {
     MEM.with(|m| {
         let m = m.borrow();
@@ -163,7 +239,12 @@ pub(crate) fn snapshot_regions() -> Vec<RegionEntry> {
                 RegionEntry {
                     id,
                     readonly: r.readonly,
-                    data: r.data.clone(),
+                    data: if r.source.is_some() {
+                        Vec::new()
+                    } else {
+                        r.data.clone()
+                    },
+                    source: r.source.clone(),
                 }
             })
             .collect()
@@ -171,6 +252,10 @@ pub(crate) fn snapshot_regions() -> Vec<RegionEntry> {
 }
 
 /// Re-establish regions captured by [`snapshot_regions`].
+///
+/// For a file-backed region the caller must have re-read and validated
+/// `entry.data` against `entry.source` first (`Vm::restore` does this); the
+/// region keeps its `source` so a later snapshot persists provenance again.
 ///
 /// Idempotent: a region that already exists with **identical** contents is
 /// left in place (the template boot and the first restore share one process in
@@ -202,6 +287,7 @@ pub(crate) fn restore_regions(regions: &[RegionEntry]) {
                 Region {
                     data: r.data.clone(),
                     readonly: r.readonly,
+                    source: r.source.clone(),
                 },
             );
             if r.id >= m.next_id {
@@ -250,7 +336,14 @@ pub(crate) fn alloc(len: usize, readonly: bool) -> Result<i64, MemError> {
         }
         data.resize(len, 0);
         m.total += len;
-        m.regions.insert(id, Region { data, readonly });
+        m.regions.insert(
+            id,
+            Region {
+                data,
+                readonly,
+                source: None,
+            },
+        );
         Ok(((id as u64) << 32) as i64)
     })
 }
@@ -265,7 +358,41 @@ pub(crate) fn alloc_with(bytes: Vec<u8>, readonly: bool) -> Result<i64, MemError
         let id = m.next_id;
         m.next_id = m.next_id.checked_add(1).ok_or(MemError::CapExceeded)?;
         m.total += bytes.len();
-        m.regions.insert(id, Region { data: bytes, readonly });
+        m.regions.insert(
+            id,
+            Region {
+                data: bytes,
+                readonly,
+                source: None,
+            },
+        );
+        Ok(((id as u64) << 32) as i64)
+    })
+}
+
+/// Allocate a region pre-filled with `bytes` mapped from a file, recording the
+/// mapping's provenance so a snapshot need not embed the bytes (W160-A).
+pub(crate) fn alloc_mapped(
+    bytes: Vec<u8>,
+    readonly: bool,
+    source: RegionSource,
+) -> Result<i64, MemError> {
+    MEM.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.total.saturating_add(bytes.len()) > m.cap {
+            return Err(MemError::CapExceeded);
+        }
+        let id = m.next_id;
+        m.next_id = m.next_id.checked_add(1).ok_or(MemError::CapExceeded)?;
+        m.total += bytes.len();
+        m.regions.insert(
+            id,
+            Region {
+                data: bytes,
+                readonly,
+                source: Some(source),
+            },
+        );
         Ok(((id as u64) << 32) as i64)
     })
 }
@@ -1089,6 +1216,42 @@ mod tests {
         let c = alloc(1, false).expect("alloc");
         let cid = (c as u64 >> 32) as u32;
         assert!(!saved.iter().any(|r| r.id == cid));
+    }
+
+    #[test]
+    fn file_backed_region_records_source_without_embedding_bytes() {
+        reclaim_all();
+        let src = RegionSource::capture(
+            "/apex/com.android.i18n/etc/icu/icudt72l.dat".to_string(),
+            4096,
+            &[1, 2, 3, 4],
+            28_431_696,
+            1_700_000_000,
+        );
+        assert_eq!(src.length, 4);
+        assert!(src.matches(&[1, 2, 3, 4], 28_431_696, 1_700_000_000));
+        assert!(!src.matches(&[1, 2, 3, 5], 28_431_696, 1_700_000_000));
+        assert!(!src.matches(&[1, 2, 3, 4], 99, 1_700_000_000));
+        assert!(!src.matches(&[1, 2, 3, 4], 28_431_696, 42));
+
+        let a = alloc_mapped(vec![1, 2, 3, 4], true, src.clone()).expect("alloc");
+        let saved = snapshot_regions();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].source.as_ref(), Some(&src));
+        assert!(
+            saved[0].data.is_empty(),
+            "a file-backed region must not embed its bytes in the snapshot"
+        );
+
+        // Simulate a fresh process: the caller re-reads/validates the file and
+        // hands the bytes back, then the table is rebuilt with the source kept.
+        reclaim_all();
+        let mut entry = saved[0].clone();
+        entry.data = vec![1, 2, 3, 4];
+        restore_regions(&[entry]);
+        assert_eq!(read_bytes(a, 4).unwrap(), vec![1, 2, 3, 4]);
+        assert!(write_bytes(a, &[0]).is_err());
+        assert_eq!(snapshot_regions()[0].source.as_ref(), Some(&src));
     }
 
     #[test]

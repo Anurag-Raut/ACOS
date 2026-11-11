@@ -1,31 +1,33 @@
 # ACOS — Status
 
-**As of 2026-11-11, HEAD `00950ce`** (W144-A; `main` advanced through
-`f1fa8c8`/`f3120d5`/`3ef0a72` after the measured commit). `git log` is
-authoritative. **`BENCHMARKS.md` §9 is the authoritative measured table**; its
-raw artifact is `results/bench/v1-2026-11-11-051824.json`, measured on a release
-build of **`2c682c7`** (the HEAD when this wave started) — `main` moved 4
-commits during the run, so the W142-A/W147-A/W144-A commits below are newer than
-the numbers. `TASKS.md` is the plan; `docs/V1.md` is the V1 definition;
+**As of 2026-11-11, HEAD `65856f2`** (W159-A; `main` advanced through
+`b467193`/`20663b3` after the W160-A build). `git log` is authoritative.
+**`BENCHMARKS.md` §9 is the authoritative measured table**; its raw artifact is
+`results/bench/v1-2026-11-11-061354.json`, measured on a release build of
+**`20663b3` + the uncommitted W160-A patch** (the HEAD when this wave started)
+— `main` moved to `b467193`/`65856f2` during the run, so W158-A/W159-A are newer
+than the numbers. `TASKS.md` is the plan; `docs/V1.md` is the V1 definition;
 `docs/FINDINGS.md` is the append-only findings log; `EXPERIMENTS.md` is history.
 
 ## One line
 
 **`counter.apk` reaches `first_frame` through a real launched Activity
 (`ThreadedRenderer.draw` → `FrameStore`); `hello-views`, `form-validation` and
-`list-scroll` reach `first_frame` at W147-A. A live `View` tree is observable
-(M7 49.9 ms p50), but a tap is accepted and does not land
-(`state_changed=false`), and the default boot-image **restore** path is broken
-(warm launch fails ~9/10 at `activity_on_create`), so `ACOS_NO_BOOT_CACHE=1` is
-required for a reliable launch.** The
+`list-scroll` reach `first_frame` at W147-A. The default boot-cache **restore**
+path is fixed (W154-A carried native regions, W160-A records their file source
+and re-reads it): a warm `acos launch` now reaches `first_frame` **5/5** at
+0.806 s p50 with a **25.58 MB** cache entry. A live `View` tree is observable
+(M7 49.8 ms p50), but a tap is accepted and still does not land
+(`state_changed=false`).** The
 Rust VM runs the real Android 14 core-library bytecode, the real boot-classpath
 DEX is extracted unprivileged, `acos inspect`/`run-dex`/`verify` exist, and the
 Rust service layer (`acos-services`, `acos-wm`), the SQLite engine
 (`acos-sqlite`), the confinement layer (`acos-sandbox`) and the renderer
-(`acos-render`) have their own acceptance tests. The V1 benchmark at `2c682c7`
-beats legacy on **4 of 11** metrics (**4 PASS / 7 not-pass** vs owner directive
-D2; see `BENCHMARKS.md` §9); the frame and live UI tree now land, while input,
-screenshot routing, reset, independence and the V1 verdict remain unverified.
+(`acos-render`) have their own acceptance tests. The V1 benchmark at
+`20663b3`+W160-A beats legacy on **5 of 11** metrics (**5 PASS / 6 not-pass** vs
+owner directive D2; see `BENCHMARKS.md` §9); the frame, live UI tree and fresh
+screenshot now land, while input, reset, independence and the V1 verdict remain
+unverified.
 
 ## Milestone table (M0..M5 + V1 gate)
 
@@ -38,53 +40,59 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 | **M0** static APK/DEX analysis | parse/verify/decode APK + DEX; differential vs `dexdump`/`aapt2` | **done** (static-analysis tier) | `crates/acos-dex/tests/diff_dexdump.sh` → 3 files / 380 methods / 4,253 insns / 0 mismatches (`docs/FINDINGS.md` F-0004); `crates/acos-apk/tests/differential_aapt2.rs`; `docs/FINDINGS.md` F-0002 |
 | **M1** println on the real core library | console programs execute on real `core-oj`/`core-libart`/`core-icu4j` DEX and match the ART oracle | **done** (art-reference) | `results/m1/README.md` (20/20 byte-identical, normal + GC-stress); `results/vm/OS_NATIVES_AUDIT.md` §3 (`--corelib real`: 25 pass / 0 fail / 0 unsupported of 25); `results/vm/dexprogs-real-normal.json` |
 | **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **done for counter** (gate enabled W147-A) | `bindApplication` + `Application.onCreate` run; the launch reaches `on_resume` and `first_frame` on `counter.apk` (`results/m2/M2_LOG.md`; `BENCHMARKS.md` §9.1 M3); `hello-views`/`form-validation`/`list-scroll` reach `first_frame` at W147-A (`f3120d5`); `crates/acos-runtime/tests/m2.rs` |
-| **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **done for counter** (W133-A) | `results/render/M3_LOG.md`, `results/render/m3-hello-views-vs-art.json`, `crates/acos-runtime/src/frame_handoff.rs`; framework-bound `acos launch counter.apk` → `first_frame` in **0.903 s p50**, 5/5 with `ACOS_NO_BOOT_CACHE=1` (`BENCHMARKS.md` §9.1 M3); the launched frame is not yet ART-scored |
+| **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **done for counter** (W133-A) | `results/render/M3_LOG.md`, `results/render/m3-hello-views-vs-art.json`, `crates/acos-runtime/src/frame_handoff.rs`; framework-bound `acos launch counter.apk` → `first_frame` in **0.806 s p50** on the **default warm path** (5/5; cold control 1.073 s p50), `BENCHMARKS.md` §9.1 M3; the launched frame is not yet ART-scored |
 | **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **partial** — tree live, tap does not land | live `View` tree via `acos observe --tree` (M7 49.9 ms, `results/wm/README.md`); `acos tap --text Increment` is `accepted: true` but `state_changed: false`; W144-A input leash landed after the measured commit (`BENCHMARKS.md` §9.1 M7/M8) |
 | **M5** interaction trace | `lifecycle-summary.txt` + `ui_after_*` + native-diff | **not started** | depends on M2–M4 |
 | **V1 gate** `acos verify` full verdict | `acos verify --apk … --scenario … --json --artifacts …` passes on the two fixtures with no Android boot | **not started** | runner exists (`crates/acos-verify`, `scenarios/`), but the native backend stops at the first UI step (`docs/DEV_WORKFLOW.md` §9; `scenarios/README.md`). The V1 benchmark measures the gap: `BENCHMARKS.md` §9.1 M10 |
 
-## V1 benchmark (2026-11-11, measured at `2c682c7`)
+## V1 benchmark (2026-11-11, W160-A)
 
 `BENCHMARKS.md` §9 is the authoritative measured table; raw per-round samples in
-`results/bench/v1-2026-11-11-051824.json` (release, 3 rounds, loadavg 4.07,
-38.6 GiB available, `.cache/target-w148a`, guarded). Reproduce with
-`tools/bench-v1.sh --rounds 3`.
+`results/bench/v1-2026-11-11-061354.json` (release, 3 rounds, loadavg 1.99,
+35.8 GiB available, `.cache/target-w160a`, guarded). Built from `20663b3` + the
+uncommitted W160-A patch; `main` moved to `b467193`/`65856f2` during the run.
+Reproduce with `tools/bench-v1.sh --rounds 3`.
 
-Against owner directive D2: **4 PASS / 4 FAIL / 3 NOT_MEASURED** (7 of 11 not
-passing; was 2/9 at `addd4e2`). Passes:
-M1 fixed idle core **133.85 MiB** vs 206.0 (W1); M2 N=5 per-session
-**39.45 MiB** vs 78.7 (v9); M3 framework-bound `acos launch counter.apk` →
-`first_frame` **0.903 s p50** vs 3.620 s (⚠ boot cache off; the default warm
-launch reaches `first_frame` only 1/5, failing at `activity_on_create`); M7 live
-`View` tree **49.9 ms p50** vs 538 ms one-shot. Fails: M4/M5/M6/M8/M9/M10/M11
-(unmeasured capabilities plus the tap that does not land). ACOS-native:
-process→`Vm` 13.95 ms, boot→attach 12.44 ms, SessionPool create 1.24 ms / reset
-2.22 ms (N=5), renderer cold frame 2.98 ms, PNG 7.10 ms, `frame-diff` 171 ms,
-live tree 49.9 ms. VM throughput is behind `java -Xint` on 11/12 `Bench*`
-programs (only `BenchString` 0.215×; worst `BenchGc` 2.68×). Noisy rows:
-`observe_tree_ms`, `apk_inspect_ms`.
+Against owner directive D2: **5 PASS / 4 FAIL / 2 NOT_MEASURED** (6 of 11 not
+passing; was 4/7). Passes:
+M1 fixed idle core **133.86 MiB** vs 206.0 (W1); M2 N=5 per-session
+**39.47 MiB** vs 78.7 (v9); M3 framework-bound `acos launch counter.apk` →
+`first_frame` **0.806 s p50** on the **default warm path** (5/5) vs 3.620 s;
+M5 daemon-session screenshot **50.08 ms** vs 66.5 ms; M7 live `View` tree
+**49.8 ms p50** vs 538 ms one-shot. Fails: M4/M6/M8/M9 (capabilities/the tap),
+plus M10/M11 unmeasured. ACOS-native: process→`Vm` 21.83 ms, boot→attach
+14.35 ms, `Vm::restore` 45.4 ms, SessionPool create 1.19 ms / reset 2.26 ms
+(N=5), renderer cold frame 2.22 ms, PNG 8.25 ms, `frame-diff` 147 ms, live tree
+49.8 ms. VM throughput is behind `java -Xint` on 11/12 `Bench*` programs (only
+`BenchString` 0.205×; worst `BenchGc` 2.57×). Noisy rows: `observe_tree_ms`,
+`apk_inspect_ms`. The boot-cache entry is back to **25.58 MB** from W154-A's
+54.01 MB, and warm launch is no slower (before/after: 919.3 → 810.4 ms p50;
+`results/perf/BOOTIMAGE_CACHE.md` §W160-A).
 
-**Test counts.** 1046 `#[test]`/`#[tokio::test]` functions are declared across
-`crates/` at `2c682c7`; the full suite was **not** re-run in this V1 wave (the
-tree was shared with other agents). Recorded green suites include `acos-mcp`
-50/50 (`results/mcp/cargo-test.txt`), `acos-vm` snapshot 16/16 and the new
-boot-image-cache 10 unit + 3 integration, `acos-runtime` session_pool 4/4, and
-`tools/diff-dexprogs.sh --corelib real` 27/27 normal and GC-stress.
+**Test counts.** The full suite was **not** re-run in this wave (the tree is
+shared with other agents), but W160-A's own gates are green at
+`20663b3`+W160-A: `acos-vm` lib (native_mem 6/6, vfs 18/18), `acos-vm`
+snapshot 16/16, `acos-vm` native_mem integration 1/1, `acos-runtime`
+boot_image_cache 6/6, `acos-cli` session 11/11 (incl. the warm-cache
+regression), clippy `-D warnings --no-deps` clean, `cargo check --workspace
+--all-targets` pass, and `tools/diff-dexprogs.sh --corelib real` 27/27 normal
+and GC-stress.
 
 ### Known gaps (V1)
 
-1. **Boot-image restore is broken for launch.** `VectorDrawable.nCreateGroup`
-   is fixed (`crates/acos-vm/src/natives/gfx_vector.rs`), but the on-disk
-   `ACOSSNAP` restore makes a warm `acos launch` fail at `activity_on_create`
-   (ICU `DatPackageReader` index error) ~9/10 times; `ACOS_NO_BOOT_CACHE=1` is
-   5/5. Evidence: `BENCHMARKS.md` §9.1 M3 and §9.5.
-2. **Renderer not framework-bound.** `acos-render` produces a correct
-   hello-views frame (cold 2.54 ms, SSIM 0.9938 vs the ART capture) but no
-   launched Activity publishes it through `frame_handoff`. Evidence:
+1. **[CLOSED] Boot-image restore for launch.** W154-A carried the native
+   regions; W160-A records their file *source* and re-reads it, failing closed
+   on a changed file. Warm `acos launch` reaches `first_frame` **5/5** at
+   0.806 s p50 with a **25.58 MB** cache entry. Evidence: `BENCHMARKS.md` §9.1
+   M3, `results/perf/BOOTIMAGE_CACHE.md` §W160-A.
+2. **Launched frame not ART-scored.** `acos-render` produces a correct
+   hello-views frame (cold 2.22 ms, SSIM 0.9938 vs the ART capture) and a
+   launched Activity publishes through `frame_handoff` (M3), but no ART-diff
+   has been recorded for the launched frame. Evidence:
    `results/render/README.md`, `results/render/M3_LOG.md`.
-3. **UI tree / input / reset unimplemented.** `observe --tree` returns
-   `not_ready`; `UiNode`/`UiTree` are protocol-only; no input injection; pool
-   reset is core-VM-only. Evidence: `BENCHMARKS.md` §9.1 M6–M8.
+3. **Input / reset.** A live `View` tree is observable (M7 49.8 ms p50), but
+   `acos tap --text Increment` is `accepted: true` yet `state_changed=false`;
+   pool reset is core-VM-only (M6). Evidence: `BENCHMARKS.md` §9.1 M6–M8.
 4. **M9 not independent.** One process-global Binder transport: N sessions are a
    memory/throughput experiment, not N isolated workers.
 5. **RN bridge.** Hermes/JNI confined-stack probes exist (`results/rn/`,

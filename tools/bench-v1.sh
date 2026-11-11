@@ -475,8 +475,12 @@ fw_nc = fw.get("launch_nocache") or []
 fw_def = fw.get("launch_default") or []
 nc = _ms_stats(fw_nc, "outer_ms")
 def_st = _ms_stats(fw_def, "outer_ms")
-m3 = round(nc["median"] / 1000.0, 4) if nc else None
-m3_ok = bool(nc) and _ff(fw_nc) == len(fw_nc)
+# W160-A: the default warm path is the M3 probe. W148-A had to fall back to
+# ACOS_NO_BOOT_CACHE because the restore path was broken; W154-A made it reach
+# first_frame 10/10 and W160-A keeps that with source-recorded regions, so the
+# verdict now comes from the default launch (cache on), not the cold control.
+m3 = round(def_st["median"] / 1000.0, 4) if def_st else None
+m3_ok = bool(def_st) and _ff(fw_def) == len(fw_def)
 dm = fw.get("daemon") or {}
 tree_stats = dm.get("tree")
 shot_stats = dm.get("screenshot")
@@ -504,8 +508,8 @@ cold_frame = med("render_hello_cold_ms")
 add("M3", LEGACY["M3"][0], m3, LEGACY["M3"][1], LEGACY["M3"][2],
     round(m3 / LEGACY["M3"][1], 4) if m3 else None,
     "PASS" if (m3_ok and m3 and m3 <= LEGACY["M3"][1]) else ("FAIL" if m3 else "NOT_MEASURED"),
-    "Fix the ACOSSNAP restore path so the default warm launch reaches first_frame (it fails at activity_on_create 9/10); then score the launched frame against the ART reference.",
-    f"Framework-bound `acos launch counter.apk` -> first_frame, boot cache OFF (cold): {_ff(fw_nc)}/{len(fw_nc)} reached, p50 {_fmt_stats(nc)} ms outer. Default cache ON: {_ff(fw_def)}/{len(fw_def)} reached, p50 {_fmt_stats(def_st)} ms. RSS p50 {_fmt_stats(_ms_stats(fw_nc, 'peak_rss_mib'))} MiB. Launched frame correctness not ART-scored.")
+    "Score the launched frame against the ART reference (the warm path reaches first_frame; frame correctness is not yet ART-scored).",
+    f"Framework-bound `acos launch counter.apk` -> first_frame, DEFAULT path (boot cache on): {_ff(fw_def)}/{len(fw_def)} reached, p50 {_fmt_stats(def_st)} ms outer. Cold control (boot cache OFF): {_ff(fw_nc)}/{len(fw_nc)} reached, p50 {_fmt_stats(nc)} ms. RSS p50 {_fmt_stats(_ms_stats(fw_nc, 'peak_rss_mib'))} MiB. Launched frame correctness not ART-scored.")
 pool_create = (pool.get("5") or {}).get("create_ms")
 add("M4", LEGACY["M4"][0], round(pool_create / 1000.0, 6) if pool_create else None, LEGACY["M4"][1], LEGACY["M4"][2],
     None, "FAIL", "Add a worker-create path that reaches a frame; SessionPool restore is not worker-create->frame.",
