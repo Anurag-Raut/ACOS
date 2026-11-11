@@ -253,6 +253,8 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
             libc::setrlimit(libc::RLIMIT_CORE, &core);
             let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
             libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+            crate::watchdog::apply_init_rlimit_nice();
             Ok(())
         });
     }

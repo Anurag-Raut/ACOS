@@ -1,0 +1,2 @@
+        android.widget.TextView: dev.acos.fixtures.hellojni.MainActivity
+      android.widget.TextView: stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n

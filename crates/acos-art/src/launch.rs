@@ -440,6 +440,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     if std::env::var_os("ACOSART_HW_VERBOSE").is_some() {
         sb.env("ACOSART_HW_VERBOSE", "1");
     }
+    crate::watchdog::note_guest_priority_gap("launch");
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
     let started = Instant::now();
@@ -462,6 +463,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
             // The launcher's memory backstops bound acos-art, never ART.
             crate::watchdog::relax_child_limits();
+            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+            crate::watchdog::apply_init_rlimit_nice();
             Ok(())
                 });
             }

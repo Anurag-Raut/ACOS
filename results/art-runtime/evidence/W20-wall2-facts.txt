@@ -1,0 +1,54 @@
+# W20 wall-2: rn-hello first error -- Process.setThreadPriority(EACCES)
+
+## 1. The first error on the React context thread (guest stderr, 20 s hold, final shared binary)
+ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x3e79c63837450995 (default namespace, RTLD_GLOBAL)
+ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
+Exception in thread "create_react_context" java.lang.SecurityException: No permission to set the priority of 17
+	at android.os.Process.setThreadPriority(Native Method)
+	at com.facebook.react.ReactInstanceManager.lambda$runCreateReactContextOnNewThread$2(ReactInstanceManager.java:1219)
+	at com.facebook.react.ReactInstanceManager.$r8$lambda$PrBhihCbbAFk4ZReAALGanVLCyc(Unknown Source:0)
+	at com.facebook.react.ReactInstanceManager$$ExternalSyntheticLambda1.run(D8$$SyntheticClass:0)
+	at java.lang.Thread.run(Thread.java:1012)
+
+## 2. The framework path: libandroid_runtime android_os_Process_setThreadPriority -> androidSetThreadPriority -> setpriority
+    int rc = androidSetThreadPriority(pid, pri);
+    if (rc != 0) {
+        if (rc == INVALID_OPERATION) {
+            signalExceptionForPriorityError(env, errno, pid);
+        } else {
+            signalExceptionForGroupError(env, errno, pid);
+        }
+    }
+int androidSetThreadPriority(pid_t tid, int pri)
+{
+    int rc = 0;
+    int curr_pri = getpriority(PRIO_PROCESS, tid);
+
+    if (curr_pri == pri) {
+        return rc;
+    }
+
+    if (setpriority(PRIO_PROCESS, tid, pri) < 0) {
+        rc = INVALID_OPERATION;
+    } else {
+        errno = 0;
+    }
+
+
+## 3. Stock init.rc gives apps the right to lower nice (image: /system/etc/init/hw/init.rc)
+    # set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit nice 40 40
+
+
+## 4. This host (the same for the launcher and the guest): hard RLIMIT_NICE is 0
+Max nice priority         0                    0                    
+## A userns CAP_SYS_RESOURCE cannot raise the hard limit (kernel checks the initial ns):
+get (0, 0)
+raise failed: not allowed to raise maximum limit
+
+## 5. The launcher now mirrors init.rc best-effort and reports the gap once
+acos-art: launch: guest RLIMIT_NICE 0 < init.rc 40: Process.setThreadPriority(THREAD_PRIORITY_DISPLAY) will throw SecurityException (host hard limit 0 needs CAP_SYS_RESOURCE / a stock nice limit)
+
+## 6. Evidence that the react context thread never runs: ReactRootView attached, no children; 78 logd entries, no ReactNativeJS
+logd tags: ['', 'AndroidRuntime', 'AppCompatDelegate', 'CompatibilityChangeReporter', 'GraphicsEnvironment', 'ProcessState', 'SoLoader', 'SystemServiceRegistry', 'TrafficStats', 'Typeface', 'cutils-trace', 'jni_lib_merge', 'logdw', 'nativeloader', 'soloader.recovery.CheckBaseApkExists', 'ziparchive']
+stdout tree: ACOSLAUNCH MARK input-probe count_text=<none> inc_bounds=<none> tree={0:DecorView@1080x2209+0+0 1:LinearLayout@1080x2209+0+0 2:ViewStub#action_mode_bar_stub@0x0+0+0(vis=8) 2:FrameLayout@1080x2209+0+0 3:FitWindowsLinearLayout#action_bar_root@1080x2209+0+0 4:Vie

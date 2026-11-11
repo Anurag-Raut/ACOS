@@ -261,6 +261,62 @@ pub fn relax_child_limits() {
     }
 }
 
+/// Stock Android's `init.rc` sets `setrlimit nice 40 40` ("allow priorities
+/// from 19 to -20") for every service. That is what lets an app thread call
+/// `android.os.Process.setThreadPriority(THREAD_PRIORITY_DISPLAY)` (-4):
+/// `androidSetThreadPriority` does `setpriority(PRIO_PROCESS, tid, -4)` and
+/// libandroid_runtime turns EACCES into `SecurityException`. With the Linux
+/// (systemd) default hard limit of 0 the call is refused, and e.g. RN 0.81's
+/// `ReactInstanceManager.create_react_context` thread dies before the JS
+/// runtime exists (measured in W20).
+pub const INIT_RLIMIT_NICE: libc::rlim_t = 40;
+
+/// Mirror `init.rc`'s `RLIMIT_NICE` in a forked child (`pre_exec`).
+///
+/// Raising the *hard* limit needs `CAP_SYS_RESOURCE` in the initial user
+/// namespace, so on an unprivileged host (hard limit 0) this is a no-op and
+/// must never be fatal. A host that starts the engine with the stock limit
+/// gets stock behaviour with no further change.
+pub fn apply_init_rlimit_nice() {
+    let lim = libc::rlimit { rlim_cur: INIT_RLIMIT_NICE, rlim_max: INIT_RLIMIT_NICE };
+    unsafe {
+        libc::setrlimit(libc::RLIMIT_NICE, &lim);
+    }
+}
+
+/// The stock-priority gate: a nice value of -4 (display priority) needs
+/// `RLIMIT_NICE >= 24`. Read the host's hard limit so a route can say, once,
+/// that `Process.setThreadPriority(-4)` will fail on this host instead of
+/// letting the guest fail with a bare `SecurityException`.
+#[must_use]
+pub fn guest_priority_supported() -> bool {
+    let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    if unsafe { libc::getrlimit(libc::RLIMIT_NICE, &mut cur) } != 0 {
+        return false;
+    }
+    cur.rlim_max >= 24
+}
+
+/// Print the stock-priority gap once per launcher process (the routes call it
+/// right before spawning the guest). `init.rc`'s hard value is 40; the Linux
+/// default user session value is 0.
+pub fn note_guest_priority_gap(route: &str) {
+    static NOTED: AtomicBool = AtomicBool::new(false);
+    if guest_priority_supported() || NOTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    unsafe {
+        libc::getrlimit(libc::RLIMIT_NICE, &mut cur);
+    }
+    eprintln!(
+        "acos-art: {route}: guest RLIMIT_NICE {} < init.rc {INIT_RLIMIT_NICE}: \
+         Process.setThreadPriority(THREAD_PRIORITY_DISPLAY) will throw SecurityException \
+         (start the runner with a stock nice limit >= 24 / CAP_SYS_RESOURCE in the initial userns)",
+        cur.rlim_max
+    );
+}
+
 /// Install the launcher-side ceilings once per process (idempotent enough to be
 /// called from `main`): the soft rlimit backstop plus a process-wide watchdog
 /// that stays armed for the whole invocation.
@@ -329,5 +385,20 @@ mod tests {
     fn relax_child_limits_is_safe_to_call() {
         // Must never panic or lower anything in the calling process.
         relax_child_limits();
+    }
+
+    #[test]
+    fn the_stock_init_rc_nice_limit_is_mirrored_and_safe_to_apply() {
+        // `init.rc` on the image: `setrlimit nice 40 40` (priorities 19..-20).
+        assert_eq!(INIT_RLIMIT_NICE, 40);
+        // Must never panic. On an unprivileged host (hard limit 0) the kernel
+        // refuses the raise and the guest keeps the host limit; the gate below
+        // must report that instead of claiming stock support.
+        apply_init_rlimit_nice();
+        let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        let rc = unsafe { libc::getrlimit(libc::RLIMIT_NICE, &mut cur) };
+        assert_eq!(rc, 0);
+        assert_eq!(guest_priority_supported(), cur.rlim_max >= 24);
+        note_guest_priority_gap("test");
     }
 }

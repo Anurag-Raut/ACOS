@@ -361,6 +361,8 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
             // The launcher's memory backstops are soft limits for *this* process;
             // ART needs terabytes of address space and is never the bounded one.
             crate::watchdog::relax_child_limits();
+            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+            crate::watchdog::apply_init_rlimit_nice();
             Ok(())
                 });
             }

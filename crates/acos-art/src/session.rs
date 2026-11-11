@@ -503,6 +503,8 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
             libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
             // The launcher's memory backstops bound acos-art, never ART.
             crate::watchdog::relax_child_limits();
+            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+            crate::watchdog::apply_init_rlimit_nice();
             Ok(())
                 });
             }
