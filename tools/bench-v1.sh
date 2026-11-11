@@ -433,6 +433,156 @@ finally:
 fw["daemon"] = dm
 metrics["fw"] = fw
 
+# ---- 14. M4/M6: worker create / reset from the boot template -> frame ----
+# A genuine worker-create path: one framework template boot (or warm on-disk
+# cache load) outside the timed region, then each sample is Vm::restore +
+# counter.apk launch + ThreadedRenderer.draw into the process FrameStore. The
+# metric only counts a sample as ready when a *fresh* frame was published.
+wcf = {}
+r, raw["worker-create-frame"] = bench(
+    "worker-create-frame", ["--apk", counter], runs=max(ROUNDS, 3), timeout=1800)
+if r:
+    wcf = r
+metrics["worker_create_frame"] = wcf
+
+# ---- 15. M9: N concurrent separate-process sessions (launch + tree) -------
+# Each child is its own OS process running `observe --apk counter --tree`, so
+# the sessions cannot share an address space or the in-process Binder transport.
+# Per-session RSS is the child's own VmHWM sampled while it is alive; wall is
+# parent-measured. Input-level independence (tap in one not altering another)
+# cannot be shown while M8 tap does not land, and the in-process pool remains a
+# memory experiment, so the row is reported honestly as FAIL even when every
+# process reaches first_frame.
+def concurrent_observe(n, timeout=600):
+    procs = []
+    t0 = now_ms()
+    for _ in range(n):
+        procs.append(subprocess.Popen(
+            [ACOS, "observe", "--apk", counter, "--tree", "--json"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV))
+    hwm = {p.pid: 0 for p in procs}
+    while any(p.poll() is None for p in procs):
+        for p in procs:
+            if p.poll() is None:
+                try:
+                    st = open(f"/proc/{p.pid}/status").read()
+                    m = re.search(r"VmHWM:\s+(\d+)", st)
+                    if m:
+                        hwm[p.pid] = max(hwm[p.pid], int(m.group(1)))
+                except Exception:
+                    pass
+        time.sleep(0.02)
+    wall = now_ms() - t0
+    oks, stages, trees = 0, [], 0
+    for p in procs:
+        try:
+            d = json.loads(p.stdout.read().decode() or "{}")
+        except Exception:
+            d = {}
+        r = d.get("result") or {}
+        if d.get("status") == "pass":
+            oks += 1
+        stages.append(r.get("stage_reached"))
+        if (r.get("tree") or {}).get("nodes"):
+            trees += 1
+    rss = [v / 1024.0 for v in hwm.values()]
+    return {"n": n, "wall_ms": round(wall, 2), "ok": oks, "trees": trees,
+            "stages": stages, "rss_mib": stats(rss) if rss else None}
+
+conc = {}
+for n in (5, 10, 20):
+    conc[str(n)] = concurrent_observe(n)
+metrics["concurrent_sessions"] = conc
+
+# ---- 16. M10: scripted end-to-end verify on one live session --------------
+# launch -> tree -> screenshot -> tap -> tree -> screenshot -> frame-diff, all
+# through the CLI on the same kept daemon session. `acos verify` is not used
+# because it stops at the first UI step; this is the honest wall of the whole
+# loop plus the before/after frame diff that decides whether state changed.
+e2e = {}
+esock = os.path.join(TMP, "e2e.sock")
+try:
+    os.remove(esock)
+except OSError:
+    pass
+eserve = subprocess.Popen([ACOS, "serve", "--socket", esock, "--idle-timeout", "180"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ENV)
+try:
+    for _ in range(100):
+        if os.path.exists(esock):
+            break
+        time.sleep(0.05)
+    if os.path.exists(esock):
+        eenv = {**ENV, "ACOS_SESSION_SOCKET": esock}
+        e2e_t0 = now_ms()
+
+        def step(args):
+            dt, p = run_json([ACOS] + args + ["--json"], eenv)
+            d = doc_of(p); r = d.get("result") or {}
+            return round(dt, 2), d, r
+
+        def shot(path):
+            # In-process launch + frame: this is the CLI path that actually
+            # writes a PNG. The daemon returns frame metadata but no pixels.
+            dt, p = run_json(
+                [ACOS, "observe", "--apk", counter, "--screenshot", path, "--json"], ENV)
+            return round(dt, 2)
+
+        dt, d, r = step(["launch", counter, "--keep"])
+        e2e["launch_ms"] = dt
+        e2e["launch_stage"] = r.get("reached_stage")
+        dt, d, r = step(["observe", "--tree", "--session", "s_cli"])
+        e2e["tree_ms"] = dt
+        e2e["tree_stage"] = r.get("stage_reached")
+        dt, d, r = step(["observe", "--screenshot", os.path.join(TMP, "ignored-a.png"),
+                         "--session", "s_cli"])
+        e2e["shot_a_ms"] = dt
+        e2e["frame_hash_before"] = (r.get("frame") or {}).get("content_hash")
+        dt, d, r = step(["tap", "--text", "Increment", "--session", "s_cli"])
+        e2e["tap_ms"] = dt
+        e2e["tap_accepted"] = r.get("accepted")
+        e2e["tap_state_changed"] = r.get("state_changed")
+        dt, d, r = step(["observe", "--tree", "--session", "s_cli"])
+        e2e["tree_after_ms"] = dt
+        dt, d, r = step(["observe", "--screenshot", os.path.join(TMP, "ignored-b.png"),
+                         "--session", "s_cli"])
+        e2e["shot_b_ms"] = dt
+        e2e["frame_hash_after"] = (r.get("frame") or {}).get("content_hash")
+        a_png = os.path.join(TMP, "e2e-a.png")
+        b_png = os.path.join(TMP, "e2e-b.png")
+        e2e["diff_shot_a_ms"] = shot(a_png)
+        e2e["diff_shot_b_ms"] = shot(b_png)
+        if os.path.exists(a_png) and os.path.exists(b_png):
+            dt, p = run_json([ACOS, "frame-diff", a_png, b_png, "--json"], ENV)
+            d = doc_of(p)
+            e2e["frame_diff_ms"] = round(dt, 2)
+            e2e["frame_diff"] = d.get("result")
+        e2e["total_ms"] = round(now_ms() - e2e_t0, 2)
+finally:
+    eserve.terminate()
+    try:
+        eserve.wait(timeout=5)
+    except Exception:
+        eserve.kill()
+    try:
+        os.remove(esock)
+    except OSError:
+        pass
+metrics["e2e_verify"] = e2e
+
+# M11: verified tasks / GiB-minute, derived from M10 wall and M2 memory. Only a
+# task whose assert passed counts; the tap does not land, so verified = 0 and
+# the derived *bound* is reported separately, never as a verified rate.
+m10_s = (e2e.get("total_ms") or 0) / 1000.0
+m2_inc5 = (metrics.get("sessions_incremental_mib") or {}).get("5")
+m2_gib = (m2_inc5 or 0) / 1024.0
+m11_bound = round(60.0 / (m10_s * m2_gib), 4) if (m10_s > 0 and m2_gib > 0) else None
+metrics["tasks_per_gib_minute"] = {
+    "verified_tasks": 1 if e2e.get("tap_state_changed") else 0,
+    "derived_bound": m11_bound,
+    "basis": "60 / (M10 wall seconds * M2 GiB per session)",
+}
+
 # ---- legacy table (BENCHMARKS.md §3/§5; reference only) ------------------
 LEGACY = {
     "M1": ("Fixed idle core memory", 206.0, "MiB anon+shmem (W1) / 303.9 (v9)"),
@@ -511,9 +661,27 @@ add("M3", LEGACY["M3"][0], m3, LEGACY["M3"][1], LEGACY["M3"][2],
     "Score the launched frame against the ART reference (the warm path reaches first_frame; frame correctness is not yet ART-scored).",
     f"Framework-bound `acos launch counter.apk` -> first_frame, DEFAULT path (boot cache on): {_ff(fw_def)}/{len(fw_def)} reached, p50 {_fmt_stats(def_st)} ms outer. Cold control (boot cache OFF): {_ff(fw_nc)}/{len(fw_nc)} reached, p50 {_fmt_stats(nc)} ms. RSS p50 {_fmt_stats(_ms_stats(fw_nc, 'peak_rss_mib'))} MiB. Launched frame correctness not ART-scored.")
 pool_create = (pool.get("5") or {}).get("create_ms")
-add("M4", LEGACY["M4"][0], round(pool_create / 1000.0, 6) if pool_create else None, LEGACY["M4"][1], LEGACY["M4"][2],
-    None, "FAIL", "Add a worker-create path that reaches a frame; SessionPool restore is not worker-create->frame.",
-    "SessionPool restore is a quiescent core VM, no frame.")
+wcf = metrics.get("worker_create_frame") or {}
+wcf_create = wcf.get("create") or {}
+wcf_reset = wcf.get("reset") or {}
+wcf_create_ms = (wcf_create.get("ms") or {}).get("p50")
+wcf_reset_ms = (wcf_reset.get("ms") or {}).get("p50")
+wcf_samples = wcf.get("samples") or 0
+wcf_create_frames = wcf_create.get("frames_published") or 0
+wcf_reset_frames = wcf_reset.get("frames_published") or 0
+m4_ok = bool(wcf) and wcf_samples > 0 and wcf_create_frames == wcf_samples
+m6_ok = bool(wcf) and wcf_samples > 0 and wcf_reset_frames == wcf_samples
+m6_frame_legacy_s = 0.7481
+add("M4", LEGACY["M4"][0], round(wcf_create_ms / 1000.0, 4) if wcf_create_ms else None, LEGACY["M4"][1], LEGACY["M4"][2],
+    round((wcf_create_ms / 1000.0) / LEGACY["M4"][1], 4) if wcf_create_ms else None,
+    "PASS" if (m4_ok and wcf_create_ms and wcf_create_ms / 1000.0 <= LEGACY["M4"][1]) else ("FAIL" if wcf_create_ms else "NOT_MEASURED"),
+    "Keep the worker-create frame path honest; the runtime-rendered frame is not yet ART-scored." if m4_ok else "Worker create still does not reach a fresh frame.",
+    f"Worker create = new AgentSession from the warm boot-image cache -> counter.apk -> fresh published frame: {wcf_create_frames}/{wcf_samples} samples, p50 {wcf_create_ms} ms. Legacy is worker create -> frame.")
+add("M6", LEGACY["M6"][0], round(wcf_reset_ms, 4) if wcf_reset_ms else None, m6_frame_legacy_s * 1000.0, LEGACY["M6"][2],
+    round(wcf_reset_ms / (m6_frame_legacy_s * 1000.0), 4) if wcf_reset_ms else None,
+    "PASS" if (m6_ok and wcf_reset_ms and wcf_reset_ms <= m6_frame_legacy_s * 1000.0) else ("FAIL" if wcf_reset_ms else "NOT_MEASURED"),
+    "Keep the template-reset -> frame path honest; an in-place app-state reset is not implemented." if m6_ok else "Reset still does not reach a fresh frame.",
+    f"App reset = drop the live session + recreate it from the warm boot-image cache -> fresh frame: {wcf_reset_frames}/{wcf_samples} samples, p50 {wcf_reset_ms} ms. Legacy `reset --app` -> frame p50 748.1 ms. Scope is a template restore, not in-place app state.")
 shot = med("screenshot_warm_total_ms")
 shot_ms = _fmt_stats(shot_stats)
 add("M5", LEGACY["M5"][0], round(shot_ms / 1000.0, 6) if shot_ms else None, LEGACY["M5"][1], LEGACY["M5"][2],
@@ -523,10 +691,6 @@ add("M5", LEGACY["M5"][0], round(shot_ms / 1000.0, 6) if shot_ms else None, LEGA
     "Route `observe --screenshot` through the daemon session (same-process `observe --apk` already publishes a CompletedFrame) and keep the frame request-sequenced.",
     f"Daemon-session completed-frame retrieval p50 {shot_ms} ms (status={shot_info.get('status')}, stage={shot_info.get('stage')}); process stdout is wall-timed, includes PNG encode+write. Self-contained `observe --apk --screenshot` p50 {_fmt_stats(_ms_stats(fw.get('observe_screenshot_apk') or []))} ms incl. launch. Renderer-only warm encode is {shot} ms.")
 reset = (pool.get("5") or {}).get("reset_ms")
-add("M6", LEGACY["M6"][0], reset, LEGACY["M6"][1] * 1000.0, LEGACY["M6"][2],
-    round(reset / (LEGACY["M6"][1] * 1000.0), 4) if reset else None,
-    "FAIL", "Implement app-scoped reset -> first frame; pool reset is a core-VM restore with no app/frame.",
-    "Pool reset-to-clean (N=5); legacy is app reset + frame.")
 tree_ms = _fmt_stats(tree_stats)
 add("M7", LEGACY["M7"][0], tree_ms, LEGACY["M7"][1] * 1000.0, LEGACY["M7"][2],
     round(tree_ms / (LEGACY["M7"][1] * 1000.0), 4) if tree_ms else None,
@@ -539,12 +703,25 @@ add("M8", "Action-to-state latency", round(tap_ms / 1000.0, 6) if tap_ms else No
     None, "FAIL",
     "Land the tap: the input is acked but `state_changed=false` and the count stays `0` (W144-A leash fix pending).",
     f"`acos tap --text Increment` accepted={tap_info.get('accepted')} state_changed={tap_info.get('state_changed')} p50 {tap_ms} ms; no observed state change.")
-add("M9", "Concurrent workloads", (metrics.get("pool_sessions") or {}).get("20", {}).get("total_mib"), None, LEGACY["M9"][2], None, "FAIL",
-    "Per-session Binder transports so N sessions are independently usable, then assert independent state/input at N.", "memory at N=20 only; independent state not proven")
-add("M10", "End-to-end verify wall", None, LEGACY["M10"][1], LEGACY["M10"][2], None, "FAIL",
-    "Close launch/assert/evidence/reset/cleanup so `acos verify` passes on the fixtures.", "verify stops at the first UI step")
-add("M11", "Verified tasks / GiB-minute", None, None, LEGACY["M11"][2], None, "FAIL",
-    "Run the T01-T12 suite with job-cgroup accounting.", "not published")
+conc = metrics.get("concurrent_sessions") or {}
+n20 = conc.get("20") or {}
+rss20 = (n20.get("rss_mib") or {}).get("p50")
+add("M9", "Concurrent workloads", rss20, None, LEGACY["M9"][2], None, "FAIL",
+    "Prove input-level independence (tap in one session not altering another) once M8 lands; the in-process pool needs per-session Binder transports.",
+    f"N=5/10/20 concurrent separate-process sessions each `observe --apk counter --tree`: N=20 ok {n20.get('ok')}/{n20.get('n')}, trees {n20.get('trees')}/{n20.get('n')}, wall {n20.get('wall_ms')} ms, per-session VmHWM p50 {rss20} MiB. Input independence not proven (M8 tap does not land); the in-process pool remains a memory experiment.")
+e2e = metrics.get("e2e_verify") or {}
+e2e_total_s = (e2e.get("total_ms") or 0) / 1000.0
+e2e_changed = bool(e2e.get("tap_state_changed"))
+e2e_diff = e2e.get("frame_diff") or {}
+add("M10", "End-to-end verify wall", round(e2e_total_s, 4) if e2e_total_s else None, LEGACY["M10"][1], LEGACY["M10"][2],
+    round(e2e_total_s / LEGACY["M10"][1], 4) if e2e_total_s else None,
+    "PASS" if (e2e_total_s and e2e_total_s <= LEGACY["M10"][1] and e2e_changed) else ("FAIL" if e2e_total_s else "NOT_MEASURED"),
+    "Land the tap (M8) so the assert step observes a state change; the CLI loop itself now runs end to end.",
+    f"Scripted CLI loop launch -> tree -> screenshot -> tap -> tree -> screenshot -> frame-diff: wall {e2e.get('total_ms')} ms; tap accepted={e2e.get('tap_accepted')} state_changed={e2e.get('tap_state_changed')}; daemon frame hash before={e2e.get('frame_hash_before')} after={e2e.get('frame_hash_after')}; frame-diff differing_fraction={(e2e_diff.get('diff') or {}).get('differing_fraction')}. Legacy ~19 s install-bound dev loop. The wall is under legacy but the verify assert fails, so the row is not a pass.")
+m11 = metrics.get("tasks_per_gib_minute") or {}
+add("M11", "Verified tasks / GiB-minute", m11.get("derived_bound") if m11.get("verified_tasks") else None, None, LEGACY["M11"][2], None, "FAIL",
+    "Run the T01-T12 suite with job-cgroup accounting; the derived bound is not a verified rate.",
+    f"verified_tasks={m11.get('verified_tasks')}; derived bound {m11.get('derived_bound')} tasks/GiB-min from M10 wall and M2 memory ({m11.get('basis')}). Zero verified tasks until the tap/assert lands, so no verified rate is claimed.")
 add("L-launch", "Launch: cold process -> Vm ready", med("process_start"), None, "no legacy metric", None, "N/A",
     "", "ACOS-native; no legacy baseline")
 add("L-boot", "Launch: framework boot -> attach", med("boot_attach"), None, "no legacy metric", None, "N/A", "", "ACOS-native")

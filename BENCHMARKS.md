@@ -1313,3 +1313,58 @@ ACOS_PROFILE_OUT=$PWD/results/tmp/w160a-profile.json \
 
 The run writes `results/bench/v1-2026-11-11-061354.json`; the printed table is
 the one in §9.1.
+
+---
+
+### 9.7 M4/M6/M9/M10/M11: legacy methodology and the ACOS measurement (W165-A)
+
+The V1 gate has to compare like with like, so this section states exactly how
+the frozen ACVM measured each remaining non-pass and how ACOS measures it now.
+Every ACOS number here comes from the same `tools/bench-v1.sh` run as §9.1.
+
+#### Legacy method (frozen ACVM; reference only)
+
+| # | Legacy metric | How legacy measured it | Source |
+|---|---|---|---|
+| M4 | Worker create → correct frame | Warm core. Issue a *create worker* request (a new session on the already-booted core, not a core boot) and time to the first **fresh, non-black** frame, p50 over n=20 (P5b) / n=30 (corrected P1.8); the reported value is create → frame, not the create command alone. | `EXPERIMENTS.md` §21/§23; `docs/reference/ACVM_INVENTORY.md` |
+| M6 | Reset-to-ready | Warm core with a live app. `reset --app` command latency (110.3 ms p50, n=12) **and** the time to the first fresh non-black frame after it (748.1 ms p50, n=12); the D2 row compares the `→ frame` figure. Scope is `--app` (the app's user state), not the whole user. | `iter/D2.md`; `ACVM_INVENTORY.md` |
+| M9 | Concurrent workloads | N=5 scorecard plus 10 additional public virtual displays created with 0 failures; the target was to "independently demonstrate N=10". Memory is cgroup workset; each session is an independent guest with its own display and input. | `EXPERIMENTS.md` §E3.2/§P1.5; `docs/handoff/04` |
+| M10 | End-to-end verify wall | The U2 dev loop: build → install → launch → assert → evidence → reset → cleanup, wall-timed; the ~19 s figure is install-bound. | `docs/handoff/04`; §3 |
+| M11 | Verified tasks / GiB-minute | Not published. Defined as correctly completed predeclared tasks ÷ ∫(job memory GiB × minutes), with 0 false passes; requires the T01–T12 suite and job-cgroup accounting. | BENCHMARKS.md §1/§2 |
+
+#### ACOS measurement (this run)
+
+* **M4** — `acos bench worker-create-frame` (implemented in
+  `crates/acos-cli/src/bench.rs`). One `RuntimeTemplate` is booted (or loaded
+  from the warm on-disk boot cache) **outside** the timed region; each sample is
+  `Vm::restore` → counter.apk `bindApplication` → `Activity.onCreate` →
+  `ThreadedRenderer.draw` into the process `FrameStore`. A sample counts only
+  when `FrameStore::published_count` advanced, so a quiescent restore is never a
+  frame. The reported p50 is create → fresh frame.
+* **M6** — the `reset` half of the same metric: after a live app, drop the
+  `Runtime`, restore the framework template and relaunch to a fresh frame. This
+  is a **template reset**, not an in-place app-state reset; the process-global
+  Binder transport is replaced. The comparison value is the legacy
+  `reset --app → frame` 748.1 ms.
+* **M9** — `tools/bench-v1.sh` runs N=5/10/20 **separate OS processes**, each
+  `acos observe --apk counter --tree` (launch + live tree), concurrently. Wall
+  is parent-measured; per-session memory is each child's own `/proc/<pid>/status`
+  `VmHWM` sampled while it is alive, reported as RSS (not PSS, not summed with a
+  cgroup value). Independence at the *input* level (tap in one session not
+  altering another) is **not** claimed while M8 tap does not land, and the
+  in-process `SessionPool` remains a memory experiment because of the shared
+  Binder transport; the row therefore stays FAIL even when every process reaches
+  `first_frame`.
+* **M10** — a scripted CLI loop on one kept daemon session:
+  `launch --keep` → `observe --tree` → `observe --screenshot A` →
+  `tap --text Increment` → `observe --tree` → `observe --screenshot B` →
+  `frame-diff A B`. The wall is the whole loop; the frame diff is the assert
+  evidence. The wall is under the legacy install-bound value, but the assert
+  fails (the tap is acked and does not change state), so the row is not a pass.
+* **M11** — derived in the harness as `60 / (M10 wall seconds × M2 GiB per
+  session)`; this is a *bound*, not a verified rate. `verified_tasks` is 0 until
+  the M10 assert passes, so no verified rate is claimed.
+
+The M4/M6 verdicts are taken from a run only when `frames_published == samples`;
+otherwise the row is FAIL/NOT_MEASURED with the blocker recorded. No row is
+promoted on a measurement type, engine state or scope the data does not support.

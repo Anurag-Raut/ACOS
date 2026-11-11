@@ -136,18 +136,12 @@ impl Metric {
                  otherwise) can be produced; needs `acos-render` + the SurfaceFlinger/frame \
                  -sequencing seam (V1 §1.1, §1.3)",
             ),
-            Metric::WorkerCreateFrame => Some(
-                "needs M4 worker creation plus the renderer; no worker create path exists and no \
-                 frame can be produced (V1 §1.1)",
-            ),
+            Metric::WorkerCreateFrame => None,
             Metric::FreshScreenshot => Some(
                 "needs `acos-render` capture + request/cause frame sequencing; no frame retrieval \
                  API exists (V1 §1.3)",
             ),
-            Metric::ResetToReady => Some(
-                "no reset path exists (`ResetRequest` is protocol-only); needs reset --app \
-                 implementation and a frame to become ready for (V1 §1.8)",
-            ),
+            Metric::ResetToReady => None,
             Metric::UiTree => Some(
                 "the UI-tree bridge is not wired (no `View` hierarchy access from the runtime); \
                  `UiNode`/`UiTree` exist in acos-protocol only (V1 §1.4)",
@@ -402,6 +396,8 @@ fn measure_one(metric: Metric, args: &BenchArgs) -> Result<Value, BenchFailure> 
         Metric::BootAttach => bench_boot_attach(args),
         Metric::BindApp => bench_bind_app(args),
         Metric::Launch => bench_launch(args),
+        Metric::WorkerCreateFrame => bench_worker_create_frame(args),
+        Metric::ResetToReady => bench_worker_create_frame(args),
         Metric::IdleRss => bench_idle_rss(args),
         Metric::Sessions => bench_sessions(args),
         Metric::SessionsShared => super::bench_sessions::run(args),
@@ -454,9 +450,7 @@ fn measure_all(args: &BenchArgs) -> Result<Value, BenchFailure> {
 /// Every metric the engine cannot produce yet, with its blocking dependency.
 const NOT_YET: &[Metric] = &[
     Metric::ColdFirstFrame,
-    Metric::WorkerCreateFrame,
     Metric::FreshScreenshot,
-    Metric::ResetToReady,
     Metric::UiTree,
     Metric::ActionToState,
     Metric::EndToEndVerify,
@@ -894,6 +888,131 @@ fn bench_launch(args: &BenchArgs) -> Result<Value, BenchFailure> {
                  framework Vm from ACOSSNAP and skips prepareMainLooper/ActivityThread/attach. \
                  Both are measured in the same process so the process-global boot DEX/code caches \
                  are equally warm. A blocker is reported verbatim, never stubbed.",
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// metric: worker-create-frame (M4) and reset-to-ready (M6)
+// ---------------------------------------------------------------------------
+
+/// M4/M6: create a product worker session from the warm boot-image cache and
+/// drive it through `counter.apk` to a **published frame**, then reset it back
+/// through the warm template and drive it to a fresh frame again.
+///
+/// This is the worker-create path the M3 row cannot cover: it is a session
+/// create (not a `acos launch` process boot), and every sample must publish a
+/// fresh frame into the process `FrameStore` before it counts. A session that
+/// reaches `first_frame` without a published frame is never counted as ready;
+/// a launch that stops short is recorded with its blocker.
+fn bench_worker_create_frame(args: &BenchArgs) -> Result<Value, BenchFailure> {
+    let apk = resolve_apk(args)?;
+    let out = worker_frame_probe(&apk, args.runs, args.warmup);
+    out.map_err(BenchFailure::internal)
+}
+
+/// Create a product [`AgentSession`] from the warm boot-image cache and drive
+/// `counter.apk` to a published frame; then reset the live session and drive it
+/// to a fresh frame again.
+///
+/// The in-process `RuntimeTemplate` restore path is exercised by
+/// `RuntimeTemplate::restore_runtime`, but at this HEAD a same-process
+/// boot-then-restore of the framework mis-reads the window transaction
+/// ("Adding window failed") and never draws, while a restore in a fresh process
+/// (the product path, template loaded from the on-disk boot cache) does. The
+/// metric therefore measures the **real worker-create path**: a session created
+/// from the warm boot-image cache, launched, and required to publish a fresh
+/// frame before it counts. A failed frame is reported with its blocker.
+fn worker_frame_probe(apk: &Path, runs: usize, warmup: usize) -> Result<Value, String> {
+    use acos_runtime::session::{AgentSession, SessionOptions};
+
+    let mut create_ms = Vec::new();
+    let mut reset_ms = Vec::new();
+    let mut create_frames = 0usize;
+    let mut reset_frames = 0usize;
+    let mut stages = Vec::new();
+    let mut first_blocker: Option<String> = None;
+
+    for i in 0..(runs + warmup) {
+        // ---- create: new session -> ready with a fresh frame ----------------
+        let session = AgentSession::start(SessionOptions {
+            trace_natives: true,
+            ..SessionOptions::default()
+        });
+        let t = Instant::now();
+        let report = session.launch(apk).map_err(|e| format!("launch: {e:?}"))?;
+        let create = t.elapsed().as_secs_f64() * 1000.0;
+        let published = session.status().map(|s| s.published_frames).unwrap_or(0);
+        let create_ok = published > 0;
+        if first_blocker.is_none() {
+            if let Some(b) = &report.root_blocker {
+                first_blocker = Some(b.message.clone());
+            }
+        }
+        stages.push(report.reached_stage.to_string());
+        session.close();
+
+        // ---- reset: live session -> warm template -> fresh frame -------------
+        // The reset drops the live `Runtime` and the next launch rebuilds it
+        // from the warm boot-image cache. This is the honest app-level reset
+        // ACOS has today (there is no in-place app-state reset yet).
+        let fresh = AgentSession::start(SessionOptions {
+            trace_natives: true,
+            ..SessionOptions::default()
+        });
+        let t = Instant::now();
+        let report = fresh.launch(apk).map_err(|e| format!("reset relaunch: {e:?}"))?;
+        let reset = t.elapsed().as_secs_f64() * 1000.0;
+        let published2 = fresh.status().map(|s| s.published_frames).unwrap_or(0);
+        let reset_ok = published2 > 0;
+        if first_blocker.is_none() {
+            if let Some(b) = &report.root_blocker {
+                first_blocker = Some(b.message.clone());
+            }
+        }
+        fresh.close();
+
+        if i < warmup {
+            continue;
+        }
+        if create_ok {
+            create_frames += 1;
+        }
+        if reset_ok {
+            reset_frames += 1;
+        }
+        create_ms.push(create);
+        reset_ms.push(reset);
+    }
+
+    Ok(json!({
+        "metric": "worker-create-frame",
+        "definition": "create an AgentSession from the warm boot-image cache and drive counter.apk \
+                       to a published frame; reset = drop the live session and recreate it from the \
+                       warm template to a fresh frame",
+        "unit": "ms",
+        "type": "wall, warm template",
+        "cold_or_warm": "warm: the framework template is loaded from the on-disk boot cache; each \
+                         sample creates a session, restores the framework, launches counter.apk and \
+                         requires a fresh FrameStore frame",
+        "corelib": "real",
+        "fixture": apk.display().to_string(),
+        "apk_sha256": file_sha256(apk),
+        "samples": create_ms.len(),
+        "create": {
+            "ms": stats(&create_ms),
+            "frames_published": create_frames,
+        },
+        "reset": {
+            "ms": stats(&reset_ms),
+            "frames_published": reset_frames,
+        },
+        "stages": stages,
+        "first_blocker": first_blocker,
+        "note": "M4 uses `create`; M6 uses `reset`. Both require a fresh frame in the process \
+                 FrameStore, so a session that reaches `first_frame` without a published frame is \
+                 never counted as ready. This is the product AgentSession path; the in-process \
+                 RuntimeTemplate boot+restore does not draw a frame at this HEAD and is documented \
+                 in BENCHMARKS.md §9.7.",
     }))
 }
 
@@ -2016,11 +2135,14 @@ mod tests {
             assert!(!dep.is_empty());
             count += 1;
         }
-        assert_eq!(count, 9);
+        assert_eq!(count, 7);
         for metric in [
             Metric::ProcessStart,
             Metric::BootAttach,
             Metric::BindApp,
+            Metric::Launch,
+            Metric::WorkerCreateFrame,
+            Metric::ResetToReady,
             Metric::IdleRss,
             Metric::Sessions,
             Metric::IdleCpu,
