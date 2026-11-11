@@ -55,15 +55,17 @@
 //!   ACOS has no surface sync group, and the framework treats null as "no
 //!   sync".
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use acos_parcel::{BinderId, Parcel};
+use acos_wm::callbacks::{WmCallback, IWINDOW_DESCRIPTOR};
 use acos_wm::codec::{LayoutParams, ParcelCodec};
 use acos_wm::geom::RectI;
 use acos_wm::wms::{AddWindowResult, RelayoutResult};
 
 use crate::error::{Result as SResult, ServiceError};
-use crate::host::ServiceObject;
+use crate::host::{PendingDelivery, ServiceObject};
 use crate::wms::WmsState;
 
 /// The `IWindowSession` transaction codes of the **API-34 image**
@@ -130,12 +132,24 @@ pub struct WindowSessionService {
     /// `SurfaceControl` to (W5). `None` keeps the W3 placeholder body — that is
     /// the state of a host with no compositor installed.
     compositor: Option<Arc<Mutex<crate::surface_client::SurfaceState>>>,
+    /// Windows whose `IWindow.dispatchAppVisibility(true)` has already been
+    /// handed to the peer (W6). One delivery per window: the callback queue is
+    /// re-populated by every window operation, and a second `true` would just
+    /// re-traverse.
+    visibility_delivered: HashSet<u64>,
+    /// `IWindow` callbacks the queue produced but this slice does not deliver
+    /// yet (W5 §5.1: `resized(reportDraw)` from the relayout path and the
+    /// image-less code 17 must not be put on the wire). Counted so a silent
+    /// drop can be measured.
+    callbacks_deferred: usize,
 }
 
 impl std::fmt::Debug for WindowSessionService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WindowSessionService")
             .field("window_id", &self.window_id_binder)
+            .field("visibility_delivered", &self.visibility_delivered.len())
+            .field("callbacks_deferred", &self.callbacks_deferred)
             .finish()
     }
 }
@@ -148,6 +162,8 @@ impl WindowSessionService {
             state,
             window_id_binder,
             compositor: None,
+            visibility_delivered: HashSet::new(),
+            callbacks_deferred: 0,
         }
     }
 
@@ -386,6 +402,98 @@ impl ServiceObject for WindowSessionService {
         })
     }
 
+    /// W6: deliver `IWindow.dispatchAppVisibility(true)` to the app.
+    ///
+    /// The window binder arrived in `addToDisplayAsUser` as the app's own
+    /// `IWindow.Stub` (`BinderId` tagged as a Java local binder by the peer), so
+    /// a `PendingDelivery` addressed at it becomes a real oneway transaction on
+    /// the guest's looper. The callbacks are popped from `acos-wm`'s queue in the
+    /// order the WMS queued them (visibility → focus → insets), but only the
+    /// visibility one is put on the wire:
+    ///
+    /// * `windowFocusChanged` is the replay model's explicit extension (code
+    ///   17); the API-34 `IWindow` has no such transaction and its `$Stub` would
+    ///   answer a `Transaction failed` for an unknown code;
+    /// * `resized(reportDraw=true)`/`insetsControlChanged` are the *post-layout*
+    ///   callbacks. Delivering them from the relayout path is the shape that
+    ///   hung W5's guest (results/art-runtime/W5.md §5.1), and the first
+    ///   traversal does not need them (`mFirst` forces measure/layout/draw).
+    ///   They stay counted in `callbacks_deferred` until a slice that can prove
+    ///   the ordering ships them.
+    ///
+    /// The visibility callback is delivered **once per window**, so a queue that
+    /// keeps growing across relayouts cannot turn into a traversal storm.
+    fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        let mut pending = Vec::new();
+        {
+            let mut state = self.lock();
+            while let Some(pc) = state.wm.callbacks.pop() {
+                pending.push(pc);
+            }
+        }
+        let mut out = Vec::new();
+        for pc in pending {
+            let method = pc.callback.method();
+            let code = pc.callback.code();
+            match &pc.callback {
+                WmCallback::DispatchAppVisibility { visible: true } => {
+                    // A rejected add (`null` IWindow) has no binder to address.
+                    // There is nothing to deliver to, and a fabricated handle
+                    // would be a fake callback.
+                    if pc.window == 0 {
+                        self.callbacks_deferred += 1;
+                        continue;
+                    }
+                    if !self.visibility_delivered.insert(pc.window) {
+                        continue;
+                    }
+                    let data = match pc.callback.to_parcel() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!(
+                                "{DESCRIPTOR}: visibility callback for window {}: {e}",
+                                pc.window
+                            );
+                            continue;
+                        }
+                    };
+                    if std::env::var_os("ACOS_W6_CALLBACKS").is_some() {
+                        eprintln!(
+                            "ACOSW6 deliver {IWINDOW_DESCRIPTOR}.{method} code={code} \
+                             → window {:#x}",
+                            pc.window
+                        );
+                    }
+                    out.push(PendingDelivery {
+                        target: BinderId(pc.window),
+                        interface: IWINDOW_DESCRIPTOR.to_string(),
+                        code,
+                        method: method.to_string(),
+                        data,
+                    });
+                }
+                WmCallback::DispatchAppVisibility { visible: false } => {
+                    // Forget the window so a later `true` is delivered again; a
+                    // hidden window is not needed for the first frame.
+                    self.visibility_delivered.remove(&pc.window);
+                    self.callbacks_deferred += 1;
+                }
+                other => {
+                    self.callbacks_deferred += 1;
+                    if std::env::var_os("ACOS_W6_CALLBACKS").is_some() {
+                        eprintln!(
+                            "ACOSW6 defer {IWINDOW_DESCRIPTOR}.{} code={} (window {:#x})",
+                            other.method(),
+                            other.code(),
+                            pc.window
+                        );
+                    }
+                }
+            }
+        }
+        out
+    }
+
     fn raw_transact(
         &mut self,
         interface: &str,
@@ -427,11 +535,14 @@ impl ServiceObject for WindowSessionService {
                 crate::exception::write_no_exception(reply);
                 write_add_result(&mut state, &add, size_compat_scale_len, reply)?;
                 // W5 finding: the real WMS also sends `IWindow`
-                // `dispatchAppVisibility(true)` here. Delivering it from this
-                // node made the guest hang in the run that tried it, so the
-                // queued callbacks are left in `acos-wm` and the wall is
-                // recorded in results/art-runtime/W5.md (see
-                // `getHostVisibility()`/`View.GONE`).
+                // `dispatchAppVisibility(true)` here, and `ViewRootImpl`
+                // derives `mAppVisible` from the add result's
+                // `ADD_FLAG_APP_VISIBLE` bit — which ACOS does not set — so
+                // `getHostVisibility()` is GONE until that callback arrives.
+                // W6 delivers it in `drain_raw_deliveries` (after this reply),
+                // one callback only: W5's attempt to flush the whole queue from
+                // both add and relayout hung the guest (results/art-runtime/
+                // W5.md §5.1).
                 // `viewVisibility` is not part of the add policy yet; record it
                 // in the trace surface only (see W1.md §4).
                 let _ = view_visibility;
@@ -516,7 +627,10 @@ impl ServiceObject for WindowSessionService {
                 write_relayout_result(&r, reply)?;
                 // W5 finding: `resized(reportDraw=true)` is the other callback
                 // the client needs before it will draw; same open item as the
-                // visibility callback above.
+                // visibility callback above. It is deliberately **not**
+                // delivered here: `drain_raw_deliveries` counts it as deferred,
+                // and W5 §5.1 records why (the relayout-driven flush is the
+                // shape that hung).
             }
             codes::RELAYOUT_ASYNC => {
                 // Oneway: same request shape, no reply body.

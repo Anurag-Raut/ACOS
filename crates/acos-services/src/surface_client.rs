@@ -844,6 +844,13 @@ fn apply_layer_state(
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });
+            if std::env::var_os("ACOS_W6_DUMP").is_some() {
+                if let (Some(dir), Some(stored)) =
+                    (std::env::var_os("ACOS_W6_DUMP"), record.latest.as_ref())
+                {
+                    dump_latest_buffer(record.layer_id, stored, std::path::Path::new(&dir));
+                }
+            }
             if std::env::var_os("ACOS_W5_BUF").is_some() {
                 eprintln!(
                     "ACOSDBG BUFFER layer={} frame={} {}x{} stride={} fmt={} id={}",
@@ -913,6 +920,76 @@ fn try_clone(meta: &GraphicBufferMeta) -> OwnedFd {
     meta.fd
         .try_clone()
         .unwrap_or_else(|_| panic!("duplicating a GraphicBuffer memfd cannot fail"))
+}
+
+/// W6 diagnostic: copy the stored buffer's pixels out of the memfd that C1 kept.
+///
+/// The bytes are read through **this process's own dup** of the guest's
+/// `GraphicBuffer` fd (`LatestBuffer::fd`), so a dump is evidence that the
+/// buffer reached C1 in full, not a copy the producer made. Writes
+/// `<dir>/frame-<n>.rgba` (stride × height × 4) plus a `.meta` line with the
+/// dimensions, the FNV-1a of the pixels and the count of non-zero bytes (a
+/// blank buffer has 0). Diagnostic only: nothing is dumped unless the env var
+/// names a directory.
+fn dump_latest_buffer(layer_id: i32, buf: &LatestBuffer, dir: &std::path::Path) {
+    use std::io::Write;
+    use std::os::unix::fs::FileExt;
+
+    let row = buf.row_bytes();
+    let size = row.saturating_mul(buf.height as usize);
+    if size == 0 {
+        return;
+    }
+    let Ok(owned) = rustix::io::dup(buf.fd()) else {
+        eprintln!("ACOSW6 dump: dup fd failed");
+        return;
+    };
+    let file = std::fs::File::from(owned);
+    let mut pixels = vec![0u8; size];
+    let mut read = 0usize;
+    while read < size {
+        match file.read_at(&mut pixels[read..], read as u64) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => read += n,
+        }
+    }
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    let mut non_zero = 0usize;
+    let mut distinct = std::collections::HashSet::new();
+    for px in pixels[..read].chunks_exact(4) {
+        for b in px {
+            hash ^= u64::from(*b);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+        if px.iter().any(|b| *b != 0) {
+            non_zero += 1;
+        }
+        distinct.insert([px[0], px[1], px[2], px[3]]);
+    }
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        eprintln!("ACOSW6 dump: {e}");
+        return;
+    }
+    let stem = format!("frame-{}", buf.frame_number);
+    let rgba = dir.join(format!("{stem}.rgba"));
+    if let Err(e) = std::fs::write(&rgba, &pixels[..read]) {
+        eprintln!("ACOSW6 dump: {e}");
+        return;
+    }
+    let meta = format!(
+        "layer={layer_id} frame={} width={} height={} stride={} format={} bytes={} \
+         fnv1a={hash:016x} non_zero_pixels={non_zero} distinct_pixels={}\n",
+        buf.frame_number,
+        buf.width,
+        buf.height,
+        buf.stride,
+        buf.format,
+        read,
+        distinct.len()
+    );
+    let _ = std::fs::File::create(dir.join(format!("{stem}.meta")))
+        .and_then(|mut f| f.write_all(meta.as_bytes()));
+    eprintln!("ACOSW6 dump {}", meta.trim_end());
 }
 
 /// Build `onReleaseBuffer(ReleaseCallbackId, Fence::NO_FENCE, maxAcquired)`.

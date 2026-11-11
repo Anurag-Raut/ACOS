@@ -228,18 +228,38 @@ public final class LaunchMain {
                 System.out.println("ACOSLAUNCH MARK viewroot-probe: no ViewRootImpl");
                 return;
             }
+            // Field reads only. W6: `Surface.isValid()` takes the Java
+            // `Surface` monitor that `Surface.lockCanvas` holds across
+            // `nativeLockCanvas`, so probing it here deadlocked the watcher
+            // against a draw that is in flight (ART dump in
+            // results/art-runtime/W6.md §3). `mSurface != null` and
+            // `isValid` are equivalent for this diagnostic.
             Object surface = get(vr, "mSurface");
             Object attach = get(vr, "mAttachInfo");
-            Object bbq = get(vr, "mBlastBufferQueue");
+            Object view = get(vr, "mView");
             Object dirty = get(vr, "mDirty");
+            // `getHostVisibility()` is the value `performTraversals` gates
+            // `performDraw` on (`mAppVisible ? mView.getVisibility() : GONE`).
+            // `mViewVisibility` is only the value stored at the *end* of a
+            // traversal, so it stays at its constructor default (GONE) while a
+            // draw is in flight even though the window is visible.
+            Object hostVisibility = "<n/a>";
+            try {
+                java.lang.reflect.Method hv = vr.getClass().getDeclaredMethod("getHostVisibility");
+                hv.setAccessible(true);
+                hostVisibility = hv.invoke(vr);
+            } catch (Throwable t) {
+                hostVisibility = "<" + t + ">";
+            }
             System.out.println("ACOSLAUNCH MARK viewroot-probe surface_valid="
-                    + (surface == null ? "null" : surface.getClass().getMethod("isValid").invoke(surface))
-                    + " surface=" + surface
+                    + (surface != null)
                     + " view_visibility=" + get(vr, "mViewVisibility")
+                    + " host_visibility=" + hostVisibility
+                    + " app_visible=" + get(vr, "mAppVisible")
+                    + " decor_visibility=" + (view == null ? "null" : get(view, "mViewFlags"))
                     + " first=" + get(vr, "mFirst")
                     + " display_state=" + (attach == null ? "null" : get(attach, "mDisplayState"))
                     + " renderer=" + (attach == null ? "null" : get(attach, "mThreadedRenderer"))
-                    + " blast_queue=" + (bbq == null ? "null" : "set")
                     + " dirty=" + dirty
                     + " layout_requested=" + get(vr, "mLayoutRequested"));
         } catch (Throwable x) {
