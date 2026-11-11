@@ -14,7 +14,7 @@ Metric: verified tasks per GiB-minute with N=10 concurrent agents (M12: total at
 | Native loader, sandbox (Landlock/seccomp), arm64/qemu transport | Loader route B rejected (34-63 d). Sandbox + arm64 still useful: ART in bwrap, arm64 apps via qemu later | KEEP sandbox; PARK loader route; arm64 later |
 | Verify/scenario tooling, UI tree protocol, parity (ART oracle), benchmarks | Engine-independent | KEEP; add `--engine art` |
 | Flutter, RN, Gaten | Cheaper on ART (real JNI, native libs just run) | KEEP DEFERRED until counter.apk runs on ART |
-| ART plan S1..S4 as written (54-77 agent-days, replacement framework JNI + patched libbinder + custom graphics intercept) | Not reuse-first. Replaces libandroid_runtime/libhwui/libbinder wholesale before proving stock pieces cannot work | REVISE: reuse-first ladder below |
+| ART plan S1..S4 as written (replacement framework JNI + patched libbinder + custom graphics intercept) | Not reuse-first. Replaces libandroid_runtime/libhwui/libbinder wholesale before proving stock pieces cannot work | REVISE: reuse-first ladder below |
 
 ## 1b. Evidence since this plan was written (experiments D, E, 2026-11-11)
 - D: stock libandroid_runtime + libbinder run Parcel, Looper, Resources on ART (needs property table, registration order, LD_PRELOAD into default namespace). Binder driver emulation via one ioctl (BINDER_WRITE_READ) is the clean hook; fake /dev/binder in bwrap is not viable.
@@ -31,7 +31,7 @@ For each layer try in order; stop at the first rung that works on counter.apk:
 - Services: no system_server. Rust ServiceHost answers only the transactions a test hits; unknown -> UNSUPPORTED_*.
 - Process model: independent ART processes first; ART-aware warm-fork pool only after M-C and only if it clears the gate (>=25% of N=10 PSS).
 
-## 3. Phases, todos, gates (agent-days are caps; kill criteria from ART_RUNTIME_PLAN.md apply)
+## 3. Phases, todos, gates (no time budgets; one-hour task rule applies)
 
 Phase 0 - probes (running now, ~1 day): D (libandroid_runtime/Binder on ART), E (graphics seam), F (launcher crate, properties, logd, CHECK fix), W200 (render).
   T0.1 read E2D/E2E/F reports; fix the rung choice for natives, binder, graphics. Owner: orchestrator.
