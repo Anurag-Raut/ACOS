@@ -2,12 +2,13 @@
 
 ## Current direction (ART)
 
-Direction set 2026-11-11 in `docs/DECISION_ART_RUNTIME.md`, `docs/PLAN_V2.md`
-and `docs/ENGINEERING_POLICY.md`. ACOS is an agent-first environment for
-running real Android APKs and verifying app changes, not a replacement OS. The
-agent-day estimates and kill criteria in `docs/ART_RUNTIME_PLAN.md` are void
-(its header says so). The Rust VM track is frozen; its old status is kept
-below under "Rust VM track (frozen)".
+Direction set 2026-11-11 in `docs/OWNER_DIRECTION_2026-11-11.md` (the owner's
+consolidated direction, which wins on conflict), `docs/DECISION_ART_RUNTIME.md`,
+`docs/PLAN_V2.md` and `docs/ENGINEERING_POLICY.md`. ACOS is an agent-first
+environment for running real Android APKs and verifying app changes, not a
+replacement OS. The agent-day estimates and kill criteria in
+`docs/ART_RUNTIME_PLAN.md` are void (its header says so). The Rust VM track is
+frozen; its old status is kept below under "Rust VM track (frozen)".
 
 ### Engine and rules
 
@@ -25,9 +26,76 @@ below under "Rust VM track (frozen)".
   reference, with no new features (`docs/PLAN_V2.md` §1).
 - **No silent fallback** between engines. No snapshot or virtual-time
   determinism claims on the ART path (`docs/DECISION_ART_RUNTIME.md`).
-- **One-hour rule:** no task runs more than 60 min without justification and
-  approval; at 60 min the agent reports, and is not killed. No time-based
-  abandonment of ART (`docs/ENGINEERING_POLICY.md`).
+- **One-hour rule:** a task gets at most 60 min of autonomous work. At 60 min
+  the agent checkpoints safely (never a kill), reports done / blocking / why
+  it is hard / the smallest next action, and asks for approval before more
+  effort. No time-based abandonment of ART (`docs/ENGINEERING_POLICY.md`,
+  `docs/OWNER_DIRECTION_2026-11-11.md` §6).
+- **Priority order:** P0 real APK running, P0 interactive loop, P0 host
+  protection; then P1 sessions and benchmarks; P2 efficiency and compatibility
+  after measurements (`docs/PLAN_V2.md` §6).
+
+### Component status (ART, 2026-11-11)
+
+Sources: `results/art-runtime/{P4b,S3,Q1,Q2b,D1,R1,R2,S2,Q3}.md` and the git
+log at `3eabff1`. Only facts in those files are used. Commit state comes from
+each file's own text: P4b, S3, Q2b, D1, R2, Q3 and S2 say nothing is committed,
+R1's fix is in `3678c34`, and Q1 does not say. Most ART work is uncommitted.
+
+Status values (`docs/OWNER_DIRECTION_2026-11-11.md` §12):
+
+- **DONE:** exercised on the real ART path by a real APK run with a result
+  file, and nothing in its required scope is missing. Library loading or an
+  isolated test is not DONE.
+- **PARTIAL:** exercised on the real ART path by a real APK run with a result
+  file, and part of its required scope is missing.
+- **BLOCKED:** a real APK run reaches it and fails at a named cause recorded in
+  `results/`.
+- **NOT STARTED:** no real APK run on the ART path touches it. Isolated tests
+  and library loads are listed as evidence only.
+
+| Component | Google/Rust/Hybrid | Status | Working now | Missing | Priority |
+|---|---|---|---|---|---|
+| ART runtime (`dalvikvm64`) | Google | PARTIAL | Console corpus: 27 pass, 0 fail, 1 skipped (`28_sqlite_basic`, dex not built), 0 fatal logs, unchanged after sandbox hardening (`verify-27-f2.json`, S3 §2). The launch reaches `Application.onCreate` and `Activity.onCreate/onStart/onResume` (P4b §0, P4c). | Real window attach/draw not reached (`IWindowManager.openSession` unsupported, P4c). AOT vs JIT on the APK path is not measured in the listed files. | P0 |
+| Framework classes (`ActivityThread`, `Instrumentation`, `Application`, `Activity`) | Google | PARTIAL | Real `ActivityThread`: `BIND_APPLICATION` (110) finishes on the main Looper. `Instrumentation` is created by the framework (`instrumentationName=null`). A `ClientTransaction` with `LaunchActivityItem` and `ResumeActivityItem` is built by framework code and delivered (code 54). `Activity.attach`, `PhoneWindow.<init>`, `Activity.onCreate`, `onStart` and `onResume` run (AcosCounter logs, commit `80db296`, P4c). | `ViewRootImpl` construction fails at `IWindowManager.openSession` (P4c; W1 in progress). | P0 |
+| Settings content provider (`settings`) | Rust (`acos-services` `ProviderRegistry`) | PARTIAL | Rust route: `getContentProvider` is answered from the registry with a real `ContentProviderHolder`. `GET_config`, `LIST_config` and `query` return registry data. 7/7 `ams_java` tests pass (Q2b §2). | P4c fixed the hang (the binder peer closed the reply's fd before sending); `GET_config` through the ART peer now answers and the Activity resumes. `query` bulk-cursor path and other providers are not exercised on ART. | P0 |
+| Bionic / linker (APK native libraries) | Google | PARTIAL | `hello-jni` natives return the V1 values, 12/12 (R2 §2), with an app-namespace `PathClassLoader`. The RN native closure (6 libraries, `BIND_NOW`) loads (R2 §4). | Only in the R2 harness, not through the `ActivityThread` launch path (R2 §4.3). | P2 |
+| JNI | Google | PARTIAL | `hello-jni` natives run through `RegisterNatives` and `ThrowNew`. RN's merged `JNI_OnLoad` completes (R2 §2, §4). | `AndroidRuntime::mJavaVM` is null in the `dalvikvm64` guest, so a JNI upcall on an error path crashes at 0x0 (Q3 §1.1, §8 defect 4). App logging needs one framework registration, `register_android_util_Log`, through a shim (R2 §3.2). | P1 |
+| libandroid_runtime (framework natives) | Google | PARTIAL | The stock library runs under `dalvikvm64`. Parcel, Looper and the other framework natives run on the launch path (P4b §0). `NativeDisplayEventReceiver` runs its native path (Q3 §1). | `AndroidRuntime::start()` never runs, so `mJavaVM` and `gCurRuntime` stay null (Q3 §1, §8). The display event receiver fails and then segfaults in its destructor (Q3 §1). | P0 |
+| libbinder / Parcel | Google | PARTIAL | Stock `libbinder` talks to the Rust peer. `attachApplication`, `bindApplication` (1324 bytes, code 5) and `scheduleTransaction` (2108 bytes, code 54) reach the real `ApplicationThread` (P4b §0, §3). `servicemanager.ready=true` ends the libbinder wait loop, so the R1 log spin is gone (P4b §6). | `Parcel.marshall()` cannot carry binder objects, so the activity token and three system tokens are `null` (P4b §3, §7). The arg tables for `notifyDexLoad` (106) and `handleApplicationWtf` (101) are stale and return `SERVICE_BAD_REQUEST`, and their descriptor reads `<unknown>` (P4b §9). | P0 |
+| Binder transport (ACOS adapter) | Hybrid (stock libbinder + Rust peer) | PARTIAL | Reverse delivery through the userspace driver: the same `F_TXN` path carries `bindApplication` and the `ClientTransaction` (P4b §3). No kernel binder is used (P4b §7). | Binder objects do not cross the transport; see the token stand-in above. No transport optimisation is measured, and none is claimed. | P0 |
+| System services (`ServiceHost`, Rust) | Rust | PARTIAL | On the ART launch path, `attachApplication`, `getActivityClientController` (18) and `getDisplayId` (21) are answered (P4b §5 item 4). The `IDisplayManager.getDisplayInfo` codec matches the API-34 layout byte for byte: 260-byte reply, 6 tests (D1 §4). Unsupported transactions are recorded as structured records (P4b §9). | The D1 codec is not on the launch path; the guest still pushes its template (D1 §5). `getApplicationInfo` and `getInstrumentationInfoAsUser` are guest-marshalled templates (P4b §7). Stock vs lightweight is not yet evaluated per service in the listed files. | P0 |
+| Window / surface (`IWindowSession`, `Surface`) | Hybrid (stock `PhoneWindow`/`DecorView`; the ACOS window service is to be decided) | PARTIAL | One-shot `render-app` frame through stock `PhoneWindow`/`DecorView`: SSIM 0.99351, 8/8 structural nodes, tree 12/12, md5 `9ec17f05…` (P4b §0, S3 §2). | No live window lifecycle. `addToDisplayAsUser`, `relayout` and a `Surface`/`SurfaceControl` are not reached (P4b §5). The rung is undecided: a null `SurfaceControl` first, or a shmem `ANativeWindow` (P4b §5.2). | P0 |
+| ViewRootImpl | Google | NOT STARTED | Nothing on the live path. The frame comes from `render-app`, not from a `ViewRootImpl` traversal. | `setView`, `addToDisplay`, `relayout`, `performTraversals` and the input channel (P4b §5). | P0 |
+| Choreographer and vsync | Google, with an ACOS vsync source | NOT STARTED | Isolated only, from the Q3 harness, not an APK run. The first unpressed draw of a ripple starts a `ValueAnimator`, which builds `Choreographer` and `DisplayEventReceiver`. Without SurfaceFlinger the process hangs (property absent) or segfaults (property served) (Q3 §2, §4). Chosen routes: a guest settle policy now, a vsync peer later (Q3 §5). | No vsync source on any path. The settle policy is not in the guest yet (Q3 §8). `Choreographer` is constructed before any traversal (P4b §5.3). | P0 |
+| HWUI / Skia | Google | PARTIAL | Stock libhwui on the CPU Skia path draws the counter frame: SSIM 0.99351, 8/8 structural nodes, md5 stable (P4b §0, S3 §2, R1 §3.3). A pressed and focused `Button` frame draws in the harness with no crash, with the ripple downgraded to a content layer (Q3 §6). | The frame is one-shot, not from a live session. Settled animation frames (ripple, halo, shadow) need a clock (Q3 §6). `drawRenderNode` is unavailable on a software canvas (Q3 §4 row 6). | P0 |
+| AssetManager / overlays | Google | PARTIAL | Static overlays through stock `ApkAssets`, with no hardcoding (commit `9c5947d`). The counter frame depends on them. | Not exercised through a live `Activity` launch. `hello-views` inflation is blocked upstream by the settings provider (P4b §4). | P0 |
+| Sessions (independent processes) | ACOS (Rust) | PARTIAL | N=10 independent ART processes, each rendering `counter.apk`, verified 10/10 in all 3 reps. Peak PSS sum 1386.1 MiB. Median 326.4 verified tasks per GiB-minute (Q1 §1). | The Q1 run has no LLM agent in the loop (Q1 §3.1). The `session` route never reaches its ready line: it aborts in `StateListAnimator` → `Choreographer` (R1 §5). Every run writes the same `/data` tree (S3 §5). | P1 |
+| Input and live interaction (tap, key, live tree, reset, relaunch) | ACOS (input) with the stock `ViewRootImpl` | NOT STARTED | No ART input result in the listed files. | Everything. P4b stops before `onResume`, so no input reaches a live view. | P0 |
+| Observation and verification | ACOS | PARTIAL | `render-app` plus `tools/art-render-app-compare.py`: `ok` and exit 0 means SSIM at least 0.99 and 8/8 structural nodes (Q1 §1; S3 §2). Tree 12/12 (P4b §0). | Frame and tree from a single shot. No `acos verify --engine art` result in the listed files. No live tree. | P0 |
+| Sandbox (Linux isolation + ACOS orchestration) | ACOS (bwrap, Rust launcher) | PARTIAL | Hardened argv: `--unshare-pid/net/ipc/uts/cgroup-try`, `--die-with-parent`, `--clearenv`, `--cap-drop ALL`. Corpus unchanged. Killing the launcher leaves no guest or bwrap (S3 §2, §2.1; S2). Memory: logd cap 50 000 entries, 8 MiB stream caps, 2 GiB RSS watchdog (R1 §2). | `/data` is writable by any guest, and `boot.art` can be overwritten (S2 item 5; S3 §5). No mandatory cgroup memory limit (S3 §3). No seccomp or Landlock on the ART route (S3 §3). | P0 |
+| Rust DEX VM (`acos-vm`) | Rust | PARTIAL | Frozen as reference and fallback. `acos verify`: 10/10 at N=10 on the 13-step counter scenario, median 52.2 verified tasks per GiB-minute, about 578 MiB PSS per agent (Q1 §1). | No feature work (owner). Not comparable with the ART workload (Q1 §3.2). | frozen |
+| Warm-fork / shared pages | ACOS on Google ART | NOT STARTED | Nothing measured in the listed files beyond per-agent PSS (Q1 §1). | Gated after M-C, and only if it clears the gate (`docs/PLAN_V2.md` §2). | P2 |
+| Compatibility apps (RN, Flutter, Gaten) | Google (app code) | NOT STARTED | In the R2 harness, the RN native closure loads and `JNI_OnLoad` completes. RN's first blocker is `SoLoader.init()` (R2 §4.2). | No ART run of an RN, Flutter or Gaten app through the launch path. No Flutter evidence in the listed files. | P2 |
+
+**Decisive test (owner §11, `counter.apk`): NOT PASSED (update after P4c, `80db296`: launch now reaches `Activity.onResume`; next blocker `IWindowManager.openSession`; no live frame, tap or `--engine art` yet).**
+
+- Real `Activity` on ART: not reached. The launch stops inside `Activity.attach`, in the `PhoneWindow` constructor's settings read (P4b §4).
+- UI and view tree: a one-shot tree exists (12/12), not from a live `Activity` (P4b §0).
+- Tap Increment, 0 becomes 1: not reached. No ART input path is recorded.
+- Fresh screenshot: not produced from a live session.
+- Verify, reset, rerun: not reached.
+
+**Smallest next actions, from the result files (in order):**
+
+1. Serve the `settings` provider to the ART peer, or fail the call with a structured error. A hang is not allowed (P4b §4). Verify with `tools/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art launch --apk fixtures/build/apps/counter.apk --until activity-resumed` (P4b §10).
+2. Serve `addToDisplayAsUser` and `relayout` with a null `SurfaceControl` (rung 0), so `performTraversals` gets past `relayout` (P4b §5.2).
+3. Provide a vsync peer node for `createDisplayEventConnection`, or the guest settle policy, so no animator starts during draw (P4b §5.3; Q3 §5, §8).
+4. Per-run `/data` root and a mandatory cgroup before any untrusted APK runs (S3 §3, §5).
+
+Owner decisions pending: none is recorded in the listed files. The window and
+surface rung (P4b §5.2) becomes an owner gate if it commits to a complex new
+window or graphics implementation (`docs/OWNER_DIRECTION_2026-11-11.md` §10).
 
 ### Proven on ART
 
@@ -42,7 +110,7 @@ below under "Rust VM track (frozen)".
 | `counter.apk` first frame, software path | SSIM **0.99685** vs ART oracle, 4/4 content bounds exact, md5 stable over 5 runs, with image static RROs applied by stock path | `results/art-feasibility/E4H.md`, `results/art-runtime/P2c.md`, `results/art-runtime/P2e.md` |
 | Real window chrome | `PhoneWindow`/`DecorView` built by stock `setContentView`; full frame SSIM **0.99290** (P3b), **0.99351** (P3c), tree 12/12, structural 8/8 | `results/art-runtime/P3b.md`, `results/art-runtime/P3c.md` |
 | Fonts | `sSystemFontMap` built from `/system/etc/fonts.xml`; ActionBar title bounds exact (189 px) | `results/art-runtime/P3c.md` |
-| Launch reaches `bindApplication` | `attachApplication` answered by `ServiceHost`; `bindApplication` delivered (1492 bytes); `handleBindApplication` runs up to instrumentation init | `results/art-runtime/P4a.md` |
+| Launch reaches `Application.onCreate` | `bindApplication` (1324 bytes, `instrumentationName=null`, framework-created `Instrumentation`) finishes on the main Looper; `Application.onCreate` runs; the `ClientTransaction` reaches `Activity.attach` | `results/art-runtime/P4b.md` (uncommitted) |
 | Memory, measured | Cold path: 16–21 MiB private per session; AOT boot image: 64–66 MiB; shared file-backed part 100–113 MiB (cold) / 60–83 MiB (AOT), whole host | `results/art-runtime/BASELINE.md` |
 
 Caveats: the `counter` frame comes from a one-shot `render-app` run, not a
@@ -50,22 +118,25 @@ live session. P3c's numbers are uncommitted at the time of writing.
 
 ### In progress (not verified)
 
-- **Launch past `bindApplication`.** `counter.apk` stops at
-  `ActivityThread.initInstrumentation`: the instrumentation class is not
-  loadable from the APK class loader (split APK does not reach
-  `LoadedApk.makePaths`). `Application.onCreate` is **not** reached. Three
-  options are written in `results/art-runtime/P4a.md` §4; no decision is recorded.
-  Code: `crates/acos-art/src/launch.rs`, `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`
-  (both uncommitted).
-- **Content provider (Settings).** `hello-views` fails in `EditText` →
-  `Settings.Config` → `IActivityManager.getContentProvider`
-  (`results/art-runtime/P2a.md` §4, `results/art-runtime/P3c.md` §4). An
-  uncommitted local `IContentProvider` for `Settings.Config` sits in
-  `crates/acos-art/guest/java/dev/acos/art/AppMain.java` (around lines 681–736).
-  No result file records whether it works.
-- **Sessions.** `crates/acos-art/src/session.rs`, `tools/art-session-drive.py`
-  and `tools/art-runtime/bench.sh` (ART engine row) are untracked. There is no
-  ART session result file in `results/`.
+- **Launch past `Application.onCreate`: resolved by P4b.** `Application.onCreate`
+  runs with `instrumentationName=null`, and the framework creates
+  `Instrumentation` (`results/art-runtime/P4b.md` §1–§2). The `ClientTransaction`
+  reaches `Activity.attach`. `Activity.onCreate` is blocked by the `settings`
+  provider (P4b §4). Code: `crates/acos-art/src/launch.rs`,
+  `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java` (uncommitted, P4b §8).
+- **Content provider (Settings).** The Rust route is fixed: `Q2b` made
+  `getContentProvider`, `call` and `query` registry-backed (7/7 `ams_java`
+  tests). The ART path still blocks: `Settings.Global` →
+  `IContentProvider.call` hangs the main thread, because the holder's binder has
+  no server (`results/art-runtime/P4b.md` §4). `hello-views` still fails in
+  `EditText` (`results/art-runtime/P2a.md` §4). Q2b has no ART evidence (Q2b §6).
+- **Sessions.** Q1 ran N=10 independent `render-app` processes, 10/10 verified
+  (`results/art-runtime/Q1-baselines.md`). The `session` route never reaches its
+  ready line: it aborts in `StateListAnimator` → `Choreographer`
+  (`results/art-runtime/R1.md` §5). Every run shares one writable `/data` tree
+  (`results/art-runtime/S3.md` §5). `crates/acos-art/src/session.rs`,
+  `tools/art-session-drive.py` and `tools/art-runtime/bench.sh` (ART engine row)
+  are untracked. There is no ART session result file in `results/`.
 - **`results/art-runtime/p3d/`** holds a frame, tree and `compare.json`
   (tree identical to `p3c`). There is no `P3d.md` report, so its status is unknown.
 - **Working tree.** Most ART work is uncommitted (`git status`: `crates/acos-art`,
@@ -76,14 +147,14 @@ live session. P3c's numbers are uncommitted at the time of writing.
 | Gate | State | Evidence |
 |---|---|---|
 | M-A framework classes run | **Not accepted.** Most pieces are proven (above); no runner exists: `tools/art-runtime/accept.sh` is absent (only `bench.sh`) | `docs/PLAN_V2.md` §3 |
-| M-B `counter.apk` first frame | **Partial.** Frame via `render-app` (SSIM 0.99685 / 0.99351); the real Activity launch is blocked (P4a) | P2e, P3c, P4a |
+| M-B `counter.apk` first frame | **Partial.** Frame via `render-app` (SSIM 0.99685 / 0.99351); `Application.onCreate` runs; the real Activity launch is blocked at `Activity.attach` by the `settings` provider | P2e, P3c, P4b |
 | M-C tap + UI tree | **Not started on ART (unknown).** No ART tap or live-tree result file | — |
 | M-D V1 parity + M1–M11 on ART | **Not started.** M1–M11 have not been measured on ART; `results/` has only memory numbers | `results/art-runtime/BASELINE.md` |
 
 ### Open gaps
 
 1. `hello-views` cannot inflate `EditText` (Settings content provider, above).
-2. `counter.apk` `Application.onCreate` is not reached (P4a §4).
+2. `counter.apk` `Activity.onCreate` is not reached: the launch blocks at the `settings` provider (P4b §4). `Application.onCreate` runs (P4b §1).
 3. Two framework arg tables are stale: `IPackageManager.notifyDexLoad` (code 106) and
    `IActivityManager.handleApplicationWtf` (code 101) return `SERVICE_BAD_REQUEST`.
    The peer also logs `descriptor "<unknown>"` (P4a §5).
@@ -92,7 +163,9 @@ live session. P3c's numbers are uncommitted at the time of writing.
 5. The `acos verify --engine art` selector is required by `docs/PLAN_V2.md`
    (phase 2, T2.5). Whether it exists is unknown; no ART verify result is recorded.
 6. Fixed-core memory and N=10 measurements (M12, `docs/ENGINEERING_POLICY.md`)
-   on the ART path are not measured.
+   on the ART path exist only for the one-shot `render-app` workload: median
+   326.4 verified tasks per GiB-minute at N=10, with no agent in the loop
+   (`results/art-runtime/Q1-baselines.md`). The agent-loop benchmark is not measured.
 7. Warm-fork pool: not started. Gated after M-C (`docs/ART_RUNTIME_PLAN.md` §4,
    `docs/PLAN_V2.md` §3 phase 4).
 8. Flutter, React Native and Gaten: deferred until `counter.apk` runs on ART
@@ -116,7 +189,7 @@ live session. P3c's numbers are uncommitted at the time of writing.
 ## Rust VM track (frozen)
 
 Recorded before 2026-11-11. Kept as written. Where it conflicts with "Current
-direction (ART)" above, the section above wins.
+direction (ART)" above, the section above wins. Everything from "## One line" to the end of this file describes the Rust VM track; it is historical, not the current ART status.
 
 **As of 2026-11-11, HEAD `fd1a887`** (W165-A; `main` also carries W161-A through
 W171-A). `git log` is authoritative, and `tools/status-check.sh` fails when this
@@ -409,7 +482,7 @@ stale at HEAD: the tap lands on `counter.apk` (`results/m2/M2_LOG.md`
 `results/bench/REPORT.md` table (commit `ced0d70`) is retained as wave history
 but is no longer the V1 record.
 
-## Next 10 tasks
+## Next 10 tasks (Rust VM track, frozen: historical)
 
 Closed since the last refresh (do not re-open): **boot-image warm restore**
 (W154-A/W160-A) and the **`counter` tap** (W161-A). Current list:
