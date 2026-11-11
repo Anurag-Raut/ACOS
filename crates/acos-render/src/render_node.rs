@@ -299,14 +299,10 @@ impl RenderNode {
         self.bump();
     }
 
-    /// The node's local→parent transform (Android's RenderNode property
-    /// composition, evaluated at `top,left`).
-    pub fn local_matrix(&self) -> Matrix3x3 {
+    /// Compose the node's transform properties around `base` translation.
+    fn compose_matrix(&self, base_x: f32, base_y: f32) -> Matrix3x3 {
         let mut m = Matrix3x3::identity();
-        m.set_translate(
-            self.left as f32 + self.translation_x,
-            self.top as f32 + self.translation_y,
-        );
+        m.set_translate(base_x, base_y);
         let px = if self.pivot_explicit {
             self.pivot_x
         } else {
@@ -328,8 +324,27 @@ impl RenderNode {
         m
     }
 
+    /// The node's transform matrix as exposed to Java (`RenderNode.getMatrix`):
+    /// translation/rotation/scale about the pivot, **without** the layout
+    /// `left`/`top`. Android keeps the position separate from the transform, and
+    /// `View.transformFromViewToWindowSpace` adds `mLeft`/`mTop` itself; folding
+    /// the position into this matrix double-counts it (W179-A).
+    pub fn transform_matrix(&self) -> Matrix3x3 {
+        self.compose_matrix(self.translation_x, self.translation_y)
+    }
+
+    /// The node's local→parent transform used by the renderer: the layout
+    /// position (`left`/`top`) composed with the transform. This is what places
+    /// a child `RenderNode` inside its parent's canvas.
+    pub fn local_matrix(&self) -> Matrix3x3 {
+        self.compose_matrix(
+            self.left as f32 + self.translation_x,
+            self.top as f32 + self.translation_y,
+        )
+    }
+
     pub fn has_identity_matrix(&self) -> bool {
-        self.local_matrix().is_identity()
+        self.transform_matrix().is_identity()
     }
 
     /// Conservative damage/version digest for a subtree.
@@ -415,5 +430,49 @@ mod tests {
         n.set_left_top_right_bottom(10, 20, 110, 220);
         let p = n.local_matrix().map_point(crate::geom::PointF::new(0.0, 0.0));
         assert_eq!((p.x, p.y), (10.0, 20.0));
+    }
+
+    /// W179-A: the Java-visible transform (`RenderNode.getMatrix`, which
+    /// `View.getMatrix`/`hasIdentityMatrix` read) must **not** fold in the
+    /// layout `left`/`top`. `View.transformFromViewToWindowSpace` adds
+    /// `mLeft`/`mTop` itself, so a position-bearing matrix double-counts every
+    /// ancestor offset (the dialog/counter 2x tree bounds). The renderer still
+    /// needs the position, so `local_matrix` keeps it.
+    #[test]
+    fn transform_matrix_excludes_layout_position() {
+        let mut n = RenderNode::new("x");
+        n.set_left_top_right_bottom(42, 106, 311, 232);
+
+        let origin = crate::geom::PointF::new(0.0, 0.0);
+        let local = n.local_matrix().map_point(origin);
+        assert_eq!(
+            (local.x, local.y),
+            (42.0, 106.0),
+            "renderer placement keeps the layout position"
+        );
+
+        let t = n.transform_matrix().map_point(origin);
+        assert_eq!(
+            (t.x, t.y),
+            (0.0, 0.0),
+            "the Java transform must not contain the layout position"
+        );
+        assert!(
+            n.has_identity_matrix(),
+            "an untransformed view is identity regardless of its position"
+        );
+    }
+
+    /// W179-A: real transforms stay in the Java-visible matrix, so
+    /// `View.transformFromViewToWindowSpace` still applies them (and only
+    /// once).
+    #[test]
+    fn transform_matrix_keeps_translation_and_scale() {
+        let mut n = RenderNode::new("x");
+        n.set_left_top_right_bottom(10, 20, 110, 220);
+        n.set_translation(5.0, 7.0);
+        assert!(!n.has_identity_matrix(), "a translated view is not identity");
+        let t = n.transform_matrix().map_point(crate::geom::PointF::new(1.0, 2.0));
+        assert_eq!((t.x, t.y), (6.0, 9.0));
     }
 }

@@ -127,6 +127,39 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
         "live tree exposes the counter buttons: {labels:?}"
     );
 
+    // W179-A: window-relative offsets must be applied exactly once. The
+    // reference (`fixtures/reference/counter/art-api34-x86_64`) puts the count
+    // TextView at screen `[42,317]` and the Increment button at left `42`.
+    // Before the fix `View.getLocationOnScreen` folded each `RenderNode`'s
+    // layout position into its transform matrix *and* added `mLeft`/`mTop`, so
+    // every offset below the window origin was doubled (count left 84, top
+    // 506; Increment left 84).
+    fn find_by_id(n: &acos_runtime::view_tree::ViewNode, suffix: &str) -> Option<[i32; 4]> {
+        if n.resource_id.ends_with(suffix) {
+            return Some(n.bounds);
+        }
+        n.children.iter().find_map(|c| find_by_id(c, suffix))
+    }
+    let count = tree
+        .nodes
+        .iter()
+        .find_map(|n| find_by_id(n, ":id/count"))
+        .expect("count TextView in the live tree");
+    assert_eq!(
+        (count[0], count[1]),
+        (42, 317),
+        "count TextView screen origin is doubled (W179-A): {count:?}"
+    );
+    let inc = tree
+        .nodes
+        .iter()
+        .find_map(|n| find_by_id(n, ":id/inc"))
+        .expect("Increment button in the live tree");
+    assert_eq!(
+        inc[0], 42,
+        "Increment left is doubled (W179-A): {inc:?}"
+    );
+
     session.close();
 }
 

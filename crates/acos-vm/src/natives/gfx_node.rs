@@ -792,7 +792,9 @@ fn write_matrix_arg(vm: &Vm, ctx: NativeCtx, m: Matrix3x3) -> VmResult<()> {
 
 fn n_get_transform(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    let m = with_ctx(|c| c.render_nodes.get(h).map(|n| n.local_matrix()));
+    // Java-visible transform excludes the layout position (`left`/`top`):
+    // `View.transformFromViewToWindowSpace` adds `mLeft`/`mTop` itself (W179-A).
+    let m = with_ctx(|c| c.render_nodes.get(h).map(|n| n.transform_matrix()));
     if let Some(m) = m {
         write_matrix_arg(vm, ctx, m)?;
     }
@@ -800,7 +802,7 @@ fn n_get_transform(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn n_get_inverse(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    let m = with_ctx(|c| c.render_nodes.get(h).map(|n| n.local_matrix()))
+    let m = with_ctx(|c| c.render_nodes.get(h).map(|n| n.transform_matrix()))
         .and_then(|m| m.inverted());
     if let Some(m) = m {
         write_matrix_arg(vm, ctx, m)?;
