@@ -267,6 +267,10 @@ fn cl_new_instance(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             return Err(vm.throw_new("Ljava/lang/InstantiationException;", None));
         }
     };
+    // `Class.newInstance()` performs class initialization (JLS 12.4.1); the
+    // framework instantiates the launch `Activity` through this path, so a
+    // skipped `<clinit>` would drop `System.loadLibrary(...)` (JNI fixture).
+    vm.initialize_class(cid)?;
     let obj = vm.alloc_instance(cid)?;
     vm.native_roots.push(obj);
     let ctor = vm.find_method(cid, "<init>", "()V", InvokeKind::Direct);

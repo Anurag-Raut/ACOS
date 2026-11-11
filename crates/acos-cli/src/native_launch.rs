@@ -190,6 +190,18 @@ pub fn confine_native_launch_with_writable(
         ..ConfineProfile::default()
     };
     if let Some(boot) = boot_root() {
+        // The VM resolves `/system/fonts` through `ACOS_FONT_DIR`. `confine`
+        // runs `clearenv`, so the caller's value is gone by the time the app
+        // first shapes text. Repoint it at the boot tree we just granted
+        // read-only; without it every text measurement fails with
+        // `acos-render font collection missing` (hello-jni sets an ActionBar
+        // title during `onCreate`, before any later font load).
+        let fonts = boot.join("fonts");
+        if fonts.is_dir() {
+            profile
+                .env
+                .push(("ACOS_FONT_DIR".to_string(), fonts.display().to_string()));
+        }
         profile.read_only_paths.push(boot);
     }
     // Keep the explicit root visible to the runtime across `clearenv`.

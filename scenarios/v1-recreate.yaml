@@ -1,0 +1,133 @@
+# v1-recreate: V1 1.7 — state save/restore across a real activity recreation.
+#
+# The `rotate` step drives the framework's own configuration-change path:
+# `ActivityThread.prepareRelaunchActivity` + `handleRelaunchActivity` +
+# `handleResumeActivity`, i.e. `onPause -> onStop -> onSaveInstanceState ->
+# onDestroy -> onCreate(savedInstanceState) -> onStart -> onResume`. Nothing is
+# faked: the fixture's `onSaveInstanceState` writes the counter into a real
+# `Bundle` and `onCreate` reads it back.
+#
+# This file deliberately asserts the lifecycle order and the restored text, not
+# ART pixel bounds: the landscape reflow is tracked separately (V1 1.4/1.9).
+version: 1
+name: v1-recreate
+description: >-
+  Launch hello-views, click Greet twice (clicks: 2), rotate to landscape and
+  back so the activity is destroyed and recreated from its saved Bundle, assert
+  the exact lifecycle order and that "clicks: 2" survives, then press Back and
+  assert the destroy order.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+
+  # ---- drive the app out of its initial state ---------------------------
+  - type:
+      selector: {id: input}
+      text: World
+  - tap:
+      selector: {id: btn}
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, World! clicks: 1"}
+
+  # A fresh capture between the two taps: it forces a completed frame for the
+  # first click (the tap rule compares both tree and screenshot), so the second
+  # click is measured against a settled screen.
+  - capture:
+      name: v1-recreate-after-click-1
+      format: png
+      fresh: true
+
+  - tap:
+      selector: {id: btn}
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, World! clicks: 2"}
+
+  # ---- rotate: the activity is recreated from its saved state -----------
+  - rotate:
+      orientation: landscape
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 2"}
+
+  # ---- rotate back: same save/restore cycle in the other direction ------
+  - rotate:
+      orientation: portrait
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 2"}
+
+  # ---- Back finishes the activity --------------------------------------
+  - back: {}
+
+  # Back finishes the activity. Scanned over the whole session log (like the
+  # launch assertion above): the destroy sequence is the *last* occurrence of
+  # these lines, and the step-local window is consumed by the step's own
+  # observation.
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onPause$'
+        - '^onStop$'
+        - '^onSaveInstanceState clicks=2$'
+        - '^onDestroy$'
+
+  - assert_no_crash: {}

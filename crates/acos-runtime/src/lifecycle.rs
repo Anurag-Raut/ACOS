@@ -60,6 +60,11 @@ pub struct LifecycleReport {
     /// The transaction ran far enough that `ActivityThread.mActivities` holds a
     /// record with a live `Activity` (i.e. `Activity.onCreate` returned).
     pub transaction_delivered: bool,
+    /// The launch `Activity` is resumed (`Activity.mResumed`), read from the
+    /// framework rather than inferred from the app's logcat. Fixtures such as
+    /// hello-jni never log `onResume`, so the log heuristic alone would
+    /// false-block the `on_resume` launch rung.
+    pub resumed: bool,
     /// The main looper was asked to `quitSafely()` and returned.
     pub looper_quit: bool,
     /// The first structured failure, if any. Populated even when the lifecycle
@@ -105,6 +110,18 @@ pub enum LifecycleError {
     /// handle, so the blocker is diagnosable from the report alone.
     #[error("java exception: {0}")]
     JavaException(String),
+    /// An internal invariant failed (a framework object came back null, a
+    /// configuration field was missing, ...). Not an app bug.
+    #[error("internal: {0}")]
+    Internal(String),
+    /// A framework API the step needs is absent from the boot image.
+    #[error("unsupported api: {api} (at {at})")]
+    UnsupportedApi {
+        /// The API that is missing.
+        api: String,
+        /// Where it was called from.
+        at: String,
+    },
 }
 
 impl Runtime {
@@ -126,6 +143,7 @@ impl Runtime {
             app_created: false,
             transaction_scheduled: false,
             transaction_delivered: false,
+            resumed: false,
             looper_quit: false,
             error: None,
         };
@@ -169,6 +187,7 @@ impl Runtime {
             app_created: false,
             transaction_scheduled: false,
             transaction_delivered: false,
+            resumed: false,
             looper_quit: false,
             error: None,
         };
@@ -276,6 +295,7 @@ impl Runtime {
         // return it after the frame has been attempted.
         let transaction_error = run_phase(self.vm_mut()).err();
         report.transaction_delivered = activity_created(self.vm_mut(), thread, tx.token);
+        report.resumed = activity_resumed(self.vm_mut(), thread, tx.token);
         acos_vm::profile::add_stage(
             "client_transaction",
             __t.elapsed().as_nanos().min(u64::MAX as u128) as u64,
@@ -344,8 +364,24 @@ impl Runtime {
         // forever, so this is bounded instead of using the launch scheduler
         // budget.
         const INTERACTION_PUMP_TURNS: u32 = 2_000;
-        self.vm_mut()
-            .run_scheduler_max(true, INTERACTION_PUMP_TURNS)?;
+        // The injected event is delivered by an immediate looper wake, so the
+        // pump services already-due work only and does **not** advance the
+        // virtual clock to the next vsync or the `EditText` cursor blink (500
+        // ms).
+        //
+        // The framework's response to a click (button press-state animation,
+        // ripple, relayout) keeps the `Choreographer` scheduling a vsync per
+        // frame; in the interpreter each frame is a full traversal (~1 s), and
+        // W180-A measured 118 frames / 113 s for one tap after typing. The
+        // visible result — the click handler's text change and a repaint — does
+        // not need that animation to finish, so the pump arms a small vsync
+        // budget and draws the resulting tree synchronously below. This bounds
+        // the work; it does not skip the input dispatch or the render.
+        const INTERACTION_FRAME_BUDGET: u32 = 3;
+        acos_vm::natives::fwk_vsync::set_frame_budget(Some(INTERACTION_FRAME_BUDGET));
+        let pumped = self.vm_mut().run_scheduler_due(INTERACTION_PUMP_TURNS);
+        acos_vm::natives::fwk_vsync::set_frame_budget(None);
+        pumped?;
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
@@ -410,6 +446,320 @@ impl Runtime {
         }
         out.push('"');
         out
+    }
+
+    /// Drive a real configuration-change relaunch of the launched activity.
+    ///
+    /// This is the framework's own path, not a re-launch shortcut:
+    /// `ActivityThread.prepareRelaunchActivity` builds the relaunch
+    /// `ActivityClientRecord` from a `MergedConfiguration`, and
+    /// `ActivityThread.handleRelaunchActivity` then runs
+    /// `handleRelaunchActivityInner`, which pauses, stops (calling the app's
+    /// `onSaveInstanceState`), destroys, and launches the activity again with
+    /// the saved `Bundle` — the exact sequence AMS triggers with a
+    /// `ActivityRelaunchItem`.
+    ///
+    /// `orientation` is `1` (portrait) or `2` (landscape); the display override
+    /// is updated first so the relaunched activity measures against the new
+    /// screen.
+    pub fn relaunch_activity(&mut self, orientation: i32) -> Result<(), LifecycleError> {
+        use acos_vm::javabridge::JavaValue;
+
+        // The display the app will measure against after the relaunch.
+        if let Some(mut display) = acos_services::display::display_override() {
+            let landscape = orientation == 2;
+            let (w, h) = (display.width, display.height);
+            if landscape != (w > h) {
+                display.width = h;
+                display.height = w;
+            }
+            acos_services::display::set_display_override(Some(display));
+        }
+
+        let thread = match self
+            .vm_mut()
+            .call_static(
+                "android.app.ActivityThread",
+                "currentActivityThread",
+                "()Landroid/app/ActivityThread;",
+                &[],
+            )
+            .ok()
+            .and_then(|v| match v {
+                JavaValue::Object(h) if h != NULL => Some(h),
+                _ => None,
+            }) {
+            Some(t) => t,
+            None => {
+                return Err(LifecycleError::UnsupportedApi {
+                    api: "ActivityThread.currentActivityThread()".into(),
+                    at: "acos_runtime::lifecycle::relaunch_activity".into(),
+                })
+            }
+        };
+        // The new configuration: same locale/density, flipped geometry.
+        let config = crate::bind_app::build_config(self.vm_mut())
+            .map_err(|e| LifecycleError::Internal(e.to_string()))?;
+        let (w_dp, h_dp) = {
+            let vm = self.vm_mut();
+            (
+                match vm.get_field(config, "screenWidthDp") {
+                    Ok(JavaValue::Int(v)) => v,
+                    _ => 411,
+                },
+                match vm.get_field(config, "screenHeightDp") {
+                    Ok(JavaValue::Int(v)) => v,
+                    _ => 842,
+                },
+            )
+        };
+        {
+            let vm = self.vm_mut();
+            vm.set_field(config, "orientation", JavaValue::Int(orientation))?;
+            if orientation == 2 {
+                vm.set_field(config, "screenWidthDp", JavaValue::Int(h_dp.max(w_dp)))?;
+                vm.set_field(config, "screenHeightDp", JavaValue::Int(w_dp.min(h_dp)))?;
+            } else {
+                vm.set_field(config, "screenWidthDp", JavaValue::Int(w_dp.min(h_dp)))?;
+                vm.set_field(config, "screenHeightDp", JavaValue::Int(h_dp.max(w_dp)))?;
+            }
+        }
+        let merged = self
+            .vm_mut()
+            .new_instance_ctor(
+                "android.util.MergedConfiguration",
+                "(Landroid/content/res/Configuration;)V",
+                &[JavaValue::Object(config)],
+            )
+            .map_err(|e| LifecycleError::Internal(e.to_string()))?;
+        let actions = self
+            .vm_mut()
+            .new_instance_ctor(
+                "android.app.servertransaction.PendingTransactionActions",
+                "()V",
+                &[],
+            )
+            .map_err(|e| LifecycleError::Internal(e.to_string()))?;
+
+        // The live activity's token: `ActivityThread.mActivities` is the
+        // ArrayMap<IBinder, ActivityClientRecord> the launch registered. Using
+        // the real token (not null) is what makes the framework tear the
+        // existing activity down instead of creating a second one.
+        let activity_token = {
+            let vm = self.vm_mut();
+            let map = match vm.get_field(thread, "mActivities") {
+                Ok(JavaValue::Object(h)) if h != NULL => h,
+                _ => {
+                    return Err(LifecycleError::Internal(
+                        "ActivityThread.mActivities is not readable".into(),
+                    ))
+                }
+            };
+            // Several records can be present (a restore replays the launch),
+            // so pick the one whose `activity` field is live rather than
+            // `keyAt(0)`: a stale record would make `handleRelaunchActivity`
+            // look up an activity that no longer exists and silently do
+            // nothing.
+            let size = match vm.call_method(map, "size", "()I", &[]) {
+                Ok(JavaValue::Int(n)) if n > 0 => n,
+                _ => {
+                    return Err(LifecycleError::Internal(
+                        "ActivityThread.mActivities is empty (no launched activity)".into(),
+                    ))
+                }
+            };
+            let mut live = None;
+            for i in (0..size).rev() {
+                let Ok(JavaValue::Object(key)) =
+                    vm.call_method(map, "keyAt", "(I)Ljava/lang/Object;", &[JavaValue::Int(i)])
+                else {
+                    continue;
+                };
+                if key == NULL {
+                    continue;
+                }
+                let Ok(JavaValue::Object(rec)) = vm.call_method(
+                    thread,
+                    "getActivityClient",
+                    "(Landroid/os/IBinder;)Landroid/app/ActivityThread$ActivityClientRecord;",
+                    &[JavaValue::Object(key)],
+                ) else {
+                    continue;
+                };
+                if rec == NULL {
+                    continue;
+                }
+                if matches!(vm.get_field(rec, "activity"), Ok(JavaValue::Object(a)) if a != NULL) {
+                    live = Some(key);
+                    break;
+                }
+            }
+            match live {
+                Some(k) => k,
+                None => {
+                    return Err(LifecycleError::Internal(
+                        "no ActivityClientRecord has a live activity".into(),
+                    ))
+                }
+            }
+        };
+
+        // `prepareRelaunchActivity(token, pendingResults, pendingNewIntents,
+        // configChanges, mergedConfig, preserveWindow)` -> ActivityClientRecord.
+        // Every config bit is "changed" (0xFFFF) because the fixture declares no
+        // `android:configChanges`, so the framework must recreate the activity.
+        const ALL_CONFIG_CHANGES: i32 = 0xFFFF;
+        let record = match self.vm_mut().call_method(
+            thread,
+            "prepareRelaunchActivity",
+            "(Landroid/os/IBinder;Ljava/util/List;Ljava/util/List;ILandroid/util/MergedConfiguration;Z)Landroid/app/ActivityThread$ActivityClientRecord;",
+            &[
+                JavaValue::Object(activity_token),
+                JavaValue::Null,
+                JavaValue::Null,
+                JavaValue::Int(ALL_CONFIG_CHANGES),
+                JavaValue::Object(merged),
+                JavaValue::Boolean(false),
+            ],
+        ) {
+            Ok(JavaValue::Object(h)) if h != NULL => h,
+            Ok(_) => {
+                return Err(LifecycleError::Internal(
+                    "prepareRelaunchActivity returned null (no live ActivityClientRecord)".into(),
+                ))
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        let vm_reason = self
+            .vm_mut()
+            .new_string_rooted("relaunch")
+            .map_err(|e| LifecycleError::Internal(e.to_string()))?;
+
+        // The real destroy -> onCreate(savedInstanceState) sequence.
+        self.vm_mut().call_method(
+            thread,
+            "handleRelaunchActivity",
+            "(Landroid/app/ActivityThread$ActivityClientRecord;Landroid/app/servertransaction/PendingTransactionActions;)V",
+            &[JavaValue::Object(record), JavaValue::Object(actions)],
+        )?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+        }
+
+        // `handleRelaunchActivity` ends at `handleLaunchActivity`, which runs
+        // `onCreate`/`onStart` and stops; the resume is the transaction's
+        // `ResumeActivityItem` (`handleResumeActivity`), which is what re-adds
+        // the window (`makeVisible` -> `WindowManager.addView`). Without it the
+        // recreated activity has no `ViewRootImpl` and nothing to draw.
+        // `prepareRelaunchActivity` returns a *temporary* record (no
+        // `activity`); the live record the destroy/launch updated is the one
+        // registered under the token.
+        let live_record = match self.vm_mut().call_method(
+            thread,
+            "getActivityClient",
+            "(Landroid/os/IBinder;)Landroid/app/ActivityThread$ActivityClientRecord;",
+            &[JavaValue::Object(activity_token)],
+        ) {
+            Ok(JavaValue::Object(h)) if h != NULL => h,
+            _ => {
+                return Err(LifecycleError::Internal(
+                    "the relaunched activity has no ActivityClientRecord".into(),
+                ))
+            }
+        };
+        // `TransactionExecutor` cycles ON_START before ON_RESUME; calling
+        // `handleResumeActivity` alone resumes an activity that never started.
+        self.vm_mut().call_method(
+            thread,
+            "handleStartActivity",
+            "(Landroid/app/ActivityThread$ActivityClientRecord;Landroid/app/servertransaction/PendingTransactionActions;Landroid/app/ActivityOptions;)V",
+            &[
+                JavaValue::Object(live_record),
+                JavaValue::Object(actions),
+                JavaValue::Null,
+            ],
+        )?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+        }
+        self.vm_mut().call_method(
+            thread,
+            "handleResumeActivity",
+            "(Landroid/app/ActivityThread$ActivityClientRecord;ZZZLjava/lang/String;)V",
+            &[
+                JavaValue::Object(live_record),
+                JavaValue::Boolean(false), // finalStateRequest
+                JavaValue::Boolean(false), // isForward
+                JavaValue::Boolean(false), // onlyLocalRequest
+                JavaValue::Object(vm_reason),
+            ],
+        )?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+        }
+        // A recreate needs a **real traversal**: the recreated window has no
+        // measured bounds until `ViewRootImpl` runs `performTraversals` on the
+        // next vsync, which the due-work pump (no clock advance) never reaches.
+        // Advance the guest clock to the next vsyncs instead, bounded by a
+        // frame budget so the press-state/animation frames cannot run away.
+        const RELAUNCH_FRAME_BUDGET: u32 = 4;
+        set_main_looper_quitting(self.vm_mut(), 0)?;
+        if !main_thread_in_looper(self.vm()) {
+            self.vm_mut()
+                .push_static_call("android.os.Looper", "loop", "()V", &[])?;
+            if let Some(t) = self.vm_mut().threads.first_mut() {
+                t.status = ThreadStatus::Runnable;
+            }
+        }
+        acos_vm::natives::fwk_vsync::set_frame_budget(Some(RELAUNCH_FRAME_BUDGET));
+        let pumped = self.vm_mut().run_scheduler(true);
+        acos_vm::natives::fwk_vsync::set_frame_budget(None);
+        pumped?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+        }
+        self.render_frame_now()?;
+        Ok(())
+    }
+
+    /// Advance the guest clock through at most `frames` vsync frames, then draw.
+    ///
+    /// The interaction pump services only already-due work (a click's text
+    /// change lands immediately), but some effects are *animated*: a
+    /// `smoothScrollToPosition` or a dialog window transition only completes
+    /// after a few `Choreographer` frames. This advances to those frames, with
+    /// the frame budget as the hard stop, so a caller can ask for "one more
+    /// frame" until the state change is visible without ever letting the
+    /// animation storm run unbounded.
+    pub fn pump_frames(&mut self, frames: u32) -> Result<(), LifecycleError> {
+        set_main_looper_quitting(self.vm_mut(), 0)?;
+        if !main_thread_in_looper(self.vm()) {
+            self.vm_mut()
+                .push_static_call("android.os.Looper", "loop", "()V", &[])?;
+            if let Some(t) = self.vm_mut().threads.first_mut() {
+                t.status = ThreadStatus::Runnable;
+            }
+        }
+        acos_vm::natives::fwk_vsync::set_frame_budget(Some(frames));
+        let pumped = self.vm_mut().run_scheduler(true);
+        acos_vm::natives::fwk_vsync::set_frame_budget(None);
+        pumped?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+        }
+        self.render_frame_now()?;
+        Ok(())
     }
 
     /// Drive the real `ThreadedRenderer.draw` for every live `ViewRootImpl`.
@@ -744,6 +1094,29 @@ fn deliver_launch_transaction(
     Ok(crate::client_transaction::deliver_launch(
         vm, app_thread, app, apk_path,
     )?)
+}
+
+/// True when the launch `Activity` has run `onResume` (`Activity.mResumed` is
+/// set by `Activity.performResume`). Read from the framework so fixtures that
+/// do not override `onResume` are still detected.
+fn activity_resumed(vm: &mut Vm, thread: Handle, token: Handle) -> bool {
+    let record = match vm.call_method(
+        thread,
+        "getActivityClient",
+        "(Landroid/os/IBinder;)Landroid/app/ActivityThread$ActivityClientRecord;",
+        &[JavaValue::Object(token)],
+    ) {
+        Ok(JavaValue::Object(h)) if h != NULL => h,
+        _ => return false,
+    };
+    let activity = match vm.get_field(record, "activity") {
+        Ok(JavaValue::Object(h)) if h != NULL => h,
+        _ => return false,
+    };
+    matches!(
+        vm.get_field(activity, "mResumed"),
+        Ok(JavaValue::Boolean(true))
+    )
 }
 
 /// True when `ActivityThread.mActivities` has a record for `token` whose

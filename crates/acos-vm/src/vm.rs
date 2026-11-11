@@ -2335,6 +2335,36 @@ impl Vm {
         Ok(())
     }
 
+    /// Pump only work that is already due, without advancing the guest clock.
+    ///
+    /// Used by the interaction pump after input injection. The injected event
+    /// is delivered by an immediate looper wake, so it needs no clock advance;
+    /// a repeating timer (the `EditText` cursor blink, or the vsync-driven
+    /// `Choreographer.doFrame`) is future-dated and is left pending instead of
+    /// being chased. Bounding the pump this way — rather than by a turn count —
+    /// keeps a tap after typing from running hundreds of full framework
+    /// traversals (W180-A: 113 s and the 120 s VM watchdog). The visible
+    /// repaint is still driven synchronously by `Runtime::render_frame_now`.
+    pub fn run_scheduler_due(&mut self, max_turns: u32) -> VmResult<()> {
+        let mut turns: u32 = 0;
+        loop {
+            crate::interp::run(self)?;
+            crate::natives::safe_point::pump(self);
+            if self.pending_exception != NULL || self.exit_request.is_some() {
+                break;
+            }
+            self.host.check()?;
+            if !crate::natives::looper::pump_due(self)? {
+                break;
+            }
+            turns += 1;
+            if turns >= max_turns {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Exit code requested by `System.exit`, if any.
     pub fn exit_code(&self) -> i32 {
         self.exit_request.unwrap_or(0)

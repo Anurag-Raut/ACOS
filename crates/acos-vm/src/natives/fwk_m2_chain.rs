@@ -21,6 +21,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         n_init_zygote_child_heap_profiling,
     );
     vm.register_native(
+        "Landroid/app/ActivityThread;",
+        "nPurgePendingResources",
+        "()V",
+        n_purge_pending_resources,
+    );
+    vm.register_native(
         "Lcom/android/internal/os/ClassLoaderFactory;",
         "createClassloaderNamespace",
         "(Ljava/lang/ClassLoader;ILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
@@ -39,6 +45,23 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 /// arm — the structural result matches the platform's own unprotected path.
 /// Recorded in `results/m2/M2_LOG.md` rather than hidden.
 fn n_init_zygote_child_heap_profiling(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    Ok(())
+}
+
+/// `ActivityThread.nPurgePendingResources()`.
+///
+/// `ActivityThread.handleRelaunchActivity` (the configuration-change recreate
+/// path, V1 1.7) calls this after the old activity has been destroyed to drop
+/// the `Resources` objects ART kept alive for it. ART's implementation walks
+/// its weak `Resources` table and frees the ones whose `ResourcesImpl` is no
+/// longer reachable; the Java side (`ResourcesManager`) then rebuilds them on
+/// the next access.
+///
+/// ACOS keeps resources in the Rust resource table keyed by the guest
+/// `ResourcesImpl`, so nothing is retained on behalf of a destroyed activity
+/// and there is nothing to purge. The structural effect is the same: the next
+/// `getResources()` call resolves against the live table.
+fn n_purge_pending_resources(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 

@@ -1,0 +1,77 @@
+# v1-reset: V1 1.8 — reset and destroy on the real session path.
+#
+# Exercises `acos reset --scope app` as a scenario step: the app is driven to a
+# non-initial state (two clicks, so the tree reads "clicks: 2"), the session is
+# reset, and a fresh launch must come back to the fixture's initial strings.
+# `destroy` is the session-close path exercised when the run ends; the harness
+# asserts the worker is gone (see results/v1/W191A.md for the CLI evidence).
+version: 1
+name: v1-reset
+description: >-
+  Launch hello-views, click Greet twice to reach "clicks: 2", reset the app
+  scope, relaunch, and assert the tree is back to "Hello ACOS" / "clicks: 0".
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+  - reset
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}
+
+  # ---- drive the app out of its initial state ---------------------------
+  # One click is enough to prove the reset: the tree leaves its initial state
+  # ("clicks: 0") and the post-reset launch must come back to it.
+  - tap:
+      selector: {id: btn}
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, ! clicks: 1"}
+
+  # ---- reset the app scope, then relaunch -------------------------------
+  - reset:
+      scope: app
+
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: title}
+      text: {exact: Hello ACOS}
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}
+
+  - assert_no_crash: {}

@@ -256,7 +256,9 @@ impl Proc {
 /// progress (so [`crate::vm::Vm::run_scheduler`] should re-enter the
 /// scheduler).
 pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
-    pump_impl(vm, false)
+    // Real-time pump: unchanged pre-W191-A behaviour (it may block for the
+    // deadline). Only [`pump_due`] suppresses the advance.
+    pump_impl(vm, false, true)
 }
 
 /// The deterministic scheduler hook used by the lifecycle driver.
@@ -269,7 +271,25 @@ pub(crate) fn pump(vm: &mut Vm) -> VmResult<bool> {
 /// is what lets a `Choreographer` `doFrame` scheduled at the next vsync run
 /// without a real 16.6 ms wait per frame.
 pub(crate) fn pump_virtual(vm: &mut Vm) -> VmResult<bool> {
-    pump_impl(vm, true)
+    pump_impl(vm, true, true)
+}
+
+/// The interaction-pump variant: service work that is already due, but never
+/// advance the guest clock to a future deadline.
+///
+/// After an input event has been injected, the only work the pump must do is
+/// deliver it (an `InputChannel` wake, not a timed message) and let the caller
+/// draw the result. A repeating timer — the `EditText` cursor blink every
+/// 500 ms, or the `Choreographer` `doFrame` at every vsync — is always
+/// *future*-dated, and advancing the clock to it turns one tap into hundreds of
+/// full framework traversals. Reporting idle instead lets
+/// [`crate::vm::Vm::run_scheduler_due`] stop at the input boundary; the real
+/// repaint is still driven synchronously by `Runtime::render_frame_now`.
+///
+/// This is a bound, not a skip: every message whose deadline has already
+/// arrived is dispatched, and every readable fd (input, Binder) is serviced.
+pub(crate) fn pump_due(vm: &mut Vm) -> VmResult<bool> {
+    pump_impl(vm, true, false)
 }
 
 /// Shared body of [`pump`] / [`pump_virtual`].
@@ -279,7 +299,7 @@ pub(crate) fn pump_virtual(vm: &mut Vm) -> VmResult<bool> {
 ///
 /// * `false` — block the host until the deadline (or a wake) arrives;
 /// * `true` — advance the guest clock to the deadline and wake the looper.
-fn pump_impl(vm: &mut Vm, virtual_time: bool) -> VmResult<bool> {
+fn pump_impl(vm: &mut Vm, virtual_time: bool, allow_advance: bool) -> VmResult<bool> {
     // A run whose only thread is parked here must still obey the host
     // watchdog; check before blocking and again when the wait returns.
     vm.host.check()?;
@@ -363,7 +383,12 @@ fn pump_impl(vm: &mut Vm, virtual_time: bool) -> VmResult<bool> {
         // No fd is readable and no deadline has passed in real time. If a
         // future deadline exists, jump the guest clock to it (plus 1 ms so a
         // truncated millisecond poll timeout cannot leave `now < msg.when`)
-        // and wake the parked looper(s) whose deadline is now due.
+        // and wake the parked looper(s) whose deadline is now due. The
+        // interaction pump (`allow_advance == false`) deliberately stops here:
+        // only already-due work ran, and the explicit render draws the result.
+        if !allow_advance {
+            return Ok(false);
+        }
         let Some(deadline) = next_deadline else {
             return Ok(false);
         };

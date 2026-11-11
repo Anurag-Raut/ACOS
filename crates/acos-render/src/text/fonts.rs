@@ -607,6 +607,18 @@ pub fn candidate_font_dirs() -> Vec<PathBuf> {
             dirs.push(PathBuf::from(dir));
         }
     }
+    // `ACOS_BOOT_DIR` is the runtime's extracted Android system image; its
+    // `fonts/` is the authoritative font set. Resolving it here (before the
+    // host directories) keeps text metrics identical between a confined
+    // `--native` launch and a normal one, and stops a host font set such as
+    // `/usr/share/fonts` from silently standing in for the Android fonts — the
+    // layout/bounds drift W191-A traced to exactly that substitution.
+    if let Some(boot) = std::env::var_os("ACOS_BOOT_DIR").map(PathBuf::from) {
+        let p = boot.join("fonts");
+        if p.is_dir() {
+            dirs.push(p);
+        }
+    }
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     for rel in ["../../.cache/boot/android-34/fonts", ".cache/boot/android-34/fonts"] {
         let p = manifest.join(rel);

@@ -295,6 +295,9 @@ fn ctor_new_instance0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         return Err(vm.throw_new("Ljava/lang/InstantiationException;", None));
     };
     let mid = get_long_field(vm, this, "artMethod").unwrap_or(0) as MethodId;
+    // `Constructor.newInstance(...)` performs class initialization (JLS
+    // 12.4.1) before the constructor body runs.
+    vm.initialize_class(cid)?;
     let obj = vm.alloc_instance(cid)?;
     vm.native_roots.push(obj);
     let result = crate::interp::call_method(vm, mid, obj, &[]);

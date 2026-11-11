@@ -537,16 +537,25 @@ impl Backend for NativeBackend {
     fn logs_since(&mut self, _since: u64) -> Result<Vec<LogRecord>, BackendError> {
         let session = self.session()?;
         let lines: Vec<LogLine> = session.logs().map_err(session_error)?;
+        // Multiset difference against the previous snapshot, not "count beyond
+        // the previous count". The guest log sink is a bounded ring (4096
+        // records): once it evicts, a line's *count* in the snapshot goes
+        // **down**, and count-based dedup then silently drops new records that
+        // share a line with an evicted one. That is what hid the recreation
+        // lifecycle (`onCreate` after `onDestroy`) from `assert_log` in
+        // W191-A. A multiset difference is stable under eviction.
+        let mut remaining = self.logs_seen.clone();
         let mut out = Vec::new();
         let mut seen_now: BTreeMap<String, usize> = BTreeMap::new();
         for line in &lines {
             let key = line.line.clone();
-            let count = seen_now.entry(key.clone()).or_insert(0);
-            *count += 1;
-            let already = self.logs_seen.get(&key).copied().unwrap_or(0);
-            if *count > already {
-                self.logs_seq += 1;
-                out.push(log_record(line, self.logs_seq));
+            *seen_now.entry(key.clone()).or_insert(0) += 1;
+            match remaining.get_mut(&key) {
+                Some(n) if *n > 0 => *n -= 1,
+                _ => {
+                    self.logs_seq += 1;
+                    out.push(log_record(line, self.logs_seq));
+                }
             }
         }
         self.logs_seen = seen_now;
@@ -609,13 +618,15 @@ impl Backend for NativeBackend {
                 self.session()?.key(4).map_err(input_error)?;
             }
             InputAction::Rotate(orientation) => {
-                return Err(BackendError::unsupported(
-                    "input",
-                    format!(
-                        "the native runtime cannot rotate the display ({orientation:?}) yet: no \
-                         orientation change / activity recreation path exists in the session"
-                    ),
-                ));
+                // The real config-change path: the session flips the display
+                // and drives `ActivityThread.handleRelaunchActivity`, so the
+                // activity is paused, stopped (`onSaveInstanceState`),
+                // destroyed, and recreated from the saved `Bundle`.
+                let code = match orientation {
+                    acos_protocol::commands::Orientation::Portrait => 1,
+                    acos_protocol::commands::Orientation::Landscape => 2,
+                };
+                self.session()?.relaunch(code).map_err(input_error)?;
             }
         }
         // Force a completed frame for the post-action observation: a text commit

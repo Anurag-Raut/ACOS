@@ -105,6 +105,10 @@ struct VsyncState {
     next_id: u64,
     receivers: BTreeMap<u64, ReceiverState>,
     interval_nanos: i64,
+    /// Remaining vsync ticks the Choreographer may be handed. `None` is
+    /// unlimited; `Some(0)` drops a `scheduleVsync` so the looper parks. The
+    /// interaction pump arms a small budget (see [`set_frame_budget`]).
+    frame_budget: Option<u32>,
 }
 
 impl VsyncState {
@@ -113,12 +117,27 @@ impl VsyncState {
             next_id: 1,
             receivers: BTreeMap::new(),
             interval_nanos: DEFAULT_INTERVAL_NANOS,
+            frame_budget: None,
         }
     }
 }
 
 thread_local! {
     static STATE: RefCell<VsyncState> = RefCell::new(VsyncState::new());
+}
+
+/// Cap how many further vsync ticks `DisplayEventReceiver.scheduleVsync` may
+/// deliver. `None` restores unlimited rendering.
+///
+/// The interaction pump arms a small budget: an input event's click handler and
+/// the synchronous `render_frame_now` are all the visible result needs, while
+/// the press-state animation can keep the `Choreographer` scheduling frames for
+/// seconds. In the interpreter each frame is a full traversal, so an unbounded
+/// storm after a tap (W180-A: 118 frames, 113 s, 120 s watchdog) is bounded to
+/// a handful of frames here. A dropped request leaves the eventfd quiet, so the
+/// looper parks and the scheduler returns.
+pub fn set_frame_budget(budget: Option<u32>) {
+    STATE.with(|s| s.borrow_mut().frame_budget = budget);
 }
 
 /// Configure the virtual refresh interval in nanoseconds (test/VRR hook).
@@ -291,6 +310,23 @@ fn native_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_schedule_vsync(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ptr = vm.arg_i64(ctx, 0) as u64;
     if ptr == 0 {
+        return Ok(());
+    }
+    // Consume one frame from the armed budget, if any. An exhausted budget
+    // drops the request: no eventfd write, so `nativePollOnce` parks instead of
+    // running another traversal.
+    let allowed = STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        match s.frame_budget.as_mut() {
+            Some(0) => false,
+            Some(n) => {
+                *n -= 1;
+                true
+            }
+            None => true,
+        }
+    });
+    if !allowed {
         return Ok(());
     }
     let wrote = STATE.with(|s| {

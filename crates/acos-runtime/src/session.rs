@@ -423,6 +423,10 @@ enum Cmd {
         steps: usize,
         reply: Sender<Result<InputReport, SessionError>>,
     },
+    Relaunch {
+        orientation: i32,
+        reply: Sender<Result<InputReport, SessionError>>,
+    },
     Logs {
         reply: Sender<Result<Vec<LogLine>, SessionError>>,
     },
@@ -634,6 +638,12 @@ impl AgentSession {
     }
 
     /// The current guest log buffer (does not drain it).
+    /// Rotate the display and let the real framework recreate the activity
+    /// (`ActivityThread.handleRelaunchActivity`), preserving saved state.
+    pub fn relaunch(&self, orientation: i32) -> Result<InputReport, SessionError> {
+        self.round_trip(|reply| Cmd::Relaunch { orientation, reply })
+    }
+
     pub fn logs(&self) -> Result<Vec<LogLine>, SessionError> {
         self.round_trip(|reply| Cmd::Logs { reply })
     }
@@ -721,6 +731,12 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                     (Ok(report), Some(before)) => Ok(input_after_pump(&mut state, report, before)),
                     (report, _) => report,
                 });
+            }
+            Cmd::Relaunch {
+                orientation,
+                reply,
+            } => {
+                let _ = reply.send(do_relaunch(&mut state, orientation));
             }
             Cmd::Logs { reply } => {
                 let mut lines = current_logs();
@@ -1074,6 +1090,45 @@ fn do_split_tap(_state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport,
     finish_input("tap", Ok(seqs))
 }
 
+/// Rotate and recreate the launched activity through the real framework path.
+fn do_relaunch(state: &mut WorkerState, orientation: i32) -> Result<InputReport, SessionError> {
+    let stage = state.stage_reached;
+    let before = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES)
+        .map(|t| tree_state_summary(&t))
+        .ok();
+    let Some(runtime) = state.runtime.as_mut() else {
+        return Err(SessionError::new(
+            "UNSUPPORTED_BACKEND",
+            format!("cannot relaunch: the runtime is not booted (stage reached: {stage})"),
+        )
+        .with_details(vec![
+            ("reason", "not_ready".to_string()),
+            ("capability", "input.rotate".to_string()),
+            ("stage_reached", stage.to_string()),
+        ]));
+    };
+    runtime.relaunch_activity(orientation).map_err(|e| {
+        SessionError::new("UNSUPPORTED_BACKEND", format!("relaunch failed: {e}")).with_details(vec![
+            ("capability", "input.rotate".to_string()),
+            ("stage_reached", stage.to_string()),
+        ])
+    })?;
+    let mut report = InputReport {
+        kind: "rotate".to_string(),
+        accepted: true,
+        ack_seqs: Vec::new(),
+        path: None,
+        state_changed: false,
+    };
+    if let Ok(after) = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES) {
+        report.state_changed = match before {
+            Some(before) => tree_state_summary(&after) != before,
+            None => true,
+        };
+    }
+    Ok(report)
+}
+
 /// Run the interaction pump and set `state_changed` from a pre/post tree diff.
 fn input_after_pump(state: &mut WorkerState, mut report: InputReport, before: String) -> InputReport {
     if let Some(rt) = state.runtime.as_mut() {
@@ -1081,9 +1136,30 @@ fn input_after_pump(state: &mut WorkerState, mut report: InputReport, before: St
             eprintln!("acos-session: interaction pump failed: {e}");
         }
     }
-    if let Ok(after) = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES) {
-        report.state_changed = tree_state_summary(&after) != before;
+    let mut after = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES).ok();
+    let mut changed = after
+        .as_ref()
+        .map(|t| tree_state_summary(t) != before)
+        .unwrap_or(false);
+    // An *animated* effect (`smoothScrollToPosition`, a dialog window
+    // transition) is not visible after the due-work pump. Fall back to the
+    // pre-W191-A bounded virtual-time pump — but only when the due-work pump
+    // produced no change, so a plain click (whose text change lands
+    // immediately) never pays for it and the tap-after-type storm stays
+    // bounded by the frame budget armed inside `pump`.
+    if !changed {
+        if let Some(rt) = state.runtime.as_mut() {
+            if rt.vm_mut().run_scheduler_max(true, 2000).is_ok() {
+                let _ = rt.render_frame_now();
+            }
+        }
+        after = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES).ok();
+        changed = after
+            .as_ref()
+            .map(|t| tree_state_summary(t) != before)
+            .unwrap_or(false);
     }
+    report.state_changed = changed;
     report
 }
 
@@ -1418,7 +1494,7 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
     let app_ok = report.app_created;
     let tx_scheduled = report.transaction_scheduled;
     let activity_ok = report.transaction_delivered;
-    let resume_ok = lifecycle_msgs.iter().any(|m| m.contains("onResume"));
+    let resume_ok = report.resumed || lifecycle_msgs.iter().any(|m| m.contains("onResume"));
     let frame = state.store.latest();
     let frame_ok = frame.is_some();
 
