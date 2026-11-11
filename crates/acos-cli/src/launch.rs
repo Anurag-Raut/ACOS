@@ -135,17 +135,20 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     let flutter = args.flutter || detect_flutter(&args.apk);
     let rn = args.rn || detect_react_native(&args.apk);
     if args.keep || flutter || rn {
+        // The ABI gate (UNSUPPORTED_ABI, ADR-0018 W59-A) must run here too: the
+        // daemon route's own backends report an ABI miss as WRONG_ABI. Only the
+        // parse-and-check runs in this process; confinement is never entered
+        // here, so the daemon spawn is still the first execution.
+        if crate::native_launch::native_requested(args.native) {
+            if let Err(err) = crate::native_launch::check_apk(&args.apk) {
+                return reject_native_gate(&request_id, &args, &err);
+            }
+        }
         return run_keep(&args, &request_id, flutter, rn);
     }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
-            let envelope = session_error_envelope(&request_id, &err);
-            if args.json {
-                crate::print_json(&envelope);
-            } else {
-                eprintln!("launch: {}: {}", err.code, err.message);
-            }
-            return ExitCode::FAILURE;
+            return reject_native_gate(&request_id, &args, &err);
         }
     }
     let native = crate::native_launch::native_requested(args.native);
@@ -263,6 +266,18 @@ fn print_daemon_launch(result: &Value) {
             }
         }
     }
+}
+
+/// Report a native-gate rejection (`UNSUPPORTED_ABI`, `CONFINEMENT_UNAVAILABLE`,
+/// ...) as the launch envelope and fail.
+fn reject_native_gate(request_id: &str, args: &LaunchArgs, err: &SessionError) -> ExitCode {
+    let envelope = session_error_envelope(request_id, err);
+    if args.json {
+        crate::print_json(&envelope);
+    } else {
+        eprintln!("launch: {}: {}", err.code, err.message);
+    }
+    ExitCode::FAILURE
 }
 
 /// ABI-check the APK and, when it ships host-ABI native code, confine the
