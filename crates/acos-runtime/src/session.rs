@@ -710,10 +710,17 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                 steps,
                 reply,
             } => {
-                let _ = reply.send(finish_input(
+                let before = do_observe_tree(&mut state, crate::view_tree::DEFAULT_MAX_NODES)
+                    .map(|t| tree_state_summary(&t))
+                    .ok();
+                let report = finish_input(
                     "swipe",
                     input_java::inject_swipe(from, to, duration_nanos, steps).map_err(input_error),
-                ));
+                );
+                let _ = reply.send(match (report, before) {
+                    (Ok(report), Some(before)) => Ok(input_after_pump(&mut state, report, before)),
+                    (report, _) => report,
+                });
             }
             Cmd::Logs { reply } => {
                 let mut lines = current_logs();
@@ -992,7 +999,7 @@ fn do_tap_text(state: &mut WorkerState, label: &str) -> Result<InputReport, Sess
     let x = (left + right) as f32 / 2.0;
     let y = (top + bottom) as f32 / 2.0;
     let before = tree_state_summary(&tree);
-    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    let report = do_split_tap(state, x, y)?;
     Ok(input_after_pump(state, report, before))
 }
 
@@ -1027,7 +1034,7 @@ fn do_tap_id(state: &mut WorkerState, id: &str) -> Result<InputReport, SessionEr
     let x = (left + right) as f32 / 2.0;
     let y = (top + bottom) as f32 / 2.0;
     let before = tree_state_summary(&tree);
-    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    let report = do_split_tap(state, x, y)?;
     Ok(input_after_pump(state, report, before))
 }
 
@@ -1037,11 +1044,30 @@ fn do_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, Sessio
     let before = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES)
         .map(|t| tree_state_summary(&t))
         .ok();
-    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    let report = do_split_tap(state, x, y)?;
     Ok(match before {
         Some(before) => input_after_pump(state, report, before),
         None => report,
     })
+}
+
+/// Inject a tap across two looper passes: DOWN, pump, UP.
+///
+/// A physical tap delivers DOWN and UP as separate `InputEventReceiver`
+/// drains, so the widget's posted tap/long-press scheduling runs *between*
+/// them. The previous single-batch `inject_tap` wrote DOWN+UP before the
+/// looper was pumped, so `AbsListView` never posted its `PerformClick`
+/// `Runnable` and a `ListView` row click was silently dropped. Splitting the
+/// gesture lets the framework's real touch state machine advance.
+fn do_split_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, SessionError> {
+    let mut seqs = input_java::inject_tap_down(x, y).map_err(input_error)?;
+    if let Some(rt) = state.runtime.as_mut() {
+        if let Err(e) = rt.pump() {
+            eprintln!("acos-session: tap-down pump failed: {e}");
+        }
+    }
+    seqs.extend(input_java::inject_tap_up(x, y).map_err(input_error)?);
+    finish_input("tap", Ok(seqs))
 }
 
 /// Run the interaction pump and set `state_changed` from a pre/post tree diff.

@@ -526,6 +526,75 @@ pub fn swipe(args: SwipeArgs) -> ExitCode {
     finish_input(&session, &request_id, &args.session, args.json, result)
 }
 
+/// Arguments for `acos scroll`.
+///
+/// A scroll is a vertical MotionEvent gesture: DOWN at `(x, y1)`, interpolated
+/// MOVEs, UP at `(x, y2)`. It is the tool an agent uses to scroll a list that
+/// has no scroll button; `acos swipe` delivers the same sequence but `scroll`
+/// names the intent and takes a single axis.
+#[derive(Debug, clap::Args)]
+pub struct ScrollArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+
+    /// X coordinate of the gesture (finger stays on this column).
+    pub x: i32,
+
+    /// Start Y (finger down).
+    pub y1: i32,
+
+    /// End Y (finger up). A smaller `y2` scrolls content down (finger up).
+    pub y2: i32,
+
+    /// Gesture duration in milliseconds.
+    #[arg(long, default_value_t = 300)]
+    pub duration_ms: u64,
+
+    /// Number of interpolated motion steps.
+    #[arg(long, default_value_t = 8)]
+    pub steps: usize,
+
+    /// Launch this APK first, then scroll.
+    #[arg(long)]
+    pub apk: Option<PathBuf>,
+
+    /// Wall-clock ceiling for an `--apk` launch, in seconds.
+    #[arg(long, default_value_t = 120)]
+    pub timeout: u64,
+
+    /// Emit the standard ACOS JSON envelope instead of a text summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Run `acos scroll`.
+pub fn scroll(args: ScrollArgs) -> ExitCode {
+    if args.apk.is_none() {
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "from": {"x": args.x, "y": args.y1},
+            "to": {"x": args.x, "y": args.y2},
+            "duration_ms": args.duration_ms,
+        });
+        if let Some(code) = call_running_daemon("acos_swipe", &daemon_args, args.json) {
+            return code;
+        }
+    }
+    let request_id = new_request_id();
+    let session = start_session(args.timeout);
+    if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
+        return emit(&envelope, args.json);
+    }
+    let result = session.swipe(
+        (args.x as f32, args.y1 as f32),
+        (args.x as f32, args.y2 as f32),
+        Duration::from_millis(args.duration_ms),
+        args.steps.max(1),
+    );
+    finish_input(&session, &request_id, &args.session, args.json, result)
+}
+
 fn finish_input(
     _session: &AgentSession,
     request_id: &str,

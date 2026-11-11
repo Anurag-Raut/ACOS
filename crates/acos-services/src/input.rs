@@ -141,6 +141,10 @@ pub struct InputDispatcher {
     next_seq: u32,
     pending: BTreeMap<u32, PendingEvent>,
     acks: Vec<AckRecord>,
+    /// A DOWN delivered by [`InputDispatcher::inject_tap_down`] awaiting its
+    /// matching UP. The target is pinned so a relayout/z-order change between
+    /// the two halves cannot reroute the UP to a different window.
+    active_tap: Option<WindowId>,
 }
 
 impl InputDispatcher {
@@ -176,6 +180,9 @@ impl InputDispatcher {
     /// Remove a window and drop its pending routes.
     pub fn remove_window(&mut self, window: WindowId) {
         self.windows.remove(&window);
+        if self.active_tap == Some(window) {
+            self.active_tap = None;
+        }
         if self.focus == Some(window) {
             self.focus = self
                 .windows
@@ -282,6 +289,38 @@ impl InputDispatcher {
             InputEvent::Motion(motion(1, x, y, INJECT_BASE_NANOS + TAP_HOLD_NANOS)),
         )?;
         Ok(vec![down, up])
+    }
+
+    /// Inject the DOWN half of a tap and remember its target.
+    ///
+    /// A real tap delivers DOWN and UP in **separate** looper passes: the
+    /// widget's posted tap/long-press scheduling runs between them. Batching
+    /// both events in one channel drain skips that window, so a `ListView`
+    /// never posts its `PerformClick`. The runtime calls this, pumps the
+    /// looper, then calls [`InputDispatcher::inject_tap_up`].
+    pub fn inject_tap_down(&mut self, x: f32, y: f32) -> Result<Vec<u32>, InputError> {
+        let target = self.hit_test(x, y).ok_or(InputError::NoWindowAtPoint {
+            x: x.floor() as i32,
+            y: y.floor() as i32,
+        })?;
+        let seq = self.deliver(target, InputEvent::Motion(motion(0, x, y, INJECT_BASE_NANOS)))?;
+        self.active_tap = Some(target);
+        Ok(vec![seq])
+    }
+
+    /// Inject the UP half of a tap started by [`InputDispatcher::inject_tap_down`].
+    pub fn inject_tap_up(&mut self, x: f32, y: f32) -> Result<Vec<u32>, InputError> {
+        let target = self.active_tap.take().or_else(|| self.hit_test(x, y)).ok_or(
+            InputError::NoWindowAtPoint {
+                x: x.floor() as i32,
+                y: y.floor() as i32,
+            },
+        )?;
+        let seq = self.deliver(
+            target,
+            InputEvent::Motion(motion(1, x, y, INJECT_BASE_NANOS + TAP_HOLD_NANOS)),
+        )?;
+        Ok(vec![seq])
     }
 
     /// Inject an interpolated swipe: DOWN, `steps` MOVEs, UP.

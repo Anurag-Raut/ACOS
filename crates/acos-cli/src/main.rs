@@ -54,6 +54,8 @@ enum Command {
     Key(session::KeyArgs),
     /// Swipe between two points.
     Swipe(session::SwipeArgs),
+    /// Scroll a vertical distance (a vertical MotionEvent DOWN/MOVE/UP sequence).
+    Scroll(session::ScrollArgs),
     /// Type text into the focused editor (same path as `acos session text`).
     Type(session::SessionTextArgs),
     /// Read the guest log buffer.
@@ -169,6 +171,7 @@ fn main() -> ExitCode {
         Command::Tap(args) => session::tap(args),
         Command::Key(args) => session::key(args),
         Command::Swipe(args) => session::swipe(args),
+        Command::Scroll(args) => session::scroll(args),
         Command::Type(args) => session::session(session::SessionCommand::Text(args)),
         Command::Logs(args) => session::logs(args),
         Command::Serve(args) => serve::run(args),

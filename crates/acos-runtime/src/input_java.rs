@@ -176,6 +176,16 @@ pub fn inject_tap(x: f32, y: f32) -> Result<Vec<u32>, InputError> {
     with_wms(|s| s.input.inject_tap(x, y))
 }
 
+/// Inject the DOWN half of a tap (see `InputDispatcher::inject_tap_down`).
+pub fn inject_tap_down(x: f32, y: f32) -> Result<Vec<u32>, InputError> {
+    with_wms(|s| s.input.inject_tap_down(x, y))
+}
+
+/// Inject the UP half of a tap started by [`inject_tap_down`].
+pub fn inject_tap_up(x: f32, y: f32) -> Result<Vec<u32>, InputError> {
+    with_wms(|s| s.input.inject_tap_up(x, y))
+}
+
 /// Inject a swipe through the service dispatcher.
 pub fn inject_swipe(
     from: (f32, f32),
