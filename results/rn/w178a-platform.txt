@@ -1,0 +1,423 @@
+# W178-A — RN platform launch evidence (SoLoader native loading reaches ReactRootView attach)
+
+Regenerated with the rebuilt fixture APK (`fixtures/build/apps/rn-hello.apk`,
+md5 d8ed0a4c8cc09c2afa9fd9007b962b89) after:
+  * `tools/rn-hello-deps.py` now resolves `lifecycle-viewmodel-savedstate`;
+  * `AppInfo::from_manifest` points `nativeLibraryDir` at the guest VFS lib dir;
+  * the fixture registers `OpenSourceMergedSoMapping` + a `System.loadLibrary`-backed
+    `SoFileLoader` (mirrors `BridgeProbe`).
+
+## Stage ladder + blocker
+
+reached_stage = activity_on_create
+classes_loaded = 2446  wall_ms = 19010
+stages = [['apk_parsed', 'Ok'], ['process_booted', 'Ok'], ['bind_application', 'Ok'], ['application_on_create', 'Ok'], ['client_transaction', 'Ok'], ['activity_on_create', 'Ok'], ['on_resume', 'Blocked'], ['first_frame', 'NotReached']]
+
+root_blocker:
+java exception: java.lang.RuntimeException: Unable to start activity ComponentInfo{dev.acos.fixtures.rnhello/dev.acos.fixtures.rnhello.MainActivity}: java.lang.IllegalArgumentException: Cannot add a null child view to a ViewGroup
+    at android.app.ActivityThread.performLaunchActivity(3782)
+    at android.app.ActivityThread.handleLaunchActivity(3922)
+    at android.app.servertransaction.LaunchActivityItem.execute(103)
+    at android.app.servertransaction.TransactionExecutor.executeCallbacks(139)
+    at android.app.servertransaction.TransactionExecutor.execute(96)
+    at android.app.ActivityThread$H.handleMessage(2443)
+    at android.os.Handler.dispatchMessage(106)
+    at android.os.Looper.loopOnce(205)
+    at android.os.Looper.loop(294)
+    at java.lang.Object.<init>(56)
+  caused by: java.lang.IllegalArgumentException: Cannot add a null child view to a ViewGroup
+    at android.view.ViewGroup.addView(5034)
+    at android.view.ViewGroup.addView(5016)
+    at androidx.appcompat.app.AppCompatDelegateImpl.setContentView(742)
+    at androidx.appcompat.app.AppCompatActivity.setContentView(203)
+    at com.facebook.react.ReactActivityDelegate.loadApp(178)
+    at com.facebook.react.ReactActivityDelegate.lambda$onCreate$0(171)
+    at com.facebook.react.ReactActivityDelegate.$r8$lambda$HPdXfLmAU1y4Wc1XbwAHziPP2WA(0)
+    at com.facebook.react.ReactActivityDelegate$$ExternalSyntheticLambda0.run(0)
+    at com.facebook.systrace.Systrace.traceSection(35)
+    at com.facebook.react.ReactActivityDelegate.onCreate(130)
+    at com.facebook.react.ReactActivity.onCreate(61)
+    at android.app.Activity.performCreate(8595)
+    at android.app.Activity.performCreate(8573)
+    at android.app.Instrumentation.callActivityOnCreate(1456)
+    at android.app.ActivityThread.performLaunchActivity(3764)
+    at android.app.ActivityThread.handleLaunchActivity(3922)
+    at android.app.servertransaction.LaunchActivityItem.execute(103)
+    at android.app.servertransaction.TransactionExecutor.executeCallbacks(139)
+    at android.app.servertransaction.TransactionExecutor.execute(96)
+    at android.app.ActivityThread$H.handleMessage(2443)
+    at android.os.Handler.dispatchMessage(106)
+    at android.os.Looper.loopOnce(205)
+    at android.os.Looper.loop(294)
+    at java.lang.Object.<init>(56)
+  java-tail: 
+    
+  native-tail: 
+    Ljava/util/concurrent/atomic/AtomicInteger;-><clinit>()V
+    Ljava/util/concurrent/atomic/AtomicInteger;->getAndAdd(I)I
+    Ljava/lang/Thread;->currentThread()Ljava/lang/Thread;
+    Landroid/os/MessageQueue;->nativeInit()J
+    Ljava/lang/ref/Reference;->refersTo0(Ljava/lang/Object;)Z
+    Landroid/os/Binder;->getNativeBBinderHolder()J
+    Landroid/os/Binder;->getNativeFinalizer()J
+    Ljava/lang/Class;->getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;
+    Ljava/lang/String;->charAt(I)C
+    Ldalvik/system/VMRuntime;->registerNativeAllocation(J)V
+    Ljava/lang/Class;->isAnonymousClass()Z
+    Ljava/lang/Class;->getNameNative()Ljava/lang/String;
+    Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
+    Ljava/lang/Class;->getDeclaringClass()Ljava/lang/Class;
+    Ljava/lang/String;->lastIndexOf(Ljava/lang/String;)I
+    Ljava/lang/String;->substring(I)Ljava/lang/String;
+    Ldalvik/system/VMRuntime;->newUnpaddedArray(Ljava/lang/Class;I)Ljava/lang/Object;
+    Landroid/system/OsConstants;->initConstants()V
+    Llibcore/io/Linux;->sysconf(I)J
+    Ljava/lang/String;->replace(CC)Ljava/lang/String;
+    Ljava/lang/Float;->floatToRawIntBits(F)I
+    Ljava/lang/Double;->doubleToRawLongBits(D)J
+    Ljava/lang/Double;->longBitsToDouble(J)D
+    Ldalvik/system/VMRuntime;->bootClassPath()Ljava/lang/String;
+    Ldalvik/system/VMRuntime;->classPath()Ljava/lang/String;
+    Llibcore/io/Linux;->getenv(Ljava/lang/String;)Ljava/lang/String;
+    Ldalvik/system/VMRuntime;->vmVersion()Ljava/lang/String;
+    Llibcore/io/Linux;->getuid()I
+    Llibcore/io/Linux;->getpwuid(I)Landroid/system/StructPasswd;
+    Llibcore/io/Linux;->uname()Landroid/system/StructUtsname;
+    Llibcore/icu/ICU;->getIcuVersion()Ljava/lang/String;
+    Llibcore/icu/ICU;->getUnicodeVersion()Ljava/lang/String;
+    Llibcore/icu/ICU;->getCldrVersion()Ljava/lang/String;
+    Ljava/lang/System;->specialProperties()[Ljava/lang/String;
+    Ldalvik/system/VMRuntime;->properties()[Ljava/lang/String;
+    Ljava/lang/String;->indexOf(I)I
+    Ljava/lang/String;->substring(II)Ljava/lang/String;
+    Ljava/lang/String;->isEmpty()Z
+    Ljdk/internal/misc/Unsafe;->arrayBaseOffset(Ljava/lang/Class;)I
+    Ljdk/internal/misc/Unsafe;->arrayIndexScale(Ljava/lang/Class;)I
+    Ljdk/internal/misc/Unsafe;->addressSize()I
+    Ldalvik/system/VMStack;->getStackClass2()Ljava/lang/Class;
+    Ljava/lang/Class;->getDeclaredField(Ljava/lang/String;)Ljava/lang/reflect/Field;
+    Ljava/lang/Class;->isAssignableFrom(Ljava/lang/Class;)Z
+    Ljava/lang/String;->lastIndexOf(I)I
+    Ljava/lang/String;->intern()Ljava/lang/String;
+    Ljdk/internal/misc/Unsafe;->objectFieldOffset(Ljava/lang/reflect/Field;)J
+    Ljava/lang/Object;->notifyAll()V
+    Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V
+    Ljava/lang/String;->fillBytesLatin1([BI)V
+    Ljava/lang/String;-><init>([BIII)V
+    Ljava/lang/Class;->getDeclaredFields()[Ljava/lang/reflect/Field;
+    Ljava/lang/reflect/Field;->getNameInternal()Ljava/lang/String;
+    Ljdk/internal/misc/Unsafe;->compareAndSetInt(Ljava/lang/Object;JII)Z
+    Ljdk/internal/misc/Unsafe;->getReferenceAcquire(Ljava/lang/Object;J)Ljava/lang/Object;
+    Ljdk/internal/misc/Unsafe;->compareAndSetReference(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z
+    Ljdk/internal/misc/Unsafe;->compareAndSetLong(Ljava/lang/Object;JJJ)Z
+    Ljava/lang/ref/Reference;->getReferent()Ljava/lang/Object;
+    Ljava/lang/String;-><init>([C)V
+    Lorg/apache/harmony/dalvik/ddmc/DdmServer;->nativeSendChunk(I[BII)V
+    Landroid/os/SystemProperties;->native_get_boolean(Ljava/lang/String;Z)Z
+    Landroid/os/SystemProperties;->native_get_int(Ljava/lang/String;I)I
+    Landroid/os/SystemClock;->elapsedRealtime()J
+    Landroid/os/SystemClock;->uptimeNanos()J
+    Lcom/android/internal/os/BinderInternal;->getContextObject()Landroid/os/IBinder;
+    Landroid/os/Parcel;->nativeCreate()J
+    Landroid/os/Parcel;->nativeMarkForBinder(JLandroid/os/IBinder;)V
+    Landroid/os/Parcel;->nativeWriteInterfaceToken(JLjava/lang/String;)V
+    Landroid/os/Parcel;->nativeWriteString16(JLjava/lang/String;)V
+    Landroid/os/BinderProxy;->transactNative(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z
+    Landroid/os/Parcel;->nativeReadInt(J)I
+    Landroid/os/Parcel;->nativeReadStrongBinder(J)Landroid/os/IBinder;
+    Landroid/os/Parcel;->nativeFreeBuffer(J)V
+    Landroid/os/SystemClock;->uptimeMillis()J
+    Landroid/os/Parcel;->nativeWriteStrongBinder(JLandroid/os/IBinder;)V
+    Landroid/os/Parcel;->nativeWriteLong(JJ)I
+    Ljava/lang/String;->indexOf(II)I
+    Ljava/lang/Object;->internalClone()Ljava/lang/Object;
+    Ljava/lang/String;->equalsIgnoreCase(Ljava/lang/String;)Z
+    Ljava/lang/String;->toCharArray()[C
+    Ljava/lang/Class;->getDeclaredClasses()[Ljava/lang/Class;
+    Ljava/lang/String;->indexOf(Ljava/lang/String;)I
+    Landroid/os/SystemProperties;->native_get(Ljava/lang/String;)Ljava/lang/String;
+    Landroid/os/Binder;->clearCallingIdentity()J
+    Landroid/os/MessageQueue;->nativePollOnce(JI)V
+    Landroid/os/Trace;->nativeGetEnabledTags()J
+    Ldalvik/system/VMRuntime;->registerSensitiveThread()V
+    Ldalvik/system/VMRuntime;->newNonMovableArray(Ljava/lang/Class;I)Ljava/lang/Object;
+    Ldalvik/system/VMRuntime;->addressOf(Ljava/lang/Object;)J
+    Landroid/os/SystemClock;->elapsedRealtimeNanos()J
+    Ljava/lang/Runtime;->loadLibrary0(Ljava/lang/Class;Ljava/lang/String;)V
+    Landroid/util/StatsLog;->writeImpl([BII)V
+    Ljava/lang/String;-><init>([B)V
+    Landroid/util/Log;->println_native(IILjava/lang/String;Ljava/lang/String;)I
+    Ljava/lang/Object;->identityHashCodeNative(Ljava/lang/Object;)I
+    Landroid/os/Process;->setArgV0Native(Ljava/lang/String;)V
+    Ldalvik/system/VMRuntime;->setProcessPackageName(Ljava/lang/String;)V
+    Ldalvik/system/VMRuntime;->setProcessDataDirectory(Ljava/lang/String;)V
+    Landroid/graphics/Canvas;->nSetCompatibilityVersion(I)V
+    Ljava/lang/Thread;->nativeGetStatus(Z)I
+    Ljava/lang/ThreadGroup;->addUnstarted()V
+    Ljava/io/UnixFileSystem;->initIDs()V
+    Lsun/misc/Unsafe;->objectFieldOffset(Ljava/lang/reflect/Field;)J
+    Ljava/io/UnixFileSystem;->canonicalize0(Ljava/lang/String;)Ljava/lang/String;
+    Ljava/lang/Throwable;->nativeFillInStackTrace()Ljava/lang/Object;
+    Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+    Ljava/lang/VMClassLoader;->getBootClassPathEntries()[Ljava/lang/String;
+    Lcom/android/icu/util/LocaleNative;->setDefaultNative(Ljava/lang/String;)V
+    Landroid/graphics/Typeface;->nativeGetReleaseFunc()J
+    Landroid/graphics/Typeface;->preloadFontFile(Ljava/lang/String;)V
+    Landroid/os/SystemProperties;->native_get(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    Ljava/lang/String;->compareTo(Ljava/lang/String;)I
+    Ljava/lang/String;->getCharsNoCheck(II[CI)V
+    Ljava/lang/String;->trim()Ljava/lang/String;
+    Ljava/lang/String;->endsWith(Ljava/lang/String;)Z
+    Ljava/io/UnixFileSystem;->list(Ljava/io/File;)[Ljava/lang/String;
+    Ljava/io/UnixFileSystem;->getBooleanAttributes0(Ljava/lang/String;)I
+    Llibcore/io/Linux;->open(Ljava/lang/String;II)Ljava/io/FileDescriptor;
+    Llibcore/io/Linux;->fstat(Ljava/io/FileDescriptor;)Landroid/system/StructStat;
+    Llibcore/io/Linux;->android_fdsan_exchange_owner_tag(Ljava/io/FileDescriptor;JJ)V
+    Lsun/nio/ch/FileChannelImpl;->initIDs()J
+    Ljava/lang/Thread;->isInterrupted()Z
+    Lsun/nio/ch/NativeThread;->current()J
+    Lsun/nio/ch/FileDispatcherImpl;->size0(Ljava/io/FileDescriptor;)J
+    Lsun/nio/ch/FileChannelImpl;->map0(IJJ)J
+    Llibcore/io/AsynchronousCloseMonitor;->signalBlockedThreads(Ljava/io/FileDescriptor;)V
+    Ljava/io/FileDescriptor;->isSocket(I)Z
+    Llibcore/io/Linux;->close(Ljava/io/FileDescriptor;)V
+    Llibcore/io/Memory;->peekByte(J)B
+    Llibcore/io/Memory;->peekShortNative(J)S
+    Llibcore/io/Memory;->peekIntNative(J)I
+    Llibcore/io/Memory;->peekByteArray(J[BII)V
+    Llibcore/io/Memory;->peekCharArray(J[CIIZ)V
+    Lcom/android/icu/util/regex/PatternNative;->getNativeFinalizer()J
+    Lcom/android/icu/util/regex/PatternNative;->compileImpl(Ljava/lang/String;I)J
+    Ldalvik/system/VMRuntime;->getNotifyNativeInterval()I
+    Ljava/util/concurrent/atomic/AtomicInteger;->addAndGet(I)I
+    Llibcore/io/Linux;->strerror(I)Ljava/lang/String;
+    Llibcore/io/Linux;->readBytes(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I
+    Ljava/lang/String;-><init>([CII)V
+    Lcom/android/icu/charset/NativeConverter;->getNativeFinalizer()J
+    Lcom/android/icu/charset/NativeConverter;->charsetForName(Ljava/lang/String;)Ljava/nio/charset/Charset;
+    Lcom/android/icu/charset/NativeConverter;->openConverter(Ljava/lang/String;)J
+    Lcom/android/icu/charset/NativeConverter;->getAveCharsPerByte(J)F
+    Lcom/android/icu/charset/NativeConverter;->setCallbackDecode(JIILjava/lang/String;)V
+    Lcom/android/icu/charset/NativeConverter;->decode(J[BI[CI[IZ)I
+    Lcom/android/icu/util/regex/MatcherNative;->getNativeFinalizer()J
+    Lcom/android/icu/util/regex/PatternNative;->openMatcherImpl(J)J
+    Lcom/android/icu/util/regex/MatcherNative;->groupCountImpl(J)I
+    Lcom/android/icu/util/regex/MatcherNative;->setInputImpl(JLjava/lang/String;II)V
+    Lcom/android/icu/util/regex/MatcherNative;->useAnchoringBoundsImpl(JZ)V
+    Lcom/android/icu/util/regex/MatcherNative;->useTransparentBoundsImpl(JZ)V
+    Lcom/android/icu/util/regex/MatcherNative;->matchesImpl(J[I)Z
+    Lcom/android/icu/util/regex/MatcherNative;->findNextImpl(J[I)Z
+    Ldalvik/system/VMRuntime;->getSdkVersionNative(I)I
+    Ljava/lang/reflect/Array;->createObjectArray(Ljava/lang/Class;I)Ljava/lang/Object;
+    Ljdk/internal/misc/Unsafe;->putReferenceRelease(Ljava/lang/Object;JLjava/lang/Object;)V
+    Ldalvik/system/VMRuntime;->notifyNativeAllocationsInternal()V
+    Ljava/io/FileInputStream;->available0()I
+    Landroid/graphics/Typeface;->nativeRegisterLocaleList(Ljava/lang/String;)V
+    Landroid/graphics/fonts/Font$Builder;->nInitBuilder()J
+    Landroid/graphics/fonts/Font$Builder;->nAddAxis(JIF)V
+    Landroid/graphics/fonts/Font$Builder;->nBuild(JLjava/nio/ByteBuffer;Ljava/lang/String;Ljava/lang/String;IZI)J
+    Landroid/graphics/fonts/Font;->nGetReleaseNativeFont()J
+    Landroid/graphics/fonts/FontFamily$Builder;->nGetReleaseNativeFamily()J
+    Landroid/graphics/fonts/Font;->nGetPackedStyle(J)I
+    Landroid/graphics/fonts/FontFamily$Builder;->nInitBuilder()J
+    Landroid/graphics/fonts/FontFamily$Builder;->nAddFont(JJ)V
+    Landroid/graphics/fonts/FontFamily$Builder;->nBuild(JLjava/lang/String;IZZ)J
+    Landroid/graphics/Typeface;->nativeCreateFromArray([JJII)J
+    Landroid/graphics/Typeface;->nativeGetStyle(J)I
+    Landroid/graphics/Typeface;->nativeGetWeight(J)I
+    Landroid/graphics/Typeface;->nativeCreateWeightAlias(JI)J
+    Landroid/graphics/Typeface;->nativeSetDefault(J)V
+    Landroid/graphics/Typeface;->nativeForceSetStaticFinalField(Ljava/lang/String;Landroid/graphics/Typeface;)V
+    Landroid/graphics/Typeface;->nativeCreateFromTypeface(JI)J
+    Landroid/graphics/Typeface;->nativeRegisterGenericFamily(Ljava/lang/String;J)V
+    Ljava/lang/Float;->intBitsToFloat(I)F
+    Landroid/graphics/ColorSpace$Rgb;->nativeCreate(FFFFFFF[F)J
+    Landroid/graphics/ColorSpace$Rgb;->nativeGetNativeFinalizer()J
+    Ljava/lang/Math;->pow(DD)D
+    Landroid/hardware/OverlayProperties;->nGetDestructor()J
+    Landroid/os/Parcel;->nativeWriteInt(JI)I
+    Landroid/hardware/OverlayProperties;->nWriteOverlayPropertiesToParcel(JLandroid/os/Parcel;)V
+    Landroid/os/Parcel;->nativeMarshall(J)[B
+    Landroid/hardware/OverlayProperties;->nReadOverlayPropertiesFromParcel(Landroid/os/Parcel;)J
+    Landroid/os/SystemProperties;->native_find(Ljava/lang/String;)J
+    Landroid/os/Parcel;->nativeWriteString8(JLjava/lang/String;)V
+    Landroid/os/Parcel;->nativeWriteFloat(JF)I
+    Landroid/os/Parcel;->nativeReadString16(J)Ljava/lang/String;
+    Landroid/os/Parcel;->nativeReadString8(J)Ljava/lang/String;
+    Landroid/os/Parcel;->nativeReadFloat(J)F
+    Landroid/os/Parcel;->nativeDataAvail(J)I
+    Landroid/os/Parcel;->nativeReadLong(J)J
+    Landroid/util/Log;->isLoggable(Ljava/lang/String;I)Z
+    Ljava/lang/Class;->getInnerClassFlags(I)I
+    Ljava/lang/Enum;->enumValues(Ljava/lang/Class;)[Ljava/lang/Object;
+    Ldalvik/system/VMRuntime;->is64Bit()Z
+    Landroid/os/Binder;->setThreadStrictModePolicy(I)V
+    Ldalvik/system/VMRuntime;->setDedupeHiddenApiWarnings(Z)V
+    Landroid/os/Trace;->nativeSetAppTracingAllowed(Z)V
+    Landroid/app/ActivityThread;->nInitZygoteChildHeapProfiling()V
+    Landroid/graphics/HardwareRenderer;->nSetDebuggingEnabled(Z)V
+    Ljava/lang/Class;->newInstance()Ljava/lang/Object;
+    Ljava/lang/System;->log(CLjava/lang/String;Ljava/lang/Throwable;)V
+    Llibcore/io/Linux;->stat(Ljava/lang/String;)Landroid/system/StructStat;
+    Landroid/content/res/AssetManager;->nativeGetThemeFreeFunction()J
+    Landroid/content/res/ApkAssets;->nativeLoad(ILjava/lang/String;ILandroid/content/res/loader/AssetsProvider;)J
+    Landroid/content/res/ApkAssets;->nativeGetStringBlock(J)J
+    Ljava/lang/Class;->classForName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;
+    Ljava/lang/VMClassLoader;->findLoadedClass(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;
+    Lcom/android/org/conscrypt/NativeCrypto;->clinit()V
+    Lcom/android/org/conscrypt/NativeCrypto;->get_cipher_names(Ljava/lang/String;)[Ljava/lang/String;
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_has_aes_hardware()I
+    Ljava/lang/String;-><init>(II[C)V
+    Ljava/lang/Class;->getDeclaredConstructorInternal([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;
+    Ljava/lang/reflect/Constructor;->newInstance0([Ljava/lang/Object;)Ljava/lang/Object;
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_get_digestbyname(Ljava/lang/String;)J
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_MD_size(J)I
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_MD_CTX_create()J
+    Llibcore/util/CharsetUtils;->toUtf8Bytes(Ljava/lang/String;II)[B
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_DigestInit_ex(Lcom/android/org/conscrypt/NativeRef$EVP_MD_CTX;J)I
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_DigestUpdate(Lcom/android/org/conscrypt/NativeRef$EVP_MD_CTX;[BII)V
+    Lcom/android/org/conscrypt/NativeCrypto;->EVP_DigestFinal_ex(Lcom/android/org/conscrypt/NativeRef$EVP_MD_CTX;[BI)I
+    Ljava/lang/String;->toLowerCase()Ljava/lang/String;
+    Ljava/io/UnixFileSystem;->checkAccess(Ljava/io/File;I)Z
+    Landroid/content/res/AssetManager;->nativeCreate()J
+    Landroid/content/res/AssetManager;->nativeSetApkAssets(J[Landroid/content/res/ApkAssets;Z)V
+    Landroid/content/res/AssetManager;->nativeSetConfiguration(JIILjava/lang/String;IIIIIIIIIIIIIIII)V
+    Llibcore/io/Linux;->getpid()I
+    Ljava/util/concurrent/atomic/AtomicLong;-><clinit>()V
+    Ljava/util/concurrent/atomic/AtomicLong;->get()J
+    Ljava/util/concurrent/atomic/AtomicLong;->compareAndSet(JJ)Z
+    Ljava/lang/System;->nanoTime()J
+    Ldalvik/system/DexFile;->openDexFileNative(Ljava/lang/String;Ljava/lang/String;ILjava/lang/ClassLoader;[Ldalvik/system/DexPathList$Element;)Ljava/lang/Object;
+    Ldalvik/system/DexFile;->isBackedByOatFile(Ljava/lang/Object;)Z
+    Ldalvik/system/DexFile;->verifyInBackgroundNative(Ljava/lang/Object;Ljava/lang/ClassLoader;)V
+    Ldalvik/system/BaseDexClassLoader;->computeClassLoaderContextsNative()[Ljava/lang/String;
+    Lcom/android/internal/os/ClassLoaderFactory;->createClassloaderNamespace(Ljava/lang/ClassLoader;ILjava/lang/String;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    Ldalvik/system/VMRuntime;->registerAppInfo(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V
+    Landroid/os/Binder;->getCallingPid()I
+    Landroid/os/Binder;->getCallingUid()I
+    Landroid/net/NetworkUtils;->getBoundNetworkHandleForProcess()J
+    Ljava/lang/String;-><init>(Ljava/lang/String;)V
+    Llibcore/io/Linux;->setenv(Ljava/lang/String;Ljava/lang/String;Z)V
+    Landroid/graphics/HardwareRenderer;->setupShadersDiskCache(Ljava/lang/String;Ljava/lang/String;)V
+    Landroid/os/Parcel;->nativeDataPosition(J)I
+    Landroid/os/GraphicsEnvironment;->isDebuggable()Z
+    Landroid/os/GraphicsEnvironment;->setLayerPaths(Ljava/lang/ClassLoader;Ljava/lang/String;)V
+    Landroid/os/SystemProperties;->native_get_long(Ljava/lang/String;J)J
+    Landroid/os/GraphicsEnvironment;->setGpuStats(Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;I)V
+    Ljava/util/concurrent/atomic/AtomicInteger;->incrementAndGet()I
+    Ldalvik/system/VMRuntime;->clampGrowthLimit()V
+    Landroid/content/res/AssetManager;->nativeGetAssignedPackageIdentifiers(JZZ)Landroid/util/SparseArray;
+    Ljava/lang/reflect/Field;->set(Ljava/lang/Object;Ljava/lang/Object;)V
+    Ljava/util/concurrent/atomic/AtomicInteger;->getAndIncrement()I
+    Landroid/os/Binder;->flushPendingCommands()V
+    Landroid/os/MessageQueue;->nativeWake(J)V
+    Landroid/content/res/ApkAssets;->nativeIsUpToDate(J)Z
+    Landroid/content/res/AssetManager;->nativeThemeCreate(J)J
+    Landroid/content/res/AssetManager;->nativeThemeApplyStyle(JJIZ)V
+    Landroid/graphics/HardwareRenderer;->nSetDisplayDensityDpi(I)V
+    Landroid/content/res/AssetManager;->nativeThemeGetChangingConfigurations(J)I
+    Landroid/graphics/HardwareRenderer;->preload()V
+    Landroid/os/GraphicsEnvironment;->hintActivityLaunch()V
+    Ljava/util/concurrent/atomic/AtomicReference;-><clinit>()V
+    Landroid/content/res/AssetManager;->nativeGetResourceValue(JISLandroid/util/TypedValue;Z)I
+    Landroid/content/res/StringBlock;->nativeGetSize(J)I
+    Landroid/content/res/StringBlock;->nativeGetString(JI)Ljava/lang/String;
+    Landroid/content/res/StringBlock;->nativeGetStyle(JI)[I
+    Ljava/lang/reflect/Field;->get(Ljava/lang/Object;)Ljava/lang/Object;
+    Ljava/lang/reflect/Field;->getAnnotationNative(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;
+    Ljava/lang/Class;->getDeclaredMethodsUnchecked(Z)[Ljava/lang/reflect/Method;
+    Ljava/lang/reflect/Executable;->getMethodReturnTypeInternal()Ljava/lang/Class;
+    Ljava/lang/reflect/Executable;->getParameterTypesInternal()[Ljava/lang/Class;
+    Ljava/lang/reflect/Executable;->getMethodNameInternal()Ljava/lang/String;
+    Ljava/lang/reflect/Method;->getDefaultValue()Ljava/lang/Object;
+    Ljava/lang/Class;->getDeclaredMethodInternal(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;
+    Ljava/lang/Class;->getInterfacesInternal()[Ljava/lang/Class;
+    Ljava/lang/reflect/Executable;->compareMethodParametersInternal(Ljava/lang/reflect/Method;)I
+    Ljava/lang/reflect/Method;->getExceptionTypes()[Ljava/lang/Class;
+    Ljava/util/concurrent/atomic/AtomicLong;->getAndIncrement()J
+    Ljava/lang/reflect/Proxy;->generateProxy(Ljava/lang/String;[Ljava/lang/Class;Ljava/lang/ClassLoader;[Ljava/lang/reflect/Method;[[Ljava/lang/Class;)Ljava/lang/Class;
+    Landroid/provider/$Proxy0;-><init>(Ljava/lang/reflect/InvocationHandler;)V
+    Landroid/provider/$Proxy0;->maxTargetSdk()I
+    Landroid/os/Parcel;->nativeSetDataPosition(JI)V
+    Landroid/os/Parcel;->nativePushAllowFds(JZ)Z
+    Landroid/os/Parcel;->nativeRestoreAllowFds(JZ)V
+    Landroid/os/Parcel;->nativeAppendFrom(JJII)V
+    Landroid/os/Parcel;->nativeHasFileDescriptors(J)Z
+    Landroid/content/res/AssetManager;->nativeThemeCopy(JJJJ)V
+    Landroid/content/res/AssetManager;->nativeApplyStyle(JJIIJ[IJJ)V
+    Ljava/lang/Class;->getEnclosingClass()Ljava/lang/Class;
+    Landroid/content/res/AssetManager;->nativeGetResourceTypeName(JI)Ljava/lang/String;
+    Landroid/content/res/AssetManager;->nativeOpenXmlAsset(JILjava/lang/String;)J
+    Landroid/content/res/XmlBlock;->nativeGetStringBlock(J)J
+    Landroid/content/res/XmlBlock;->nativeCreateParseState(JI)J
+    Landroid/content/res/XmlBlock;->nativeNext(J)I
+    Landroid/content/res/XmlBlock;->nativeGetName(J)I
+    Landroid/graphics/drawable/VectorDrawable;->nCreateGroup()J
+    Landroid/graphics/drawable/VectorDrawable;->nCreateTree(J)J
+    Lcom/android/internal/util/VirtualRefBasePtr;->nIncStrong(J)V
+    Ldalvik/system/VMRuntime;->registerNativeFree(J)V
+    Lcom/android/internal/util/VirtualRefBasePtr;->nDecStrong(J)V
+    Landroid/content/res/AssetManager;->nativeRetrieveAttributes(JJ[I[I[I)Z
+    Landroid/graphics/drawable/VectorDrawable;->nSetRendererViewportSize(JFF)V
+    Landroid/graphics/drawable/VectorDrawable;->nGetRootAlpha(J)F
+    Landroid/graphics/drawable/VectorDrawable;->nSetRootAlpha(JF)Z
+    Landroid/graphics/drawable/VectorDrawable;->nCreateFullPath()J
+    Landroid/graphics/drawable/VectorDrawable;->nGetFullPathProperties(J[BI)Z
+    Landroid/util/PathParser;->nCreatePathDataFromString(Ljava/lang/String;I)J
+    Landroid/graphics/drawable/VectorDrawable;->nSetPathString(JLjava/lang/String;I)V
+    Landroid/graphics/drawable/VectorDrawable;->nUpdateFullPathFillGradient(JJ)V
+    Landroid/graphics/drawable/VectorDrawable;->nUpdateFullPathStrokeGradient(JJ)V
+    Landroid/graphics/drawable/VectorDrawable;->nUpdateFullPathProperties(JFIFIFFFFFIII)V
+    Landroid/graphics/drawable/VectorDrawable;->nAddChild(JJ)V
+    Landroid/content/res/XmlBlock;->nativeDestroyParseState(J)V
+    Landroid/graphics/Paint;->nInit()J
+    Landroid/graphics/Paint;->nGetNativeFinalizer()J
+    Landroid/graphics/Paint;->nSetFlags(JI)V
+    Landroid/graphics/Paint;->nSetTextLocales(JLjava/lang/String;)I
+    Ljava/lang/Math;->sqrt(D)D
+    Ljava/util/concurrent/atomic/AtomicReference;->get()Ljava/lang/Object;
+    Ljava/lang/System;->mapLibraryName(Ljava/lang/String;)Ljava/lang/String;
+    Lcom/facebook/react/soloader/OpenSourceMergedSoMapping;->libreact_featureflagsjni_so()I
+    Lcom/facebook/react/internal/featureflags/ReactNativeFeatureFlagsCxxInterop;->enableBridgelessArchitecture()Z
+    Lcom/facebook/react/internal/featureflags/ReactNativeFeatureFlagsCxxInterop;->enableFabricRenderer()Z
+    Landroid/graphics/RenderNode;->nCreate(Ljava/lang/String;)J
+    Landroid/graphics/RenderNode;->nGetNativeFinalizer()J
+    Landroid/graphics/Paint;->nSetTextLocalesByMinikinLocaleListId(JI)V
+    Landroid/graphics/Path;->nGetFinalizer()J
+    Landroid/graphics/Path;->nInit()J
+    Landroid/graphics/Path;->nMoveTo(JFF)V
+    Landroid/graphics/Path;->nCubicTo(JFFFFFF)V
+    Landroid/graphics/Path;->nApproximate(JF)[F
+    Landroid/content/res/XmlBlock;->nativeGetAttributeCount(J)I
+    Landroid/content/res/XmlBlock;->nativeGetAttributeResource(JI)I
+    Landroid/graphics/Paint;->nSetColor(JI)V
+    Landroid/content/res/XmlBlock;->nativeDestroy(J)V
+    Landroid/content/res/XmlBlock;->nativeGetSourceResId(J)I
+    Landroid/graphics/RenderNode;->nGetElevation(J)F
+    Landroid/graphics/RenderNode;->nGetClipToOutline(J)Z
+    Landroid/graphics/RenderNode;->nSetClipToOutline(JZ)Z
+    Landroid/graphics/Matrix;->nCreate(J)J
+    Landroid/graphics/Matrix;->nGetNativeFinalizer()J
+    Landroid/content/res/XmlBlock;->nativeGetAttributeIndex(JLjava/lang/String;Ljava/lang/String;)I
+    Landroid/content/res/XmlBlock;->nativeGetAttributeDataType(JI)I
+    Landroid/content/res/XmlBlock;->nativeGetAttributeData(JI)I
+    Landroid/content/res/AssetManager;->nativeThemeGetAttributeValue(JJILandroid/util/TypedValue;Z)I
+    Ljava/lang/reflect/Method;->invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
+
+## SoLoader events (guest nativeLibraryDir, no host path)
+
+  - ANGLE GameManagerService for dev.acos.fixtures.rnhello: false
+  - dev.acos.fixtures.rnhello is not listed in per-application setting
+  - Recording new base apk path: /data/user/0/dev.acos.fixtures.rnhello/base.apk
+  - Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/user/0/dev.acos.fixtures.rnhello/lib/x86_64 flags = 0]]
+  - Preparing SO source: BackupSoSource[root = /data/user/0/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/user/0/dev.acos.fixtures.rnhello/base.apk]]
+
+## acos-native-loader merged JNI_OnLoad (libreactnative.so mapped)
+
+  [android-log 3] jni_lib_merge: Entering merged library JNI_OnLoad.
+  [android-log 3] jni_lib_merge: Preparing 12 pre-merged libs (including stub)
+  [android-log 3] jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x7ff0e02b2ba0
+  [android-log 3] jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x7ff0e038e530
+  ...
+  jni_lib_merge lines: 14
+  UnsatisfiedLinkError lines: 0

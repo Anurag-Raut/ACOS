@@ -140,22 +140,22 @@ fn rn_platform_launch_probe() {
     }
     eprintln!("{}", String::from_utf8_lossy(&out.stderr));
 
-    // W174-A guard: assert the *current* rung, not the legacy conflated one.
+    // W178-A guard: assert the *current* rung, not a legacy one.
     //
-    // The class-loader rung is now closed: `AppInfo::from_manifest` sets the
-    // real `ApplicationInfo.FLAG_HAS_CODE` (0x4, `1 << 2`; W164-A used 0x1,
-    // which is `FLAG_SYSTEM`), so `LoadedApk.mIncludeCode` is true and the
-    // framework's own `PathClassLoader` receives the staged APK dex path. The
-    // app's `MainApplication` is instantiated, `Application.onCreate` runs, and
-    // `SoLoader.init` prepares the APK's `lib/x86_64` SO source. The next
-    // blocker is no longer class loading: it is `ComponentActivity.<init>`
-    // calling `androidx.lifecycle.SavedStateHandleSupport.enableSavedStateHandles`,
-    // a class this fixture APK does not package (see W164A_PIXELS.md §W174-A).
+    // Three rungs are locked here:
+    //   * the class loader (`FLAG_HAS_CODE == 0x4`) — no `ClassNotFoundException`;
+    //   * `ComponentActivity.<init>` — the fixture now packages
+    //     `lifecycle-viewmodel-savedstate`, so `activity_on_create` completes;
+    //   * the native/`SoLoader` rung — `nativeLibraryDir` is the guest
+    //     `/data/user/0/<pkg>/lib/x86_64` (not a host build path), the merged-so
+    //     mapping plus a `System.loadLibrary`-backed `SoFileLoader` load
+    //     `libreactnative.so` through `acos-native-loader` (its `jni_lib_merge`
+    //     `JNI_OnLoad` runs), so no `UnsatisfiedLinkError` is raised.
     //
-    // The guard therefore requires: the framework booted; the app's own classes
-    // resolve (no `ClassNotFoundException`, no empty `DexPathList`); and the real
-    // `SoLoader` rung was reached. It does not pin the next blocker, which is a
-    // fixture packaging gap another workstream may close.
+    // The next blocker is `ReactDelegate.loadApp` taking the bridgeless branch
+    // (`enableBridgelessArchitecture()` is true) while the fixture is Paper, so
+    // `ReactActivityDelegate.loadApp` passes a null root view to
+    // `setContentView`. That is the next rung (see W164A_PIXELS.md §W178-A).
     let launch = launch.expect("child printed W164A_LAUNCH");
     assert_ne!(launch["reached_stage"], "apk_parsed", "launch: {launch}");
     assert!(
@@ -184,6 +184,15 @@ fn rn_platform_launch_probe() {
         Some("Ok"),
         "Application.onCreate did not run (class loader rung regressed): {launch}"
     );
+    assert_eq!(
+        stage_status("activity_on_create").as_deref(),
+        Some("Ok"),
+        "Activity.onCreate did not complete (SavedStateHandle/native rung regressed): {launch}"
+    );
+    assert!(
+        !blocker.contains("UnsatisfiedLinkError"),
+        "an app native library failed to load again (SoLoader/native-load rung regressed): {blocker}"
+    );
     let events = events.expect("child printed W164A_EVENTS");
     let events = events
         .as_array()
@@ -194,7 +203,9 @@ fn rn_platform_launch_probe() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        events.contains("Preparing SO source") && events.contains("base.apk!/lib/x86_64"),
-        "SoLoader did not prepare the APK SO source; events:\n{events}"
+        events.contains("Preparing SO source")
+            && events.contains("ApplicationSoSource")
+            && events.contains("/lib/x86_64"),
+        "SoLoader did not prepare the guest native-library SO source; events:\n{events}"
     );
 }

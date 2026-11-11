@@ -150,10 +150,17 @@ impl AppInfo {
     ) -> Self {
         let package = manifest.package.clone();
         let source_dir = apk_path.to_string_lossy().into_owned();
-        let native_library_dir = apk_path
-            .parent()
-            .map(|p| p.join("lib/x86_64").to_string_lossy().into_owned())
-            .unwrap_or_else(|| "/data/app/lib/x86_64".into());
+        // `nativeLibraryDir` must be a *guest* path: Android framework code
+        // (`SoLoader`'s `ApplicationSoSource`/`DirectorySoSource`) resolves and
+        // canonicalizes it through `java.io.File`, i.e. through the sandbox
+        // VFS. `NativeBridge::prepare` extracts the APK's `lib/<abi>/*.so` into
+        // exactly `<dataDir>/lib/<abi>` inside that VFS, so point there. (A
+        // host build path can never be canonicalized by the confined guest and
+        // made the first `SoLoader.loadLibrary` fail with an `ENOENT`.)
+        let native_library_dir = format!(
+            "/data/user/{FIXTURE_USER}/{package}/lib/{}",
+            acos_apk::HOST_ABI
+        );
         let process_name = manifest
             .application
             .process
@@ -198,11 +205,21 @@ impl AppInfo {
         // `PathClassLoader` was built with an empty dex path (`DexPathList[[]]`)
         // while the native-library path was populated.
         const FLAG_HAS_CODE: i32 = 0x0000_0004;
+        // AOSP `ParsingPackageUtils.parseBaseApplication`:
+        //   sa.getBoolean(AndroidManifestApplication_extractNativeLibs, true)
+        //   -> `ai.flags |= ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS` (1 << 28)
+        // The fixture manifest does not set `android:extractNativeLibs`, the
+        // default is `true`, and the fixture APK stores its `lib/` entries
+        // compressed, so the native libraries are unpacked into
+        // `nativeLibraryDir` rather than `dlopen`ed straight from the APK.
+        // `SoLoader` reads this flag to choose `ApplicationSoSource` instead of
+        // the APK-direct source.
+        const FLAG_EXTRACT_NATIVE_LIBS: i32 = 0x1000_0000;
         let hardware_accelerated = manifest
             .application
             .hardware_accelerated
             .unwrap_or(target_sdk >= ICE_CREAM_SANDWICH);
-        let mut flags = FLAG_HAS_CODE;
+        let mut flags = FLAG_HAS_CODE | FLAG_EXTRACT_NATIVE_LIBS;
         if hardware_accelerated {
             flags |= FLAG_HARDWARE_ACCELERATED;
         }

@@ -62,6 +62,16 @@ ROOTS = [
     ("com.facebook.fresco", "fresco", "3.6.0"),
     ("com.facebook.fresco", "imagepipeline-okhttp3", "3.6.0"),
     ("com.facebook.fresco", "middleware", "3.6.0"),
+    # `androidx.activity:activity` declares `lifecycle-viewmodel-savedstate` as a
+    # `compile` dependency, and `ComponentActivity.<init>` calls
+    # `SavedStateHandleSupport.enableSavedStateHandles`. Without that artifact the
+    # DEX has only a reference and the Activity cannot be constructed (W174-A).
+    # The requested 2.6.1 and the highest cached 2.10.0 carry metadata only (the
+    # 2.9+ modules are KMP `module`/`pom` with the binary split into the
+    # `-android` variant), so pin the closest cached version whose main artifact
+    # actually carries the classes. The general fallback below is also fixed to
+    # never drop a subtree when the highest cached version has no binary.
+    ("androidx.lifecycle", "lifecycle-viewmodel-savedstate", "2.6.2"),
 ]
 
 DEP_RE = re.compile(r"<dependency>(.*?)</dependency>", re.S)
@@ -140,13 +150,18 @@ def resolve() -> List[Tuple[str, str, str]]:
             continue
         pom, art = files_for(g, a, v)
         if art is None:
-            # exact version absent; fall back to the highest cached version
-            vers = _cache_versions(g, a)
-            if not vers:
-                continue
-            v = max(vers, key=_ver_key)
-            pom, art = _cache_files(g, a, v)
-            if art is None:
+            # Exact version has no cached binary. Fall back to the highest
+            # cached version that actually carries an AAR/JAR. Picking the
+            # mere highest version can silently drop the whole subtree when the
+            # cache entry is metadata-only (e.g. AndroidX 2.9+ KMP modules,
+            # whose base coordinate has no binary and whose `-android` variant
+            # holds it).
+            for cand in sorted(_cache_versions(g, a), key=_ver_key, reverse=True):
+                pom, art = _cache_files(g, a, cand)
+                if art:
+                    v = cand
+                    break
+            else:
                 continue
         chosen[ga] = v
         if pom:

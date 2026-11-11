@@ -556,3 +556,163 @@ dialogs/DatePicker/`fwk_res`, ICU/fonts/AVD, `boot_image_cache.rs`, CLI
    `view_tree` walk can read it) switch `RnSession::frame()` /
    `acos observe --frame` to the `FrameStore`; until a real frame is published
    the structured `UNSUPPORTED_RN_NO_RENDERER` stays.
+
+---
+
+# W178-A — the native rung is done: SoLoader maps the merged `libreactnative.so` through `acos-native-loader`, and the next rung is `ReactRootView` attach
+
+Follow-on to W174-A. Three principled fixes let the real platform lifecycle
+reach the Activity's `onCreate`: the fixture's missing
+`lifecycle-viewmodel-savedstate`, the guest `nativeLibraryDir`, and the merged-so
+`SoLoader` mapping/loader. The stage ladder now shows `activity_on_create` **Ok**
+and stops at `ReactRootView` attach.
+
+## At a glance
+
+| step | result |
+|---|---|
+| W174-A blocker | **fixed**: `lifecycle-viewmodel-savedstate` added as an explicit resolver root (2.6.2; 2.9+ cache entries are KMP metadata-only) |
+| resolver bug | **fixed**: the "highest cached version" fallback silently dropped a `group:artifact` whose highest cache entry had no AAR/JAR; it now walks versions down to the first with a binary |
+| fixture host | `MainApplication` registers `OpenSourceMergedSoMapping` (reflection) + a `System.loadLibrary`-backed `SoFileLoader`, mirroring `BridgeProbe` |
+| guest paths | `AppInfo::from_manifest` `nativeLibraryDir` is now `/data/user/0/<pkg>/lib/<abi>` (+ `FLAG_EXTRACT_NATIVE_LIBS`), not a host build path |
+| launch before | `reached_stage=activity_on_create`, `on_resume=Blocked`; SoLoader canonicalized a nonexistent **host** `nativeLibraryDir` (`ENOENT`) |
+| launch after | `reached_stage=activity_on_create`; `activity_on_create` **Ok**; `SoLoader` maps the merged `libreactnative.so` (its `jni_lib_merge` `JNI_OnLoad` runs, 0 `UnsatisfiedLinkError`); 2 446 classes, 19.0 s |
+| new blocker | `ReactDelegate.loadApp` takes the **bridgeless** branch (`enableBridgelessArchitecture() == true`) while the fixture is Paper, so `ReactActivityDelegate.loadApp` passes a null root view to `setContentView` |
+| `observe --frame` | still `UNSUPPORTED_BACKEND` (no frame yet) |
+| level A | **not met**; exact next step in §5 |
+
+## 1. The fixture dependency gap (W174-A §4) is closed
+
+`ComponentActivity.<init>` calls
+`SavedStateHandleSupport.enableSavedStateHandles`, and that class lives in
+`lifecycle-viewmodel-savedstate`, which the fixture APK did not package.
+
+Two things were wrong in `tools/rn-hello-deps.py`:
+
+* `androidx.activity:activity:1.7.0` declares `lifecycle-viewmodel-savedstate`
+  as a `compile` dependency, but the cached 2.6.1 entry (and the highest cached
+  2.10.0) carries only `pom`/`module` — the AndroidX 2.9+ KMP split puts the
+  binary in the `-android` coordinate. The resolver therefore dropped the whole
+  subtree. Added it as an explicit root at **2.6.2** (the closest cached version
+  whose main artifact is a real `aar`, matching the resolved
+  `lifecycle-runtime`/`lifecycle-common` 2.6.2).
+* The fallback `v = max(_cache_versions(...))` picked the highest cached version
+  and gave up when that entry had no binary, silently omitting the artifact. It
+  now sorts versions descending and takes the first with an `aar`/`jar`, so a
+  metadata-only cache entry can no longer drop a dependency.
+
+`tools/rn-hello-deps.py` now resolves **80** artifacts (was 77) including
+`lifecycle-viewmodel-savedstate-2.6.2.aar`; the class is present in
+`classes.dex` and `activity_on_create` completes.
+
+## 2. `nativeLibraryDir` must be a guest path
+
+`NativeBridge::prepare` extracts the APK's `lib/<abi>/*.so` into
+`<vfs_root>/data/user/0/<pkg>/lib/<abi>` — the guest path
+`/data/user/0/<pkg>/lib/<abi>`. `AppInfo::from_manifest` still pointed
+`nativeLibraryDir` at the **host** build directory
+(`<repo>/fixtures/build/apps/lib/x86_64`), which does not exist on the host and
+can never be canonicalized by the confined guest. `SoLoader`'s
+`ApplicationSoSource`/`DirectorySoSource` canonicalizes that directory through
+`java.io.File`, so the first load failed with
+`canonicalize0(<host path>): ENOENT`.
+
+Fix: `from_manifest` builds `nativeLibraryDir` as
+`/data/user/{FIXTURE_USER}/{package}/lib/{acos_apk::HOST_ABI}` and sets
+`ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS` (`1 << 28`), the AOSP default for an
+APK that does not set `android:extractNativeLibs` (the fixture stores its `lib/`
+entries compressed, so they are unpacked into `nativeLibraryDir`). `SoLoader`
+then prepares `ApplicationSoSource[DirectorySoSource[root =
+/data/user/0/dev.acos.fixtures.rnhello/lib/x86_64]]` and finds every `.so`.
+
+## 3. The merged-so mapping and the loader seam
+
+RN 0.81 merges its separate JNI libraries (`react_featureflagsjni`,
+`reactnativejni`, `fabricjni`, ...) into `libreactnative.so`; the Java side
+loads the logical name and `OpenSourceMergedSoMapping` redirects it. The fixture
+called the older `SoLoader.init(this, false)`, which installs **no** mapping, so
+the first `loadLibrary("react_featureflagsjni")` looked for a
+`libreact_featureflagsjni.so` that does not exist.
+
+`SoLoader` exposes no public API to set the mapping *and* a `SoFileLoader` at
+once, so `MainApplication` installs the private `externalSoMapping` field by
+reflection and calls `SoLoader.init(this, 0, new FixtureSoFileLoader())` — the
+same seam `BridgeProbe` uses. `FixtureSoFileLoader` strips the canonical path
+back to a bare name and calls `System.loadLibrary`, because the ACOS native
+loader deliberately resolves by name against the JNI search path rather than
+accepting a guest-supplied absolute path (W67A #4). With that, `libreactnative.so`
+(and its `libjsi`/`libfbjni`/`libc++_shared` dependencies) map through
+`acos-native-loader`, its `jni_lib_merge` `JNI_OnLoad` runs (registering the 11
+merged libs), and no `UnsatisfiedLinkError` is raised.
+
+## 4. New blocker: `ReactDelegate.loadApp` takes the bridgeless branch
+
+`on_resume` is now blocked at
+
+```
+java.lang.RuntimeException: Unable to start activity
+  ...: java.lang.IllegalArgumentException: Cannot add a null child view to a ViewGroup
+    at android.view.ViewGroup.addView(5034)
+    at androidx.appcompat.app.AppCompatDelegateImpl.setContentView(742)
+    at androidx.appcompat.app.AppCompatActivity.setContentView(203)
+    at com.facebook.react.ReactActivityDelegate.loadApp(178)
+```
+
+`ReactActivityDelegate.loadApp` does
+`getPlainActivity().setContentView(mReactDelegate.getReactRootView())`.
+`ReactDelegate.loadApp` (disassembled from the APK) branches on
+`ReactNativeNewArchitectureFeatureFlags.enableBridgelessArchitecture()`:
+
+* **true** → `reactHost.createSurface(...)`; `internalReactRootView` is never
+  assigned;
+* **false** (Paper) → `internalReactRootView = createRootView()`.
+
+The fixture is Paper (`isNewArchEnabled() == false`, no `reactHost`), but the
+feature flag is the RN 0.81 native default `true`, so `loadApp` takes the
+bridgeless branch, `getReactRootView()` returns null, and `setContentView(null)`
+throws. The fixture never calls the RN entry point that applies the app's
+new-architecture configuration to the C++ feature flags
+(`ReactNativeApplicationEntryPoint.loadReactNative` /
+`DefaultNewArchitectureEntryPoint.load`), so the flag is never forced to Paper.
+
+## 5. Exact next session
+
+1. Configure the feature flags to Paper in `MainApplication` (or the
+   `ReactDelegate`), so `enableBridgelessArchitecture()` is `false`; expect
+   `ReactDelegate.createRootView()` to build a real `ReactRootView` and
+   `setContentView` to succeed.
+2. Then `ReactRootView.startReactApplication` →
+   `ReactInstanceManager` creation → `ReactRootView` attach to
+   `WindowManagerGlobal`; record the next blocker the same way.
+3. Only once a real frame is published does `RnSession::frame()` /
+   `acos observe --frame` switch to the `FrameStore`; until then the structured
+   `UNSUPPORTED_RN_NO_RENDERER` stays.
+
+## 6. Files touched (uncommitted, not committed)
+
+* `tools/rn-hello-deps.py` — explicit `lifecycle-viewmodel-savedstate` root +
+  binary-aware version fallback.
+* `fixtures/apps/rn-hello/src/dev/acos/fixtures/rnhello/MainApplication.java` —
+  `OpenSourceMergedSoMapping` registration + `FixtureSoFileLoader`.
+* `crates/acos-services/src/pms.rs` — guest `nativeLibraryDir` +
+  `FLAG_EXTRACT_NATIVE_LIBS`.
+* `crates/acos-runtime/tests/rn_pixels.rs` — guard asserts the
+  `activity_on_create`/native rung.
+* `results/rn/w178a-platform.txt` — measured platform-launch evidence.
+* `results/rn/W164A_PIXELS.md` — this section.
+
+`fixtures/build/apps/rn-hello.apk` is a build output under the gitignored
+`/fixtures/build/` tree; only its sources (the manifest + Java) are tracked. No
+`flutter_*`, tap/ripple (`acos-wm`), bench/pool, ICU/fonts/AVD, dialogs/
+`fwk_res`, CLI (`session_backend.rs`/`parity.rs`/`launch.rs`) or
+`boot_image_cache.rs` file was edited.
+
+## 7. Acceptance
+
+| check | result |
+|---|---|
+| `cargo test -p acos-services --lib` | **45 passed** (flag test included) |
+| `cargo test -p acos-runtime --test rn_pixels` | **2 passed** (`reached_stage=activity_on_create`, `activity_on_create=Ok`, guest `ApplicationSoSource` asserted) |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** (`exit=0`) |
+| `cargo check --workspace --all-targets` | **clean** (`exit=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** (`exit=0`) |
