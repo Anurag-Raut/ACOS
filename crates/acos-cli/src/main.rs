@@ -6,6 +6,7 @@
 mod bench;
 mod bench_pool;
 mod doctor;
+mod engine;
 mod bench_sessions;
 mod frame_diff;
 mod launch;

@@ -1,0 +1,40 @@
+# v2-art-type-unsupported: the ART session has no text-input command.
+#
+# This scenario exists to prove `acos verify --engine art` reports the missing
+# capability by name (`input.type_text`) instead of faking a pass or silently
+# falling back to the Rust VM. The `type` step is the only reason it cannot pass.
+version: 1
+name: v2-art-type-unsupported
+description: >-
+  Launch counter, assert the tree, then type into it. The ART session protocol
+  has no type command, so the run must stop with UNSUPPORTED_BACKEND naming
+  input.type_text (see results/art-runtime/V2.md).
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - type:
+      text: "42"

@@ -1,0 +1,84 @@
+# v2-art-counter: the decisive `acos verify --engine art` scenario.
+#
+# counter.apk -> real Activity on ART -> live View tree -> tap Increment
+# -> count 0 becomes 1 -> fresh screenshot -> reset -> tap again (count 1).
+#
+# This file deliberately has no `assert_log`/`back`/`rotate`/`type` steps: the
+# ART session protocol has no log, rotate or text-input command yet, so those
+# steps would be reported `unsupported` with the missing capability named.
+# Add them here only when the session exposes the command (results/art-runtime/V2.md).
+version: 1
+name: v2-art-counter
+description: >-
+  Launch counter on real ART, assert the live tree (count/inc texts), tap
+  Increment, assert count 0 -> 1, take a fresh screenshot, reset, then tap again
+  and assert count returns to 1. No log/rotate/type steps: ART has no command
+  for those yet.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+
+  # The decisive transition: 0 -> 1 through the app's own click listener.
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+
+  - capture:
+      name: art-after-inc1
+      format: png
+      fresh: true
+
+  # Reset -> fresh Activity; then the same transition must be reproducible.
+  - reset:
+      scope: app
+
+  # Reset relaunches the Activity; wait_for binds the fresh frame before the
+  # tree is asserted (a reset alone does not complete a frame-advancing step).
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
