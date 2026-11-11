@@ -1,0 +1,47 @@
+# W17 probe scenario: EditText hint is reported as text (uiautomator-compatible).
+#
+# W15 blocker 1: the live tree probe only read `TextView.getText()`, so every
+# `android:hint` assertion saw "". W17 emits `hint` (and falls back to it for
+# `text` when the field is empty). This scenario is the teeth for that fix: on a
+# probe without the fallback the first assert_text fails with
+# `expected "Name", got ""`; with it, the app's first observable state matches.
+#
+# Bounds are deliberately not asserted here: the probe reports window-local
+# `bounds` and display-space `bounds_on_screen`, and the engine's choice between
+# them is a separate (S8) change. The full form-validation scenario still stops
+# at its bounds assertion until then.
+version: 1
+name: w17-form-hint
+description: >-
+  Launch form-validation on real ART and verify the EditText hint texts are
+  visible in the live tree (Name, Email) plus the Submit button label.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: name}
+      text: {exact: Name}
+  - assert_text:
+      selector: {id: email}
+      text: {exact: Email}
+  - assert_text:
+      selector: {id: submit}
+      text: {exact: Submit}

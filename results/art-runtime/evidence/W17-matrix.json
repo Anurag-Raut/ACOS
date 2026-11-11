@@ -1,0 +1,239 @@
+{
+ "task": "W17",
+ "generated_utc": "2026-11-11T22:11:00Z",
+ "binary": ".cache/w17-target/debug/acos + acos-art (dev debug, built 21:56\u201322:00Z)",
+ "command": "tools/art-runtime/run-exclusive.sh --task W17 -- tools/guarded.sh --mem 8G --time 900 -- <acos> verify --scenario <s> --apk <apk> --engine art --artifacts <dir> --json",
+ "note": "W15 rows are the original W15 scenarios; W17 *-hint rows are the new hint-only scenarios (same APKs).",
+ "runs": [
+  {
+   "run": "W15 form-validation (full)",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": 2,
+   "fail_code": "ASSERTION_FAILED",
+   "fail_message": "expected bounds [42,317][1038,435], got [42,189][1038,307]"
+  },
+  {
+   "run": "W15 hello-jni (full)",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 2,
+   "unsupported_steps": [],
+   "fail_step": 1,
+   "fail_code": "ELEMENT_NOT_FOUND",
+   "fail_message": "selector Selector { id: None, text: None, content_desc: None, class: Some(\"android.widget.TextView\"), bounds: Some(Bounds([0, 275, 1080, 2337])), index: None } matched no node"
+  },
+  {
+   "run": "W15 widget-gallery",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 sqlite-crud",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 2,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 canvas-shapes",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 2,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 two-activity",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 text-input",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 5,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 rn-hello",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 2,
+   "unsupported_steps": [],
+   "fail_step": 1,
+   "fail_code": "ELEMENT_NOT_FOUND",
+   "fail_message": "selector Selector { id: None, text: Some(TextMatch { exact: Some(\"Hello ACOS\"), contains: None, regex: None }), content_desc: None, class: None, bounds: None, index: None } matched no node"
+  },
+  {
+   "run": "W15 hello-views (full)",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": 2,
+   "fail_code": "ASSERTION_FAILED",
+   "fail_message": "expected bounds [42,317][231,368], got [42,189][231,240]"
+  },
+  {
+   "run": "W15 multi-activity (full)",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": 2,
+   "fail_code": "ASSERTION_FAILED",
+   "fail_message": "expected bounds [42,317][1038,435], got [42,189][1038,307]"
+  },
+  {
+   "run": "W15 todo-list (full)",
+   "verdict": "fail",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": 2,
+   "fail_code": "ASSERTION_FAILED",
+   "fail_message": "expected bounds [42,317][1038,435], got [42,189][1038,307]"
+  },
+  {
+   "run": "W17 form-hint",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 4,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W17 todo-hint",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 4,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W17 multi-hint",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W17 hello-views-hint",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 5,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W16 text-input (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 7,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 counter v2 (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 11,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 dialog-menu (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 dialogs-menus (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 fragments-nav (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 list-adapter (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 3,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 list-scroll (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 2,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  },
+  {
+   "run": "W15 todo-dogfood (regression)",
+   "verdict": "pass",
+   "mode": "live",
+   "steps_executed": 4,
+   "unsupported_steps": [],
+   "fail_step": null,
+   "fail_code": null,
+   "fail_message": null
+  }
+ ]
+}

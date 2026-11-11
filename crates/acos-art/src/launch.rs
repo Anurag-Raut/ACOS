@@ -193,6 +193,47 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     fs::copy(&opts.apk, &apk)?;
     let package = crate::app::apk_package(&opts.apk)?;
 
+    // W17: installd's native-library step. Stock Android extracts the APK's
+    // `lib/<abi>/*.so` into `ApplicationInfo.nativeLibraryDir` at install time
+    // and `LoadedApk` puts that directory on the class loader's native search
+    // path. ACOS stages the APK read-only and never ran that step, so
+    // `dlopen` saw `library "libhellojni.so" not found`. Extract into this
+    // run's own tree (bound read-only at `/data/app-lib`); an arm64-only APK
+    // keeps its honest `UNSUPPORTED_ABI` path in the guest.
+    let native_lib_root = run.dir("app-lib");
+    let native_libs = acos_services::native_libs::install(&opts.apk, &native_lib_root)
+        .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
+    match &native_libs {
+        acos_services::native_libs::NativeLibInstall::Installed { libs, .. } => {
+            eprintln!(
+                "acos-art: launch: native libs installed={} dir={} guest={}",
+                libs.len(),
+                native_lib_root.display(),
+                acos_services::native_libs::GUEST_NATIVE_LIB_DIR
+            );
+        }
+        acos_services::native_libs::NativeLibInstall::UnsupportedAbi { available, message } => {
+            eprintln!(
+                "acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}"
+            );
+        }
+        acos_services::native_libs::NativeLibInstall::None => {}
+    }
+    // The declared `<application android:name>` class and `android:theme`.
+    // Without the class the real `LoadedApk.makeApplication` instantiates
+    // `android.app.Application` instead of the APK's own (W15: RN's
+    // `SoLoader.init()` lives there, and the guest ran the base class, so the
+    // first React class hit `SoLoader.init() not yet called`). The theme is
+    // what `PackageParser` resolves into the activity's `ActivityInfo.theme`;
+    // without it an AppCompat activity aborts with "You need to use a
+    // Theme.AppCompat theme" (W17: rn-hello's next wall after SoLoader).
+    let installed = acos_services::pms::PmsState::from_apk(&opts.apk).ok();
+    let application_class = installed
+        .as_ref()
+        .map(|state| state.app.class_name.clone())
+        .filter(|name| !name.is_empty());
+    let application_theme = installed.as_ref().map_or(0, |state| state.app.theme);
+
     let staging = run.dir("out").join("launch");
     fs::create_dir_all(&staging)?;
     for stale in [
@@ -342,6 +383,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         "/data/out/launch".into(),
         opts.until.clone(),
         activity.clone().unwrap_or_default(),
+        application_class.clone().unwrap_or_default(),
+        application_theme.to_string(),
     ];
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
@@ -349,6 +392,11 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
+    // The per-run extracted native libraries (installd's `nativeLibraryDir`).
+    sb.ro_bind(
+        &native_lib_root,
+        acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
+    );
     sb.ro_bind(&substrate, "/data/app/libacosart.so");
     sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");

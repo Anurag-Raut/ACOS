@@ -1,0 +1,29 @@
+{
+  "index": 2,
+  "step": "tap",
+  "status": "pass",
+  "duration_ms": 15991,
+  "frame_seq": 3,
+  "assertions": [
+    {
+      "kind": "input_delivery",
+      "passed": true,
+      "matched_node_ids": [],
+      "message": "host-observed input delivery (2 guest ack(s)); no visual change; no state change claimed"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/3.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/3.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-tap.json"
+    }
+  ]
+}

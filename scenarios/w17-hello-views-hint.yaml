@@ -1,0 +1,39 @@
+# W17 probe scenario: EditText hint is reported as text (see w17-form-hint).
+version: 1
+name: w17-hello-views-hint
+description: >-
+  Launch hello-views on real ART and verify the EditText hint ("Enter your
+  name") plus the title, Greet button and counter text in the live tree.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: title}
+      text: {exact: "Hello ACOS"}
+  - assert_text:
+      selector: {id: input}
+      text: {exact: "Enter your name"}
+  - assert_text:
+      selector: {id: btn}
+      text: {exact: Greet}
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}

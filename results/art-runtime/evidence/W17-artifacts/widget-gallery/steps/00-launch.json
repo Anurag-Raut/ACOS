@@ -1,0 +1,13 @@
+{
+  "index": 0,
+  "step": "launch",
+  "status": "pass",
+  "duration_ms": 465,
+  "assertions": [],
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/00-launch.json"
+    }
+  ]
+}

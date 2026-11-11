@@ -56,6 +56,10 @@ public final class LaunchMain {
     static String sOut;
     static String sUntil = "application-created";
     static String sActivity;
+    /** `<application android:name>`, fully qualified; empty = platform default. */
+    static String sAppClass = "";
+    /** `<application android:theme>` resource id; 0 = platform default. */
+    static int sAppTheme;
     static volatile boolean sApplicationCreated;
     /**
      * Frame-probe progress: `-1` = probe disabled, otherwise the number of
@@ -80,6 +84,14 @@ public final class LaunchMain {
         sOut = args[2];
         if (args.length > 3 && args[3] != null && args[3].length() > 0) sUntil = args[3];
         if (args.length > 4 && args[4] != null && args[4].length() > 0) sActivity = args[4];
+        if (args.length > 5 && args[5] != null) sAppClass = args[5];
+        if (args.length > 6 && args[6] != null && args[6].length() > 0) {
+            try {
+                sAppTheme = Integer.parseInt(args[6].trim());
+            } catch (NumberFormatException ignored) {
+                sAppTheme = 0;
+            }
+        }
         try {
             run(t0);
         } catch (Throwable t) {
@@ -356,9 +368,19 @@ public final class LaunchMain {
      * Every sample is one stdout line: {@code ACOSPROBE } followed by JSON
      * {@code {"seq":N,"time":ms,"tree":{"nodes":[...]}}}.
      *
-     * <p>Bounds are {@code View.getLocationInWindow}, the same coordinate space
-     * the host's InputChannel MotionEvents use (I2). Nothing is invoked; the
-     * only calls are getters.
+     * <p>Bounds are reported twice: {@code bounds} is
+     * {@code View.getLocationInWindow} (the coordinate space the host's
+     * InputChannel MotionEvents use, I2) and {@code bounds_on_screen} is
+     * {@code View.getLocationOnScreen} (the display space the reference
+     * scenarios and the Rust VM tree use). The engine chooses; both come from
+     * stock View getters and are never inferred.
+     *
+     * <p>{@code text} is {@code TextView.getText()}, falling back to
+     * {@code getHint()} when the field is empty (uiautomator-compatible, and
+     * the W15 fix for the four fixtures that assert an EditText's hint).
+     * {@code hint} always carries the hint itself, so a consumer that wants
+     * the literal text is not forced through the fallback. Nothing is
+     * invoked; the only calls are getters.
      */
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
@@ -472,11 +494,26 @@ public final class LaunchMain {
             }
         }
         String text = "";
+        String hint = "";
         try {
             if (v instanceof TextView) {
                 CharSequence cs = ((TextView) v).getText();
                 text = cs == null ? "" : cs.toString();
+                CharSequence h = ((TextView) v).getHint();
+                hint = h == null ? "" : h.toString();
+                if (text.isEmpty()) text = hint;
             }
+        } catch (Throwable ignored) {
+        }
+        String contentDescription = "";
+        try {
+            CharSequence cd = v.getContentDescription();
+            contentDescription = cd == null ? "" : cd.toString();
+        } catch (Throwable ignored) {
+        }
+        int[] screen = new int[2];
+        try {
+            v.getLocationOnScreen(screen);
         } catch (Throwable ignored) {
         }
         String cls;
@@ -489,6 +526,8 @@ public final class LaunchMain {
         boolean clickable;
         boolean enabled;
         boolean focused;
+        boolean checked;
+        boolean selected;
         try {
             vis = v.getVisibility();
         } catch (Throwable t) {
@@ -509,16 +548,34 @@ public final class LaunchMain {
         } catch (Throwable t) {
             focused = false;
         }
+        try {
+            checked = v instanceof android.widget.Checkable
+                    && ((android.widget.Checkable) v).isChecked();
+        } catch (Throwable t) {
+            checked = false;
+        }
+        try {
+            selected = v.isSelected();
+        } catch (Throwable t) {
+            selected = false;
+        }
         out.append("{\"class\":\"").append(jesc(cls)).append('"')
                 .append(",\"id\":\"").append(jesc(idName)).append('"')
                 .append(",\"text\":\"").append(jesc(text)).append('"')
+                .append(",\"hint\":\"").append(jesc(hint)).append('"')
+                .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
                 .append("][").append(loc[0] + v.getWidth()).append(',')
                 .append(loc[1] + v.getHeight()).append("]\"")
+                .append(",\"bounds_on_screen\":\"[").append(screen[0]).append(',')
+                .append(screen[1]).append("][").append(screen[0] + v.getWidth())
+                .append(',').append(screen[1] + v.getHeight()).append("]\"")
                 .append(",\"visibility\":").append(vis)
                 .append(",\"clickable\":").append(clickable)
                 .append(",\"enabled\":").append(enabled)
-                .append(",\"focused\":").append(focused);
+                .append(",\"focused\":").append(focused)
+                .append(",\"checked\":").append(checked)
+                .append(",\"selected\":").append(selected);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             boolean first = true;
@@ -1078,7 +1135,19 @@ public final class LaunchMain {
         ai.sourceDir = sApk;
         ai.publicSourceDir = sApk;
         ai.dataDir = "/data/app-data/" + sPkg;
-        ai.nativeLibraryDir = "/data/app";
+        // W17: the per-run extracted `lib/<abi>` tree (installd's
+        // `nativeLibraryDir`); `LoadedApk` adds it to the class loader's
+        // native search path. An empty directory is bound too, so the path
+        // always exists for apps without native code.
+        ai.nativeLibraryDir = "/data/app-lib/x86_64";
+        // W17: the APK's own Application class. Empty here means the base
+        // `android.app.Application` (the platform default), which is what the
+        // guest ran for every APK before this line existed.
+        if (!sAppClass.isEmpty()) ai.className = sAppClass;
+        // W17: the manifest's `android:theme`, the resource `PackageParser`
+        // copies into the activity's `ActivityInfo.theme`; AppCompat activities
+        // abort without it (`Theme.AppCompat` check in createSubDecor).
+        ai.theme = sAppTheme;
         ai.processName = sPkg;
         ai.uid = android.os.Process.myUid();
         ai.minSdkVersion = 26;
@@ -1307,7 +1376,7 @@ public final class LaunchMain {
         setField(cls, info, "dataDir", dataDir);
         setField(cls, info, "deviceProtectedDataDir", dataDir);
         setField(cls, info, "credentialProtectedDataDir", dataDir);
-        setField(cls, info, "nativeLibraryDir", "/data/app");
+        setField(cls, info, "nativeLibraryDir", "/data/app-lib/x86_64");
         Parcel p = Parcel.obtain();
         try {
             p.writeInt(0); // AIDL reply: no exception
@@ -1335,7 +1404,7 @@ public final class LaunchMain {
         setFieldForce(cls, ai, "targetActivity", null);
         setFieldForce(cls, ai, "permission", null);
         setFieldForce(cls, ai, "launchMode", 0);
-        setFieldForce(cls, ai, "theme", 0);          // 0 = platform default
+        setFieldForce(cls, ai, "theme", sAppTheme); // manifest theme; 0 = platform default
         setFieldForce(cls, ai, "flags", 0);          // no FLAG_HARDWARE_ACCELERATED
         setFieldForce(cls, ai, "screenOrientation", -1);
         setFieldForce(cls, ai, "configChanges", 0);

@@ -57,6 +57,7 @@ pub mod input;
 pub mod input_channel;
 pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod misc;
+pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
 pub mod parcelable;
 pub mod pms;
 pub mod provider;

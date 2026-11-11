@@ -1,0 +1,52 @@
+{
+  "index": 2,
+  "step": "assert_text",
+  "status": "fail",
+  "duration_ms": 2,
+  "frame_seq": 1,
+  "assertions": [
+    {
+      "kind": "text",
+      "passed": false,
+      "diff": {
+        "expected": [
+          42,
+          317,
+          1038,
+          435
+        ],
+        "actual": [
+          42,
+          189,
+          1038,
+          307
+        ],
+        "path": "nodes[4].bounds",
+        "detail": "bounds did not match"
+      },
+      "matched_node_ids": [
+        "n4_dev.acos.fixtures.todolist:id/input"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_text.json"
+    }
+  ],
+  "error": {
+    "code": "ASSERTION_FAILED",
+    "message": "expected bounds [42,317][1038,435], got [42,189][1038,307]",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "retryable": false
+  }
+}

@@ -1,0 +1,33 @@
+# W17 probe scenario: EditText hint is reported as text (see w17-form-hint).
+version: 1
+name: w17-multi-hint
+description: >-
+  Launch multi-activity on real ART and verify the EditText hint ("Message") and
+  the Send button label appear in the live tree.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Message}
+  - assert_text:
+      selector: {id: send}
+      text: {exact: Send}

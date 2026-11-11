@@ -1,0 +1,46 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W17-artifacts/form-validation",
+      "engine_report": "results/art-runtime/evidence/W17-artifacts/form-validation/engine.json",
+      "verdict": "results/art-runtime/evidence/W17-artifacts/form-validation/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "request_id": "req_2d3539_18e71c6e622e0af1",
+  "verdict_status": "fail"
+}

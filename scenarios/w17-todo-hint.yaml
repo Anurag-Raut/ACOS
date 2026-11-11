@@ -1,0 +1,36 @@
+# W17 probe scenario: EditText hint is reported as text (see w17-form-hint).
+version: 1
+name: w17-todo-hint
+description: >-
+  Launch todo-list on real ART and verify the EditText hint ("New item") and the
+  two button labels appear in the live tree.
+app: fixtures/build/apps/todo-list.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.todolist/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: input}
+      text: {exact: New item}
+  - assert_text:
+      selector: {id: add}
+      text: {exact: Add}
+  - assert_text:
+      selector: {id: clear}
+      text: {exact: Clear all}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/form-validation.apk",
+  "apk_sha256": "1730a4afd6f92dec87bac5c577d013adc229a2a30ae03a0abc4b7960b6d462eb",
+  "scenario_path": "scenarios/w17-form-hint.yaml",
+  "scenario_sha256": "2beb10f491a300d4c007121546476de23ebdc49b8157b70a525844d2065821c4",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
