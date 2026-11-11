@@ -371,7 +371,12 @@ fn write_input_channel(
 /// `val.length` (`Parcel.java:1719`). So the count is the client's length, not
 /// ours: pad with `0.0` / truncate the policy values to it.
 fn write_size_compat_scale(reply: &mut Parcel, values: &[f32], client_len: i32) -> SResult<()> {
+    // S7: the length is guest-declared; never allocate an attacker-chosen size.
+    const MAX_SIZE_COMPAT_SCALE: usize = 8;
     let len = usize::try_from(client_len).unwrap_or(0);
+    if len > MAX_SIZE_COMPAT_SCALE {
+        return Err(perr(format!("sizeCompatScale length {len} exceeds {MAX_SIZE_COMPAT_SCALE}")));
+    }
     let mut out = vec![0.0f32; len];
     for (slot, value) in out.iter_mut().zip(values) {
         *slot = *value;
