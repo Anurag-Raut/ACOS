@@ -178,15 +178,24 @@ impl AppInfo {
         // (`targetSdkVersion=34`, no `android:hardwareAccelerated`).
         const ICE_CREAM_SANDWICH: i32 = 14;
         const FLAG_HARDWARE_ACCELERATED: i32 = 0x2000_0000;
+        // AOSP `ParsingPackageUtils.parseBaseApplication`:
+        //   sa.getBoolean(AndroidManifestApplication_hasCode, true)
+        //   -> `ai.flags |= ApplicationInfo.FLAG_HAS_CODE`
+        // The manifest model has no explicit `android:hasCode` field yet, so
+        // the AOSP default (`true`) applies. Without it `LoadedApk.mIncludeCode`
+        // is false, `getClassLoaderDexPaths()` returns an empty list and the
+        // framework's `PathClassLoader` cannot load the app's own classes
+        // (`ClassNotFoundException` on the manifest `android:name`) even though
+        // `sourceDir` points at the staged APK.
+        const FLAG_HAS_CODE: i32 = 0x0000_0001;
         let hardware_accelerated = manifest
             .application
             .hardware_accelerated
             .unwrap_or(target_sdk >= ICE_CREAM_SANDWICH);
-        let flags = if hardware_accelerated {
-            FLAG_HARDWARE_ACCELERATED
-        } else {
-            0
-        };
+        let mut flags = FLAG_HAS_CODE;
+        if hardware_accelerated {
+            flags |= FLAG_HARDWARE_ACCELERATED;
+        }
         Self {
             package_name: package.clone(),
             name: String::new(),
@@ -1207,6 +1216,56 @@ impl ServiceObject for PmsService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AOSP `parseBaseApplication` sets `FLAG_HAS_CODE` from
+    /// `android:hasCode` (default `true`). Without it `LoadedApk.mIncludeCode`
+    /// is false and the framework's `PathClassLoader` gets an empty dex path,
+    /// so an app with a manifest `android:name` cannot be instantiated
+    /// (W164-A: `ClassNotFoundException: ... MainApplication`,
+    /// `DexPathList[[]]`).
+    #[test]
+    fn application_info_flags_include_has_code() {
+        let manifest = acos_apk::manifest::Manifest {
+            package: "dev.acos.fixtures.rnhello".into(),
+            version_code: Some(1),
+            version_code_major: None,
+            version_name: Some("1.0".into()),
+            min_sdk: Some(26),
+            target_sdk: Some(34),
+            max_sdk: None,
+            compile_sdk: Some(34),
+            uses_permissions: Vec::new(),
+            uses_features: Vec::new(),
+            application: acos_apk::manifest::ApplicationInfo {
+                name: Some(".MainApplication".into()),
+                label: None,
+                label_ref: None,
+                debuggable: Some(true),
+                allow_backup: Some(false),
+                extract_native_libs: None,
+                hardware_accelerated: None,
+                theme: None,
+                process: None,
+            },
+            activities: Vec::new(),
+            services: Vec::new(),
+            receivers: Vec::new(),
+            providers: Vec::new(),
+        };
+        let app = AppInfo::from_manifest(&manifest, Path::new("/tmp/app.apk"), FIXTURE_UID);
+        const FLAG_HAS_CODE: i32 = 0x0000_0001;
+        const FLAG_HARDWARE_ACCELERATED: i32 = 0x2000_0000;
+        assert_eq!(
+            app.flags & FLAG_HAS_CODE,
+            FLAG_HAS_CODE,
+            "FLAG_HAS_CODE must be set for the default hasCode=true"
+        );
+        assert_eq!(
+            app.flags & FLAG_HARDWARE_ACCELERATED,
+            FLAG_HARDWARE_ACCELERATED,
+            "targetSdk 34 defaults hardwareAccelerated to true"
+        );
+    }
 
     fn sample_provider() -> ProviderInfo {
         ProviderInfo {
