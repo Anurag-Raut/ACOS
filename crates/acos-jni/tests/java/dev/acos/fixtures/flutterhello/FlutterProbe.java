@@ -5,8 +5,10 @@ import android.os.SystemClock;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import io.flutter.embedding.engine.FlutterJNI;
+import io.flutter.embedding.engine.dart.PlatformMessageHandler;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -122,6 +124,26 @@ public final class FlutterProbe {
   /** W156-A: the last exception thrown while capturing a semantics update. */
   static volatile String sSemanticsError;
 
+  /**
+   * W169-A platform-channel capture. The engine delivers a Dart
+   * `sendPlatformMessage` to the embedder through the installed
+   * {@link PlatformMessageHandler}; the raw probe answers the custom channel and
+   * records which real channels (SystemChrome `flutter/platform`) it sees.
+   */
+  static volatile int sPlatformMessages;
+
+  static volatile String sLastPlatformChannel = "";
+
+  static volatile String sLastPlatformPayload = "";
+
+  /** Responses from Dart to embedder->Dart dispatch (key data ack). */
+  static volatile int sPlatformResponses;
+
+  static volatile String sLastPlatformResponse = "";
+
+  /** Diagnostic count of embedder->Dart dispatches. */
+  static volatile int sDartInDispatches;
+
   public static void main(String[] args) {
     String bundlePath = args.length > 0 ? args[0] : null;
     String entrypoint = args.length > 1 ? args[1] : "main";
@@ -142,6 +164,8 @@ public final class FlutterProbe {
       sJni = jni;
       installVsyncBridge(jni);
       jni.setAccessibilityDelegate(new SemanticsCapture());
+      jni.setPlatformMessageHandler(new ProbeMessageHandler());
+      System.out.println("ACOS_FLUTTER_PROBE phase=platformHandler ok");
       System.out.println("ACOS_FLUTTER_PROBE phase=constructed jni=" + jni);
 
 
@@ -244,6 +268,138 @@ public final class FlutterProbe {
       System.out.println("ACOS_FLUTTER_PROBE phase=error " + t);
       t.printStackTrace(System.out);
     }
+  }
+
+  /**
+   * W169-A: the embedder side of the platform-message transport. Every channel
+   * a real app uses (`flutter/platform`, `flutter/textinput`, `flutter/navigation`)
+   * reaches this handler; the custom `acos/probe` channel is round-tripped so
+   * the Dart reply callback is proven, not assumed.
+   */
+  private static final class ProbeMessageHandler implements PlatformMessageHandler {
+    @Override
+    public void handleMessageFromDart(
+        String channel, ByteBuffer message, int replyId, long callbackHandle) {
+      sPlatformMessages++;
+      sLastPlatformChannel = channel;
+      sLastPlatformPayload = decodeUtf8(message);
+      System.out.println(
+          "ACOS_FLUTTER_PROBE phase=platformMessage channel=" + channel
+              + " replyId=" + replyId
+              + " bytes=" + (message == null ? 0 : message.remaining())
+              + " data=" + sLastPlatformPayload);
+      if ("acos/probe".equals(channel)) {
+        byte[] reply = "pong-from-java".getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buf = ByteBuffer.allocateDirect(reply.length);
+        buf.put(reply);
+        FlutterJNI jni = sJni;
+        if (jni != null) {
+          // A response to a Dart-originated message is delivered through
+          // `invokePlatformMessageResponseCallback(replyId, ...)`, exactly as
+          // `DartMessenger$Reply.reply` does; `dispatchPlatformMessage` would
+          // be a brand-new embedder->Dart message instead.
+          jni.invokePlatformMessageResponseCallback(replyId, buf, buf.position());
+        }
+        System.out.println(
+            "ACOS_FLUTTER_PROBE phase=platformReply channel=" + channel
+                + " replyId=" + replyId);
+      } else if ("flutter/platform".equals(channel)) {
+        System.out.println(
+            "ACOS_FLUTTER_PROBE phase=systemChromeSeen channel=" + channel);
+      }
+    }
+
+    @Override
+    public void handlePlatformMessageResponse(int responseId, ByteBuffer message) {
+      sPlatformResponses++;
+      sLastPlatformResponse = decodeUtf8(message);
+      System.out.println(
+          "ACOS_FLUTTER_PROBE phase=platformResponse id=" + responseId
+              + " bytes=" + (message == null ? 0 : message.remaining())
+              + " data=" + sLastPlatformResponse);
+    }
+  }
+
+  /** Read a ByteBuffer as UTF-8 without consuming the caller's position. */
+  private static String decodeUtf8(ByteBuffer message) {
+    if (message == null) {
+      return "<null>";
+    }
+    ByteBuffer dup = message.duplicate();
+    byte[] bytes = new byte[dup.remaining()];
+    dup.get(bytes);
+    return new String(bytes, StandardCharsets.UTF_8);
+  }
+
+  /**
+   * W169-A harness driver: embedder -> Dart on a custom channel, which proves
+   * the transport a real `MethodChannel` uses and exercises the Dart response
+   * path (`handlePlatformMessageResponse`).
+   */
+  public static void sendDartIn() {
+    FlutterJNI jni = sJni;
+    if (jni == null) {
+      return;
+    }
+    byte[] msg = "push-from-java".getBytes(StandardCharsets.UTF_8);
+    ByteBuffer buf = ByteBuffer.allocateDirect(msg.length);
+    buf.put(msg);
+    jni.dispatchPlatformMessage("acos/dart_in", buf, buf.position(), 77);
+    sDartInDispatches++;
+    System.out.println("ACOS_FLUTTER_PROBE phase=dispatchDartIn bytes=" + msg.length);
+  }
+
+  /**
+   * W169-A harness driver: a keyboard event on the engine's `flutter/keydata`
+   * channel. The six little-endian uint64 fields are the `key_data_packet.h`
+   * layout `PlatformDispatcher.onKeyData` unpacks (charDataSize, timeStamp,
+   * type, physical, logical, synthesized) with no character payload.
+   */
+  public static void sendKeyData() {
+    FlutterJNI jni = sJni;
+    if (jni == null) {
+      return;
+    }
+    ByteBuffer buf = ByteBuffer.allocateDirect(48);
+    buf.order(ByteOrder.LITTLE_ENDIAN);
+    buf.putLong(0L); // charDataSize
+    buf.putLong(SystemClock.uptimeMillis() * 1000L); // timeStamp (micros)
+    buf.putLong(0L); // KeyEventType.down
+    buf.putLong(0L); // physical
+    buf.putLong(0L); // logical
+    buf.putLong(0L); // synthesized
+    jni.dispatchPlatformMessage("flutter/keydata", buf, buf.position(), 88);
+    sDartInDispatches++;
+    System.out.println("ACOS_FLUTTER_PROBE phase=dispatchKeyData");
+  }
+
+  /**
+   * W169-A harness driver: the Android back button. The embedding's
+   * `FlutterActivityAndFragmentDelegate` sends `popRoute` on `flutter/navigation`
+   * to Dart; a raw probe proves the engine carries it and records that no
+   * framework handler exists to answer it.
+   */
+  public static void sendNavigationPopRoute() {
+    FlutterJNI jni = sJni;
+    if (jni == null) {
+      return;
+    }
+    byte[] msg = new byte[] {0x01}; // placeholder raw method call
+    ByteBuffer buf = ByteBuffer.allocateDirect(msg.length);
+    buf.put(msg);
+    jni.dispatchPlatformMessage("flutter/navigation", buf, buf.position(), 99);
+    sDartInDispatches++;
+    System.out.println("ACOS_FLUTTER_PROBE phase=dispatchNavigation");
+  }
+
+  /** W169-A diagnostics for the harness's machine-readable surface stage. */
+  public static String platformDebug() {
+    return "messages=" + sPlatformMessages
+        + " lastChannel=" + sLastPlatformChannel
+        + " lastPayload=" + sLastPlatformPayload
+        + " responses=" + sPlatformResponses
+        + " lastResponse=" + sLastPlatformResponse
+        + " dispatches=" + sDartInDispatches;
   }
 
   /**

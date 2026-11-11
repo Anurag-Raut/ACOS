@@ -3,6 +3,7 @@
 // It deliberately does not import package:flutter: ACOS only needs a real
 // Flutter engine (libflutter.so) plus a real AOT app snapshot (libapp.so),
 // and this keeps the fixture buildable without the 1.5 GB Flutter SDK.
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -12,6 +13,22 @@ ui.FlutterView? get _view => _dispatcher.implicitView;
 int _counter = 0;
 ui.Rect _buttonRect = ui.Rect.zero;
 bool _buttonDown = false;
+
+// W169-A: a real app runs a continuous animation. `dart:ui` 3.47 has no
+// `scheduleFrameCallback` (that is `SchedulerBinding` in the framework), so
+// the raw probe ticks by scheduling the next frame from the draw callback, the
+// same engine animator/vsync path a `Ticker` ultimately uses.
+int _animStep = -1;
+bool _animPending = false;
+const int _animFrames = 6;
+int _beginFrames = 0;
+int _lastBeginMicros = 0;
+
+// W169-A: platform-channel surface. A real app talks to the embedder through
+// `flutter/platform` (SystemChrome), `flutter/textinput`, `flutter/navigation`
+// (popRoute) and `flutter/keydata`; these exercise the same engine transport
+// from `dart:ui` without the framework.
+bool _probeSent = false;
 
 void main() {
   print("ACOS_DART_MAIN entered");
@@ -23,11 +40,21 @@ void main() {
   _dispatcher.onDrawFrame = _onDrawFrame;
   _dispatcher.onPointerDataPacket = _onPointerDataPacket;
   _dispatcher.onMetricsChanged = () => _dispatcher.scheduleFrame();
+  _dispatcher.onKeyData = _onKeyData;
   _dispatcher.onSemanticsEnabledChanged = _onSemanticsEnabledChanged;
+  // W169-A: embedder -> Dart listeners. `channelBuffers.setListener` registers
+  // the channel with the engine (`SendChannelUpdate`), so a
+  // `FlutterJNI.dispatchPlatformMessage` reaches it. The custom channel is the
+  // method-channel round trip; `flutter/navigation` is the back-button channel
+  // a real app's WidgetsBinding would answer.
+  ui.channelBuffers.setListener('acos/dart_in', _onDartIn);
+  ui.channelBuffers.setListener('flutter/navigation', _onNavigation);
   // W156-A: handle the accessibility action channel so `acos tap --text` can
   // drive the button through `FlutterJNI.dispatchSemanticsAction` as well as
-  // the pointer path.
-  _dispatcher.onSemanticsAction = _onSemanticsAction;
+  // the pointer path. W169-A: the pinned dart:ui 3.47 API is the
+  // `SemanticsActionEvent` callback (`onSemanticsAction` does not exist; the
+  // committed fixture never compiled against this platform).
+  _dispatcher.onSemanticsActionEvent = _onSemanticsActionEvent;
   _dispatcher.scheduleFrame();
 }
 
@@ -46,12 +73,16 @@ void _onSemanticsEnabledChanged() {
   _publishSemantics();
 }
 
-/// W156-A: the engine-invoked accessibility action handler (`nativeDispatchSemanticsAction`
-/// -> `_dispatchSemanticsAction`). The raw `dart:ui` probe handles the tap on
-/// node 1 itself; a widget app would get this from the framework.
-void _onSemanticsAction(int id, ui.SemanticsAction action, ByteData? args) {
-  print('ACOS_DART_SEMANTICS_ACTION id=$id action=$action');
-  if (id == 1 && action == ui.SemanticsAction.tap) {
+/// W156-A/W169-A: the engine-invoked accessibility action handler
+/// (`nativeDispatchSemanticsAction` -> `_dispatchSemanticsAction`). The raw
+/// `dart:ui` probe handles the tap on node 1 itself; a widget app would get
+/// this from the framework.
+void _onSemanticsActionEvent(ui.SemanticsActionEvent event) {
+  print(
+    'ACOS_DART_SEMANTICS_ACTION id=${event.nodeId} action=${event.type} '
+    'view=${event.viewId}',
+  );
+  if (event.nodeId == 1 && event.type == ui.SemanticsAction.tap) {
     _counter += 1;
     _semanticsPublished = false;
     print('ACOS_DART_COUNTER counter=$_counter via=semantics');
@@ -118,9 +149,78 @@ void _publishSemantics() {
   print('ACOS_DART_SEMANTICS nodes=1 label=Increment rect=$rect');
 }
 
-void _onBeginFrame(Duration _) {
-  // The frame is drawn in _onDrawFrame.
-  print("ACOS_DART_BEGINFRAME");
+void _onBeginFrame(Duration frameTime) {
+  // The frame is drawn in _onDrawFrame. W169-A: count animation frames and
+  // record the engine's monotonic frame time so multi-frame presentation and
+  // its cadence are provable from the log.
+  _beginFrames++;
+  final int micros = frameTime.inMicroseconds;
+  print(
+    'ACOS_DART_BEGINFRAME n=$_beginFrames at=$micros '
+    'delta=${micros - _lastBeginMicros}',
+  );
+  _lastBeginMicros = micros;
+}
+
+// W169-A: Dart -> embedder -> Dart platform-channel round trip. The payload is
+// deliberately raw UTF-8 (not StandardMethodCodec): the point is the engine's
+// transport, which is exactly what the framework's `MethodChannel` rides on.
+void _sendPlatformProbes() {
+  if (_probeSent) {
+    return;
+  }
+  _probeSent = true;
+  final Uint8List ping = Uint8List.fromList(utf8.encode('ping-from-dart'));
+  _dispatcher.sendPlatformMessage(
+    'acos/probe',
+    ping.buffer.asByteData(),
+    _onProbeReply,
+  );
+  final Uint8List chrome = Uint8List.fromList(
+    utf8.encode('SystemChrome.setApplicationSwitcherDescription'),
+  );
+  _dispatcher.sendPlatformMessage(
+    'flutter/platform',
+    chrome.buffer.asByteData(),
+    _onProbeReply,
+  );
+  print('ACOS_DART_CHANNEL_SENT channel=acos/probe,flutter/platform');
+}
+
+void _onProbeReply(ByteData? data) {
+  final String reply = data == null
+      ? '<null>'
+      : utf8.decode(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+  print('ACOS_DART_CHANNEL_REPLY data=$reply');
+}
+
+// Embedder -> Dart: the Java driver's `sendDartIn`.
+void _onDartIn(ByteData? data, ui.PlatformMessageResponseCallback callback) {
+  final String s = data == null
+      ? '<null>'
+      : utf8.decode(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+  print('ACOS_DART_CHANNEL_IN channel=acos/dart_in data=$s');
+  final Uint8List ack = Uint8List.fromList(utf8.encode('ack-from-dart'));
+  callback(ack.buffer.asByteData());
+}
+
+// Embedder -> Dart: the Android back button. The framework's WidgetsBinding
+// answers `popRoute`; a raw probe can only prove the engine delivered it.
+void _onNavigation(ByteData? data, ui.PlatformMessageResponseCallback callback) {
+  final int n = data == null ? -1 : data.lengthInBytes;
+  print('ACOS_DART_NAVIGATION bytes=$n');
+  callback(Uint8List(2).buffer.asByteData());
+}
+
+// Embedder -> Dart: keyboard events arrive on the engine's `flutter/keydata`
+// channel and are unpacked by `PlatformDispatcher.onKeyData`.
+bool _onKeyData(ui.KeyData data) {
+  print(
+    'ACOS_DART_KEY type=${data.type} physical=${data.physical} '
+    'logical=${data.logical} character=${data.character} '
+    'synthesized=${data.synthesized}',
+  );
+  return true;
 }
 
 int _drawAttempts = 0;
@@ -163,6 +263,10 @@ void _onDrawFrame() {
     ui.Paint()..color = const ui.Color(0xFF1B1B1F),
   );
 
+  // W169-A: the platform probes do not need a settled frame, but sending on
+  // the first draw keeps them after `main` has installed every listener.
+  _sendPlatformProbes();
+
   // "hello acos" title.
   final title = _paragraph('hello acos', 32, const ui.Color(0xFFFFFFFF));
   title.layout(ui.ParagraphConstraints(width: width - 80));
@@ -191,6 +295,37 @@ void _onDrawFrame() {
       buttonRect.top + (buttonRect.height - label.height) / 2,
     ),
   );
+
+  // W169-A animation: the tap frame itself stays at rest (so the W130-A
+  // parity reference still matches); the moving "Hello ACOS" Paragraph is
+  // drawn on the following frames. This is both the multi-frame presentation
+  // probe and the dart:ui glyph-rendering probe.
+  if (_animPending) {
+    _animPending = false;
+    _animStep = 0;
+    _dispatcher.scheduleFrame();
+  } else if (_animStep >= 0 && _animStep < _animFrames) {
+    final ui.Paragraph hello = _paragraph(
+      'Hello ACOS',
+      20,
+      const ui.Color(0xFFFFD54F),
+    );
+    hello.layout(const ui.ParagraphConstraints(width: 300));
+    canvas.drawParagraph(
+      hello,
+      ui.Offset(40, top + 180 + _animStep * 6),
+    );
+    print(
+      'ACOS_DART_TEXT text=Hello ACOS frame=$_animStep width=${hello.width} '
+      'height=${hello.height} longest=${hello.longestLine}',
+    );
+    print('ACOS_DART_ANIM step=$_animStep');
+    hello.dispose();
+    _animStep++;
+    _dispatcher.scheduleFrame();
+  } else if (_animStep >= _animFrames) {
+    _animStep = -1;
+  }
 
   final picture = recorder.endRecording();
   final builder = ui.SceneBuilder()..addPicture(ui.Offset.zero, picture);
@@ -240,6 +375,9 @@ void _onPointerDataPacket(ui.PointerDataPacket packet) {
           // W130-A: the tap's effect must be visible in the engine log, not
           // inferred from pixels alone.
           print('ACOS_DART_COUNTER counter=$_counter at=$pos');
+          // W169-A: start the animation on the next frame (this tap frame stays
+          // at rest so the parity reference is unchanged).
+          _animPending = true;
           // W156-A: the value string changes with the counter, so the semantic
           // node must be republished for `observe --tree` to reflect it.
           _semanticsPublished = false;

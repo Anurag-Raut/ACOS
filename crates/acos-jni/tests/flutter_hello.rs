@@ -639,9 +639,14 @@ fn flutter_child_worker() {
     // `sSemanticsSeq` stayed 0.
     let mut seen_frames = 0usize;
     let mut tapped = false;
+    // W169-A: once the tap frame has settled, drive the extra engine surface a
+    // real app needs (platform channels, key data, navigation) and let the
+    // probe's animation present its frames.
+    let mut probes_sent = false;
     let mut sem_enabled = false;
     let mut delivered = 0usize;
     let mut vsync_due = std::time::Instant::now();
+    let mut last_progress_round = 0usize;
     for _round in 0..1500 {
         if _round % 40 == 0 {
             if let Ok(acos_vm::JavaValue::Object(h)) = vm.call_static(
@@ -702,37 +707,42 @@ fn flutter_child_worker() {
         // Drive the app: the probe's single `scheduleFrame()` is coalesced into
         // the *first* frame (which the isolate requests from `main()` before the
         // rasterizer has a surface), so ask again until a frame is presented and
-        // re-tap the Increment button for the second frame.
+        // re-tap the Increment button for the second frame. W169-A adds a third
+        // stage: once the tap frame has settled, exercise the platform-channel /
+        // key-data / navigation surface and let the probe's animation run.
+        let probe_desc = "Ldev/acos/fixtures/flutterhello/FlutterProbe;";
+        let call = |vm: &mut Vm, method: &str, sig: &str| {
+            match vm.call_static(probe_desc, method, sig, &[]) {
+                Ok(_) => println!(
+                    "W93A_STAGE {}",
+                    serde_json::json!({"phase": "drive", "method": method, "frames": seen_frames})
+                ),
+                Err(e) => println!(
+                    "W93A_STAGE {}",
+                    serde_json::json!({"phase": "drive-error", "method": method, "detail": format!("{e:?}")})
+                ),
+            }
+        };
         if _round % 40 == 39 {
-            let (method, sig) = if seen_frames == 0 {
-                ("requestFrame", "()V")
+            if seen_frames == 0 {
+                call(&mut vm, "requestFrame", "()V");
             } else if !tapped && seen_frames >= 1 {
                 tapped = true;
-                ("tapIncrement", "()V")
-            } else {
-                ("", "")
-            };
-            if !method.is_empty() {
-                match vm.call_static(
-                    "Ldev/acos/fixtures/flutterhello/FlutterProbe;",
-                    method,
-                    sig,
-                    &[],
-                ) {
-                    Ok(_) => println!(
-                        "W93A_STAGE {}",
-                        serde_json::json!({"phase": "drive", "method": method, "frames": seen_frames})
-                    ),
-                    Err(e) => println!(
-                        "W93A_STAGE {}",
-                        serde_json::json!({"phase": "drive-error", "method": method, "detail": format!("{e:?}")})
-                    ),
-                }
+                call(&mut vm, "tapIncrement", "()V");
+            } else if tapped && !probes_sent && seen_frames >= 2 {
+                probes_sent = true;
+                call(&mut vm, "sendDartIn", "()V");
+                call(&mut vm, "sendKeyData", "()V");
+                call(&mut vm, "sendNavigationPopRoute", "()V");
+            } else if probes_sent && seen_frames < 12 {
+                // Keep the animator fed if a synthetic vsync is missed.
+                call(&mut vm, "requestFrame", "()V");
             }
         }
         let frames = acos_jni::ndk_host::presented_frames();
         if frames.len() > seen_frames {
             seen_frames = frames.len();
+            last_progress_round = _round;
             println!(
                 "W93A_STAGE {}",
                 serde_json::json!({
@@ -757,8 +767,10 @@ fn flutter_child_worker() {
                 Err(e) => println!("W93A_SEM enable-call error={e:?}"),
             }
         }
-        if seen_frames >= 3 {
-            // The tap's second frame is present; stop once it has settled.
+        if seen_frames >= 12 || (probes_sent && _round.saturating_sub(last_progress_round) > 240) {
+            // The tap frame plus the animation and the platform probes have
+            // settled; stop when a full frame budget is present (or when no new
+            // frame arrives for ~2 s after the probes were sent).
             break;
         }
     }
@@ -814,10 +826,66 @@ fn flutter_child_worker() {
         })
     );
 
+    // W169-A: read the platform-message surface the Java driver captured: the
+    // Dart->embedder->Dart round trip, the real SystemChrome channel, the
+    // embedder->Dart key-data/navigation dispatches and their Dart responses.
+    let probe_desc = "Ldev/acos/fixtures/flutterhello/FlutterProbe;";
+    let int_field = |vm: &mut Vm, name: &str| -> i64 {
+        match vm.get_static_field(probe_desc, name) {
+            Ok(acos_vm::JavaValue::Int(v)) => v as i64,
+            Ok(acos_vm::JavaValue::Long(v)) => v,
+            _ => 0,
+        }
+    };
+    let str_field = |vm: &mut Vm, name: &str| -> String {
+        match vm.get_static_field(probe_desc, name) {
+            Ok(acos_vm::JavaValue::Object(h)) => vm.java_string_to_rust(h).unwrap_or_default(),
+            _ => String::new(),
+        }
+    };
+    let platform_messages = int_field(&mut vm, "sPlatformMessages");
+    let platform_responses = int_field(&mut vm, "sPlatformResponses");
+    let dart_in_dispatches = int_field(&mut vm, "sDartInDispatches");
+    let last_channel = str_field(&mut vm, "sLastPlatformChannel");
+    let last_payload = str_field(&mut vm, "sLastPlatformPayload");
+    let last_response = str_field(&mut vm, "sLastPlatformResponse");
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({
+            "phase": "surface",
+            "platform_messages": platform_messages,
+            "platform_responses": platform_responses,
+            "dart_in_dispatches": dart_in_dispatches,
+            "last_platform_channel": last_channel,
+            "last_platform_payload": last_payload,
+            "last_platform_response": last_response,
+        })
+    );
+
     // Persist every presented frame so `acos frame-diff` can compare the real
     // engine output with the phone reference. Frames are RGBA8888 straight
     // from `ANativeWindow_unlockAndPost` (premultiplied, like the compositor).
     let frames = acos_jni::ndk_host::presented_frames();
+    // W169-A: prove `dart:ui` Paragraph glyphs reached the software frame. The
+    // animated "Hello ACOS" label (0xFFFFD54F amber) is the only element with
+    // that colour; a nonzero count means real glyph coverage.
+    let yellow: Vec<usize> = frames
+        .iter()
+        .map(|f| {
+            f.rgba
+                .chunks_exact(4)
+                .filter(|p| p[3] > 128 && p[0] > 200 && p[1] > 150 && p[2] < 130)
+                .count()
+        })
+        .collect();
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({
+            "phase": "text-pixels",
+            "per_frame": yellow,
+            "max": yellow.iter().copied().max().unwrap_or(0),
+        })
+    );
     let mut written: Vec<serde_json::Value> = Vec::new();
     // W128-A: the confined child may only write inside its scratch directory
     // (ADR-0022: Landlock grants exactly `with_read_write(&scratch)`), so the
@@ -1083,6 +1151,71 @@ fn flutter_hello_under_confinement() {
     assert_eq!(
         increment["clickable"], true,
         "Increment node is not clickable: {increment}"
+    );
+
+    // W169-A: the engine surface a real app needs, exercised from the raw
+    // `dart:ui` probe: multi-frame animation, the platform-message transport
+    // (custom round trip + the SystemChrome channel), keyboard key data, and
+    // the back-button navigation channel.
+    assert!(
+        stderr.contains("ACOS_DART_BEGINFRAME n="),
+        "the engine never delivered begin-frame callbacks: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_TEXT text=Hello ACOS"),
+        "the animated Paragraph never laid out: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_ANIM step="),
+        "the probe never presented an animation frame: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_CHANNEL_REPLY data=pong-from-java"),
+        "the Dart->embedder->Dart platform round trip did not complete: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_CHANNEL_IN channel=acos/dart_in data=push-from-java"),
+        "the embedder->Dart platform message did not reach Dart: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_KEY type=KeyEventType.down"),
+        "the key-data packet did not reach PlatformDispatcher.onKeyData: {stderr}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_NAVIGATION bytes="),
+        "the flutter/navigation back-button message did not reach Dart: {stderr}"
+    );
+    let surface = stdout
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("W93A_STAGE ")
+                .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+                .filter(|v| v["phase"] == "surface")
+        })
+        .unwrap_or_else(|| panic!("child never reported a surface stage: {stdout}\nstderr:\n{stderr}"));
+    assert!(
+        surface["platform_messages"].as_i64().unwrap_or(0) >= 2,
+        "the embedder saw fewer than two Dart platform messages: {surface}"
+    );
+    assert!(
+        surface["platform_responses"].as_i64().unwrap_or(0) >= 1,
+        "Dart never answered an embedder->Dart message: {surface}"
+    );
+    assert_eq!(
+        surface["last_platform_channel"], "flutter/platform",
+        "the last platform message was not the SystemChrome channel: {surface}"
+    );
+    let text_stage = stdout
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("W93A_STAGE ")
+                .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+                .filter(|v| v["phase"] == "text-pixels")
+        })
+        .unwrap_or_else(|| panic!("child never reported a text-pixels stage: {stdout}\nstderr:\n{stderr}"));
+    assert!(
+        text_stage["max"].as_i64().unwrap_or(0) > 0,
+        "the animated 'Hello ACOS' glyphs never reached the software frame: {text_stage}"
     );
 
     let out_dir = repo_root().join("results/flutter");
