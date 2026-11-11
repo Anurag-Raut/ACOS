@@ -276,6 +276,10 @@ pub fn subset_interfaces(rows: &[SubsetRow]) -> BTreeSet<String> {
 /// Their transaction codes are *still* decoded from the boot classpath `$Stub`
 /// — this list only says which interfaces to decode, never their layout.
 pub const DECLARED_INTERFACES: &[&str] = &[
+    // W157-A: React Native's real `AndroidInfoModule.uiMode()` reaches the
+    // real `UiModeManager`, which reads `IUiModeManager.getCurrentModeType`
+    // through `ServiceManager.getService("uimode")`.
+    "android.app.IUiModeManager",
     "android.content.IClipboard",
     "android.os.IUserManager",
     "android.app.INotificationManager",

@@ -100,6 +100,9 @@ pub const NAMES: &[(&str, &str)] = &[
     ),
     ("clipboard", "android.content.IClipboard"),
     ("user", "android.os.IUserManager"),
+    // W157-A: React Native's real `AndroidInfoModule` reads the real
+    // `UiModeManager`; the framework asks `ServiceManager` for `uimode`.
+    ("uimode", "android.app.IUiModeManager"),
     ("notification", "android.app.INotificationManager"),
     (
         "statusbar",
@@ -166,6 +169,7 @@ pub fn install(host: &mut ServiceHost) {
     let appops = Arc::new(Mutex::new(crate::declared::AppOpsState::new()));
     let permission = Arc::new(Mutex::new(crate::declared::PermissionState::new()));
     let users = Arc::new(Mutex::new(crate::declared::UserState::new()));
+    let uimode = Arc::new(Mutex::new(crate::declared::UiModeState::new()));
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
     let connectivity = Arc::new(Mutex::new(crate::declared::ConnectivityState::new()));
@@ -355,6 +359,10 @@ pub fn install(host: &mut ServiceHost) {
     );
     host.register("user", "android.os.IUserManager", move |_w| {
         Box::new(crate::declared::UserService::new(Arc::clone(&users)))
+            as Box<dyn ServiceObject>
+    });
+    host.register("uimode", "android.app.IUiModeManager", move |_w| {
+        Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode)))
             as Box<dyn ServiceObject>
     });
     host.register(

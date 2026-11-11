@@ -27,10 +27,13 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.view.MotionEvent;
 
 import com.facebook.hermes.reactexecutor.HermesExecutorFactory;
+import com.facebook.react.internal.AndroidChoreographerProvider;
 import com.facebook.react.internal.ChoreographerProvider;
 import com.facebook.react.modules.core.ReactChoreographer;
 import com.facebook.react.NativeModuleRegistryBuilder;
@@ -56,6 +59,7 @@ import com.facebook.react.modules.appstate.AppStateModule;
 import com.facebook.react.modules.core.TimingModule;
 import com.facebook.react.devsupport.ReleaseDevSupportManager;
 import com.facebook.react.modules.deviceinfo.DeviceInfoModule;
+import com.facebook.react.modules.systeminfo.AndroidInfoModule;
 import com.facebook.react.soloader.OpenSourceMergedSoMapping;
 import com.facebook.soloader.SoLoader;
 import com.facebook.soloader.SoSource;
@@ -66,6 +70,10 @@ import com.facebook.react.views.view.ReactViewManager;
 import com.facebook.react.uimanager.DisplayMetricsHolder;
 import com.facebook.react.uimanager.UIManagerModule;
 import com.facebook.react.uimanager.ViewManager;
+import com.facebook.react.uimanager.events.EventDispatcher;
+import com.facebook.react.uimanager.events.TouchEvent;
+import com.facebook.react.uimanager.events.TouchEventCoalescingKeyHelper;
+import com.facebook.react.uimanager.events.TouchEventType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -77,6 +85,14 @@ public final class BridgeProbe {
   public static Object PROBE_STATIC;
   public static Object[] PROBE_ARR;
   public static volatile Object PROBE_VOL;
+
+  /**
+   * W157-A: when true the probe runs inside an `acos-runtime` session and uses
+   * the *real* `AndroidChoreographerProvider` and `AndroidInfoModule` (with the
+   * `uimode`/`display` services installed by the runtime) instead of the
+   * virtual provider and the service-free `PlatformConstants` shim.
+   */
+  public static boolean REAL_MODE = false;
 
   private static final String TAG = "ACOS_RN_BRIDGE ";
   private static final String OP = "ACOS_RN_OP ";
@@ -211,6 +227,41 @@ public final class BridgeProbe {
       return this;
     }
 
+    /**
+     * W157-A: resolve the real `UiModeManager` through the framework's own
+     * `ServiceManager` + `IUiModeManager.Stub.asInterface` path, so the real
+     * `AndroidInfoModule.uiMode()` reads the `uimode` service the runtime
+     * installs. The hidden `IUiModeManager`/`UiModeManager(Context, service)`
+     * APIs are reached reflectively because the probe is compiled against the
+     * public `android.jar`.
+     */
+    @Override
+    public Object getSystemService(String name) {
+      if ("uimode".equals(name)) {
+        try {
+          Class<?> sm = Class.forName("android.os.ServiceManager");
+          IBinder b = (IBinder) sm.getMethod("getService", String.class).invoke(null, "uimode");
+          stage("uimode-service", b == null ? "null" : "binder");
+          if (b == null) {
+            return null;
+          }
+          // The real API-34 `UiModeManager(Context)` constructor resolves
+          // `IUiModeManager` itself from `ServiceManager`; the runtime's
+          // `uimode` service backs it. (The `(Context, IUiModeManager)`
+          // constructor does not exist on this boot classpath.)
+          java.lang.reflect.Constructor<android.app.UiModeManager> ctor =
+              android.app.UiModeManager.class.getDeclaredConstructor(Context.class);
+          ctor.setAccessible(true);
+          return ctor.newInstance(this);
+        } catch (Throwable t) {
+          emit("{\"phase\":\"uimode-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+          dump(t);
+          return null;
+        }
+      }
+      return super.getSystemService(name);
+    }
+
     @Override
     public Resources getResources() {
       return Resources.getSystem();
@@ -306,6 +357,35 @@ public final class BridgeProbe {
       }
     }
 
+    /**
+     * W157-A: the tag of the view whose props carry {@code testID}, read back
+     * from the recorded ops so a synthetic touch can target the real Button.
+     */
+    public int tagForTestId(String testId) {
+      String needle = "\"testID\":\"" + testId + "\"";
+      synchronized (ops) {
+        for (String op : ops) {
+          if (!op.contains(needle)) {
+            continue;
+          }
+          int i = op.indexOf("\"tag\":");
+          if (i < 0) {
+            continue;
+          }
+          int j = i + 6;
+          int k = j;
+          while (k < op.length() && (Character.isDigit(op.charAt(k)) || op.charAt(k) == '-')) {
+            k++;
+          }
+          try {
+            return Integer.parseInt(op.substring(j, k));
+          } catch (NumberFormatException ignored) {
+          }
+        }
+      }
+      return -1;
+    }
+
     @Override
     public Map<String, Object> getConstants() {
       Map<String, Object> c = super.getConstants();
@@ -362,6 +442,70 @@ public final class BridgeProbe {
       if (forward) {
         super.removeRootView(rootViewTag);
       }
+    }
+
+    // W157-A: the JS responder system (`Pressability._measureResponderRegion`)
+    // needs the target's frame before it will fire `onPress`. The probe registers
+    // no view managers, so there is no native shadow tree to measure; the probe
+    // answers with a synthetic 100x100 frame at the origin, which contains the
+    // synthetic touch. The touch itself still travels the real `TouchEvent` ->
+    // `RCTEventEmitter.receiveTouches` path.
+    @Override
+    @ReactMethod
+    public void measure(int reactTag, com.facebook.react.bridge.Callback callback) {
+      log("{\"op\":\"measure\",\"tag\":" + reactTag + "}");
+      if (callback != null) {
+        callback.invoke(0.0, 0.0, 100.0, 100.0, 0.0, 0.0);
+      }
+    }
+
+    @Override
+    @ReactMethod
+    public void measureInWindow(int reactTag, com.facebook.react.bridge.Callback callback) {
+      log("{\"op\":\"measureInWindow\",\"tag\":" + reactTag + "}");
+      if (callback != null) {
+        callback.invoke(0.0, 0.0, 100.0, 100.0);
+      }
+    }
+
+    @Override
+    @ReactMethod
+    public void measureLayout(
+        int reactTag,
+        int ancestorReactTag,
+        com.facebook.react.bridge.Callback success,
+        com.facebook.react.bridge.Callback failure) {
+      log("{\"op\":\"measureLayout\",\"tag\":" + reactTag + "}");
+      if (success != null) {
+        success.invoke(0.0, 0.0, 100.0, 100.0);
+      }
+    }
+
+    // W157-A: `onPressIn` asks the native Button for its ripple/hotspot update.
+    // The probe has no view managers, so the command is recorded and dropped;
+    // it does not affect the press -> `onPress` -> `setCount` path.
+    @Override
+    @ReactMethod
+    public void dispatchViewManagerCommand(
+        int reactTag,
+        com.facebook.react.bridge.Dynamic commandId,
+        com.facebook.react.bridge.ReadableArray commandArgs) {
+      log("{\"op\":\"dispatchViewManagerCommand\",\"tag\":" + reactTag + "}");
+    }
+
+    // W157-A: the JS responder system blocks native gesture recognisers while a
+    // JS responder is active. The probe has no native gesture layer, so these
+    // are recorded no-ops.
+    @Override
+    @ReactMethod
+    public void setJSResponder(int reactTag, boolean blockNativeResponder) {
+      log("{\"op\":\"setJSResponder\",\"tag\":" + reactTag + "}");
+    }
+
+    @Override
+    @ReactMethod
+    public void clearJSResponder() {
+      log("{\"op\":\"clearJSResponder\"}");
     }
   }
 
@@ -614,7 +758,7 @@ public final class BridgeProbe {
    * `MessageQueue` (native `nativeInit`), so the VM's looper pump can drive it
    * with virtual time, exactly like the framework lifecycle driver (W118-A).
    */
-  private static void prepareMainThread() {
+  private static void prepareMainThread(boolean real) {
     try {
       if (Looper.myLooper() == null) {
         Looper.prepareMainLooper();
@@ -625,17 +769,65 @@ public final class BridgeProbe {
       dump(t);
     }
     try {
-      ReactChoreographer.initialize(VirtualChoreographerProvider.INSTANCE);
-      stage("choreographer", "ok-virtual-provider");
+      if (real) {
+        // W157-A: the real provider builds `android.view.Choreographer`, whose
+        // constructor reads the `display` service and whose vsync source is the
+        // runtime's `DisplayEventReceiver`; no synthetic clock is involved.
+        ReactChoreographer.initialize(AndroidChoreographerProvider.INSTANCE);
+        stage("choreographer", "ok-real-provider");
+      } else {
+        ReactChoreographer.initialize(VirtualChoreographerProvider.INSTANCE);
+        stage("choreographer", "ok-virtual-provider");
+      }
     } catch (Throwable t) {
       emit("{\"phase\":\"choreographer-error\",\"error\":\"" + esc(t.toString()) + "\"}");
       dump(t);
     }
   }
 
+  /**
+   * W157-A: dispatch a synthetic tap through RN's real event path.
+   *
+   * `JSTouchDispatcher` resolves a target from the native `ViewGroup`
+   * hierarchy; the probe registers no view managers, so the probe emits the
+   * same `TouchEvent`s `JSTouchDispatcher` would (`START` then `END`) directly
+   * through the real `UIManagerModule.getEventDispatcher()`. The JS responder
+   * system then routes the press to the Button's `onPress`, and the resulting
+   * re-render is captured as the second `UIManager` batch.
+   */
+  private static void dispatchTap(LoggingUIManagerModule um) {
+    int tag = um.tagForTestId("hello-button");
+    System.out.println("ACOS_RN_TAP_START {\"tag\":" + tag + "}");
+    System.out.flush();
+    if (tag <= 0) {
+      stage("tap", "no-target-tag");
+      return;
+    }
+    try {
+      EventDispatcher ed = um.getEventDispatcher();
+      TouchEventCoalescingKeyHelper helper = new TouchEventCoalescingKeyHelper();
+      long t = android.os.SystemClock.uptimeMillis();
+      float x = 8f;
+      float y = 8f;
+      MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0);
+      ed.dispatchEvent(TouchEvent.obtain(tag, TouchEventType.START, down, t, x, y, helper));
+      MotionEvent up = MotionEvent.obtain(t, t + 40, MotionEvent.ACTION_UP, x, y, 0);
+      ed.dispatchEvent(TouchEvent.obtain(tag, TouchEventType.END, up, t, x, y, helper));
+      stage("tap", "dispatched tag=" + tag);
+    } catch (Throwable t) {
+      emit("{\"phase\":\"tap-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+  }
+
   public static void main(String[] args) {
     emit("{\"phase\":\"begin\"}");
-    prepareMainThread();
+    // W157-A: `real` selects the real `AndroidChoreographerProvider` +
+    // `AndroidInfoModule` (runtime session); `tap` asks for the synthetic touch.
+    boolean realMode = args.length > 4 && "real".equals(args[4]);
+    boolean tap = args.length > 5 && "tap".equals(args[5]);
+    REAL_MODE = realMode;
+    prepareMainThread(realMode);
     // Earliest possible main-looper marker: proves the looper can dispatch and
     // runs before the native `initializeRuntime` task posted by `initializeBridge`.
     new android.os.Handler(Looper.getMainLooper())
@@ -709,7 +901,13 @@ public final class BridgeProbe {
       final LoggingUIManagerModule um = uiManager;
       Map<String, ModuleHolder> modules = new HashMap<>();
       putModule(modules, "UIManager", () -> um);
-      putModule(modules, "PlatformConstants", () -> new SimplePlatformConstantsModule());
+      if (realMode) {
+        // W157-A: the real TurboModule reads `uiMode` through the real
+        // `UiModeManager` backed by the runtime's `uimode` service.
+        putModule(modules, "PlatformConstants", () -> new AndroidInfoModule(rc));
+      } else {
+        putModule(modules, "PlatformConstants", () -> new SimplePlatformConstantsModule());
+      }
       putModule(modules, "DeviceInfo", () -> new DeviceInfoModule(rc));
       // The real `ReleaseDevSupportManager` is RN's own no-op dev-support
       // implementation; the Kotlin constructors reject `null` (W88-A blocker 4).
@@ -821,6 +1019,17 @@ public final class BridgeProbe {
     try {
       android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
       handler.post(() -> stage("diag", "drain-start"));
+      if (tap && uiManager != null) {
+        final LoggingUIManagerModule umTap = uiManager;
+        handler.postDelayed(
+            new Runnable() {
+              @Override
+              public void run() {
+                dispatchTap(umTap);
+              }
+            },
+            400);
+      }
       handler.postDelayed(
           new Runnable() {
             @Override
@@ -829,7 +1038,7 @@ public final class BridgeProbe {
               Looper.myLooper().quit();
             }
           },
-          1000);
+          1500);
       Looper.loop();
       stage("looper-done", "ok");
     } catch (Throwable t) {

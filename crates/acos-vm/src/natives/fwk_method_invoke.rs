@@ -54,9 +54,15 @@ fn method_invoke(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             Some("Method.artMethod is not a valid method"),
         ));
     };
-    let (params, ret, is_static) = {
+    let (params, ret, is_static, name, sig) = {
         let m = &vm.methods[mid as usize];
-        (m.params.clone(), m.ret, m.is_static())
+        (
+            m.params.clone(),
+            m.ret,
+            m.is_static(),
+            m.name.clone(),
+            m.sig.clone(),
+        )
     };
     let args = array_refs(vm, args_arr);
     if args.len() != params.len() {
@@ -75,6 +81,18 @@ fn method_invoke(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         obj
     };
 
+    // `Method.invoke` must use virtual dispatch: `Class.getMethods()` returns
+    // the *declaring* method, so an inherited abstract declaration (e.g.
+    // `NativeTimingSpec.createTimer`) would otherwise be invoked directly and
+    // throw `AbstractMethodError` instead of reaching the concrete override on
+    // the receiver's class (W157-A). Private/static methods are not in the
+    // virtual map, so `dispatch` falls back to the declaring method.
+    let effective = if is_static {
+        mid
+    } else {
+        vm.dispatch(receiver, &name, &sig).unwrap_or(mid)
+    };
+
     let mut raw = Vec::with_capacity(params.len());
     for (i, &tid) in params.iter().enumerate() {
         let kind = vm.type_kind(tid);
@@ -87,7 +105,7 @@ fn method_invoke(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     }
 
-    let result = crate::interp::call_method(vm, mid, receiver, &raw)?;
+    let result = crate::interp::call_method(vm, effective, receiver, &raw)?;
 
     let rk = vm.type_kind(ret);
     if rk == TypeKind::Void {

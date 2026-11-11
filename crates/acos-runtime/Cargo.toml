@@ -22,4 +22,6 @@ thiserror = { workspace = true }
 serde_json = { workspace = true }
 acos-gles = { path = "../acos-gles" }
 acos-native-loader = { path = "../acos-native-loader" }
+acos-sandbox = { path = "../acos-sandbox" }
 acos-test-support = { path = "../acos-test-support" }
+zip = { version = "2", default-features = false, features = ["deflate"] }

@@ -455,6 +455,86 @@ impl ServiceObject for UserService {
 }
 
 // ---------------------------------------------------------------------------
+// IUiModeManager
+// ---------------------------------------------------------------------------
+
+/// `UiModeManager` mode constants the framework reads back.
+pub const UI_MODE_TYPE_NORMAL: i32 = 1;
+/// `UiModeManager.MODE_NIGHT_NO` (night mode off).
+pub const MODE_NIGHT_NO: i32 = 1;
+
+/// `IUiModeManager` state: the ACOS device is a normal (non-car/desk/tv)
+/// phone in day mode, matching the measured device config. There is no
+/// contrast controller, so `addCallback`/`removeCallback` are recorded and the
+/// mutators report a structured unsupported error rather than a fake success.
+#[derive(Debug, Default)]
+pub struct UiModeState {
+    /// Night-mode mutators that Android would have applied.
+    pub mutations: Vec<String>,
+}
+
+impl UiModeState {
+    /// New empty state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// `IUiModeManager` handler.
+pub struct UiModeService {
+    state: Arc<Mutex<UiModeState>>,
+}
+
+impl UiModeService {
+    /// Wrap shared state.
+    #[must_use]
+    pub fn new(state: Arc<Mutex<UiModeState>>) -> Self {
+        Self { state }
+    }
+}
+
+impl ServiceObject for UiModeService {
+    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+        if interface != "android.app.IUiModeManager" {
+            return Err(unsupported(interface, method));
+        }
+        let reply = match method.name.as_str() {
+            // The ACOS reference device is a normal handheld in day mode.
+            "getCurrentModeType" => vec![Value::Int(UI_MODE_TYPE_NORMAL)],
+            "getNightMode" => vec![Value::Int(MODE_NIGHT_NO)],
+            // No active contrast controller: the neutral value is 0.0f.
+            "getContrast" => vec![Value::Float(0.0)],
+            "isNightModeLocked" | "isUiModeLocked" | "isUiModeLockedForUser" => {
+                vec![Value::Bool(false)]
+            }
+            // The real `UiModeManager` constructor registers its contrast
+            // callback. ACOS has no contrast controller, so the callback is
+            // recorded and never invoked: a no-op success, not a fake value.
+            "addCallback" | "removeCallback" => {
+                self.state.lock().unwrap().mutations.push(method.name.clone());
+                vec![]
+            }
+            // Mutators and the contrast-listener registration are not
+            // implemented: report them honestly instead of a no-op success.
+            "setNightMode" | "setApplicationNightMode" | "setNightModeForUser"
+            | "setNightModeForUserWithDisplay" | "enableCarMode" | "disableCarMode"
+            | "setDesktopMode" | "setCarMode"
+            | "addContrastChangeListener" | "removeContrastChangeListener"
+            | "setCustomNightModeStart" | "setCustomNightModeEnd" => {
+                self.state.lock().unwrap().mutations.push(method.name.clone());
+                return Err(unsupported(interface, method));
+            }
+            _ => return Err(unsupported(interface, method)),
+        };
+        Ok(CallResult {
+            reply,
+            deliveries: Vec::new(),
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // INotificationManager
 // ---------------------------------------------------------------------------
 
