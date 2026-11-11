@@ -46,3 +46,6 @@ Use latest actual baselines from the Rust VM and the legacy container repo; neve
 
 ### Clarification (2026-11-11): at 60 minutes do not kill
 An agent passing 60 minutes is treated as a problem, not a termination trigger. Do not cancel it. Notify the user immediately (PushNotification plus chat) with: why it is taking long (what it is doing, evidence from its activity), what exactly blocks it, and what the user or orchestrator can do to help (decision, approval, access, resources, split the task). The agent keeps running (or is steered to a safe checkpoint that preserves partial work) while the user decides. Never auto-grant or auto-kill.
+
+## AOSP reference
+Agents read Google's source (docs/AOSP_REFERENCE.md, `.cache/aosp/`) before guessing or disassembling. Source is for understanding; we run the image's compiled binaries and do not copy AOSP source into the repo.
