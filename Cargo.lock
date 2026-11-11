@@ -255,6 +255,7 @@ dependencies = [
  "acos-protocol",
  "acos-wm",
  "proptest",
+ "rustix",
  "serde",
  "serde_json",
  "thiserror",

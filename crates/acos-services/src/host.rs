@@ -255,9 +255,27 @@ impl ServiceHost {
         self.dynamic.len()
     }
 
+    /// Register a dynamic (`raw_transact`-served) node **and** give it a
+    /// `ServiceManager` name.
+    ///
+    /// Interfaces outside the decoded `acos-aidl` tables (`android.gui.*`, the
+    /// W-R compositor surface) have no factory to construct lazily, so they are
+    /// registered by object; they still need a name because the framework
+    /// reaches them through `ServiceManager.getService` (W-R T2:
+    /// `getService("SurfaceFlinger")`).
+    pub fn register_dynamic_named(
+        &mut self,
+        name: &'static str,
+        descriptor: &'static str,
+        object: Box<dyn ServiceObject>,
+    ) -> BinderId {
+        let binder = self.register_dynamic(descriptor, object);
+        self.names.insert(name, descriptor);
+        binder
+    }
+
     /// Register an auxiliary binder (a binder returned by another service).
-    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {
-        let binder = self.registry.register_local(descriptor);
+    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {        let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.aux.insert(descriptor, binder);
         binder
@@ -379,15 +397,22 @@ impl ServiceHost {
 
     /// Resolve a service-manager name to its binder, constructing the service
     /// on first request. Unknown names return `None` (Android returns `null`).
-    pub fn check_service(&mut self, name: &str) -> Result<Option<BinderId>> {        let Some(descriptor) = self.names.get(name).copied() else {
+    ///
+    /// A descriptor served by a **dynamic** node and no factory (the
+    /// `android.gui.ISurfaceComposer` node behind `SurfaceFlinger`, W-R T2)
+    /// resolves to that node's binder: `raw_transact`-served interfaces have no
+    /// `acos-aidl` table, so they are registered with
+    /// [`ServiceHost::register_dynamic`] rather than a factory.
+    pub fn check_service(&mut self, name: &str) -> Result<Option<BinderId>> {
+        let Some(descriptor) = self.names.get(name).copied() else {
             return Ok(None);
         };
-        let Some(entry) = self.entries.get(&descriptor) else {
-            return Ok(None);
-        };
-        let binder = entry.binder;
-        self.ensure(descriptor)?;
-        Ok(Some(binder))
+        if let Some(entry) = self.entries.get(&descriptor) {
+            let binder = entry.binder;
+            self.ensure(descriptor)?;
+            return Ok(Some(binder));
+        }
+        Ok(self.binder_for_descriptor(descriptor))
     }
 
     /// Resolve a descriptor's binder without constructing the service.

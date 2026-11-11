@@ -42,10 +42,12 @@
 pub mod ams;
 pub mod atms;
 pub mod clipboard;
+pub mod compositor_client;
 pub mod declared;
 pub mod codec;
 pub mod cursor;
 pub mod display;
+pub mod display_events;
 pub mod error;
 pub mod exception;
 pub mod host;
