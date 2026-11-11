@@ -495,6 +495,27 @@ pub(crate) fn read_bytes(addr: i64, len: usize) -> Result<Vec<u8>, MemError> {
     with_bytes(addr, len, <[u8]>::to_vec)
 }
 
+/// Read a NUL-terminated byte string starting at `addr`, bounded by the end of
+/// its region.
+///
+/// A C-string pointer is what every `sun.nio.fs.UnixNativeDispatcher` path
+/// native receives (`NativeBuffer.address()`); unlike [`read_bytes`] the caller
+/// does not know the length, so the scan stops at the first NUL or the region
+/// end (a missing NUL is not an error, matching `strnlen`).
+pub(crate) fn read_cstr(addr: i64) -> Result<Vec<u8>, MemError> {
+    let (id, off) = split(addr)?;
+    MEM.with(|m| {
+        let m = m.borrow();
+        let region = m.regions.get(&id).ok_or(MemError::NoRegion)?;
+        if off > region.data.len() {
+            return Err(MemError::OutOfBounds);
+        }
+        let rest = &region.data[off..];
+        let end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        Ok(rest[..end].to_vec())
+    })
+}
+
 /// Copy `bytes` into native memory.
 pub(crate) fn write_bytes(addr: i64, bytes: &[u8]) -> Result<(), MemError> {
     with_bytes_mut(addr, bytes.len(), |dst| dst.copy_from_slice(bytes))

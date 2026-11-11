@@ -75,6 +75,8 @@ pub const EMFILE: i32 = 24;
 pub const ENOSPC: i32 = 28;
 /// `EROFS`: read-only file system.
 pub const EROFS: i32 = 30;
+/// `ERANGE`: result range too large for the caller's buffer.
+pub const ERANGE: i32 = 34;
 /// `ENAMETOOLONG`: file name too long.
 pub const ENAMETOOLONG: i32 = 36;
 /// `ENOSYS`: function not implemented.
@@ -248,6 +250,13 @@ enum Source {
     Synthetic { data: Vec<u8>, pos: u64, mode: u32 },
 }
 
+/// An open directory stream (`opendir(3)`): the entry names and a cursor.
+#[derive(Debug)]
+struct DirStream {
+    entries: Vec<String>,
+    pos: usize,
+}
+
 /// One entry in the descriptor table.
 #[derive(Debug)]
 struct OpenFile {
@@ -290,6 +299,10 @@ pub struct Vfs {
     /// security/capability xattr layer, so other namespaces report
     /// `EOPNOTSUPP` rather than inventing a label.
     xattrs: BTreeMap<(String, String), Vec<u8>>,
+    /// Open directory streams (`sun.nio.fs.UnixNativeDispatcher.opendir`),
+    /// keyed by the synthetic `long` handle the native layer hands back.
+    dir_streams: BTreeMap<u64, DirStream>,
+    next_dir: u64,
 }
 
 impl Vfs {
@@ -324,6 +337,8 @@ impl Vfs {
             broken,
             denials: Vec::new(),
             xattrs: BTreeMap::new(),
+            dir_streams: BTreeMap::new(),
+            next_dir: 1,
         }
     }
 
@@ -1326,6 +1341,48 @@ impl Vfs {
             .collect();
         names.sort_unstable();
         Ok(names)
+    }
+
+    /// `opendir(3)`: open a directory stream over `guest`.
+    ///
+    /// The returned `u64` is a synthetic handle (never a host pointer). The
+    /// entry list is a snapshot taken at open time, mirroring the readdir
+    /// contract closely enough for `java.nio.file.DirectoryStream`; `.` and
+    /// `..` are included first, exactly as a real `readdir` reports them.
+    pub fn opendir(&mut self, guest: &str) -> Result<u64, i32> {
+        self.check_broken()?;
+        let mut entries = self.list(guest)?;
+        entries.insert(0, "..".to_string());
+        entries.insert(0, ".".to_string());
+        Ok(self.alloc_dir(entries))
+    }
+
+    /// `fdopendir(3)`: open a directory stream on an already-open descriptor.
+    pub fn fdopendir(&mut self, fd: i32) -> Result<u64, i32> {
+        let guest = self.get(fd)?.guest_path.clone();
+        self.opendir(&guest)
+    }
+
+    fn alloc_dir(&mut self, entries: Vec<String>) -> u64 {
+        let handle = self.next_dir.max(1);
+        self.next_dir = handle.wrapping_add(1).max(1);
+        self.dir_streams.insert(handle, DirStream { entries, pos: 0 });
+        handle
+    }
+
+    /// `readdir(3)`: the next entry name, or `None` at end of stream.
+    pub fn readdir(&mut self, dir: u64) -> Result<Option<String>, i32> {
+        let s = self.dir_streams.get_mut(&dir).ok_or(EBADF)?;
+        let name = s.entries.get(s.pos).cloned();
+        if name.is_some() {
+            s.pos += 1;
+        }
+        Ok(name)
+    }
+
+    /// `closedir(3)`: drop the directory stream.
+    pub fn closedir(&mut self, dir: u64) -> Result<(), i32> {
+        self.dir_streams.remove(&dir).map(|_| ()).ok_or(EBADF)
     }
 
     pub fn statvfs(&self, guest: &str) -> Result<StatVfs, i32> {

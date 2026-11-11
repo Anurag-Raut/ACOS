@@ -52,6 +52,63 @@ pub fn install(vm: &mut Vm) -> VmResult<()> {
         "(J)V",
         native_thread_signal,
     );
+    // `sun.nio.ch.IOUtil` static query surface (W168-A): `IOV_MAX` gates the
+    // readv/writev path and is read from `IOUtil.<clinit>`, so the default
+    // filesystem cannot open a channel without it.
+    let u = "Lsun/nio/ch/IOUtil;";
+    vm.register_native(u, "iovMax", "()I", iov_max);
+    vm.register_native(u, "fdLimit", "()I", fd_limit);
+    vm.register_native(u, "fdVal", "(Ljava/io/FileDescriptor;)I", fd_val);
+    vm.register_native(u, "setfdVal", "(Ljava/io/FileDescriptor;I)V", set_fd_val);
+    vm.register_native(
+        u,
+        "configureBlocking",
+        "(Ljava/io/FileDescriptor;Z)V",
+        configure_blocking,
+    );
+    vm.register_native(u, "makePipe", "(Z)J", make_pipe);
+    vm.register_native(u, "drain", "(I)Z", drain);
+    vm.register_native(u, "randomBytes", "([B)Z", random_bytes);
+    // The remaining `sun.nio.ch.FileDispatcherImpl` operations.
+    let d = "Lsun/nio/ch/FileDispatcherImpl;";
+    vm.register_native(d, "read0", "(Ljava/io/FileDescriptor;JI)I", fd_read0);
+    vm.register_native(d, "write0", "(Ljava/io/FileDescriptor;JI)I", fd_write0);
+    vm.register_native(
+        d,
+        "pread0",
+        "(Ljava/io/FileDescriptor;JIJ)I",
+        fd_pread0,
+    );
+    vm.register_native(
+        d,
+        "pwrite0",
+        "(Ljava/io/FileDescriptor;JIJ)I",
+        fd_pwrite0,
+    );
+    vm.register_native(d, "readv0", "(Ljava/io/FileDescriptor;JI)J", fd_readv0);
+    vm.register_native(d, "writev0", "(Ljava/io/FileDescriptor;JI)J", fd_writev0);
+    vm.register_native(d, "close0", "(Ljava/io/FileDescriptor;)V", fd_close0);
+    vm.register_native(d, "closeIntFD", "(I)V", fd_close_int);
+    vm.register_native(d, "force0", "(Ljava/io/FileDescriptor;Z)I", fd_force0);
+    vm.register_native(
+        d,
+        "truncate0",
+        "(Ljava/io/FileDescriptor;J)I",
+        fd_truncate0,
+    );
+    vm.register_native(d, "preClose0", "(Ljava/io/FileDescriptor;)V", fd_noop_obj);
+    vm.register_native(
+        d,
+        "release0",
+        "(Ljava/io/FileDescriptor;JJ)V",
+        fd_release0,
+    );
+    vm.register_native(
+        d,
+        "lock0",
+        "(Ljava/io/FileDescriptor;ZJJZ)I",
+        fd_lock0,
+    );
     Ok(())
 }
 
@@ -193,4 +250,301 @@ fn native_thread_signal(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 
 fn io_error(vm: &mut Vm, msg: &str) -> VmError {
     vm.throw_new("Ljava/io/IOException;", Some(msg))
+}
+
+// ---------------------------------------------------------------------------
+// sun.nio.ch.IOUtil
+// ---------------------------------------------------------------------------
+
+/// `IOUtil.iovMax() -> int`: the maximum iovec count for `readv`/`writev`.
+/// Linux's `IOV_MAX` is 1024, and ART reports it from `sysconf(_SC_IOV_MAX)`.
+fn iov_max(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i32(ctx, 1024);
+    Ok(())
+}
+
+/// `IOUtil.fdLimit() -> int`: the soft `RLIMIT_NOFILE`, or `-1` when
+/// unlimited. ACOS's descriptor table has its own ceiling; report the same
+/// order of magnitude so the JDK sizes its thread-local buffers sanely.
+fn fd_limit(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_i32(ctx, 1024);
+    Ok(())
+}
+
+/// `IOUtil.fdVal(FileDescriptor) -> int`
+fn fd_val(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let fd = fd_descriptor(vm, fd_obj).unwrap_or(-1);
+    vm.ret_i32(ctx, fd);
+    Ok(())
+}
+
+/// `IOUtil.setfdVal(FileDescriptor, int)`
+fn set_fd_val(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let fd = vm.arg_i32(ctx, 1);
+    if fd_obj != NULL {
+        vm.set_instance_field_by_name(fd_obj, "fd", fd as u32);
+        vm.set_instance_field_by_name(fd_obj, "descriptor", fd as u32);
+    }
+    Ok(())
+}
+
+/// `IOUtil.configureBlocking(FileDescriptor, boolean)`
+fn configure_blocking(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let blocking = vm.arg_i32(ctx, 1) != 0;
+    let Some(fd) = fd_descriptor(vm, fd_obj) else {
+        return Ok(());
+    };
+    // `F_GETFL` then set/clear `O_NONBLOCK`. ACOS I/O is synchronous, so this
+    // only records the flag for observability.
+    let flags = vm.vfs.fcntl(fd, 3, 0).unwrap_or(0);
+    let new = if blocking {
+        flags & !0o4000
+    } else {
+        flags | 0o4000
+    };
+    let _ = vm.vfs.fcntl(fd, 4, new);
+    Ok(())
+}
+
+/// `IOUtil.makePipe(boolean blocking) -> long`: a pipe pair packed as
+/// `(writeFd << 32) | readFd`, exactly as ART returns it.
+fn make_pipe(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let blocking = vm.arg_i32(ctx, 0) != 0;
+    let flags = if blocking { 0 } else { 0o4000 };
+    match vm.vfs.pipe2(flags) {
+        Ok((r, w)) => {
+            let packed = ((w as i64) << 32) | (r as i64 & 0xffff_ffff);
+            vm.ret_i64(ctx, packed);
+            Ok(())
+        }
+        Err(e) => Err(io_error(
+            vm,
+            &format!("makePipe failed: {}", crate::vfs::errno_name(e)),
+        )),
+    }
+}
+
+/// `IOUtil.drain(int fd) -> boolean`: drain a nonblocking stream. ACOS's
+/// `Vfs::poll` is the only readiness primitive; a socket here is a local
+/// `AF_UNIX` pair, so there is nothing to force out.
+fn drain(_vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    _vm.ret_bool(ctx, true);
+    Ok(())
+}
+
+/// `IOUtil.randomBytes(byte[]) -> boolean`: fill from the host entropy pool.
+fn random_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let arr = vm.arg_ref(ctx, 0);
+    let len = match vm.heap.get(arr) {
+        Some(crate::heap::Object::Array(a)) => a.data.len(),
+        _ => 0,
+    };
+    let mut buf = vec![0u8; len];
+    let ok = std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut buf))
+        .is_ok();
+    if ok {
+        if let Some(crate::heap::Object::Array(a)) = vm.heap.get_mut(arr) {
+            if let crate::heap::ArrayData::Byte(v) = &mut a.data {
+                for (slot, b) in v.iter_mut().zip(buf.iter()) {
+                    *slot = *b as i8;
+                }
+            }
+        }
+    }
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// sun.nio.ch.FileDispatcherImpl
+// ---------------------------------------------------------------------------
+
+fn fd_read0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    fd_transfer(vm, ctx, "read0", None, false)
+}
+
+fn fd_write0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    fd_transfer(vm, ctx, "write0", None, true)
+}
+
+fn fd_pread0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let pos = vm.arg_i64(ctx, 3);
+    fd_transfer(vm, ctx, "pread0", Some(pos as u64), false)
+}
+
+fn fd_pwrite0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let pos = vm.arg_i64(ctx, 3);
+    fd_transfer(vm, ctx, "pwrite0", Some(pos as u64), true)
+}
+
+/// Shared body of `read0`/`write0`/`pread0`/`pwrite0`: move `len` bytes
+/// between the descriptor and a synthetic native-memory address.
+fn fd_transfer(
+    vm: &mut Vm,
+    ctx: NativeCtx,
+    function: &str,
+    position: Option<u64>,
+    write: bool,
+) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let addr = vm.arg_i64(ctx, 1);
+    let len = vm.arg_i32(ctx, 2).max(0) as usize;
+    let Some(fd) = fd_descriptor(vm, fd_obj) else {
+        return Err(io_error(vm, &format!("{function}: invalid FileDescriptor")));
+    };
+    let err = |vm: &mut Vm, e: i32| {
+        io_error(
+            vm,
+            &format!("{function} failed: {}", crate::vfs::errno_name(e)),
+        )
+    };
+    if write {
+        let data = native_mem::read_bytes_at(vm, addr, len)?;
+        let n = match position {
+            Some(off) => vm.vfs.pwrite(fd, &data, off).map_err(|e| err(vm, e))?,
+            None => vm.vfs.write(fd, &data).map_err(|e| err(vm, e))?,
+        };
+        vm.ret_i32(ctx, n as i32);
+    } else {
+        let mut buf = vec![0u8; len];
+        let n = match position {
+            Some(off) => vm.vfs.pread(fd, &mut buf, off).map_err(|e| err(vm, e))?,
+            None => vm.vfs.read(fd, &mut buf).map_err(|e| err(vm, e))?,
+        };
+        native_mem::write_bytes_at(vm, addr, &buf[..n])?;
+        vm.ret_i32(ctx, n as i32);
+    }
+    Ok(())
+}
+
+/// Read the `address`/`length` pairs of a native `struct iovec` array.
+fn read_iovecs(vm: &mut Vm, addr: i64, count: usize) -> VmResult<Vec<(i64, usize)>> {
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let base = native_mem::read_bytes_at(vm, addr + (i * 16) as i64, 8)?;
+        let len = native_mem::read_bytes_at(vm, addr + (i * 16 + 8) as i64, 8)?;
+        let base = i64::from_le_bytes(base.try_into().unwrap());
+        let len = u64::from_le_bytes(len.try_into().unwrap()) as usize;
+        out.push((base, len));
+    }
+    Ok(out)
+}
+
+fn fd_readv0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let addr = vm.arg_i64(ctx, 1);
+    let count = vm.arg_i32(ctx, 2).max(0) as usize;
+    let Some(fd) = fd_descriptor(vm, fd_obj) else {
+        return Err(io_error(vm, "readv0: invalid FileDescriptor"));
+    };
+    let iovecs = read_iovecs(vm, addr, count)?;
+    let mut total = 0usize;
+    for (base, len) in iovecs {
+        if total > 0 && len == 0 {
+            break;
+        }
+        let mut buf = vec![0u8; len];
+        let n = vm.vfs.read(fd, &mut buf).map_err(|e| {
+            io_error(vm, &format!("readv0 failed: {}", crate::vfs::errno_name(e)))
+        })?;
+        native_mem::write_bytes_at(vm, base, &buf[..n])?;
+        total += n;
+        if n < len {
+            break;
+        }
+    }
+    vm.ret_i64(ctx, total as i64);
+    Ok(())
+}
+
+fn fd_writev0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let addr = vm.arg_i64(ctx, 1);
+    let count = vm.arg_i32(ctx, 2).max(0) as usize;
+    let Some(fd) = fd_descriptor(vm, fd_obj) else {
+        return Err(io_error(vm, "writev0: invalid FileDescriptor"));
+    };
+    let iovecs = read_iovecs(vm, addr, count)?;
+    let mut total = 0usize;
+    for (base, len) in iovecs {
+        if total > 0 && len == 0 {
+            break;
+        }
+        let data = native_mem::read_bytes_at(vm, base, len)?;
+        let n = vm.vfs.write(fd, &data).map_err(|e| {
+            io_error(vm, &format!("writev0 failed: {}", crate::vfs::errno_name(e)))
+        })?;
+        total += n;
+        if n < len {
+            break;
+        }
+    }
+    vm.ret_i64(ctx, total as i64);
+    Ok(())
+}
+
+fn fd_close0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    if let Some(fd) = fd_descriptor(vm, fd_obj) {
+        if fd > 2 {
+            let _ = vm.vfs.close(fd);
+        }
+        vm.set_instance_field_by_name(fd_obj, "fd", (-1i32) as u32);
+        vm.set_instance_field_by_name(fd_obj, "descriptor", (-1i32) as u32);
+    }
+    Ok(())
+}
+
+fn fd_close_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd = vm.arg_i32(ctx, 0);
+    if fd > 2 {
+        let _ = vm.vfs.close(fd);
+    }
+    Ok(())
+}
+
+fn fd_force0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let meta = vm.arg_i32(ctx, 1) != 0;
+    if let Some(fd) = fd_descriptor(vm, fd_obj) {
+        vm.vfs.fsync(fd, !meta).map_err(|e| {
+            io_error(vm, &format!("force0 failed: {}", crate::vfs::errno_name(e)))
+        })?;
+    }
+    vm.ret_i32(ctx, 0);
+    Ok(())
+}
+
+fn fd_truncate0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let fd_obj = vm.arg_ref(ctx, 0);
+    let size = vm.arg_i64(ctx, 1).max(0) as u64;
+    let Some(fd) = fd_descriptor(vm, fd_obj) else {
+        return Err(io_error(vm, "truncate0: invalid FileDescriptor"));
+    };
+    vm.vfs.ftruncate(fd, size).map_err(|e| {
+        io_error(vm, &format!("truncate0 failed: {}", crate::vfs::errno_name(e)))
+    })?;
+    vm.ret_i32(ctx, 0);
+    Ok(())
+}
+
+fn fd_noop_obj(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    Ok(())
+}
+
+fn fd_release0(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
+    // The synthetic mmap region is freed by `unmap0`; nothing to release here.
+    Ok(())
+}
+
+fn fd_lock0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // ACOS runs a single guest process, so advisory byte-range locks cannot
+    // conflict within the VM; report success without a cross-process table.
+    let _ = vm.arg_i32(ctx, 1);
+    vm.ret_i32(ctx, 0);
+    Ok(())
 }

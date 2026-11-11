@@ -209,3 +209,172 @@ tree were left untouched.
 4. Only then switch `RnSession::frame()`/`acos observe --frame` to the
    `FrameStore`; until a real frame is published the structured
    `UNSUPPORTED_RN_NO_RENDERER` stays.
+
+---
+
+# W168-A — `sun.nio.fs` on the VFS: the NIO rung is done, and the app class loader is the next rung
+
+Follow-on to W164-A (rung 2 of §5). The NIO substrate for `java.nio.file`
+is now implemented and independently verified; the RN platform probe executes
+`UnixNativeDispatcher.init()`/`getcwd()`, and the next blocker is the app
+`PathClassLoader`/`DexPathList` — not `SoLoader` yet.
+
+## At a glance
+
+| step | result |
+|---|---|
+| `sun.nio.fs.UnixNativeDispatcher` (47 natives) | **implemented** over the VFS (`init`, `getcwd`, `open0`/`openat0`, `stat0`/`lstat0`/`fstat`/`fstatat0`/`stat1`/`exists0`, `read`/`write`, `opendir0`/`fdopendir`/`readdir`/`closedir`, `mkdir0`/`rmdir0`/`unlink0`/`unlinkat0`/`mknod0`, `rename0`/`renameat0`/`link0`/`symlink0`/`readlink0`/`realpath0`, `access0`/`chmod0`/`fchmod`/`chown0`/`lchown0`/`fchown`, `utimes0`/`futimes`, `statvfs0`, `strerror`, `getpwuid`/`getgrgid`/`getpwnam0`/`getgrnam0`, `dup`/`close`, `fpathconf`/`pathconf0`/`fopen0`/`fclose`) |
+| `sun.nio.ch.IOUtil` + `FileDispatcherImpl` | **implemented** (`iovMax`/`fdLimit`/`fdVal`/`setfdVal`/`configureBlocking`/`makePipe`/`drain`/`randomBytes`; `read0`/`write0`/`pread0`/`pwrite0`/`readv0`/`writev0`/`close0`/`closeIntFD`/`force0`/`truncate0`/`preClose0`/`release0`/`lock0`) |
+| `LinuxNativeDispatcher` | **implemented** (`init` no-op, mount-table end-of-stream, `user.*` xattr via the VFS) |
+| Java acceptance | **passes**: `crates/acos-vm/tests/nio_fs.rs` (`Files.exists`/`readAllBytes`/`newDirectoryStream`/`toRealPath`, attrs + owner, rename/delete, ENOENT/EISDIR) |
+| RN platform probe | NIO rung **passed**; next blocker is `ClassNotFoundException` on `MainApplication` with `DexPathList[[]]`, 1 673 classes, 6.3 s |
+
+## 1. Implementation notes (principled, not a shim)
+
+`crates/acos-vm/src/natives/fwk_nio_fs.rs` is the NIO peer of
+`io_linux.rs`: every path argument is a `NativeBuffer` NUL-terminated C string
+in the synthetic native-memory table, read with a new
+`native_mem::read_cstr`, and resolved through the **same** [`crate::vfs`] as
+`java.io`. Errors are raised as the real `sun.nio.fs.UnixException(errno)`;
+`errorString()` calls the real `UnixNativeDispatcher.strerror` bytecode, which
+this module also supplies.
+
+* `init()` returns the AOSP Linux mask `SUPPORTS_OPENAT | SUPPORTS_FUTIMES |
+  SUPPORTS_XATTR`. Each set bit is backed: `openat`/`futimes`/`fgetxattr0`
+  are all implemented. `SUPPORTS_FUTIMENS`/`SUPPORTS_LUTIMES`/
+  `SUPPORTS_BIRTHTIME` are **not** returned, matching the dex (Android's
+  class declares no `futimens`/`lutimes`, and the kernel exposes no birthtime
+  to `stat`).
+* `opendir`/`readdir`/`closedir` add a per-session directory-stream table to
+  the VFS (`Vfs::opendir`/`fdopendir`/`readdir`/`closedir`); entries are
+  snapshotted at open time and `.`/`..` are reported first, exactly as
+  `readdir` does, and filtered by the real `UnixDirectoryStream`.
+* `read`/`write`/`readv0`/`writev0` resolve synthetic addresses through
+  `native_mem::read_bytes_at`/`write_bytes_at`, so both `Unsafe.allocateMemory`
+  regions and `VMRuntime.addressOf` heap-array aliases work.
+* **Honest refusals**: `chown`/`fchown` report `EPERM` (ACOS has no capability
+  layer), `mknod` reports `EOPNOTSUPP` (no device nodes), non-`user.*` xattr
+  names report `EOPNOTSUPP`, `lock0` succeeds because the VM runs one guest
+  process so advisory ranges cannot conflict, and `getFileStores()` yields an
+  empty list because there is no mount namespace.
+
+## 2. Java round-trip evidence
+
+`crates/acos-vm/tests/java/NioFsMain.java` runs on the real Android 14 core
+library (no Rust shortcut) and prints:
+
+```
+dir_exists=true dir_is_dir=true
+rw_same=true rw_size=10
+list_has_probe=true list_size=1
+realpath=/data/user/0/com.example.nio/files/probe.bin realpath_abs=true
+attr_is_reg=true attr_size=10 attr_uid=1000 attr_owner=system
+old_gone=true new_present=true deleted=true
+fonts_prefix=<?xml version=
+enoent_reason=null enoent_file_present=true eisdir_caught=true
+```
+
+`attr_owner` proves `getpwuid`/`strerror` are reached by the real
+`UnixFileAttributes.owner()` path (the platform's `UnixException` passes a
+`null` reason, so the `getReason()` observed is the literal `"null"`, matching
+Android's `translateToIOException`). The `fonts_prefix` line reads `/system`
+through the NIO SPI, i.e. the same confined boot cache `java.io` uses.
+
+## 3. Measured platform-probe advance (the W164-A blocker is gone)
+
+`results/rn/w168a-platform.txt` (re-run of `rn_platform_launch_probe`):
+
+```
+reached_stage=bind_application  classes_loaded=1673  wall_ms=6301
+native-tail includes: Lsun/nio/fs/UnixNativeDispatcher;->init()I
+                      Lsun/nio/fs/UnixNativeDispatcher;->getcwd()[B
+                      Lcom/android/internal/os/ClassLoaderFactory;->createClassloaderNamespace(...)
+```
+
+The previous `UNSUPPORTED_JAVA_API: Lsun/nio/fs/UnixNativeDispatcher;->init()I`
+is no longer the root blocker. The next blocker is the app class loader, and
+it is **not** the `FLAG_HAS_CODE` regression the probe guard looks for:
+
+```
+JAVA_EXCEPTION: Unable to instantiate application
+  dev.acos.fixtures.rnhello.MainApplication ...
+  ClassNotFoundException: Didn't find class
+  "dev.acos.fixtures.rnhello.MainApplication"
+  on path: DexPathList[[], nativeLibraryDirectories=[.../fixtures/build/apps/lib/x86_64, /system/lib64, /system/lib]]
+```
+
+A one-off diagnostic in `bind_app.rs` (not kept) read the materialised
+`android.content.pm.ApplicationInfo` at `handleBindApplication` time:
+
+```
+rust_flags=0x20000001  java_flags=536870913 (0x20000001)
+  source=/data/user/0/dev.acos.fixtures.rnhello/base.apk
+```
+
+So `FLAG_HAS_CODE` **is** set and `sourceDir` is the staged APK. Dumping the
+real `LoadApk` bytecode (Android 14 `classes.dex`) shows why the W164-A
+narrative is incomplete: `ActivityThread.getPackageInfoNoCheck(ai)` passes
+`includeCode=1` to `LoadedApk.<init>(…, includeCode, …)` unconditionally, and
+`LoadedApk.makePaths(...)` unconditionally does `outZipPaths.add(sourceDir)`.
+The empty `DexPathList` therefore comes from a later step in
+`LoadedApk.createOrUpdateClassLoaderLocked` / `ApplicationLoaders.getClassLoader`
+or from `DexFile.openDexFileNative`, not from the flag.
+
+**Correction to W164-A §3/§4.** The prose “gets past `application_on_create`
+into the app's own `MainApplication`” is not supported by
+`results/rn/w164a-platform.txt`: its own stage ladder marks
+`application_on_create` **Blocked** with the NIO `init()` exception. The NIO
+call is reached from `LoadedApk` class-loader setup, so the app was never
+instantiated in that run. The `ClassNotFoundException` was masked by the NIO
+blocker, not fixed by `FLAG_HAS_CODE`. (The flag fix itself is still correct
+and remains locked by `pms::tests::application_info_flags_include_has_code`
+and the probe's `!ClassNotFoundException` guard, which now points at the
+class-loader rung.)
+
+One concrete VFS signal in the same run (worth the next session):
+`LoadedApk` logs `Failed to ensure
+/data/user_de/0/dev.acos.fixtures.rnhello/code_cache: mkdir failed: ENOENT`
+and the same for `cache`. The device-protected tree **is** mapped
+(`Vfs::target` → `<root>/data/user_de/**`), so this is an `mkdir`
+parent-existence / `File.mkdirs()` interaction to pin down alongside the
+class loader.
+
+## 4. Exact next session
+
+1. Trace `LoadedApk.createOrUpdateClassLoaderLocked` by setting a native
+   breakpoint on `ApplicationLoaders.getClassLoader` / `DexFile.openDexFileNative`;
+   log the `zipPaths`/`libPaths` it receives. If `zipPaths` is empty, the bug is
+   in `makePaths`/`updateApplicationInfo`; if non-empty, it is
+   `DexFile.openDexFileNative` over the staged path.
+2. Fix the `/data/user_de/0/<pkg>` `mkdirs` ENOENT (the `ensureDataDir`
+   warning) if it participates.
+3. Only once `MainApplication` instantiates: expect the next blocker at
+   `SoLoader.init` (rung 3) and record it the same way.
+
+## 5. Acceptance
+
+| check | result |
+|---|---|
+| `cargo test -p acos-vm --lib --test file_io --test native_mem` | **129 + 1 + 1 passed** |
+| `cargo test -p acos-vm --test nio_fs` | **1 passed** |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** (`exit=0`) |
+| `cargo check --workspace --all-targets` | **clean** (`exit=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+| `tools/diff-dexprogs.sh --corelib real --gc-stress` | **27 pass / 0 fail / 0 unsupported of 27** |
+| `cargo test -p acos-runtime --test rn_pixels` | **advances to `ClassNotFoundException`** (documented next rung; the probe's legacy `ClassNotFoundException` guard fails by design until the class loader is fixed) |
+
+## 6. Files touched (uncommitted, not committed)
+
+* `crates/acos-vm/src/natives/fwk_nio_fs.rs` — **new**: 47
+  `UnixNativeDispatcher` natives + `LinuxNativeDispatcher`.
+* `crates/acos-vm/src/natives/mod.rs` — install the new module.
+* `crates/acos-vm/src/natives/native_mem.rs` — `read_cstr`.
+* `crates/acos-vm/src/natives/fwk_m2_filechannel.rs` — `IOUtil` +
+  remaining `FileDispatcherImpl`.
+* `crates/acos-vm/src/vfs.rs` — directory streams + `ERANGE`.
+* `crates/acos-vm/tests/nio_fs.rs`, `crates/acos-vm/tests/java/NioFsMain.java`
+  — **new** Java acceptance.
+* `results/rn/w168a-platform.txt`, this section.
+
+No `pms.rs`, `flutter_*`, `bench/pool`, tap/ripple, ICU/fonts/AVD, or
+`boot_image_cache.rs` file was edited.

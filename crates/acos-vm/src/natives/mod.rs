@@ -40,6 +40,7 @@ mod fwk_method_invoke;
 mod fwk_m2_chain;
 mod fwk_m2_chain2;
 mod fwk_m2_chain6;
+mod fwk_nio_fs;
 mod fwk_proxy;
 pub mod fwk_surface;
 pub mod fwk_vsync;
@@ -127,6 +128,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     fwk_m2_chain::install(vm)?;
     fwk_m2_chain2::install(vm)?;
     fwk_m2_chain6::install(vm)?;
+    // `java.nio.file`'s `sun.nio.fs` SPI on top of the sandbox VFS.
+    fwk_nio_fs::install(vm);
     // `android.animation.PropertyValuesHolder`'s twelve JNI setters (the
     // `StateListAnimator` -> `AnimatorSet` -> `PropertyValuesHolder` path).
     fwk_animation::install(vm)?;
