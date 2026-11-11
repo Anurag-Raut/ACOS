@@ -60,6 +60,27 @@ pub use error::{ConfineError, CONFINEMENT_FAILED, CONFINEMENT_UNAVAILABLE};
 pub use live::probe_live;
 pub use probe::{probe, systemd_user_scope_available, Capabilities};
 
+/// The kernel Landlock ABI this host supports (`None` when Landlock is absent).
+///
+/// Callers that install a ruleset *outside* this process — the deferred
+/// in-guest install in `acos-art` — use this to decide whether the layer is
+/// required (kernel supports it ⇒ fail closed) or must fall back to the
+/// namespace/mount view with the gap documented.
+pub fn landlock_abi() -> Option<u32> {
+    linux::landlock_abi()
+}
+
+/// Serialise a Landlock ruleset for a deferred install in another process.
+///
+/// The returned plan is the crate's single Landlock policy expressed as the
+/// line-oriented guest format the freestanding applier reads (see
+/// `linux::landlock::plan`). Fails when the host has no Landlock at all; a
+/// caller with no in-process `confine` (the ART guest) must then document the
+/// fallback instead of pretending the layer is active.
+pub fn landlock_guest_plan(read_only: &[&str], read_write: &[&str]) -> Result<Vec<u8>, String> {
+    linux::landlock_plan(read_only, read_write)
+}
+
 /// Install the audited seccomp-bpf filter in the current process.
 ///
 /// This is the entry point an `LD_PRELOAD` guard calls from its constructor

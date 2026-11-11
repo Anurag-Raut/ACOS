@@ -447,6 +447,10 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     // outcome (the watchdog/cgroup killed the run before the guest's
     // constructor could run); those stay reported, not turned into a new error.
     let killed_by_host = dog.as_ref().and_then(|d| d.trip()).is_some() || cgroup.oom_kills() > 0;
+    if !killed_by_host {
+        // S6: the same guard applies Landlock; a supporting kernel must prove it.
+        crate::landlock::require_from_log(&guard_report, &guard_log_path)?;
+    }
     if !guard_ok && !killed_by_host {
         return Err(Error::SeccompUnavailable(format!(
             "the guest seccomp guard did not install (report: {:?}, exit: {:?}, stderr: {})",

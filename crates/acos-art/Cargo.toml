@@ -15,6 +15,7 @@ name = "acos-art"
 path = "src/main.rs"
 
 [dependencies]
+acos-sandbox = { path = "../acos-sandbox" }
 acos-binder-peer = { path = "../acos-binder-peer" }
 acos-services = { path = "../acos-services" }
 libc = "0.2"

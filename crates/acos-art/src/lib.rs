@@ -29,6 +29,7 @@ pub mod capture;
 pub mod cgroup;
 pub mod launch;
 pub mod session;
+pub mod landlock;
 pub mod launcher;
 pub mod logd;
 pub mod props;

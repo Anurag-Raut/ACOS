@@ -276,6 +276,11 @@ pub fn apply_landlock(ro: &[PathBuf], rw: &[PathBuf]) -> Result<String, String> 
     landlock::restrict(ro, rw)
 }
 
+/// Serialise a Landlock ruleset for a deferred, in-guest install.
+pub fn landlock_plan(read_only: &[&str], read_write: &[&str]) -> Result<Vec<u8>, String> {
+    landlock::plan(read_only, read_write)
+}
+
 /// Install the seccomp-bpf syscall filter.
 pub fn install_seccomp() -> Result<String, String> {
     seccomp::install()

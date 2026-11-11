@@ -58,10 +58,33 @@
 //! and the launcher turns that into [`crate::Error::SeccompUnavailable`].
 //! Tamper caveat: the log lives in the run root, which the guest can write; it
 //! is evidence of *observed denials*, not a tamper-proof audit trail.
+//!
+//! ## S6: the same constructor applies Landlock first
+//!
+//! [`crate::landlock`] writes the guest ruleset plan (assembled by
+//! `acos-sandbox`, one policy in the tree) into the same `<data>/seccomp`
+//! directory. The constructor applies it with the raw Landlock syscalls
+//! **before** installing this filter, so after the constructor returns both
+//! kernel layers are in effect and the guest cannot widen either. The evidence
+//! line is `OK landlock=active abi=N rules=M`; [`require_guard`] fails closed
+//! when it is missing on a kernel that supports Landlock.
+//!
+//! ## Audit mode (`ACOS_ART_SECCOMP_AUDIT=kill`)
+//!
+//! The production deny action is `EACCES`. For the denial audit in
+//! `results/art-runtime/S6.md`, setting this variable rebuilds the blob with
+//! `SECCOMP_RET_KILL_PROCESS` for the same deny list: a run that completes
+//! normally then proves that **no** denied syscall was attempted at all (a
+//! single attempt would die of `SIGSYS` instead). It is an audit instrument,
+//! not a production default, and it is part of the artefact hash so the two
+//! blobs never alias in the cache.
 
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Guest path of the Landlock plan bound alongside the seccomp artefacts.
+pub use crate::landlock::GUEST_PLAN;
 
 /// Freestanding guest stub, compiled on demand into the data dir.
 pub const GUEST_SOURCE: &str = include_str!("seccomp_guest.c");
@@ -265,10 +288,73 @@ impl Builder {
     }
 }
 
-/// Assemble the filter program (denials are `SECCOMP_RET_TRAP`).
-fn build_program() -> Vec<Insn> {
+/// The deny action: `EACCES` in production, `KILL_PROCESS` for the S6 audit.
+///
+/// `Kill(Some(nrs))` kills only the listed syscall numbers and keeps `EACCES`
+/// for the rest, which is what lets the audit attribute a single denial to one
+/// syscall (kill one candidate at a time; a run that still completes proves
+/// that syscall was not attempted).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DenyAction {
+    /// `SECCOMP_RET_ERRNO | EACCES` (production).
+    Errno,
+    /// `SECCOMP_RET_KILL_PROCESS` (audit only: a denial is fatal and loud).
+    Kill(Option<Vec<u32>>),
+}
+
+impl DenyAction {
+    /// Stable hash component so two audit blobs never alias in the cache.
+    fn to_u64(&self) -> u64 {
+        match self {
+            DenyAction::Errno => 1,
+            DenyAction::Kill(None) => 2,
+            DenyAction::Kill(Some(list)) => {
+                3 ^ list.iter().fold(0u64, |acc, nr| acc.wrapping_mul(31).wrapping_add(*nr as u64))
+            }
+        }
+    }
+
+    fn kills(&self, nr: u32) -> bool {
+        match self {
+            DenyAction::Errno => false,
+            DenyAction::Kill(None) => true,
+            DenyAction::Kill(Some(list)) => list.contains(&nr),
+        }
+    }
+}
+
+/// `ACOS_ART_SECCOMP_AUDIT` selects the audit action; anything else (or unset)
+/// keeps production `EACCES`:
+///
+/// * `kill` — every deny-listed syscall is `KILL_PROCESS` (whole-list audit);
+/// * `kill:101,157` — only those syscall numbers die, the rest return `EACCES`
+///   (used to attribute a denial to one syscall without ptrace: an
+///   unprivileged userns has no seccomp audit log, see S6.md).
+fn audit_action() -> DenyAction {
+    let Ok(raw) = std::env::var("ACOS_ART_SECCOMP_AUDIT") else {
+        return DenyAction::Errno;
+    };
+    let raw = raw.trim();
+    if matches!(raw, "kill" | "1" | "kill_process") {
+        return DenyAction::Kill(None);
+    }
+    if let Some(list) = raw.strip_prefix("kill:") {
+        let nrs: Vec<u32> = list
+            .split(',')
+            .filter_map(|p| p.trim().parse::<u32>().ok())
+            .collect();
+        if !nrs.is_empty() {
+            return DenyAction::Kill(Some(nrs));
+        }
+    }
+    DenyAction::Errno
+}
+
+/// Assemble the filter program.
+fn build_program_with(action: &DenyAction) -> Vec<Insn> {
     let mut b = Builder::new();
     let deny = b.label();
+    let kill = b.label();
     let kill_arch = b.label();
     let arch_ok = b.label();
     let list = b.label();
@@ -302,7 +388,9 @@ fn build_program() -> Vec<Insn> {
     b.ld_abs(OFF_NR);
     for nr in deny_list() {
         let next = b.label();
-        b.jeq(nr, deny, next);
+        // The audit can make an individual syscall fatal; everything else keeps
+        // the production EACCES action.
+        b.jeq(nr, if action.kills(nr) { kill } else { deny }, next);
         b.mark(next);
     }
     let after_clone = b.label();
@@ -332,6 +420,10 @@ fn build_program() -> Vec<Insn> {
     b.mark(personality_query);
     b.jeq(PERSONALITY_QUERY, allow, deny);
 
+    // The kill terminal is emitted for every build (dead code in production,
+    // and it keeps the production layout stable for the tests below).
+    b.mark(kill);
+    b.ret(RET_KILL_PROCESS);
     b.mark(allow);
     b.ret(RET_ALLOW);
     b.mark(deny);
@@ -344,7 +436,12 @@ fn build_program() -> Vec<Insn> {
 /// records, little-endian, no length prefix (bwrap derives the count from the
 /// file size; measured — a prefix is rejected with "must be multiple of 8").
 pub fn build_blob() -> Vec<u8> {
-    let prog = build_program();
+    build_blob_with(&audit_action())
+}
+
+/// The blob for an explicit deny action (the audit uses [`DenyAction::Kill`]).
+pub fn build_blob_with(action: &DenyAction) -> Vec<u8> {
+    let prog = build_program_with(action);
     let mut out = Vec::with_capacity(prog.len() * 8);
     for i in &prog {
         out.extend_from_slice(&i.code.to_le_bytes());
@@ -368,13 +465,21 @@ pub fn enable(root: &crate::ArtRoot) -> Result<()> {
 pub fn require_guard(run_dir: &Path) -> Result<String> {
     let path = run_dir.join("out/seccomp.log");
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    match text.lines().find(|l| l.starts_with("OK guard=active")) {
-        Some(line) => Ok(line.to_string()),
-        None => Err(Error::SeccompUnavailable(format!(
-            "the guest seccomp guard did not report in {}; a run whose filter cannot be proven is refused",
-            path.display()
-        ))),
-    }
+    let guard = text
+        .lines()
+        .find(|l| l.starts_with("OK guard=active"))
+        .map(str::to_string)
+        .ok_or_else(|| {
+            Error::SeccompUnavailable(format!(
+                "the guest seccomp guard did not report in {}; a run whose filter cannot be proven is refused",
+                path.display()
+            ))
+        })?;
+    // S6: the same constructor applies Landlock before the filter. Its evidence
+    // is mandatory on a kernel that supports Landlock (fail closed), and an
+    // explicit `SKIP landlock=kernel-unsupported` is the only accepted fallback.
+    let landlock = crate::landlock::require_from_log(&text, &path)?;
+    Ok(format!("{guard} / {landlock}"))
 }
 
 /// Compile the freestanding stub and write the blob into `<data>/seccomp/`.
@@ -384,8 +489,17 @@ pub fn build_guest(dest_dir: &Path) -> Result<(PathBuf, PathBuf)> {
     let so = dest_dir.join("libacos_seccomp_guest.so");
     let blob = dest_dir.join("seccomp.bpf");
     let src = dest_dir.join("seccomp_guest.c");
-    let blob_bytes = build_blob();
-    let hash = crate::simple_hash(GUEST_SOURCE) ^ (blob_bytes.len() as u64) ^ 0x5ec0_0000;
+    let action = audit_action();
+    // S6: the Landlock plan is written every time (it is a text file, not a
+    // compiled artefact) and removed when this kernel has no Landlock, so a
+    // run never ships a plan the kernel cannot enforce.
+    let landlock = crate::landlock::write_plan(dest_dir)?;
+    let blob_bytes = build_blob_with(&action);
+    let hash = crate::simple_hash(GUEST_SOURCE)
+        ^ (blob_bytes.len() as u64)
+        ^ (action.to_u64()).wrapping_mul(0x9e37_79b9)
+        ^ (landlock as u64).wrapping_mul(0x85eb_ca6b)
+        ^ 0x5ec0_0000;
     let stamp = dest_dir.join("seccomp.hash");
     let up_to_date = std::fs::read_to_string(&stamp)
         .map(|s| s.trim() == hash.to_string())
@@ -428,7 +542,7 @@ mod tests {
     use super::*;
 
     fn compiled() -> Vec<Insn> {
-        build_program()
+        build_program_with(&DenyAction::Errno)
     }
 
     #[test]
@@ -437,6 +551,23 @@ mod tests {
         assert!(!p.is_empty());
         assert!(p.len() < 255, "jt/jf are u8-limited, got {}", p.len());
         assert_eq!(p.last().map(|i| i.code), Some(RET_K));
+    }
+
+    #[test]
+    fn audit_action_kills_and_never_returns_eacces() {
+        let p = build_program_with(&DenyAction::Kill(None));
+        // The kill terminal is emitted before the allow/deny terminals.
+        assert!(p.iter().any(|i| i.k == RET_KILL_PROCESS));
+        assert_eq!(build_blob_with(&DenyAction::Kill(None)).len(), p.len() * 8);
+        // The production build carries the same (unreachable) kill terminal, so
+        // its last instruction is still the EACCES deny.
+        let q = build_program_with(&DenyAction::Errno);
+        assert_eq!(q.last().map(|i| i.k), Some(RET_ERRNO | (libc::EACCES as u32 & 0xffff)));
+        // A subset build jumps to the kill terminal only for the listed nrs.
+        let sub = DenyAction::Kill(Some(vec![libc::SYS_ptrace as u32]));
+        assert!(sub.kills(libc::SYS_ptrace as u32));
+        assert!(!sub.kills(libc::SYS_mount as u32));
+        assert!(!DenyAction::Errno.kills(libc::SYS_ptrace as u32));
     }
 
     #[test]

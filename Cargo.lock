@@ -38,6 +38,7 @@ name = "acos-art"
 version = "0.1.0"
 dependencies = [
  "acos-binder-peer",
+ "acos-sandbox",
  "acos-services",
  "libc",
  "serde",

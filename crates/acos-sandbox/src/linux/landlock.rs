@@ -275,6 +275,64 @@ pub fn restrict(read_only: &[PathBuf], read_write: &[PathBuf]) -> Result<String,
     Ok(detail)
 }
 
+/// The guest-side plan format version written by [`plan`].
+const PLAN_VERSION: &str = "acos-landlock 1";
+
+/// Serialise a Landlock ruleset **for a deferred, in-guest install** (S6).
+///
+/// The ART guest is a bionic process inside bwrap: a Rust `cdylib` guard cannot
+/// be preloaded there (see `results/art-runtime/S5.md` §2.1), so the ruleset is
+/// assembled here — one policy, one place — and applied by the freestanding
+/// preloaded constructor (`crates/acos-art/src/seccomp_guest.c`) after bwrap's
+/// mounts and before ART's `main`.
+///
+/// The paths are **guest** paths, not host paths: they are opened by the guest
+/// after its mount view exists. The format is line-oriented text so the
+/// freestanding stub needs no libc allocator or JSON parser:
+///
+/// ```text
+/// acos-landlock 1
+/// abi 10
+/// handled 7fff
+/// ro <hex allowed_access> <absolute guest path>
+/// rw <hex allowed_access> <absolute guest path>
+/// ```
+///
+/// Only the ABI-dependent handled mask and the per-rule access masks come from
+/// this crate; the caller supplies the roots. Missing roots are skipped by the
+/// applier (`ENOENT`), exactly as [`restrict`] does, and never widen a grant.
+pub fn plan(read_only: &[&str], read_write: &[&str]) -> Result<Vec<u8>, String> {
+    let abi = abi().ok_or_else(|| "landlock_create_ruleset(VERSION) unsupported".to_string())?;
+    let handled = handled_fs(abi);
+    let ro = read_only_access();
+    let rw = handled;
+    let mut out = String::new();
+    out.push_str(PLAN_VERSION);
+    out.push('\n');
+    out.push_str(&format!("abi {abi}\n"));
+    out.push_str(&format!("handled {handled:x}\n"));
+    for path in read_only {
+        check_guest_path(path)?;
+        out.push_str(&format!("ro {ro:x} {path}\n"));
+    }
+    for path in read_write {
+        check_guest_path(path)?;
+        out.push_str(&format!("rw {rw:x} {path}\n"));
+    }
+    Ok(out.into_bytes())
+}
+
+/// A plan path is one line: absolute, no whitespace, no NUL.
+fn check_guest_path(path: &str) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err(format!("landlock plan path {path:?} is not absolute"));
+    }
+    if path.contains(|c: char| c.is_whitespace() || c == '\0') {
+        return Err(format!("landlock plan path {path:?} contains whitespace or NUL"));
+    }
+    Ok(())
+}
+
 /// Add one path-beneath rule. Returns `Ok(false)` for a missing root.
 fn add_path_rule(ruleset_fd: c_int, path: &Path, access: u64) -> Result<bool, String> {
     let cpath = CString::new(path.as_os_str().as_bytes())
@@ -383,5 +441,58 @@ mod tests {
             ancestor_access() & (FS_READ_DIR | FS_READ_FILE | FS_WRITE_FILE),
             0
         );
+    }
+
+    /// S6: the guest plan must grant every write right only on the rw roots,
+    /// never on the read-only root, and must be parseable line-by-line.
+    #[test]
+    fn guest_plan_confines_writes_to_the_rw_roots() {
+        let Some(abi) = abi() else {
+            eprintln!("SKIP guest plan test: Landlock unavailable");
+            return;
+        };
+        let blob = plan(&["/"], &["/data/out", "/data/tmp"]).expect("plan");
+        let text = String::from_utf8(blob).expect("utf-8 plan");
+        assert!(text.starts_with("acos-landlock 1\n"), "{text}");
+        let handled = handled_fs(abi);
+        let ro_mask = read_only_access();
+        // The rw mask is the whole handled set for this ABI: create, remove,
+        // rename (refer), truncate and device ioctl included.
+        let mut rw_lines = 0;
+        for line in text.lines() {
+            let mut parts = line.splitn(3, ' ');
+            match parts.next() {
+                Some("ro") => {
+                    let mask = u64::from_str_radix(parts.next().unwrap(), 16).unwrap();
+                    assert_eq!(mask, ro_mask);
+                    assert_eq!(mask & FS_WRITE_FILE, 0, "ro grants no writes");
+                    assert_eq!(mask & FS_REMOVE_FILE, 0);
+                    assert_eq!(parts.next(), Some("/"));
+                }
+                Some("rw") => {
+                    let mask = u64::from_str_radix(parts.next().unwrap(), 16).unwrap();
+                    assert_eq!(mask, handled);
+                    assert_ne!(mask & FS_WRITE_FILE, 0);
+                    assert_ne!(mask & FS_MAKE_REG, 0);
+                    rw_lines += 1;
+                }
+                Some("handled") => {
+                    let mask = u64::from_str_radix(parts.next().unwrap(), 16).unwrap();
+                    assert_eq!(mask, handled);
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(rw_lines, 2, "one rw rule per rw root: {text}");
+    }
+
+    #[test]
+    fn guest_plan_rejects_paths_the_stub_cannot_parse() {
+        if abi().is_none() {
+            return;
+        }
+        for bad in ["relative", "/with space", "/with\nnewline"] {
+            assert!(plan(&[bad], &[]).is_err(), "{bad:?} must be rejected");
+        }
     }
 }
