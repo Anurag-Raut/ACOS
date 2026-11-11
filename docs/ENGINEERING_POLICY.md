@@ -43,3 +43,6 @@ Binder: do not commit to a large /dev/binder emulation without verifying that st
 
 ## Benchmarks
 Use latest actual baselines from the Rust VM and the legacy container repo; never compare incompatible memory measurements. Record: fixed core memory, incremental per-app memory, total with N=10 agents, PSS/private/cgroup/host memory and graphics allocations, cold/warm start, first correct frame, screenshot and UI-tree latency, tap-to-state latency, reset/relaunch latency, verified tasks per GiB-minute, compatibility pass/fail. Headline: correctly verified Android dev tasks per GiB-minute at N=10. Real APKs only; no wins claimed from tiny Java programs or incomplete launches.
+
+### Clarification (2026-11-11): at 60 minutes do not kill
+An agent passing 60 minutes is treated as a problem, not a termination trigger. Do not cancel it. Notify the user immediately (PushNotification plus chat) with: why it is taking long (what it is doing, evidence from its activity), what exactly blocks it, and what the user or orchestrator can do to help (decision, approval, access, resources, split the task). The agent keeps running (or is steered to a safe checkpoint that preserves partial work) while the user decides. Never auto-grant or auto-kill.
