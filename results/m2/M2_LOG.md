@@ -2839,3 +2839,130 @@ aborted with `posix_spawn: Resource temporarily unavailable`.
   `state_changed` was introduced.
 * The ICU `.dat` failure is a separate, pre-existing VM blocker and is named
   above; it is not caused by the WMS or input changes.
+
+---
+
+# W161-A session — counter tap e2e enabled: PerformClick runs
+
+Worktree: clean HEAD `20663b3`, `CARGO_TARGET_DIR=.cache/target-w161a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_BOOT_DIR=.cache/boot/android-34`. No commits.
+Owned/edited files: `crates/acos-vm/src/natives/fwk_input.rs`,
+`crates/acos-vm/src/natives/fwk_vsync.rs`, the `counter_interaction`
+`#[ignore]`, and this log.
+
+## Bottom line
+
+`cargo test -p acos-runtime --test counter_interaction` now runs **both** tests
+un-ignored: `counter_launch...` and `counter_tap_increment_updates_the_tree`,
+which asserts `report.state_changed`, the `AcosCounter: increment value=1` log,
+and that the live tree shows count `1`. 5/5 runs green (3 of them consecutive).
+
+## Root cause (actual, not the W152-A hypothesis)
+
+The W152-A note said the remaining gap was "in `ViewRootImpl` input delivery".
+That was wrong. Tracing proved the input delivery was already complete:
+
+1. `InputEventReceiver.dispatchInputEvent` runs on the looper green thread;
+   `ViewRootImpl$WindowInputEventReceiver.onInputEvent` ->
+   `enqueueInputEvent(..., true)` -> `doProcessInputEvents` ->
+   `ViewPostImeInputStage.processPointerEvent` -> `View.dispatchPointerEvent` ->
+   `DecorView`/`Activity`/`ViewGroup.dispatchTouchEvent` -> the `Button` (a
+   `TextView` subclass) -> `View.onTouchEvent`. `isClickable()` and
+   `isEnabled()` were true and `PFLAG_PRESSED` was set on ACTION_UP.
+2. ACTION_UP therefore ran the click branch and **posted** the click:
+   `View$PerformClick` was enqueued on the main `Handler` with `when ==` the
+   current uptime (verified by a temporary interp tracer).
+3. The click never ran because `ViewRootImpl.scheduleTraversals` (reached from
+   `View.setPressed`'s `invalidate`) posts a **sync barrier** plus an async
+   `Choreographer` traversal callback. The async callback jumps the barrier and
+   enters `performTraversals` -> `ThreadedRenderer.draw` ->
+   `View.updateDisplayListIfDirty` -> `View.drawBackground` ->
+   `RippleDrawable.drawPatterned` -> `RippleShader.<init>` ->
+   `RuntimeShader.nativeCreateBuilder`, which ACOS does not implement. The
+   unbound-native `VmError` aborts the whole traversal (and the scheduler turn),
+   so the sync `View$PerformClick` behind the barrier is never dispatched.
+4. A second, independent defect made the ordering worse: `fwk_vsync` anchored
+   the 60 Hz grid at the first `nativeScheduleVsync` and advanced it only by
+   `tick_count`. The virtual-time pump jumps the guest clock to a far-future
+   Handler deadline while no vsync is requested, so the grid fell ~2.5 s behind
+   `SystemClock.uptimeMillis`; `FrameDisplayEventReceiver.onVsync` then posted
+   its `MSG_DO_FRAME` with a `when` already in the past (observed
+   `when=2599 now=5105`).
+
+The ripple/`RenderNodeAnimator`/`CanvasProperty` graphics natives are a real,
+separate gap (the same one W147-A named for `widget-gallery`). The interaction
+fix does **not** fake them.
+
+## Fix 1 — cancel the pending traversal after input delivery
+
+`crates/acos-vm/src/natives/fwk_input.rs::on_looper_wake` now calls
+`ViewRootImpl.unscheduleTraversals()` on every root after at least one input
+frame was dispatched. `unscheduleTraversals` removes the traversal's sync
+barrier and its `Choreographer` callback, so the input-induced handler messages
+(posted at the current uptime) run. This is consistent with the existing ACOS
+design: the lifecycle driver already renders interaction/first frames
+synchronously with `Runtime::render_frame_now` because there is no RenderThread
+and the framework's vsync-driven `performDraw` path is not used.
+
+The helper reads the roots exactly as `render_frame_now` does
+(`WindowManagerGlobal.getInstance()` then `getRootViews()`, falling back to the
+`mRoots` field on this API-34 build). It clears any pending exception left by a
+probe and releases its bridge roots.
+
+Evidence (`ACOS_W161A_TRACE`, since removed):
+`cancel_traversal root=143714 scheduled=true barrier=4 result=None`, followed by
+`AcosCounter: increment value=1` and `test result: ok`.
+
+## Fix 2 — never emit a vsync timestamp in the past
+
+`crates/acos-vm/src/natives/fwk_vsync.rs::on_looper_wake` re-anchors the grid to
+`now_nanos()` when the next grid tick has fallen behind the guest clock (a real
+display resumes vsync at the current time after an idle gap). The next tick is
+`now + interval`; the framework clamps the future timestamp to its own
+`System.nanoTime`. This keeps frame deadlines on the same boot clock as
+`SystemClock.uptimeMillis` and prevents a stale `MSG_DO_FRAME` from ordering
+before current-uptime handler messages.
+
+## What was checked and rejected
+
+* **Hit-testing / coordinates (d)** — correct: `getX/Y=218.5/531` window-local,
+  `getRawX/Y=218.5/659` display, inside the Button frame `(84,468)-(353,594)`.
+* **Event timestamps** — the injected `downTime=1e9`, `eventTime=1.05e9` are on
+  a fixed base; the framework's tap logic does not depend on their absolute
+  value (the click was posted regardless). Not the blocker.
+* **Batched input / `nativeConsumeBatchedInputEvents`** — not on the path;
+  `onInputEvent` uses `processImmediately=true`.
+* **Implementing the ripple graphics natives** — attempted (`RuntimeShader`,
+  `CanvasProperty`, `RenderNodeAnimator` stubs) and **reverted**: the traversal
+  then failed on a stale `HardwareRenderer` proxy handle. Partial graphics
+  stubs are worse than the honest gap; the pump-level fix does not need them.
+* **ICU `DatPackageReader` flake** — untouched (W154-A owns it; 3/3 tap runs
+  did not hit it).
+
+## Gates (this worktree)
+
+| Gate | Result |
+|---|---|
+| `cargo test -p acos-runtime --test counter_interaction` (un-ignored) | **2 pass / 0 fail** (5/5 runs) |
+| `cargo test -p acos-runtime --test m2` | 3 pass / 0 fail |
+| `cargo test -p acos-vm --lib` | 127 pass / 0 fail |
+| `cargo test -p acos-vm --test input_natives` | 4 pass / 0 fail |
+| `cargo test -p acos-vm --test looper` / `--test looper_fds` | 4 / 1 pass |
+| `cargo test -p acos-runtime --test vsync_natives` | 3 pass / 0 fail |
+| `cargo check --workspace --all-targets` | clean |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail** |
+
+## Honesty
+
+* The tap round trip is real: the app's own `onClick` runs and sets the
+  TextView; the test asserts the live tree, not a synthesised flag.
+* The ripple/AGSL graphics natives (`RuntimeShader`, `CanvasProperty`,
+  `RenderNodeAnimator`) remain unimplemented. The interaction pump still logs a
+  `RuntimeShader` error from the invalidation that the click itself schedules
+  (`render_frame_now` already tolerates draw errors); the interaction frame may
+  therefore omit the pressed-state ripple. This is a named graphics gap, not a
+  faked pass.
+* No commit. The patch touches `crates/` plus this log only; scratch
+  `fixtures/build`/`.cache/boot` symlinks and the `dexprogs` result file were
+  removed/restored from the worktree.

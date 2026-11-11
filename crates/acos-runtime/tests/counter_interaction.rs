@@ -7,12 +7,14 @@
 //! live walk of `WindowManagerGlobal` (see `acos_runtime::view_tree`).
 //!
 //! The full interaction round trip (`tap --text Increment` -> count `1`) is
-//! pinned by [`counter_tap_increment_updates_the_tree`], which is `#[ignore]`d:
-//! the injected `MotionEvent` now reaches `ViewRootImpl` (the launcher no
-//! longer deadlocks at `SurfaceSyncGroup`), but the framework throws an NPE on
-//! a released `SurfaceControl` IME inset-animation leash before the click
-//! listener runs (see `results/m2/M2_LOG.md` §W133-A). Keeping it ignored means
-//! the suite stays green without pretending the tap works.
+//! pinned by [`counter_tap_increment_updates_the_tree`]. The injected
+//! `MotionEvent` is delivered window-local to `ViewRootImpl`, and the app's
+//! `Button.onClick` runs: the interaction pump cancels the framework's pending
+//! `ViewRootImpl` traversal after input delivery (ACOS renders interaction
+//! frames synchronously via `Runtime::render_frame_now`), because that
+//! traversal's async callback otherwise aborts on unimplemented ripple-graphics
+//! natives before the sync `View$PerformClick` message posted by ACTION_UP can
+//! run. See `results/m2/M2_LOG.md` §W161-A.
 //!
 //! Skips loudly when the fixture APK or boot directory is unavailable;
 //! `ACOS_REQUIRE_FIXTURES` turns the missing fixture into a hard failure.
@@ -129,7 +131,6 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
 }
 
 #[test]
-#[ignore = "blocked: the leash NPE is fixed and the injected MotionEvent now reaches the app in window-local coordinates, but the Button's `View.onTouchEvent`/`performClick` does not run (no `AcosCounter: increment` log and `state_changed=false`); the remaining gap is in `ViewRootImpl` input delivery, not the WMS reply fan-out. See results/m2/M2_LOG.md §W152-A"]
 fn counter_tap_increment_updates_the_tree() {
     seed_boot_dir();
     let Some(apk) = counter_apk() else {

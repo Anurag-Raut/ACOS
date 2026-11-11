@@ -434,7 +434,26 @@ pub(crate) fn on_looper_wake(vm: &mut Vm, looper: u64) -> VmResult<bool> {
             }
             r.pending = false;
             r.tick_count += 1;
-            r.last_tick = r.base_nanos.saturating_add(r.interval.saturating_mul(r.tick_count));
+            // A vsync timestamp must never precede the current uptime clock.
+            // The virtual-time pump can jump the guest clock far ahead of the
+            // grid (it advances to the earliest far-future Handler deadline
+            // while no vsync is requested), which would leave `last_tick` in
+            // the past. `FrameDisplayEventReceiver.onVsync` then posts its
+            // `MSG_DO_FRAME` with a `when` already in the past, so a traversal
+            // runs ahead of handler messages posted at the current uptime
+            // (e.g. the `View$PerformClick` posted by ACTION_UP). Re-anchor the
+            // grid to `now` when it has fallen behind, exactly as a real
+            // display resumes vsync at the current time after an idle gap.
+            let now = now_nanos();
+            let mut tick = r
+                .base_nanos
+                .saturating_add(r.interval.saturating_mul(r.tick_count));
+            if tick < now {
+                r.base_nanos = now;
+                r.tick_count = 1;
+                tick = now.saturating_add(r.interval);
+            }
+            r.last_tick = tick;
             r.vsync_id = r.tick_count;
             ready.push((
                 *id,

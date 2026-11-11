@@ -2139,7 +2139,75 @@ pub(crate) fn on_looper_wake(vm: &mut Vm, looper: u64) -> VmResult<bool> {
             any = true;
         }
     }
+    if any {
+        cancel_traversal_after_input(vm);
+    }
     Ok(any)
+}
+
+/// Drop the framework's pending `ViewRootImpl` traversal after input delivery.
+///
+/// `ViewRootImpl.scheduleTraversals` (reached from `View.setPressed`'s
+/// `invalidate`) posts a **sync barrier** and an async `Choreographer` traversal
+/// callback. The async callback jumps the barrier and, on ACOS, aborts inside
+/// the ripple background draw on the unimplemented graphics natives
+/// (`RuntimeShader` / `CanvasProperty` / `RenderNodeAnimator`); the sync
+/// `View$PerformClick` message ACTION_UP posts behind the barrier is then never
+/// dispatched. ACOS produces the interaction frame synchronously with
+/// `Runtime::render_frame_now`, so the framework traversal is not needed here:
+/// cancel it (which removes the barrier and the callback) so the input-induced
+/// handler messages run. A no-op when no root has a traversal scheduled.
+fn cancel_traversal_after_input(vm: &mut Vm) {
+    let global = match vm.call_static(
+        "android.view.WindowManagerGlobal",
+        "getInstance",
+        "()Landroid/view/WindowManagerGlobal;",
+        &[],
+    ) {
+        Ok(JavaValue::Object(h)) if h != crate::heap::NULL => h,
+        _ => {
+            vm.pending_exception = crate::heap::NULL;
+            return;
+        }
+    };
+    let roots = match vm.call_method(global, "getRootViews", "()Ljava/util/ArrayList;", &[]) {
+        Ok(JavaValue::Object(h)) if h != crate::heap::NULL => h,
+        _ => {
+            // API 34 keeps the roots on the `mRoots` field; `getRootViews` is
+            // not in this build's `WindowManagerGlobal` (same fallback as
+            // `Runtime::render_frame_now`).
+            vm.pending_exception = crate::heap::NULL;
+            match vm.get_field(global, "mRoots") {
+                Ok(JavaValue::Object(h)) if h != crate::heap::NULL => h,
+                _ => {
+                    vm.pending_exception = crate::heap::NULL;
+                    vm.release_bridge_root(global);
+                    return;
+                }
+            }
+        }
+    };
+    let count = match vm.call_method(roots, "size", "()I", &[]) {
+        Ok(JavaValue::Int(n)) => n,
+        _ => 0,
+    };
+    for i in 0..count {
+        let root = match vm.call_method(
+            roots,
+            "get",
+            "(I)Ljava/lang/Object;",
+            &[JavaValue::Int(i)],
+        ) {
+            Ok(JavaValue::Object(h)) if h != crate::heap::NULL => h,
+            _ => continue,
+        };
+        let _ = vm.call_method(root, "unscheduleTraversals", "()V", &[]);
+        vm.pending_exception = crate::heap::NULL;
+        vm.release_bridge_root(root);
+    }
+    vm.pending_exception = crate::heap::NULL;
+    vm.release_bridge_root(roots);
+    vm.release_bridge_root(global);
 }
 
 fn recv_one(fd: &OwnedFd) -> Option<Vec<u8>> {
