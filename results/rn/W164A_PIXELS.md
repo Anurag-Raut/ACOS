@@ -716,3 +716,76 @@ new-architecture configuration to the C++ feature flags
 | `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** (`exit=0`) |
 | `cargo check --workspace --all-targets` | **clean** (`exit=0`) |
 | `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** (`exit=0`) |
+
+---
+
+## W184-A — Paper feature-flag override on the fixture entry point
+
+**Outcome: level B (unchanged).** `activity_on_create=Ok`, `first_frame=NotReached`.
+The fixture now applies the app's Paper configuration through the RN-owned
+entry point, but the C++ flag install itself hits a native JNI rung.
+
+### What was changed
+
+`fixtures/apps/rn-hello/src/dev/acos/fixtures/rnhello/MainActivity.java` now
+calls
+
+```java
+DefaultNewArchitectureEntryPoint.load(false, false, false);
+```
+
+in `onCreate` **before** `super.onCreate(...)` (i.e. before
+`ReactActivity.onCreate` -> `ReactActivityDelegate.onCreate` -> `loadApp`
+reads `ReactNativeNewArchitectureFeatureFlags.enableBridgelessArchitecture()`).
+`load(turboModules, fabric, bridgeless)` all-false is the Paper configuration
+(the same seam the RN 0.81 template uses when
+`BuildConfig.IS_NEW_ARCHITECTURE_ENABLED` is false). It first calls
+`DefaultSoLoader.maybeLoadSoLibrary()` and then
+`ReactNativeFeatureFlags.override(...)`.
+
+### Next blocker (measured, same stack as §W178-A)
+
+The merged-lib `jni_lib_merge` `JNI_OnLoad` succeeds through
+`About to register 11 actual methods.` and then the **`CxxInterop.override`**
+native call throws
+
+```
+libc++abi: terminating due to uncaught exception of type std::runtime_error:
+  Unable to retrieve jni environment. Is the thread attached?
+```
+
+so `ReactNativeFeatureFlags.override(...)` never installs the C++ provider.
+`enableBridgelessArchitecture()` still returns the RN 0.81 native default
+`true`; `ReactDelegate.loadApp` still takes the bridgeless branch and
+`Activity.setContentView(null)` throws `IllegalArgumentException: Cannot add a
+null child view to a ViewGroup`. Stack still bottoms out at
+`MainActivity.onCreate(37)` -> `DefaultNewArchitectureEntryPoint.load` ->
+`DefaultSoLoader.maybeLoadSoLibrary` -> `SoLoader.loadLibrary` ->
+`jni_lib_merge`.
+
+### Next principled fix
+
+The rung is the **JNI attach/`GetEnv` path used by the merged lib**, not the
+Java placement of the call. `jni_lib_merge` calls `GetEnv` with JNI 1.2
+(`crates/acos-jni/src/state.rs`); `Environment::current()` inside the
+`CxxInterop.override` entry point is what fails. The W178 `jni_lib_merge`
+`JNI_OnLoad` succeeded on the `Application.onCreate` thread, so the difference
+is which thread reaches the merged-lib entry point and whether that thread is
+attached when `CxxInterop.override` runs. Fix `Environment::current()` /
+`GetEnv` for the activity thread in the `jni_lib_merge`-`CxxInterop` path so
+the override is actually installed; then `loadApp` takes the Paper branch,
+`ReactDelegate.createRootView()` builds a real `ReactRootView`, and
+`startReactApplication` / `ReactInstanceManager` become reachable.
+
+### Acceptance (clean worktree `.cache/w184a` at HEAD 501250a)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-runtime --test rn_pixels` | **2 passed** (`rn_platform_launch_probe`: `activity_on_create=Ok`, `on_resume=Blocked`, `first_frame=NotReached`; same `jni_lib_merge`/`Environment::current` blocker) |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** (`exit=0`) |
+| `cargo check --workspace --all-targets` | **clean** (`exit=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** (`exit=0`) |
+
+`fixtures/build/apps/rn-hello.apk` is a gitignored build output. The source
+change is only `MainActivity.java` (the fixture entry point); no crate source
+was edited.
