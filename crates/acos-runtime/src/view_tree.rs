@@ -255,8 +255,16 @@ impl Walker<'_> {
             .map(|c| self.vm.class_desc_of_id(c))
             .unwrap_or_default();
 
-        let text = string_call(self.vm, view, "getText", "()Ljava/lang/CharSequence;", &[])
+        let mut text = string_call(self.vm, view, "getText", "()Ljava/lang/CharSequence;", &[])
             .unwrap_or_default();
+        if text.is_empty() {
+            // uiautomator reports a TextView/EditText `hint` as its text when the
+            // field is empty (the ART reference trees do the same), so an empty
+            // input is observable by its hint instead of looking like a blank
+            // node. A typed value always wins.
+            text = string_call(self.vm, view, "getHint", "()Ljava/lang/CharSequence;", &[])
+                .unwrap_or_default();
+        }
         let content_desc = string_call(
             self.vm,
             view,

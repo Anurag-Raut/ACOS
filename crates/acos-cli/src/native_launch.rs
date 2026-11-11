@@ -119,6 +119,10 @@ fn session_root() -> Result<PathBuf, SessionError> {
 
 /// The host boot cache the VM reads `/system` files from, if it exists.
 fn boot_root() -> Option<PathBuf> {
+    let env = std::env::var_os("ACOS_BOOT_DIR").map(PathBuf::from);
+    if let Some(path) = env.filter(|path| path.is_dir()) {
+        return Some(path);
+    }
     let candidates = [
         ".cache/boot/android-34",
         "target/tmp/boot/android-34",
@@ -136,6 +140,20 @@ fn boot_root() -> Option<PathBuf> {
 /// reports true, which is what `acos-native-loader` requires before mapping a
 /// guest `.so`.
 pub fn confine_native_launch(apk: &Path) -> Result<ConfinementReport, SessionError> {
+    confine_native_launch_with_writable(apk, None, None)
+}
+
+/// Enter confinement with one extra writable path (used by `acos verify
+/// --native`, which must write its evidence directory after the run).
+///
+/// The extra path is created when missing and is the only addition to the
+/// writable surface; everything else is identical to
+/// [`confine_native_launch`].
+pub fn confine_native_launch_with_writable(
+    apk: &Path,
+    extra_writable: Option<&Path>,
+    extra_read: Option<&Path>,
+) -> Result<ConfinementReport, SessionError> {
     let root = session_root()?;
     // Read surface is exactly what native loading needs (W67A #13): the VFS
     // session root (writable), the boot-cache `/system` mapping, and the APK's
@@ -143,9 +161,32 @@ pub fn confine_native_launch(apk: &Path) -> Result<ConfinementReport, SessionErr
     // granted: the custom ELF loader resolves `DT_NEEDED` from the VFS/APK
     // search paths, and granting `/lib` was what made a traversing `DT_NEEDED`
     // (finding #4) useful. Read-only roots are added only when they exist.
+    if let Some(extra) = extra_writable {
+        std::fs::create_dir_all(extra).map_err(|e| {
+            error(
+                "CONFINEMENT_UNAVAILABLE",
+                format!("cannot create write path {}: {e}", extra.display()),
+                vec![("path", extra.display().to_string())],
+            )
+        })?;
+    }
+    let mut read_write_paths = vec![root.clone()];
+    if let Some(extra) = extra_writable {
+        read_write_paths.push(extra.to_path_buf());
+    }
+    let mut read_only_paths = Vec::new();
+    if let Some(extra) = extra_read {
+        if let Some(parent) = extra.parent() {
+            read_only_paths.push(if parent.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                parent.to_path_buf()
+            });
+        }
+    }
     let mut profile = ConfineProfile {
-        read_only_paths: Vec::new(),
-        read_write_paths: vec![root.clone()],
+        read_only_paths,
+        read_write_paths,
         ..ConfineProfile::default()
     };
     if let Some(boot) = boot_root() {

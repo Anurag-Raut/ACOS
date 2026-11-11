@@ -17,6 +17,12 @@ acos verify --apk fixtures/build/apps/hello-jni.apk \
   --json --artifacts out/hello-jni
 ```
 
+The V1 core loop (no rotation yet) is `scenarios/v1-hello-views.yaml` and
+`scenarios/v1-counter.yaml`; the negative fixtures are built with
+`tools/build-negative-apps.sh` and exercised by
+`cargo test -p acos-cli --test negative_verify`. Status and blockers:
+`docs/V1.md` §W180-A.
+
 Both runs must produce `verdict.json` with `verdict: pass` **and** a complete
 artifacts directory (`steps/`, `frames/`, `tree/`, `events.jsonl`,
 `resources.json`, `repro.*`). `acos-protocol`'s `validate_artifacts_dir` rejects a

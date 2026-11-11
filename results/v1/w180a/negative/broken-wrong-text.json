@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "verdict": "fail",
+  "fidelity": "native-runtime",
+  "backend": "acos-native",
+  "isolation": "process",
+  "request_id": "req_7ab04_18e6dbc514eb63b7",
+  "session_id": "s_native_1",
+  "started_at": "2026-11-11T02:12:21.061Z",
+  "finished_at": "2026-11-11T02:12:30.796Z",
+  "app": {
+    "path": "fixtures/build/apps/broken-wrong-text.apk",
+    "package": "dev.acos.fixtures.counter",
+    "sha256": "92bc32efb29502eabf1de171632121e7bf8344a98aba7e1f321f453b78dbdb39"
+  },
+  "scenario": {
+    "path": "scenarios/v1-counter.yaml",
+    "name": "v1-counter",
+    "sha256": "247edde60e49c8ca6b4b1b41f2fe6e83b3b4cb2aa00b04e0693531ab0baf189e"
+  },
+  "steps": [
+    {
+      "index": 0,
+      "step": "launch",
+      "status": "pass",
+      "duration_ms": 9530,
+      "assertions": [],
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "step": "wait_for",
+      "status": "pass",
+      "duration_ms": 103,
+      "frame_seq": 4,
+      "assertions": [],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "step": "assert_text",
+      "status": "fail",
+      "duration_ms": 102,
+      "frame_seq": 4,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": false,
+          "diff": {
+            "expected": {
+              "exact": "0"
+            },
+            "actual": "5",
+            "path": "nodes[4].text",
+            "detail": "text did not match (exactly \"0\")"
+          },
+          "matched_node_ids": [
+            "n1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ],
+      "error": {
+        "code": "ASSERTION_FAILED",
+        "message": "expected text exactly \"0\", got \"5\"",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "retryable": false
+      }
+    }
+  ],
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "step_index": 2,
+    "summary": "step 2 (assert_text) fail",
+    "error": {
+      "code": "ASSERTION_FAILED",
+      "message": "expected text exactly \"0\", got \"5\"",
+      "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+      "retryable": false
+    }
+  },
+  "resources": {
+    "wall_ms": 9735,
+    "peak_rss_bytes": 683610112,
+    "memory_mib": 651,
+    "frames_captured": 2,
+    "events": 48,
+    "sessions": 1,
+    "steps": 3
+  },
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/broken-wrong-text.apk",
+    "apk_sha256": "92bc32efb29502eabf1de171632121e7bf8344a98aba7e1f321f453b78dbdb39",
+    "scenario_path": "scenarios/v1-counter.yaml",
+    "scenario_sha256": "247edde60e49c8ca6b4b1b41f2fe6e83b3b4cb2aa00b04e0693531ab0baf189e",
+    "flags": [],
+    "isolation": "process",
+    "display": {
+      "mode": "offscreen",
+      "width": 1080,
+      "height": 2400,
+      "density_dpi": 420
+    },
+    "fidelity": "native-runtime",
+    "backend": "acos-native"
+  },
+  "notes": [
+    "stopped at step 2 (assert_text): fail; later steps were not executed",
+    "scenario expected `pass`, engine produced `fail` — result is a truthful partial"
+  ]
+}

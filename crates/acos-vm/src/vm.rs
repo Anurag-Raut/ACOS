@@ -2298,6 +2298,16 @@ impl Vm {
         /// handful of turns; a repeating timer is capped here and the host
         /// wall budget stops it after that.
         const MAX_PUMP_TURNS: u32 = 100_000;
+        self.run_scheduler_max(virtual_time, MAX_PUMP_TURNS)
+    }
+
+    /// [`Vm::run_scheduler`] with an explicit turn budget.
+    ///
+    /// An interaction pump must not chase a repeating framework timer (for
+    /// example the `EditText` cursor blink) for 100k virtual-time turns: the
+    /// event and its immediate repaint are handled in the first turns, and the
+    /// rest is a periodic timer that never goes idle. `max_turns` bounds that.
+    pub fn run_scheduler_max(&mut self, virtual_time: bool, max_turns: u32) -> VmResult<()> {
         let mut turns: u32 = 0;
         loop {
             crate::interp::run(self)?;
@@ -2318,7 +2328,7 @@ impl Vm {
                 break;
             }
             turns += 1;
-            if turns >= MAX_PUMP_TURNS {
+            if turns >= max_turns {
                 break;
             }
         }

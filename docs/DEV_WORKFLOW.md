@@ -283,14 +283,14 @@ distinction:
 | DEX console run | `acos run-dex` | `acos_run_dex` | working |
 | ART reference capture | `tools/oracle/*` | — | working |
 | scenario validation | `cargo test -p acos-protocol` | — | working |
-| verify (static + launch) | `acos verify` | `acos_verify` | partial |
-| launch Activity / lifecycle | `acos run` | `acos_run` | **not working yet** |
-| UI tree / text | `acos observe` | `acos_observe` | **not working yet** |
-| screenshot / frame | `acos capture` | `acos_capture` | **not working yet** |
-| tap / type / back / rotate | `acos action` | `acos_action` | **not working yet** |
-| assertions against the app | `acos assert` | `acos_assert` | **not working yet** |
-| event stream | `acos events` | `acos_events` | **not working yet** |
-| reset / profile / destroy | `acos reset/profile/destroy` | `acos_reset/…` | **not working yet** |
+| verify (static + launch) | `acos verify` | `acos_verify` | **working for the counter core loop** (W180-A, `scenarios/v1-counter.yaml`, no Android boot); `hello-views` tap-after-type and `hello-jni` native symbols are blocked (`docs/V1.md`) |
+| launch Activity / lifecycle | `acos run` | `acos_run` | working on `counter`/`hello-views`/`form-validation` (W159-A, W161-A); rotation/recreate not implemented |
+| UI tree / text | `acos observe` | `acos_observe` | working (text/ids/classes); bounds offset vs ART is open (W179-A) |
+| screenshot / frame | `acos capture` | `acos_capture` | working: fresh forced frame + stable hash for a static screen (W180-A `AgentSession::capture`) |
+| tap / type / back / rotate | `acos action` | `acos_action` | tap + type work on `counter`/`hello-views`/`form-validation` (W161-A, W167-A, W180-A); back untested; rotate not implemented |
+| assertions against the app | `acos assert` | `acos_assert` | working through `acos verify` (exact text, bounds, ordered logs, frame binding) |
+| event stream | `acos events` | `acos_events` | `verify` writes `events.jsonl` with frame/tree/log events |
+| reset / profile / destroy | `acos reset/profile/destroy` | `acos_reset/…` | reset/destroy work at the session level; `profile` reports the process peak RSS |
 | capability report | `acos capability-report` | `acos_capability_report` | **not working yet** |
 
 MCP availability is probed at runtime from `acos --help`, not hard-coded: as

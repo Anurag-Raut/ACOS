@@ -134,7 +134,7 @@ fn every_checked_in_scenario_parses_and_validates() {
         }
         assert_eq!(scenario.display.label(), "1080x2400@420");
     }
-    assert_eq!(positive, 6);
+    assert_eq!(positive, 8);
     assert_eq!(negative, 9);
 }
 

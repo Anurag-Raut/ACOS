@@ -1,0 +1,109 @@
+# v1-hello-views: the V1 core loop on hello-views.apk with no Android boot.
+#
+# Product path: one `AgentSession` (the `acos launch --keep` / `observe` /
+# `tap` / `session text` worker) driven by `acos verify`. Every expected string
+# and bound is the ART reference capture in
+# fixtures/reference/hello-views/art-api34-x86_64/ (1080x2400 @ 420 dpi,
+# en-US, light theme, font scale 1.0).
+#
+# String reconciliation (docs/V1.md §1 note): the fixture builds
+# `"Hello, " + name + "! clicks: " + clicks`; the V1 draft asserted
+# `"Hello, World!"` / `"clicks: 1"`. The ART capture typed `World`, so the
+# scenario asserts exactly that generated string (not a widened match) and the
+# initial fixture strings `Hello ACOS` / `clicks: 0`. The fixture README's
+# `Hello, Ada! clicks: 1` is the same template with a different name.
+#
+# Bounds: the live tree at HEAD is offset/scaled relative to the ART reference
+# (content top 422 vs 275, x 84 vs 42; layout-offset work W179-A), so this file
+# asserts id + exact text only. The ART-bound checks stay in the reference
+# scenarios (`hello-views.yaml` / `counter.yaml`, V1 1.4/1.9) and are not marked
+# done. Rotation/save-restore and Back live in `scenarios/hello-views.yaml` (V1 1.7):
+# the session has no orientation-change path yet, so this file deliberately
+# stops before `rotate` instead of weakening those checks.
+version: 1
+name: v1-hello-views
+description: >-
+  Launch hello-views, assert the live View tree (title/input/btn/result texts
+  and ART bounds), type World, tap Greet once, assert "Hello, World! clicks: 1",
+  capture a fresh frame, and assert no crash.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: title}
+      text: {exact: Hello ACOS}
+
+  - assert_text:
+      selector: {id: input}
+      text: {exact: Enter your name}
+
+  - assert_text:
+      selector: {id: btn}
+      text: {exact: Greet}
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  # `type` focuses the field (it taps the selector then commits through the
+  # real InputConnection). A standalone tap on the already-focused EditText is
+  # not asserted: the framework legitimately reports no visible state change
+  # for it, and the executor's tap rule requires a visible change.
+  - type:
+      selector: {id: input}
+      text: World
+  - tap:
+      selector: {id: btn}
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^greet name=World clicks=1$'
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "Hello, World! clicks: 1"}
+
+  - capture:
+      name: v1-hello-views-after-click-1
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

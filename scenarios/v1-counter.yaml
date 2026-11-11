@@ -1,0 +1,97 @@
+# v1-counter: the V1 core loop on counter.apk with no Android boot.
+#
+# Product path: one `AgentSession` (the `acos launch --keep` / `observe` /
+# `tap` worker) driven by `acos verify`. Expected strings/bounds are the ART
+# reference capture in fixtures/reference/counter/art-api34-x86_64/
+# (1080x2400 @ 420 dpi).
+#
+# Bounds: the live tree at HEAD is offset/scaled relative to the ART reference
+# (content top 422 vs 275, x 84 vs 42; layout-offset work W179-A), so this file
+# asserts id + exact text only. The ART-bound checks stay in the reference
+# scenarios (`hello-views.yaml` / `counter.yaml`, V1 1.4/1.9) and are not marked
+# done. Rotation/save-restore and Back live in `scenarios/counter.yaml` (V1 1.7): the
+# session has no orientation-change path yet, so this file stops before
+# `rotate` instead of weakening those checks.
+version: 1
+name: v1-counter
+description: >-
+  Launch counter, assert the live View tree (count/inc/reset texts and ART
+  bounds), tap Increment and assert count becomes 1, tap again and assert 2,
+  capture a fresh frame, and assert no crash.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+
+  - assert_text:
+      selector: {id: reset}
+      text: {exact: Reset}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^onCreate$'
+        - '^onStart$'
+        - '^onResume$'
+
+  - tap:
+      selector: {id: inc}
+
+  - assert_log:
+      tag: AcosCounter
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^increment value=1$'
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+
+  - capture:
+      name: v1-counter-after-inc1
+      format: png
+      fresh: true
+
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+
+  - assert_no_crash: {}

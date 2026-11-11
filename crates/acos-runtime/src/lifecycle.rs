@@ -338,7 +338,22 @@ impl Runtime {
                 t.status = ThreadStatus::Runnable;
             }
         }
-        run_phase(self.vm_mut())?;
+        // Interactions only need the turns that drain the injected event and
+        // its immediate repaint. A repeating timer (the `EditText` cursor blink
+        // posts every 500 ms of guest time) keeps the virtual-time pump busy
+        // forever, so this is bounded instead of using the launch scheduler
+        // budget.
+        const INTERACTION_PUMP_TURNS: u32 = 2_000;
+        self.vm_mut()
+            .run_scheduler_max(true, INTERACTION_PUMP_TURNS)?;
+        if self.vm().pending_exception != NULL {
+            let h = self.vm_mut().pending_exception;
+            self.vm_mut().pending_exception = NULL;
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
+        }
         self.render_frame_now()?;
         Ok(())
     }

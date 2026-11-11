@@ -387,6 +387,10 @@ enum Cmd {
         screenshot: Option<PathBuf>,
         reply: Sender<Result<ObserveReport, SessionError>>,
     },
+    Capture {
+        screenshot: Option<PathBuf>,
+        reply: Sender<Result<ObserveReport, SessionError>>,
+    },
     ObserveTree {
         max_nodes: usize,
         reply: Sender<Result<ViewTree, SessionError>>,
@@ -554,6 +558,15 @@ impl AgentSession {
         self.round_trip(|reply| Cmd::Observe { screenshot, reply })
     }
 
+    /// Force a fresh completed frame and read it: drives the real
+    /// `ThreadedRenderer.draw` (`render_frame_now`) and then observes, so the
+    /// returned `frame_id` is strictly newer than the previous one. This is the
+    /// `capture --fresh` contract; a static app would otherwise never publish a
+    /// second frame and a stale frame could masquerade as evidence.
+    pub fn capture(&self, screenshot: Option<PathBuf>) -> Result<ObserveReport, SessionError> {
+        self.round_trip(|reply| Cmd::Capture { screenshot, reply })
+    }
+
     /// Walk the live framework `View` hierarchy of the session's VM.
     ///
     /// Returns `UNSUPPORTED_BACKEND` with `details.reason = "not_ready"` when
@@ -665,6 +678,9 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
             }
             Cmd::Observe { screenshot, reply } => {
                 let _ = reply.send(do_observe(&state, screenshot.as_deref()));
+            }
+            Cmd::Capture { screenshot, reply } => {
+                let _ = reply.send(do_capture(&mut state, screenshot.as_deref()));
             }
             Cmd::ObserveTree { max_nodes, reply } => {
                 let _ = reply.send(do_observe_tree(&mut state, max_nodes));
@@ -789,14 +805,25 @@ fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionEr
             ("stage_reached", stage.to_string()),
         ]));
     };
+    let before = crate::view_tree::walk(runtime.vm_mut(), crate::view_tree::DEFAULT_MAX_NODES)
+        .map(|tree| tree_state_summary(&tree))
+        .unwrap_or_default();
     match crate::text_java::inject_text(runtime.vm_mut(), text) {
-        Ok(report) => Ok(InputReport {
-            kind: "text".to_string(),
-            accepted: true,
-            ack_seqs: report.ack_seqs,
-            path: Some(report.path.as_str().to_string()),
-            state_changed: true,
-        }),
+        Ok(report) => {
+            // The text commit is the visible change; `state_changed` is the
+            // before/after tree diff, not a guess. A follow-up `capture` forces
+            // the fresh frame (the looper pump is used by taps, not by text).
+            let after = crate::view_tree::walk(runtime.vm_mut(), crate::view_tree::DEFAULT_MAX_NODES)
+                .map(|tree| tree_state_summary(&tree))
+                .unwrap_or_default();
+            Ok(InputReport {
+                kind: "text".to_string(),
+                accepted: true,
+                ack_seqs: report.ack_seqs,
+                path: Some(report.path.as_str().to_string()),
+                state_changed: after != before,
+            })
+        }
         Err(e) => Err(text_error(&e, stage)),
     }
 }
@@ -822,6 +849,29 @@ fn text_error(e: &crate::text_java::TextError, stage: &str) -> SessionError {
         crate::text_java::TextError::Framework(_) => {}
     }
     SessionError::new(e.code(), e.message()).with_details(details)
+}
+
+/// Render the current tree once and observe the new completed frame.
+fn do_capture(
+    state: &mut WorkerState,
+    screenshot: Option<&Path>,
+) -> Result<ObserveReport, SessionError> {
+    let stage = state.stage_reached;
+    let Some(runtime) = state.runtime.as_mut() else {
+        return Err(SessionError::new(
+            "UNSUPPORTED_BACKEND",
+            format!("cannot capture: the runtime is not booted (stage reached: {stage})"),
+        )
+        .with_details(vec![
+            ("reason", "not_ready".to_string()),
+            ("capability", "ui.screenshot".to_string()),
+            ("stage_reached", stage.to_string()),
+        ]));
+    };
+    runtime.render_frame_now().map_err(|error| {
+        SessionError::new("RENDER_IO", format!("capture render failed: {error}"))
+    })?;
+    do_observe(state, screenshot)
 }
 
 fn do_observe(
@@ -1017,6 +1067,9 @@ fn tree_state_summary(tree: &ViewTree) -> String {
         out.push_str(&format!("{:?}", node.bounds));
         out.push('|');
         out.push_str(if node.visible { "1" } else { "0" });
+        out.push_str(if node.focused { "1" } else { "0" });
+        out.push_str(if node.enabled { "1" } else { "0" });
+        out.push_str(if node.checked { "1" } else { "0" });
         out.push('\n');
         for child in &node.children {
             walk(child, out);

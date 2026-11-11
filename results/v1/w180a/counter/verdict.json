@@ -1,0 +1,385 @@
+{
+  "schema_version": 1,
+  "verdict": "pass",
+  "fidelity": "native-runtime",
+  "backend": "acos-native",
+  "isolation": "process",
+  "request_id": "req_81503_18e6dbfe57e665e9",
+  "session_id": "s_native_1",
+  "started_at": "2026-11-11T02:16:26.998Z",
+  "finished_at": "2026-11-11T02:16:43.771Z",
+  "app": {
+    "path": "fixtures/build/apps/counter.apk",
+    "package": "dev.acos.fixtures.counter",
+    "sha256": "a0254db0b54d1960c7dcdb273041e09de644c356a436ba139c4d8c37766bd3aa"
+  },
+  "scenario": {
+    "path": "scenarios/v1-counter.yaml",
+    "name": "v1-counter",
+    "sha256": "247edde60e49c8ca6b4b1b41f2fe6e83b3b4cb2aa00b04e0693531ab0baf189e"
+  },
+  "steps": [
+    {
+      "index": 0,
+      "step": "launch",
+      "status": "pass",
+      "duration_ms": 9234,
+      "assertions": [],
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "step": "wait_for",
+      "status": "pass",
+      "duration_ms": 104,
+      "frame_seq": 4,
+      "assertions": [],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "step": "assert_text",
+      "status": "pass",
+      "duration_ms": 102,
+      "frame_seq": 4,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": [
+            "n1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "step": "assert_text",
+      "status": "pass",
+      "duration_ms": 103,
+      "frame_seq": 4,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": [
+            "n2"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "step": "assert_text",
+      "status": "pass",
+      "duration_ms": 102,
+      "frame_seq": 4,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": [
+            "n3"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-assert_text.json"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "step": "assert_log",
+      "status": "pass",
+      "duration_ms": 0,
+      "assertions": [
+        {
+          "kind": "log",
+          "passed": true,
+          "matched_node_ids": []
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-assert_log.json"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "step": "tap",
+      "status": "pass",
+      "duration_ms": 3394,
+      "frame_seq": 9,
+      "assertions": [
+        {
+          "kind": "state_change",
+          "passed": true,
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/9.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/9.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-tap.json"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "step": "assert_log",
+      "status": "pass",
+      "duration_ms": 0,
+      "assertions": [
+        {
+          "kind": "log",
+          "passed": true,
+          "matched_node_ids": []
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-assert_log.json"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "step": "assert_text",
+      "status": "pass",
+      "duration_ms": 104,
+      "frame_seq": 9,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": [
+            "n1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/9.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/9.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-assert_text.json"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "step": "capture",
+      "status": "pass",
+      "duration_ms": 184,
+      "frame_seq": 10,
+      "assertions": [],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-capture.json"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "step": "tap",
+      "status": "pass",
+      "duration_ms": 3334,
+      "frame_seq": 15,
+      "assertions": [
+        {
+          "kind": "state_change",
+          "passed": true,
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-tap.json"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "step": "assert_text",
+      "status": "pass",
+      "duration_ms": 106,
+      "frame_seq": 15,
+      "assertions": [
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": [
+            "n1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-assert_text.json"
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "step": "assert_no_crash",
+      "status": "pass",
+      "duration_ms": 0,
+      "assertions": [
+        {
+          "kind": "no_crash",
+          "passed": true,
+          "matched_node_ids": [],
+          "message": "no crash recorded"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-assert_no_crash.json"
+        }
+      ]
+    }
+  ],
+  "resources": {
+    "wall_ms": 16773,
+    "peak_rss_bytes": 700030976,
+    "memory_mib": 667,
+    "frames_captured": 9,
+    "events": 65,
+    "sessions": 1,
+    "steps": 13
+  },
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/counter.apk",
+    "apk_sha256": "a0254db0b54d1960c7dcdb273041e09de644c356a436ba139c4d8c37766bd3aa",
+    "scenario_path": "scenarios/v1-counter.yaml",
+    "scenario_sha256": "247edde60e49c8ca6b4b1b41f2fe6e83b3b4cb2aa00b04e0693531ab0baf189e",
+    "flags": [],
+    "isolation": "process",
+    "display": {
+      "mode": "offscreen",
+      "width": 1080,
+      "height": 2400,
+      "density_dpi": 420
+    },
+    "fidelity": "native-runtime",
+    "backend": "acos-native"
+  },
+  "notes": []
+}
