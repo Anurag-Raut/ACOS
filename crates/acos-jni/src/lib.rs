@@ -50,6 +50,7 @@ pub mod flutter;
 pub mod flutter_session;
 pub mod jni;
 pub mod load;
+pub mod react_native;
 pub mod gles_host;
 pub mod ndk_host;
 pub mod refs;
@@ -60,6 +61,7 @@ pub mod traps;
 pub use broker::{attached_workers, pending_requests, take_worker_error};
 pub use error::JniError;
 pub use jni::{acos_jni_method_codes, acos_jni_va_invoke, implemented_slot_count, JniCallResult};
+pub use react_native::{ReactNativeApk, ReactNativeError, RnNode, RnTree};
 pub use state::{JniConfig, JniRuntime, JNI_ERR, JNI_OK, JNI_VERSION_1_4, JNI_VERSION_1_6};
 pub use flutter_session::{
     FlutterFrame, FlutterSession, FlutterSessionError, FlutterSessionOptions,

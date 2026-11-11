@@ -1,0 +1,20 @@
+{
+  "stages": [
+    "W158A_STAGE {\"confined\":true,\"report\":{\"active\":true,\"kernel_release\":\"7.2.11-arch1-1\",\"landlock_abi\":10,\"layers\":[{\"detail\":\"PR_SET_NO_NEW_PRIVS=1\",\"layer\":\"no_new_privs\",\"status\":\"active\"},{\"detail\":\"kept []\",\"layer\":\"close_fds\",\"status\":\"active\"},{\"detail\":\"cleared; set 8 vars\",\"layer\":\"sanitize_env\",\"status\":\"active\"},{\"detail\":\"AS=4294967296 NOFILE=1024 NPROC=8192 CPU=60 FSIZE=2147483648 STACK=268435456 MEMLOCK=67108864 CORE=0\",\"layer\":\"rlimits\",\"status\":\"active\"},{\"detail\":null,\"layer\":\"user_namespace\",\"status\":\"skipped\"},{\"detail\":null,\"layer\":\"net_namespace\",\"status\":\"skipped\"},{\"detail\":null,\"layer\":\"mount_namespace\",\"status\":\"skipped\"},{\"detail\":\"abi 10, 69 rules, scoped abstract_unix_socket+signal\",\"layer\":\"landlock\",\"status\":\"active\"},{\"detail\":\"92 bpf insns, 61 denied syscalls, AF_UNIX-only sockets\",\"layer\":\"seccomp\",\"status\":\"active\"}]}}",
+    "W158A_STAGE {\"hello\":3,\"nodes\":12,\"ops\":19,\"phase\":\"mount\",\"tap_me\":13,\"tree\":[{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":3,\"text\":\"Hello ACOS\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":5,\"testID\":\"hello-text\"},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":7,\"text\":\"React Native + Hermes\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":9},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":13,\"text\":\"TAP ME\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":15},{\"class\":\"RCTView\",\"clickable\":true,\"tag\":17,\"testID\":\"hello-button\"},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":19,\"text\":\"count: 0\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":23,\"testID\":\"count-text\"},{\"class\":\"RCTView\",\"clickable\":false,\"tag\":25,\"testID\":\"hello-root\"},{\"class\":\"RCTView\",\"clickable\":false,\"tag\":27},{\"class\":\"\",\"clickable\":false,\"tag\":44261}]}",
+    "W158A_STAGE {\"count_tag\":19,\"phase\":\"tap\",\"tap_error\":null,\"tap_tag\":17,\"tree\":[{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":3,\"text\":\"Hello ACOS\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":5,\"testID\":\"hello-text\"},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":7,\"text\":\"React Native + Hermes\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":9},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":13,\"text\":\"TAP ME\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":15},{\"class\":\"RCTView\",\"clickable\":true,\"tag\":17,\"testID\":\"hello-button\"},{\"class\":\"RCTRawText\",\"clickable\":false,\"tag\":19,\"text\":\"count: 1\"},{\"class\":\"RCTText\",\"clickable\":false,\"tag\":23,\"testID\":\"count-text\"},{\"class\":\"RCTView\",\"clickable\":false,\"tag\":25,\"testID\":\"hello-root\"},{\"class\":\"RCTView\",\"clickable\":false,\"tag\":27},{\"class\":\"\",\"clickable\":false,\"tag\":44261}]}"
+  ],
+  "summary": {
+    "confined": true,
+    "count_one": true,
+    "frame_code": "UNSUPPORTED_RN_NO_RENDERER",
+    "frame_error": "rn renderer unsupported: the RN bridge registers no native view managers, so UIImplementation never lays out or draws; there is no pixel frame yet",
+    "hello": true,
+    "launched": true,
+    "nodes": 12,
+    "real_boot": true,
+    "registered_natives": 149,
+    "tap_me": true,
+    "tap_tag": 17
+  }
+}

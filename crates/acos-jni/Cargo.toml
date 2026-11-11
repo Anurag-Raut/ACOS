@@ -18,6 +18,7 @@ acos-native-loader = { path = "../acos-native-loader" }
 acos-vm = { path = "../acos-vm" }
 libc = "0.2"
 png = "0.17"
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 

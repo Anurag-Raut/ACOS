@@ -389,3 +389,72 @@ wired but the e2e falls back to the physical centre until that lands. The
 software GLES sink in the child also republishes the first RGBA buffer, so
 tap-frame pixels are identical (the counter is proven by the Dart log). See
 `results/flutter/FLUTTER_PARITY.md` §W149-A.
+
+## 8. React Native APKs (W158-A)
+
+React Native's legacy (Paper) renderer builds the Android `View` tree in
+JavaScript and ships every mutation to the host as a `UIManagerModule`
+operation. ACOS captures that operation stream instead of reading a native view
+hierarchy, because no native view managers are registered yet.
+
+### 8.1 Recognise one
+
+Detection is structural (`lib/<abi>/libreactnative*.so` or `lib/<abi>/libhermes.so`
+**plus** `assets/index.android.bundle`), never a manifest guess:
+
+`RnSession::detect` (and `acos_jni::react_native::detect`) returns the RN ABIs
+and whether the bundle is present; a framework APK is never misclassified.
+
+### 8.2 The library (`acos_runtime::RnSession`)
+
+W158-A moved the W157-A harness host loop into a library type. The confined
+child used by the product path owns one `RnSession`:
+
+```text
+RnSession::launch(apk, opts)     mount the bridge, capture the UIManager batch
+session.tree()                   &RnTree (tag/class/testID/text; no bounds)
+session.tap_tag(tag)             real TouchEvent path + Looper pump
+session.tap_test_id("hello-button")
+session.tap_text("TAP ME")       resolves the RCTText to its touchable parent
+session.frame()                  UNSUPPORTED_RN_NO_RENDERER (no native views)
+```
+
+The host loop is the real one: `ReactChoreographer` over the real
+`android.view.Choreographer` (the runtime `display` service), the real
+`AndroidInfoModule` (`uimode` service), the real `EventDispatcherImpl`, and the
+single-threaded main-looper bridge W143-A proved. A later `tap` re-enters
+`Looper.loop()` on the live session (the main looper refuses to quit, so its
+queue survives) — it does **not** re-run the harness; the counter state is
+preserved.
+
+### 8.3 The agent tree
+
+`RnTree`/`RnNode` replay `createView`/`updateView`/`setChildren` into
+tag/class/testID/text nodes. `RCTText` text is the concatenated child
+`RCTRawText`; `clickable` comes from the JS responder props. **Bounds are
+absent**, not zero: no view managers means `UIImplementation` never lays the
+tree out. `tap --text`/`--testID` resolve to the nearest clickable ancestor, so
+`TAP ME` targets the Button's `RCTView` (tag 17), the tag W157-A proved drives
+`onPress` → `setCount`.
+
+### 8.4 Structured errors
+
+* `UNSUPPORTED_RN` — not a React Native APK;
+* `UNSUPPORTED_RN_SETUP` / `UNSUPPORTED_RN_DRIVER` — boot/bridge stage failed;
+* `UNSUPPORTED_RN_NO_RENDERER` — `observe --frame` (missing native view
+  managers ⇒ no pixel frame yet);
+* `UNSUPPORTED_RN_NO_TARGET` — `tap --text`/`--testID` found nothing;
+* `WRONG_ABI` — no RN/Hermes library for the host ABI.
+
+### 8.5 Evidence and boundary
+
+Fixture-gated e2e `crates/acos-runtime/tests/rn_product.rs` (confined child):
+mount → tree contains `Hello ACOS` and `TAP ME` → `tap --testID hello-button` →
+tree says `count: 1`; `observe --frame` returns
+`UNSUPPORTED_RN_NO_RENDERER`. Evidence: `results/rn/w158a-product.json`.
+
+**Boundary:** the library and its e2e are landed; the MCP/CLI product routing
+(`acos launch <rn.apk>` → daemon `RnSessions` table, `acos observe --tree`,
+`acos tap --text`) is **not** wired in this wave. Until it is, an RN APK
+launched through `acos launch` still falls through to the framework ladder.
+See `results/rn/W158A_PRODUCT.md`.

@@ -17,6 +17,7 @@ acos-services = { path = "../acos-services" }
 acos-vm = { path = "../acos-vm" }
 acos-wm = { path = "../acos-wm" }
 thiserror = { workspace = true }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

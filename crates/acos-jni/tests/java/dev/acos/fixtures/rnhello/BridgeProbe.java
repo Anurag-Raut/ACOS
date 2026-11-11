@@ -87,6 +87,95 @@ public final class BridgeProbe {
   public static volatile Object PROBE_VOL;
 
   /**
+   * W158-A: the live recording UIManager, so the product `RnSession` can read
+   * the op stream and dispatch a tap after the driver `main` has returned.
+   */
+  static LoggingUIManagerModule sUiManager;
+
+  /** The recorded ops as a JSON array (each element is already an op object). */
+  public static String opsJson() {
+    if (sUiManager == null) {
+      return "[]";
+    }
+    List<String> ops = sUiManager.ops();
+    StringBuilder sb = new StringBuilder("[");
+    for (int i = 0; i < ops.size(); i++) {
+      if (i > 0) {
+        sb.append(',');
+      }
+      sb.append(ops.get(i));
+    }
+    return sb.append(']').toString();
+  }
+
+  /**
+   * W158-A: dispatch a synthetic touch on `tag` through the real RN event path
+   * (`UIManagerModule.getEventDispatcher()` + `TouchEvent`), exactly as W157-A
+   * proved. Used by the product tap after the mount drain has returned.
+   */
+  public static void dispatchTapForTag(int tag) {
+    if (sUiManager == null || tag <= 0) {
+      stage("tap", "no-target-tag");
+      return;
+    }
+    try {
+      EventDispatcher ed = sUiManager.getEventDispatcher();
+      TouchEventCoalescingKeyHelper helper = new TouchEventCoalescingKeyHelper();
+      long t = android.os.SystemClock.uptimeMillis();
+      float x = 8f;
+      float y = 8f;
+      MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0);
+      ed.dispatchEvent(TouchEvent.obtain(tag, TouchEventType.START, down, t, x, y, helper));
+      MotionEvent up = MotionEvent.obtain(t, t + 40, MotionEvent.ACTION_UP, x, y, 0);
+      ed.dispatchEvent(TouchEvent.obtain(tag, TouchEventType.END, up, t, x, y, helper));
+      System.out.println("ACOS_RN_TAP_START {\"tag\":" + tag + "}");
+      System.out.flush();
+      stage("tap", "dispatched tag=" + tag);
+    } catch (Throwable t) {
+      emit("{\"phase\":\"tap-error\",\"error\":\"" + esc(t.toString()) + "\"}");
+      dump(t);
+    }
+  }
+
+  /**
+   * W158-A: post a tap on `tag`, then re-enter `Looper.loop()` with a bounded
+   * quit. Called through the VM's `push_static_call` + scheduler so the
+   * asynchronous RN work (JS responder, Choreographer flush) drains exactly as
+   * it did for the W157-A mount. The main looper's queue is `quitAllowed=false`,
+   * so `Looper.quit()` throws before it can destroy the queue — the loop is
+   * safely re-enterable.
+   */
+  public static void tapAndPump(final int tag, final long quitDelayMs) {
+    android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
+    handler.postDelayed(
+        new Runnable() {
+          @Override
+          public void run() {
+            dispatchTapForTag(tag);
+          }
+        },
+        10);
+    handler.postDelayed(
+        new Runnable() {
+          @Override
+          public void run() {
+            // Do NOT catch here: the main looper refuses to quit
+            // (`quitAllowed=false`), and the thrown `IllegalStateException`
+            // must propagate out of `Looper.loop()` to end this drain, exactly
+            // as the W157-A mount does.
+            Looper.myLooper().quit();
+          }
+        },
+        quitDelayMs);
+    try {
+      Looper.loop();
+      stage("pump-done", "ok");
+    } catch (Throwable t) {
+      stage("pump-done", esc(t.toString()));
+    }
+  }
+
+  /**
    * W157-A: when true the probe runs inside an `acos-runtime` session and uses
    * the *real* `AndroidChoreographerProvider` and `AndroidInfoModule` (with the
    * `uimode`/`display` services installed by the runtime) instead of the
@@ -895,6 +984,7 @@ public final class BridgeProbe {
       stage("viewmanagers", "count=" + viewManagers.size());
 
       uiManager = new LoggingUIManagerModule(reactContext, viewManagers, 0);
+      sUiManager = uiManager;
       stage("uimanager", "ok");
 
       final BridgeReactContext rc = reactContext;
