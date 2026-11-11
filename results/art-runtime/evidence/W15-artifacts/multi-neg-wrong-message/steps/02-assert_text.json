@@ -1,0 +1,44 @@
+{
+  "index": 2,
+  "step": "assert_text",
+  "status": "fail",
+  "duration_ms": 2,
+  "frame_seq": 1,
+  "assertions": [
+    {
+      "kind": "text",
+      "passed": false,
+      "diff": {
+        "expected": {
+          "exact": "Goodbye"
+        },
+        "actual": "",
+        "path": "nodes[4].text",
+        "detail": "text did not match (exactly \"Goodbye\")"
+      },
+      "matched_node_ids": [
+        "n4_dev.acos.fixtures.multiactivity:id/message"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_text.json"
+    }
+  ],
+  "error": {
+    "code": "ASSERTION_FAILED",
+    "message": "expected text exactly \"Goodbye\", got \"\"",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "retryable": false
+  }
+}

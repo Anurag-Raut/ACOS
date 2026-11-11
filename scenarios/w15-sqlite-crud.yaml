@@ -1,0 +1,32 @@
+# W15 compatibility scenario: sqlite-crud on the real ART interactive engine.
+# Minimal, honest: launch + app-specific assertion(s); no log/rotate/reset steps.
+version: 1
+name: w15-sqlite-crud
+description: >-
+  Launch sqlite-crud on real ART and verify its first observable UI state. Part of
+  the W15 fixture-app compatibility matrix (results/art-runtime/W15.md).
+app: fixtures/build/apps/sqlite-crud.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.sqlitecrud/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: add}
+      text: {exact: "Add"}

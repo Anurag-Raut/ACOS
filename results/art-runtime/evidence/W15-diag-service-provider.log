@@ -1,0 +1,34 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+/home/Qui/Projects/acos/.cache/art-locks/data-W15-2893560/shim/artshim.c:79:13: warning: unused function 'sys6' [-Wunused-function]
+   79 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/Projects/acos/.cache/art-locks/data-W15-2893560/shim/artshim.c:95:13: warning: unused function 'sb_putn' [-Wunused-function]
+   95 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+acos-binder-peer: launch bindApplication request stashed (1404 bytes)
+acos-binder-peer: launch reply template stashed for android.hardware.display.IDisplayManager code 1 (232 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 9 (656 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 44 (432 bytes, framework-marshalled)
+acos-binder-peer: delivering bindApplication (1404 bytes, code 5) to java binder wire=1
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":106,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.content.pm.IPackageManager::notifyDexLoad: arg 3 (Str16): parcel underflow: need 13107296 byte(s) at 164, have 96","method":"notifyDexLoad"}
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (656 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":101,"descriptor":"android.app.IActivityManager","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.app.IActivityManager::handleApplicationWtf: arg 3 (TypedObject(android.app.ApplicationErrorReport$ParcelableCrashInfo, nullable=true)): no parcelable codec for android.app.ApplicationErrorReport$ParcelableCrashInfo","method":"handleApplicationWtf"}
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (656 bytes)
+acos-binder-peer: launch ClientTransaction request stashed (2172 bytes, framework-marshalled)
+acos-binder-peer: delivering ClientTransaction (2172 bytes, IApplicationThread.scheduleTransaction code 54) to java binder wire=1
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":10,"descriptor":"android.app.IActivityClientController","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.app.IActivityClientController::reportSizeConfigurations: arg 1 (TypedObject(android.window.SizeConfigurationBuckets, nullable=true)): parcel underflow: need 4 byte(s) at 128, have 0","method":"reportSizeConfigurations"}
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":19,"descriptor":"android.app.IActivityManager","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.app.IActivityManager::registerReceiverWithFeature: arg 5 (TypedObject(android.content.IntentFilter, nullable=true)): no parcelable codec for android.content.IntentFilter","method":"registerReceiverWithFeature"}
+acos-art: launch wall=131ms until=activity-resumed application_created=true activity_resumed=true txn=Some(2172)/true reverse_replies=2 reverse_failed=0 logd=38 (logd: 38 entries) peer_resource_limits=0
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=57MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2893751-i7143520.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: logd: 38 entries

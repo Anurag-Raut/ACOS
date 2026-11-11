@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/broken-wrong-text.apk",
+  "apk_sha256": "9c19b8aede67150138fd8a531b7cd42a7f679e5923e0e9434188b2f449d84038",
+  "scenario_path": "scenarios/v2-art-counter.yaml",
+  "scenario_sha256": "cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

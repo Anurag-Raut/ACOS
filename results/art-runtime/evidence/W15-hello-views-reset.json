@@ -1,0 +1,271 @@
+{
+  "request_id": "req_2bdccb_18e719c8d1cda210",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_hello-views",
+  "isolation": "process",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "code": "UNSUPPORTED_BACKEND",
+    "message": "the backend cannot reset state (missing capability `reset`)",
+    "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+    "retryable": false,
+    "details": {
+      "capability": "reset",
+      "detail": "the backend cannot reset state"
+    }
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W15-artifacts/hello-views-reset",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.helloviews",
+        "path": "fixtures/build/apps/hello-views.apk",
+        "sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W15-artifacts/hello-views-reset",
+        "engine_report": "results/art-runtime/evidence/W15-artifacts/hello-views-reset/engine.json",
+        "verdict": "results/art-runtime/evidence/W15-artifacts/hello-views-reset/verdict.json"
+      },
+      "failure": {
+        "code": "UNSUPPORTED_BACKEND",
+        "error": {
+          "code": "UNSUPPORTED_BACKEND",
+          "details": {
+            "capability": "reset",
+            "detail": "the backend cannot reset state"
+          },
+          "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+          "message": "the backend cannot reset state (missing capability `reset`)",
+          "retryable": false
+        },
+        "step_index": 5,
+        "summary": "step 5 (reset) unsupported"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T21:08:51.155Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 5 (reset): unsupported; later steps were not executed",
+        "scenario expected `pass`, engine produced `unsupported` — result is a truthful partial"
+      ],
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/hello-views.apk",
+        "apk_sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/v1-reset.yaml",
+        "scenario_sha256": "390be55ae6f8db6364346efb64297f40eda7f13bf116d3f50abcd4bd25e6f740"
+      },
+      "request_id": "req_2bdccb_18e719c8d1cda210",
+      "resources": {
+        "events": 5,
+        "frames_captured": 5,
+        "memory_mib": 73,
+        "peak_rss_bytes": 77467648,
+        "sessions": 1,
+        "steps": 6,
+        "wall_ms": 2535
+      },
+      "scenario": {
+        "name": "v1-reset",
+        "path": "scenarios/v1-reset.yaml",
+        "sha256": "390be55ae6f8db6364346efb64297f40eda7f13bf116d3f50abcd4bd25e6f740"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_hello-views",
+      "started_at": "2026-11-11T21:08:48.620Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 525,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "text",
+              "matched_node_ids": [
+                "n4_dev.acos.fixtures.helloviews:id/result"
+              ],
+              "passed": true
+            }
+          ],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-assert_text.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "state_change",
+              "matched_node_ids": [],
+              "message": "UI tree and screenshot both changed",
+              "passed": true
+            }
+          ],
+          "duration_ms": 1998,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/3.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/3.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/03-tap.json"
+            }
+          ],
+          "frame_seq": 3,
+          "index": 3,
+          "status": "pass",
+          "step": "tap"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "text",
+              "matched_node_ids": [
+                "n4_dev.acos.fixtures.helloviews:id/result"
+              ],
+              "passed": true
+            }
+          ],
+          "duration_ms": 1,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/3.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/3.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/04-assert_text.json"
+            }
+          ],
+          "frame_seq": 3,
+          "index": 4,
+          "status": "pass",
+          "step": "assert_text"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 0,
+          "error": {
+            "code": "UNSUPPORTED_BACKEND",
+            "details": {
+              "capability": "reset",
+              "detail": "the backend cannot reset state"
+            },
+            "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+            "message": "the backend cannot reset state (missing capability `reset`)",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/05-reset.json"
+            }
+          ],
+          "index": 5,
+          "status": "unsupported",
+          "step": "reset"
+        }
+      ],
+      "unsupported_steps": [
+        {
+          "capability": "reset",
+          "index": 5,
+          "step": "reset"
+        }
+      ],
+      "verdict": "unsupported"
+    },
+    "verdict_path": "results/art-runtime/evidence/W15-artifacts/hello-views-reset/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 2535,
+    "peak_rss_bytes": 77467648
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

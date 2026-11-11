@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W15-artifacts/multi-activity",
+      "engine_report": "results/art-runtime/evidence/W15-artifacts/multi-activity/engine.json",
+      "verdict": "results/art-runtime/evidence/W15-artifacts/multi-activity/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": []
+  },
+  "request_id": "req_2be5ee_18e719cc907c1673",
+  "verdict_status": "fail"
+}

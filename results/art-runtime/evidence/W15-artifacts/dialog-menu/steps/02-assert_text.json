@@ -1,0 +1,30 @@
+{
+  "index": 2,
+  "step": "assert_text",
+  "status": "pass",
+  "duration_ms": 2,
+  "frame_seq": 1,
+  "assertions": [
+    {
+      "kind": "text",
+      "passed": true,
+      "matched_node_ids": [
+        "n4_dev.acos.fixtures.dialogmenu:id/status"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_text.json"
+    }
+  ]
+}

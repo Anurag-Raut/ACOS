@@ -1,0 +1,2 @@
+{"seq":1,"timestamp_ms":1000,"session_id":"s_art_hello-views","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"0d5e52da21ccc01273b3261ac20ba50f"}
+{"seq":2,"timestamp_ms":2000,"session_id":"s_art_hello-views","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"0d5e52da21ccc01273b3261ac20ba50f"}

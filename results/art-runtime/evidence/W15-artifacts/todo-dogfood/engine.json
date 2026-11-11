@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W15-artifacts/todo-dogfood",
+      "engine_report": "results/art-runtime/evidence/W15-artifacts/todo-dogfood/engine.json",
+      "verdict": "results/art-runtime/evidence/W15-artifacts/todo-dogfood/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": []
+  },
+  "request_id": "req_2c02d3_18e719d9d087dd68",
+  "verdict_status": "pass"
+}

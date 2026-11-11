@@ -1,0 +1,980 @@
+{
+  "frame": {
+    "frame_seq": 1,
+    "produced_at": "2026-11-11T21:09:27.788Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2209,
+    "density": 420,
+    "content_hash": "0146c1195f102dd8502199bf14d1a340",
+    "meaningful": true
+  },
+  "package": "dev.acos.fixtures.listadapter",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "com.android.internal.policy.DecorView",
+      "resource_id": "",
+      "text": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2209
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "children": [
+        {
+          "id": "n1_android:id/decor_content_parent",
+          "class": "com.android.internal.widget.ActionBarOverlayLayout",
+          "resource_id": "android:id/decor_content_parent",
+          "text": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            2209
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "children": [
+            {
+              "id": "n2_android:id/content",
+              "class": "android.widget.FrameLayout",
+              "resource_id": "android:id/content",
+              "text": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                147,
+                1080,
+                2209
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "children": [
+                {
+                  "id": "n3_",
+                  "class": "android.widget.LinearLayout",
+                  "resource_id": "",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    147,
+                    1080,
+                    2209
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [
+                    {
+                      "id": "n4_dev.acos.fixtures.listadapter:id/selected",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.listadapter:id/selected",
+                      "text": "none",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        189,
+                        1038,
+                        240
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.listadapter:id/scroll",
+                      "class": "android.widget.Button",
+                      "resource_id": "dev.acos.fixtures.listadapter:id/scroll",
+                      "text": "Scroll to last",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        240,
+                        394,
+                        366
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.listadapter:id/list",
+                      "class": "android.widget.ListView",
+                      "resource_id": "dev.acos.fixtures.listadapter:id/list",
+                      "text": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        366,
+                        1038,
+                        2167
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            366,
+                            1038,
+                            532
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 0",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                398,
+                                1006,
+                                449
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 0",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                449,
+                                1006,
+                                500
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            535,
+                            1038,
+                            701
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 1",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                567,
+                                1006,
+                                618
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 1",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                618,
+                                1006,
+                                669
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            704,
+                            1038,
+                            870
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 2",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                736,
+                                1006,
+                                787
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 2",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                787,
+                                1006,
+                                838
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            873,
+                            1038,
+                            1039
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 3",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                905,
+                                1006,
+                                956
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 3",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                956,
+                                1006,
+                                1007
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1042,
+                            1038,
+                            1208
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 4",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1074,
+                                1006,
+                                1125
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 4",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1125,
+                                1006,
+                                1176
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1211,
+                            1038,
+                            1377
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 5",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1243,
+                                1006,
+                                1294
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 5",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1294,
+                                1006,
+                                1345
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1380,
+                            1038,
+                            1546
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 6",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1412,
+                                1006,
+                                1463
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 6",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1463,
+                                1006,
+                                1514
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1549,
+                            1038,
+                            1715
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 7",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1581,
+                                1006,
+                                1632
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 7",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1632,
+                                1006,
+                                1683
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1718,
+                            1038,
+                            1884
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 8",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1750,
+                                1006,
+                                1801
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 8",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1801,
+                                1006,
+                                1852
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            1887,
+                            1038,
+                            2053
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 9",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1919,
+                                1006,
+                                1970
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 9",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                1970,
+                                1006,
+                                2021
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        },
+                        {
+                          "id": "n5_",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "",
+                          "text": "",
+                          "content_desc": "",
+                          "bounds": [
+                            42,
+                            2056,
+                            1038,
+                            2222
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "children": [
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_title",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_title",
+                              "text": "Item 10",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                2088,
+                                1006,
+                                2139
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            },
+                            {
+                              "id": "n6_dev.acos.fixtures.listadapter:id/row_sub",
+                              "class": "android.widget.TextView",
+                              "resource_id": "dev.acos.fixtures.listadapter:id/row_sub",
+                              "text": "subtitle 10",
+                              "content_desc": "",
+                              "bounds": [
+                                74,
+                                2139,
+                                1006,
+                                2190
+                              ],
+                              "visible": true,
+                              "enabled": true,
+                              "focused": false,
+                              "clickable": false,
+                              "scrollable": false,
+                              "checked": false,
+                              "children": [],
+                              "package": ""
+                            }
+                          ],
+                          "package": ""
+                        }
+                      ],
+                      "package": ""
+                    }
+                  ],
+                  "package": ""
+                }
+              ],
+              "package": ""
+            },
+            {
+              "id": "n2_android:id/action_bar_container",
+              "class": "com.android.internal.widget.ActionBarContainer",
+              "resource_id": "android:id/action_bar_container",
+              "text": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                0,
+                1080,
+                147
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "children": [
+                {
+                  "id": "n3_android:id/action_bar",
+                  "class": "android.widget.Toolbar",
+                  "resource_id": "android:id/action_bar",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    0,
+                    1080,
+                    147
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.TextView",
+                      "resource_id": "",
+                      "text": "dev.acos.fixtures.listadapter.MainActivity",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        38,
+                        1018,
+                        109
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.ActionMenuView",
+                      "resource_id": "",
+                      "text": "",
+                      "content_desc": "",
+                      "bounds": [
+                        1080,
+                        0,
+                        1080,
+                        147
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    }
+                  ],
+                  "package": ""
+                },
+                {
+                  "id": "n3_android:id/action_context_bar",
+                  "class": "com.android.internal.widget.ActionBarContextView",
+                  "resource_id": "android:id/action_context_bar",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "visible": false,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [],
+                  "package": ""
+                }
+              ],
+              "package": ""
+            }
+          ],
+          "package": ""
+        }
+      ],
+      "package": ""
+    }
+  ],
+  "truncated": false,
+  "text_available": true
+}

@@ -1,0 +1,69 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.textinput.MainActivity",
+      "buffer_generation": 7,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "height": 2209,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.textinput",
+      "probe_seq": 1,
+      "width": 1080
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W15-artifacts/text-input/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 4
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 2,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W15-artifacts/text-input/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "probe_seq": 14
+    },
+    {
+      "cmd": "tap",
+      "code": "NO_FRESH_FRAME",
+      "error": "tap at (540,248) completed no new settled observation within 15s: c1_generation 7 -> 9, probe_seq 22 -> 322, and the pixels did not change from the previous capture",
+      "gesture": {
+        "acks": [
+          {
+            "handled": true,
+            "latency_us": null,
+            "seq": 1
+          },
+          {
+            "handled": true,
+            "latency_us": null,
+            "seq": 2
+          }
+        ],
+        "seqs": [
+          3,
+          4
+        ],
+        "token": "0x100000008"
+      },
+      "ok": false
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 2,
+      "ok": true
+    }
+  ]
+}

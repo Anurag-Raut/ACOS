@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/hello-views.apk",
+  "apk_sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121",
+  "scenario_path": "scenarios/v1-hello-views.yaml",
+  "scenario_sha256": "ebe7fdeabdcfd0d691e1dea1fe482a8e40654a384329cdc59de719ae7565069f",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

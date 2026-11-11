@@ -1,0 +1,140 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.helloviews",
+    "path": "fixtures/build/apps/hello-views.apk",
+    "sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle",
+    "engine_report": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle/engine.json",
+    "verdict": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle/verdict.json"
+  },
+  "failure": {
+    "code": "UNSUPPORTED_BACKEND",
+    "error": {
+      "code": "UNSUPPORTED_BACKEND",
+      "details": {
+        "capability": "logs",
+        "detail": "the backend cannot expose logs"
+      },
+      "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+      "message": "the backend cannot expose logs (missing capability `logs`)",
+      "retryable": false
+    },
+    "step_index": 2,
+    "summary": "step 2 (assert_log) unsupported"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T21:08:59.530Z",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 2 (assert_log): unsupported; later steps were not executed",
+    "scenario expected `fail` but engine produced `unsupported` (assertions were not reached or not executable)"
+  ],
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/hello-views.apk",
+    "apk_sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/negative/wrong-lifecycle-order.yaml",
+    "scenario_sha256": "6841a20406aaa8cd3e3a3dc2cd831c8d08d2ce5019aba0a6f3f7ca3b4910bdd9"
+  },
+  "request_id": "req_2be247_18e719cb416871c3",
+  "resources": {
+    "events": 2,
+    "frames_captured": 2,
+    "memory_mib": 64,
+    "peak_rss_bytes": 67825664,
+    "sessions": 1,
+    "steps": 3,
+    "wall_ms": 526
+  },
+  "scenario": {
+    "name": "negative-wrong-lifecycle-order",
+    "path": "scenarios/negative/wrong-lifecycle-order.yaml",
+    "sha256": "6841a20406aaa8cd3e3a3dc2cd831c8d08d2ce5019aba0a6f3f7ca3b4910bdd9"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_hello-views",
+  "started_at": "2026-11-11T21:08:59.004Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 523,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/1.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/1.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 1,
+      "index": 1,
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 0,
+      "error": {
+        "code": "UNSUPPORTED_BACKEND",
+        "details": {
+          "capability": "logs",
+          "detail": "the backend cannot expose logs"
+        },
+        "hint": "This engine cannot execute this step yet; report it as unsupported rather than faking a pass.",
+        "message": "the backend cannot expose logs (missing capability `logs`)",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/02-assert_log.json"
+        }
+      ],
+      "index": 2,
+      "status": "unsupported",
+      "step": "assert_log"
+    }
+  ],
+  "unsupported_steps": [
+    {
+      "capability": "logs",
+      "index": 2,
+      "step": "assert_log"
+    }
+  ],
+  "verdict": "unsupported"
+}

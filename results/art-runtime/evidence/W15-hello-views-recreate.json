@@ -1,0 +1,164 @@
+{
+  "request_id": "req_2bda27_18e719c4b2d9ede8",
+  "ok": false,
+  "status": "error",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_hello-views",
+  "isolation": "process",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "code": "NO_FRESH_FRAME",
+    "message": "acos-art: NO_FRESH_FRAME: type_text at (0,0) completed no new settled observation within 15s: c1_generation 7 -> 7, probe_seq 11 -> 311, and the pixels did not change from the previous capture",
+    "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+    "retryable": true
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.helloviews",
+        "path": "fixtures/build/apps/hello-views.apk",
+        "sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate",
+        "engine_report": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate/engine.json",
+        "verdict": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate/verdict.json"
+      },
+      "failure": {
+        "code": "NO_FRESH_FRAME",
+        "error": {
+          "code": "NO_FRESH_FRAME",
+          "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+          "message": "acos-art: NO_FRESH_FRAME: type_text at (0,0) completed no new settled observation within 15s: c1_generation 7 -> 7, probe_seq 11 -> 311, and the pixels did not change from the previous capture",
+          "retryable": true
+        },
+        "step_index": 2,
+        "summary": "step 2 (type) error"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T21:08:46.386Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 2 (type): error; later steps were not executed",
+        "scenario expected `pass`, engine produced `error` — result is a truthful partial"
+      ],
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/hello-views.apk",
+        "apk_sha256": "92cdda9f4eeb952a772172e9605643c2225de8aeaed899d4c3f686574398e121",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/v1-recreate.yaml",
+        "scenario_sha256": "578bd8a818ed3226288304b4c4d6109a96035d05467641c2aacc92bf76af943e"
+      },
+      "request_id": "req_2bda27_18e719c4b2d9ede8",
+      "resources": {
+        "events": 2,
+        "frames_captured": 2,
+        "memory_mib": 64,
+        "peak_rss_bytes": 67551232,
+        "sessions": 1,
+        "steps": 3,
+        "wall_ms": 15545
+      },
+      "scenario": {
+        "name": "v1-recreate",
+        "path": "scenarios/v1-recreate.yaml",
+        "sha256": "578bd8a818ed3226288304b4c4d6109a96035d05467641c2aacc92bf76af943e"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_hello-views",
+      "started_at": "2026-11-11T21:08:30.841Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 526,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 1,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 15016,
+          "error": {
+            "code": "NO_FRESH_FRAME",
+            "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+            "message": "acos-art: NO_FRESH_FRAME: type_text at (0,0) completed no new settled observation within 15s: c1_generation 7 -> 7, probe_seq 11 -> 311, and the pixels did not change from the previous capture",
+            "retryable": true
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/02-type.json"
+            }
+          ],
+          "index": 2,
+          "status": "error",
+          "step": "type"
+        }
+      ],
+      "unsupported_steps": [],
+      "verdict": "error"
+    },
+    "verdict_path": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 15545,
+    "peak_rss_bytes": 67551232
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

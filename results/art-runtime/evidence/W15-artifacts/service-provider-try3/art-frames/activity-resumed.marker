@@ -1,0 +1,8 @@
+package=dev.acos.fixtures.svcprovider
+activity=dev.acos.fixtures.svcprovider.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@2464e55
+post_resume_failure=java.lang.RuntimeException: Unable to resume activity {dev.acos.fixtures.svcprovider/dev.acos.fixtures.svcprovider.MainActivity}: java.lang.IllegalArgumentException: bad request for android.app.IActivityManager::registerReceiverWithFeature: arg 5 (TypedObject(android.content.IntentFilter, nullable=true)): no parcelable codec for android.content.IntentFilter

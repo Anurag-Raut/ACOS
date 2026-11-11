@@ -1,0 +1,124 @@
+{
+  "request_id": "req_2bf785_18e719d31a5ad850",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_native-hello",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W15-artifacts/native-hello",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.nativehello",
+        "path": "fixtures/build/apps/native-hello.apk",
+        "sha256": "ad7c6efd3e4690b5c47fce3ab9738bd553d38ba09921261a5f2795665c2af816"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W15-artifacts/native-hello",
+        "engine_report": "results/art-runtime/evidence/W15-artifacts/native-hello/engine.json",
+        "verdict": "results/art-runtime/evidence/W15-artifacts/native-hello/verdict.json"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T21:09:33.757Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/native-hello.apk",
+        "apk_sha256": "ad7c6efd3e4690b5c47fce3ab9738bd553d38ba09921261a5f2795665c2af816",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w15-native-hello.yaml",
+        "scenario_sha256": "bb86c026b14f23e6b94d348d463e7617f948b5ddf005b2a38a485dadc0e28c69"
+      },
+      "request_id": "req_2bf785_18e719d31a5ad850",
+      "resources": {
+        "events": 2,
+        "frames_captured": 2,
+        "memory_mib": 64,
+        "peak_rss_bytes": 67809280,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 1079
+      },
+      "scenario": {
+        "name": "w15-native-hello",
+        "path": "scenarios/w15-native-hello.yaml",
+        "sha256": "bb86c026b14f23e6b94d348d463e7617f948b5ddf005b2a38a485dadc0e28c69"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_native-hello",
+      "started_at": "2026-11-11T21:09:32.678Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 539,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 538,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-capture.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "results/art-runtime/evidence/W15-artifacts/native-hello/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 1079,
+    "peak_rss_bytes": 67809280
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

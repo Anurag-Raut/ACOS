@@ -1,0 +1,118 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.helloviews.MainActivity",
+      "buffer_generation": 7,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "height": 2209,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.helloviews",
+      "probe_seq": 1,
+      "width": 1080
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W15-artifacts/hello-views-recreate/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 4
+    },
+    {
+      "cmd": "type_text",
+      "code": "NO_FRESH_FRAME",
+      "error": "type_text at (0,0) completed no new settled observation within 15s: c1_generation 7 -> 7, probe_seq 11 -> 311, and the pixels did not change from the previous capture",
+      "gesture": {
+        "acks": [
+          {
+            "handled": true,
+            "latency_us": null,
+            "seq": 1
+          },
+          {
+            "handled": true,
+            "latency_us": null,
+            "seq": 2
+          },
+          {
+            "handled": false,
+            "latency_us": 5093,
+            "seq": 3
+          },
+          {
+            "handled": false,
+            "latency_us": 5090,
+            "seq": 4
+          },
+          {
+            "handled": false,
+            "latency_us": 5083,
+            "seq": 5
+          },
+          {
+            "handled": false,
+            "latency_us": 5082,
+            "seq": 6
+          },
+          {
+            "handled": false,
+            "latency_us": 5081,
+            "seq": 7
+          },
+          {
+            "handled": false,
+            "latency_us": 5082,
+            "seq": 8
+          },
+          {
+            "handled": false,
+            "latency_us": 5080,
+            "seq": 9
+          },
+          {
+            "handled": false,
+            "latency_us": 5079,
+            "seq": 10
+          },
+          {
+            "handled": false,
+            "latency_us": 5078,
+            "seq": 11
+          },
+          {
+            "handled": false,
+            "latency_us": 5078,
+            "seq": 12
+          }
+        ],
+        "seqs": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "token": "0x100000008"
+      },
+      "ok": false
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 1,
+      "ok": true
+    }
+  ]
+}

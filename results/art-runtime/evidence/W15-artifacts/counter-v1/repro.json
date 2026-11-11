@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/counter.apk",
+  "apk_sha256": "a0254db0b54d1960c7dcdb273041e09de644c356a436ba139c4d8c37766bd3aa",
+  "scenario_path": "scenarios/v1-counter.yaml",
+  "scenario_sha256": "247edde60e49c8ca6b4b1b41f2fe6e83b3b4cb2aa00b04e0693531ab0baf189e",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

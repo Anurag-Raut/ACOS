@@ -938,6 +938,21 @@ public final class LaunchMain {
                 "register_android_text_AndroidCharacter",
                 "register_android_text_Hyphenator",
                 "register_android_util_CharsetUtils",
+                // W15: android.widget.Switch's constructor (and therefore any
+                // ScrollView layout that inflates a Switch) calls
+                // VelocityTracker.obtain() -> nativeInitialize. Without this
+                // registration the Activity cannot inflate (widget-gallery).
+                "register_android_view_VelocityTracker",
+                // W15: SQLiteConnection's natives live in the framework
+                // registration (libandroid_runtime exports it, implemented by
+                // libsqlite); without it the first sqlite open is an
+                // UnsatisfiedLinkError (sqlite-crud).
+                "register_android_database_SQLiteConnection",
+                // W15: the next sqlite wall after the connection registration:
+                // the first query allocates a CursorWindow
+                // (nativeCreate/nativeRead/nativeWrite). The image exports this
+                // registration; without it the Activity dies on first read.
+                "register_android_database_CursorWindow",
                 // DisplayManagerGlobal's constructor reads OverlayProperties
                 // (IDisplayManager.getOverlaySupport) even when the reply is
                 // null; the CREATOR field reference runs <clinit>.

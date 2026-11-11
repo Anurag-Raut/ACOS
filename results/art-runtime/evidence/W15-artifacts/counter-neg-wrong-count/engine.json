@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W15-artifacts/counter-neg-wrong-count",
+      "engine_report": "results/art-runtime/evidence/W15-artifacts/counter-neg-wrong-count/engine.json",
+      "verdict": "results/art-runtime/evidence/W15-artifacts/counter-neg-wrong-count/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": []
+  },
+  "request_id": "req_2bd060_18e719beee7abdb5",
+  "verdict_status": "fail"
+}

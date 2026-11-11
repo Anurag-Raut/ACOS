@@ -1,0 +1,296 @@
+{
+  "frame": {
+    "frame_seq": 1,
+    "produced_at": "2026-11-11T21:08:59.526Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2209,
+    "density": 420,
+    "content_hash": "0d5e52da21ccc01273b3261ac20ba50f",
+    "meaningful": true
+  },
+  "package": "dev.acos.fixtures.helloviews",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "com.android.internal.policy.DecorView",
+      "resource_id": "",
+      "text": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2209
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "children": [
+        {
+          "id": "n1_android:id/decor_content_parent",
+          "class": "com.android.internal.widget.ActionBarOverlayLayout",
+          "resource_id": "android:id/decor_content_parent",
+          "text": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            2209
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "children": [
+            {
+              "id": "n2_android:id/content",
+              "class": "android.widget.FrameLayout",
+              "resource_id": "android:id/content",
+              "text": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                147,
+                1080,
+                2209
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "children": [
+                {
+                  "id": "n3_",
+                  "class": "android.widget.LinearLayout",
+                  "resource_id": "",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    147,
+                    1080,
+                    2209
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [
+                    {
+                      "id": "n4_dev.acos.fixtures.helloviews:id/title",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.helloviews:id/title",
+                      "text": "Hello ACOS",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        189,
+                        231,
+                        240
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.helloviews:id/input",
+                      "class": "android.widget.EditText",
+                      "resource_id": "dev.acos.fixtures.helloviews:id/input",
+                      "text": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        240,
+                        1038,
+                        358
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": true,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.helloviews:id/btn",
+                      "class": "android.widget.Button",
+                      "resource_id": "dev.acos.fixtures.helloviews:id/btn",
+                      "text": "Greet",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        358,
+                        273,
+                        484
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.helloviews:id/result",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.helloviews:id/result",
+                      "text": "clicks: 0",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        484,
+                        175,
+                        535
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    }
+                  ],
+                  "package": ""
+                }
+              ],
+              "package": ""
+            },
+            {
+              "id": "n2_android:id/action_bar_container",
+              "class": "com.android.internal.widget.ActionBarContainer",
+              "resource_id": "android:id/action_bar_container",
+              "text": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                0,
+                1080,
+                147
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "children": [
+                {
+                  "id": "n3_android:id/action_bar",
+                  "class": "android.widget.Toolbar",
+                  "resource_id": "android:id/action_bar",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    0,
+                    1080,
+                    147
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.TextView",
+                      "resource_id": "",
+                      "text": "dev.acos.fixtures.helloviews.MainActivity",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        38,
+                        1018,
+                        109
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.ActionMenuView",
+                      "resource_id": "",
+                      "text": "",
+                      "content_desc": "",
+                      "bounds": [
+                        1080,
+                        0,
+                        1080,
+                        147
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "children": [],
+                      "package": ""
+                    }
+                  ],
+                  "package": ""
+                },
+                {
+                  "id": "n3_android:id/action_context_bar",
+                  "class": "com.android.internal.widget.ActionBarContextView",
+                  "resource_id": "android:id/action_context_bar",
+                  "text": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "visible": false,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "children": [],
+                  "package": ""
+                }
+              ],
+              "package": ""
+            }
+          ],
+          "package": ""
+        }
+      ],
+      "package": ""
+    }
+  ],
+  "truncated": false,
+  "text_available": true
+}

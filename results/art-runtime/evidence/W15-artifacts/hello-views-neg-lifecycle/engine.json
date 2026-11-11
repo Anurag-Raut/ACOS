@@ -1,0 +1,39 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle",
+      "engine_report": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle/engine.json",
+      "verdict": "results/art-runtime/evidence/W15-artifacts/hello-views-neg-lifecycle/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": [
+      {
+        "capability": "logs",
+        "index": 2,
+        "step": "assert_log"
+      }
+    ]
+  },
+  "request_id": "req_2be247_18e719cb416871c3",
+  "verdict_status": "unsupported"
+}
