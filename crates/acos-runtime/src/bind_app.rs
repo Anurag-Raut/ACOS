@@ -202,11 +202,17 @@ pub(crate) fn build_config(vm: &mut Vm) -> Result<Handle, BindAppError> {
         "(Landroid/os/LocaleList;)V",
         &[JavaValue::Object(locales)],
     )?;
-    // Density and dp bounds from the oracle's `overrideConfig`.
-    vm.set_field(config, "densityDpi", JavaValue::Int(420))?;
-    vm.set_field(config, "screenWidthDp", JavaValue::Int(411))?;
-    vm.set_field(config, "screenHeightDp", JavaValue::Int(842))?;
-    vm.set_field(config, "smallestScreenWidthDp", JavaValue::Int(411))?;
+    // Density and dp bounds from the oracle's `overrideConfig`, or from the
+    // active display override (`acos launch --density 400 --display 1080x2400`
+    // / `--reference`) so the configuration matches the phone under test.
+    let (density_dpi, width_dp, height_dp) = match acos_services::display::display_override() {
+        Some(o) => (o.density_dpi, o.screen_width_dp(), o.screen_height_dp()),
+        None => (420, 411, 842),
+    };
+    vm.set_field(config, "densityDpi", JavaValue::Int(density_dpi))?;
+    vm.set_field(config, "screenWidthDp", JavaValue::Int(width_dp))?;
+    vm.set_field(config, "screenHeightDp", JavaValue::Int(height_dp))?;
+    vm.set_field(config, "smallestScreenWidthDp", JavaValue::Int(width_dp))?;
     vm.set_field(config, "fontScale", JavaValue::Float(1.0))?;
     // `Configuration.ORIENTATION_PORTRAIT`.
     vm.set_field(config, "orientation", JavaValue::Int(1))?;

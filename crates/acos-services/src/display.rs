@@ -6,7 +6,113 @@
 //! `NavigationBar0` present) and `device-config.json`.
 
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// A display configuration override applied before an app boots.
+///
+/// `acos launch --density 400` (and `--display 1080x2400`, `--reference`) set
+/// this so ACOS is laid out on the phone's display instead of the API-34
+/// emulator reference. The phone under test is `1080x2400 @ 400 dpi` with a
+/// 108 px status bar and gesture navigation (zero navigation-bar inset).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplayOverride {
+    /// Logical width in pixels.
+    pub width: i32,
+    /// Logical height in pixels.
+    pub height: i32,
+    /// Density in dpi (`400` on the moto g35).
+    pub density_dpi: i32,
+    /// Status-bar top inset in pixels (`108`).
+    pub status_bar_top: i32,
+    /// Navigation-bar bottom inset in pixels (`0` for gesture navigation).
+    pub nav_bar_bottom: i32,
+}
+
+impl DisplayOverride {
+    /// The moto g35 (ZA222WGJPP) under test: 1080x2400 @ 400 dpi, 108 px
+    /// status bar, gesture navigation.
+    #[must_use]
+    pub const fn phone() -> Self {
+        Self {
+            width: 1080,
+            height: 2400,
+            density_dpi: 400,
+            status_bar_top: 108,
+            nav_bar_bottom: 0,
+        }
+    }
+
+    /// Smallest screen width in dp, rounded to nearest.
+    #[must_use]
+    pub fn screen_width_dp(&self) -> i32 {
+        (self.width * 160 + self.density_dpi / 2) / self.density_dpi.max(1)
+    }
+
+    /// Screen height in dp, rounded to nearest.
+    #[must_use]
+    pub fn screen_height_dp(&self) -> i32 {
+        (self.height * 160 + self.density_dpi / 2) / self.density_dpi.max(1)
+    }
+
+    /// Application height in pixels (`height - status - nav`).
+    #[must_use]
+    pub fn app_height(&self) -> i32 {
+        (self.height - self.status_bar_top - self.nav_bar_bottom).max(0)
+    }
+
+    /// `"1080x2400@400/108/0"`: the compact wire/env encoding.
+    #[must_use]
+    pub fn spec(&self) -> String {
+        format!(
+            "{}x{}@{}/{}/{}",
+            self.width, self.height, self.density_dpi, self.status_bar_top, self.nav_bar_bottom
+        )
+    }
+
+    /// Parse [`Self::spec`].
+    #[must_use]
+    pub fn parse(spec: &str) -> Option<Self> {
+        let (size, density) = spec.split_once('@')?;
+        let (w, h) = size.split_once('x')?;
+        let parts: Vec<&str> = density.split('/').collect();
+        let density_dpi = parts.first()?.parse().ok()?;
+        let status_bar_top = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let nav_bar_bottom = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        Some(Self {
+            width: w.parse().ok()?,
+            height: h.parse().ok()?,
+            density_dpi,
+            status_bar_top,
+            nav_bar_bottom,
+        })
+    }
+}
+
+static OVERRIDE: OnceLock<Mutex<Option<DisplayOverride>>> = OnceLock::new();
+
+fn override_slot() -> &'static Mutex<Option<DisplayOverride>> {
+    OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
+/// Install (or clear) the process-wide display override.
+///
+/// The `acos serve` daemon replaces any prior session on launch, so one global
+/// override is sufficient and matches the single-live-runtime transport seam.
+pub fn set_display_override(override_: Option<DisplayOverride>) {
+    *override_slot().lock().unwrap_or_else(|e| e.into_inner()) = override_;
+}
+
+/// The active display override: the in-process value, else `ACOS_DISPLAY_OVERRIDE`
+/// (`"1080x2400@400/108/0"`), which the daemon inherits from `acos launch`.
+#[must_use]
+pub fn display_override() -> Option<DisplayOverride> {
+    if let Some(o) = *override_slot().lock().unwrap_or_else(|e| e.into_inner()) {
+        return Some(o);
+    }
+    std::env::var("ACOS_DISPLAY_OVERRIDE")
+        .ok()
+        .and_then(|s| DisplayOverride::parse(&s))
+}
 
 use acos_aidl::MethodInfo;
 
@@ -51,10 +157,11 @@ pub struct DisplayInfo {
 }
 
 impl DisplayInfo {
-    /// The reference hello-views display.
+    /// The reference hello-views display, with any active [`DisplayOverride`]
+    /// applied so `getDisplayInfo` / `DisplayMetrics` follow `acos launch`.
     #[must_use]
     pub fn hello_views() -> Self {
-        Self {
+        let mut d = Self {
             display_id: 0,
             logical_width: 1080,
             logical_height: 2400,
@@ -70,7 +177,15 @@ impl DisplayInfo {
             state: 2,
             refresh_rate: 60.000004,
             color_mode: 0,
+        };
+        if let Some(o) = display_override() {
+            d.logical_width = o.width;
+            d.logical_height = o.height;
+            d.app_width = o.width;
+            d.app_height = o.app_height();
+            d.density_dpi = o.density_dpi;
         }
+        d
     }
 
     /// Encode as a typed parcelable in `DisplayInfo.writeToParcel` order.

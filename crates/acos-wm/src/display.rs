@@ -141,6 +141,55 @@ impl DisplaySpec {
         }
     }
 
+    /// A display with explicit geometry, used by `acos launch --density` /
+    /// `--display` / `--reference` so ACOS can be laid out on the *same*
+    /// display configuration as the phone under test instead of the API-34
+    /// emulator reference.
+    ///
+    /// The status-bar and navigation-bar insets are the only bar geometry the
+    /// app window consumes; the gesture/cutout rectangles are scaled from the
+    /// reference so the inset state stays internally consistent.
+    #[must_use]
+    pub fn custom(
+        width: i32,
+        height: i32,
+        density_dpi: u32,
+        status_bar_top: i32,
+        nav_bar_bottom: i32,
+    ) -> Self {
+        let width = width.max(1);
+        let height = height.max(1);
+        let density = density_dpi as f32 / 160.0;
+        let bars = SystemBars {
+            status_bar: RectI::new(0, 0, width, status_bar_top),
+            status_bar_tappable: RectI::new(0, 0, width, status_bar_top),
+            nav_bar: RectI::new(0, height - nav_bar_bottom, width, height),
+            nav_bar_tappable: RectI::new(0, 0, 0, 0),
+            ime_visible: RectI::new(0, height, width, height),
+            display_cutout: RectI::new(0, 0, width, status_bar_top),
+            mandatory_system_gestures_top: RectI::new(0, 0, width, status_bar_top),
+            mandatory_system_gestures_bottom: RectI::new(
+                0,
+                height - nav_bar_bottom,
+                width,
+                height,
+            ),
+            system_gestures_left: RectI::new(0, 0, 0, height),
+            system_gestures_right: RectI::new(width, 0, width, height),
+        };
+        Self {
+            id: 0,
+            frame: RectI::new(0, 0, width, height),
+            app_bounds: RectI::new(0, status_bar_top, width, height - nav_bar_bottom),
+            density_dpi,
+            density,
+            refresh_hz: REFRESH_HZ,
+            frame_interval_nanos: FRAME_INTERVAL_NANOS,
+            bars,
+            rotation: 0,
+        }
+    }
+
     /// `IWindowManager.hasNavigationBar` — the reference has `NavigationBar0`.
     #[must_use]
     pub const fn has_navigation_bar(&self) -> bool {
@@ -188,6 +237,19 @@ mod tests {
         assert_eq!(d.app_insets(), InsetsI::new(0, 128, 0, 63));
         assert_eq!(d.bars.ime_visible.height(), 126);
         assert_eq!(d.bars.ime_visible.top, 2274);
+    }
+
+    #[test]
+    fn custom_display_applies_phone_geometry() {
+        // The moto g35 under test: 1080x2400 @ 400 dpi, 108 px status bar,
+        // gesture navigation (no navigation-bar inset).
+        let d = DisplaySpec::custom(1080, 2400, 400, 108, 0);
+        assert_eq!(d.frame, RectI::new(0, 0, 1080, 2400));
+        assert_eq!(d.app_bounds, RectI::new(0, 108, 1080, 2400));
+        assert_eq!(d.app_insets(), InsetsI::new(0, 108, 0, 0));
+        assert_eq!(d.density, 2.5);
+        assert_eq!(d.density_dpi, 400);
+        assert!(!d.has_navigation_bar());
     }
 
     #[test]

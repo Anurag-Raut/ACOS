@@ -74,6 +74,7 @@ pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
 pub use lifecycle::{LifecycleError, LifecycleReport};
 pub use rn_session::{RnSession, RnSessionError, RnSessionOptions};
+pub use acos_services::display::{display_override, set_display_override, DisplayOverride};
 pub use session::SessionError;
 pub use text_java::{TextError, TextPath, TextReport};
 pub use view_tree::{TreeError, ViewNode, ViewTree};

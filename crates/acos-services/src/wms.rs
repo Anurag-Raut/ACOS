@@ -61,9 +61,20 @@ pub struct DisplayFacts {
 }
 
 impl DisplayFacts {
-    /// The reference hello-views device.
+    /// The reference hello-views device, with any active display override
+    /// applied so `getInitialDisplaySize` / `getBaseDisplayDensity` follow
+    /// `acos launch --density` / `--display` / `--reference`.
     #[must_use]
-    pub const fn reference() -> Self {
+    pub fn reference() -> Self {
+        if let Some(o) = crate::display::display_override() {
+            return Self {
+                width: o.width,
+                height: o.height,
+                density_dpi: o.density_dpi,
+                has_navigation_bar: o.nav_bar_bottom > 0,
+                ime_policy: 0,
+            };
+        }
         Self {
             width: acos_wm::display::DISPLAY_WIDTH,
             height: acos_wm::display::DISPLAY_HEIGHT,
@@ -106,7 +117,17 @@ impl WmsState {
     /// A state machine on the reference display with one open session.
     #[must_use]
     pub fn new() -> Self {
-        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let display = match crate::display::display_override() {
+            Some(o) => DisplaySpec::custom(
+                o.width,
+                o.height,
+                o.density_dpi as u32,
+                o.status_bar_top,
+                o.nav_bar_bottom,
+            ),
+            None => DisplaySpec::reference_1080x2400(),
+        };
+        let mut wm = WindowManager::new(display);
         let (session, session_binder) = wm.open_session(None);
         Self {
             wm,

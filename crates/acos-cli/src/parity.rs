@@ -41,6 +41,8 @@ pub struct CompareOptions {
     pub ignore_bounds: bool,
     /// Compare `enabled`/`focused`/`clickable` too.
     pub strict_state: bool,
+    /// Also build the ranked per-element (resource-id) layout diff.
+    pub element_diff: bool,
 }
 
 impl Default for CompareOptions {
@@ -50,8 +52,139 @@ impl Default for CompareOptions {
             bounds_scale: 1.0,
             ignore_bounds: false,
             strict_state: false,
+            element_diff: false,
         }
     }
+}
+
+/// One element compared **by resource id** between the ACOS tree and the
+/// phone/reference tree, with the raw bounds and size deltas.
+///
+/// This is the geometry-focused companion to [`Difference`]: it only matches
+/// nodes that carry a resource id (the stable identity the product path also
+/// uses) and reports `acos - phone` per edge plus the per-axis size change, so
+/// the largest real layout differences rank first.
+#[derive(Debug, Clone, Serialize)]
+pub struct ElementDifference {
+    /// Android resource id (`pkg:id/name`).
+    pub resource_id: String,
+    /// View class on the ACOS side (or the phone side when ACOS is missing).
+    pub class: String,
+    /// ACOS text.
+    pub acos_text: String,
+    /// Phone text.
+    pub phone_text: String,
+    /// ACOS bounds `[left, top, right, bottom]`, if present.
+    pub acos_bounds: Option<[i32; 4]>,
+    /// Phone bounds `[left, top, right, bottom]`, if present.
+    pub phone_bounds: Option<[i32; 4]>,
+    /// Per-edge `acos - phone` delta, when both bounds exist.
+    pub delta: Option<[i32; 4]>,
+    /// ACOS size `[width, height]`.
+    pub acos_size: Option<[i32; 2]>,
+    /// Phone size `[width, height]`.
+    pub phone_size: Option<[i32; 2]>,
+    /// `acos_size - phone_size`.
+    pub size_delta: Option<[i32; 2]>,
+    /// `matched`, `bounds_differ`, `text_differs`, `missing_in_acos` or
+    /// `missing_on_phone`.
+    pub kind: String,
+    /// Ranking magnitude: larger means a bigger real difference.
+    pub score: i64,
+}
+
+/// Bounds deltas smaller than this are likely rounding, not layout drift.
+const ELEMENT_DELTA_FLOOR: i64 = 2;
+/// Text/size mismatch weight so structural differences outrank tiny shifts.
+const ELEMENT_TEXT_WEIGHT: i64 = 100_000;
+
+/// Match two trees by resource id and rank the layout differences.
+///
+/// Nodes without a resource id are skipped: they have no stable identity to
+/// align on, and the product selectors used by `acos tap --id` all carry one.
+/// The result is sorted by descending [`ElementDifference::score`].
+#[must_use]
+pub fn element_differences(acos: &[ViewNode], phone: &[ViewNode]) -> Vec<ElementDifference> {
+    use std::collections::BTreeSet;
+
+    fn by_id(nodes: &[ViewNode]) -> BTreeMap<String, &ViewNode> {
+        let mut map = BTreeMap::new();
+        for node in flatten(nodes) {
+            if !node.resource_id.is_empty() {
+                map.entry(node.resource_id.clone()).or_insert(node);
+            }
+        }
+        map
+    }
+    let acos_by_id = by_id(acos);
+    let phone_by_id = by_id(phone);
+    let keys: BTreeSet<&String> = acos_by_id.keys().chain(phone_by_id.keys()).collect();
+
+    let size = |b: [i32; 4]| [b[2] - b[0], b[3] - b[1]];
+    let mut out = Vec::new();
+    for key in keys {
+        let a = acos_by_id.get(key).copied();
+        let p = phone_by_id.get(key).copied();
+        let mut entry = ElementDifference {
+            resource_id: key.clone(),
+            class: a.map(|n| n.class.clone()).or_else(|| p.map(|n| n.class.clone())).unwrap_or_default(),
+            acos_text: a.map(|n| n.text.clone()).unwrap_or_default(),
+            phone_text: p.map(|n| n.text.clone()).unwrap_or_default(),
+            acos_bounds: a.map(|n| n.bounds),
+            phone_bounds: p.map(|n| n.bounds),
+            delta: None,
+            acos_size: a.map(|n| size(n.bounds)),
+            phone_size: p.map(|n| size(n.bounds)),
+            size_delta: None,
+            kind: "matched".to_string(),
+            score: 0,
+        };
+        match (a, p) {
+            (None, Some(_)) => {
+                entry.kind = "missing_in_acos".to_string();
+                entry.score = ELEMENT_TEXT_WEIGHT;
+            }
+            (Some(_), None) => {
+                entry.kind = "missing_on_phone".to_string();
+                entry.score = ELEMENT_TEXT_WEIGHT;
+            }
+            (Some(a), Some(p)) => {
+                let delta = [
+                    a.bounds[0] - p.bounds[0],
+                    a.bounds[1] - p.bounds[1],
+                    a.bounds[2] - p.bounds[2],
+                    a.bounds[3] - p.bounds[3],
+                ];
+                entry.delta = Some(delta);
+                entry.size_delta = Some([
+                    entry.acos_size.unwrap()[0] - entry.phone_size.unwrap()[0],
+                    entry.acos_size.unwrap()[1] - entry.phone_size.unwrap()[1],
+                ]);
+                let mut score: i64 = delta.iter().map(|d| i64::from(d.abs())).sum();
+                if a.text.trim() != p.text.trim() {
+                    entry.kind = "text_differs".to_string();
+                    score += ELEMENT_TEXT_WEIGHT;
+                } else if delta.iter().any(|d| i64::from(d.abs()) > ELEMENT_DELTA_FLOOR)
+                    || entry
+                        .size_delta
+                        .unwrap()
+                        .iter()
+                        .any(|d| i64::from(d.abs()) > ELEMENT_DELTA_FLOOR)
+                {
+                    entry.kind = "bounds_differ".to_string();
+                }
+                entry.score = score;
+            }
+            (None, None) => continue,
+        }
+        out.push(entry);
+    }
+    out.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.resource_id.cmp(&b.resource_id))
+    });
+    out
 }
 
 /// One normalized difference between the device reference and ACOS.
@@ -92,6 +225,9 @@ pub struct ParityReport {
     pub acos_nodes: usize,
     /// True when there is no difference at all.
     pub identical: bool,
+    /// Ranked per-element (resource-id) layout differences, when requested.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub element_diff: Vec<ElementDifference>,
     /// The options applied.
     pub options: Value,
 }
@@ -244,17 +380,24 @@ pub fn compare(device: &[ViewNode], acos: &[ViewNode], opts: CompareOptions) -> 
     }
 
     let identical = differences.is_empty();
+    let element_diff = if opts.element_diff {
+        element_differences(acos, device)
+    } else {
+        Vec::new()
+    };
     ParityReport {
         matches,
         differences,
         device_nodes: flatten(device).len(),
         acos_nodes: flatten(acos).len(),
         identical,
+        element_diff,
         options: json!({
             "bounds_tolerance": opts.bounds_tolerance,
             "bounds_scale": opts.bounds_scale,
             "ignore_bounds": opts.ignore_bounds,
             "strict_state": opts.strict_state,
+            "element_diff": opts.element_diff,
         }),
     }
 }
@@ -401,6 +544,11 @@ pub struct ParityArgs {
     #[arg(long)]
     pub strict_state: bool,
 
+    /// Emit the ranked per-element (resource-id) layout diff: bounds delta,
+    /// text and size for each app view, largest real difference first.
+    #[arg(long = "element-diff")]
+    pub element_diff: bool,
+
     /// Directory for the captured device screenshots/XML (live mode).
     #[arg(long)]
     pub output: Option<PathBuf>,
@@ -490,6 +638,7 @@ pub fn run(args: ParityArgs) -> ExitCode {
         bounds_scale: args.bounds_scale,
         ignore_bounds: args.ignore_bounds,
         strict_state: args.strict_state,
+        element_diff: args.element_diff,
     };
 
     let report = match (&args.device, &args.recorded, &args.acos_tree) {
@@ -529,6 +678,21 @@ pub fn run(args: ParityArgs) -> ExitCode {
                         .map(Vec::len)
                         .unwrap_or(0)
                 );
+                if let Some(rows) = report.get("element_diff").and_then(Value::as_array) {
+                    println!("ranked element diff (acos - phone):");
+                    for row in rows.iter().take(20) {
+                        let id = row.get("resource_id").and_then(Value::as_str).unwrap_or("");
+                        let kind = row.get("kind").and_then(Value::as_str).unwrap_or("");
+                        let score = row.get("score").and_then(Value::as_i64).unwrap_or(0);
+                        let a = bounds_str(row.get("acos_bounds"));
+                        let p = bounds_str(row.get("phone_bounds"));
+                        let d = bounds_str(row.get("delta"));
+                        let s = pair_str(row.get("size_delta"));
+                        println!(
+                            "  {score:>7} {kind:<16} {id}\n            acos={a} phone={p} delta={d} size_delta={s}"
+                        );
+                    }
+                }
             }
             if identical {
                 ExitCode::SUCCESS
@@ -584,6 +748,30 @@ impl ParityFailure {
             "message": self.message,
             "details": self.details,
         })
+    }
+}
+
+fn bounds_str(value: Option<&Value>) -> String {
+    match value.and_then(Value::as_array) {
+        Some(a) => format!(
+            "[{},{},{},{}]",
+            a.first().and_then(Value::as_i64).unwrap_or(0),
+            a.get(1).and_then(Value::as_i64).unwrap_or(0),
+            a.get(2).and_then(Value::as_i64).unwrap_or(0),
+            a.get(3).and_then(Value::as_i64).unwrap_or(0),
+        ),
+        None => "-".to_string(),
+    }
+}
+
+fn pair_str(value: Option<&Value>) -> String {
+    match value.and_then(Value::as_array) {
+        Some(a) => format!(
+            "[{},{}]",
+            a.first().and_then(Value::as_i64).unwrap_or(0),
+            a.get(1).and_then(Value::as_i64).unwrap_or(0),
+        ),
+        None => "-".to_string(),
     }
 }
 
@@ -1060,6 +1248,57 @@ mod tests {
             "bounds differences must be labelled density"
         );
         assert!(report.matches > 0);
+    }
+
+    /// The ranked per-element diff matches by resource id and ranks the
+    /// largest real layout difference first; matching elements are `matched`.
+    #[test]
+    fn element_diff_ranks_by_resource_id() {
+        let acos = parse_uiautomator_xml(
+            r#"<hierarchy>
+                <node text="Increment" resource-id="pkg:id/inc" class="android.widget.Button" bounds="[84,634][353,760]"/>
+                <node text="Reset" resource-id="pkg:id/reset" class="android.widget.Button" bounds="[84,886][315,1012]"/>
+              </hierarchy>"#,
+        )
+        .unwrap();
+        let phone = parse_uiautomator_xml(
+            r#"<hierarchy>
+                <node text="Increment" resource-id="pkg:id/inc" class="android.widget.Button" bounds="[40,334][262,454]"/>
+                <node text="Reset" resource-id="pkg:id/reset" class="android.widget.Button" bounds="[84,886][315,1012]"/>
+              </hierarchy>"#,
+        )
+        .unwrap();
+        let ranked = element_differences(&acos, &phone);
+        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked[0].resource_id, "pkg:id/inc");
+        assert_eq!(ranked[0].kind, "bounds_differ");
+        assert_eq!(ranked[0].delta, Some([44, 300, 91, 306]));
+        assert_eq!(ranked[0].acos_size, Some([269, 126]));
+        assert_eq!(ranked[0].phone_size, Some([222, 120]));
+        assert_eq!(ranked[0].size_delta, Some([47, 6]));
+        // The identical Reset element ranks last and is `matched`.
+        assert_eq!(ranked[1].resource_id, "pkg:id/reset");
+        assert_eq!(ranked[1].kind, "matched");
+        assert_eq!(ranked[1].score, 0);
+        assert!(ranked[0].score > ranked[1].score);
+    }
+
+    /// A missing element is text-level, not geometry, and outranks a shift.
+    #[test]
+    fn element_diff_flags_missing_and_text() {
+        let acos = parse_uiautomator_xml(
+            r#"<hierarchy><node text="Increment" resource-id="pkg:id/inc" class="android.widget.Button" bounds="[0,0][10,10]"/></hierarchy>"#,
+        )
+        .unwrap();
+        let phone = parse_uiautomator_xml(
+            r#"<hierarchy><node text="Count" resource-id="pkg:id/count" class="android.widget.TextView" bounds="[0,0][10,10]"/></hierarchy>"#,
+        )
+        .unwrap();
+        let ranked = element_differences(&acos, &phone);
+        assert_eq!(ranked.len(), 2);
+        assert!(ranked.iter().any(|e| e.kind == "missing_in_acos"));
+        assert!(ranked.iter().any(|e| e.kind == "missing_on_phone"));
+        assert!(ranked.iter().all(|e| e.score >= 100_000));
     }
 
     /// A busy phone skip is structured, not a pass.

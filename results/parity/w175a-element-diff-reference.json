@@ -1,0 +1,850 @@
+{
+  "acos_nodes": 12,
+  "acos_source": ".cache/w175a-verify/tree.json",
+  "app": "",
+  "device_dir": "/home/Qui/Projects/acos/fixtures/reference-device",
+  "device_nodes": 16,
+  "differences": [
+    {
+      "acos_bounds": null,
+      "class": "android.widget.FrameLayout",
+      "delta": null,
+      "device_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "key": "class:android.widget.FrameLayout",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": ""
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "device_bounds": [
+        874,
+        36,
+        893,
+        69
+      ],
+      "key": "class:android.widget.ImageView",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": ""
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.LinearLayout",
+      "delta": null,
+      "device_bounds": [
+        0,
+        248,
+        1080,
+        2400
+      ],
+      "key": "class:android.widget.LinearLayout",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        2400
+      ],
+      "class": "com.android.internal.policy.DecorView",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:@0xffffffff",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "@0xffffffff",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        388,
+        1080,
+        2540
+      ],
+      "class": "android.widget.LinearLayout",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:@0xffffffff",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "@0xffffffff",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        80,
+        188,
+        258,
+        248
+      ],
+      "class": "android.widget.TextView",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:@0xffffffff",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "@0xffffffff",
+      "text": "Counter"
+    },
+    {
+      "acos_bounds": [
+        2160,
+        108,
+        2160,
+        248
+      ],
+      "class": "android.widget.ActionMenuView",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:@0xffffffff",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "@0xffffffff",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        248
+      ],
+      "class": "android.widget.Toolbar",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:android:id/action_bar",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "android:id/action_bar",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        248
+      ],
+      "class": "com.android.internal.widget.ActionBarContainer",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:android:id/action_bar_container",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "android:id/action_bar_container",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        0,
+        108
+      ],
+      "class": "com.android.internal.widget.ActionBarContextView",
+      "delta": null,
+      "device_bounds": null,
+      "key": "id:android:id/action_context_bar",
+      "kind": "extra_in_acos",
+      "note": "ACOS exposes the node; the device does not",
+      "resource_id": "android:id/action_context_bar",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        388,
+        1080,
+        2540
+      ],
+      "class": "android.widget.FrameLayout",
+      "delta": [
+        0,
+        140,
+        0,
+        140
+      ],
+      "device_bounds": [
+        0,
+        248,
+        1080,
+        2400
+      ],
+      "key": "id:android:id/content",
+      "kind": "bounds_differ",
+      "note": "bounds differ beyond tolerance",
+      "resource_id": "android:id/content",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        2400
+      ],
+      "class": "com.android.internal.widget.ActionBarOverlayLayout",
+      "delta": null,
+      "device_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "key": "id:android:id/decor_content_parent",
+      "kind": "class_differs",
+      "note": "device android.view.ViewGroup vs acos com.android.internal.widget.ActionBarOverlayLayout",
+      "resource_id": "android:id/decor_content_parent",
+      "text": ""
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        2400
+      ],
+      "class": "com.android.internal.widget.ActionBarOverlayLayout",
+      "delta": [
+        0,
+        108,
+        0,
+        0
+      ],
+      "device_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "key": "id:android:id/decor_content_parent",
+      "kind": "bounds_differ",
+      "note": "bounds differ beyond tolerance",
+      "resource_id": "android:id/decor_content_parent",
+      "text": ""
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.LinearLayout",
+      "delta": null,
+      "device_bounds": [
+        874,
+        32,
+        995,
+        74
+      ],
+      "key": "id:com.android.systemui:id/battery",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "com.android.systemui:id/battery",
+      "text": "Battery charging, 100 percent."
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.TextView",
+      "delta": null,
+      "device_bounds": [
+        893,
+        32,
+        990,
+        74
+      ],
+      "key": "id:com.android.systemui:id/battery_percentage_view",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "com.android.systemui:id/battery_percentage_view",
+      "text": "100%"
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.TextView",
+      "delta": null,
+      "device_bounds": [
+        45,
+        33,
+        129,
+        75
+      ],
+      "key": "id:com.android.systemui:id/clock",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "com.android.systemui:id/clock",
+      "text": "7:02"
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "device_bounds": [
+        805,
+        32,
+        821,
+        70
+      ],
+      "key": "id:com.android.systemui:id/wifi_out",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "com.android.systemui:id/wifi_out",
+      "text": ""
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "device_bounds": [
+        821,
+        34,
+        859,
+        72
+      ],
+      "key": "id:com.android.systemui:id/wifi_signal",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "com.android.systemui:id/wifi_signal",
+      "text": "Wifi signal full."
+    },
+    {
+      "acos_bounds": [
+        80,
+        468,
+        100,
+        510
+      ],
+      "class": "android.widget.TextView",
+      "delta": [
+        40,
+        180,
+        39,
+        176
+      ],
+      "device_bounds": [
+        40,
+        288,
+        61,
+        334
+      ],
+      "key": "id:dev.acos.fixtures.counter:id/count",
+      "kind": "bounds_differ",
+      "note": "bounds differ beyond tolerance",
+      "resource_id": "dev.acos.fixtures.counter:id/count",
+      "text": "0"
+    },
+    {
+      "acos_bounds": [
+        80,
+        552,
+        336,
+        672
+      ],
+      "class": "android.widget.Button",
+      "delta": [
+        40,
+        218,
+        74,
+        218
+      ],
+      "device_bounds": [
+        40,
+        334,
+        262,
+        454
+      ],
+      "key": "id:dev.acos.fixtures.counter:id/inc",
+      "kind": "bounds_differ",
+      "note": "bounds differ beyond tolerance",
+      "resource_id": "dev.acos.fixtures.counter:id/inc",
+      "text": "Increment"
+    },
+    {
+      "acos_bounds": [
+        80,
+        792,
+        300,
+        912
+      ],
+      "class": "android.widget.Button",
+      "delta": [
+        40,
+        338,
+        40,
+        338
+      ],
+      "device_bounds": [
+        40,
+        454,
+        260,
+        574
+      ],
+      "key": "id:dev.acos.fixtures.counter:id/reset",
+      "kind": "bounds_differ",
+      "note": "bounds differ beyond tolerance",
+      "resource_id": "dev.acos.fixtures.counter:id/reset",
+      "text": "Reset"
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "device_bounds": [
+        129,
+        0,
+        184,
+        108
+      ],
+      "key": "text:android.widget.ImageView|Android System notification:",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": "Android System notification: "
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "device_bounds": [
+        184,
+        0,
+        239,
+        108
+      ],
+      "key": "text:android.widget.ImageView|Settings notification:",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": "Settings notification: "
+    },
+    {
+      "acos_bounds": null,
+      "class": "android.widget.TextView",
+      "delta": null,
+      "device_bounds": [
+        40,
+        145,
+        221,
+        211
+      ],
+      "key": "text:android.widget.TextView|Counter",
+      "kind": "missing_in_acos",
+      "note": "device exposes the node; ACOS does not",
+      "resource_id": "",
+      "text": "Counter"
+    }
+  ],
+  "element_diff": [
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        2400
+      ],
+      "acos_size": [
+        1080,
+        2292
+      ],
+      "acos_text": "",
+      "class": "com.android.internal.policy.DecorView",
+      "delta": null,
+      "kind": "missing_on_phone",
+      "phone_bounds": null,
+      "phone_size": null,
+      "phone_text": "",
+      "resource_id": "@0xffffffff",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        248
+      ],
+      "acos_size": [
+        1080,
+        140
+      ],
+      "acos_text": "",
+      "class": "android.widget.Toolbar",
+      "delta": null,
+      "kind": "missing_on_phone",
+      "phone_bounds": null,
+      "phone_size": null,
+      "phone_text": "",
+      "resource_id": "android:id/action_bar",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        248
+      ],
+      "acos_size": [
+        1080,
+        140
+      ],
+      "acos_text": "",
+      "class": "com.android.internal.widget.ActionBarContainer",
+      "delta": null,
+      "kind": "missing_on_phone",
+      "phone_bounds": null,
+      "phone_size": null,
+      "phone_text": "",
+      "resource_id": "android:id/action_bar_container",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        0,
+        108
+      ],
+      "acos_size": [
+        0,
+        0
+      ],
+      "acos_text": "",
+      "class": "com.android.internal.widget.ActionBarContextView",
+      "delta": null,
+      "kind": "missing_on_phone",
+      "phone_bounds": null,
+      "phone_size": null,
+      "phone_text": "",
+      "resource_id": "android:id/action_context_bar",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": null,
+      "acos_size": null,
+      "acos_text": "",
+      "class": "android.widget.LinearLayout",
+      "delta": null,
+      "kind": "missing_in_acos",
+      "phone_bounds": [
+        874,
+        32,
+        995,
+        74
+      ],
+      "phone_size": [
+        121,
+        42
+      ],
+      "phone_text": "Battery charging, 100 percent.",
+      "resource_id": "com.android.systemui:id/battery",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": null,
+      "acos_size": null,
+      "acos_text": "",
+      "class": "android.widget.TextView",
+      "delta": null,
+      "kind": "missing_in_acos",
+      "phone_bounds": [
+        893,
+        32,
+        990,
+        74
+      ],
+      "phone_size": [
+        97,
+        42
+      ],
+      "phone_text": "100%",
+      "resource_id": "com.android.systemui:id/battery_percentage_view",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": null,
+      "acos_size": null,
+      "acos_text": "",
+      "class": "android.widget.TextView",
+      "delta": null,
+      "kind": "missing_in_acos",
+      "phone_bounds": [
+        45,
+        33,
+        129,
+        75
+      ],
+      "phone_size": [
+        84,
+        42
+      ],
+      "phone_text": "7:02",
+      "resource_id": "com.android.systemui:id/clock",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": null,
+      "acos_size": null,
+      "acos_text": "",
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "kind": "missing_in_acos",
+      "phone_bounds": [
+        805,
+        32,
+        821,
+        70
+      ],
+      "phone_size": [
+        16,
+        38
+      ],
+      "phone_text": "",
+      "resource_id": "com.android.systemui:id/wifi_out",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": null,
+      "acos_size": null,
+      "acos_text": "",
+      "class": "android.widget.ImageView",
+      "delta": null,
+      "kind": "missing_in_acos",
+      "phone_bounds": [
+        821,
+        34,
+        859,
+        72
+      ],
+      "phone_size": [
+        38,
+        38
+      ],
+      "phone_text": "Wifi signal full.",
+      "resource_id": "com.android.systemui:id/wifi_signal",
+      "score": 100000,
+      "size_delta": null
+    },
+    {
+      "acos_bounds": [
+        80,
+        792,
+        300,
+        912
+      ],
+      "acos_size": [
+        220,
+        120
+      ],
+      "acos_text": "Reset",
+      "class": "android.widget.Button",
+      "delta": [
+        40,
+        338,
+        40,
+        338
+      ],
+      "kind": "bounds_differ",
+      "phone_bounds": [
+        40,
+        454,
+        260,
+        574
+      ],
+      "phone_size": [
+        220,
+        120
+      ],
+      "phone_text": "Reset",
+      "resource_id": "dev.acos.fixtures.counter:id/reset",
+      "score": 756,
+      "size_delta": [
+        0,
+        0
+      ]
+    },
+    {
+      "acos_bounds": [
+        80,
+        552,
+        336,
+        672
+      ],
+      "acos_size": [
+        256,
+        120
+      ],
+      "acos_text": "Increment",
+      "class": "android.widget.Button",
+      "delta": [
+        40,
+        218,
+        74,
+        218
+      ],
+      "kind": "bounds_differ",
+      "phone_bounds": [
+        40,
+        334,
+        262,
+        454
+      ],
+      "phone_size": [
+        222,
+        120
+      ],
+      "phone_text": "Increment",
+      "resource_id": "dev.acos.fixtures.counter:id/inc",
+      "score": 550,
+      "size_delta": [
+        34,
+        0
+      ]
+    },
+    {
+      "acos_bounds": [
+        80,
+        468,
+        100,
+        510
+      ],
+      "acos_size": [
+        20,
+        42
+      ],
+      "acos_text": "0",
+      "class": "android.widget.TextView",
+      "delta": [
+        40,
+        180,
+        39,
+        176
+      ],
+      "kind": "bounds_differ",
+      "phone_bounds": [
+        40,
+        288,
+        61,
+        334
+      ],
+      "phone_size": [
+        21,
+        46
+      ],
+      "phone_text": "0",
+      "resource_id": "dev.acos.fixtures.counter:id/count",
+      "score": 435,
+      "size_delta": [
+        -1,
+        -4
+      ]
+    },
+    {
+      "acos_bounds": [
+        0,
+        388,
+        1080,
+        2540
+      ],
+      "acos_size": [
+        1080,
+        2152
+      ],
+      "acos_text": "",
+      "class": "android.widget.FrameLayout",
+      "delta": [
+        0,
+        140,
+        0,
+        140
+      ],
+      "kind": "bounds_differ",
+      "phone_bounds": [
+        0,
+        248,
+        1080,
+        2400
+      ],
+      "phone_size": [
+        1080,
+        2152
+      ],
+      "phone_text": "",
+      "resource_id": "android:id/content",
+      "score": 280,
+      "size_delta": [
+        0,
+        0
+      ]
+    },
+    {
+      "acos_bounds": [
+        0,
+        108,
+        1080,
+        2400
+      ],
+      "acos_size": [
+        1080,
+        2292
+      ],
+      "acos_text": "",
+      "class": "com.android.internal.widget.ActionBarOverlayLayout",
+      "delta": [
+        0,
+        108,
+        0,
+        0
+      ],
+      "kind": "bounds_differ",
+      "phone_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "phone_size": [
+        1080,
+        2400
+      ],
+      "phone_text": "",
+      "resource_id": "android:id/decor_content_parent",
+      "score": 108,
+      "size_delta": [
+        0,
+        -108
+      ]
+    }
+  ],
+  "fidelity": "physical-device",
+  "identical": false,
+  "matches": 0,
+  "mode": "recorded",
+  "ok": false,
+  "options": {
+    "bounds_scale": 1.0,
+    "bounds_tolerance": 4,
+    "element_diff": true,
+    "ignore_bounds": false,
+    "strict_state": false
+  }
+}

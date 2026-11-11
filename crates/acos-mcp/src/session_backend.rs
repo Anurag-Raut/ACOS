@@ -393,6 +393,7 @@ impl SessionBackend {
         let launch_args = json!({
             "apk": apk.display().to_string(),
             "native": true,
+            "display": acos_runtime::display_override().map(|o| o.spec()),
             "timeout_ms": limits.wall_secs.saturating_mul(1000),
             "base": {"request_id": request_id, "session_id": id},
         });
@@ -935,6 +936,17 @@ impl SessionBackend {
             Err(reason) => return unsafe_path(request_id, apk, &reason),
         };
         let id = session_id(args);
+        // `acos launch --density/--display/--reference` rides along as a compact
+        // spec; install it before the runtime worker boots so `DisplayMetrics`,
+        // the WMS display and the layout all use the phone's configuration.
+        match args.get("display") {
+            None | Some(Value::Null) => acos_runtime::set_display_override(None),
+            Some(Value::String(spec)) => match acos_runtime::DisplayOverride::parse(spec) {
+                Some(o) => acos_runtime::set_display_override(Some(o)),
+                None => return invalid_argument(request_id, "display", "unparsable display spec"),
+            },
+            Some(_) => return invalid_argument(request_id, "display", "expected a string spec"),
+        }
         let mut limits = self.limits;
         if let Some(ms) = args
             .get("timeout_ms")

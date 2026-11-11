@@ -61,6 +61,53 @@ pub struct LaunchArgs {
     /// separate `acos observe/tap/logs` invocations see the same live session.
     #[arg(long)]
     pub keep: bool,
+
+    /// Override the display density (dpi) the client sees. `--density 400`
+    /// lays ACOS out at 1080x2400 @ 400 dpi (the moto g35 under test) instead
+    /// of the API-34 emulator's 420 dpi, so geometry can be compared on the
+    /// same display configuration.
+    #[arg(long)]
+    pub density: Option<u32>,
+
+    /// Override the logical display size, `WIDTHxHEIGHT` (e.g. `1080x2400`).
+    #[arg(long)]
+    pub display: Option<String>,
+
+    /// Reference mode: run with the test phone's exact display parameters
+    /// (`1080x2400 @ 400 dpi`, 108 px status bar, gesture navigation).
+    #[arg(long)]
+    pub reference: bool,
+}
+
+/// Build the display override for `acos launch` from its flags.
+///
+/// `--reference` selects the full phone configuration; `--density` /
+/// `--display` change one axis while keeping the API-34 reference geometry.
+fn display_override_from_args(args: &LaunchArgs) -> Option<acos_runtime::DisplayOverride> {
+    if args.reference {
+        return Some(acos_runtime::DisplayOverride::phone());
+    }
+    if args.density.is_none() && args.display.is_none() {
+        return None;
+    }
+    let mut o = acos_runtime::DisplayOverride {
+        width: 1080,
+        height: 2400,
+        density_dpi: 420,
+        status_bar_top: 128,
+        nav_bar_bottom: 63,
+    };
+    if let Some(d) = args.density {
+        o.density_dpi = d as i32;
+    }
+    if let Some(spec) = &args.display {
+        let (w, h) = spec.split_once('x').unwrap_or((spec.as_str(), ""));
+        if let (Ok(w), Ok(h)) = (w.parse::<i32>(), h.parse::<i32>()) {
+            o.width = w;
+            o.height = h;
+        }
+    }
+    Some(o)
 }
 
 /// Structurally detect a Flutter APK (engine `.so` and/or `flutter_assets`).
@@ -76,6 +123,12 @@ pub fn detect_react_native(apk: &std::path::Path) -> bool {
 /// Run `acos launch`.
 pub fn run(args: LaunchArgs) -> ExitCode {
     let request_id = new_request_id();
+    let display = display_override_from_args(&args);
+    acos_runtime::set_display_override(display);
+    match display {
+        Some(o) => std::env::set_var("ACOS_DISPLAY_OVERRIDE", o.spec()),
+        None => std::env::remove_var("ACOS_DISPLAY_OVERRIDE"),
+    }
     // A Flutter APK can only be driven by the confined child, so it always
     // routes through the daemon even without `--keep`: the session must outlive
     // this process for `acos observe`/`tap` to address it.
@@ -129,6 +182,7 @@ pub fn run(args: LaunchArgs) -> ExitCode {
 
 /// Launch through the `acos serve` daemon and leave the session running.
 fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> ExitCode {
+    let display = display_override_from_args(args);
     let native = crate::native_launch::native_requested(args.native) || flutter || rn;
     let mut client = match crate::serve::ensure_daemon() {
         Ok(client) => client,
@@ -145,6 +199,7 @@ fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> Exi
         "native": native,
         "flutter": flutter,
         "rn": rn,
+        "display": display.map(|o| o.spec()),
         "timeout_ms": args.timeout.saturating_mul(1000),
     });
     let envelope = match client.call("acos_launch", &daemon_args) {
