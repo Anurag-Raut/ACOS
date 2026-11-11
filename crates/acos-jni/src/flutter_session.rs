@@ -52,6 +52,10 @@ pub enum FlutterSessionError {
         apk: String,
     },
     /// The APK ships no engine for the requested ABI.
+    ///
+    /// This is the APK-level ABI gate (no engine for the host ABI), so it
+    /// reports `UNSUPPORTED_ABI` like the CLI gate (ADR-0018 W59-A), not
+    /// `WRONG_ABI` (which is per-ELF `e_machine` mismatch in the loader).
     UnsupportedAbi {
         /// The APK path.
         apk: String,
@@ -103,7 +107,7 @@ impl FlutterSessionError {
     pub fn code(&self) -> &'static str {
         match self {
             FlutterSessionError::NotFlutter { .. } => "UNSUPPORTED_FLUTTER",
-            FlutterSessionError::UnsupportedAbi { .. } => "WRONG_ABI",
+            FlutterSessionError::UnsupportedAbi { .. } => "UNSUPPORTED_ABI",
             FlutterSessionError::Setup { .. } => "UNSUPPORTED_BACKEND",
             FlutterSessionError::Engine { code, .. } => match code.as_str() {
                 "UNSUPPORTED_NATIVE_SYMBOL" => "UNSUPPORTED_NATIVE_SYMBOL",
@@ -1009,4 +1013,21 @@ fn first_error_line(stdout: &str) -> Option<String> {
         .lines()
         .find(|l| l.contains("phase=error"))
         .map(str::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR-0018 W59-A/E1: an APK-level engine ABI miss is `UNSUPPORTED_ABI`,
+    /// not the loader's per-ELF `WRONG_ABI`.
+    #[test]
+    fn abi_miss_is_unsupported_abi() {
+        let err = FlutterSessionError::UnsupportedAbi {
+            apk: "flutter-hello-arm64.apk".to_string(),
+            abis: vec!["arm64-v8a".to_string()],
+        };
+        assert_eq!(err.code(), "UNSUPPORTED_ABI");
+        assert!(err.to_string().contains("host ABI"));
+    }
 }

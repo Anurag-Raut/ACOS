@@ -117,7 +117,7 @@ they are not interchangeable with the API-34 emulator references.
 | exception propagation across the boundary | partial | `crates/acos-jni/tests/jni_errors.rs` |
 | native thread attach/detach | partial | `crates/acos-jni/src/state.rs` |
 | ELF loading / relocations / symbol resolution | verified (fixture) | `results/native-loader/README.md`; 475 Bionic symbols (383 forwarded / 92 shimmed) in `results/native-loader/coverage.json`; `libhellojni.so` load p50 8,466 ns |
-| ABI translation (ARM-only on x86_64) | none (`WRONG_ABI`, ADR-0002/0014) | `results/native-loader/README.md` §2 |
+| ABI translation (ARM-only on x86_64) | none (`UNSUPPORTED_ABI` at the APK gate, ADR-0018 W59-A; `WRONG_ABI` for a per-ELF `e_machine` mismatch, ADR-0014) | `results/native-loader/README.md` §2 |
 
 ---
 

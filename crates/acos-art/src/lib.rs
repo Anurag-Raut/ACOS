@@ -73,6 +73,11 @@ pub enum Error {
     CgroupUnavailable(String),
     #[error("SECCOMP_UNAVAILABLE: {0}")]
     SeccompUnavailable(String),
+    /// The guest Landlock ruleset could not be assembled or proven on a kernel
+    /// that supports Landlock (fail closed). Distinct from the seccomp family:
+    /// Landlock owns filesystem confinement, the seccomp filter owns syscalls.
+    #[error("LANDLOCK_UNAVAILABLE: {0}")]
+    LandlockUnavailable(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }

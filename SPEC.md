@@ -218,7 +218,8 @@ additive):
 |---|---|
 | `UNSUPPORTED_ANDROID_API` | native engine lacks a required `android.*` API/behaviour |
 | `UNSUPPORTED_NATIVE_SYMBOL` | a required ELF/Bionic symbol or ABI is unavailable |
-| `WRONG_ABI` | APK/native library ABI is not supported by this engine |
+| `WRONG_ABI` | one ELF's `e_machine`/class is not what the loader can map |
+| `UNSUPPORTED_ABI` | the APK ships native code, but none for the host ABI (ADR-0018 W59-A) |
 | `REQUIRES_GMS` | app needs licensed Google Mobile Services |
 | `NEEDS_REAL_DEVICE` | behaviour needs a real device/OEM/hardware target |
 | `NO_FRESH_FRAME` | no fresh frame satisfying the request exists |

@@ -53,6 +53,12 @@ pub enum RnSessionError {
         apk: String,
     },
     /// The APK ships no RN/Hermes runtime for the host ABI.
+    ///
+    /// This is the APK-level ABI gate: the APK provides native code, but no
+    /// `lib/<host-abi>/` directory. It is `UNSUPPORTED_ABI` (ADR-0018 W59-A),
+    /// the same contract as the CLI gate in `acos launch`. `WRONG_ABI` stays
+    /// reserved for an individual ELF whose `e_machine` the loader cannot map
+    /// (`acos-native-loader::LoaderError::WrongAbi`).
     UnsupportedAbi {
         /// The APK path.
         apk: String,
@@ -93,7 +99,7 @@ impl RnSessionError {
     pub fn code(&self) -> &'static str {
         match self {
             RnSessionError::NotReactNative { .. } => "UNSUPPORTED_RN",
-            RnSessionError::UnsupportedAbi { .. } => "WRONG_ABI",
+            RnSessionError::UnsupportedAbi { .. } => "UNSUPPORTED_ABI",
             RnSessionError::Setup { .. } => "UNSUPPORTED_RN_SETUP",
             RnSessionError::Driver { .. } => "UNSUPPORTED_RN_DRIVER",
             RnSessionError::Unsupported { feature, .. } => match *feature {
@@ -575,5 +581,22 @@ fn setup(stage: &'static str, detail: impl std::fmt::Display) -> RnSessionError 
     RnSessionError::Setup {
         stage,
         detail: detail.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR-0018 W59-A/E1: an APK-level ABI miss is `UNSUPPORTED_ABI` on this
+    /// route too, not the loader's per-ELF `WRONG_ABI`.
+    #[test]
+    fn abi_miss_is_unsupported_abi() {
+        let err = RnSessionError::UnsupportedAbi {
+            apk: "rn-hello-arm64.apk".to_string(),
+            abis: vec!["arm64-v8a".to_string()],
+        };
+        assert_eq!(err.code(), "UNSUPPORTED_ABI");
+        assert!(err.to_string().contains("host ABI"));
     }
 }

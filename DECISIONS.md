@@ -68,6 +68,11 @@ x86_64 is host-native and removes translation from the first proof; accepting
 **Consequences.**
 - Apps whose only native libraries are ARM-only are `WRONG_ABI` until a
   translator exists (explicitly reported, never faked).
+  *Superseded in part by ADR-0018 update (W59-A, 2026-11-11):* the APK-level
+  ABI gate now reports `UNSUPPORTED_ABI` naming every ABI the APK provides (see
+  also the E1 error-contract note in ADR-0018). `WRONG_ABI` remains only for a
+  single ELF whose `e_machine` the in-process loader cannot map. The original
+  text is kept for history.
 - API-level support is declared per task; "supports Android" is not claimed.
 - Compiling fixtures uses the SDK tools only as build tools (ADR-0004).
 
@@ -387,6 +392,10 @@ auditable Bionic-compat symbol table. Missing symbols are a structured
 `UNSUPPORTED_NATIVE_SYMBOL` error, **never a silent stub**. `JNIEnv`/`JavaVM`
 tables are implemented in Rust against the VM (`crate acos-jni`, planned).
 **ARM-only libraries are `WRONG_ABI` for now**; translation deferred.
+*Superseded in part by the ADR-0018 update (W59-A, 2026-11-11):* when the APK
+ships native code but no host-ABI `lib/<abi>/`, the launch gate and the daemon
+RN/Flutter backends return `UNSUPPORTED_ABI`; `WRONG_ABI` is the loader-level
+per-ELF `e_machine` mismatch only.
 
 **Rationale.** ADR-0007 requires real `native` behaviour for the real framework;
 ADR-0009's handle design makes the JNI reference tables tractable. Silent stubs
@@ -559,6 +568,30 @@ opt-in flag plus the ADR-0022 confinement layer; the default remains off.
   product `acos`/MCP launch path still needs the JNI runtime attached. Until
   then `--native` proves the ABI/confinement gate and fails closed, and no
   runtime `System.loadLibrary` reaches untrusted ELF code.
+
+### ADR-0018 update — one error contract for ABI misses and Landlock (E1, 2026-11-11)
+
+Status: accepted, narrows ADR-0002/ADR-0014 without rewriting them.
+
+- **One ABI-miss code.** `UNSUPPORTED_ABI` is the code for "the APK ships
+  native code, but none for this host's ABI". The CLI gate (commit f221a77)
+  already did this; the daemon RN backend (`acos-runtime::RnSessionError`) and
+  the Flutter session (`acos-jni::FlutterSessionError`) now report it too
+  instead of `WRONG_ABI`. The MCP `launch` path is therefore consistent with
+  `acos launch` regardless of route.
+- **`WRONG_ABI` kept, narrowly.** It remains the `acos-native-loader` code for
+  one ELF whose `e_machine`/class is not what the in-process loader executes.
+  That is a different condition (a mapped library, not an APK-level ABI
+  inventory), and changing it would alter the loader policy contract and its
+  `policy` test; the ADR-0014 note above is retained for history.
+- **Landlock is its own family.** `acos-art::Error::LandlockUnavailable`
+  (stable code `LANDLOCK_UNAVAILABLE`) replaces reusing
+  `Error::SeccompUnavailable` for the S6 guest ruleset, and the code is in
+  `acos-protocol::ErrorCode`. The seccomp filter and the Landlock ruleset still
+  ship in one guard bundle, but a filesystem-confinement failure is now
+  distinguishable from a syscall-filter failure in logs and JSON.
+- **One table.** `docs/ERROR_CODES.md` lists code, meaning, component and exit
+  status.
 
 ## ADR-0019 — Text rendering: FreeType + HarfBuzz glyph rasterisation; no Skia adoption (supersedes the Skia part of the advisor suggestion)
 

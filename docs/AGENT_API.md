@@ -186,7 +186,7 @@ should not hand-roll these comparisons.
 | app's text is wrong | `fail` + `ASSERTION_FAILED` + diff | fix the app/expectation |
 | selector matches nothing | `fail` + `ELEMENT_NOT_FOUND` | re-observe; fix selector or expectation |
 | engine lacks a Java API | `unsupported` + `UNSUPPORTED_JAVA_API` | do not rewrite the app to hide it; escalate or report |
-| ARM-only `.so` on x86_64 | `unsupported` + `WRONG_ABI` | supply the ABI or change target |
+| ARM-only `.so` on x86_64 | `unsupported` + `UNSUPPORTED_ABI` (APK-level; `WRONG_ABI` only for a per-ELF `e_machine` mismatch at load) | supply the ABI or change target |
 | app needs GMS | `unsupported` + `REQUIRES_GMS` | use a GMS target or report |
 | no display on a headless session | `unsupported` + `NO_DISPLAY` | create a display or drop UI steps |
 | app crash | `crash` + `APP_CRASHED` | read stack; fix app/platform call |
@@ -882,7 +882,8 @@ succeed. It never means the result is a pass.
 | `UNSUPPORTED_NATIVE_SYMBOL` | `no` | Read details.symbol/details.library; implement/import the symbol, rebuild the .so for the supported ABI, or report the exact missing symbol. Do not fake a return value. |
 | `NEEDS_REAL_DEVICE` | `no` | This behaviour requires a real/OEM device or hardware. Report it as unsupported; do not claim a native or simulated pass. |
 | `REQUIRES_GMS` | `no` | The app depends on licensed Google Mobile Services. Use a GMS-enabled reference target or report unsupported. |
-| `WRONG_ABI` | `no` | Compare the APK ABI with the engine ABI. Supply a build containing the supported ABI, or run an ABI that is actually supported. |
+| `WRONG_ABI` | `no` | The loader cannot map this individual ELF (`e_machine`/class mismatch). Use a library built for the engine ABI. |
+| `UNSUPPORTED_ABI` | `no` | The APK ships native code but no `lib/<host-abi>/`. Supply an ABI split that includes x86_64, or do not request native loading. |
 | `NO_DISPLAY` | `no` | Create the session with a display (offscreen:WxH) before capture/observe, or drop the step for a headless logic-only scenario. |
 | `NO_TEXT` | `no` | The chosen route has no text. Enable the text/semantics capability or use structural selectors (id/class/bounds) instead. |
 | `UNSUPPORTED_RELOCATION` | `no` | Report the relocation type and library; use a build without it or extend the loader. Do not skip the load. |

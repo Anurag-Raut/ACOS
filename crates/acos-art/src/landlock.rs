@@ -39,9 +39,10 @@
 //!
 //! * ABI present ⇒ the plan is mandatory. A missing/unreadable plan, a failed
 //!   `create_ruleset`/`add_rule`/`restrict_self`, or a constructor that exits
-//!   before logging `OK landlock=active` **fails the run** (`Error::SeccompUnavailable`
-//!   with the stable code `LANDLOCK_UNAVAILABLE`, because the layer ships in the
-//!   same guard bundle as the seccomp filter).
+//!   before logging `OK landlock=active` **fails the run**
+//!   (`Error::LandlockUnavailable`, stable code `LANDLOCK_UNAVAILABLE`). The
+//!   layer ships in the same guard bundle as the seccomp filter, but it is a
+//!   distinct failure: filesystem confinement, not syscall filtering.
 //! * ABI absent (kernel < 5.13 or Landlock not in the LSM list) ⇒ no plan is
 //!   written; the applier logs `SKIP landlock=kernel-unsupported` and the run
 //!   proceeds on the S2–S4 namespace/mount view, whose write surface is already
@@ -115,11 +116,10 @@ pub fn write_plan(dir: &Path) -> Result<bool> {
         }
         return Ok(false);
     }
-    let bytes = acos_sandbox::landlock_guest_plan(READ_ONLY_ROOTS, READ_WRITE_ROOTS).map_err(|e| {
-        Error::SeccompUnavailable(format!(
-            "LANDLOCK_UNAVAILABLE: cannot assemble the guest ruleset: {e}"
-        ))
-    })?;
+    let bytes =
+        acos_sandbox::landlock_guest_plan(READ_ONLY_ROOTS, READ_WRITE_ROOTS).map_err(|e| {
+            Error::LandlockUnavailable(format!("cannot assemble the guest ruleset: {e}"))
+        })?;
     std::fs::write(&plan_path, bytes)?;
     Ok(true)
 }
@@ -137,8 +137,8 @@ pub fn require_from_log(text: &str, log_path: &Path) -> Result<String> {
             return Ok(line.to_string());
         }
     }
-    Err(Error::SeccompUnavailable(format!(
-        "LANDLOCK_UNAVAILABLE: the guest Landlock ruleset is not proven in {}; \
+    Err(Error::LandlockUnavailable(format!(
+        "the guest Landlock ruleset is not proven in {}; \
          a kernel with Landlock must apply it or the run is refused",
         log_path.display()
     )))
@@ -150,7 +150,7 @@ pub fn plan_preview() -> Result<String> {
         return Ok(String::new());
     }
     let bytes = acos_sandbox::landlock_guest_plan(READ_ONLY_ROOTS, READ_WRITE_ROOTS)
-        .map_err(|e| Error::SeccompUnavailable(format!("LANDLOCK_UNAVAILABLE: {e}")))?;
+        .map_err(|e| Error::LandlockUnavailable(e.to_string()))?;
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
@@ -185,6 +185,15 @@ mod tests {
         ] {
             assert!(!rw.contains(&forbidden), "{forbidden} must not be writable: {rw:?}");
         }
+    }
+
+    /// E1: a Landlock failure carries `LANDLOCK_UNAVAILABLE`, not the seccomp
+    /// family's `SECCOMP_UNAVAILABLE`; the two layers are distinguishable.
+    #[test]
+    fn landlock_failure_has_its_own_code() {
+        let err = Error::LandlockUnavailable("plan missing".into());
+        assert_eq!(err.to_string(), "LANDLOCK_UNAVAILABLE: plan missing");
+        assert!(!err.to_string().contains("SECCOMP_UNAVAILABLE"));
     }
 
     #[test]

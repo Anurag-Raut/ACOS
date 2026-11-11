@@ -77,7 +77,7 @@ pub fn mcp_tools() -> McpToolsList {
                     "Create a session by launching an APK activity. Every later observe/capture/action/assert targets the returned session_id. ",
                     "Set isolation and display explicitly: `sandbox` for independent app data, `none` display for headless logic. ",
                     "Returns session_id, package, effective isolation/display/fidelity and optionally the first frame. ",
-                    "Common errors: WRONG_ABI, ISOLATION_UNAVAILABLE, NEEDS_REAL_DEVICE, REQUIRES_GMS, APK_*."
+                    "Common errors: UNSUPPORTED_ABI, ISOLATION_UNAVAILABLE, NEEDS_REAL_DEVICE, REQUIRES_GMS, APK_*."
                 ),
             ),
             McpToolDescriptor::new::<ObserveRequest>(
