@@ -37,7 +37,7 @@ fi
 build_probe() {
     local name="$1"
     "$CC" -O2 -Wall -Wno-unused-parameter -o "$DATA/$name" "$SRC/$name.c" \
-        -L"$SYS/system/lib64" -lui -lgui -Wl,-rpath-link,"$SYS/system/lib64" || exit 3
+        -L"$SYS/system/lib64" -lui -lgui -lutils -Wl,-rpath-link,"$SYS/system/lib64" || exit 3
 }
 build_probe probe_flatten
 build_probe probe_blast
@@ -96,8 +96,14 @@ run_probe() {
         pre="/data/libacosart.so:/data/libacoshw.so"
         extra=(--setenv ACOSART_LOAD : --setenv ACOSART_BINDER_FAKE 1)
     fi
+    # G1_C1_SOCK=<host path> binds the C1 bridge socket into the sandbox as
+    # /data/g1.sock (a unix socket cannot be copied; bwrap can bind the node).
+    local sargs=()
+    if [ -n "${G1_C1_SOCK:-}" ] && [ -S "$G1_C1_SOCK" ]; then
+        sargs=(--bind "$G1_C1_SOCK" /data/g1.sock --setenv G1_C1_SOCK /data/g1.sock)
+    fi
     echo "== bwrap + LD_PRELOAD=$pre : $p"
-    bwrap "${BASE[@]}" --setenv LD_PRELOAD "$pre" "${extra[@]}" \
+    bwrap "${BASE[@]}" "${sargs[@]}" --setenv LD_PRELOAD "$pre" "${extra[@]}" \
           --setenv ACOSART_HW_VERBOSE "${ACOSART_HW_VERBOSE:-0}" \
           -- "/data/$p"
     echo "== exit=$?"

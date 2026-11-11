@@ -1,0 +1,15 @@
+[package]
+name = "g1-c1bridge"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Harness only: it drives C1's real surface_client path for the G1 item-2
+# producer/consumer evidence. Lives outside crates/ so no product crate changes.
+[dependencies]
+acos-parcel = { path = "../../../../crates/acos-parcel" }
+acos-services = { path = "../../../../crates/acos-services" }
+acos-binder-peer = { path = "../../../../crates/acos-binder-peer" }
+libc = "0.2"
+
+[workspace]
