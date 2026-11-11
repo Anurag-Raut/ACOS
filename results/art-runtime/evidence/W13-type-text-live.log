@@ -1,0 +1,11 @@
+# W13: type_text is delivered live but the guest KeyCharacterMap is empty (2026-11-11T20:55:49Z)
+READY {"ok": true, "frame_seq": null, "activity_resumed": null, "protocol": null}
+TREE1 ok= True seq= 1
+INPUT NODE {"bounds": "[42,189][1038,307]", "class": "android.widget.EditText", "clickable": true, "enabled": true, "focused": true, "id": "dev.acos.fixtures.textinput:id/input", "text": "", "visibility": 0}
+TAP ok= True code= None seq= 2
+TYPE ok= False code= NO_FRESH_FRAME seq= None err= type_text at (0,0) completed no new settled observation within 15s: c1_generation 9 -> 9, probe_seq 24 -> 323, and the pixels did not change from the previous capture gesture= {"acks": [{"handled": true, "latency_us": 630484, "seq": 3}, {"handled": true, "latency_us": 630485, "seq": 4}, {"handled": false, "latency_us": 5077, "seq": 5}, {"handled": false, "latency_us": 5072, "seq": 6}, {"handled": false, "latency_us": 5064, "seq": 7}, {"handled": false, "latency_us": 5063,
+TREE2 ok= True input= {"bounds": "[42,189][1038,307]", "class": "android.widget.EditText", "clickable": true, "enabled": true, "focused": true, "id": "dev.acos.fixtures.textinput:id/input", "text": "", "visibility": 0}
+CLOSE True
+rc 0
+
+# the acked strokes are in the reply above: all text strokes handled=false, tree input text stays ""; no LOOPER_THREW

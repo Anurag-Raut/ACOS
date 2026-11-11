@@ -7,6 +7,8 @@
 //! caller  ->  {"cmd":"tree"}                  reply: tree + frame_seq + png + md5
 //! caller  ->  {"cmd":"screenshot"}            reply: png + md5 + frame_seq
 //! caller  ->  {"cmd":"tap","x":..,"y":..}     reply: tree + frame_seq + png + md5
+//! caller  ->  {"cmd":"key","code":..}         reply: tree + frame_seq + png + md5
+//! caller  ->  {"cmd":"type_text","text":".."} reply: tree + frame_seq + png + md5
 //! caller  ->  {"cmd":"close"}                 reply: ok, then exit
 //!
 //! `frame_seq` is the session's capture sequence (one per capture), and the
@@ -20,7 +22,12 @@
 //! reads have the session timeout; the child is spawned in its own process group
 //! and reaped on drop, so a wedged ART cannot leave orphans behind.
 //!
-//! The protocol has **no** `type` (text input), no `rotate` and no log command.
+//! `key`/`type_text` publish real `InputMessage` key events on the live
+//! `InputChannel` (W13): the guest's focused view receives them as `KeyEvent`s,
+//! exactly like a physical keyboard. `type_text` is ASCII-only (the US/QWERTY
+//! virtual-keyboard map) and a character with no key is a structured error.
+//!
+//! The protocol has no `rotate` and no log command.
 //! [`SessionCapabilities`] says so, and a scenario step that needs one fails with
 //! `UNSUPPORTED_BACKEND` naming it. Nothing here renders offline: this engine is
 //! [`Mode::Live`]; if the binary, the sysroot or a command is unavailable the
@@ -537,12 +544,10 @@ impl SessionBackend for ArtSession {
             tap: true,
             // Host-side: resolve the node's text in the tree, tap its centre.
             tap_text: true,
-            // The protocol has no text-input command yet.
-            type_text: false,
-            // Key events need window focus, which still needs the IME
-            // `EditorInfo` parcel codec (I2 §5). Delivery-only is not a
-            // capability, so this is reported missing rather than attempted.
-            key: false,
+            // W13: real key events on the focused window; `type_text` is one
+            // key stroke per character (ASCII / US layout).
+            type_text: true,
+            key: true,
             // The real launch session has no `reset` command; the scenario taps
             // the app's own Reset control instead.
             reset: false,
@@ -676,11 +681,9 @@ impl SessionBackend for ArtSession {
         )
     }
 
-    fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
-        Err(BackendError::unsupported(
-            "input.type_text",
-            "the ART session protocol has no text-input command yet (`type_text`)",
-        ))
+    fn type_text(&mut self, text: &str) -> Result<(), BackendError> {
+        let reply = self.command(serde_json::json!({"cmd":"type_text","text":text}))?;
+        self.absorb(&reply)
     }
 
     fn key(&mut self, key: &str) -> Result<(), BackendError> {
@@ -866,15 +869,15 @@ mod tests {
             screenshot: true,
             tap: true,
             tap_text: true,
-            type_text: false,
-            key: false,
+            type_text: true,
+            key: true,
             reset: false,
             close: true,
             logs: false,
             environment: false,
             crash_reports: false,
         };
-        assert_eq!(caps.missing(), vec!["type_text", "key", "reset", "logs", "environment", "crash_reports"]);
+        assert_eq!(caps.missing(), vec!["reset", "logs", "environment", "crash_reports"]);
     }
 
     #[test]

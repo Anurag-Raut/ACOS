@@ -1295,6 +1295,35 @@ impl InputPublisher {
         Ok(seq)
     }
 
+    /// A key press (`DOWN` + `UP`) carrying an explicit meta state and device
+    /// id. Used by typed text: the guest's `KeyEvent.getUnicodeChar()` resolves
+    /// the character through `KeyCharacterMap.load(deviceId)`, so a virtual
+    /// keyboard (`deviceId = -1`) is the right source for injected text.
+    pub fn key_stroke(
+        &mut self,
+        key_code: i32,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<Gesture> {
+        let down_time = monotonic_nanos();
+        let mut down = KeyEvent::new(
+            self.alloc_event_id(),
+            KEY_ACTION_DOWN,
+            key_code,
+            down_time,
+            down_time,
+        );
+        down.meta_state = meta_state;
+        down.device_id = device_id;
+        let mut up = down;
+        up.event_id = self.alloc_event_id();
+        up.action = KEY_ACTION_UP;
+        up.event_time = down_time + DEFAULT_TAP_HOLD_NANOS;
+        Ok(Gesture {
+            dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
+        })
+    }
+
     /// Press several key codes in order (each a `DOWN`+`UP` pair).
     pub fn key_sequence(&mut self, key_codes: &[i32]) -> Result<Vec<Dispatch>> {
         let mut out = Vec::with_capacity(key_codes.len() * 2);

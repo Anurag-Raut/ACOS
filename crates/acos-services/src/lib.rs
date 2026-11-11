@@ -52,6 +52,7 @@ pub mod error;
 pub mod exception;
 pub mod host;
 pub mod ime;
+pub mod ime_wire;
 pub mod input;
 pub mod input_channel;
 pub mod misc;

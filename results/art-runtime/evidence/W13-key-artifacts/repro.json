@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/counter.apk",
+  "apk_sha256": "a0254db0b54d1960c7dcdb273041e09de644c356a436ba139c4d8c37766bd3aa",
+  "scenario_path": "results/art-runtime/evidence/W13-key.yaml",
+  "scenario_sha256": "5afc4b5a6d8ad9d4ea149819807172966b518a62cbd5adaff18f8000658a527b",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

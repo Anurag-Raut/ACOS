@@ -122,19 +122,16 @@ impl InputDispatch {
         Self::default()
     }
 
-    /// Create a pair for `token`, publish `TOUCH_MODE(true)` (the state the
-    /// real dispatcher sends before the first touch), and keep the server end.
-    /// The client end is written into the add reply by
-    /// [`InputDispatch::write_and_forget`].
+    /// Create a pair for `token`, publish `TOUCH_MODE(true)` and
+    /// `FOCUS(true)` (the state the real dispatcher sends to a newly focused
+    /// window), and keep the server end. The client end is written into the add
+    /// reply by [`InputDispatch::write_and_forget`].
     ///
-    /// `FOCUS` is deliberately **not** published by default: the framework's
-    /// `handleWindowFocusChanged` calls
-    /// `IInputMethodManager.startInputOrWindowGainedFocus` with an `EditorInfo`
-    /// argument that this host's generic parcel codec cannot decode yet
-    /// (`no parcelable codec for android.view.inputmethod.EditorInfo`), which
-    /// throws on the guest's main looper. That is an adjacent IME wall, not an
-    /// input-channel one; [`InputDispatch::publish_focus`] is the real API and
-    /// `ACOS_INPUT_FOCUS=1` opts in (for the day the IME codec lands).
+    /// W13: `FOCUS` is now delivered by default. The image's focus path runs
+    /// `IInputMethodManager.startInputOrWindowGainedFocus`, whose `EditorInfo`
+    /// request and `InputBindResult` reply are marshalled by
+    /// [`crate::ime_wire`], so focus no longer kills the guest's main looper.
+    /// Setting `ACOS_INPUT_NO_FOCUS=1` suppresses it for diagnostics only.
     pub fn register_window(&mut self, token: BinderId, name: &str) -> Result<()> {
         self.registry.register(token, name)?;
         self.tokens.insert(token.0);
@@ -148,7 +145,7 @@ impl InputDispatch {
             kind: "touch_mode",
             detail: "inTouchMode=true".into(),
         });
-        if std::env::var_os("ACOS_INPUT_FOCUS").is_some() {
+        if std::env::var_os("ACOS_INPUT_NO_FOCUS").is_none() {
             self.publish_focus(token, true)?;
         }
         Ok(())
@@ -323,6 +320,42 @@ impl InputDispatch {
             });
         }
         Ok(gesture)
+    }
+
+    /// Publish `text` as one key stroke per character on `token`'s channel.
+    ///
+    /// Every character is encoded **before** anything is published, so a text
+    /// the US key map cannot express fails without a half-typed field.
+    pub fn inject_text(&mut self, token: BinderId, text: &str) -> Result<Gesture> {
+        let strokes = text_strokes(text)?;
+        let Some(publisher) = self.registry.publisher_mut(token) else {
+            let message = format!("inject_text: no input channel for token {:#x}", token.0);
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let mut dispatches = Vec::with_capacity(strokes.len() * 2);
+        for (key_code, meta_state) in strokes {
+            match publisher.key_stroke(key_code, meta_state, VIRTUAL_KEYBOARD_DEVICE_ID) {
+                Ok(gesture) => dispatches.extend(gesture.dispatches),
+                Err(e) => {
+                    self.events.push(InputEvent::Error {
+                        token,
+                        message: format!("inject_text: {e}"),
+                    });
+                    return Err(e);
+                }
+            }
+            self.events.push(InputEvent::Published {
+                token,
+                seq: dispatches[dispatches.len() - 2].seq,
+                kind: "key",
+                detail: format!("text keyCode={key_code} meta={meta_state}"),
+            });
+        }
+        Ok(Gesture { dispatches })
     }
 
     /// Read every reply currently queued on `token` and record it. `EAGAIN`
@@ -512,6 +545,21 @@ impl InputHost {
         self.collect(&token, &gesture, ack_wait)
     }
 
+    /// Publish `text` as a real key stroke per character on the newest live
+    /// window and collect every `FINISHED` reply.
+    ///
+    /// This is the `type_text` session API. It is a **keyboard** path: the
+    /// guest resolves each character through its `KeyCharacterMap`, exactly as
+    /// for a physical keyboard. It is not an IME `commitText` (ACOS runs a null
+    /// IME; see `crate::ime`).
+    pub fn type_text(&self, text: &str, ack_wait: Duration) -> Result<InjectedGesture> {
+        let token = self
+            .newest_token()
+            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
+        let gesture = lock(&self.state).inject_text(token, text)?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
     fn collect(
         &self,
         token: &BinderId,
@@ -568,6 +616,76 @@ fn parse_injection() -> Option<Injection> {
         eprintln!("ACOSI2 ignoring malformed ACOS_INPUT_KEY={code:?}");
     }
     None
+}
+
+/// `KeyEvent.META_SHIFT_ON` (the framework value on the image).
+pub const META_SHIFT_ON: i32 = 1;
+/// `KeyCharacterMap.VIRTUAL_KEYBOARD`: the device a host-injected text key
+/// names so the guest resolves the character through its virtual keyboard map.
+pub const VIRTUAL_KEYBOARD_DEVICE_ID: i32 = -1;
+
+/// Map printable ASCII text to Android key strokes (`keyCode`, `metaState`) in
+/// the **US/QWERTY** layout of the image's virtual keyboard.
+///
+/// This is only the host-side encoding of a character into the key that would
+/// produce it on a US keyboard. The guest still resolves the character through
+/// its own `KeyCharacterMap` (`KeyEvent.getUnicodeChar`), so this is the same
+/// path a physical keyboard uses, not an `InputConnection` shortcut.
+///
+/// A character with no US key is a structured error naming the character; no
+/// event is published for a text that cannot be fully encoded.
+pub fn text_strokes(text: &str) -> std::result::Result<Vec<(i32, i32)>, ChannelError> {
+    let mut out = Vec::with_capacity(text.chars().count());
+    for ch in text.chars() {
+        let (code, shift) = match ch {
+            'a'..='z' => (29 + (ch as i32 - 'a' as i32), false),
+            'A'..='Z' => (29 + (ch as i32 - 'A' as i32), true),
+            '0'..='9' => (7 + (ch as i32 - '0' as i32), false),
+            ' ' => (62, false),
+            '\n' => (66, false),
+            '\t' => (61, false),
+            '-' => (69, false),
+            '_' => (69, true),
+            '=' => (70, false),
+            '+' => (70, true),
+            '[' => (71, false),
+            '{' => (71, true),
+            ']' => (72, false),
+            '}' => (72, true),
+            '\\' => (73, false),
+            '|' => (73, true),
+            ';' => (74, false),
+            ':' => (74, true),
+            '\'' => (75, false),
+            '"' => (75, true),
+            ',' => (55, false),
+            '<' => (55, true),
+            '.' => (56, false),
+            '>' => (56, true),
+            '/' => (76, false),
+            '?' => (76, true),
+            '`' => (68, false),
+            '~' => (68, true),
+            '!' => (8, true),
+            '@' => (9, true),
+            '#' => (10, true),
+            '$' => (11, true),
+            '%' => (12, true),
+            '^' => (13, true),
+            '&' => (14, true),
+            '*' => (15, true),
+            '(' => (16, true),
+            ')' => (7, true),
+            other => {
+                return Err(ChannelError::Io(format!(
+                    "no US key produces character {other:?} (U+{:04X}); text input is ASCII-only",
+                    other as u32
+                )))
+            }
+        };
+        out.push((code, if shift { META_SHIFT_ON } else { 0 }));
+    }
+    Ok(out)
 }
 
 fn injector_loop(

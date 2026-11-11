@@ -1449,7 +1449,11 @@ fn interactive_serve(
                     evidence.push(reply);
                 }
             },
-            "tap" | "key" => {
+            "tap" | "key" | "type_text" => {
+                let text_arg = request
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
                 let (x, y, key_code) = if cmd == "tap" {
                     let x = request.get("x").and_then(|v| v.as_i64());
                     let y = request.get("y").and_then(|v| v.as_i64());
@@ -1459,6 +1463,19 @@ fn interactive_serve(
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
                                 "error": "tap needs integer x and y",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    }
+                } else if cmd == "type_text" {
+                    match text_arg {
+                        Some(_) => (0.0, 0.0, None),
+                        None => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                                "error": "type_text needs a string text",
                             });
                             protocol_write(&reply);
                             evidence.push(reply);
@@ -1484,6 +1501,9 @@ fn interactive_serve(
                 let g0 = latest_generation(live);
                 let injected = match (cmd, key_code) {
                     ("tap", _) => live.input.tap(x, y, ack_wait),
+                    ("type_text", _) => live
+                        .input
+                        .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
                     (_, Some(code)) => live.input.key(code, ack_wait),
                     _ => unreachable!(),
                 };

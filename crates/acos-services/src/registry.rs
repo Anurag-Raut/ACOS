@@ -377,14 +377,16 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     // decoded transactions routable instead of silently missing.
     host.register_aux("com.android.internal.inputmethod.IInputMethodSession");
     host.register_aux("com.android.internal.inputmethod.IImeTracker");
+    // W13: the focus path's `startInputOrWindowGainedFocus` carries a real
+    // `EditorInfo` and returns a real `InputBindResult`, neither of which the
+    // generic `Value` codec can express. Register the manager as a dynamic
+    // node so `ServiceHost` routes it to `raw_transact`; every other method
+    // delegates to `ImeService`'s generic layout (see `ime_wire.rs`).
     let ime_manager = Arc::clone(&ime);
-    host.register(
+    host.register_dynamic_named(
         "input_method",
         "com.android.internal.view.IInputMethodManager",
-        move |_w| {
-            Box::new(crate::ime::ImeService::new(Arc::clone(&ime_manager)))
-                as Box<dyn ServiceObject>
-        },
+        Box::new(crate::ime_wire::ImeWireService::new(ime_manager)),
     );
     let ime_session = Arc::clone(&ime);
     host.register(

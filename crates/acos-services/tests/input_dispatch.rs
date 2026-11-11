@@ -43,7 +43,7 @@ fn next(consumer: &mut LoopbackConsumer) -> InputMessage {
 }
 
 #[test]
-fn register_publishes_touch_mode_and_focus_is_the_real_api() {
+fn register_publishes_touch_mode_and_focus_is_delivered_by_default() {
     let (mut d, mut guest) = registered_dispatch();
     match next(&mut guest) {
         InputMessage::TouchMode {
@@ -52,23 +52,32 @@ fn register_publishes_touch_mode_and_focus_is_the_real_api() {
         } => {}
         other => panic!("first message is TOUCH_MODE(true), got {other:?}"),
     }
-    // FOCUS is opt-in (the IME focus callback is an adjacent wall), but when
-    // published it is the image body ViewRootImpl's onFocusEvent consumes.
-    let seq = d.publish_focus(TOKEN, true).expect("focus");
+    // W13: focus is part of registration now. The IME focus reply
+    // (`startInputOrWindowGainedFocus`) is answered by `ime_wire`, so the
+    // guest's main looper survives the framework's stock focus path.
+    match next(&mut guest) {
+        InputMessage::Focus {
+            has_focus: true, ..
+        } => {}
+        other => panic!("registration publishes FOCUS(true), got {other:?}"),
+    }
+    // The explicit API is still the same image body, e.g. for a lost focus.
+    let seq = d.publish_focus(TOKEN, false).expect("focus");
     match next(&mut guest) {
         InputMessage::Focus {
             seq: got,
-            has_focus: true,
+            has_focus: false,
             ..
         } => assert_eq!(got, seq),
-        other => panic!("expected FOCUS(true), got {other:?}"),
+        other => panic!("expected FOCUS(false), got {other:?}"),
     }
 }
 
 #[test]
 fn inject_tap_publishes_down_then_up_and_records_the_acks_out_of_order() {
     let (mut d, mut guest) = registered_dispatch();
-    // Drain the TOUCH_MODE state message.
+    // Drain the registration state messages: TOUCH_MODE then FOCUS(true).
+    let _ = next(&mut guest);
     let _ = next(&mut guest);
 
     let gesture = d.inject_tap(TOKEN, 120.5, 340.25).expect("tap");
@@ -128,6 +137,7 @@ fn inject_tap_publishes_down_then_up_and_records_the_acks_out_of_order() {
 fn inject_key_publishes_the_key_layout() {
     let (mut d, mut guest) = registered_dispatch();
     let _ = next(&mut guest);
+    let _ = next(&mut guest);
     let g = d.inject_key(TOKEN, KEYCODE_ENTER).expect("key");
     match next(&mut guest) {
         InputMessage::Key { seq, event } => {
@@ -146,6 +156,7 @@ fn inject_key_publishes_the_key_layout() {
 #[test]
 fn a_wrong_token_is_a_structured_error_and_publishes_nothing() {
     let (mut d, mut guest) = registered_dispatch();
+    let _ = next(&mut guest);
     let _ = next(&mut guest);
     let err = d.inject_tap(BinderId(0xdead_beef), 1.0, 2.0).unwrap_err();
     assert!(matches!(err, ChannelError::Io(_)), "got {err:?}");
@@ -181,6 +192,7 @@ fn remove_closes_the_guest_end() {
     d.register_window(TOKEN, "removed").expect("register");
     let fd = d.duplicate_client_fd(TOKEN).expect("client fd");
     let mut guest = LoopbackConsumer::new(fd);
+    let _ = next(&mut guest);
     let _ = next(&mut guest);
     assert!(d.remove(TOKEN));
     assert!(!d.is_registered(TOKEN));
@@ -258,4 +270,79 @@ fn add_to_display_writes_the_producer_registry_fd_which_carries_focus() {
         } => {}
         other => panic!("add reply fd did not carry TOUCH_MODE(true): {other:?}"),
     }
+}
+
+#[test]
+fn text_is_encoded_as_the_us_keys_the_guest_will_resolve() {
+    use acos_services::window_session::input_dispatch::{text_strokes, META_SHIFT_ON};
+    assert_eq!(
+        text_strokes("aA0) z").expect("ascii"),
+        vec![
+            (29, 0),
+            (29, META_SHIFT_ON),
+            (7, 0),
+            (7, META_SHIFT_ON),
+            (62, 0),
+            (54, 0),
+        ]
+    );
+    assert_eq!(text_strokes("\n\t\\\"?/").expect("ascii"), vec![
+        (66, 0),
+        (61, 0),
+        (73, 0),
+        (75, META_SHIFT_ON),
+        (76, META_SHIFT_ON),
+        (76, 0),
+    ]);
+    let err = text_strokes("é").expect_err("non-ASCII has no US key");
+    assert!(format!("{err}").contains("ASCII-only"), "got {err}");
+}
+
+#[test]
+fn inject_text_publishes_one_key_stroke_per_character_on_the_virtual_keyboard() {
+    let (mut d, mut guest) = registered_dispatch();
+    let _ = next(&mut guest); // TOUCH_MODE
+    let _ = next(&mut guest); // FOCUS(true)
+    let gesture = d.inject_text(TOKEN, "Hi").expect("text");
+    assert_eq!(gesture.dispatches.len(), 4, "two keys, down+up each");
+    for (index, (code, meta)) in [(36, 1), (37, 0)].into_iter().enumerate() {
+        for action in [KEY_ACTION_DOWN, KEY_ACTION_UP] {
+            match next(&mut guest) {
+                InputMessage::Key { seq, event } => {
+                    assert_eq!(seq, gesture.dispatches[index * 2 + usize::from(action == KEY_ACTION_UP)].seq);
+                    assert_eq!(event.action, action);
+                    assert_eq!(event.key_code, code);
+                    assert_eq!(event.meta_state, meta);
+                    assert_eq!(
+                        event.device_id,
+                        acos_services::window_session::input_dispatch::VIRTUAL_KEYBOARD_DEVICE_ID,
+                        "text resolves through KeyCharacterMap.load(VIRTUAL_KEYBOARD)"
+                    );
+                }
+                other => panic!("expected KEY, got {other:?}"),
+            }
+        }
+    }
+    for dispatch in &gesture.dispatches {
+        guest.send_finished(dispatch.seq, true).expect("ack");
+    }
+    let responses = d.drain_acks(TOKEN).expect("acks");
+    assert_eq!(responses.len(), 4);
+    assert!(responses.iter().all(|r| matches!(
+        r,
+        ConsumerResponse::Finished(ack) if ack.handled
+    )));
+}
+
+#[test]
+fn a_character_with_no_key_fails_before_anything_is_published() {
+    let (mut d, mut guest) = registered_dispatch();
+    let _ = next(&mut guest); // TOUCH_MODE
+    let _ = next(&mut guest); // FOCUS(true)
+    let err = d.inject_text(TOKEN, "ok\u{1F600}").expect_err("emoji");
+    assert!(format!("{err}").contains("ASCII-only"), "got {err}");
+    assert!(
+        guest.recv().expect("recv").is_none(),
+        "a partially-encodable text must publish nothing at all"
+    );
 }
