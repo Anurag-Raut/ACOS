@@ -1,0 +1,22 @@
+{
+  "request_id": "req_25c3b_18e6d8fbc11887e6",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "input"
+  ],
+  "result": {
+    "accepted": true,
+    "action": "tap",
+    "input_ack_seq": 6,
+    "session_id": "s_cli",
+    "state_changed": false,
+    "text_path": null
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}
