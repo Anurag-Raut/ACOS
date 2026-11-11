@@ -1,0 +1,84 @@
+E4H png /home/Qui/Projects/acos/.cache/art-exp/data/out/e4h-view.png  content 1080x2062
+  art-oracle  SSIM=0.99196  MAE=0.432/255  identical_pixels=98.22%  (ref fixtures/reference/counter/art-api34-x86_64/screenshot_initial.png)
+  acos-vm     SSIM=0.92209  MAE=16.250/255  identical_pixels=90.57%  (ref results/parity/w193a/counter.png)
+E4H png /home/Qui/Projects/acos/.cache/art-exp/data/out/e4h-view-nocaps.png  content 1080x2062
+  art-oracle  SSIM=0.99685  MAE=0.114/255  identical_pixels=98.50%  (ref fixtures/reference/counter/art-api34-x86_64/screenshot_initial.png)
+  acos-vm     SSIM=0.92299  MAE=16.161/255  identical_pixels=90.70%  (ref results/parity/w193a/counter.png)
+
+tree e4h-tree.txt:
+  -- vs art-oracle: 3/8 nodes exact
+     class:                                           ref=[0, 0, 0, 0]           ours=None                   delta=None
+     class:android.widget.FrameLayout                 ref=[0, 0, 1080, 2400]     ours=[0, 0, 1080, 2062]     delta=[0, 0, 0, -338]
+     text:android.widget.TextView|Counter             ref=[42, 166, 231, 237]    ours=None                   delta=None
+     id:id/content                                    ref=[0, 275, 1080, 2337]   ours=None                   delta=None
+     id:id/inc                                        ref=[42, 93, 273, 219]     ours=[42, 93, 309, 219]     delta=[0, 0, 36, 0]
+  -- vs acos-vm: 3/9 nodes exact
+     class:com.android.internal.policy.DecorView      ref=[0, 128, 1080, 2337]   ours=None                   delta=None
+     id:id/content                                    ref=[0, 275, 1080, 2337]   ours=None                   delta=None
+     id:id/inc                                        ref=[42, 93, 311, 219]     ours=[42, 93, 309, 219]     delta=[0, 0, -2, 0]
+     text:android.widget.TextView|Counter             ref=[42, 166, 231, 237]    ours=None                   delta=None
+     class:android.widget.ActionMenuView              ref=[1080, 128, 1080, 275] ours=None                   delta=None
+     id:id/action_context_bar                         ref=[0, 128, 0, 128]       ours=None                   delta=None
+
+tree e4h-tree-nocaps.txt:
+  -- vs art-oracle: 4/8 nodes exact
+     class:                                           ref=[0, 0, 0, 0]           ours=None                   delta=None
+     class:android.widget.FrameLayout                 ref=[0, 0, 1080, 2400]     ours=[0, 0, 1080, 2062]     delta=[0, 0, 0, -338]
+     text:android.widget.TextView|Counter             ref=[42, 166, 231, 237]    ours=None                   delta=None
+     id:id/content                                    ref=[0, 275, 1080, 2337]   ours=None                   delta=None
+  -- vs acos-vm: 3/9 nodes exact
+     class:com.android.internal.policy.DecorView      ref=[0, 128, 1080, 2337]   ours=None                   delta=None
+     id:id/content                                    ref=[0, 275, 1080, 2337]   ours=None                   delta=None
+     id:id/inc                                        ref=[42, 93, 311, 219]     ours=[42, 93, 273, 219]     delta=[0, 0, -38, 0]
+     text:android.widget.TextView|Counter             ref=[42, 166, 231, 237]    ours=None                   delta=None
+     class:android.widget.ActionMenuView              ref=[1080, 128, 1080, 275] ours=None                   delta=None
+     id:id/action_context_bar                         ref=[0, 128, 0, 128]       ours=None                   delta=None
+
+JSON {
+ "e4h-view.png": {
+  "art-oracle": {
+   "ssim": 0.99196,
+   "mae": 0.432,
+   "pixel_exact": 0.98222
+  },
+  "acos-vm": {
+   "ssim": 0.92209,
+   "mae": 16.25,
+   "pixel_exact": 0.90574
+  }
+ },
+ "e4h-view-nocaps.png": {
+  "art-oracle": {
+   "ssim": 0.99685,
+   "mae": 0.114,
+   "pixel_exact": 0.98499
+  },
+  "acos-vm": {
+   "ssim": 0.92299,
+   "mae": 16.161,
+   "pixel_exact": 0.90698
+  }
+ },
+ "tree": {
+  "e4h-tree.txt": {
+   "art-oracle": {
+    "exact": 3,
+    "total": 8
+   },
+   "acos-vm": {
+    "exact": 3,
+    "total": 9
+   }
+  },
+  "e4h-tree-nocaps.txt": {
+   "art-oracle": {
+    "exact": 4,
+    "total": 8
+   },
+   "acos-vm": {
+    "exact": 3,
+    "total": 9
+   }
+  }
+ }
+}
