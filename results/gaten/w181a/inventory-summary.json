@@ -1,0 +1,881 @@
+{
+ "abi": "x86_64",
+ "totals": {
+  "libraries": 23,
+  "imports": 1458,
+  "provided": 1374,
+  "partial": 56,
+  "missing": 28,
+  "defined_in_corpus": 45564
+ },
+ "unresolved": [
+  {
+   "rank": 1,
+   "provision": "missing",
+   "symbol": "__gcov_dump",
+   "sites": 2,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 2,
+   "provision": "missing",
+   "symbol": "__gcov_flush",
+   "sites": 2,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 3,
+   "provision": "missing",
+   "symbol": "MallocExtension_Internal_MarkThreadBusy",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 4,
+   "provision": "missing",
+   "symbol": "MallocExtension_Internal_MarkThreadIdle",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 5,
+   "provision": "missing",
+   "symbol": "MallocExtension_Internal_ProcessBackgroundActions",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 6,
+   "provision": "missing",
+   "symbol": "_ZN4absl19leak_check_internal12DoIgnoreLeakEPKv",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 7,
+   "provision": "missing",
+   "symbol": "_ZN4absl19leak_check_internal16EnableLeakChecksEPi",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 8,
+   "provision": "missing",
+   "symbol": "_ZN4absl19leak_check_internal17DisableLeakChecksEPPi",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 9,
+   "provision": "missing",
+   "symbol": "_ZN4base33HasDuplicateGlobalSymbolsInternalEv",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 10,
+   "provision": "missing",
+   "symbol": "_ZN6tflite16UseGemmlowpOnX86Ev",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 11,
+   "provision": "missing",
+   "symbol": "_ZTH15ThreadedBufSize",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 12,
+   "provision": "missing",
+   "symbol": "__pthread_cleanup_pop",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 13,
+   "provision": "missing",
+   "symbol": "__pthread_cleanup_push",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 14,
+   "provision": "missing",
+   "symbol": "stats_census_experimental_export_root_scoped_data_signal_safe",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 15,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_brkitr",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 16,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_brkitr_char",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 17,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_collation",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 18,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_conversion",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 19,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_core",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 20,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_custom",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 21,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_likely",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 22,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_locale",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 23,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_n4m",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 24,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_nfkccf",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 25,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_other",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 26,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_translit",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 27,
+   "provision": "missing",
+   "symbol": "uprv_getICUData_tz",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 28,
+   "provision": "missing",
+   "symbol": "x_cgo_init",
+   "sites": 1,
+   "note": null,
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 29,
+   "provision": "partial",
+   "symbol": "dl_iterate_phdr",
+   "sites": 19,
+   "note": "guest objects only, no host objects",
+   "libraries": [
+    "libappmodules.so",
+    "libc++_shared.so",
+    "libfbjni.so",
+    "libgesturehandler.so",
+    "libhermestooling.so",
+    "libhermesvm.so",
+    "libjsi.so",
+    "libmlkit_google_ocr_pipeline.so",
+    "libnative-imagetranscoder.so",
+    "libonnxruntime.so",
+    "libreact_codegen_RNKC.so",
+    "libreact_codegen_rngesturehandler_codegen.so",
+    "libreact_codegen_rnscreens.so",
+    "libreact_codegen_rnsvg.so",
+    "libreact_codegen_safeareacontext.so",
+    "libreactnative.so",
+    "libreanimated.so",
+    "librnscreens.so",
+    "libworklets.so"
+   ]
+  },
+  {
+   "rank": 30,
+   "provision": "partial",
+   "symbol": "__cxa_thread_atexit_impl",
+   "sites": 3,
+   "note": "runs on host thread exit only",
+   "libraries": [
+    "libc++_shared.so",
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 31,
+   "provision": "partial",
+   "symbol": "dlclose",
+   "sites": 3,
+   "note": "unloads on last handle only",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so",
+    "libonnxruntime4j_jni.so"
+   ]
+  },
+  {
+   "rank": 32,
+   "provision": "partial",
+   "symbol": "dladdr",
+   "sites": 2,
+   "note": "reports the object but not the nearest symbol",
+   "libraries": [
+    "libfbjni.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 33,
+   "provision": "partial",
+   "symbol": "dlerror",
+   "sites": 2,
+   "note": "always NULL (no error text)",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 34,
+   "provision": "partial",
+   "symbol": "dlopen",
+   "sites": 2,
+   "note": "search-path confined, no RTLD_GLOBAL/LOCAL semantics",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 35,
+   "provision": "partial",
+   "symbol": "dlsym",
+   "sites": 2,
+   "note": "RTLD_NEXT unsupported",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so",
+    "libonnxruntime.so"
+   ]
+  },
+  {
+   "rank": 36,
+   "provision": "partial",
+   "symbol": "eglBindAPI",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 37,
+   "provision": "partial",
+   "symbol": "eglChooseConfig",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 38,
+   "provision": "partial",
+   "symbol": "eglCreateContext",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 39,
+   "provision": "partial",
+   "symbol": "eglCreatePbufferSurface",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 40,
+   "provision": "partial",
+   "symbol": "eglDestroyContext",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 41,
+   "provision": "partial",
+   "symbol": "eglDestroySurface",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 42,
+   "provision": "partial",
+   "symbol": "eglGetCurrentContext",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 43,
+   "provision": "partial",
+   "symbol": "eglGetCurrentDisplay",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 44,
+   "provision": "partial",
+   "symbol": "eglGetCurrentSurface",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 45,
+   "provision": "partial",
+   "symbol": "eglGetDisplay",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 46,
+   "provision": "partial",
+   "symbol": "eglGetError",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 47,
+   "provision": "partial",
+   "symbol": "eglGetProcAddress",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 48,
+   "provision": "partial",
+   "symbol": "eglInitialize",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 49,
+   "provision": "partial",
+   "symbol": "eglMakeCurrent",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 50,
+   "provision": "partial",
+   "symbol": "eglQueryString",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 51,
+   "provision": "partial",
+   "symbol": "eglReleaseThread",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 52,
+   "provision": "partial",
+   "symbol": "eglTerminate",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 53,
+   "provision": "partial",
+   "symbol": "glBindFramebuffer",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 54,
+   "provision": "partial",
+   "symbol": "glBindTexture",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 55,
+   "provision": "partial",
+   "symbol": "glClear",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 56,
+   "provision": "partial",
+   "symbol": "glClientWaitSync",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 57,
+   "provision": "partial",
+   "symbol": "glDeleteFramebuffers",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 58,
+   "provision": "partial",
+   "symbol": "glDeleteQueries",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 59,
+   "provision": "partial",
+   "symbol": "glDeleteSync",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 60,
+   "provision": "partial",
+   "symbol": "glDeleteTextures",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 61,
+   "provision": "partial",
+   "symbol": "glDrawBuffers",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 62,
+   "provision": "partial",
+   "symbol": "glFenceSync",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 63,
+   "provision": "partial",
+   "symbol": "glFinish",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 64,
+   "provision": "partial",
+   "symbol": "glFlush",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 65,
+   "provision": "partial",
+   "symbol": "glFramebufferTexture2D",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 66,
+   "provision": "partial",
+   "symbol": "glGenFramebuffers",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 67,
+   "provision": "partial",
+   "symbol": "glGenQueries",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 68,
+   "provision": "partial",
+   "symbol": "glGenTextures",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 69,
+   "provision": "partial",
+   "symbol": "glGetError",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 70,
+   "provision": "partial",
+   "symbol": "glGetFramebufferAttachmentParameteriv",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 71,
+   "provision": "partial",
+   "symbol": "glGetIntegeri_v",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 72,
+   "provision": "partial",
+   "symbol": "glGetIntegerv",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 73,
+   "provision": "partial",
+   "symbol": "glGetQueryObjectuiv",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 74,
+   "provision": "partial",
+   "symbol": "glGetString",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 75,
+   "provision": "partial",
+   "symbol": "glGetStringi",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 76,
+   "provision": "partial",
+   "symbol": "glPixelStorei",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 77,
+   "provision": "partial",
+   "symbol": "glReadPixels",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 78,
+   "provision": "partial",
+   "symbol": "glTexImage2D",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 79,
+   "provision": "partial",
+   "symbol": "glTexParameteri",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 80,
+   "provision": "partial",
+   "symbol": "glTexStorage2D",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 81,
+   "provision": "partial",
+   "symbol": "glUseProgram",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 82,
+   "provision": "partial",
+   "symbol": "glViewport",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 83,
+   "provision": "partial",
+   "symbol": "glWaitSync",
+   "sites": 1,
+   "note": "resolves to a reported UNSUPPORTED trap; no GL implementation",
+   "libraries": [
+    "libmlkit_google_ocr_pipeline.so"
+   ]
+  },
+  {
+   "rank": 84,
+   "provision": "partial",
+   "symbol": "pthread_getattr_np",
+   "sites": 1,
+   "note": "reports the host stack, not the guest one",
+   "libraries": [
+    "libhermesvm.so"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+wrote results/gaten/w181a/inventory.json (23 libraries)
+
+23 libraries, 1458 distinct imports: 1374 provided, 56 partial, 28 missing (45564 defined in corpus)
+
+rank  provision libs   symbol                                   note
+1     missing   2      __gcov_dump                                         
+2     missing   2      __gcov_flush                                         
+3     missing   1      MallocExtension_Internal_MarkThreadBusy                                         
+4     missing   1      MallocExtension_Internal_MarkThreadIdle                                         
+5     missing   1      MallocExtension_Internal_ProcessBackgroundActions                                         
+6     missing   1      _ZN4absl19leak_check_internal12DoIgnoreLeakEPKv                                         
+7     missing   1      _ZN4absl19leak_check_internal16EnableLeakChecksEPi                                         
+8     missing   1      _ZN4absl19leak_check_internal17DisableLeakChecksEPPi                                         
+9     missing   1      _ZN4base33HasDuplicateGlobalSymbolsInternalEv                                         
+10    missing   1      _ZN6tflite16UseGemmlowpOnX86Ev                                         
+11    missing   1      _ZTH15ThreadedBufSize                                         
+12    missing   1      __pthread_cleanup_pop@LIBC                                    
+13    missing   1      __pthread_cleanup_push@LIBC                                    
+14    missing   1      stats_census_experimental_export_root_scoped_data_signal_safe                                         
+15    missing   1      uprv_getICUData_brkitr                                         
+16    missing   1      uprv_getICUData_brkitr_char                                         
+17    missing   1      uprv_getICUData_collation                                         
+18    missing   1      uprv_getICUData_conversion                                         
+19    missing   1      uprv_getICUData_core                                         
+20    missing   1      uprv_getICUData_custom                                         
+21    missing   1      uprv_getICUData_likely                                         
+22    missing   1      uprv_getICUData_locale                                         
+23    missing   1      uprv_getICUData_n4m                                         
+24    missing   1      uprv_getICUData_nfkccf                                         
+25    missing   1      uprv_getICUData_other                                         
+26    missing   1      uprv_getICUData_translit                                         
+27    missing   1      uprv_getICUData_tz                                         
+28    missing   1      x_cgo_init                                         
+29    partial   19     dl_iterate_phdr@LIBC                                    guest objects only, no host objects
+30    partial   3      __cxa_thread_atexit_impl                                         runs on host thread exit only
+(sites: 4430 import references across the corpus)

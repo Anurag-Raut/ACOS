@@ -1,0 +1,15 @@
+acos --confined-child: active=true
+[android-log 3] jni_lib_merge: Entering merged library JNI_OnLoad.
+
+[android-log 3] jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+[android-log 3] jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x7fafd407b6e0
+
+[android-log 3] jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x7fafd40a7b60
+
+[android-log 3] jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x7fafd40a9900
+
+[android-log 3] jni_lib_merge: About to register 3 actual methods.
+
+ACOS guest assertion failed: LocalReferenceAllocator{}.verifyReference(ref) || GlobalReferenceAllocator{}.verifyReference(ref) at /root/.gradle/caches/9.3.1/transforms/f362d5fb1aad680e6e97ed17ca3529bd/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:424 (facebook::jni::alias_ref<_jclass *>::alias_ref(javaobject) [T = _jclass *])
+timeout: the monitored command dumped core

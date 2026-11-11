@@ -16,6 +16,7 @@
 
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -153,7 +154,21 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 });
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(50));
+                // Block until a connection arrives (or the idle-check interval
+                // elapses) instead of sleeping a fixed 50 ms. The old
+                // `thread::sleep(50ms)` made every new CLI connection wait up
+                // to a full poll interval before it was accepted, which showed
+                // up as a ~50 ms floor on every daemon round trip.
+                let mut pfd = libc::pollfd {
+                    fd: listener.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+                let rc = unsafe { libc::poll(&mut pfd, 1, 50) };
+                if rc < 0 && std::io::Error::last_os_error().kind() != ErrorKind::Interrupted {
+                    eprintln!("acos serve: poll: {}", std::io::Error::last_os_error());
+                    break;
+                }
             }
             Err(e) => {
                 eprintln!("acos serve: accept: {e}");

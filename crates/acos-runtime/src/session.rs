@@ -1131,6 +1131,33 @@ fn zlib_stored(data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Standard reflected CRC-32 (polynomial `0xedb8_8320`) lookup table.
+///
+/// The previous implementation walked all 8 bits of every byte, which is
+/// ~8 branchy iterations per input byte; over a 10.4 MB 1080x2400 frame that
+/// dominated screenshot latency. The table is the usual byte-at-a-time form
+/// and produces the identical CRC, so the emitted PNG is byte-for-byte the
+/// same.
+static CRC32_TABLE: std::sync::LazyLock<[u32; 256]> = std::sync::LazyLock::new(|| {
+    let mut table = [0u32; 256];
+    let mut i = 0usize;
+    while i < 256 {
+        let mut c = i as u32;
+        let mut k = 0;
+        while k < 8 {
+            c = if c & 1 != 0 {
+                0xedb8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
+            k += 1;
+        }
+        table[i] = c;
+        i += 1;
+    }
+    table
+});
+
 struct Crc32 {
     value: u32,
 }
@@ -1140,13 +1167,12 @@ impl Crc32 {
         Crc32 { value: 0xffff_ffff }
     }
     fn update(&mut self, data: &[u8]) {
+        let table = &*CRC32_TABLE;
+        let mut c = self.value;
         for &b in data {
-            self.value ^= u32::from(b);
-            for _ in 0..8 {
-                let mask = (self.value & 1).wrapping_neg();
-                self.value = (self.value >> 1) ^ (0xedb8_8320 & mask);
-            }
+            c = table[((c ^ u32::from(b)) & 0xff) as usize] ^ (c >> 8);
         }
+        self.value = c;
     }
     fn finish(&self) -> u32 {
         self.value ^ 0xffff_ffff
@@ -1164,10 +1190,23 @@ impl Adler32 {
     }
     fn update(&mut self, data: &[u8]) {
         const MOD: u32 = 65521;
-        for &byte in data {
-            self.a = (self.a + u32::from(byte)) % MOD;
-            self.b = (self.b + self.a) % MOD;
+        // Defer the modulo to the end of each 5552-byte block, the largest
+        // run that cannot overflow a u32 accumulator (zlib's NMAX). This is
+        // the same Adler-32 value with two modulos per block instead of two
+        // per byte.
+        const NMAX: usize = 5552;
+        let mut a = self.a;
+        let mut b = self.b;
+        for chunk in data.chunks(NMAX) {
+            for &byte in chunk {
+                a += u32::from(byte);
+                b += a;
+            }
+            a %= MOD;
+            b %= MOD;
         }
+        self.a = a;
+        self.b = b;
     }
     fn finish(&self) -> u32 {
         (self.b << 16) | self.a
@@ -1560,6 +1599,45 @@ fn peak_rss_bytes() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crc32_and_adler32_match_known_vectors() {
+        // Standard check values: CRC-32("123456789") = 0xCBF43926,
+        // Adler-32("Wikipedia") = 0x11E60398. Also prove the block-split
+        // update path agrees with a single update, since `Adler32` now defers
+        // the modulo per 5552-byte block.
+        let mut crc = Crc32::new();
+        crc.update(b"123456789");
+        assert_eq!(crc.finish(), 0xcbf4_3926);
+
+        let mut crc = Crc32::new();
+        for chunk in b"123456789".chunks(2) {
+            crc.update(chunk);
+        }
+        assert_eq!(crc.finish(), 0xcbf4_3926);
+
+        let mut adler = Adler32::new();
+        adler.update(b"Wikipedia");
+        assert_eq!(adler.finish(), 0x11e6_0398);
+
+        let mut adler = Adler32::new();
+        for chunk in b"Wikipedia".chunks(3) {
+            adler.update(chunk);
+        }
+        assert_eq!(adler.finish(), 0x11e6_0398);
+
+        // A payload larger than the 5552-byte block boundary must also match a
+        // reference accumulation (modular sum computed independently).
+        let data: Vec<u8> = (0..20_000u32).map(|i| (i % 251) as u8).collect();
+        let mut adler = Adler32::new();
+        adler.update(&data);
+        let (mut a, mut b) = (1u64, 0u64);
+        for &byte in &data {
+            a = (a + u64::from(byte)) % 65521;
+            b = (b + a) % 65521;
+        }
+        assert_eq!(adler.finish(), ((b << 16) | a) as u32);
+    }
 
     #[test]
     fn png_encoder_is_a_valid_png() {

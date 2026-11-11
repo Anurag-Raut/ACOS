@@ -1526,3 +1526,103 @@ ACOS_PROFILE_OUT=$PWD/results/tmp/w176a-profile.json \
 
 This writes `results/bench/v1-2026-11-11-071510.json`; the table above is
 §9.8.1.
+
+---
+
+### 9.9 Screenshot daemon latency + concurrent-launch memory (W183-A)
+
+The two §9.8 FAILs are re-examined with a **clean worktree of committed HEAD
+`4f5b3fd` plus only the W183-A patch** (no other wave's in-flight file). M5 is
+fixed; M9 is measured and its allocator levers are quantified and rejected.
+
+**Method.** `CARGO_TARGET_DIR=.cache/target-w183a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_BUILD_JOBS=2`, release build under
+`tools/guarded.sh`. M5 uses the exact `dm["screenshot"]` method of
+`tools/bench-v1.sh` §13: one daemon (`ACOS_NO_BOOT_CACHE=1`, private socket),
+`launch counter --keep`, then each sample is a **separate**
+`acos observe --screenshot <path> --session s_cli --json` process timed wall;
+n=25. The A/B ran in one host window: old = `.cache/target-w176a/release/acos`
+(the §9.8 binary, `fd1a887` + W172-A), new = W183-A. M9 uses the
+`concurrent_observe` method: N separate `acos observe --apk counter --tree`
+processes, per-PID peak PSS from `/proc/<pid>/smaps_rollup` (peak of 20 ms
+samples), p50.
+
+#### 9.9.1 M5 — fresh screenshot: 100.11 → 25.61 ms p50 (PASS)
+
+| M5, same method | p50 | min | max | n |
+|---|---:|---:|---:|---:|
+| §9.8 at HEAD (old binary, same window) | 100.11 ms | 98.17 | 123.58 | 25 |
+| **W183-A** | **25.61 ms** | 23.69 | 29.71 | 25 |
+| Legacy ACVM (§3) | 66.5 ms | — | — | — |
+| Ratio vs legacy | **0.385** | | | |
+| Verdict (D2) | **PASS** | | | |
+
+A bare daemon `observe` (no `--screenshot`) is p50 **1.81 ms** under W183-A vs
+**50.03 ms** under the old binary; this isolates the two independent costs:
+
+1. **~50 ms accept-poll floor.** `acos serve` used
+   `listener.set_nonblocking(true)` and `thread::sleep(50 ms)` on `WouldBlock`,
+   so every new CLI connection waited up to a full poll interval before it was
+   accepted. Replaced with `libc::poll(POLLIN, 50 ms)`, which wakes on the
+   connection; the idle-check cadence is unchanged. This floor is `319d51e`
+   and is *the whole* of §9.1's `50.08 ms` row.
+2. **~50 ms PNG encode.** The daemon screenshot path was only made real by
+   W159-A (`65856f2`, "daemon screenshot honoured"); §9.1 predates it and never
+   wrote the PNG. It encoded the 10.4 MB IDAT with a bit-by-bit `Crc32`
+   (8 branchy iterations/byte) and a per-byte-modulo `Adler32`. Both are now the
+   standard byte-at-a-time CRC-32 table and zlib's 5552-byte-batched Adler-32.
+   The emitted PNG is **byte-for-byte identical** (10 371 258 bytes, sha256
+   `4aa99c2b4320750fcd03eeb43641b62c202878bc2903aed430c8ecb4adf3926f`), so this
+   is a pure compute fix.
+
+The regression origin is therefore W159-A's daemon encode on top of the
+pre-existing `319d51e` accept sleep — **not** W167-A's repaint and not noise.
+The target (≤60 ms p50, ≥20 samples) is met: 25.61 ms p50, n=25.
+
+#### 9.9.2 M9 — concurrent per-session peak PSS (no change; levers quantified)
+
+No M9 code changed. Per-session peak PSS, separate processes:
+
+| N | old binary p50 | W183-A p50 | Pss_Anon / Pss_File (W183-A) | frames+trees |
+|---:|---:|---:|---|---|
+| 5 | 530.38 MiB | 529.90 MiB | 525.37 / 4.57 | 5/5 |
+| 20 | 527.16 MiB | 527.54 MiB | 525.37 / 2.24 | 20/20 |
+
+Allocator A/B at N=5 (W183-A), against the launch wall of the same path:
+
+| setting | peak PSS p50 | `observe --apk counter --tree` wall p50 |
+|---|---:|---:|
+| default | 529.90 MiB | 1035 ms |
+| `MALLOC_ARENA_MAX=1` | 522.59 MiB (−7.3) | 994 ms |
+| `MALLOC_ARENA_MAX=1 MALLOC_TRIM_THRESHOLD_=0` | **493.30 MiB (−36.6)** | **2324 ms (2.25×)** |
+
+`M_ARENA_MAX` saves only ~7 MiB (1.4 %); `M_TRIM_THRESHOLD=0` saves ~37 MiB
+but costs 2.25× launch wall, so **neither is landed**. An `ACOS_PROFILE=1`
+census of one launch (`observe --apk counter --tree`) reproduces W146-A: the
+largest anonymous mappings are 133.8 / 79.9 / 67.1 / 66.8 / 65.1 / 56.5 / 42.5
+/ 38.8 MiB and hold the named live buckets (`dex_raw` 66.2, `dex_parsed_tables`
+24.0, `vm_class_meta` 17.6, `vm_dex_handle_caches` 16.3, `dex_decoded_strings`
+16.2, `vm_heap_slots` 16.2 MiB). The peak is live bytes held in glibc arenas,
+not fragmentation or dead buffers: `malloc_trim` after boot/first frame cannot
+lower a recorded high-water mark; mmapping the 25.6 MB boot-cache file is
+blocked by `#![forbid(unsafe_code)]` and the crate's documented trust model;
+and the 66 MiB raw DEX is live shared data still needed for lazy method decode.
+No safe, meaningful reduction was found in this window; the structural fix
+remains the zygote-like template (`results/bench/MEMORY_PROFILE.md` §5).
+M9 stays **FAIL** (input-level independence is still not proven), unchanged.
+
+#### 9.9.3 Acceptance gates (clean worktree of `4f5b3fd` + W183-A only)
+
+| gate | result |
+|---|---|
+| `cargo test -p acos-runtime` (boot cache, snapshot, session encode + new CRC/Adler vectors) | **36 unit + all integration suites pass, 0 failed** |
+| `cargo test -p acos-cli` | all pass (serving/verify 2/2) **except** the pre-existing, fixture-gated `native_launch::wrong_abi_apk_is_rejected_before_any_execution`: the source emits `WRONG_ABI` while the test expects `UNSUPPORTED_ABI` for `rn-hello-arm64.apk`. This predates W183-A and touches no daemon/PNG path; it only runs when the gitignored `fixtures/build/apps/rn-hello-arm64.apk` exists (a fresh `git worktree add` does not copy it). |
+| `cargo test -p acos-mcp` (incl. `e2e`) | **pass** after the same fixture placement + `target/release/acos` link |
+| `cargo clippy -p acos-runtime -p acos-cli -p acos-mcp --all-targets --no-deps -- -D warnings` | **clean (exit 0)** |
+| `cargo check --workspace --all-targets` | **pass (exit 0)** |
+| `tools/diff-dexprogs.sh --corelib real` | **27/27 pass** |
+| `tools/diff-dexprogs.sh --corelib real --gc-stress` | **27/27 pass** |
+
+**Files:** `crates/acos-cli/src/serve.rs` (event-driven accept poll),
+`crates/acos-runtime/src/session.rs` (CRC-32 table, Adler-32 batching, a
+known-answer unit test). No other tracked file. The emitted PNG is unchanged.
