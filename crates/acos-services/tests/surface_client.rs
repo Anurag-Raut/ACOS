@@ -295,12 +295,11 @@ fn write_layer_state(
     data.write_float(0.0); // shadowRadius
     data.write_int32(0); // frameRateSelectionPriority
     data.write_float(60.0); // frameRate
+    // The image's frame-rate group is three bytes (no frameRateCategory,
+    // frameRateCategorySmoothSwitchOnly or frameRateSelectionStrategy).
     data.write_byte(0); // frameRateCompatibility
     data.write_byte(0); // changeFrameRateStrategy
     data.write_byte(0); // defaultFrameRateCompatibility
-    data.write_byte(0); // frameRateCategory
-    data.write_bool(false); // frameRateCategorySmoothSwitchOnly
-    data.write_byte(0); // frameRateSelectionStrategy
     data.write_uint32(0); // fixedTransformHint
     data.write_bool(false); // autoRefresh
     data.write_bool(false); // dimmingEnabled
@@ -323,12 +322,14 @@ fn write_layer_state(
         data.write_bool(false);
     }
     data.write_int32(1); // TrustedPresentationThresholds marker
-    data.write_int32(12); // AIDL size = 3 words
+    data.write_int32(16); // AIDL size counts itself: 4 + 12 payload bytes
     data.write_float(-1.0);
     data.write_float(-1.0);
     data.write_int32(0);
     data.write_int32(1); // TrustedPresentationListener marker
     data.write_strong_binder(BinderId(0));
+    // A hand-built (non-wire-form) parcel carries no stability record after the
+    // null binder; see the fixture helper for the imported wire form.
     data.write_int32(-1);
     data.write_float(1.0); // currentHdrSdrRatio
     data.write_float(1.0); // desiredHdrSdrRatio
@@ -706,4 +707,183 @@ fn an_image_shaped_window_info_decodes_to_the_last_byte() {
     assert_eq!(data.data_avail(), 0, "WindowInfo body was not consumed exactly");
     assert_eq!(decoded.transaction_id, 9);
     assert_eq!(decoded.composers[0].surface, Some(handle));
+}
+
+// ---------------------------------------------------------------------------
+// W9: the captured real image parcels (tests/fixtures)
+// ---------------------------------------------------------------------------
+
+/// The captured files include the 72-byte `writeInterfaceToken` prelude the peer
+/// consumes before the handler runs (`fixtures/README.md`).
+const IMAGE_TOKEN_PRELUDE: usize = 72;
+/// Body offset of the `BINDER_TYPE_FD` object in `blast_txn_1028.bin`.
+const IMAGE_FD_OBJECT_BODY: usize = 668;
+/// Body offset of `frameRate`'s field group in `blast_txn_1028.bin` (the three
+/// frame-rate bytes are at 452/456/460, `fixedTransformHint` at 464).
+const IMAGE_FRAME_RATE_GROUP_END: usize = 460;
+const FLAT_OBJECT_BYTES: usize = 24;
+
+/// Build a parcel from a captured image parcel, replacing the one
+/// `BINDER_TYPE_FD` object with a live memfd. A parcel's fd table is
+/// process-local (the capture's raw descriptor number cannot be re-opened), so
+/// that object's 24 bytes are the only ones allowed to differ; the helper
+/// asserts the rest of the data is byte-identical to the fixture.
+fn image_parcel(bytes: &[u8], fd_object_body_offset: Option<usize>, fd: &OwnedFd) -> Parcel {
+    let mut parcel = Parcel::new();
+    let Some(fd_object_body_offset) = fd_object_body_offset else {
+        // No fd in this capture: the whole file must be byte-identical.
+        parcel.unmarshall(bytes);
+        parcel.set_wire_null_stability(true);
+        return parcel;
+    };
+    let fd_at = IMAGE_TOKEN_PRELUDE + fd_object_body_offset;
+    let mut i = 0;
+    while i < bytes.len() {
+        if i == fd_at {
+            parcel.write_file_descriptor(fd.as_fd()).expect("fd");
+            i += FLAT_OBJECT_BYTES;
+            continue;
+        }
+        let mut word = [0u8; 4];
+        word.copy_from_slice(&bytes[i..i + 4]);
+        parcel.write_int32(i32::from_le_bytes(word));
+        i += 4;
+    }
+    // Mirror `acos-binder-peer::import_parcel_raw`: the captured bytes are the
+    // guest driver's wire form, where a null binder is followed by a 4-byte
+    // stability record that the import cannot strip (null binders are not in the
+    // object table).
+    parcel.set_wire_null_stability(true);
+    parcel.set_data_position(0);
+    let built = parcel.marshall();
+    assert_eq!(built.len(), bytes.len(), "fixture length changed");
+    assert_eq!(
+        &built[..fd_at],
+        &bytes[..fd_at],
+        "the prefix must stay byte-identical to the capture"
+    );
+    assert_eq!(
+        &built[fd_at + FLAT_OBJECT_BYTES..],
+        &bytes[fd_at + FLAT_OBJECT_BYTES..],
+        "the tail after the fd object must stay byte-identical to the capture"
+    );
+    parcel
+}
+
+fn fixture_memfd() -> OwnedFd {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "acos-c1-fixture-{}-{}.rgba",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    let file = std::fs::File::create(&path).expect("temp buffer");
+    file.set_len(1080 * 2209 * 4).expect("size");
+    let _ = std::fs::remove_file(&path);
+    file.into()
+}
+
+/// W9: one real BLAST `setTransactionState` carrying a `GraphicBuffer` decodes
+/// to the last byte. This is the test that failed for W7/W8 (the r75-shaped
+/// reader was 8 bytes long at the frame-rate group and the GraphicBuffer magic
+/// check read the image's reversed word as garbage).
+#[test]
+fn an_image_blast_transaction_with_a_buffer_decodes_to_the_last_byte() {
+    let bytes = include_bytes!("fixtures/blast_txn_1028.bin");
+    let fd = fixture_memfd();
+    let mut parcel = image_parcel(bytes, Some(IMAGE_FD_OBJECT_BODY), &fd);
+    parcel.set_data_position(IMAGE_TOKEN_PRELUDE);
+
+    let decoded = surface_client::decode_transaction_state(&mut parcel)
+        .expect("the captured real BLAST buffer transaction must decode");
+    assert_eq!(
+        parcel.data_avail(),
+        0,
+        "the real parcel was not consumed exactly"
+    );
+    assert_eq!(decoded.composers.len(), 1);
+    assert_eq!(decoded.displays, 0, "the capture has no display state");
+    assert!(decoded.apply_token.is_some(), "applyToken is a binder");
+    let layer = &decoded.composers[0];
+    assert_eq!(layer.layer_id, 3);
+    // The captured change mask (byte-exact; it includes eBufferChanged
+    // `0x0020_0000`, which is why the buffer body follows).
+    assert_eq!(layer.what, 0x0000_1009_23ac_2000);
+    assert_ne!(layer.what & surface_client::what::BUFFER, 0);
+    assert!(layer.surface.is_some(), "surface is a strong binder");
+    assert_eq!(
+        layer.listeners.len(),
+        1,
+        "the layer registered one listener group"
+    );
+    assert_eq!(layer.listeners[0].callback_ids.len(), 2);
+
+    let buffer = layer.buffer.as_ref().expect("the transaction carries a buffer");
+    let meta = buffer.buffer.as_ref().expect("the buffer is a GraphicBuffer");
+    assert_eq!((meta.width, meta.height, meta.stride), (1080, 2209, 1080));
+    assert_eq!(meta.format, 1, "RGBA_8888");
+    assert_eq!(meta.id, 0x2_0000_0000, "GraphicBuffer.id == cachedBufferId");
+    assert_eq!(meta.usage & 0xffff_ffff, 2355, "usage low word");
+    assert_eq!(buffer.frame_number, 1);
+    assert_eq!(buffer.producer_id, 1);
+    assert_eq!(buffer.cached_buffer_id, meta.id);
+    assert!(!buffer.has_barrier);
+    // The stored fd is a live, readable 1080x2209x4 memfd (what the capture
+    // dump converts to a PNG).
+    let readable = std::fs::File::from(meta.fd.try_clone().expect("dup"));
+    let len = readable.metadata().expect("stat the captured memfd").len() as usize;
+    assert_eq!(
+        len,
+        1080 * 2209 * 4,
+        "the GraphicBuffer fd must be the captured frame buffer"
+    );
+}
+
+/// The sibling capture has no buffer body: the same prefix and the trailing
+/// parcelables must still consume exactly.
+#[test]
+fn an_image_blast_transaction_without_a_buffer_decodes_to_the_last_byte() {
+    let bytes = include_bytes!("fixtures/blast_txn_700.bin");
+    let fd = fixture_memfd();
+    let mut parcel = image_parcel(bytes, None, &fd);
+    parcel.set_data_position(IMAGE_TOKEN_PRELUDE);
+
+    let decoded = surface_client::decode_transaction_state(&mut parcel)
+        .expect("the captured real BLAST transaction must decode");
+    assert_eq!(parcel.data_avail(), 0, "the real parcel was not consumed exactly");
+    assert_eq!(decoded.composers.len(), 1);
+    let layer = &decoded.composers[0];
+    assert_eq!(layer.layer_id, 4098);
+    assert!(
+        layer.buffer.is_none(),
+        "a transaction without a buffer body must not invent one"
+    );
+}
+
+/// Teeth for the image's frame-rate group: put the r75 group back (a fourth
+/// `byte`, `frameRateCategorySmoothSwitchOnly` and `frameRateSelectionStrategy`
+/// — 12 added bytes) and the decoder must refuse the parcel. A reader
+/// transcribed from the tag would decode this patched parcel exactly, so this
+/// test fails on the old implementation instead of silently accepting both wire
+/// shapes.
+#[test]
+fn a_tag_shaped_frame_rate_group_is_rejected() {
+    let bytes = include_bytes!("fixtures/blast_txn_1028.bin");
+    let insert_at = IMAGE_TOKEN_PRELUDE + IMAGE_FRAME_RATE_GROUP_END;
+    let mut patched = Vec::with_capacity(bytes.len() + 12);
+    patched.extend_from_slice(&bytes[..insert_at]);
+    patched.extend_from_slice(&[0u8; 12]); // 4th byte + bool + byte, all zero
+    patched.extend_from_slice(&bytes[insert_at..]);
+    assert_eq!(patched.len(), bytes.len() + 12);
+
+    let fd = fixture_memfd();
+    let mut parcel = image_parcel(&patched, Some(IMAGE_FD_OBJECT_BODY + 12), &fd);
+    parcel.set_data_position(IMAGE_TOKEN_PRELUDE);
+    let err = surface_client::decode_transaction_state(&mut parcel)
+        .expect_err("a tag-shaped frame-rate group must not decode as an image parcel");
+    assert!(
+        matches!(err, ServiceError::BadRequest { .. } | ServiceError::Internal(_)),
+        "the rejection must be a structured error, got {err:?}"
+    );
 }

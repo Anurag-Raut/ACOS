@@ -45,8 +45,14 @@
 //!   r75 `ISurfaceComposer.cpp` write order (proxy at `0xd038f` writes the
 //!   descriptor from `android::ISurfaceComposer::descriptor`, `0xd06ae` passes
 //!   code 8).
-//! * `layer_state_t` is the r75 `LayerState.cpp` order, confirmed against the
-//!   image's `layer_state_t::read` call sequence at `0xad190`.
+//! * `layer_state_t` follows the r75 `LayerState.cpp` order with three measured
+//!   image deltas (all from `libgui.so` disassembly and the captured parcels in
+//!   `tests/fixtures/`): the frame-rate group is **three** bytes instead of
+//!   four-plus-bool-plus-byte (−8 bytes), the `GraphicBuffer` magic is written
+//!   in reverse byte order, and `TrustedPresentationListener` carries one extra
+//!   int32 after its binder. An AIDL parcelable's size word counts itself, so
+//!   `TrustedPresentationThresholds`/`FocusRequest` payloads are `size - 4`.
+//!   These four facts are what let a real BLAST transaction decode at all (W9).
 //! * The image's `gui::WindowInfo` is **older than r75**: it has no
 //!   `contentSize`, no `canOccludePresentation`, and its
 //!   `InputApplicationInfo`/`FrameTimelineInfo`/`FocusRequest` parcelables
@@ -56,7 +62,7 @@
 //!   `uint64` then the fence bool), so the callback stats match that shape.
 
 use std::collections::HashMap;
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd, RawFd};
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
@@ -625,6 +631,7 @@ pub fn apply_transaction_state(
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     s.transactions_decoded += 1;
     let latch_time = now_ns();
+    let dbg = std::env::var_os("ACOS_W5_BUF").is_some();
     for composer in &transaction.composers {
         apply_layer_state(
             &mut s,
@@ -632,6 +639,19 @@ pub fn apply_transaction_state(
             transaction.desired_present_time,
             latch_time,
             &transaction.listener_callbacks,
+        );
+    }
+    if dbg {
+        eprintln!(
+            "ACOSDBG TXN t={latch_time} composers={} displays={} has_buffer={} total_transactions={} deliveries={}",
+            transaction.composers.len(),
+            transaction.displays,
+            transaction
+                .composers
+                .iter()
+                .any(|c| c.buffer.as_ref().is_some_and(|b| b.buffer.is_some())),
+            s.transactions_decoded,
+            s.deliveries.len()
         );
     }
     // The legacy path has no AIDL status header; the proxy ignores the reply.
@@ -895,6 +915,12 @@ fn apply_layer_state(
     );
 
     if let Some((target, id)) = release {
+        if std::env::var_os("ACOS_W5_BUF").is_some() {
+            eprintln!(
+                "ACOSDBG RELEASE target={:#x} buffer={} frame={}",
+                target.0, id.buffer_id, id.frame_number
+            );
+        }
         state
             .deliveries
             .push(on_release_buffer_delivery(target, id, state.max_acquired_buffers));
@@ -904,6 +930,14 @@ fn apply_layer_state(
     for listener in callbacks {
         if listener.listener.is_null() || listener.callback_ids.is_empty() {
             continue;
+        }
+        if std::env::var_os("ACOS_W5_BUF").is_some() {
+            eprintln!(
+                "ACOSDBG COMPLETED target={:#x} ids={:?} layer={:#x}",
+                listener.listener.0,
+                listener.callback_ids.iter().map(|c| c.id).collect::<Vec<_>>(),
+                handle.0
+            );
         }
         state.deliveries.push(on_transaction_completed_delivery(
             listener.listener,
@@ -1326,12 +1360,15 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let _shadow_radius = data.read_float().map_err(perr)?;
     let _frame_rate_selection_priority = data.read_int32().map_err(perr)?;
     let _frame_rate = data.read_float().map_err(perr)?;
+    // The image's frame-rate group is **three** bytes, not r75's four bytes plus
+    // `frameRateCategorySmoothSwitchOnly` (bool) and `frameRateSelectionStrategy`
+    // (byte). Measured from `layer_state_t::{write,read}` in
+    // `libgui.so` (`writeByte` @0xd1c56/0xd1c6e/0xd1c86) and from the captured
+    // parcels (fixtures README, body 448..464). r75 would read 8 bytes too many
+    // here, which is why every real BLAST transaction failed to decode.
     let _ = data.read_byte().map_err(perr)?;
     let _ = data.read_byte().map_err(perr)?;
     let _ = data.read_byte().map_err(perr)?;
-    let _ = data.read_byte().map_err(perr)?; // frameRateCategory
-    let _ = data.read_bool().map_err(perr)?; // frameRateCategorySmoothSwitchOnly
-    let _ = data.read_byte().map_err(perr)?; // frameRateSelectionStrategy
     let _ = data.read_uint32().map_err(perr)?; // fixedTransformHint
     let _ = data.read_bool().map_err(perr)?; // autoRefresh
     let _ = data.read_bool().map_err(perr)?; // dimmingEnabled
@@ -1371,6 +1408,16 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     read_aidl_parcelable(data)?;
     if dbg { eprintln!("ACOSDBG ls tpt at {}", data.data_position()); }
     // Parcelable TrustedPresentationListener (C++: marker + binder + int32).
+    //
+    // The binder is **null** in the real BLAST transactions, and libbinder
+    // appends a 4-byte `Stability::Level` record after a null binder. A null
+    // binder is never in the parcel's object table, so the peer's import cannot
+    // strip that record (`crates/acos-binder-peer` strips four bytes only after
+    // table-listed binder objects) and instead marks the parcel
+    // `wire_null_stability`; `read_strong_binder` consumes the record. W8 read
+    // that word as an image-only field; it is the stability record (fixed by W9:
+    // reading it twice put `displayCount`/`applyToken` four bytes late, which is
+    // why the captured 700-byte transactions failed at the tail).
     let _present = data.read_int32().map_err(perr)?;
     let _listener = data.read_strong_binder().map_err(perr)?;
     let _id = data.read_int32().map_err(perr)?;
@@ -1489,6 +1536,24 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
     })
 }
 
+/// Obtain an owned descriptor for a number that arrived in a peer frame
+/// (`SCM_RIGHTS`) but that the imported `Parcel` does not own.
+///
+/// `acos-binder-peer::import_parcel_raw` rewrites a `BINDER_TYPE_FD` object's id
+/// to the received descriptor and then imports the data with
+/// `Parcel::unmarshall`, which does not build an fd table, so
+/// [`Parcel::borrowed_file_descriptor`] misses. The number is live in this
+/// process while the frame is being handled (the peer closes a received frame's
+/// descriptors only after it has handled the frame). Re-opening
+/// `/proc/self/fd/<n>` is a safe way to duplicate it from this crate, which is
+/// `#![forbid(unsafe_code)]`; a `GraphicBuffer` is a memfd, which supports that
+/// reopen. Anything else (closed number, non-reopenable descriptor) is an error
+/// the caller turns into a structured failure — never a blank buffer.
+fn received_file_descriptor(raw: RawFd) -> std::io::Result<OwnedFd> {
+    let file = std::fs::File::open(format!("/proc/self/fd/{raw}"))?;
+    Ok(file.into())
+}
+
 fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let len = data.read_int32().map_err(perr)?;
     let fd_count = data.read_int32().map_err(perr)?;
@@ -1511,7 +1576,14 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
         eprintln!("ACOSDBG gb len={len} fdc={fd_count} words={header:?}");
     }
     let magic = header[0];
-    if magic != i32::from_le_bytes(*b"GB01") && magic != i32::from_le_bytes(*b"GBFR") {
+    // The image's `libui` writes the magic word in the reverse byte order of the
+    // r75 tag: the bytes `31 30 42 47` (uint32 `0x47423031`), where a tag-built
+    // `'GB01'` literal is `47 42 30 31` (`0x31304247`). Both are accepted; any
+    // other value is still rejected (never guess past a bad header).
+    let tag_gb01 = i32::from_le_bytes(*b"GB01");
+    let image_gb01 = i32::from_be_bytes(*b"GB01");
+    let tag_gbfr = i32::from_le_bytes(*b"GBFR");
+    if magic != tag_gb01 && magic != image_gb01 && magic != tag_gbfr {
         return Err(ServiceError::BadRequest {
             interface: LEGACY_COMPOSER_DESCRIPTOR.to_string(),
             method: "setTransactionState".into(),
@@ -1524,19 +1596,30 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let format = header[4];
     let usage_lo = header[6] as u32 as u64;
     let id = ((header[7] as u32 as u64) << 32) | (header[8] as u32 as u64);
-    let usage_hi = if magic == i32::from_le_bytes(*b"GB01") {
-        header[12] as u32 as u64
-    } else {
+    let usage_hi = if magic == tag_gbfr {
         0
+    } else {
+        header[12] as u32 as u64
     };
     let mut fd: Option<OwnedFd> = None;
     for _ in 0..fd_count {
         if let Some(raw) = data.read_file_descriptor().map_err(perr)? {
-            let borrowed = data
-                .borrowed_file_descriptor(raw)
-                .ok_or_else(|| ServiceError::Internal("GraphicBuffer fd vanished".into()))?;
-            fd = Some(borrowed.try_clone_to_owned().map_err(|e| {
-                ServiceError::Internal(format!("dup(GraphicBuffer fd): {e}"))
+            // Normally the parcel owns the descriptor (`borrowed_file_descriptor`
+            // finds it). A parcel imported by `acos-binder-peer` has its
+            // `BINDER_TYPE_FD` object id rewritten to the descriptor that arrived
+            // in `SCM_RIGHTS`, but the import goes through `Parcel::unmarshall`,
+            // which does not build an owned fd table — so fall back to dup'ing the
+            // number directly. The peer keeps a received frame's descriptors open
+            // until it has handled the frame, so the number is live for exactly
+            // this call; `dup` reads only the number. If it is not a live
+            // descriptor the dup fails and this stays a structured error (never a
+            // silently zero-filled buffer).
+            let cloned = match data.borrowed_file_descriptor(raw) {
+                Some(borrowed) => borrowed.try_clone_to_owned().map_err(|e| e.to_string()),
+                None => received_file_descriptor(raw).map_err(|e| e.to_string()),
+            };
+            fd = Some(cloned.map_err(|e| {
+                ServiceError::Internal(format!("dup(GraphicBuffer fd {raw}): {e}"))
             })?);
         }
     }
@@ -1653,12 +1736,26 @@ fn read_callback_id_vector(data: &mut Parcel) -> SResult<Vec<CallbackId>> {
 }
 
 /// Read an AIDL parcelable as `marker, int32 size, payload`.
+///
+/// A generated AIDL `writeToParcel` size word **counts itself** (`size >= 4`, the
+/// reader rejects anything smaller and then seeks to `start + size`), so the
+/// payload is `size - 4` bytes. Measured on the image's
+/// `TrustedPresentationThresholds` (`blast_txn_1028.bin` body 816: size 16 with a
+/// 12-byte payload) and on the same shape in `FocusRequest`.
 fn read_aidl_parcelable(data: &mut Parcel) -> SResult<()> {
     let present = data.read_int32().map_err(perr)?;
     if present == 0 {
         return Ok(());
     }
-    read_sized_blob(data)
+    let size = data.read_int32().map_err(perr)?;
+    if size < 4 {
+        return Err(ServiceError::BadRequest {
+            interface: LEGACY_COMPOSER_DESCRIPTOR.to_string(),
+            method: "setTransactionState".into(),
+            detail: format!("AIDL parcelable size {size} cannot include its own size word"),
+        });
+    }
+    skip_bytes(data, size - 4)
 }
 
 /// Read `int32 size` then skip that many bytes (a direct AIDL `writeToParcel`

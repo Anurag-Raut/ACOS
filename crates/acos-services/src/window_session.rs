@@ -476,27 +476,13 @@ impl ServiceObject for WindowSessionService {
             let code = pc.callback.code();
             match &pc.callback {
                 WmCallback::DispatchAppVisibility { visible: true } => {
-                    // I2 diagnostic mode: W6's visibility delivery makes the
-                    // first traversal call `drawSoftware`, which blocks the
-                    // main looper in `Surface.nativeLockCanvas` (no buffer yet,
-                    // W6 §3). Input is dispatched on that same looper, so an
-                    // injected tap would never run. When an injection plan is
-                    // configured we hold this callback and log why; the tap
-                    // path itself is unchanged and still goes through the real
-                    // socketpair. Remove this gate once the first buffer lands.
-                    if let Some(input) = &self.input {
-                        if input.is_active() {
-                            self.callbacks_deferred += 1;
-                            if std::env::var_os("ACOSI2_VERBOSE").is_some() {
-                                eprintln!(
-                                    "ACOSI2 holding dispatchAppVisibility for window {:#x}: \
-                                     input needs the main looper free (W6 lockCanvas wall)",
-                                    pc.window
-                                );
-                            }
-                            continue;
-                        }
-                    }
+                    // W9: the I2 diagnostic hold is gone. It existed because W6's
+                    // first traversal blocked the main looper in
+                    // `Surface.nativeLockCanvas` (no buffer yet), so an injected
+                    // tap would never run. C1 now decodes the real BLAST
+                    // transaction and releases buffers, so the first traversal
+                    // returns; visibility is delivered while an injection plan is
+                    // active and input + frames coexist.
                     // A rejected add (`null` IWindow) has no binder to address.
                     // There is nothing to deliver to, and a fabricated handle
                     // would be a fake callback.

@@ -354,6 +354,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     if let Ok(hold) = std::env::var("ACOSLAUNCH_HOLD_MS") {
         sb.env("ACOSLAUNCH_HOLD_MS", &hold);
     }
+    // W9: forward the guest-HW diagnostic switch so the gralloc shim's
+    // `allocate`/`lock` line reaches the launch log (W7 could not see it because
+    // the guest env is cleared and the launcher did not forward the variable).
+    if std::env::var_os("ACOSART_HW_VERBOSE").is_some() {
+        sb.env("ACOSART_HW_VERBOSE", "1");
+    }
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
     let started = Instant::now();
