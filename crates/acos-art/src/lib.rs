@@ -43,6 +43,10 @@ pub const DEFAULT_IMAGE_REL: &str = "system-images/android-34/google_apis/x86_64
 /// Host path of the embedded freestanding shim source.
 pub const SHIM_SOURCE: &str = include_str!("../shim/artshim.c");
 
+/// Version marker of the synthesised `apex-info-list.xml` (bumped when the
+/// generated content changes, so a stale file is rewritten).
+const APEX_INFO_MARKER: &str = "<!-- acos-art apex-info-list v3 -->\n";
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("repository root not found (set ACOS_ROOT)")]
@@ -61,11 +65,57 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// One APEX of the image: its module (mount) name and the `.apex` file name.
+/// One APEX of the image.
+///
+/// `name` is the **host directory** under `<sysroot>/system/apex/` (the
+/// extraction names it after the `.apex` payload file, e.g.
+/// `com.google.android.configinfrastructure`), while `mount` is the **device
+/// mount name** from `apex_manifest.pb`. They differ for the Google-signed
+/// modules, and the mount name is what `/apex/<name>` and every classpath
+/// fragment use, so the sandbox must mount by `mount`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApexModule {
     pub name: String,
     pub file: String,
+    pub mount: String,
+}
+
+impl ApexModule {
+    /// `/apex/<name>` as the device spells it (shared-libs APEX is aliased).
+    pub fn guest(&self) -> String {
+        if self.mount == "com.google.mainline.primary.libs" {
+            "/apex/sharedlibs".to_string()
+        } else {
+            format!("/apex/{}", self.mount)
+        }
+    }
+}
+
+/// `BOOTCLASSPATH` and `DEX2OATBOOTCLASSPATH` as `/data/system/environ/classpath`
+/// (written by the image's own `derive_classpath`) enumerates them.
+///
+/// ART's `GetFirstMainlineFrameworkLibraryFilename` (libartbase) requires
+/// `DEX2OATBOOTCLASSPATH` to be a strict prefix of `BOOTCLASSPATH`; the
+/// remainder names the mainline framework libraries and is what
+/// `GetDefaultBootImageLocation` uses to derive the boot-image mainline
+/// extension. Setting both from this file makes that CHECK pass on real input.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Classpaths {
+    pub boot: Vec<String>,
+    pub dex2oat: Vec<String>,
+}
+
+impl Classpaths {
+    /// Usable means: the device pair (strict prefix + non-empty mainline
+    /// remainder) **and** the platform framework is present. A sysroot
+    /// extracted without `/system/etc/classpaths/` cannot produce the latter,
+    /// and its derivation would silently drop `framework.jar`.
+    pub fn is_complete(&self) -> bool {
+        let has_framework = self.boot.iter().any(|j| j.ends_with("/framework.jar"));
+        let prefix_ok =
+            self.dex2oat.len() < self.boot.len() && self.boot[..self.dex2oat.len()] == self.dex2oat[..];
+        has_framework && prefix_ok
+    }
 }
 
 /// The extracted, read-only ART sysroot plus the writable per-session data dir.
@@ -124,6 +174,7 @@ impl ArtRoot {
             "misc/apexdata/com.android.art/dalvik-cache/x86_64",
             "linkerconfig",
             "socket",
+            "system/environ",
             "tmp",
             "img",
             "shim",
@@ -145,25 +196,29 @@ impl ArtRoot {
     pub fn write_apex_info_list(&self) -> Result<()> {
         let out = self.apex_info_list();
         let modules = self.modules_path();
-        let stale = match (fs::metadata(&out), fs::metadata(&modules)) {
-            (Ok(o), Ok(m)) => match (o.modified(), m.modified()) {
-                (Ok(o), Ok(m)) => o < m,
+        let have_marker = fs::read_to_string(&out).map(|t| t.contains(APEX_INFO_MARKER)).unwrap_or(false);
+        let stale = !have_marker
+            || match (fs::metadata(&out), fs::metadata(&modules)) {
+                (Ok(o), Ok(m)) => match (o.modified(), m.modified()) {
+                    (Ok(o), Ok(m)) => o < m,
+                    _ => true,
+                },
                 _ => true,
-            },
-            _ => true,
-        };
+            };
         if !stale {
             return Ok(());
         }
-        let mut xml = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<apex-info-list>\n");
+        let mut xml = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+        xml.push_str(APEX_INFO_MARKER);
+        xml.push_str("<apex-info-list>\n");
         for m in &self.modules {
-            let shared = m.name == "com.google.mainline.primary.libs";
+            let shared = m.mount == "com.google.mainline.primary.libs";
             xml.push_str(&format!(
                 "  <apex-info moduleName=\"{}\" modulePath=\"/system/apex/{}\" \
                  preinstalledModulePath=\"/system/apex/{}\" versionCode=\"340000000\" \
                  versionName=\"1\" isFactory=\"true\" isActive=\"true\" \
                  lastUpdateMillis=\"0\" provideSharedApexLibs=\"{}\" />\n",
-                m.name, m.file, m.file, shared
+                m.mount, m.file, m.file, shared
             ));
         }
         xml.push_str("</apex-info-list>\n");
@@ -180,7 +235,13 @@ impl ArtRoot {
     /// namespaces `libnativeloader` requires).
     pub fn ensure_linkerconfig(&self, regen: bool) -> Result<()> {
         let ld = self.data.join("linkerconfig/ld.config.txt");
-        if ld.is_file() && !regen {
+        // linkerconfig enumerates the APEX namespaces from the actual mounts,
+        // so a mount-table change (new extraction, corrected apex names)
+        // invalidates an existing ld.config.txt.
+        let stamp = self.data.join("linkerconfig/.mounts");
+        let mounts = self.mount_stamp();
+        let stamp_ok = fs::read_to_string(&stamp).map(|s| s.trim() == mounts).unwrap_or(false);
+        if ld.is_file() && stamp_ok && !regen {
             return Ok(());
         }
         self.ensure_data()?;
@@ -207,7 +268,187 @@ impl ArtRoot {
                 text.iter().map(|b| *b as char).collect::<String>().trim()
             )));
         }
+        fs::write(&stamp, format!("{mounts}\n"))?;
         Ok(())
+    }
+
+    /// Fingerprint of the APEX mount table (`/apex/<name>` set).
+    fn mount_stamp(&self) -> String {
+        let mut names: Vec<String> = self.modules.iter().map(ApexModule::guest).collect();
+        names.sort();
+        format!("{:x}", simple_hash(&names.join("\n")))
+    }
+
+    // ---- classpath (the input ART's mainline-framework CHECK reads) --------
+
+    /// `<data>/system/environ/classpath`, the file `derive_classpath` writes on
+    /// device and `init` sources into the environment.
+    pub fn classpath_env_file(&self) -> PathBuf {
+        self.data.join("system/environ/classpath")
+    }
+
+    /// The generated classpaths, if `derive_classpath` has produced a usable
+    /// device pair (see [`Classpaths::is_complete`]).
+    pub fn classpaths(&self) -> Option<Classpaths> {
+        let cp = Self::parse_classpath_env(&fs::read_to_string(self.classpath_env_file()).ok()?)?;
+        cp.is_complete().then_some(cp)
+    }
+
+    /// Parse the `export NAME a:b:c` lines of a device `classpath` environ file.
+    pub fn parse_classpath_env(text: &str) -> Option<Classpaths> {
+        let mut cp = Classpaths::default();
+        for line in text.lines() {
+            let line = line.trim();
+            let Some(rest) = line.strip_prefix("export ") else { continue };
+            let Some((key, value)) = rest.split_once(char::is_whitespace) else { continue };
+            let list: Vec<String> = value
+                .trim()
+                .split(':')
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+                .collect();
+            match key {
+                "BOOTCLASSPATH" => cp.boot = list,
+                "DEX2OATBOOTCLASSPATH" => cp.dex2oat = list,
+                _ => {}
+            }
+        }
+        (!cp.boot.is_empty() && !cp.dex2oat.is_empty()).then_some(cp)
+    }
+
+    /// Produce `/data/system/environ/classpath` with the image's own
+    /// `derive_classpath` — the component `init` runs on device. This is the
+    /// missing input behind ART's fatal
+    /// `Check failed: !location.empty() No mainline framework library found`:
+    /// libartbase's `GetFirstMainlineFrameworkLibraryFilename` splits the part
+    /// of `BOOTCLASSPATH` after the `DEX2OATBOOTCLASSPATH` prefix, so the two
+    /// must be the device pair (prefix + mainline remainder), not one string
+    /// duplicated into both variables.
+    pub fn ensure_classpath_env(&self, regen: bool) -> Result<()> {
+        let out = self.classpath_env_file();
+        if let Some(dir) = out.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        if !regen && out.is_file() && self.classpaths().is_some() && self.classpath_env_is_fresh(&out) {
+            return Ok(());
+        }
+        let derive = "/apex/com.android.sdkext/bin/derive_classpath";
+        if !self.host_path(derive).is_file() {
+            return Err(Error::Layout(format!(
+                "{} is missing from the sysroot (needed to derive BOOTCLASSPATH/DEX2OATBOOTCLASSPATH)",
+                derive
+            )));
+        }
+        // derive_classpath is a bionic binary: the shim gives it logd + props.
+        crate::build_shim(&self.data.join("shim"))?;
+        let mut sb = self.sandbox();
+        sb.with_shim(true);
+        let mut cmd = sb.command(derive, &[])?;
+        let out_log = cmd.output()?;
+        let mut text = Vec::new();
+        text.extend_from_slice(&out_log.stdout);
+        text.extend_from_slice(&out_log.stderr);
+        let log = self.data.join("system/environ/derive_classpath.log");
+        fs::write(&log, &text)?;
+        let parsed = Self::parse_classpath_env(&fs::read_to_string(&out).unwrap_or_default());
+        let Some(cp) = parsed else {
+            return Err(Error::Layout(format!(
+                "derive_classpath wrote no usable {} (status {:?}, log: {}): {}",
+                out.display(),
+                out_log.status.code(),
+                log.display(),
+                String::from_utf8_lossy(&text).trim()
+            )));
+        };
+        if !cp.is_complete() {
+            // Old E1A scratch sysroots have no /system/etc/classpaths/, so the
+            // platform framework jars are not enumerated. Do not use a partial
+            // classpath: fall back to the sysroot's own BOOTCLASSPATH list and
+            // a fragment-derived DEX2OATBOOTCLASSPATH prefix.
+            eprintln!(
+                "acos-art: warning: derive_classpath for {} produced an incomplete classpath \
+                 (no platform framework jars; the sysroot lacks /system/etc/classpaths/); \
+                 using the sysroot BOOTCLASSPATH list instead (non-device ordering)",
+                self.sysroot.display()
+            );
+            return Ok(());
+        }
+        // Every enumerated jar must exist in the sysroot, otherwise ART would
+        // fail far away from the cause.
+        let missing: Vec<&String> = cp.boot.iter().filter(|j| !self.host_path(j).is_file()).collect();
+        if !missing.is_empty() {
+            return Err(Error::Layout(format!(
+                "BOOTCLASSPATH names jars the sysroot lacks: {} (re-run tools/art-sysroot.sh)",
+                missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            )));
+        }
+        Ok(())
+    }
+
+    fn classpath_env_is_fresh(&self, out: &Path) -> bool {
+        let newer = |p: &Path| -> bool {
+            match (fs::metadata(p).and_then(|m| m.modified()), fs::metadata(out).and_then(|m| m.modified())) {
+                (Ok(src), Ok(dst)) => dst >= src,
+                _ => false,
+            }
+        };
+        newer(&self.modules_path()) && newer(&self.sysroot.join("READY"))
+    }
+
+    /// Fallback `DEX2OATBOOTCLASSPATH` for when `derive_classpath` is not
+    /// available: the leading run of `BOOTCLASSPATH` entries that the image's
+    /// own classpath fragments mark as `DEX2OATBOOTCLASSPATH`. It only has to
+    /// be a proper prefix with a non-empty remainder — the remainder is the
+    /// mainline framework part ART derives its boot-image extension from.
+    pub fn fallback_dex2oat_classpath(&self) -> Result<Vec<String>> {
+        let marked = self.dex2oat_fragment_jars();
+        let boot = self.device_bootclasspath()?;
+        let prefix: Vec<String> = boot
+            .iter()
+            .take_while(|j| marked.iter().any(|m| m.trim_end() == j.trim_end()))
+            .cloned()
+            .collect();
+        if !prefix.is_empty() && prefix.len() < boot.len() {
+            return Ok(prefix);
+        }
+        // Last resort: keep one jar for the mainline remainder.
+        Ok(boot.split_last().map(|(_, rest)| rest.to_vec()).unwrap_or_default())
+    }
+
+    /// Jars the image's `bootclasspath.pb` fragments put in
+    /// `DEX2OATBOOTCLASSPATH` (proto `ClasspathEntry{string jar=1; Classpath
+    /// classpath=2;}` with `DEX2OATBOOTCLASSPATH = 1`).
+    fn dex2oat_fragment_jars(&self) -> Vec<String> {
+        let mut files: Vec<PathBuf> = vec![self.sysroot.join("system/etc/classpaths/bootclasspath.pb")];
+        if let Ok(rd) = fs::read_dir(self.sysroot.join("system/apex")) {
+            for e in rd.filter_map(|e| e.ok()) {
+                files.push(e.path().join("etc/classpaths/bootclasspath.pb"));
+            }
+        }
+        let mut jars = Vec::new();
+        for f in files {
+            let Ok(bytes) = fs::read(&f) else { continue };
+            // ClasspathFragment: repeated ClasspathEntry entries = 1;
+            for (field, wire, value) in proto_fields(&bytes) {
+                if field != 1 || wire != 2 {
+                    continue;
+                }
+                let mut jar = String::new();
+                let mut classpath = u64::MAX;
+                for (f2, w2, v2) in proto_fields(&value) {
+                    match (f2, w2) {
+                        (1, 2) => jar = String::from_utf8_lossy(&v2).to_string(),
+                        (2, 0) => classpath = u64::from_le_bytes(v2.as_slice().try_into().unwrap()),
+                        _ => {}
+                    }
+                }
+                // Classpath.DEX2OATBOOTCLASSPATH == 1
+                if classpath == 1 && !jar.is_empty() {
+                    jars.push(jar);
+                }
+            }
+        }
+        jars
     }
 
     // ---- sysroot contents -------------------------------------------------
@@ -305,8 +546,14 @@ impl ArtRoot {
                 Some((m, t)) => (m, t),
                 None => (rest, ""),
             };
-            let real = if module == "sharedlibs" { "com.google.mainline.primary.libs" } else { module };
-            return self.sysroot.join("system/apex").join(real).join(tail);
+            if module == "sharedlibs" {
+                return self.sysroot.join("system/apex/com.google.mainline.primary.libs").join(tail);
+            }
+            // Device path (`/apex/<apex_manifest name>`) or host directory name.
+            if let Some(m) = self.modules.iter().find(|m| m.mount == module || m.name == module) {
+                return self.sysroot.join("system/apex").join(&m.name).join(tail);
+            }
+            return self.sysroot.join("system/apex").join(module).join(tail);
         }
         self.sysroot.join(dev.trim_start_matches('/'))
     }
@@ -419,11 +666,7 @@ impl<'a> Sandbox<'a> {
         a.push(r.apex_info_list().into());
         a.push("/apex/apex-info-list.xml".into());
         for m in &r.modules {
-            let guest = if m.name == "com.google.mainline.primary.libs" {
-                "/apex/sharedlibs".to_string()
-            } else {
-                format!("/apex/{}", m.name)
-            };
+            let guest = m.guest();
             a.push("--ro-bind".into());
             a.push(r.sysroot.join("system/apex").join(&m.name).into());
             a.push(guest.into());
@@ -483,16 +726,27 @@ impl<'a> Sandbox<'a> {
         }
 
         // ---- environment ----
-        let bc = r.device_bootclasspath()?;
+        // BOOTCLASSPATH / DEX2OATBOOTCLASSPATH must be the device pair: the
+        // second is a strict prefix of the first and the remainder (the
+        // mainline framework jars) is what ART derives its boot-image mainline
+        // extension from. Both equal, or the second unset, is fatal
+        // ("No mainline framework library found").
+        let (bc, dx) = match r.classpaths() {
+            Some(cp) => (cp.boot, Some(cp.dex2oat)),
+            // Before `derive_classpath` has run (e.g. the linkerconfig step).
+            None => (r.device_bootclasspath()?, Some(r.fallback_dex2oat_classpath()?)),
+        };
         for (k, v) in &self.env {
             let v = if k.as_str() == "BOOTCLASSPATH" { bc.join(":") } else { v.clone() };
             a.push("--setenv".into());
             a.push(k.as_str().into());
             a.push(v.as_str().into());
         }
-        a.push("--setenv".into());
-        a.push("DEX2OATBOOTCLASSPATH".into());
-        a.push(bc.join(":").as_str().into());
+        if let Some(dx) = dx {
+            a.push("--setenv".into());
+            a.push("DEX2OATBOOTCLASSPATH".into());
+            a.push(dx.join(":").as_str().into());
+        }
         if self.shim {
             a.push("--setenv".into());
             a.push("LD_PRELOAD".into());
@@ -540,6 +794,86 @@ pub fn repo_root() -> Result<PathBuf> {
     Err(Error::NoRepoRoot)
 }
 
+/// Minimal protobuf wire walk: `(field, wire_type, value)` where a
+/// length-delimited value is the payload, and a varint is 8-byte LE (so the
+/// caller can `u64::from_le_bytes`). Enough for `apex_manifest.pb` and the
+/// `*.pb` classpath fragments; no schema, no allocation-heavy runtime.
+fn proto_fields(bytes: &[u8]) -> Vec<(u64, u8, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let Some((key, next)) = read_varint(bytes, i) else { break };
+        i = next;
+        let field = key >> 3;
+        let wire = (key & 7) as u8;
+        match wire {
+            0 => {
+                let Some((v, next)) = read_varint(bytes, i) else { break };
+                i = next;
+                out.push((field, wire, v.to_le_bytes().to_vec()));
+            }
+            1 => {
+                if i + 8 > bytes.len() {
+                    break;
+                }
+                out.push((field, wire, bytes[i..i + 8].to_vec()));
+                i += 8;
+            }
+            2 => {
+                let Some((len, next)) = read_varint(bytes, i) else { break };
+                let end = next.saturating_add(len as usize);
+                if end > bytes.len() {
+                    break;
+                }
+                out.push((field, wire, bytes[next..end].to_vec()));
+                i = end;
+            }
+            5 => {
+                if i + 4 > bytes.len() {
+                    break;
+                }
+                out.push((field, wire, bytes[i..i + 4].to_vec()));
+                i += 4;
+            }
+            _ => break,
+        }
+    }
+    out
+}
+
+fn read_varint(bytes: &[u8], mut i: usize) -> Option<(u64, usize)> {
+    let mut value = 0u64;
+    let mut shift = 0u32;
+    loop {
+        let b = *bytes.get(i)?;
+        i += 1;
+        value |= u64::from(b & 0x7f) << shift;
+        if b & 0x80 == 0 {
+            return Some((value, i));
+        }
+        shift += 7;
+        if shift >= 64 {
+            return None;
+        }
+    }
+}
+
+/// Device mount name of an APEX (`apex_manifest.pb` field 1, a string), which
+/// is what apexd mounts under `/apex/<name>`.
+fn apex_mount_name(dir: &Path, fallback: &str) -> String {
+    let Ok(bytes) = fs::read(dir.join("apex_manifest.pb")) else { return fallback.to_string() };
+    for (field, wire, value) in proto_fields(&bytes) {
+        if field == 1 && wire == 2 {
+            if let Ok(name) = std::str::from_utf8(&value) {
+                if !name.is_empty() {
+                    return name.to_string();
+                }
+            }
+        }
+    }
+    fallback.to_string()
+}
+
 fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
     // Some extraction passes recorded a module dir with stray whitespace
     // (" com.android.configinfrastructure"); accept the trimmed match.
@@ -568,7 +902,8 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
             let name = it.next().unwrap_or("").to_string();
             let file = it.next().unwrap_or(&name).to_string();
             let Some(dir) = real_dir(&name) else { continue };
-            out.push(ApexModule { name: dir, file });
+            let mount = apex_mount_name(&sysroot.join("system/apex").join(&dir), &dir);
+            out.push(ApexModule { name: dir, file, mount });
         }
         if !out.is_empty() {
             return Ok(out);
@@ -592,7 +927,8 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
             "com.android.vndk.v34" => "com.google.android.vndk.current.apex".to_string(),
             _ => format!("{name}.apex"),
         };
-        out.push(ApexModule { name, file });
+        let mount = apex_mount_name(&sysroot.join("system/apex").join(&name), &name);
+        out.push(ApexModule { name, file, mount });
     }
     if out.is_empty() {
         return Err(Error::Layout(format!("no APEX payloads under {}", dir.display())));
@@ -644,4 +980,74 @@ fn simple_hash(s: &str) -> u64 {
         h = h.wrapping_mul(0x100_0000_01b3);
     }
     h
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classpath_env_parses_device_environ() {
+        let text = "export BOOTCLASSPATH /apex/a.jar:/apex/b.jar:/system/framework/c.jar\n\
+                    export DEX2OATBOOTCLASSPATH /apex/a.jar:/apex/b.jar\n\
+                    export SYSTEMSERVERCLASSPATH /system/framework/services.jar\n";
+        let cp = ArtRoot::parse_classpath_env(text).expect("parsed");
+        assert_eq!(cp.boot, vec!["/apex/a.jar", "/apex/b.jar", "/system/framework/c.jar"]);
+        assert_eq!(cp.dex2oat, vec!["/apex/a.jar", "/apex/b.jar"]);
+        // The invariant ART CHECKs: DEX2OATBOOTCLASSPATH is the prefix of
+        // BOOTCLASSPATH and something is left over (the mainline framework).
+        assert!(cp.boot.len() > cp.dex2oat.len());
+        assert_eq!(&cp.boot[..cp.dex2oat.len()], &cp.dex2oat[..]);
+    }
+
+    #[test]
+    fn classpath_env_rejects_incomplete_files() {
+        assert!(ArtRoot::parse_classpath_env("export BOOTCLASSPATH /a.jar\n").is_none());
+        assert!(ArtRoot::parse_classpath_env("").is_none());
+    }
+
+    #[test]
+    fn varint_roundtrip() {
+        let mut bytes = Vec::new();
+        for v in [0u64, 1, 127, 128, 300, 340818082] {
+            let mut x = v;
+            loop {
+                let mut b = (x & 0x7f) as u8;
+                x >>= 7;
+                if x != 0 {
+                    b |= 0x80;
+                }
+                bytes.push(b);
+                if x == 0 {
+                    break;
+                }
+            }
+        }
+        let mut i = 0usize;
+        for want in [0u64, 1, 127, 128, 300, 340818082] {
+            let (got, next) = read_varint(&bytes, i).expect("varint");
+            assert_eq!(got, want);
+            i = next;
+        }
+    }
+
+    #[test]
+    fn apex_manifest_name_wins_over_dir_name() {
+        // apex_manifest.pb = {1: "com.android.configinfrastructure", 2: <varint>}
+        let dir = std::env::temp_dir().join(format!("acos-apex-manifest-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let name = b"com.android.configinfrastructure";
+        let mut pb = vec![0x0a, name.len() as u8];
+        pb.extend_from_slice(name);
+        pb.extend_from_slice(&[0x10, 0x80, 0x80, 0x80, 0xa2, 0x01]);
+        fs::write(dir.join("apex_manifest.pb"), &pb).unwrap();
+        assert_eq!(
+            apex_mount_name(&dir, "com.google.android.configinfrastructure"),
+            "com.android.configinfrastructure"
+        );
+        // Absent manifest: keep the host directory name.
+        assert_eq!(apex_mount_name(&dir.join("nope"), "com.android.art"), "com.android.art");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

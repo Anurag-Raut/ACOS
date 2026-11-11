@@ -20,9 +20,12 @@
  *    exact in-memory `prop_info` layout bionic exposes, so callers that read
  *    the struct directly (`__system_property_serial`, `pi->value`) also work.
  *
- * `__android_log_call_aborter` is interposed so that ART's fatal CHECK path is
- * *recorded* (tag "art_aborter") instead of being silently swallowed: the
- * launcher turns such an entry into outcome=crash code=ART_FATAL_CHECK.
+ * Fatal paths are NOT suppressed.  `__android_log_call_aborter` and
+ * `__android_log_assert` are interposed only to route the final message into
+ * the logd sink first (liblog has no working writer here), then they do what
+ * bionic's default aborter does: raise SIGABRT.  A `CHECK` failure therefore
+ * kills the process, exactly as on device; the launcher reads the recorded
+ * fatal entry plus the signal and reports `ART_FATAL_CHECK`.
  */
 typedef unsigned long usize;
 typedef __builtin_va_list va_list;
@@ -31,24 +34,37 @@ typedef __builtin_va_list va_list;
 #define va_end(v) __builtin_va_end(v)
 
 /* ---- raw syscalls (x86_64 / aarch64 generic numbers via asm registers) --- */
+#define SIGABRT 6
+
 #if defined(__x86_64__)
 #define SYS_read 0
 #define SYS_write 1
 #define SYS_open 2
 #define SYS_close 3
+#define SYS_getpid 39
 #define SYS_socket 41
 #define SYS_connect 42
+#define SYS_gettid 186
+#define SYS_tgkill 234
 #elif defined(__aarch64__)
 #define SYS_read 63
 #define SYS_write 64
-#define SYS_open 1024
+#define SYS_getpid 172
 #define SYS_close 57
+#define SYS_tgkill 131
+#define SYS_gettid 178
 #define SYS_socket 198
 #define SYS_connect 203
+#define SYS_open 1024
 #else
 #error "artshim: unsupported architecture"
 #endif
 
+static long sys0(long n) {
+  long r;
+  __asm__ volatile("syscall" : "=a"(r) : "a"(n) : "rcx", "r11", "memory");
+  return r;
+}
 static long sys1(long n, long a) {
   long r;
   __asm__ volatile("syscall" : "=a"(r) : "a"(n), "D"(a) : "rcx", "r11", "memory");
@@ -202,6 +218,17 @@ int __android_log_buf_write(int buf, int prio, const char *tag, const char *msg)
   log_text(prio, tag, msg);
   return 1;
 }
+/* Raise SIGABRT on the calling thread, like bionic's abort().  Never returns
+ * when the signal is delivered; the spin keeps freestanding control flow
+ * defined if a handler somehow resumes us. */
+static void shim_abort(void) {
+  long pid = sys0(SYS_getpid);
+  long tid = sys0(SYS_gettid);
+  sys3(SYS_tgkill, pid, tid, SIGABRT);
+  for (;;) {
+  }
+}
+
 int __android_log_assert(const char *cond, const char *tag, const char *fmt, ...) {
   struct sbuf s;
   s.n = 0;
@@ -209,6 +236,7 @@ int __android_log_assert(const char *cond, const char *tag, const char *fmt, ...
   sb_puts(&s, cond ? cond : "(null)");
   if (fmt) { sb_puts(&s, " "); va_list ap; va_start(ap, fmt); sb_fmt(&s, fmt, ap); va_end(ap); }
   log_frame(1 /* ANDROID_LOG_FATAL */, tag, s.b, s.n);
+  shim_abort();
   return 1;
 }
 
@@ -231,10 +259,12 @@ int __android_log_logd_logger(const struct logmsg *m) {
   log_text(m->priority, m->tag, m->message);
   return 1;
 }
-/* ART's LOG(FATAL) path funnels here; record it, do not abort from the shim
- * (the launcher classifies the record as ART_FATAL_CHECK). */
+/* ART's LOG(FATAL)/CHECK path funnels here.  Record the message into the logd
+ * sink (liblog cannot write here), then do what liblog's default aborter does:
+ * die of SIGABRT.  Suppressing this hid a real fatal CHECK in earlier runs. */
 void __android_log_call_aborter(const char *msg) {
   log_text(1, "art_aborter", msg ? msg : "(null)");
+  shim_abort();
 }
 
 /* ---- properties ---------------------------------------------------------- */

@@ -253,6 +253,7 @@ fn verify(
     let mut rows = Vec::new();
     let mut pass = 0usize;
     let mut skipped = 0usize;
+    let mut fatal_total = 0usize;
     for name in &names {
         let dex = programs.join(name).join("classes.dex");
         if !dex.is_file() {
@@ -312,6 +313,11 @@ fn verify(
             res.wall_ms,
             notes.join(", ")
         );
+        let fatal_logs = res.logs.iter().filter(|e| e.is_fatal()).count();
+        if fatal_logs > 0 {
+            notes.push(format!("{fatal_logs} fatal ART log entries"));
+        }
+        fatal_total += fatal_logs;
         rows.push(serde_json::json!({
             "program": name,
             "pass": ok,
@@ -323,11 +329,14 @@ fn verify(
             "code": res.code,
             "wall_ms": res.wall_ms,
             "logs": res.logs.len(),
+            "fatal_logs": fatal_logs,
         }));
     }
 
     let total = names.len() - skipped;
     println!("\n{pass}/{total} pass, {} fail ({} skipped)", total - pass, skipped);
+    // ART must reach real fatal-abort behaviour: no suppressed CHECKs anywhere.
+    println!("fatal ART log entries recorded: {fatal_total}");
     let summary = serde_json::json!({
         "engine": "art-dalvikvm64",
         "sysroot": root.sysroot.display().to_string(),
@@ -362,7 +371,14 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
         return Ok(out);
     }
     root.ensure_linkerconfig(false)?;
-    let jars = root.device_bootclasspath()?;
+    root.ensure_classpath_env(false)?;
+    // Use the device classpath (derive_classpath output), not the sysroot's
+    // hand-derived list: the jar *locations* become the named boot-image
+    // component names ART looks up at run time (mainline extension images).
+    let jars = match root.classpaths() {
+        Some(cp) => cp.boot,
+        None => root.device_bootclasspath()?,
+    };
     if jars.is_empty() {
         return Err(Error::Layout("empty BOOTCLASSPATH".into()));
     }
@@ -444,6 +460,19 @@ fn doctor(root: &ArtRoot) {
     match root.device_bootclasspath() {
         Ok(jars) => println!("bootclasspath  {} jars, first={}", jars.len(), jars.first().cloned().unwrap_or_default()),
         Err(e) => println!("bootclasspath  ERROR: {e}"),
+    }
+    match root.classpaths() {
+        // The device pair ART's mainline-framework lookup needs.
+        Some(cp) => println!(
+            "classpaths     boot={} dex2oat={} (mainline from {}), via derive_classpath",
+            cp.boot.len(),
+            cp.dex2oat.len(),
+            cp.boot.get(cp.dex2oat.len()).cloned().unwrap_or_else(|| "-".into())
+        ),
+        None => println!(
+            "classpaths     unavailable (no {}: run once, or the sysroot has no /system/etc/classpaths/)",
+            root.classpath_env_file().display()
+        ),
     }
     let ld = root.data.join("linkerconfig/ld.config.txt");
     println!("linkerconfig   {} {}", ld.display(), if ld.is_file() { "" } else { "(not generated yet)" });

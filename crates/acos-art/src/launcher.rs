@@ -132,6 +132,9 @@ impl RunResult {
 pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     root.ensure_data()?;
     root.ensure_linkerconfig(false)?;
+    // The device classpath pair (BOOTCLASSPATH + DEX2OATBOOTCLASSPATH) from the
+    // image's own derive_classpath: ART CHECK-fails without it.
+    root.ensure_classpath_env(false)?;
 
     // Property table: present or absent is the switch the shim sees.
     let props_path = root.data.join(crate::props::PROPS_FILE);
@@ -397,22 +400,32 @@ pub fn classify(
             diags.push(format!("ART [{}] {}: {}", e.priority_name(), e.tag, e.message));
         }
         // A deliberate failure (exit 1 + uncaught exception in main) is the
-    // program's verdict, not an engine failure — and ART logs fatal-looking
-    // entries while unwinding, so this has to be checked first.
-    if stderr.contains("ClassNotFoundException") || stderr.contains("NoClassDefFoundError") {
-        diags.push("class not found on the given class path".into());
-        return (Outcome::Crash, Some("ART_NO_CLASS".into()), diags);
-    }
-    if exit == Some(1) && stderr.contains("Exception in thread \"main\"") {
-        diags.push("uncaught exception in main (expected for a failing program)".into());
-        return (Outcome::Ok, None, diags);
-    }
-    if combined.contains("Scudo ERROR") || combined.contains("out of memory") {
-        diags.push("host memory limit hit (see ACOS_HOST_RSS_MAX / guarded.sh; RLIMIT_AS is not usable for ART)".into());
-        return (Outcome::Unsupported, Some("HOST_MEMORY_LIMIT".into()), diags);
-    }
-    if let Some(c) = &check_text {
+        // program's verdict, not an engine failure — and ART logs fatal-looking
+        // entries while unwinding, so this has to be checked first.
+        if stderr.contains("ClassNotFoundException") || stderr.contains("NoClassDefFoundError") {
+            diags.push("class not found on the given class path".into());
+            return (Outcome::Crash, Some("ART_NO_CLASS".into()), diags);
+        }
+        if exit == Some(1) && stderr.contains("Exception in thread \"main\"") {
+            diags.push("uncaught exception in main (expected for a failing program)".into());
+            return (Outcome::Ok, None, diags);
+        }
+        if combined.contains("Scudo ERROR") || combined.contains("out of memory") {
+            diags.push("host memory limit hit (see ACOS_HOST_RSS_MAX / guarded.sh; RLIMIT_AS is not usable for ART)".into());
+            return (Outcome::Unsupported, Some("HOST_MEMORY_LIMIT".into()), diags);
+        }
+        // A fatal CHECK now aborts for real (the shim no longer suppresses the
+        // aborter), so the signal and the fatal log entry arrive together.
+        let fatal_check = logs.iter().find(|e| e.message.contains("Check failed") || e.message.contains("CHECK failed"));
+        if let Some(e) = fatal_check.or(fatal_log.as_ref()) {
+            if fatal_check.is_some() || e.tag == "art_aborter" {
+                diags.push(format!("ART CHECK failed: {}", e.message));
+                return (Outcome::Crash, Some("ART_FATAL_CHECK".into()), diags);
+            }
+        }
+        if let Some(c) = &check_text {
             diags.push(c.clone());
+            return (Outcome::Crash, Some("ART_FATAL_CHECK".into()), diags);
         }
         return (Outcome::Crash, Some("ART_CRASH".into()), diags);
     }
@@ -526,6 +539,17 @@ mod tests {
         );
         assert_eq!(o, Outcome::Crash);
         assert_eq!(c.as_deref(), Some("ART_FATAL_CHECK"));
+    }
+
+    #[test]
+    fn sigabrt_from_fatal_check_is_art_fatal_check() {
+        // Fatal-abort behaviour restored: the CHECK now really dies of SIGABRT,
+        // and the recorded message must still classify as a CHECK, not CRASH.
+        let logs = [entry(7, "", "Check failed: !location.empty() No mainline framework library found")];
+        let (o, c, d) = classify(None, Some(libc::SIGABRT), false, "", &logs, Duration::from_secs(1));
+        assert_eq!(o, Outcome::Crash);
+        assert_eq!(c.as_deref(), Some("ART_FATAL_CHECK"));
+        assert!(d.iter().any(|x| x.contains("SIGABRT")));
     }
 
     #[test]
