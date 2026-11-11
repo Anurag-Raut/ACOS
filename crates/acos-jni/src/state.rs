@@ -253,8 +253,12 @@ pub struct State {
     /// collected while one is held, which clears the reference.
     pub weak_globals: Vec<u32>,
     /// `NewDirectByteBuffer` buffers: `jobject` handle -> (region address,
-    /// capacity in bytes).
-    pub direct_buffers: HashMap<u32, (i64, i64)>,
+    /// capacity in bytes, original host address). The third element is the
+    /// caller-supplied pointer for buffers wrapped over native memory (0 for
+    /// buffers allocated by the JNI layer itself); Java reads through the
+    /// synthetic region while `GetDirectBufferAddress` hands the original
+    /// pointer back to native code.
+    pub direct_buffers: HashMap<u32, (i64, i64, i64)>,
     pub threads: HashMap<usize, ThreadJni>,
     /// DEX `native` declarations discovered by [`JniRuntime::scan_natives`].
     pub dex_natives: HashSet<(String, String, String)>,

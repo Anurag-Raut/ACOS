@@ -119,6 +119,9 @@ public final class FlutterProbe {
   /** Whether semantics were requested (diagnostic). */
   private static volatile boolean sSemanticsEnabled;
 
+  /** W156-A: the last exception thrown while capturing a semantics update. */
+  static volatile String sSemanticsError;
+
   public static void main(String[] args) {
     String bundlePath = args.length > 0 ? args[0] : null;
     String entrypoint = args.length > 1 ? args[1] : "main";
@@ -313,9 +316,54 @@ public final class FlutterProbe {
     if (jni == null) {
       return;
     }
-    jni.setSemanticsEnabled(true);
-    sSemanticsEnabled = true;
-    System.out.println("ACOS_FLUTTER_PROBE phase=semanticsEnabled");
+    try {
+      System.out.println(
+          "ACOS_FLUTTER_PROBE phase=semanticsEnable begin attached=" + jni.isAttached());
+      jni.setSemanticsEnabled(true);
+      sSemanticsEnabled = true;
+      System.out.println("ACOS_FLUTTER_PROBE phase=semanticsEnabled");
+    } catch (Throwable t) {
+      System.out.println("ACOS_FLUTTER_PROBE phase=semanticsEnableError " + t);
+      t.printStackTrace(System.out);
+    }
+  }
+
+  /**
+   * W156-A: dispatch a semantics TAP on `id` through
+   * `FlutterJNI.dispatchSemanticsAction` -> `nativeDispatchSemanticsAction`. The
+   * fourth argument is the `AccessibilityBridge$Action.value` mask
+   * (`TAP = 1`), which the engine maps onto `dart:ui`'s `SemanticsAction`.
+   */
+  public static void dispatchSemanticsTap(int id) {
+    FlutterJNI jni = sJni;
+    if (jni == null) {
+      return;
+    }
+    // The app's action handler schedules the next frame; the driver must not
+    // schedule one itself, or `FlutterSession::tap_text` cannot tell an action
+    // that took effect from one that did not (and would skip its pointer
+    // fallback).
+    jni.dispatchSemanticsAction(id, 1, null, 0);
+  }
+
+  /** W156-A diagnostics: the engine's semantics sequence and buffer size. */
+  public static int semanticsSeq() {
+    return sSemanticsSeq;
+  }
+
+  public static boolean semanticsEnabled() {
+    return sSemanticsEnabled;
+  }
+
+  public static int semanticsBufferSize() {
+    return sSemanticsBuffer == null ? 0 : sSemanticsBuffer.length;
+  }
+
+  public static String semanticsDebug() {
+    return "seq=" + sSemanticsSeq + " enabled=" + sSemanticsEnabled
+        + " bytes=" + semanticsBufferSize()
+        + " strings=" + (sSemanticsStrings == null ? 0 : sSemanticsStrings.length)
+        + " err=" + sSemanticsError;
   }
 
   /**
@@ -328,6 +376,9 @@ public final class FlutterProbe {
     @Override
     public void updateSemantics(
         ByteBuffer buffer, String[] strings, ByteBuffer[] attributeBuffers) {
+      // Count the delivery first: a failure to copy the buffer must not hide
+      // the fact that the engine reached the embedder at all.
+      sSemanticsSeq++;
       try {
         ByteBuffer dup = buffer.duplicate();
         dup.order(ByteOrder.LITTLE_ENDIAN);
@@ -336,8 +387,8 @@ public final class FlutterProbe {
         dup.get(data);
         sSemanticsBuffer = data;
         sSemanticsStrings = strings == null ? new String[0] : strings.clone();
-        sSemanticsSeq++;
       } catch (Throwable t) {
+        sSemanticsError = String.valueOf(t);
         System.out.println("ACOS_FLUTTER_PROBE phase=semanticsError " + t);
       }
     }

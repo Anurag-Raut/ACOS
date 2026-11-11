@@ -24,16 +24,44 @@ void main() {
   _dispatcher.onPointerDataPacket = _onPointerDataPacket;
   _dispatcher.onMetricsChanged = () => _dispatcher.scheduleFrame();
   _dispatcher.onSemanticsEnabledChanged = _onSemanticsEnabledChanged;
+  // W156-A: handle the accessibility action channel so `acos tap --text` can
+  // drive the button through `FlutterJNI.dispatchSemanticsAction` as well as
+  // the pointer path.
+  _dispatcher.onSemanticsAction = _onSemanticsAction;
   _dispatcher.scheduleFrame();
 }
 
-/// W149-A: publish a semantic node for the counter button so the engine's
-/// accessibility stream is non-empty. Raw `dart:ui` apps must build semantics
-/// themselves; a widget app gets this from the framework.
+/// W149-A/W156-A: publish a semantic node for the counter button so the
+/// engine's accessibility stream is non-empty. Raw `dart:ui` apps must build
+/// semantics themselves; a widget app gets this from the framework.
+///
+/// W156-A: the engine's `_updateSemanticsEnabled(true)` callback can run
+/// before `main` installs `onSemanticsEnabledChanged` (the isolate starts
+/// asynchronously), so the node is also re-published from every frame while
+/// `PlatformDispatcher.semanticsEnabled` is true.
 void _onSemanticsEnabledChanged() {
   if (!_dispatcher.semanticsEnabled) {
     return;
   }
+  _publishSemantics();
+}
+
+/// W156-A: the engine-invoked accessibility action handler (`nativeDispatchSemanticsAction`
+/// -> `_dispatchSemanticsAction`). The raw `dart:ui` probe handles the tap on
+/// node 1 itself; a widget app would get this from the framework.
+void _onSemanticsAction(int id, ui.SemanticsAction action, ByteData? args) {
+  print('ACOS_DART_SEMANTICS_ACTION id=$id action=$action');
+  if (id == 1 && action == ui.SemanticsAction.tap) {
+    _counter += 1;
+    _semanticsPublished = false;
+    print('ACOS_DART_COUNTER counter=$_counter via=semantics');
+    _dispatcher.scheduleFrame();
+  }
+}
+
+bool _semanticsPublished = false;
+
+void _publishSemantics() {
   final ui.SemanticsUpdateBuilder builder = ui.SemanticsUpdateBuilder();
   final ui.Rect rect = _buttonRect;
   final Float64List identity = Float64List.fromList(const <double>[
@@ -45,7 +73,10 @@ void _onSemanticsEnabledChanged() {
   builder.updateNode(
     id: 1,
     flags: ui.SemanticsFlags(isButton: true),
-    actions: 1 << ui.SemanticsAction.tap.index,
+    // The engine serialises the Java `AccessibilityBridge.Action` mask, whose
+    // TAP is bit 0. (`dart:ui`'s `SemanticsAction.tap.index` is 1 in 3.47, so
+    // shifting by it would set the LONG_PRESS bit.)
+    actions: 1 << 0,
     maxValueLength: -1,
     currentValueLength: -1,
     textSelectionBase: -1,
@@ -83,6 +114,7 @@ void _onSemanticsEnabledChanged() {
     maxValue: '',
   );
   _dispatcher.updateSemantics(builder.build());
+  _semanticsPublished = true;
   print('ACOS_DART_SEMANTICS nodes=1 label=Increment rect=$rect');
 }
 
@@ -139,6 +171,12 @@ void _onDrawFrame() {
   // Counter button.
   final buttonRect = ui.Rect.fromLTWH(40, top + 100, 220, 64);
   _buttonRect = buttonRect;
+  // W156-A: republish the semantic node once the button geometry is known and
+  // semantics are enabled. This is race-free against the engine's
+  // `_updateSemanticsEnabled` callback ordering.
+  if (_dispatcher.semanticsEnabled && !_semanticsPublished) {
+    _publishSemantics();
+  }
   canvas.drawRect(buttonRect, ui.Paint()..color = const ui.Color(0xFF6750A4));
   final label = _paragraph(
     'counter: $_counter',
@@ -202,6 +240,9 @@ void _onPointerDataPacket(ui.PointerDataPacket packet) {
           // W130-A: the tap's effect must be visible in the engine log, not
           // inferred from pixels alone.
           print('ACOS_DART_COUNTER counter=$_counter at=$pos');
+          // W156-A: the value string changes with the counter, so the semantic
+          // node must be republished for `observe --tree` to reflect it.
+          _semanticsPublished = false;
           _dispatcher.scheduleFrame();
         }
         _buttonDown = false;

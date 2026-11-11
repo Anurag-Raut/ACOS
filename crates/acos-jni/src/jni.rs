@@ -2545,10 +2545,15 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
         return 0;
     }
     // A zero address means "allocate the backing store"; a non-zero address is
-    // an existing native region owned by the caller (opaque to this layer).
-    let addr = if address == 0 {
+    // a caller-owned region. ACOS reads Java `ByteBuffer`s through its own
+    // bounded native-memory substrate (`Unsafe`/`libcore.io.Memory` reject any
+    // address that is not a live synthetic region), so a caller-owned region is
+    // copied into a fresh synthetic region. `GetDirectBufferAddress` still
+    // returns the original pointer so the native owner can keep using it (the
+    // Flutter engine wraps its `updateSemantics` buffer this way).
+    let (addr, host) = if address == 0 {
         match acos_vm::natives::jni_glue::native_mem_alloc(capacity as usize) {
-            Ok(a) => a,
+            Ok(a) => (a, 0i64),
             Err(m) => {
                 let _ = throw_class(
                     &mut ctx,
@@ -2558,8 +2563,37 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
                 return 0;
             }
         }
+    } else if acos_vm::natives::jni_glue::native_mem_check(address as i64, capacity as usize) {
+        // Already a synthetic region (a native caller passed back an address it
+        // obtained from `GetDirectBufferAddress`).
+        (address as i64, 0i64)
     } else {
-        address as i64
+        let synthetic = match acos_vm::natives::jni_glue::native_mem_alloc(capacity as usize) {
+            Ok(a) => a,
+            Err(m) => {
+                let _ = throw_class(
+                    &mut ctx,
+                    "Ljava/lang/OutOfMemoryError;",
+                    &format!("NewDirectByteBuffer: {m}"),
+                );
+                return 0;
+            }
+        };
+        if capacity > 0 {
+            // SAFETY: the JNI contract says `address` points at `capacity`
+            // readable bytes owned by the caller for the duration of this call.
+            let bytes =
+                unsafe { std::slice::from_raw_parts(address as *const u8, capacity as usize) };
+            if let Err(e) = acos_vm::natives::jni_glue::native_mem_write(synthetic, bytes) {
+                let _ = throw_class(
+                    &mut ctx,
+                    "Ljava/lang/IllegalStateException;",
+                    &format!("NewDirectByteBuffer: {e}"),
+                );
+                return 0;
+            }
+        }
+        (synthetic, address as i64)
     };
     let h = match new_direct_buffer_object(&mut ctx, addr, capacity) {
         Ok(h) => h,
@@ -2572,7 +2606,7 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
     ctx.rt
         .borrow_mut()
         .direct_buffers
-        .insert(lh, (addr, capacity));
+        .insert(lh, (addr, capacity, host));
     lh as usize
 }
 
@@ -2592,11 +2626,13 @@ pub unsafe extern "C" fn jni_GetDirectBufferAddress(_env: usize, obj: usize) -> 
     if h == NULL {
         return 0;
     }
-    if let Some((addr, cap)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
+    if let Some((addr, cap, host)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
         if cap < 0 {
             return 0;
         }
-        return addr as usize;
+        // For a buffer wrapped over caller-owned native memory, hand the
+        // original pointer back; Java reads through the synthetic copy.
+        return if host != 0 { host as usize } else { addr as usize };
     }
     // Java-created direct buffer: `DirectByteBuffer.address` is the base the
     // `MemoryRef` computed. `get_field` searches the class hierarchy.
@@ -2636,7 +2672,7 @@ pub unsafe extern "C" fn jni_GetDirectBufferCapacity(_env: usize, obj: usize) ->
     if h == NULL {
         return -1;
     }
-    if let Some((_, cap)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
+    if let Some((_, cap, _)) = ctx.rt.borrow().direct_buffers.get(&h).copied() {
         return cap;
     }
     let vm = ctx.vm();
@@ -2862,6 +2898,7 @@ pub unsafe extern "C" fn acos_jni_va_invoke(
         );
         return zero_result();
     };
+
     if n < 0 || n as usize != info.param_descs.len() {
         record(
             &ctx,
@@ -2910,7 +2947,18 @@ pub unsafe extern "C" fn acos_jni_va_invoke(
                 );
                 return zero_result();
             }
+            // JNI `Call<Type>Method` resolves the method by ID; a private
+            // method (e.g. `FlutterJNI.updateSemantics`, invoked by the engine
+            // to deliver the accessibility tree) is only in the class's
+            // direct map, so virtual dispatch misses it. Fall back to direct
+            // resolution, exactly like the `GetMethodID` lookup above.
             vm.call_method(h, &info.name, &info.sig, &args)
+                .or_else(|e| match e {
+                    BridgeError::MethodNotFound { .. } => {
+                        vm.call_method_direct(h, &info.name, &info.sig, &args)
+                    }
+                    other => Err(other),
+                })
         }
         1 => vm.call_static(&info.class, &info.name, &info.sig, &args),
         2 => vm

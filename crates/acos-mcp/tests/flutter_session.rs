@@ -132,42 +132,36 @@ fn flutter_launch_observe_tap_round_trip() {
         .as_array()
         .cloned()
         .unwrap_or_default();
-    let increment = nodes.iter().find(|n| n["text"] == "Increment");
-    // The raw `dart:ui` probe builds the node (the snapshot contains it), but the
-    // current `FlutterJNI`-only driver does not establish the engine's
-    // `AccessibilityBridge`, so the engine never delivers the update to the
-    // delegate and the tree is empty. Assert the shape when it is present and
-    // fall back to the physical point otherwise (documented sub-blocker).
-    let tap_args = if let Some(node) = increment {
-        assert_eq!(
-            node["clickable"], true,
-            "the Increment node must be clickable: {node:#?}"
-        );
-        assert_eq!(node["bounds"].as_array().map(Vec::len), Some(4));
-        json!({
-            "text": "Increment",
-            "base": {"request_id": "req_flutter_tap", "session_id": "s_flutter"},
-        })
-    } else {
-        eprintln!(
-            "NOTE: observe --tree returned {} nodes; engine semantics delivery is not wired,              tapping the known physical centre instead",
-            nodes.len()
-        );
-        json!({
-            "x": 375,
-            "y": 600,
-            "base": {"request_id": "req_flutter_tap", "session_id": "s_flutter"},
-        })
-    };
+    // W156-A: the engine now delivers the semantics tree (semantics are enabled
+    // after the first frame and `FlutterJNI.updateSemantics` reaches the
+    // embedder), so the tree is required: the Increment button with bounds and
+    // the tap action set.
+    let increment = nodes
+        .iter()
+        .find(|n| n["text"] == "Increment")
+        .unwrap_or_else(|| {
+            panic!("observe --tree did not return the Increment node: {tree_env:#?}")
+        });
+    assert_eq!(
+        increment["clickable"], true,
+        "the Increment node must be clickable: {increment:#?}"
+    );
+    assert_eq!(
+        increment["bounds"].as_array().map(Vec::len),
+        Some(4),
+        "the Increment node must carry bounds: {increment:#?}"
+    );
+    let tap_args = json!({
+        "text": "Increment",
+        "base": {"request_id": "req_flutter_tap", "session_id": "s_flutter"},
+    });
     let tap = client.call_tool("acos_tap", tap_args);
     let tapped = envelope_of(&tap);
     assert_eq!(
         tapped["status"], "pass",
         "flutter tap must dispatch: {tapped:#?}"
     );
-    if increment.is_some() {
-        assert_eq!(tapped["result"]["resolved_text"], "Increment");
-    }
+    assert_eq!(tapped["result"]["resolved_text"], "Increment");
     let tapped_at = tapped["result"]["tapped"]
         .as_array()
         .cloned()

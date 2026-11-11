@@ -288,6 +288,13 @@ pub struct FlutterSession {
     // Semantics bookkeeping.
     semantics_seq: i32,
     semantics: Vec<SemanticsNode>,
+    /// Whether `enableSemantics` has been sent to the engine. W156-A: it is
+    /// deferred until the first frame is presented, because the Dart isolate
+    /// starts asynchronously and `onSemanticsEnabledChanged` may not be
+    /// installed when `launch` returns (the engine's
+    /// `_updateSemanticsEnabled(true)` would then be delivered before the app
+    /// can react).
+    semantics_requested: bool,
 }
 
 // The session holds a raw `ALooper*` owned by the platform thread; it is never
@@ -559,7 +566,7 @@ impl FlutterSession {
             acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0)
         };
 
-        let mut session = FlutterSession {
+        let session = FlutterSession {
             vm,
             rt,
             _loader: loader,
@@ -581,12 +588,8 @@ impl FlutterSession {
             vsync_delivered: 0,
             semantics_seq: -1,
             semantics: Vec::new(),
+            semantics_requested: false,
         };
-        // Enable semantics if requested; the Java driver installed the
-        // accessibility delegate before `main` returned.
-        if session.opts.semantics {
-            let _ = session.call_driver("enableSemantics", "()V", &[]);
-        }
         Ok(session)
     }
 
@@ -645,6 +648,15 @@ impl FlutterSession {
         }
 
         self.collect_frames();
+        // W156-A: request semantics only once the Dart isolate has drawn a
+        // frame (proof that `main` ran and installed
+        // `onSemanticsEnabledChanged`). Doing it in `launch` raced the isolate
+        // start and the engine's callback fired before the app could observe
+        // it, leaving `sSemanticsSeq` at 0.
+        if self.opts.semantics && !self.semantics_requested && !self.frames.is_empty() {
+            self.semantics_requested = true;
+            let _ = self.call_driver("enableSemantics", "()V", &[]);
+        }
         Ok(self.frames.len())
     }
 
@@ -845,6 +857,25 @@ impl FlutterSession {
         let dpr = self.opts.dpr;
         let x = ((b[0] + b[2]) as f64 / 2.0) * dpr;
         let y = ((b[1] + b[3]) as f64 / 2.0) * dpr;
+        let (node_id, clickable) = (node.id, node.clickable());
+        // W156-A: prefer the accessibility action channel
+        // (`nativeDispatchSemanticsAction`, TAP = 1). If the app does not act on
+        // it (a raw `dart:ui` probe without an action handler), fall back to the
+        // proven W130-A pointer packet at the node centre so the tap still has
+        // an effect.
+        if clickable {
+            let before = self.frames.len();
+            let _ = self.call_driver(
+                "dispatchSemanticsTap",
+                "(I)V",
+                &[JavaValue::Int(node_id)],
+            );
+            let _ =
+                self.pump_until_frames(before + 1, self.opts.max_pump_rounds.min(120));
+            if self.frames.len() > before {
+                return Ok([x, y]);
+            }
+        }
         self.tap(x, y)?;
         Ok([x, y])
     }

@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use acos_dex::DexFile;
+use acos_jni::flutter::decode_semantics_update;
 use acos_jni::{JniConfig, JniRuntime};
 use acos_native_loader::{Loader, LoaderConfig, LoaderError};
 use acos_vm::{CoreLib, Vm, VmOptions};
@@ -106,6 +107,34 @@ fn load_apk_dex(apk: &Path, vm: &mut Vm) -> Result<usize, String> {
         added += 1;
     }
     Ok(added)
+}
+
+/// Read a guest `byte[]` (the engine's semantics buffer, copied into the
+/// driver's static field by the `AccessibilityDelegate`).
+fn read_byte_array(vm: &mut Vm, h: acos_vm::Handle) -> Vec<u8> {
+    let len = vm.array_length(h).unwrap_or(0);
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if let Ok(acos_vm::JavaValue::Byte(b)) = vm.get_array_element(h, i) {
+            out.push(b as u8);
+        }
+    }
+    out
+}
+
+/// Read a guest `String[]` (the engine's deduplicated semantics string table).
+fn read_string_array(vm: &mut Vm, h: acos_vm::Handle) -> Vec<String> {
+    let len = vm.array_length(h).unwrap_or(0);
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        match vm.get_array_element(h, i) {
+            Ok(acos_vm::JavaValue::Object(sh)) => {
+                out.push(vm.java_string_to_rust(sh).unwrap_or_default());
+            }
+            _ => out.push(String::new()),
+        }
+    }
+    out
 }
 
 /// Broad category for a loader failure, used by `FIRST_RUN.md`.
@@ -603,11 +632,30 @@ fn flutter_child_worker() {
         "W93A_STAGE {}",
         serde_json::json!({"phase": "looper-prepared", "looper": format!("{looper:p}")})
     );
+    // W156-A: request the engine's semantics stream only after the Dart isolate
+    // has drawn a frame. Requesting it right after `vm.run` returned raced the
+    // asynchronous isolate start: the engine's `_updateSemanticsEnabled(true)`
+    // fired before the app installed `onSemanticsEnabledChanged`, so
+    // `sSemanticsSeq` stayed 0.
     let mut seen_frames = 0usize;
     let mut tapped = false;
+    let mut sem_enabled = false;
     let mut delivered = 0usize;
     let mut vsync_due = std::time::Instant::now();
     for _round in 0..1500 {
+        if _round % 40 == 0 {
+            if let Ok(acos_vm::JavaValue::Object(h)) = vm.call_static(
+                "Ldev/acos/fixtures/flutterhello/FlutterProbe;",
+                "semanticsDebug",
+                "()Ljava/lang/String;",
+                &[],
+            ) {
+                let s = vm.java_string_to_rust(h).unwrap_or_default();
+                println!("W93A_SEM round={_round} {s}");
+            } else {
+                println!("W93A_SEM round={_round} <no debug>");
+            }
+        }
         let mut fd: std::os::raw::c_int = 0;
         let mut events: std::os::raw::c_int = 0;
         let mut data: *mut std::os::raw::c_void = std::ptr::null_mut();
@@ -697,6 +745,18 @@ fn flutter_child_worker() {
                 })
             );
         }
+        if !sem_enabled && seen_frames >= 1 {
+            sem_enabled = true;
+            match vm.call_static(
+                "Ldev/acos/fixtures/flutterhello/FlutterProbe;",
+                "enableSemantics",
+                "()V",
+                &[],
+            ) {
+                Ok(v) => println!("W93A_SEM enable-call ok={v:?}"),
+                Err(e) => println!("W93A_SEM enable-call error={e:?}"),
+            }
+        }
         if seen_frames >= 3 {
             // The tap's second frame is present; stop once it has settled.
             break;
@@ -709,6 +769,50 @@ fn flutter_child_worker() {
     for line in outcome.stderr.lines() {
         println!("W93A_PROBE_ERR {line}");
     }
+
+    // W156-A: read the engine's delivered semantics stream through the driver's
+    // `AccessibilityDelegate` capture fields and decode it with the W137-A port.
+    let sem_desc = "Ldev/acos/fixtures/flutterhello/FlutterProbe;";
+    let sem_seq = match vm.get_static_field(sem_desc, "sSemanticsSeq") {
+        Ok(acos_vm::JavaValue::Int(v)) => v,
+        _ => 0,
+    };
+    let sem_buffer = match vm.get_static_field(sem_desc, "sSemanticsBuffer") {
+        Ok(acos_vm::JavaValue::Object(h)) => read_byte_array(&mut vm, h),
+        _ => Vec::new(),
+    };
+    let sem_strings = match vm.get_static_field(sem_desc, "sSemanticsStrings") {
+        Ok(acos_vm::JavaValue::Object(h)) => read_string_array(&mut vm, h),
+        _ => Vec::new(),
+    };
+    let sem_nodes = decode_semantics_update(&sem_buffer, &sem_strings, &[]).unwrap_or_default();
+    println!(
+        "W93A_STAGE {}",
+        serde_json::json!({
+            "phase": "semantics",
+            "seq": sem_seq,
+            "buffer": sem_buffer.len(),
+            "head": sem_buffer
+                .iter()
+                .take(24)
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(""),
+            "strings": sem_strings.len(),
+            "nodes": sem_nodes
+                .iter()
+                .map(|n| serde_json::json!({
+                    "id": n.id,
+                    "text": n.text(),
+                    "value": n.value,
+                    "bounds": n.bounds(),
+                    "clickable": n.clickable(),
+                    "flags": n.flags,
+                    "actions": n.actions,
+                }))
+                .collect::<Vec<_>>(),
+        })
+    );
 
     // Persist every presented frame so `acos frame-diff` can compare the real
     // engine output with the phone reference. Frames are RGBA8888 straight
@@ -945,6 +1049,41 @@ fn flutter_hello_under_confinement() {
             "the frame after the tap does not show counter: 1: {stderr}"
         );
     }
+
+    // W156-A: the engine must deliver the semantics tree to the embedder after
+    // the Dart isolate is running (`nativeSetSemanticsEnabled` +
+    // `onSemanticsEnabledChanged`), and the W137-A decoder must see the fixture
+    // button as an `Increment` node with bounds.
+    let sem_stage = stdout.lines().find_map(|l| {
+        l.strip_prefix("W93A_STAGE ")
+            .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+            .filter(|v| v["phase"] == "semantics")
+    });
+    let sem = sem_stage.unwrap_or_else(|| {
+        panic!("child never reported a semantics stage: {stdout}\nstderr:\n{stderr}")
+    });
+    assert!(
+        sem["seq"].as_i64().unwrap_or(0) > 0,
+        "engine semantics sequence is still 0: {sem}"
+    );
+    assert!(
+        stderr.contains("ACOS_DART_SEMANTICS nodes=1 label=Increment"),
+        "the Dart probe did not publish its semantics node: {stderr}"
+    );
+    let nodes = sem["nodes"].as_array().cloned().unwrap_or_default();
+    let increment = nodes
+        .iter()
+        .find(|n| n["text"] == "Increment")
+        .unwrap_or_else(|| panic!("no Increment node in {sem}"));
+    assert_eq!(
+        increment["bounds"].as_array().map(Vec::len),
+        Some(4),
+        "Increment node has no bounds: {increment}"
+    );
+    assert_eq!(
+        increment["clickable"], true,
+        "Increment node is not clickable: {increment}"
+    );
 
     let out_dir = repo_root().join("results/flutter");
     let _ = std::fs::create_dir_all(&out_dir);
