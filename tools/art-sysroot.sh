@@ -19,14 +19,18 @@
 #   <out>/FONTS.txt, <out>/APEX_MODULES.txt               module <TAB> count/file name
 #   <out>/BOOTCLASSPATH                                   device paths, real boot order
 #   <out>/bootimg/x86_64/boot.{art,oat,vdex}              AOT boot image (optional)
+#   <out>/shim/libacoshw.so                               software gralloc LD_PRELOAD shim
+#                                                        (crates/acos-art/shim/gralloc_shim.c)
 #   <out>/MANIFEST.txt, <out>/READY                       integrity + completion stamps
 #
 # Usage:
 #   tools/art-sysroot.sh [--out DIR] [--force] [--no-boot-image] [--regen-classpath]
+#                        [--no-shim]
 #
 #   --out DIR            output directory (default .cache/art/sysroot)
 #   --force              redo the extraction even if READY exists
 #   --no-boot-image      skip the dex2oat64 boot image step
+#   --no-shim            skip building the gralloc LD_PRELOAD shim
 #   --image REL          system image, relative to $ANDROID_HOME
 #                        (default system-images/android-34/google_apis/x86_64)
 #   --keep-work          keep the ~5 GB intermediates (super.img, system.img)
@@ -42,6 +46,7 @@ SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 IMAGE_REL="${ANDROID_IMAGE_REL:-system-images/android-34/google_apis/x86_64}"
 OUT="${ACOS_ART_SYSROOT:-$ROOT/.cache/art/sysroot}"
 BOOT_IMAGE=1
+SHIM=1
 FORCE=0
 KEEP_WORK=0
 
@@ -54,6 +59,7 @@ while [ $# -gt 0 ]; do
         --image) IMAGE_REL="$2"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --no-boot-image) BOOT_IMAGE=0; shift ;;
+        --no-shim) SHIM=0; shift ;;
         --keep-work) KEEP_WORK=1; shift ;;
         -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown option $1 (try --help)" ;;
@@ -410,6 +416,41 @@ if [ "$BOOT_IMAGE" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 5b. software gralloc shim (LD_PRELOAD for the real guest)
+# ---------------------------------------------------------------------------
+# crates/acos-art/shim/gralloc_shim.c is the option-A interposer (T0 -> G1):
+# memfd-backed buffers behind the *stock* libui/libgui the image ships. It is
+# built here, against the image's own bionic, so the sysroot is the single
+# source of truth for "which libui.so this shim was matched against". Hash-stamp
+# cached like the rest; --force rebuilds it with the sysroot.
+build_hw_shim() {
+    local src="$ROOT/crates/acos-art/shim/gralloc_shim.c"
+    local out="$OUT/shim/libacoshw.so"
+    local stamp="$OUT/shim/gralloc_shim.hash"
+    local ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}/ndk/27.1.12297006}}"
+    local cc="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang"
+
+    [ -f "$src" ] || die "missing shim source: $src"
+    [ -x "$cc" ] || die "no NDK clang at $cc (set ANDROID_NDK_HOME)"
+
+    local hash
+    hash="$(sha256sum "$src" | cut -c1-32)"
+    if [ -f "$out" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$hash" ]; then
+        log "gralloc shim up to date: $out"
+        return 0
+    fi
+    mkdir -p "$OUT/shim"
+    log "building the software gralloc shim: $out"
+    "$cc" -O2 -fPIC -shared -Wall -Wno-unused-parameter \
+        -o "$out" "$src" || die "gralloc shim build failed"
+    printf '%s\n' "$hash" >"$stamp"
+}
+
+if [ "$SHIM" -eq 1 ]; then
+    build_hw_shim
+fi
+
+# ---------------------------------------------------------------------------
 # 6. manifest + stamps
 # ---------------------------------------------------------------------------
 log "writing MANIFEST.txt"
@@ -431,6 +472,7 @@ log "writing MANIFEST.txt"
     echo "apex_modules=$nmodules"
     echo "bootclasspath_jars=$(wc -l <"$OUT/BOOTCLASSPATH")"
     echo "boot_image=$([ -f "$OUT/bootimg/x86_64/boot.art" ] && echo yes || echo no)"
+    echo "hw_shim=$([ -f "$OUT/shim/libacoshw.so" ] && echo yes || echo no)"
     echo "extracted_at=$(date -Is)"
 } >"$OUT/READY"
 
