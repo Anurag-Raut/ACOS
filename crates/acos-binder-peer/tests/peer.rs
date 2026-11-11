@@ -445,3 +445,60 @@ fn reply_file_descriptors_stay_open_until_the_frame_is_written() {
     assert_eq!(i32::from_le_bytes(buf), 7, "same bytes the provider wrote");
     close_frame_fds(&frame);
 }
+
+/// L1 §3.6 regression: libbinder writes a **null** binder as 24 zero bytes plus a
+/// 4-byte `Stability::Level` record, and — unlike a real binder — does **not** put
+/// it in the offset table (`Parcel::writeObject(obj, /*nullMetaData=*/false)`).
+/// Reading it must consume those 28 bytes, or every argument after it shifts by 4
+/// (`ViewRootImpl`'s `LayoutParams.token` is exactly that case: the service
+/// reported `object at 200 is not a binder`).
+#[test]
+fn a_null_binder_consumes_its_stability_record_even_without_an_offset_entry() {
+    let mut data = Vec::new();
+    data.extend_from_slice(&7i32.to_le_bytes());
+    // flat_binder_object{type=BINDER, flags=0, binder=0, cookie=0}: libbinder's
+    // null-binder record (not all-zero bytes — the type word is set).
+    let mut null_obj = [0u8; 24];
+    null_obj[0..4].copy_from_slice(&acos_parcel::binder::BINDER_TYPE_BINDER.to_le_bytes());
+    data.extend_from_slice(&null_obj);
+    data.extend_from_slice(&0i32.to_le_bytes()); // Stability::UNDECLARED
+    data.extend_from_slice(&42i32.to_le_bytes());
+    let frame = Frame::plain(F_REQ, 1, 1, 0, NODE_TAG | 1, data);
+    assert!(frame.object_offsets().is_empty(), "a null binder is not listed");
+
+    let mut parcel = import_parcel(&frame);
+    assert_eq!(parcel.read_int32().expect("int"), 7);
+    assert_eq!(parcel.read_strong_binder().expect("binder"), None);
+    assert_eq!(
+        parcel.read_int32().expect("the argument after the null binder"),
+        42
+    );
+    assert_eq!(parcel.data_avail(), 0);
+}
+
+/// The same round trip for both kinds of binder: the peer's wire writer must emit
+/// libbinder's shape (null binder unlisted, stability 0; real binder listed,
+/// stability SYSTEM) and the importer must consume exactly one of each.
+#[test]
+fn wire_form_round_trips_a_null_binder_and_a_real_one() {
+    for id in [BinderId::NULL, BinderId(JAVA_TAG | 5)] {
+        let mut written = Parcel::new();
+        written.write_int32(7);
+        written.write_strong_binder_opt(if id.is_null() { None } else { Some(id) });
+        written.write_int32(42);
+        let base = Frame::plain(F_REQ, 1, 1, 0, NODE_TAG | 1, Vec::new());
+        let frame = frame_from_parcel(F_REQ, &base, &written);
+        assert_eq!(
+            frame.object_offsets().len(),
+            if id.is_null() { 0 } else { 1 },
+            "null binders are not in the offset table"
+        );
+
+        let mut back = import_parcel(&frame);
+        assert_eq!(back.read_int32().expect("int"), 7);
+        let want = if id.is_null() { None } else { Some(id) };
+        assert_eq!(back.read_strong_binder().expect("binder"), want);
+        assert_eq!(back.read_int32().expect("int after the binder"), 42);
+        assert_eq!(back.data_avail(), 0);
+    }
+}

@@ -1028,6 +1028,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     let mut parcel = Parcel::new();
     parcel.unmarshall(&out);
     parcel.set_data_position(0);
+    // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
+    // stability record but no object-table entry (L1 §3.6).
+    parcel.set_wire_null_stability(true);
     parcel
 }
 
@@ -1093,7 +1096,16 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
             obj[8..16].copy_from_slice(&id.to_le_bytes());
             obj[16..24].copy_from_slice(&0u64.to_le_bytes());
         }
-        offs.extend_from_slice(&(out.len() as u64).to_le_bytes());
+        // libbinder does not list a **null** binder in the offset table
+        // (`Parcel::writeObject(obj, /*nullMetaData=*/false)` skips the entry when
+        // `binder == 0`), although it still writes the 24-byte object and the
+        // 4-byte stability record. Match that exactly: the guest reads a null
+        // binder by position, not from the object table, and an extra entry
+        // would make the table disagree with what the receiver walks.
+        let null_binder = parsed.is_binder() && parsed.id == 0;
+        if !null_binder {
+            offs.extend_from_slice(&(out.len() as u64).to_le_bytes());
+        }
         out.extend_from_slice(&obj);
         if add_stability {
             // Stability::Level::SYSTEM == 0b1100 (E3G §3.3) for a real binder,

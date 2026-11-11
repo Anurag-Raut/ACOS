@@ -58,6 +58,15 @@ pub struct Parcel {
     marked: BTreeSet<u64>,
     /// Interface-token magic this parcel writes/expects; system by default.
     token_header: u32,
+    /// True when this parcel is in **libbinder wire form**: every binder object
+    /// may be followed by a 4-byte `Stability::Level` record. Objects that are
+    /// in the offset table are stripped on import (the peer does that); a
+    /// **null** binder is not in the table (`Parcel::writeObject(obj, false)`) and
+    /// is always followed by that record, so [`Parcel::read_strong_binder`] skips
+    /// it here. Without this a request containing a null binder (e.g.
+    /// `ViewRootImpl`'s `LayoutParams.token`) desyncs the rest of the parcel by
+    /// 4 bytes (L1 §3.6).
+    wire_null_stability: bool,
 }
 
 impl std::fmt::Debug for Parcel {
@@ -114,6 +123,7 @@ impl Clone for Parcel {
             allow_fds: self.allow_fds,
             marked: self.marked.clone(),
             token_header: self.token_header,
+            wire_null_stability: self.wire_null_stability,
         }
     }
 }
@@ -130,6 +140,7 @@ impl Parcel {
             allow_fds: true,
             marked: BTreeSet::new(),
             token_header: crate::token::SYSTEM_INTERFACE_TOKEN_HEADER,
+            wire_null_stability: false,
         }
     }
 
@@ -843,10 +854,23 @@ impl Parcel {
             });
         }
         if obj.id == 0 {
+            // A null binder is written without an object-table entry but *with*
+            // the 4-byte stability record (`Parcel::finishFlattenBinder` always
+            // writes it). Consume it so the next argument stays aligned.
+            if self.wire_null_stability {
+                self.check(4)?;
+                self.pos += 4;
+            }
             Ok(None)
         } else {
             Ok(Some(BinderId(obj.id)))
         }
+    }
+
+    /// Mark this parcel as libbinder **wire form** for the stability record that
+    /// follows a null binder (see the field docs).
+    pub fn set_wire_null_stability(&mut self, yes: bool) {
+        self.wire_null_stability = yes;
     }
 
     // ------------------------------------------------------------------
@@ -1152,6 +1176,7 @@ impl Parcel {
         self.marked.clear();
         self.allow_fds = true;
         self.token_header = crate::token::SYSTEM_INTERFACE_TOKEN_HEADER;
+        self.wire_null_stability = false;
     }
 
     /// `enforceNoDataAvail`: error when unread bytes remain.
