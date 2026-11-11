@@ -1626,3 +1626,73 @@ M9 stays **FAIL** (input-level independence is still not proven), unchanged.
 **Files:** `crates/acos-cli/src/serve.rs` (event-driven accept poll),
 `crates/acos-runtime/src/session.rs` (CRC-32 table, Adler-32 batching, a
 known-answer unit test). No other tracked file. The emitted PNG is unchanged.
+
+---
+
+## 10. W12 — per-session cost of the real interactive ART session (2026-11-11)
+
+First measurement of **Option A's actual per-session cost** (stock `ViewRootImpl` /
+`Choreographer` / BLAST / HWUI on the ACOS C1 + `IWindowSession`), on commit `da9e9aa`
+with the W10 BLAST-pool workaround (`DEFAULT_MAX_ACQUIRED_BUFFERS = 24`, no env override).
+Harness and full report: `results/art-runtime/W12.md`; raw run:
+`results/bench/W12-session-memory.json`. One rep per (mode, N); host 61.9 GiB, 32 threads,
+debug binaries, `date -u` 20:01:52–20:02:29.
+
+Re-run (one command, ~40 s, holds the host ART lock, `guarded.sh --mem 14G`):
+
+```bash
+tools/art-runtime/bench-session.sh --n "1 10 20" --modes "full launch render" \
+    --sample-ms 100 --out .cache/bench-session/w12-postw11
+# re-derive tables without running ART: add --analyze .cache/bench-session/w12-…
+```
+
+Modes: `full` = `acos verify --engine art` on counter.apk (interactive: launch → live tree →
+tap Increment → capture → reset → tap; the product path); `launch` = `acos-art launch
+--until activity-resumed` (same window stack, no interaction); `render` = `acos-art
+render-app` (real ART + framework `Activity` + stock libhwui, but the **non-windowed** path:
+zeroed `ViewRootImpl` stand-in, no BLAST/C1/window session).
+
+| cohort | N | verified | per-session total MiB (cgroup peak + launcher + bwrap) | per-session PSS MiB | Σ PSS MiB | Σ cgroup MiB | gralloc buffers/session | launch→frame ms | tap→fresh frame ms | host peak % |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|
+| full | 1 | 1/1 | **363.1** | 262.2 | 262.2 | 303.3 | 24 (218.4 MiB) | 535 | 1628 | 23.6 |
+| full | 10 | **10/10** | 352.4 | 145.3 | 1452.0 | 2979.8 | 23–24 | 556 | 1714 | 31.5 |
+| full | 20 | **20/20** | 348.1 | 141.3 | 2841.2 | 5899.2 | 23–24 | 759 | 1906 | 35.5 |
+| launch | 1 | 1/1 | 109.4 | 206.0 | 206.0 | 97.8 | 2 (18.2 MiB) | – | – | 24.4 |
+| launch | 10 | 10/10 | 101.5 | 89.3 | 891.1 | 945.6 | 2 | – | – | 25.2 |
+| launch | 20 | 20/20 | 100.6 | 84.5 | 1693.4 | 1904.5 | 2 | – | – | 26.4 |
+| render | 1 | 1/1 | 57.5 | 158.0 | 158.0 | 50.8 | 0 | – | – | 23.6 |
+| render | 10 | 10/10 | 62.9 | 71.2 | 842.2 | 555.3 | 0 | – | – | 24.2 |
+| render | 20 | 20/20 | 62.2 | 66.8 | 1434.2 | 1170.7 | 0 | – | – | 24.6 |
+
+Headline readings:
+
+* **Option A's window/surface stack costs +48.0 MiB PSS / +47.0 MiB guest cgroup per
+  session** with a 2-buffer pool (`launch` − `render`, N=1); 18.2 MiB of that is the buffer
+  bytes themselves. The `WR-window-surface-options.md` §3 estimate was **+27 MiB**, so the
+  estimate is **low by ~21 MiB (1.8×)**. It stays far below the *estimated* +120–300 MiB of a
+  stock SurfaceFlinger process (WR option C) — and no `libsurfaceflinger.so` /
+  `librenderengine.so` exists in the sysroot we hold, so no SF size is claimed.
+* **Today's product path costs 348–363 MiB per session**, 6.4× the small-pool window-stack
+  cost, almost entirely because the W10 pool workaround allocates 24 × 1080×2209×4 B ≈
+  218 MiB of memfd buffers whose touched pages are charged to the guest cgroup. W11's release
+  fix should bring this to ≈150–165 MiB/session; re-measure, do not assume.
+* **Metric-type rules matter here**: gralloc memfd pages are `mmap`ed only during
+  `lock`/`unlock`, so they are **absent from every process' PSS** and only visible in the
+  guest cgroup (`memory.stat shmem`) and host used. Per-session cost therefore uses the
+  cgroup `memory.peak`; the PSS sums split shared sysroot pages instead. cgroup sums
+  over-count sharing across sessions (Σ cgroup 2979.8 MiB vs Σ PSS 1452.0 MiB at N=10).
+  Never add the two.
+* Marginal per extra session (`Σ PSS` N=1→10 / N=10→20): **132.2 / 138.9 MiB** (share-aware,
+  buffers excluded); (`Σ cgroup`) **297.4 / 291.9 MiB** (per-session bound, sharing counted
+  per cgroup).
+* Legacy ACVM reference (different metric type, not summed): per-session N=1 130.3 MiB
+  anon+shmem, so ACOS-on-ART is ~2× today and ~0.85× expected after the pool fix, while
+  running the real framework path.
+* Correctness: 1/1, 10/10, 20/20 `verify` passes, three taps each with fresh frames,
+  0 cgroup OOM kills, MemAvailable never below 44 GiB.
+
+Caveats: one rep; host deltas contaminated by a concurrent agent (W11) and by ~9.5 MB/frame
+PNG page cache; debug binaries; one-shot `launch`/`render` rows are 100 ms-sampled peaks;
+`render-app` is a memory comparator, never verification evidence. `acos-art session` (the
+older headless route used by `bench-n.sh`) exits rc=1 after `activity-resumed` at this commit
+and could not be used as the comparator — recorded in `W12.md` §8.
