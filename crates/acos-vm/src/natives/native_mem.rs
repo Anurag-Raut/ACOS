@@ -130,14 +130,102 @@ pub(crate) fn total_bytes() -> usize {
     MEM.with(|m| m.borrow().total)
 }
 
+/// A serialisable copy of one live native region.
+///
+/// A snapshot can hold Java `DirectByteBuffer`s (and any other object) whose
+/// synthetic address names a region here. The region table itself is
+/// process-global native state, not VM heap state, so a restore in a fresh
+/// process must re-establish it or the restored buffer reads whatever (or
+/// nothing) happens to occupy that region id. This is the fix for W154-A:
+/// `ICUBinary$DatPackageReader` holds a mapped read-only ICU `.dat` buffer
+/// captured by the primed `Typeface.<clinit>` template, and a warm restore
+/// read a stale/garbage region and threw `IndexOutOfBoundsException`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RegionEntry {
+    /// Region id (the high 32 bits of every synthetic address into it).
+    pub id: u32,
+    /// Whether the region rejects writes (`MAP_RO`).
+    pub readonly: bool,
+    /// Region contents, exactly as the live table holds them.
+    pub data: Vec<u8>,
+}
+
+/// Snapshot every live region, sorted by id so the byte stream is
+/// deterministic regardless of `HashMap` iteration order.
+pub(crate) fn snapshot_regions() -> Vec<RegionEntry> {
+    MEM.with(|m| {
+        let m = m.borrow();
+        let mut ids: Vec<u32> = m.regions.keys().copied().collect();
+        ids.sort_unstable();
+        ids.into_iter()
+            .map(|id| {
+                let r = &m.regions[&id];
+                RegionEntry {
+                    id,
+                    readonly: r.readonly,
+                    data: r.data.clone(),
+                }
+            })
+            .collect()
+    })
+}
+
+/// Re-establish regions captured by [`snapshot_regions`].
+///
+/// Idempotent: a region that already exists with **identical** contents is
+/// left in place (the template boot and the first restore share one process in
+/// which the live table is already correct). A conflicting id is skipped, with
+/// a trace under `ACOS_BOOT_TRACE`, because overwriting it could clobber a
+/// region some other restored object still references; the caller's snapshot
+/// validation guarantees this does not happen for a legitimate template.
+pub(crate) fn restore_regions(regions: &[RegionEntry]) {
+    let trace = std::env::var_os("ACOS_BOOT_TRACE").is_some();
+    MEM.with(|m| {
+        let mut m = m.borrow_mut();
+        for r in regions {
+            if let Some(existing) = m.regions.get(&r.id) {
+                if trace && (existing.data != r.data || existing.readonly != r.readonly) {
+                    eprintln!("[native_mem] region {} conflict, keeping live bytes", r.id);
+                }
+                continue;
+            }
+            let len = r.data.len();
+            if m.total.saturating_add(len) > m.cap {
+                if trace {
+                    eprintln!("[native_mem] region {} skipped: cap exceeded", r.id);
+                }
+                continue;
+            }
+            m.total += len;
+            m.regions.insert(
+                r.id,
+                Region {
+                    data: r.data.clone(),
+                    readonly: r.readonly,
+                },
+            );
+            if r.id >= m.next_id {
+                m.next_id = r.id.saturating_add(1);
+            }
+        }
+    });
+}
+
 /// The configured cap in bytes.
 pub(crate) fn cap_bytes() -> usize {
     MEM.with(|m| m.borrow().cap)
 }
 
-/// Drop every region. Used by tests and as the reclaim hook when a VM is torn
+/// Drop every region. Used by tests, by [`Vm::new`](crate::vm::Vm::new) when a
+/// fresh VM starts on this thread, and as the reclaim hook when a VM is torn
 /// down.
-#[cfg(test)]
+///
+/// A fresh boot is a fresh process-like state: regions captured by a *previous*
+/// VM on the same host thread must not leak into the next VM's snapshot (they
+/// would nearly double the payload with an unreferenced 28 MiB ICU map and push
+/// it past the on-disk cache cap). The supported model is one `Vm` per host
+/// thread; `Vm::restore` deliberately does **not** clear, because it
+/// re-establishes the snapshot's own regions.
 pub(crate) fn reclaim_all() {
     MEM.with(|m| {
         let mut m = m.borrow_mut();
@@ -964,6 +1052,43 @@ mod tests {
         // A single oversized allocation is rejected without touching the host.
         let big = alloc(cap + 1, false);
         assert_eq!(big, Err(MemError::CapExceeded));
+    }
+
+    #[test]
+    fn snapshot_and_restore_regions_round_trip() {
+        reclaim_all();
+        let a = alloc_with(vec![9, 8, 7, 6], true).expect("alloc");
+        let b = alloc(4, false).expect("alloc");
+        let marker = 0xdead_beefu32 as i32;
+        set_i32(b, marker).unwrap();
+        let saved = snapshot_regions();
+        assert_eq!(saved.len(), 2);
+        assert!(
+            saved.windows(2).all(|w| w[0].id < w[1].id),
+            "regions must be sorted by id for a deterministic snapshot"
+        );
+
+        // Simulate a fresh process: drop every region, then re-establish the
+        // snapshot's table. The synthetic addresses must resolve again.
+        reclaim_all();
+        assert_eq!(snapshot_regions().len(), 0);
+        restore_regions(&saved);
+        assert_eq!(read_bytes(a, 4).unwrap(), vec![9, 8, 7, 6]);
+        assert_eq!(get_i32(b).unwrap(), marker);
+        assert!(
+            write_bytes(a, &[0]).is_err(),
+            "the read-only flag must survive a restore"
+        );
+        assert_eq!(snapshot_regions(), saved, "restore is exact");
+
+        // Restoring the same table again is a no-op, not a duplication.
+        restore_regions(&saved);
+        assert_eq!(snapshot_regions(), saved);
+
+        // A fresh allocation must not reuse a restored region id.
+        let c = alloc(1, false).expect("alloc");
+        let cid = (c as u64 >> 32) as u32;
+        assert!(!saved.iter().any(|r| r.id == cid));
     }
 
     #[test]

@@ -61,7 +61,11 @@ use crate::vm::{CoreLib, ThreadRT, ThreadStatus, Vm, VmOptions};
 pub const SNAPSHOT_MAGIC: [u8; 8] = *b"ACOSSNAP";
 /// Snapshot format version. Bump on any layout change; restore refuses to read
 /// a stream whose version differs.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 2;
+///
+/// Version 3 adds the native-memory region table (W154-A): a mapped ICU `.dat`
+/// `DirectByteBuffer` captured by a primed template otherwise restores to a
+/// stale synthetic address in a fresh process.
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 3;
 
 /// Process-native identity recovered from a restored `Vm` (T-43).
 #[derive(Clone, Debug, Default)]
@@ -966,6 +970,15 @@ impl Vm {
             write_regex_state(&mut w, &crate::natives::icu_regex::RegexState::default());
         }
 
+        // ---- native-memory regions (W154-A) -----------------------------
+        // `FileChannel.map0` copies VFS bytes into the process-global native
+        // region table and hands Java a synthetic address. A template snapshot
+        // can therefore hold `DirectByteBuffer`s (e.g. the ICU `.dat` reader
+        // caches created while priming `Typeface.<clinit>`) whose addresses
+        // name those regions. Carrying the regions lets a fresh process resolve
+        // the same addresses instead of reading a stale/garbage region.
+        write_native_regions(&mut w, &crate::natives::native_mem::snapshot_regions());
+
         Ok(w.buf)
     }
 
@@ -1439,6 +1452,13 @@ impl Vm {
             crate::natives::icu_regex::stage_regex_state(regex);
         }
 
+        // ---- native-memory regions (W154-A) -----------------------------
+        // Re-establish the mapped regions the restored heap's direct buffers
+        // point at. `restore_regions` is idempotent, so the template's first
+        // restore (metadata recovery) and the launch restore share one table.
+        let regions = read_native_regions(&mut r)?;
+        crate::natives::native_mem::restore_regions(&regions);
+
         // Re-resolution caches refer to the *old* class/provider layout; drop
         // them so every access re-resolves through the descriptor tables. This
         // is what makes restore independent of DEX parse-order accidents. The
@@ -1711,6 +1731,50 @@ fn read_regex_state(r: &mut Reader<'_>) -> VmResult<crate::natives::icu_regex::R
         patterns.push((h, source, flags));
     }
     Ok(crate::natives::icu_regex::RegexState { next, patterns })
+}
+
+/// Serialise the native-memory region table (W154-A).
+///
+/// Layout: `u32 count`, then per region `u32 id`, `u8 readonly`, `u32 len`,
+/// `len` raw bytes. Sorted by id at capture so the stream is deterministic.
+fn write_native_regions(w: &mut Writer, regions: &[crate::natives::native_mem::RegionEntry]) {
+    w.u32(regions.len() as u32);
+    for r in regions {
+        w.u32(r.id);
+        w.bool(r.readonly);
+        w.u32(r.data.len() as u32);
+        w.raw(&r.data);
+    }
+}
+
+fn read_native_regions(
+    r: &mut Reader<'_>,
+) -> VmResult<Vec<crate::natives::native_mem::RegionEntry>> {
+    // A crafted count is bounded by the remaining bytes: each entry needs at
+    // least 9 header bytes, so `count` can never exceed `len / 9` validly. Cap
+    // at a sane ceiling and let `need` reject a short stream.
+    const MAX_REGIONS: usize = 1 << 20;
+    let n = r.u32()? as usize;
+    if n > MAX_REGIONS {
+        return Err(VmError::SnapshotFormat(format!(
+            "native region count {n} too large"
+        )));
+    }
+    let mut out = Vec::with_capacity(n.min(4096));
+    for _ in 0..n {
+        let id = r.u32()?;
+        let readonly = r.bool()?;
+        let len = r.u32()? as usize;
+        r.need(len)?;
+        let data = r.remaining()[..len].to_vec();
+        r.pos += len;
+        out.push(crate::natives::native_mem::RegionEntry {
+            id,
+            readonly,
+            data,
+        });
+    }
+    Ok(out)
 }
 
 fn init_state_tag(s: InitState) -> u8 {

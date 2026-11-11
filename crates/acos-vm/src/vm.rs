@@ -540,6 +540,13 @@ impl Vm {
     pub fn new(options: VmOptions) -> VmResult<Vm> {
         let corelib = options.corelib;
         let boot_dir = options.boot_dir.clone();
+        // A fresh VM starts with a fresh native-region table. Regions backing a
+        // previous VM on this host thread (e.g. the memory-mapped ICU `.dat`
+        // captured while priming `Typeface.<clinit>`) must not leak into this
+        // VM's snapshot; the restored heap only ever references regions this VM
+        // allocated. `Vm::restore` does not clear: it re-establishes the
+        // snapshot's own regions instead (W154-A).
+        crate::natives::native_mem::reclaim_all();
         let mut vm = Vm::empty(options);
         match corelib {
             CoreLib::Bootstrap => {

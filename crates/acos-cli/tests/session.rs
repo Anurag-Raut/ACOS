@@ -171,6 +171,90 @@ fn launch_counter_reports_the_honest_stage_ladder() {
     assert!(result["wall_ms"].is_number());
 }
 
+/// W154-A regression: a warm on-disk boot cache must reach `first_frame` on
+/// **every** fresh-process launch.
+///
+/// The primed `Typeface.<clinit>` template captures a Java `DirectByteBuffer`
+/// over the memory-mapped ICU `.dat`. That buffer's synthetic native address
+/// names a process-local `native_mem` region; before W154-A the region was not
+/// carried by the snapshot, so a fresh process restored a stale address and
+/// `activity_on_create` threw `ExceptionInInitializerError` from
+/// `ICUBinary$DatPackageReader` (`IndexOutOfBoundsException`). Running one cold
+/// process to populate the cache and then five separate warm processes pins the
+/// fresh-process restore path (an in-process restart cannot reproduce it).
+#[test]
+fn warm_boot_cache_reaches_first_frame_on_every_launch() {
+    let apk = workspace_path("../../fixtures/build/apps/counter.apk");
+    if !apk.is_file() {
+        eprintln!("SKIP warm_boot_cache_reaches_first_frame_on_every_launch: fixture missing");
+        return;
+    }
+    // A private cache directory so an ambient warm cache cannot mask the bug
+    // and the test cannot pollute the developer's cache.
+    let cache = std::env::temp_dir().join(format!("acos-w154a-warm-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&cache);
+    std::fs::create_dir_all(&cache).expect("create cache dir");
+
+    let launch = |label: &str| -> Value {
+        let out = Command::cargo_bin("acos")
+            .expect("acos binary")
+            .env("ACOS_NO_DAEMON", "1")
+            .env("ACOS_CACHE_DIR", &cache)
+            .args([
+                "launch",
+                apk.to_str().unwrap(),
+                "--json",
+                "--timeout",
+                "180",
+            ])
+            .output()
+            .expect("run acos");
+        let v = parse_json(&out.stdout);
+        // The boot classpath may be absent on a non-oracle host: skip loudly,
+        // exactly as `launch_counter_reports_the_honest_stage_ladder` does.
+        let message = v["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if message.contains("boot classpath") || message.contains("bootclasspath") {
+            eprintln!("SKIP warm_boot_cache... ({label}): boot classpath missing: {message}");
+            return Value::Null;
+        }
+        v
+    };
+
+    // First process populates the cache (cold); the five after it are warm.
+    let cold = launch("cold");
+    if cold.is_null() {
+        return; // skipped: no boot classpath
+    }
+    assert_eq!(
+        cold["result"]["reached_stage"], "first_frame",
+        "the cold populate launch must reach first_frame on the oracle host: {cold}"
+    );
+
+    for i in 0..5 {
+        let v = launch(&format!("warm {i}"));
+        if v.is_null() {
+            return; // skipped: no boot classpath
+        }
+        assert_eq!(
+            v["status"], "pass",
+            "warm launch {i} must pass through the on-disk boot cache: {v}"
+        );
+        assert_eq!(
+            v["result"]["reached_stage"], "first_frame",
+            "warm launch {i} must reach first_frame: {v}"
+        );
+        let stages = v["result"]["stages"].as_array().expect("stages");
+        assert!(
+            stages.iter().all(|s| s["ok"] == true),
+            "every stage must be ok on warm launch {i}: {v}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&cache);
+}
+
 #[test]
 fn observe_before_any_frame_is_not_ready() {
     let out = run(&["observe", "--json"]);

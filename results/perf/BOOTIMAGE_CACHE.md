@@ -231,3 +231,151 @@ RSS (W111-A §4) and the framework `<clinit>` time.
   owner/symlink/mode checks + tests.
 * `crates/acos-runtime/src/session_pool.rs` — checked `decode_boot_payload`,
   frame tests.
+
+---
+
+# W154-A — native-memory regions in the boot snapshot (warm-restore correctness)
+
+**Status:** implemented, measured. Shared worktree of `b845c69`, only the W154-A
+files touched, `CARGO_TARGET_DIR=.cache/target-w154a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `tools/guarded.sh`, release build, real corelib,
+fixture `fixtures/build/apps/counter.apk`.
+
+## 1. Symptom
+
+`acos launch counter.apk` with a **warm on-disk boot cache** reached
+`first_frame` only rarely (the V1 run measured 1/5; this host reproduced 0/5).
+The rest failed at `activity_on_create` (surfacing at `on_resume`) with
+`java.lang.ExceptionInInitializerError`. `ACOS_NO_BOOT_CACHE=1` was 5/5.
+Disabling W111-A priming (`ACOS_CLINIT_PRIME=0`) with a warm cache was 5/5,
+isolating the trigger to priming `Typeface.<clinit>` into the template.
+
+## 2. Root cause
+
+`Typeface.<clinit>` parses `icudt72l.dat` (28,431,696 bytes) and caches
+`ICUBinary$DatPackageReader` objects. Each holds a Java `DirectByteBuffer` over
+the file: `FileChannelImpl.map0` copies the VFS bytes into a host-thread-local
+`native_mem` region and hands Java a **synthetic address**
+`(region_id << 32) | offset`. W111-A lifted `Typeface.<clinit>` into the
+framework template, so the snapshot heap carried a `DirectByteBuffer` whose
+address names a region that exists only in the boot process.
+
+`Vm::snapshot` carried the Java heap, the W115-A font/text/regex tables and the
+converter table, but **not** the `native_mem` region table. A fresh process
+restoring the snapshot resolved the stale address to no region or, if the region
+id had been reused, to unrelated bytes. `UCaseProps.<clinit>`
+(`ICUBinary.getRequiredData("ucase.icu")`) reused the cached `DatPackageReader`,
+read a garbage record count, derived a negative name index, and
+`DirectByteBuffer.getInt(int)` threw:
+
+```
+java.lang.IndexOutOfBoundsException: index=-2108489900 out of bounds
+  (limit=28431696, nb=4)
+  at java.nio.Buffer.checkIndex
+  at java.nio.DirectByteBuffer.getInt
+  at android.icu.impl.ICUBinary$DatPackageReader.getNameOffset
+  at android.icu.impl.ICUBinary$DatPackageReader.binarySearch
+  at android.icu.impl.ICUBinary$DatPackageReader.getData
+  at android.icu.impl.UCaseProps.<clinit>
+```
+
+`limit=28431696` is exactly the ICU file size, confirming the buffer metadata was
+intact and only its backing region was wrong. The failure is nondeterministic
+because it depends on which region id the restored process reuses first.
+
+## 3. Fix
+
+* `native_mem` gains `RegionEntry { id, readonly, data }`, `snapshot_regions()`
+  (sorted by id) and `restore_regions()` (idempotent: an identical live region
+  is left alone).
+* `Vm::snapshot` writes a `u32 count` + `{id, readonly, len, bytes}*` section and
+  `Vm::restore` re-establishes the table before guest code runs.
+* `SNAPSHOT_FORMAT_VERSION` 2 → 3 and `CACHE_FORMAT_VERSION` 3 → 4, so older
+  streams/entries are refused and rebuilt.
+* `Vm::new` calls `native_mem::reclaim_all()`. The table is a host-thread global
+  and two boots on one thread (as the cache integration tests do) would
+  otherwise accumulate a second, unreferenced 28 MiB ICU map, serialising it and
+  pushing the payload past the 64 MiB cache cap (which silently disables the
+  cache). `Vm::restore` deliberately does not clear: it re-establishes the
+  snapshot's own regions.
+
+The snapshot now carries exactly the native state the restored heap refers to —
+the same principle as W115-A's font/text/regex tables and T-43's
+looper/parcel/binder re-seed.
+
+## 4. Measurement
+
+| metric | before | after |
+|---|---:|---:|
+| warm launches → `first_frame` (this host) | **0/5** (V1 run: 1/5) | **10/10** |
+| `ACOS_CLINIT_PRIME=0` warm control | 5/5 | 5/5 (priming kept, so not applicable) |
+| `ACOS_NO_BOOT_CACHE=1` cold control | 5/5 | 5/5 |
+| cache entry bytes (`ACOS_CACHE_DIR` warm entry) | ~25.6 MB (W131-A no-dex-tables) | **54,008,376** |
+| `MAX_IMAGE_BYTES` headroom | n/a | 12.5 MiB below the 64 MiB cap |
+
+The +28.4 MB is the ICU `.dat` mapping; it is the price of carrying the native
+state the primed template already holds. `ACOS_BOOT_CACHE_DEX_TABLES` remains
+opt-in and **must not** be combined with the region section under the current
+64 MiB cap; the source-recorded re-map in §6 is the way to reclaim that space.
+
+## 5. Regression test
+
+`crates/acos-cli/tests/session.rs::warm_boot_cache_reaches_first_frame_on_every_launch`
+spawns one cold process to populate a private `ACOS_CACHE_DIR`, then five fresh
+warm processes; each must reach `first_frame` with every stage `ok`. It gates on
+the same `counter.apk` / boot-classpath conditions as the existing launch ladder
+test and runs in ~32 s (dev profile, under the ~60 s budget).
+
+`native_mem::tests::snapshot_and_restore_regions_round_trip` is the fast unit
+test for sorting, exact restore, read-only preservation, idempotence and
+fresh-id uniqueness.
+
+## 6. Acceptance evidence
+
+| gate | result |
+|---|---|
+| `acos launch counter.apk` warm × 10 (fresh process each) | **10 / 10 `first_frame`** |
+| `cargo test -p acos-cli --test session` | 11 / 11 (incl. the new warm test, ~32 s) |
+| `cargo test -p acos-runtime --test boot_image_cache` | 6 / 6 |
+| `cargo test -p acos-vm --test snapshot` | 16 / 16 (incl. deterministic/idempotent) |
+| `cargo test -p acos-vm --lib native_mem` | 5 / 5 (incl. the new round-trip test) |
+| `cargo test -p acos-vm -p acos-runtime -p acos-cli` | all green except two pre-existing `acos-vm` failures |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | pass |
+| `tools/diff-dexprogs.sh --corelib real` | **27 / 27 pass** |
+| `tools/diff-dexprogs.sh --corelib real --gc-stress` | **27 / 27 pass** |
+| copy-back `git apply --check` on a clean HEAD worktree | applies; compiles end-to-end |
+
+The two `acos-vm` failures are pre-existing and independent of this diff:
+`inflate_layout_through_real_layoutinflater` throws
+`UnsupportedOperationException` from `android.test.mock.MockContext.isRestricted`
+(reproduced on a clean `b845c69`), and `gfx_natives_on_the_real_framework` used a
+stale `target/tmp/acos-gfx-natives/…/classes.dex` older than its Java source
+(passes after the stale cache is removed). The committed `b845c69` tree also has
+an unrelated compile break: `javabridge.rs` calls the private
+`natives::fwk_annotations` module; the shared worktree carries the one-line
+`pub(crate)` fix (uncommitted, another agent's W153-A follow-up). While this
+work was in flight another agent added an in-progress `rn_session.rs` break to
+`acos-runtime`, so the workspace clippy/check gates above were captured before
+that landed; the W154-A patch was independently confirmed to apply and compile
+end-to-end (`cargo check -p acos-vm -p acos-runtime -p acos-cli --all-targets`)
+in a clean `b845c69` + `fwk_annotations` worktree.
+
+## 7. Follow-on
+
+Store a region *source* (`map0` host path + offset + length) beside the region
+id and re-map it on restore instead of embedding 28 MiB. That keeps the cache
+small and removes the dex-tables/region-cap tension. Until then the region bytes
+travel with the snapshot, which is correct and bounded.
+
+## 8. Files
+
+* `crates/acos-vm/src/natives/native_mem.rs` — `RegionEntry`,
+  `snapshot_regions`, `restore_regions`, round-trip test; `reclaim_all` is now
+  non-test.
+* `crates/acos-vm/src/natives/mod.rs` — `native_mem` is `pub(crate)`.
+* `crates/acos-vm/src/vm.rs` — `Vm::new` resets the native table.
+* `crates/acos-vm/src/snapshot.rs` — native-region section,
+  `SNAPSHOT_FORMAT_VERSION = 3`.
+* `crates/acos-runtime/src/boot_image_cache.rs` — `CACHE_FORMAT_VERSION = 4`.
+* `crates/acos-cli/tests/session.rs` — the five-warm-launch regression test.
