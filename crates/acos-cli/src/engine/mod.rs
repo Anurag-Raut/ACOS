@@ -1256,12 +1256,14 @@ mod engine_tests {
             steps.iter().all(|step| step["status"] == "pass"),
             "every step must pass: {steps:?}"
         );
-        // The decisive transition really happened twice (tap, reset, tap).
+        // The decisive transition really happened three times: Increment,
+        // Reset (the app's own control; the real launch engine has no reset
+        // command), then Increment again.
         let taps = steps
             .iter()
             .filter(|step| step["step"] == "tap")
             .count();
-        assert_eq!(taps, 2);
+        assert_eq!(taps, 3);
         let calls = calls.lock().unwrap();
         assert!(
             calls.iter().any(|call| call.starts_with("tap(")),

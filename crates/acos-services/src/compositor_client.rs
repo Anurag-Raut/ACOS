@@ -51,10 +51,23 @@
 //! * `getDisplayStats.vsyncTime` is `CLOCK_MONOTONIC` **now** and
 //!   `vsyncPeriod` is the same 60 Hz period the vsync thread uses, so
 //!   `Surface::getDisplayRefreshCycleDuration` and the clock agree.
-//! * `getMaxAcquiredBufferCount` is 2 (`MIN_UNDEQUEUED_BUFFERS`). A real
-//!   `SurfaceFlinger` computes it from the refresh rate and the app/SF/display
-//!   pipeline depth; ACOS has no pipeline, so this is a constant and it is
-//!   documented as one.
+//! * `getMaxAcquiredBufferCount` is [`DEFAULT_MAX_ACQUIRED_BUFFERS`] (12). A
+//!   real `SurfaceFlinger` computes it from the refresh rate and the
+//!   app/SF/display pipeline depth. ACOS has no presentation, so the value must
+//!   cover the *verification* pipeline instead: BLAST sizes its whole buffer
+//!   pool as `maxDequeued(2) + maxAcquired`, and with the old
+//!   `MIN_UNDEQUEUED_BUFFERS` (2) an interactive session blocked in
+//!   `Surface.nativeLockCanvas` after four C1-accepted frames (W10 measured:
+//!   the fifth dequeue never returned; every later gesture stalled).
+//!   W10 also measured that BLAST allocates a **new** buffer per stored frame
+//!   (10 allocations for 10 stores), i.e. C1's release callbacks do not return
+//!   slots to BLAST's pool on this image. The pool must therefore cover a whole
+//!   verification session (startup + ripple frames + gestures), not just the
+//!   display pipeline depth; 24 (26 buffers) covers the counter scenario at
+//!   ~9.5 MiB per 1080×2209 buffer. The node's reply shape is unchanged;
+//!   `ACOS_MAX_ACQUIRED_BUFFERS` overrides it for measurement (1..=64).
+//!   Removing that dependency needs the real release path (W9/W10 residual;
+//!   not a display-pipeline issue ACOS can synthesize modestly).
 //! * `getSupportedFrameTimestamps` answers `POSTED..RELEASE` (0..=9, i.e. every
 //!   `FrameEvent` except `EVENT_COUNT`). ACOS produces none of them; the list
 //!   only tells the framework which `FrameEventHistory` slots exist.
@@ -356,8 +369,16 @@ impl ServiceObject for SurfaceComposerService {
             codes::GET_MAX_ACQUIRED_BUFFER_COUNT => {
                 exception::write_no_exception(reply);
                 // `MIN_UNDEQUEUED_BUFFERS`: a synthesized constant, see the
-                // module docs.
-                reply.write_int32(2);
+                // module docs. BLAST sizes its buffer pool from this value
+                // (`getMaxBufferCountLocked = maxDequeued + maxAcquired`), so a
+                // measurement can raise it without changing the node's shape
+                // (W10 frame-slot experiment; no override ⇒ 2 as before).
+                let acquired = std::env::var("ACOS_MAX_ACQUIRED_BUFFERS")
+                    .ok()
+                    .and_then(|v| v.trim().parse::<u32>().ok())
+                    .filter(|v| *v > 0 && *v <= 64)
+                    .unwrap_or(DEFAULT_MAX_ACQUIRED_BUFFERS);
+                reply.write_int32(acquired as i32);
                 Ok(true)
             }
             _ => Err(ServiceError::UnsupportedAndroidApi {
@@ -369,6 +390,12 @@ impl ServiceObject for SurfaceComposerService {
         }
     }
 }
+
+/// BLAST's acquired-buffer budget when `ACOS_MAX_ACQUIRED_BUFFERS` is unset.
+///
+/// See the module docs: this is the verification pipeline's depth, not a
+/// display pipeline's.
+pub const DEFAULT_MAX_ACQUIRED_BUFFERS: u32 = 24;
 
 /// Best-effort method name for a code, for the structured-unsupported record.
 #[must_use]

@@ -1,0 +1,29 @@
+# W10 negative control: the engine must report a structured failure, never a pass,
+# when a selector does not exist in the real live tree.
+version: 1
+name: w10-negative-missing-selector
+description: >-
+  Launch counter on real ART and tap a view id that does not exist. The engine
+  must fail the tap with ASSERTION_FAILED before publishing any input, and the
+  run must not be a pass (no Rust VM, no preview fallback).
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities: [lifecycle, ui.text, input]
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: no_such_view}

@@ -344,7 +344,15 @@ fn test_memfd() -> OwnedFd {
         std::process::id(),
         N.fetch_add(1, Ordering::Relaxed)
     ));
-    let file = std::fs::File::create(&path).expect("temp buffer");
+    // A GraphicBuffer fd is read-write; open it that way so a capture can read
+    // the pixels back (W10's capture path reads through its own dup).
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path)
+        .expect("temp buffer");
     file.set_len(64 * 48 * 4).expect("size");
     let _ = std::fs::remove_file(&path);
     file.into()
@@ -526,6 +534,39 @@ fn a_hand_built_transaction_decodes_to_the_last_byte() {
     let _ = state;
 }
 
+/// W10: the live session's screenshot is a capture of C1's stored buffer, and
+/// C1's store counter is the "a new frame landed" signal the launcher waits on.
+/// Two transactions must advance the generation twice, and a capture must not
+/// change it (a capture is a read, not a frame).
+#[test]
+fn the_live_capture_reads_the_newest_c1_buffer_and_reports_its_generation() {
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "live-capture");
+    let listener = host.register_aux(ITRANSACTION_LISTENER);
+
+    for (frame, id) in [(1u64, 100u64), (2, 200)] {
+        let mut parcel =
+            transaction_parcel(&[(handle, layer_id, Some((listener, frame, id)), Vec::new())], &[0, 0, 0, 0, 0, 3], &[], frame);
+        transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("transaction");
+    }
+    {
+        let s = score_state(&state);
+        assert_eq!(s.latest_generation(), 2, "one increment per stored buffer");
+        let capture = s.capture_latest().expect("a stored buffer is capturable");
+        assert_eq!((capture.width, capture.height), (64, 48));
+        assert_eq!((capture.stride, capture.row_bytes), (64, 64 * 4));
+        assert_eq!(capture.generation, 2);
+        assert_eq!(capture.frame_number, 2);
+        assert_eq!(capture.buffer_id, 200);
+        assert_eq!(capture.layer_id, layer_id);
+        assert_eq!(capture.rgba.len(), capture.row_bytes * capture.height as usize);
+        assert_eq!(s.latest_generation(), 2, "a capture must not advance the store counter");
+    }
+}
+
 #[test]
 fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     let mut host = ServiceHost::new();
@@ -602,11 +643,15 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         },
         "the release must be for the buffer frame 2 replaced"
     );
-    // Fence::NO_FENCE then maxAcquired.
+    // Fence::NO_FENCE then maxAcquired (the compositor node's current pool
+    // depth, W10: BLAST sizes its pool from it).
     assert_eq!(data.read_int32().expect("fence len"), 4);
     assert_eq!(data.read_int32().expect("fence fds"), 0);
     assert_eq!(data.read_int32().expect("fence body"), 0);
-    assert_eq!(data.read_uint32().expect("maxAcquired"), 2);
+    assert_eq!(
+        data.read_uint32().expect("maxAcquired"),
+        acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS
+    );
     assert_eq!(data.data_avail(), 0, "release parcel has trailing bytes");
 
     let completed = find_completed(&second, listener);
@@ -631,7 +676,10 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     let _acquire_time = stats.read_int64().expect("acquire time");
     assert!(!stats.read_bool().expect("previous release fence"));
     assert!(!stats.read_bool().expect("transform hint"));
-    assert_eq!(stats.read_uint32().expect("max acquired"), 2);
+    assert_eq!(
+        stats.read_uint32().expect("max acquired"),
+        acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS
+    );
     assert_eq!(stats.read_int32().expect("event stats marker"), 1);
     assert_eq!(stats.read_uint64().expect("event frame"), 1);
     assert!(!stats.read_bool().expect("gpu fence"));

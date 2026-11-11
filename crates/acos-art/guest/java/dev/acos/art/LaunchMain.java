@@ -346,6 +346,217 @@ public final class LaunchMain {
         }
     }
 
+    // ------------------------------------------------------- live UI probe (W10)
+
+    /**
+     * W10: a periodic read-only view-tree sample for the interactive session.
+     *
+     * <p>The walk runs on the main thread (a Handler post between messages), so
+     * it observes the same state the app draws and never races a traversal.
+     * Every sample is one stdout line: {@code ACOSPROBE } followed by JSON
+     * {@code {"seq":N,"time":ms,"tree":{"nodes":[...]}}}.
+     *
+     * <p>Bounds are {@code View.getLocationInWindow}, the same coordinate space
+     * the host's InputChannel MotionEvents use (I2). Nothing is invoked; the
+     * only calls are getters.
+     */
+    static void startLiveProbe(final Object activity) {
+        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+        final java.util.concurrent.atomic.AtomicBoolean pending =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                long seq = 0;
+                long pendingSince = 0;
+                while (true) {
+                    // Diagnostic: if the main thread has not run a probe for
+                    // >2 s it is blocked somewhere; a Java stack from this
+                    // thread names the wall (e.g. Surface.nativeLockCanvas).
+                    long now = System.currentTimeMillis();
+                    if (pending.get()) {
+                        if (pendingSince == 0) {
+                            pendingSince = now;
+                        } else if (now - pendingSince > 2000) {
+                            dumpMainStack();
+                            pendingSince = now;
+                        }
+                    } else {
+                        pendingSince = 0;
+                    }
+                    if (!pending.get()) {
+                        pending.set(true);
+                        final long n = ++seq;
+                        main.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    emitProbe(activity, n);
+                                } catch (Throwable ignored) {
+                                    // A probe must never disturb the app: a
+                                    // failed walk is simply not published.
+                                } finally {
+                                    pending.set(false);
+                                }
+                            }
+                        });
+                    }
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
+        }, "acos-live-probe");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    static void dumpMainStack() {
+        try {
+            StackTraceElement[] frames =
+                    Looper.getMainLooper().getThread().getStackTrace();
+            StringBuilder b = new StringBuilder("ACOSPROBE-STALL main-thread");
+            int n = 0;
+            for (StackTraceElement f : frames) {
+                if (n++ >= 40) break;
+                b.append(" | ").append(f);
+            }
+            System.out.println(b);
+            System.out.flush();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void emitProbe(Object activity, long seq) throws Throwable {
+        Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+        Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+        if (!(decor instanceof View)) return;
+        StringBuilder nodes = new StringBuilder(1536);
+        int[] budget = new int[]{160};
+        try {
+            appendViewJson((View) decor, nodes, budget);
+        } catch (Throwable ignored) {
+            return;
+        }
+        StringBuilder j = new StringBuilder(2048);
+        j.append("ACOSPROBE {\"seq\":").append(seq)
+                .append(",\"time\":").append(System.currentTimeMillis())
+                .append(",\"tree\":{\"nodes\":[").append(nodes).append("]}}");
+        System.out.println(j);
+        System.out.flush();
+    }
+
+    static void appendViewJson(View v, StringBuilder out, int[] budget) {
+        if (budget[0]-- <= 0) return;
+        int[] loc = new int[2];
+        try {
+            v.getLocationInWindow(loc);
+        } catch (Throwable ignored) {
+        }
+        int id = View.NO_ID;
+        try {
+            id = v.getId();
+        } catch (Throwable ignored) {
+        }
+        String idName = "";
+        if (id != View.NO_ID) {
+            try {
+                idName = v.getResources().getResourceName(id);
+            } catch (Throwable t) {
+                try {
+                    idName = v.getResources().getResourceEntryName(id);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        String text = "";
+        try {
+            if (v instanceof TextView) {
+                CharSequence cs = ((TextView) v).getText();
+                text = cs == null ? "" : cs.toString();
+            }
+        } catch (Throwable ignored) {
+        }
+        String cls;
+        try {
+            cls = v.getClass().getName();
+        } catch (Throwable t) {
+            cls = "android.view.View";
+        }
+        int vis;
+        boolean clickable;
+        boolean enabled;
+        boolean focused;
+        try {
+            vis = v.getVisibility();
+        } catch (Throwable t) {
+            vis = 0;
+        }
+        try {
+            clickable = v.isClickable();
+        } catch (Throwable t) {
+            clickable = false;
+        }
+        try {
+            enabled = v.isEnabled();
+        } catch (Throwable t) {
+            enabled = true;
+        }
+        try {
+            focused = v.isFocused();
+        } catch (Throwable t) {
+            focused = false;
+        }
+        out.append("{\"class\":\"").append(jesc(cls)).append('"')
+                .append(",\"id\":\"").append(jesc(idName)).append('"')
+                .append(",\"text\":\"").append(jesc(text)).append('"')
+                .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
+                .append("][").append(loc[0] + v.getWidth()).append(',')
+                .append(loc[1] + v.getHeight()).append("]\"")
+                .append(",\"visibility\":").append(vis)
+                .append(",\"clickable\":").append(clickable)
+                .append(",\"enabled\":").append(enabled)
+                .append(",\"focused\":").append(focused);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            boolean first = true;
+            StringBuilder kids = new StringBuilder();
+            int n = g.getChildCount();
+            for (int i = 0; i < n && budget[0] > 0; i++) {
+                View child = g.getChildAt(i);
+                if (child == null) continue;
+                StringBuilder one = new StringBuilder();
+                appendViewJson(child, one, budget);
+                if (one.length() == 0) continue;
+                if (!first) kids.append(',');
+                kids.append(one);
+                first = false;
+            }
+            out.append(",\"children\":[").append(kids).append(']');
+        }
+        out.append('}');
+    }
+
+    static String jesc(String s) {
+        StringBuilder b = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\': b.append("\\\\"); break;
+                case '"': b.append("\\\""); break;
+                case '\n': b.append("\\n"); break;
+                case '\r': b.append("\\r"); break;
+                case '\t': b.append("\\t"); break;
+                default:
+                    if (c < 0x20) b.append(' ');
+                    else b.append(c);
+            }
+        }
+        return b.toString();
+    }
+
     static volatile boolean sActivityResumed;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
@@ -463,6 +674,17 @@ public final class LaunchMain {
                 writeResumeMarker(thread, activity, null);
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
                         + activity.getClass().getName() + " window=" + get(activity, "mWindow"));
+                // W10 interactive session: instead of a one-shot hold + quit,
+                // keep the real main looper alive and publish a read-only view
+                // tree sample every ~50 ms. The host's line-JSON session reads
+                // these samples as the app's live UI; nothing is mutated.
+                // Off unless the launcher forwards the variable.
+                if (System.getenv("ACOSLAUNCH_LIVE_PROBE") != null) {
+                    startLiveProbe(activity);
+                    System.out.println("ACOSLAUNCH MARK live-probe-started");
+                    System.out.flush();
+                    return;
+                }
                 // Diagnostic hold (W5): the watcher's `quit()` stops the main
                 // looper before the first traversal's draw, so a run that ends
                 // at `activity-resumed` never reaches `lockCanvas`/`queueBuffer`.

@@ -135,8 +135,29 @@ pub fn name_for(descriptor: &str) -> Option<&'static str> {
     NAMES.iter().find(|(_, d)| *d == descriptor).map(|(n, _)| *n)
 }
 
+/// Live host-side handles for one interactive session.
+///
+/// The standard install owns the window session's input producer and the
+/// compositor-client state privately. W10's live session needs both: it
+/// injects real taps through the same `InputHost` the window session uses, and
+/// it captures screenshots from C1's stored buffer. Returning clones keeps the
+/// install path unchanged for every other caller.
+#[derive(Clone, Debug)]
+pub struct LiveHandles {
+    /// The one authoritative `InputChannel` producer (I2).
+    pub input: crate::window_session::input_dispatch::InputHost,
+    /// The compositor-client (C1) state that keeps the newest buffer.
+    pub compositor: std::sync::Arc<std::sync::Mutex<crate::surface_client::SurfaceState>>,
+}
+
 /// Install the standard ACOS service set on `host`.
 pub fn install(host: &mut ServiceHost) {
+    let _ = install_with_handles(host);
+}
+
+/// Install the standard ACOS service set and return the handles a live session
+/// drives (`InputHost`, C1 state).
+pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     use crate::host::ServiceObject;
     use std::sync::{Arc, Mutex};
 
@@ -172,6 +193,11 @@ pub fn install(host: &mut ServiceHost) {
     // returns a routable handle instead of a fabricated id.
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
+    let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    let live = LiveHandles {
+        input: input_host.clone(),
+        compositor: Arc::clone(&compositor),
+    };
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",
         Box::new(
@@ -181,7 +207,7 @@ pub fn install(host: &mut ServiceHost) {
                 // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
                 // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
                 // the first relayout and logs the FINISHED/TIMELINE replies.
-                .with_input(crate::window_session::input_dispatch::InputHost::from_env()),
+                .with_input(input_host),
         ),
     );
     wms_state
@@ -500,6 +526,7 @@ pub fn install(host: &mut ServiceHost) {
     }
     // Point the aux binder at the registered controller entry.
     let _ = (controller, provider);
+    live
 }
 
 /// Attach the aux binders to the host's registered entries.

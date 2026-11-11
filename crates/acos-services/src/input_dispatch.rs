@@ -385,6 +385,29 @@ impl InputDispatch {
     }
 }
 
+/// One acknowledged input sequence (the `FINISHED` reply the guest sent).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InjectedAck {
+    /// The acknowledged sequence.
+    pub seq: u32,
+    /// The guest's `InputEventReceiver` result (`handled`).
+    pub handled: bool,
+    /// Publish-to-ack latency in whole microseconds, when tracked.
+    pub latency_us: Option<u64>,
+}
+
+/// One gesture published from a live session, with the guest's acks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InjectedGesture {
+    /// The window token the gesture went to.
+    pub token: BinderId,
+    /// The sequence numbers published (one per `InputMessage`).
+    pub seqs: Vec<u32>,
+    /// `FINISHED` replies received within the ack window (may be fewer than
+    /// `seqs.len()` when the guest is slow; that is reported, not hidden).
+    pub acks: Vec<InjectedAck>,
+}
+
 /// The session-facing handle: shared producer state plus the injector thread.
 #[derive(Debug, Clone)]
 pub struct InputHost {
@@ -450,10 +473,74 @@ impl InputHost {
         }
     }
 
-    /// `true` when an injection plan is configured.
+    /// `true` when an environment-driven injection plan is configured.
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.relayout_tx.is_some()
+    }
+
+    /// The window token a live injection targets: the most recently registered
+    /// window (a single-app session has exactly one).
+    #[must_use]
+    pub fn newest_token(&self) -> Option<BinderId> {
+        default_token(&lock(&self.state))
+    }
+
+    /// Publish one tap on the newest live window and collect the guest's
+    /// `FINISHED` replies for a bounded window.
+    ///
+    /// This is the interactive-session API (W10). It is the same
+    /// `InputDispatch::inject_tap` I2 already proved (window-transform-carried
+    /// coordinates on the real `InputChannel`), with the wait for the guest's
+    /// acks instead of a fire-and-forget log.
+    pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {
+        let token = self
+            .newest_token()
+            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
+        let gesture = lock(&self.state).inject_tap(token, x, y)?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
+    /// Publish one key press on the newest live window (delivery only; window
+    /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
+    /// the ack's `handled` field reports exactly that).
+    pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
+        let token = self
+            .newest_token()
+            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
+        let gesture = lock(&self.state).inject_key(token, code)?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
+    fn collect(
+        &self,
+        token: &BinderId,
+        gesture: &Gesture,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
+        let seqs: Vec<u32> = gesture.dispatches.iter().map(|d| d.seq).collect();
+        let mut acks: Vec<InjectedAck> = Vec::new();
+        let deadline = Instant::now() + ack_wait;
+        while Instant::now() < deadline && acks.len() < seqs.len() {
+            let responses = lock(&self.state).drain_acks(*token)?;
+            for response in responses {
+                if let ConsumerResponse::Finished(ack) = response {
+                    acks.push(InjectedAck {
+                        seq: ack.seq,
+                        handled: ack.handled,
+                        latency_us: ack.latency.map(|l| l.as_micros() as u64),
+                    });
+                }
+            }
+            if acks.len() < seqs.len() {
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+        Ok(InjectedGesture {
+            token: *token,
+            seqs,
+            acks,
+        })
     }
 }
 

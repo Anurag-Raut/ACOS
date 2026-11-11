@@ -225,6 +225,20 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let (tx, rx) = mpsc::channel::<PeerSummary>();
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
+    // W10: the live session drives the same `InputHost` the window session
+    // uses and captures C1's stored buffer, so the standard install hands both
+    // back. Building the host here (instead of inside the peer thread) keeps
+    // those handles in the launcher without a second install.
+    let live_handles = {
+        let mut host = acos_services::ServiceHost::new();
+        let handles = acos_services::registry::install_with_handles(&mut host);
+        if let Err(e) = host.install_package_from_apk(&apk_for_peer) {
+            eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
+        }
+        (host, handles)
+    };
+    let (peer_host, live) = live_handles;
+    let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
             let client = loop {
@@ -264,11 +278,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             // being launched: `handleBindApplication` asks for its
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
-            let mut host = acos_services::ServiceHost::standard();
-            if let Err(e) = host.install_package_from_apk(&apk_for_peer) {
-                eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
-            }
-            let mut peer = Peer::with_host(host, Some(peer_log));
+            let mut peer = Peer::with_host(peer_host, Some(peer_log));
             let rc = serve(&mut peer, client, &peer_stop);
             unsafe {
                 libc::close(client);
@@ -351,8 +361,21 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // W5: keep the guest's main looper alive for N ms after `activity-resumed`
     // so the first traversal's draw (lockCanvas -> queueBuffer -> BLAST) can be
     // observed. Diagnostic only; the stop point is unchanged.
+    if std::env::var_os("ACOSLAUNCH_HOLD_MS").is_none() {
+        // Interactive sessions keep the real looper alive and publish a live
+        // view-tree sample instead of quitting after `activity-resumed`.
+        if interactive {
+            sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
+        }
+    }
     if let Ok(hold) = std::env::var("ACOSLAUNCH_HOLD_MS") {
         sb.env("ACOSLAUNCH_HOLD_MS", &hold);
+        // A hold is the one-shot diagnostic mode; the live probe is the
+        // interactive one. The guest checks the probe first, so they cannot
+        // conflict even if both are set.
+        if interactive {
+            sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
+        }
     }
     // W9: forward the guest-HW diagnostic switch so the gralloc shim's
     // `allocate`/`lock` line reaches the launch log (W7 could not see it because
@@ -386,22 +409,36 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 });
             }
             c.process_group(0);
-            c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            } else {
+                c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            }
         },
     )?;
     let pid = child.id() as i32;
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
     let out_pipe = child.stdout.take().expect("piped stdout");
     let otx2 = otx.clone();
+    let probe_for_out = Arc::clone(&probe_state);
     let out_thread = std::thread::spawn(move || {
-        let buf = crate::capture::drain_to_tail(out_pipe, cap);
+        let buf = if interactive {
+            drain_stdout_lines(out_pipe, cap, probe_for_out)
+        } else {
+            crate::capture::drain_to_tail(out_pipe, cap)
+        };
         let _ = otx2.send((0, buf));
     });
     let err_pipe = child.stderr.take().expect("piped stderr");
+    let err_tee = std::env::var_os("ACOSLAUNCH_GUEST_STDERR_FILE").map(PathBuf::from);
     let err_thread = std::thread::spawn(move || {
-        let buf = crate::capture::drain_to_tail(err_pipe, cap);
+        let buf = match err_tee {
+            Some(path) => drain_tee(err_pipe, cap, &path),
+            None => crate::capture::drain_to_tail(err_pipe, cap),
+        };
         let _ = otx.send((1, buf));
     });
 
@@ -412,33 +449,68 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     }
 
     let mut timed_out = false;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break Some(s),
-            Ok(None) => {}
+    // W10: the interactive session replaces the one-shot wait loop. The guest
+    // is already spawned with the live probe; `interactive_serve` waits for the
+    // Activity + first C1 buffer, prints the ready line on the launcher's
+    // stdout, then serves `tree` / `screenshot` / `tap` / `key` / `close`
+    // (line-JSON, one reply per command) until the caller closes it.
+    let mut interactive_clean = false;
+    let status = if interactive {
+        let frames_dir = out.join("live-frames");
+        let dead = interactive_serve(
+            &mut child,
+            &mut cgroup,
+            &live,
+            &probe_state,
+            started,
+            opts.timeout,
+            &frames_dir,
+            &staging,
+            &out,
+            &package,
+            activity.as_deref(),
+            dog.as_ref(),
+        );
+        match dead {
+            Ok(end) => {
+                interactive_clean = end.clean;
+                end.status
+            }
             Err(e) => {
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(Error::Io(e));
             }
         }
-        if let Some(d) = &dog {
-            if d.trip().is_some() {
+    } else {
+        loop {
+            match child.try_wait() {
+                Ok(Some(s)) => break Some(s),
+                Ok(None) => {}
+                Err(e) => {
+                    let _ = child.kill();
+                    return Err(Error::Io(e));
+                }
+            }
+            if let Some(d) = &dog {
+                if d.trip().is_some() {
+                    let _ = child.wait();
+                    break None;
+                }
+            }
+            if started.elapsed() >= opts.timeout {
+                timed_out = true;
+                unsafe {
+                    libc::kill(-pid, libc::SIGKILL);
+                    libc::kill(pid, libc::SIGKILL);
+                }
+                cgroup.kill();
                 let _ = child.wait();
                 break None;
             }
+            cgroup.sample();
+            std::thread::sleep(Duration::from_millis(5));
         }
-        if started.elapsed() >= opts.timeout {
-            timed_out = true;
-            unsafe {
-                libc::kill(-pid, libc::SIGKILL);
-                libc::kill(pid, libc::SIGKILL);
-            }
-            cgroup.kill();
-            let _ = child.wait();
-            break None;
-        }
-        cgroup.sample();
-        std::thread::sleep(Duration::from_millis(5));
     };
     // The guest has ended (or was killed by the timeout/watchdog). Nothing
     // else may keep the peer thread alive, and nothing may outlive the guest
@@ -521,7 +593,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let guest_ok = status.map(|s| s.success()).unwrap_or(false);
     // bwrap re-exits with 128+signal when the guest died from a signal; undo
     // that remap so the structured outcome names the guest's real signal.
-    let (guest_exit, guest_signal) = split_exit_status(status);
+    let (mut guest_exit, mut guest_signal) = split_exit_status(status);
+    // The interactive session ends by killing its guest (the host owns the
+    // lifetime, exactly as AMS does): that SIGKILL is not a guest crash.
+    if interactive_clean {
+        guest_exit = Some(0);
+        guest_signal = None;
+    }
     let application_created = marker.is_some() && summary.delivered;
     let activity_resumed = activity_marker.is_some();
     let activity_wanted = opts.until == "activity-resumed";
@@ -587,6 +665,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             ),
         )
     };
+    // A session that reached `ready` and was closed by its caller has done what
+    // it was asked: the process ending there is the session's own teardown.
+    if interactive_clean && activity_resumed {
+        outcome = Outcome::Ok;
+        code = None;
+    }
     if let Some(t) = host_over_limit {
         outcome = Outcome::Unsupported;
         code = Some(HOST_MEMORY_LIMIT.to_string());
@@ -694,6 +778,950 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         eprintln!("acos-art: {note}");
     }
     Ok(result)
+}
+
+// ------------------------------------------------------------ W10 live session
+//
+// One real `counter.apk` guest, driven by the CLI engine over the launcher's
+// own stdin/stdout (line-JSON, one reply per command):
+//
+//   {"cmd":"tree"}       -> live tree sample (in-guest probe) + a fresh C1 capture
+//   {"cmd":"screenshot"} -> the newest C1 buffer as PNG (labelled capture source)
+//   {"cmd":"tap","x":..,"y":..} -> real InputChannel tap, then a *new* C1 frame
+//                           and a *new* probe sample, or a structured failure
+//   {"cmd":"close"}      -> stop the guest and exit
+//
+// The pixels are C1's stored `GraphicBuffer` (read through C1's own dup of the
+// guest's memfd), never a device capture and never the preview renderer. The
+// tree is the guest's own read-only view walk (`LaunchMain` live probe), not an
+// offline render. `frame_seq` is this session's capture sequence (one per
+// capture command, so a reply can never re-label an older capture as fresh);
+// the underlying C1 `buffer_generation` and producer `frame_number` are
+// reported next to it for the honest cross-check.
+
+const LIVE_PROBE_PREFIX: &str = "ACOSPROBE ";
+const LIVE_PROBE_LINE_CAP: usize = 128 * 1024;
+const CAPTURE_SOURCE: &str = "acos-c1-buffer";
+
+#[derive(Clone)]
+struct ProbeSample {
+    seq: u64,
+    tree: serde_json::Value,
+    at_ms: u64,
+}
+
+#[derive(Default)]
+struct ProbeState {
+    latest: Option<ProbeSample>,
+}
+
+fn host_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn env_u64(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
+}
+
+fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample> {
+    state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .latest
+        .clone()
+}
+
+/// Diagnostic (`ACOSLAUNCH_GUEST_STDERR_FILE`): drain a guest stream into the
+/// bounded tail **and** a host file, so a large ART thread dump survives the
+/// launcher's 4 KiB result tail. The file is capped at 32 MiB.
+fn drain_tee<R: std::io::Read>(mut reader: R, cap: usize, path: &Path) -> TailBuffer {
+    let mut tail = TailBuffer::with_cap(cap);
+    let mut file = fs::File::create(path).ok();
+    let mut written = 0usize;
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                tail.push(&chunk[..n]);
+                if let Some(f) = file.as_mut() {
+                    if written < 32 * 1024 * 1024 {
+                        let take = n.min(32 * 1024 * 1024 - written);
+                        let _ = f.write_all(&chunk[..take]);
+                        written += take;
+                    }
+                }
+            }
+        }
+    }
+    tail
+}
+
+/// Drain the guest's stdout into the bounded tail buffer **and** parse the live
+/// probe lines as they arrive. A partial line is never parsed (a truncated
+/// 128 KiB read can split a JSON object; parse only lines that ended with '\n').
+fn drain_stdout_lines<R: std::io::Read>(
+    reader: R,
+    cap: usize,
+    state: Arc<std::sync::Mutex<ProbeState>>,
+) -> TailBuffer {
+    use std::io::{BufRead, Read};
+    let mut tail = TailBuffer::with_cap(cap);
+    let mut reader = std::io::BufReader::new(reader);
+    let mut at_line_start = true;
+    loop {
+        let mut line = Vec::new();
+        match reader
+            .by_ref()
+            .take(LIVE_PROBE_LINE_CAP as u64)
+            .read_until(b'\n', &mut line)
+        {
+            Ok(0) => break,
+            Ok(_) => {
+                tail.push(&line);
+                let ended = line.ends_with(b"\n");
+                if at_line_start {
+                    if let Ok(text) = std::str::from_utf8(&line) {
+                        if let Some(json) = text.trim_end().strip_prefix(LIVE_PROBE_PREFIX) {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+                                let seq = value.get("seq").and_then(|v| v.as_u64());
+                                let tree = value.get("tree");
+                                if let (Some(seq), Some(tree)) = (seq, tree) {
+                                    let mut state =
+                                        state.lock().unwrap_or_else(|e| e.into_inner());
+                                    let newer = state
+                                        .latest
+                                        .as_ref()
+                                        .map(|p| p.seq < seq)
+                                        .unwrap_or(true);
+                                    if newer {
+                                        state.latest = Some(ProbeSample {
+                                            seq,
+                                            tree: tree.clone(),
+                                            at_ms: host_ms(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                at_line_start = ended;
+            }
+            Err(_) => break,
+        }
+    }
+    tail
+}
+
+struct Capture {
+    seq: u64,
+    generation: u64,
+    frame_number: u64,
+    buffer_id: u64,
+    producer_id: u32,
+    layer_id: i32,
+    layer_name: String,
+    width: u32,
+    height: u32,
+    md5: String,
+    fnv1a: u64,
+    non_zero_pixels: usize,
+    path: PathBuf,
+    bytes: usize,
+}
+
+impl Capture {
+    fn fields(&self) -> serde_json::Value {
+        serde_json::json!({
+            "frame_seq": self.seq,
+            "md5": self.md5,
+            "png": self.path.display().to_string(),
+            "capture_source": CAPTURE_SOURCE,
+            "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)",
+            "buffer_generation": self.generation,
+            "frame_number": self.frame_number,
+            "buffer_id": self.buffer_id,
+            "producer_id": self.producer_id,
+            "layer_id": self.layer_id,
+            "layer_name": self.layer_name,
+            "width": self.width,
+            "height": self.height,
+            "png_bytes": self.bytes,
+            "pixels_fnv1a": format!("{:016x}", self.fnv1a),
+            "non_zero_pixels": self.non_zero_pixels,
+        })
+    }
+}
+
+/// Capture the newest C1 buffer as a PNG and return it with its evidence.
+fn capture_c1(
+    live: &acos_services::registry::LiveHandles,
+    dir: &Path,
+    seq: &mut u64,
+) -> std::io::Result<Option<Capture>> {
+    let frame = {
+        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+        state.capture_latest()
+    };
+    let Some(frame) = frame else {
+        return Ok(None);
+    };
+    let png = encode_png_rgba(frame.width, frame.height, frame.stride, &frame.rgba);
+    fs::create_dir_all(dir)?;
+    *seq += 1;
+    let path = dir.join(format!(
+        "acos-c1-layer{}-frame-{}-g{}-c{}.png",
+        frame.layer_id, frame.frame_number, frame.generation, *seq
+    ));
+    fs::write(&path, &png)?;
+    let md5 = md5_hex_file(&path).unwrap_or_else(|| format!("{:016x}", frame.fnv1a));
+    Ok(Some(Capture {
+        seq: *seq,
+        generation: frame.generation,
+        frame_number: frame.frame_number,
+        buffer_id: frame.buffer_id,
+        producer_id: frame.producer_id,
+        layer_id: frame.layer_id,
+        layer_name: frame.layer_name,
+        width: frame.width,
+        height: frame.height,
+        md5,
+        fnv1a: frame.fnv1a,
+        non_zero_pixels: frame.non_zero_pixels,
+        path,
+        bytes: png.len(),
+    }))
+}
+
+fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
+    live.compositor
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .latest_generation()
+}
+
+fn protocol_write(value: &serde_json::Value) {
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{value}");
+    let _ = out.flush();
+}
+
+fn md5_hex_file(path: &Path) -> Option<String> {
+    // Same precedent as `app.rs::md5_file`: there is no md5 crate in this
+    // workspace, and the host `md5sum` is available.
+    let output = Command::new("md5sum").arg(path).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.split_whitespace().next().map(|s| s.to_string())
+}
+
+struct SessionEnd {
+    status: Option<std::process::ExitStatus>,
+    clean: bool,
+}
+
+fn kill_guest(child: &mut std::process::Child, cgroup: &mut crate::cgroup::RunCgroup) {
+    let pid = child.id() as i32;
+    // SAFETY: the guest was spawned with `process_group(0)`, so `-pid` names
+    // its group and nothing else. Both calls are idempotent.
+    unsafe {
+        libc::kill(-pid, libc::SIGKILL);
+        libc::kill(pid, libc::SIGKILL);
+    }
+    cgroup.sample();
+    cgroup.kill();
+    let _ = child.wait();
+}
+
+fn write_session_evidence(out: &Path, evidence: &[serde_json::Value]) {
+    let doc = serde_json::json!({
+        "capture_source": CAPTURE_SOURCE,
+        "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+        "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+        "steps": evidence,
+    });
+    let _ = fs::create_dir_all(out);
+    let _ = fs::write(
+        out.join("live-session.json"),
+        serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+    );
+}
+
+/// The newest probe sample plus the C1 generation it is bound to.
+struct Settled {
+    probe: ProbeSample,
+    generation: u64,
+}
+
+enum SettleEnd {
+    Settled(Settled),
+    Timeout { generation: u64, probe_seq: u64 },
+    GuestExited(std::process::ExitStatus),
+}
+
+/// Wait until the newest C1 frame and the newest in-guest tree sample describe
+/// the same, settled UI state.
+///
+/// A frame can land *before* the app's click has run (touch feedback), and the
+/// tree probe can see the post-click state before the post-click frame is
+/// stored. Binding those two blindly produced a reply whose tree said `0` and
+/// whose pixels said `1` (W10 negative evidence). This is the binding rule the
+/// session uses instead:
+///
+/// * the C1 generation advanced past `min_generation`;
+/// * the probe produced a sample **after** the last store (`probe.at_ms >
+///   last store time`), so the tree saw the state the stored frame belongs to;
+/// * no new store for `quiet` (150 ms), so the frame is not mid-animation;
+/// * optionally, the pixels differ from the caller's previous capture
+///   (`previous_fnv`), so a tap that changed nothing cannot return a frame.
+#[allow(clippy::too_many_arguments)]
+fn wait_for_settled_observation(
+    child: &mut std::process::Child,
+    cgroup: &mut crate::cgroup::RunCgroup,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    deadline: Instant,
+    min_generation: u64,
+    min_probe_seq: u64,
+    previous_fnv: Option<u64>,
+) -> SettleEnd {
+    let quiet = Duration::from_millis(150);
+    let mut last_generation = min_generation;
+    let mut last_change = Instant::now();
+    let mut last_change_ms = host_ms();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return SettleEnd::GuestExited(status),
+            _ => {}
+        }
+        let generation = latest_generation(live);
+        if generation > last_generation {
+            last_generation = generation;
+            last_change = Instant::now();
+            last_change_ms = host_ms();
+        }
+        let probe = latest_probe(probe_state);
+        let probe_after = probe
+            .as_ref()
+            .map(|p| p.at_ms >= last_change_ms)
+            .unwrap_or(false);
+        if generation > min_generation
+            && probe.as_ref().map(|p| p.seq > min_probe_seq).unwrap_or(false)
+            && last_change.elapsed() >= quiet
+            && probe_after
+        {
+            let pixels_changed = match previous_fnv {
+                None => true,
+                Some(previous) => {
+                    let current = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|c| c.fnv1a)
+                    };
+                    current != Some(previous) && current.is_some()
+                }
+            };
+            if pixels_changed {
+                return SettleEnd::Settled(Settled {
+                    probe: probe.expect("probe checked above"),
+                    generation,
+                });
+            }
+        }
+        if Instant::now() >= deadline {
+            return SettleEnd::Timeout {
+                generation,
+                probe_seq: probe.as_ref().map(|p| p.seq).unwrap_or(0),
+            };
+        }
+        cgroup.sample();
+        std::thread::sleep(Duration::from_millis(15));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn interactive_serve(
+    child: &mut std::process::Child,
+    cgroup: &mut crate::cgroup::RunCgroup,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    started: Instant,
+    startup_budget: Duration,
+    frames_dir: &Path,
+    staging: &Path,
+    out: &Path,
+    package: &str,
+    activity: Option<&str>,
+    dog: Option<&MemoryWatchdog>,
+) -> std::io::Result<SessionEnd> {
+    let mut evidence: Vec<serde_json::Value> = Vec::new();
+    let mut captures = 0u64;
+    let startup_deadline = started + startup_budget;
+    // Startup: the real Activity is resumed, the guest probe has produced a
+    // sample, and C1 has stored at least one buffer. Ready means all three.
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let reply = serde_json::json!({
+                "ok": false, "cmd": "ready", "code": "GUEST_EXITED",
+                "error": format!("the guest ended before its first live frame (status {status})"),
+                "capture_source": CAPTURE_SOURCE,
+            });
+            protocol_write(&reply);
+            evidence.push(reply);
+            write_session_evidence(out, &evidence);
+            return Ok(SessionEnd { status: Some(status), clean: false });
+        }
+        if let Some(d) = dog {
+            if d.trip().is_some() {
+                kill_guest(child, cgroup);
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": "ready", "code": HOST_MEMORY_LIMIT,
+                    "error": "the launcher memory watchdog tripped before the first live frame",
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+                write_session_evidence(out, &evidence);
+                return Ok(SessionEnd { status: None, clean: false });
+            }
+        }
+        cgroup.sample();
+        let marker = staging.join("activity-resumed.marker").is_file();
+        let probe = latest_probe(probe_state);
+        let generation = latest_generation(live);
+        if marker && probe.is_some() && generation > 0 {
+            break;
+        }
+        if Instant::now() >= startup_deadline {
+            kill_guest(child, cgroup);
+            let reply = serde_json::json!({
+                "ok": false, "cmd": "ready", "code": "NO_LIVE_FRAME",
+                "error": format!(
+                    "no live frame within {}s: activity_resumed={marker} probe={} c1_generation={generation}",
+                    startup_budget.as_secs(),
+                    probe.is_some()
+                ),
+                "capture_source": CAPTURE_SOURCE,
+            });
+            protocol_write(&reply);
+            evidence.push(reply);
+            write_session_evidence(out, &evidence);
+            return Ok(SessionEnd { status: None, clean: false });
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let probe = latest_probe(probe_state).expect("startup required a probe sample");
+    let (width, height) = {
+        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+        state
+            .newest_frame_layer()
+            .map(|(_, buffer)| (buffer.width, buffer.height))
+            .unwrap_or((1080, 2400))
+    };
+    let ready = serde_json::json!({
+        "ok": true,
+        "cmd": "ready",
+        "package": package,
+        "activity": activity.unwrap_or(""),
+        "width": width,
+        "height": height,
+        "density": 420,
+        "capture_source": CAPTURE_SOURCE,
+        "buffer_generation": latest_generation(live),
+        "probe_seq": probe.seq,
+        "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+    });
+    protocol_write(&ready);
+    evidence.push(ready);
+
+    // stdin -> channel, so the loop can also poll the guest and its deadlines.
+    let (ctx, crx) = mpsc::channel::<Option<String>>();
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        let mut lock = stdin.lock();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match lock.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = ctx.send(None);
+                    return;
+                }
+                Ok(_) => {
+                    if ctx.send(Some(line.clone())).is_err() {
+                        return;
+                    }
+                }
+                Err(_) => {
+                    let _ = ctx.send(None);
+                    return;
+                }
+            }
+        }
+    });
+
+    let session_deadline = Instant::now() + Duration::from_secs(env_u64("ACOSLAUNCH_SESSION_SECS", 900));
+    let ack_wait = Duration::from_millis(env_u64("ACOS_INPUT_ACK_MS", 2500));
+    let frame_wait = Duration::from_secs(env_u64("ACOSLAUNCH_FRAME_WAIT_SECS", 15));
+    let clean: bool;
+    let mut last_capture_fnv: Option<u64> = None;
+    loop {
+        let line = match crx.recv_timeout(Duration::from_millis(100)) {
+            Ok(Some(line)) => Some(line),
+            Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => None,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // No command: keep polling the guest and the session deadline.
+                if let Some(status) = child.try_wait()? {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "session", "code": "GUEST_EXITED",
+                        "error": format!("the guest ended while the session was idle (status {status})"),
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    write_session_evidence(out, &evidence);
+                    return Ok(SessionEnd { status: Some(status), clean: false });
+                }
+                if let Some(d) = dog {
+                    if d.trip().is_some() {
+                        kill_guest(child, cgroup);
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "session", "code": HOST_MEMORY_LIMIT,
+                            "error": "the launcher memory watchdog tripped",
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        write_session_evidence(out, &evidence);
+                        return Ok(SessionEnd { status: None, clean: false });
+                    }
+                }
+                if Instant::now() >= session_deadline {
+                    kill_guest(child, cgroup);
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "session", "code": "TIMEOUT",
+                        "error": "the live session exceeded ACOSLAUNCH_SESSION_SECS",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    write_session_evidence(out, &evidence);
+                    return Ok(SessionEnd { status: None, clean: false });
+                }
+                cgroup.sample();
+                continue;
+            }
+        };
+        let Some(line) = line else {
+            // stdin EOF: the caller went away; stop the guest like `close`.
+            clean = true;
+            break;
+        };
+        let text = line.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let request: serde_json::Value = match serde_json::from_str(text) {
+            Ok(value) => value,
+            Err(error) => {
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": "unknown", "code": "BAD_REQUEST",
+                    "error": format!("command line is not JSON: {error}"),
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+                continue;
+            }
+        };
+        let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
+        match cmd {
+            "tree" => {
+                // Bind the tree and the pixels to the same settled state: wait
+                // for a probe sample taken after the newest stored frame and for
+                // the frame stream to go quiet, then capture.
+                let settled = wait_for_settled_observation(
+                    child,
+                    cgroup,
+                    live,
+                    probe_state,
+                    Instant::now() + Duration::from_millis(1500),
+                    0,
+                    0,
+                    None,
+                );
+                let probe = match settled {
+                    SettleEnd::Settled(settled) => settled.probe,
+                    SettleEnd::Timeout { .. } => match latest_probe(probe_state) {
+                        Some(probe) => probe,
+                        None => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "NO_TEXT",
+                                "error": "the in-guest tree probe has produced no sample",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    },
+                    SettleEnd::GuestExited(status) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
+                            "error": format!("the guest ended while binding the tree (status {status})"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        write_session_evidence(out, &evidence);
+                        return Ok(SessionEnd { status: Some(status), clean: false });
+                    }
+                };
+                match capture_c1(live, frames_dir, &mut captures) {
+                    Ok(Some(capture)) => {
+                        last_capture_fnv = Some(capture.fnv1a);
+                        let mut reply = capture.fields();
+                        let map = reply.as_object_mut().expect("capture fields are an object");
+                        map.insert("ok".into(), serde_json::json!(true));
+                        map.insert("cmd".into(), serde_json::json!("tree"));
+                        map.insert("tree".into(), probe.tree.clone());
+                        map.insert("probe_seq".into(), serde_json::json!(probe.seq));
+                        map.insert("probe_at_ms".into(), serde_json::json!(probe.at_ms));
+                        protocol_write(&reply);
+                        evidence.push(serde_json::json!({
+                            "cmd": "tree", "ok": true, "frame_seq": capture.seq,
+                            "buffer_generation": capture.generation,
+                            "frame_number": capture.frame_number,
+                            "probe_seq": probe.seq, "png": capture.path.display().to_string(),
+                        }));
+                    }
+                    Ok(None) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "tree", "code": "NO_FRESH_FRAME",
+                            "error": "C1 has stored no buffer yet",
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                    }
+                    Err(error) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "tree", "code": "INTERNAL",
+                            "error": format!("cannot write the C1 capture: {error}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                    }
+                }
+            }
+            "screenshot" => match capture_c1(live, frames_dir, &mut captures) {
+                Ok(Some(capture)) => {
+                    last_capture_fnv = Some(capture.fnv1a);
+                    let mut reply = capture.fields();
+                    let map = reply.as_object_mut().expect("capture fields are an object");
+                    map.insert("ok".into(), serde_json::json!(true));
+                    map.insert("cmd".into(), serde_json::json!("screenshot"));
+                    map.insert("tree".into(), serde_json::Value::Null);
+                    protocol_write(&reply);
+                    evidence.push(serde_json::json!({
+                        "cmd": "screenshot", "ok": true, "frame_seq": capture.seq,
+                        "buffer_generation": capture.generation,
+                        "frame_number": capture.frame_number,
+                        "png": capture.path.display().to_string(),
+                    }));
+                }
+                Ok(None) => {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "screenshot", "code": "NO_FRESH_FRAME",
+                        "error": "C1 has stored no buffer yet",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                }
+                Err(error) => {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "screenshot", "code": "INTERNAL",
+                        "error": format!("cannot write the C1 capture: {error}"),
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                }
+            },
+            "tap" | "key" => {
+                let (x, y, key_code) = if cmd == "tap" {
+                    let x = request.get("x").and_then(|v| v.as_i64());
+                    let y = request.get("y").and_then(|v| v.as_i64());
+                    match (x, y) {
+                        (Some(x), Some(y)) => (x as f32, y as f32, None),
+                        _ => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                                "error": "tap needs integer x and y",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    }
+                } else {
+                    let code = request.get("code").and_then(|v| v.as_i64());
+                    match code {
+                        Some(code) => (0.0, 0.0, Some(code as i32)),
+                        None => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                                "error": "key needs an integer code",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    }
+                };
+                let p0 = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                let g0 = latest_generation(live);
+                let injected = match (cmd, key_code) {
+                    ("tap", _) => live.input.tap(x, y, ack_wait),
+                    (_, Some(code)) => live.input.key(code, ack_wait),
+                    _ => unreachable!(),
+                };
+                let injected = match injected {
+                    Ok(injected) => injected,
+                    Err(error) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "INPUT_UNAVAILABLE",
+                            "error": format!("the real InputChannel accepted no gesture: {error}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    }
+                };
+                let settled = wait_for_settled_observation(
+                    child,
+                    cgroup,
+                    live,
+                    probe_state,
+                    Instant::now() + frame_wait,
+                    g0,
+                    p0,
+                    last_capture_fnv,
+                );
+                let (settled_probe, g1, p1) = match settled {
+                    SettleEnd::Settled(settled) => (
+                        Some(settled.probe.clone()),
+                        settled.generation,
+                        settled.probe.seq,
+                    ),
+                    SettleEnd::Timeout {
+                        generation,
+                        probe_seq,
+                    } => (None, generation, probe_seq),
+                    SettleEnd::GuestExited(status) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "GUEST_EXITED",
+                            "error": format!(
+                                "the guest ended after the gesture without a settled frame (status {status})"
+                            ),
+                            "gesture": {"seqs": injected.seqs, "token": format!("{:#x}", injected.token.0)},
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        write_session_evidence(out, &evidence);
+                        return Ok(SessionEnd { status: Some(status), clean: false });
+                    }
+                };
+                if settled_probe.is_none() {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
+                        "error": format!(
+                            "{cmd} at ({x},{y}) completed no new settled observation within {}s: \
+                             c1_generation {g0} -> {g1}, probe_seq {p0} -> {p1}, and the pixels \
+                             did not change from the previous capture",
+                            frame_wait.as_secs()
+                        ),
+                        "gesture": {
+                            "seqs": injected.seqs,
+                            "acks": injected.acks.iter().map(|a| serde_json::json!({
+                                "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
+                            })).collect::<Vec<_>>(),
+                            "token": format!("{:#x}", injected.token.0),
+                        },
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                }
+                let capture = match capture_c1(live, frames_dir, &mut captures) {
+                    Ok(Some(capture)) => capture,
+                    Ok(None) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
+                            "error": "the guest reported a new frame but C1 stored no buffer",
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    }
+                    Err(error) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "INTERNAL",
+                            "error": format!("cannot write the C1 capture: {error}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    }
+                };
+                last_capture_fnv = Some(capture.fnv1a);
+                let probe = settled_probe.expect("settled probe checked above");
+                let mut reply = capture.fields();
+                let map = reply.as_object_mut().expect("capture fields are an object");
+                map.insert("ok".into(), serde_json::json!(true));
+                map.insert("cmd".into(), serde_json::json!(cmd));
+                map.insert("tree".into(), probe.tree.clone());
+                map.insert("probe_seq".into(), serde_json::json!(probe.seq));
+                map.insert("probe_at_ms".into(), serde_json::json!(probe.at_ms));
+                map.insert(
+                    "gesture".into(),
+                    serde_json::json!({
+                        "x": x, "y": y,
+                        "seqs": injected.seqs,
+                        "acks": injected.acks.iter().map(|a| serde_json::json!({
+                            "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
+                        })).collect::<Vec<_>>(),
+                        "token": format!("{:#x}", injected.token.0),
+                        "new_buffer_generation": g1,
+                        "new_probe_seq": p1,
+                    }),
+                );
+                protocol_write(&reply);
+                evidence.push(serde_json::json!({
+                    "cmd": cmd, "ok": true, "frame_seq": capture.seq,
+                    "buffer_generation": capture.generation,
+                    "frame_number": capture.frame_number,
+                    "probe_seq": probe.seq,
+                    "x": x, "y": y,
+                    "handled": injected.acks.iter().map(|a| a.handled).collect::<Vec<_>>(),
+                    "png": capture.path.display().to_string(),
+                }));
+            }
+            "reset" => {
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": "reset", "code": "UNSUPPORTED_ANDROID_API",
+                    "error": "the real launch session has no reset command; tap the app's Reset control (the scenario does)",
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+            }
+            "close" => {
+                let reply = serde_json::json!({
+                    "ok": true, "cmd": "close",
+                    "frame_seq": captures,
+                    "capture_source": CAPTURE_SOURCE,
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+                clean = true;
+                break;
+            }
+            other => {
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": other, "code": "UNSUPPORTED_ANDROID_API",
+                    "error": format!("the live launch session has no `{other}` command"),
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+            }
+        }
+    }
+    kill_guest(child, cgroup);
+    write_session_evidence(out, &evidence);
+    Ok(SessionEnd {
+        status: child.try_wait().ok().flatten(),
+        clean,
+    })
+}
+
+// ----------------------------------------------------------------- PNG encoder
+//
+// `acos-art` deliberately has no image dependency (the render path uses the
+// guest's own Bitmap encoder). A live capture has no guest-side bitmap, so a
+// minimal RGBA8 PNG writer lives here: filter type 0 per row, zlib "stored"
+// deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
+
+fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let mut filtered = Vec::with_capacity((row + 1).saturating_mul(height as usize));
+    for y in 0..height as usize {
+        filtered.push(0u8);
+        let start = y * stride_bytes;
+        let end = start + row;
+        if end <= rgba.len() {
+            filtered.extend_from_slice(&rgba[start..end]);
+        } else {
+            filtered.resize(filtered.len() + row, 0);
+        }
+    }
+    let mut out = Vec::with_capacity(filtered.len() + 1024);
+    out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
+    png_chunk(&mut out, b"IHDR", &ihdr);
+
+    let mut zlib = Vec::with_capacity(filtered.len() + 16);
+    zlib.extend_from_slice(&[0x78, 0x01]);
+    let mut offset = 0usize;
+    while offset < filtered.len() {
+        let len = (filtered.len() - offset).min(65_535);
+        let final_block = offset + len == filtered.len();
+        zlib.push(if final_block { 1 } else { 0 });
+        zlib.extend_from_slice(&(len as u16).to_le_bytes());
+        zlib.extend_from_slice(&(!(len as u16)).to_le_bytes());
+        zlib.extend_from_slice(&filtered[offset..offset + len]);
+        offset += len;
+    }
+    zlib.extend_from_slice(&adler32(&filtered).to_be_bytes());
+    png_chunk(&mut out, b"IDAT", &zlib);
+    png_chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8]) {
+    out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+    out.extend_from_slice(kind);
+    out.extend_from_slice(body);
+    let mut crc_input = Vec::with_capacity(4 + body.len());
+    crc_input.extend_from_slice(kind);
+    crc_input.extend_from_slice(body);
+    out.extend_from_slice(&crc32(&crc_input).to_be_bytes());
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+fn adler32(data: &[u8]) -> u32 {
+    let mut a = 1u32;
+    let mut b = 0u32;
+    for &byte in data {
+        a = (a + u32::from(byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    (b << 16) | a
 }
 
 /// Undo bwrap's `128+signal` remap and return the guest's real termination.

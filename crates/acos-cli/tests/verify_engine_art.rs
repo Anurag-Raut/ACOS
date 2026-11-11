@@ -127,7 +127,12 @@ for line in sys.stdin:
         break
     if cmd == "tap":
         if fault != "stale_tap":
-            state["count"] += 1
+            # The counter fixture's Reset button occupies y 494..620 in this
+            # tree; the engine resolves the selector to that button's centre.
+            if 494 <= int(request.get("y", 0)) <= 620:
+                state["count"] = 0
+            else:
+                state["count"] += 1
         reply = frame("tap", True)
         reply["tap"] = {"handled": fault != "stale_tap"}
     elif cmd == "reset":
@@ -164,6 +169,11 @@ struct Run {
 }
 
 fn run_verify(name: &str, fault: &str) -> Run {
+    let scenario = workspace().join("scenarios/v2-art-counter.yaml");
+    run_verify_scenario(name, fault, &scenario)
+}
+
+fn run_verify_scenario(name: &str, fault: &str, scenario: &Path) -> Run {
     let dir = scratch(name);
     let script = session_script(&dir);
     let artifacts = dir.join("artifacts");
@@ -177,7 +187,6 @@ fn run_verify(name: &str, fault: &str) -> Run {
         "build fixtures first: `tools/build-apps.sh` (missing {})",
         apk.display()
     );
-    let scenario = workspace.join("scenarios/v2-art-counter.yaml");
     let output = Command::cargo_bin("acos")
         .expect("acos binary")
         .env("ACOS_NO_DAEMON", "1")
@@ -253,41 +262,40 @@ fn art_counter_scenario_passes_on_a_live_session_and_tears_the_tree_down() {
     assert_eq!(verdict["mode"], "live");
     assert_eq!(verdict["unsupported_steps"].as_array().unwrap().len(), 0);
 
-    // The decisive transition ran twice and every step is bound to a frame.
+    // The decisive transition ran three times: Increment, Reset, Increment.
     let steps = verdict["steps"].as_array().unwrap();
     let taps: Vec<&Value> = steps
         .iter()
         .filter(|step| step["step"] == "tap")
         .collect();
-    assert_eq!(taps.len(), 2, "tap Increment twice (before and after reset)");
+    assert_eq!(taps.len(), 3, "tap Increment, Reset, then Increment again");
+    assert!(
+        !steps.iter().any(|step| step["step"] == "reset"),
+        "the real launch engine has no reset command; Reset is the app's own button"
+    );
 
     // Freshness: the capture step after the first tap must describe a newer
-    // frame than the tap, and the second tap a newer frame than the reset.
+    // frame than the tap, and the taps after it newer frames than the capture.
     let capture_index = steps
         .iter()
         .position(|step| step["step"] == "capture")
         .expect("capture step");
     let captured = &steps[capture_index];
-    let after_first_tap = &steps[capture_index - 2];
-    let after_first_tap = if after_first_tap["step"] == "tap" {
-        after_first_tap
-    } else {
-        &steps[capture_index - 1]
-    };
+    let after_first_tap = steps[..capture_index]
+        .iter()
+        .rev()
+        .find(|step| step["step"] == "tap")
+        .expect("tap before capture");
     assert!(
         captured["frame_seq"].as_u64().unwrap() > after_first_tap["frame_seq"].as_u64().unwrap(),
         "a fresh capture must advance past the tap: capture {:?}, tap {:?}",
         captured["frame_seq"],
         after_first_tap["frame_seq"]
     );
-    let reset_index = steps
-        .iter()
-        .position(|step| step["step"] == "reset")
-        .expect("reset step");
-    let second_tap = steps[reset_index..]
+    let second_tap = steps[capture_index..]
         .iter()
         .find(|step| step["step"] == "tap")
-        .expect("tap after reset");
+        .expect("tap after capture");
     assert!(
         second_tap["frame_seq"].as_u64().unwrap() > captured["frame_seq"].as_u64().unwrap(),
         "the second tap must complete a newer frame than the capture"
@@ -342,6 +350,43 @@ fn a_session_without_a_live_frame_fails_honestly() {
         message.contains("LIVE_FRAME_UNAVAILABLE"),
         "the failure must name the missing live frame: {message}"
     );
+    let pid = run.helper_pid.expect("helper pid");
+    assert!(wait_gone(pid), "teardown must still clean the tree on failure");
+}
+
+/// A selector the live tree does not contain must fail with a structured
+/// assertion error, before any tap is published, and never pass.
+#[test]
+fn a_tap_on_a_missing_selector_is_a_structured_failure() {
+    let base = std::fs::read_to_string(workspace().join("scenarios/v2-art-counter.yaml"))
+        .expect("the v2 counter scenario");
+    let prefix = base.split("\nsteps:\n").next().expect("scenario header");
+    let scenario_text = format!(
+        "{prefix}\nsteps:\n  - launch:\n      activity: dev.acos.fixtures.counter/.MainActivity\n\n  - tap:\n      selector: {{id: no_such_view}}\n"
+    );
+    let dir = scratch("missing-selector");
+    let scenario = dir.join("w10-missing-selector.yaml");
+    std::fs::write(&scenario, scenario_text).expect("write the negative scenario");
+    let run = run_verify_scenario("missing-selector-run", "", &scenario);
+    assert!(!run.output.status.success(), "a missing selector must not pass");
+    let verdict = verdict(&run);
+    assert_ne!(verdict["verdict"], "pass");
+    assert_eq!(verdict["engine"], "art");
+    assert_eq!(verdict["mode"], "live");
+    let failed = verdict["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["status"] != "pass")
+        .expect("a failing step");
+    assert_eq!(failed["step"], "tap");
+    assert_eq!(failed["error"]["code"], "ASSERTION_FAILED");
+    let detail = failed["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        detail.contains("no node matches selector"),
+        "the error must name the missing selector: {detail}"
+    );
+    // The tap was never published: the session tree has no such node.
     let pid = run.helper_pid.expect("helper pid");
     assert!(wait_gone(pid), "teardown must still clean the tree on failure");
 }

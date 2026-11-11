@@ -1,15 +1,19 @@
-//! The real-ART engine: one `acos-art session` child, driven by its line-JSON
-//! protocol.
+//! The real-ART engine: one `acos-art launch --interactive` child (the real
+//! framework + real BLAST/C1 guest, W10), driven by a line-JSON protocol.
 //!
-//! Protocol (from `crates/acos-art/src/session.rs`, P3d):
+//! Protocol (served by `crates/acos-art/src/launch.rs` in interactive mode):
 //!
 //! ```text
 //! caller  ->  {"cmd":"tree"}                  reply: tree + frame_seq + png + md5
 //! caller  ->  {"cmd":"screenshot"}            reply: png + md5 + frame_seq
 //! caller  ->  {"cmd":"tap","x":..,"y":..}     reply: tree + frame_seq + png + md5
-//! caller  ->  {"cmd":"key","code":..}         reply: frame_seq (+png when it changed)
-//! caller  ->  {"cmd":"reset"}                 reply: frame_seq (fresh Activity)
 //! caller  ->  {"cmd":"close"}                 reply: ok, then exit
+//!
+//! `frame_seq` is the session's capture sequence (one per capture), and the
+//! reply also carries C1's `buffer_generation` and the producer's
+//! `frame_number`, plus `capture_source: "acos-c1-buffer"`. A `tap` reply is
+//! only sent after C1 stored a **new** buffer and the guest probe produced a
+//! **new** tree sample; otherwise the reply is a structured `NO_FRESH_FRAME`.
 //! ```
 //!
 //! The first stdout line is the session's ready reply. Every line is bounded;
@@ -111,7 +115,19 @@ fn rfc3339(unix_ms: u64) -> String {
 }
 
 impl ArtSession {
-    /// Spawn `acos-art session --apk <apk>` and wait for its ready line.
+    /// Spawn `acos-art launch --apk <apk> --until activity-resumed` in its
+    /// interactive mode (`ACOSLAUNCH_INTERACTIVE=1`) and wait for its ready
+    /// line.
+    ///
+    /// This is the **real guest** path (W10): `LaunchMain` starts the real
+    /// `ActivityThread`, the peer serves the real framework, C1 stores the
+    /// app's BLAST buffers, and the launcher keeps the guest alive and serves
+    /// the same line-JSON commands this engine already speaks (`tree`,
+    /// `screenshot`, `tap`, `close`). `tree`/`tap` replies carry the in-guest
+    /// view-tree probe and a C1 buffer capture; `screenshot` is a C1 buffer
+    /// capture labelled `acos-c1-buffer`. `reset` and `key` are reported
+    /// unsupported (the app's Reset control is a tap; key activation still
+    /// needs the IME `EditorInfo` codec).
     ///
     /// `artifacts` is where the engine mirrors captured frames. The binary is
     /// `$ACOS_ART_BIN`, else `acos-art` on `PATH`, else `target/{debug,release}/
@@ -138,11 +154,20 @@ impl ArtSession {
 
         let mut command = Command::new(&binary);
         command
-            .arg("session")
+            // The interactive launch session: one real guest, one line-JSON
+            // command per step, same replies the engine already consumes.
+            .arg("launch")
             .arg("--apk")
             .arg(apk)
+            .arg("--until")
+            .arg("activity-resumed")
             .arg("--out")
             .arg(&out)
+            // The launcher reads this seam (no `acos-art` CLI flag change): a
+            // live session instead of a one-shot launch. The guest publishes
+            // the read-only view-tree probe the `tree`/`tap` replies carry.
+            .env("ACOSLAUNCH_INTERACTIVE", "1")
+            .env("ACOSLAUNCH_LIVE_PROBE", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -514,8 +539,13 @@ impl SessionBackend for ArtSession {
             tap_text: true,
             // The protocol has no text-input command yet.
             type_text: false,
-            key: true,
-            reset: true,
+            // Key events need window focus, which still needs the IME
+            // `EditorInfo` parcel codec (I2 §5). Delivery-only is not a
+            // capability, so this is reported missing rather than attempted.
+            key: false,
+            // The real launch session has no `reset` command; the scenario taps
+            // the app's own Reset control instead.
+            reset: false,
             close: true,
             logs: false,
             environment: false,
@@ -837,17 +867,14 @@ mod tests {
             tap: true,
             tap_text: true,
             type_text: false,
-            key: true,
-            reset: true,
+            key: false,
+            reset: false,
             close: true,
             logs: false,
             environment: false,
             crash_reports: false,
         };
-        assert_eq!(
-            caps.missing(),
-            vec!["type_text", "logs", "environment", "crash_reports"]
-        );
+        assert_eq!(caps.missing(), vec!["type_text", "key", "reset", "logs", "environment", "crash_reports"]);
     }
 
     #[test]

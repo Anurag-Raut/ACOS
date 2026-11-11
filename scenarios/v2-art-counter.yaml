@@ -16,17 +16,19 @@
 #     carries the frame sequence + host capture time as evidence;
 #   * `assert_text` after `tap`/`reset` observes the frame that action produced
 #     (the engine does not invent a newer traversal for a pure assertion);
-#   * `reset` relaunches the Activity; the following `wait_for` binds the fresh
-#     frame, and the second tap must beat it;
+#   * `reset` is not a session command on the real launch engine (no shell
+#     command reaches the guest): the scenario taps the app's own Reset control,
+#     and the following `wait_for` binds the fresh frame the tap produced;
 #   * the session's whole process group is torn down and checked (a survivor is
 #     reported, never silently ignored).
 version: 1
 name: v2-art-counter
 description: >-
   Launch counter on real ART, assert the live tree (count/inc texts), tap
-  Increment, assert count 0 -> 1, take a fresh screenshot, reset, then tap again
-  and assert count returns to 1. No log/rotate/type steps: ART has no command
-  for those yet.
+  Increment, assert count 0 -> 1, take a fresh screenshot, tap Reset, assert
+  back to 0, then tap Increment again and assert 1. No log/rotate/type/reset
+  steps: the real launch session has no command for those (Reset is the app's
+  own button).
 app: fixtures/build/apps/counter.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -75,15 +77,10 @@ steps:
       format: png
       fresh: true
 
-  # Reset -> fresh Activity; then the same transition must be reproducible.
-  - reset:
-      scope: app
-
-  # Reset relaunches the Activity; wait_for binds the fresh frame before the
-  # tree is asserted (a reset alone does not complete a frame-advancing step).
-  - wait_for:
-      selector: {id: count}
-      timeout_ms: 5000
+  # Reset -> back to 0 through the app's own Reset click listener. The real
+  # launch engine has no shell-like `reset` command, so this is a tap.
+  - tap:
+      selector: {id: reset}
 
   - assert_text:
       selector: {id: count}

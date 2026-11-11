@@ -140,6 +140,42 @@ pub struct Rect {
     pub bottom: i32,
 }
 
+/// One host-side copy of the newest C1 buffer, read from the guest's memfd.
+///
+/// W10's live session uses this as its screenshot: it is labelled as an
+/// **ACOS C1 buffer capture**, never as a physical-device capture.
+#[derive(Debug, Clone)]
+pub struct FrameCapture {
+    /// C1 layer id the buffer belongs to.
+    pub layer_id: i32,
+    /// C1 layer name (the window's `SurfaceControl` name when known).
+    pub layer_name: String,
+    /// Buffer width in pixels.
+    pub width: u32,
+    /// Buffer height in pixels.
+    pub height: u32,
+    /// Row stride in pixels.
+    pub stride: u32,
+    /// `HAL_PIXEL_FORMAT_*`.
+    pub format: i32,
+    /// `BufferData.frameNumber` (the producer's own frame number).
+    pub frame_number: u64,
+    /// `GraphicBuffer.id` (`ReleaseCallbackId.bufferId`).
+    pub buffer_id: u64,
+    /// `BufferData.producerId`.
+    pub producer_id: u32,
+    /// C1 store counter at the time this buffer became `latest`.
+    pub generation: u64,
+    /// Bytes per row (`stride * 4`).
+    pub row_bytes: usize,
+    /// Raw pixels (`row_bytes * height`, RGBA_8888-class layout).
+    pub rgba: Vec<u8>,
+    /// FNV-1a over the raw pixels (a content hash independent of the engine).
+    pub fnv1a: u64,
+    /// Pixels with any non-zero byte (0 means a blank buffer).
+    pub non_zero_pixels: usize,
+}
+
 /// The newest buffer a layer has posted.
 #[derive(Debug)]
 pub struct LatestBuffer {
@@ -240,6 +276,10 @@ pub struct LayerRecord {
     pub transactions: u64,
     /// Frame numbers posted, in order (bounded to 32).
     pub posted_frames: Vec<u64>,
+    /// C1's monotonic store counter for `latest`: one increment per stored
+    /// `BufferData` buffer, across all layers. A capture is a new observation
+    /// when this is greater than the previous capture's value.
+    pub latest_generation: u64,
 }
 
 /// `android.gui.FrameStats` counters for `getLayerFrameStats`.
@@ -267,10 +307,15 @@ pub struct SurfaceState {
     /// Reverse calls queued for the runtime to deliver (`PENDING` deliveries).
     deliveries: Vec<PendingDelivery>,
     next_layer_id: i32,
-    /// `getMaxAcquiredBufferCount()` — the same 2 the compositor node reports.
+    /// `getMaxAcquiredBufferCount()` — the same value the compositor node
+    /// reports (BLAST's buffer pool is sized from it; see W10).
     pub max_acquired_buffers: u32,
     /// Number of legacy transaction parcels decoded.
     pub transactions_decoded: u64,
+    /// Monotonic counter: one increment per stored `BufferData` buffer. This is
+    /// the compositor-client's own "a new frame landed" signal (the W10 live
+    /// session binds its captures to it).
+    buffer_generations: u64,
 }
 
 impl SurfaceState {
@@ -282,9 +327,92 @@ impl SurfaceState {
             stats: HashMap::new(),
             deliveries: Vec::new(),
             next_layer_id: 1,
-            max_acquired_buffers: 2,
+            max_acquired_buffers: std::env::var("ACOS_MAX_ACQUIRED_BUFFERS")
+                .ok()
+                .and_then(|v| v.trim().parse::<u32>().ok())
+                .filter(|v| *v > 0 && *v <= 64)
+                .unwrap_or(crate::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS),
             transactions_decoded: 0,
+            buffer_generations: 0,
         }
+    }
+
+    /// C1's monotonic buffer store counter (0 = no frame has landed yet).
+    #[must_use]
+    pub fn latest_generation(&self) -> u64 {
+        self.buffer_generations
+    }
+
+    /// The layer whose newest stored buffer is the newest across all layers.
+    ///
+    /// A live session has one app window layer, so this is deterministic: the
+    /// most recent buffer any layer posted is the frame the app drew last.
+    #[must_use]
+    pub fn newest_frame_layer(&self) -> Option<(&LayerRecord, &LatestBuffer)> {
+        self.layers
+            .values()
+            .filter_map(|layer| layer.latest.as_ref().map(|buffer| (layer, buffer)))
+            .max_by_key(|(layer, _)| layer.latest_generation)
+    }
+
+    /// Copy the newest stored C1 buffer out of its memfd.
+    ///
+    /// This is the **ACOS C1 buffer capture** (`capture_source`): the pixels
+    /// are read through this process's own duplicate of the `GraphicBuffer` fd
+    /// the guest produced, not from a device framebuffer and not from the
+    /// preview renderer. `None` means no buffer has landed yet.
+    #[must_use]
+    pub fn capture_latest(&self) -> Option<FrameCapture> {
+        use std::os::unix::fs::FileExt;
+
+        let (layer, buffer) = self.newest_frame_layer()?;
+        let row = buffer.row_bytes();
+        let size = row.saturating_mul(buffer.height as usize);
+        if size == 0 {
+            return None;
+        }
+        let owned = rustix::io::dup(buffer.fd()).ok()?;
+        let file = std::fs::File::from(owned);
+        let mut pixels = vec![0u8; size];
+        let mut read = 0usize;
+        while read < size {
+            match file.read_at(&mut pixels[read..], read as u64) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => read += n,
+            }
+        }
+        if read != size {
+            // A short read is not a frame: never hand a partial image to a
+            // capture/report as if it were the app's pixels.
+            return None;
+        }
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        let mut non_zero = 0usize;
+        for px in pixels.chunks_exact(4) {
+            for b in px {
+                hash ^= u64::from(*b);
+                hash = hash.wrapping_mul(0x0100_0000_01b3);
+            }
+            if px.iter().any(|b| *b != 0) {
+                non_zero += 1;
+            }
+        }
+        Some(FrameCapture {
+            layer_id: layer.layer_id,
+            layer_name: layer.name.clone(),
+            width: buffer.width,
+            height: buffer.height,
+            stride: buffer.stride,
+            format: buffer.format,
+            frame_number: buffer.frame_number,
+            buffer_id: buffer.buffer_id,
+            producer_id: buffer.producer_id,
+            generation: layer.latest_generation,
+            row_bytes: row,
+            rgba: pixels,
+            fnv1a: hash,
+            non_zero_pixels: non_zero,
+        })
     }
 
     /// A layer by its handle binder.
@@ -351,6 +479,7 @@ impl SurfaceState {
             latest_listener: BinderId(0),
             transactions: 0,
             posted_frames: Vec::new(),
+            latest_generation: 0,
         };
         self.layers.insert(handle.0, record);
         self.stats.entry(handle.0).or_default();
@@ -807,6 +936,7 @@ fn apply_layer_state(
         latest_listener: BinderId(0),
         transactions: 0,
         posted_frames: Vec::new(),
+        latest_generation: 0,
     });
 
     // A transaction can name the same listener/callback id both on the layer
@@ -835,6 +965,10 @@ fn apply_layer_state(
     let mut release: Option<(BinderId, ReleaseCallbackId)> = None;
     if let Some(buffer) = &layer.buffer {
         if let Some(meta) = &buffer.buffer {
+            // The generation is reserved before the record is borrowed mutably:
+            // a stored buffer always advances C1's monotonic store counter.
+            state.buffer_generations = state.buffer_generations.saturating_add(1);
+            let generation = state.buffer_generations;
             let record = state.layers.get_mut(&handle.0).expect("inserted above");
             let previous = record.latest.take();
             let old_listener = record.latest_listener;
@@ -864,6 +998,7 @@ fn apply_layer_state(
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });
+            record.latest_generation = generation;
             if std::env::var_os("ACOS_W6_DUMP").is_some() {
                 if let (Some(dir), Some(stored)) =
                     (std::env::var_os("ACOS_W6_DUMP"), record.latest.as_ref())
@@ -925,7 +1060,6 @@ fn apply_layer_state(
             .deliveries
             .push(on_release_buffer_delivery(target, id, state.max_acquired_buffers));
     }
-
     // One `onTransactionCompleted` per listener that registered callback ids.
     for listener in callbacks {
         if listener.listener.is_null() || listener.callback_ids.is_empty() {

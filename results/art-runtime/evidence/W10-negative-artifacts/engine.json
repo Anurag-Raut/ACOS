@@ -1,0 +1,33 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "type_text",
+        "key",
+        "reset",
+        "logs",
+        "environment",
+        "crash_reports"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "close"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W10-negative-artifacts",
+      "engine_report": "results/art-runtime/evidence/W10-negative-artifacts/engine.json",
+      "verdict": "results/art-runtime/evidence/W10-negative-artifacts/verdict.json"
+    },
+    "explicit": true,
+    "mode": "live",
+    "unsupported_steps": []
+  },
+  "request_id": "req_29cfd9_18e714fa496b5280",
+  "verdict_status": "fail"
+}

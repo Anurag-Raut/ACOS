@@ -208,7 +208,14 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
     )
     .expect("transact");
     no_exception(&mut reply);
-    assert_eq!(reply.read_int32().expect("maxAcquiredBuffers"), 2);
+    // W10: BLAST sizes its whole buffer pool from this value. ACOS answers a
+    // verification-session depth (the default constant), not the old
+    // MIN_UNDEQUEUED_BUFFERS 2: with 2, an interactive session blocked in
+    // Surface.nativeLockCanvas after four C1-accepted frames.
+    assert_eq!(
+        reply.read_int32().expect("maxAcquiredBuffers"),
+        acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS as i32
+    );
     assert_eq!(reply.data_avail(), 0);
 }
 
