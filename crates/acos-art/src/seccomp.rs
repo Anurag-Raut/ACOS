@@ -355,6 +355,28 @@ pub fn build_blob() -> Vec<u8> {
     out
 }
 
+/// Build (or reuse) the guard artefacts for `root`. Fail closed: a host without
+/// a working `cc` cannot run filtered guest code.
+pub fn enable(root: &crate::ArtRoot) -> Result<()> {
+    build_guest(&root.data.join("seccomp")).map(|_| ())
+}
+
+/// Read the guest guard's evidence from a finished run root. Fail closed: a run
+/// whose filter cannot be proven (`OK guard=active` absent) is not a run the
+/// product reports as successful; callers that already reported a watchdog or
+/// cgroup kill may skip this.
+pub fn require_guard(run_dir: &Path) -> Result<String> {
+    let path = run_dir.join("out/seccomp.log");
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    match text.lines().find(|l| l.starts_with("OK guard=active")) {
+        Some(line) => Ok(line.to_string()),
+        None => Err(Error::SeccompUnavailable(format!(
+            "the guest seccomp guard did not report in {}; a run whose filter cannot be proven is refused",
+            path.display()
+        ))),
+    }
+}
+
 /// Compile the freestanding stub and write the blob into `<data>/seccomp/`.
 /// Cached by content hash (same scheme as [`crate::build_shim`]).
 pub fn build_guest(dest_dir: &Path) -> Result<(PathBuf, PathBuf)> {

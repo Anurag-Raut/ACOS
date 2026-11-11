@@ -265,8 +265,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         opts.until.clone(),
         activity.clone().unwrap_or_default(),
     ];
+    crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&substrate, "/data/app/libacosart.so");
@@ -288,9 +290,20 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         sb.env("ACOSLAUNCH_PROBE", "1");
     }
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
-    let mut cmd = sb.command(dalvik, &argv)?;
-    unsafe {
-        cmd.pre_exec(move || {
+    let cmd = sb.command(dalvik, &argv)?;
+    let started = Instant::now();
+    // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
+    // (fail-closed, exactly as on the `run`/`verify` route).
+    let scope_info = std::fs::canonicalize(run.path())
+        .unwrap_or_else(|_| run.path().to_path_buf())
+        .join("cgroup");
+    let (mut child, mut cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
             libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
             let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
             libc::setrlimit(libc::RLIMIT_CORE, &core);
@@ -299,14 +312,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             // The launcher's memory backstops bound acos-art, never ART.
             crate::watchdog::relax_child_limits();
             Ok(())
-        });
-    }
-    cmd.process_group(0);
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let started = Instant::now();
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        },
+    )?;
     let pid = child.id() as i32;
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
@@ -351,12 +362,15 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 libc::kill(-pid, libc::SIGKILL);
                 libc::kill(pid, libc::SIGKILL);
             }
+            cgroup.kill();
             let _ = child.wait();
             break None;
         }
+        cgroup.sample();
         std::thread::sleep(Duration::from_millis(5));
     };
     let wall_ms = started.elapsed().as_millis() as u64;
+    cgroup.sample();
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -470,7 +484,23 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             t.limit_bytes / 1024 / 1024
         );
     }
+    // S5: memcg OOM and the seccomp proof, same contract as the `run` route.
+    if cgroup.oom_kills() > 0 {
+        outcome = Outcome::Unsupported;
+        code = Some(HOST_MEMORY_LIMIT.to_string());
+    }
     let mut unsupported_notes: Vec<String> = Vec::new();
+    unsupported_notes.push(cgroup.summary());
+    if cgroup.oom_kills() > 0 {
+        unsupported_notes.push(format!(
+            "{HOST_MEMORY_LIMIT}: memcg OOM-killed the launch ({} kill(s) in {})",
+            cgroup.oom_kills(),
+            cgroup.path().display()
+        ));
+    } else if dog.as_ref().and_then(|d| d.trip()).is_none() {
+        let line = crate::seccomp::require_guard(run.path())?;
+        unsupported_notes.push(format!("seccomp: {line}"));
+    }
     unsupported_notes.push(log_stats.summary());
     if let Some(e) = &log_first_dropped {
         unsupported_notes.push(format!(

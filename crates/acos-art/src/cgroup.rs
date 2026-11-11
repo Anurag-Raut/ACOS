@@ -435,3 +435,38 @@ mod tests {
         assert_eq!(&tail[3..], &["--tmpfs", "/", "--", "/bin/true"]);
     }
 }
+
+/// Wrap `cmd` in a fresh proven scope, spawn it, and hand back the live child
+/// plus its [`RunCgroup`]. `configure` runs on the *wrapped* command (that is
+/// the process actually spawned: `systemd-run`), so `pre_exec`, `process_group`
+/// and the stdio setup must be applied there — they are inherited by the
+/// scope's command tree.
+///
+/// Fail closed: if the scope cannot be created or proven, the child is killed
+/// (group and scope) and an [`Error::CgroupUnavailable`] is returned. There is
+/// no path that returns a running guest without a proven memory ceiling.
+pub fn spawn_scoped(
+    limits: MemoryLimits,
+    info: impl Into<PathBuf>,
+    cmd: &Command,
+    configure: impl FnOnce(&mut Command),
+) -> Result<(std::process::Child, RunCgroup)> {
+    let mut cgroup = RunCgroup::prepare(limits, info)?;
+    let mut wrapped = cgroup.wrap(cmd)?;
+    configure(&mut wrapped);
+    let mut child = wrapped
+        .spawn()
+        .map_err(|e| Error::Tool(format!("spawning the scoped sandbox: {e}")))?;
+    let pid = child.id() as i32;
+    if let Err(e) = cgroup.confirm(Duration::from_secs(10)) {
+        // SAFETY: plain signal calls on the pid we just spawned.
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+            libc::kill(pid, libc::SIGKILL);
+        }
+        cgroup.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
+    Ok((child, cgroup))
+}

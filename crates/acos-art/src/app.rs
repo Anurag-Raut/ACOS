@@ -315,8 +315,10 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
 
     let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
+    crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    sb.seccomp_guest(true);
     // LD_PRELOAD is managed here (not by Sandbox::with_shim) so that the logd /
     // property shim and the substrate shim are loaded together, in this order.
     sb.with_shim(false);
@@ -335,9 +337,22 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     sb.env("ACOSART_BINDER_FAKE", "1");
 
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
-    let mut cmd = sb.command(dalvik, &argv)?;
-    unsafe {
-        cmd.pre_exec(move || {
+    let cmd = sb.command(dalvik, &argv)?;
+    let full_argv: Vec<String> =
+        std::iter::once(dalvik.to_string()).chain(argv.iter().cloned()).collect();
+    let started = Instant::now();
+    // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
+    // (fail-closed, exactly as on the `run`/`verify` route).
+    let scope_info = std::fs::canonicalize(run.path())
+        .unwrap_or_else(|_| run.path().to_path_buf())
+        .join("cgroup");
+    let (mut child, mut cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
             libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
             let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
             libc::setrlimit(libc::RLIMIT_CORE, &core);
@@ -347,17 +362,12 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
             // ART needs terabytes of address space and is never the bounded one.
             crate::watchdog::relax_child_limits();
             Ok(())
-        });
-    }
-    cmd.process_group(0);
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let full_argv: Vec<String> =
-        std::iter::once(dalvik.to_string()).chain(argv.iter().cloned()).collect();
-
-    let started = Instant::now();
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        },
+    )?;
     let pid = child.id() as i32;
     // Bounded capture (R1): the guest's stdout/stderr are diagnostic tails, not
     // a data channel, so a printing loop costs at most the cap.
@@ -405,12 +415,15 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
                 libc::kill(-pid, libc::SIGKILL);
                 libc::kill(pid, libc::SIGKILL);
             }
+            cgroup.kill();
             let _ = child.wait();
             break None;
         }
+        cgroup.sample();
         std::thread::sleep(Duration::from_millis(5));
     };
     let wall_ms = started.elapsed().as_millis() as u64;
+    cgroup.sample();
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -460,6 +473,24 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
                 trip.killed_pgid
             ));
         }
+    }
+    // S5: the cgroup is the guest's ceiling; an OOM kill inside the scope is a
+    // host-resource outcome, and the seccomp filter must prove it installed.
+    diags.push(cgroup.summary());
+    if cgroup.oom_kills() > 0 {
+        outcome = Outcome::Unsupported;
+        code = Some(HOST_MEMORY_LIMIT.to_string());
+        diags.push(format!(
+            "{HOST_MEMORY_LIMIT}: memcg OOM-killed the render ({} kill(s) in {}); \
+             memory.max={}MiB swap=0",
+            cgroup.oom_kills(),
+            cgroup.path().display(),
+            cgroup.limits().mem_bytes / 1024 / 1024
+        ));
+    }
+    if cgroup.oom_kills() == 0 && dog.as_ref().and_then(|d| d.trip()).is_none() {
+        let line = crate::seccomp::require_guard(run.path())?;
+        diags.push(format!("seccomp: {line}"));
     }
     // The provisioning diagnostics (fonts, static overlays) belong to the
     // result too; they used to be collected and dropped (P2e fix).

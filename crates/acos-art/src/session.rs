@@ -451,8 +451,10 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         &session_id,
     );
 
+    crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
@@ -470,7 +472,7 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     sb.env("ACOSART_BINDER_FAKE", "1");
 
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
-    let mut cmd = sb.command(
+    let cmd = sb.command(
         dalvik,
         &[
             vec![
@@ -482,8 +484,18 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         ]
         .concat(),
     )?;
-    unsafe {
-        cmd.pre_exec(move || {
+    // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
+    // (fail-closed, exactly as on the `run`/`verify` route).
+    let scope_info = std::fs::canonicalize(run.path())
+        .unwrap_or_else(|_| run.path().to_path_buf())
+        .join("cgroup");
+    let (mut child, mut cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
             libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
             let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
             libc::setrlimit(libc::RLIMIT_CORE, &core);
@@ -492,13 +504,12 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
             // The launcher's memory backstops bound acos-art, never ART.
             crate::watchdog::relax_child_limits();
             Ok(())
-        });
-    }
-    cmd.process_group(0);
-    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| Error::Tool(format!("spawning bwrap: {e}")))?;
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        },
+    )?;
     let pid = child.id() as i32;
 
     // The launcher's own ceiling (ACOS_ART_RSS_MAX, default 2 GiB): a leak the
@@ -743,6 +754,11 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let _ = stdin.flush();
     drop(stdin);
     let status = wait_child(&mut child, Duration::from_secs(10));
+    if status.is_none() {
+        // A session that had to be killed must not leave its scope behind.
+        cgroup.kill();
+    }
+    cgroup.sample();
     let batch = logd.finish_capped();
     let log_stats = batch.stats;
     let log_first_dropped = batch.first_dropped.clone();
@@ -858,6 +874,21 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
                 t.killed_pgid
             ));
         }
+    }
+    // S5: the session's scope is its ceiling; an OOM kill is a host-resource
+    // outcome, and the guest seccomp filter must prove it installed.
+    diagnostics.push(cgroup.summary());
+    if cgroup.oom_kills() > 0 {
+        outcome = Outcome::Unsupported;
+        code = Some(HOST_MEMORY_LIMIT.to_string());
+        diagnostics.push(format!(
+            "{HOST_MEMORY_LIMIT}: memcg OOM-killed the session ({} kill(s) in {})",
+            cgroup.oom_kills(),
+            cgroup.path().display()
+        ));
+    } else if dog.as_ref().and_then(|d| d.trip()).is_none() {
+        let line = crate::seccomp::require_guard(run.path())?;
+        diagnostics.push(format!("seccomp: {line}"));
     }
     diagnostics.push(format!(
         "guest dex: {} ({})",
