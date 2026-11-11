@@ -530,10 +530,39 @@ fn recorded_parity(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| device_dir.join("snapshot-00-launch.json"));
     let device_text = std::fs::read_to_string(&snapshot_path).map_err(|e| {
-        ParityFailure::usage(format!(
-            "recorded device snapshot {} is unreadable: {e}",
-            snapshot_path.display()
-        ))
+        // A missing app directory is the common case (the fixture was never
+        // recorded on a phone); naming the snapshot file alone reads as a
+        // corrupt-file error and gives the agent no next step.
+        if !app.is_empty() && !device_dir.is_dir() {
+            let mut available: Vec<String> = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(root.join("fixtures/reference-device")) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                            available.push(name.to_string());
+                        }
+                    }
+                }
+            }
+            available.sort();
+            let hint = if available.is_empty() {
+                "no recorded device captures are present".to_string()
+            } else {
+                format!("available recorded apps: {}", available.join(", "))
+            };
+            ParityFailure::usage(format!(
+                "no recorded device capture for app {app:?} ({} does not exist); {hint}. \
+                 Use `--device-snapshot <path>` for a capture you have, or fall back to the \
+                 ART reference without `--recorded`.",
+                device_dir.display()
+            ))
+        } else {
+            ParityFailure::usage(format!(
+                "recorded device snapshot {} is unreadable: {e}",
+                snapshot_path.display()
+            ))
+        }
     })?;
     let snapshot_json: Value = serde_json::from_str(&device_text).map_err(|e| {
         ParityFailure::usage(format!("snapshot {} is not JSON: {e}", snapshot_path.display()))
@@ -988,5 +1017,30 @@ mod tests {
         assert!(!report.identical);
         assert!(report.differences.iter().any(|d| d.kind == "text_differs"));
         assert!(report.differences.iter().any(|d| d.kind == "bounds_differ"));
+    }
+
+    /// An app with no recorded phone capture gets a message that says so and
+    /// lists what *is* available, instead of a bare "snapshot is unreadable".
+    #[test]
+    fn missing_recorded_app_names_the_available_captures() {
+        let err = recorded_parity(
+            "definitely-not-a-recorded-app",
+            None,
+            None,
+            CompareOptions::default(),
+        )
+        .expect_err("an unknown app must not compare");
+        assert_eq!(err.code, "INVALID_ARGUMENT");
+        assert!(
+            err.message.contains("no recorded device capture"),
+            "{}",
+            err.message
+        );
+        assert!(
+            err.message.contains("available recorded apps"),
+            "{}",
+            err.message
+        );
+        assert!(err.message.contains("counter"), "{}", err.message);
     }
 }

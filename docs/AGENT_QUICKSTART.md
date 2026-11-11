@@ -168,7 +168,10 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    **not** "the text was inserted" — check `text_path` before trusting it.
    Likewise a `tap` before `first_frame` returns `status: "pass"`,
    `accepted: true`, but `state_changed: false` and the click does not land;
-   the frame that would route the event has not been published.
+   the frame that would route the event has not been published. When
+   `accepted: true` and `state_changed: false`, the result carries a non-empty
+   `note` saying the event may not have landed; a `key-events` fallback gets
+   its own note. Treat `note` as the in-band reason, not as an error.
 7. **Read logs.** `acos_logs { session_id }` for the app's own `Log.i` lines.
 8. **Assert.** For scenario-driven runs use `acos_verify` with a YAML scenario
    and read `verdict.json`; evidence (frames, tree, events) must exist for a
@@ -272,7 +275,11 @@ Two session-specific hints worth memorizing:
   `reached_stage: first_frame`; a frame from the real `ThreadedRenderer.draw`
   lands in the `FrameStore` (W133-A), `acos observe --apk … --tree` returns the
   live `View` hierarchy (`count=0`, `Increment`, `Reset`), and
-  `acos observe --apk … --screenshot out.png` writes the frame.
+  `acos observe --apk … --screenshot out.png` writes the frame. On a kept
+  daemon session the same `acos observe --screenshot out.png` (no `--apk`)
+  also writes the PNG and reports `result.screenshot` with the
+  `ui.screenshot` capability; `result.screenshot_error` is set when no frame
+  exists yet.
 * **⚠ Boot-image restore is broken for launch.** The first (cold) launch
   reaches `first_frame` (~0.9 s), but with the on-disk cache already populated
   the warm launch fails at `activity_on_create`

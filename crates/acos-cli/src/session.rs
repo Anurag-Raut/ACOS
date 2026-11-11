@@ -496,22 +496,36 @@ fn finish_input(
     result: Result<acos_runtime::session::InputReport, SessionError>,
 ) -> ExitCode {
     let envelope = match result {
-        Ok(report) => Envelope::pass(
-            request_id,
-            ProtocolBackend::AcosNative,
-            Fidelity::NativeRuntime,
-            Metrics::wall_ms(0),
-        )
-        .with_session_id(session_id)
-        .with_value_result(json!({
-            "session_id": session_id,
-            "action": report.kind,
-            "accepted": report.accepted,
-            "state_changed": report.state_changed,
-            "input_ack_seq": report.ack_seqs.last().copied(),
-            "text_path": report.path,
-        }))
-        .with_capabilities(["input"]),
+        Ok(report) => {
+            let mut value = json!({
+                "session_id": session_id,
+                "action": report.kind,
+                "accepted": report.accepted,
+                "state_changed": report.state_changed,
+                "input_ack_seq": report.ack_seqs.last().copied(),
+                "text_path": report.path,
+            });
+            if report.accepted && !report.state_changed {
+                value["note"] = json!(
+                    "input was delivered but the live tree did not change; the event may not \
+                     have landed. Re-observe the tree before trusting the action."
+                );
+            } else if report.path.as_deref() == Some("key-events") {
+                value["note"] = json!(
+                    "no editable InputConnection was found; text was sent as key events to the \
+                     focused view, so it may not have been inserted."
+                );
+            }
+            Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(session_id)
+            .with_value_result(value)
+            .with_capabilities(["input"])
+        }
         Err(err) => session_error_envelope(request_id, &err),
     };
     emit(&envelope, json)

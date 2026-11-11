@@ -689,9 +689,17 @@ impl SessionBackend {
         }
         let tree = args.get("tree").and_then(Value::as_bool).unwrap_or(true);
         let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+        // `--screenshot <path>` / `{"screenshot": path}` must actually write the
+        // PNG for a daemon-held session too; previously it was dropped here and
+        // the call returned a bare `pass`, so an agent could believe it had
+        // evidence with no file on disk.
+        let screenshot = args
+            .get("screenshot")
+            .and_then(Value::as_str)
+            .map(std::path::PathBuf::from);
         self.with_session(&id, |session| {
             let status = session.status().ok();
-            match session.observe(None) {
+            match session.observe(screenshot.clone()) {
                 Ok(report) => {
                     if tree || text {
                         return unsupported(
@@ -711,6 +719,23 @@ impl SessionBackend {
                             "meaningful": !frame.pixels.is_empty(),
                         })
                     });
+                    let mut result = json!({
+                        "session_id": id,
+                        "package": status.and_then(|s| s.package).unwrap_or_default(),
+                        "stage_reached": report.stage_reached,
+                        "published_frames": report.published_frames,
+                        "frame": frame,
+                    });
+                    let mut capabilities = vec!["ui.frame"];
+                    if let Some((path, bytes)) = &report.screenshot {
+                        result["screenshot"] = json!({"path": path, "bytes": bytes});
+                        capabilities.push("ui.screenshot");
+                    } else if let Some(path) = &screenshot {
+                        result["screenshot_error"] = json!(format!(
+                            "no frame was available to write to {}",
+                            path.display()
+                        ));
+                    }
                     Envelope::pass(
                         request_id,
                         ProtocolBackend::AcosNative,
@@ -718,14 +743,8 @@ impl SessionBackend {
                         Metrics::wall_ms(0),
                     )
                     .with_session_id(id.clone())
-                    .with_value_result(json!({
-                        "session_id": id,
-                        "package": status.and_then(|s| s.package).unwrap_or_default(),
-                        "stage_reached": report.stage_reached,
-                        "published_frames": report.published_frames,
-                        "frame": frame,
-                    }))
-                    .with_capabilities(["ui.frame"])
+                    .with_value_result(result)
+                    .with_capabilities(capabilities)
                 }
                 Err(err) => session_error_envelope(request_id, Some(&id), &err),
             }
@@ -1237,22 +1256,36 @@ fn input_envelope(
     kind: &str,
 ) -> Envelope {
     match result {
-        Ok(report) => Envelope::pass(
-            request_id,
-            ProtocolBackend::AcosNative,
-            Fidelity::NativeRuntime,
-            Metrics::wall_ms(0),
-        )
-        .with_session_id(session_id.to_string())
-        .with_value_result(json!({
-            "session_id": session_id,
-            "action": kind,
-            "accepted": report.accepted,
-            "state_changed": report.state_changed,
-            "input_ack_seq": report.ack_seqs.last().copied(),
-            "text_path": report.path,
-        }))
-        .with_capabilities(["input"]),
+        Ok(report) => {
+            let mut value = json!({
+                "session_id": session_id,
+                "action": kind,
+                "accepted": report.accepted,
+                "state_changed": report.state_changed,
+                "input_ack_seq": report.ack_seqs.last().copied(),
+                "text_path": report.path,
+            });
+            if report.accepted && !report.state_changed {
+                value["note"] = json!(
+                    "input was delivered but the live tree did not change; the event may not \
+                     have landed. Re-observe the tree before trusting the action."
+                );
+            } else if report.path.as_deref() == Some("key-events") {
+                value["note"] = json!(
+                    "no editable InputConnection was found; text was sent as key events to the \
+                     focused view, so it may not have been inserted."
+                );
+            }
+            Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(session_id.to_string())
+            .with_value_result(value)
+            .with_capabilities(["input"])
+        }
         Err(err) => session_error_envelope(request_id, Some(session_id), &err),
     }
 }
@@ -1828,5 +1861,36 @@ mod tests {
         );
         let _ = confined.child.kill();
         let _ = confined.child.wait();
+    }
+
+    /// A tap that is accepted but does not visibly change anything carries a
+    /// note, so `accepted: true` is not read as "the click landed".
+    #[test]
+    fn a_no_op_action_carries_a_note() {
+        use acos_runtime::session::InputReport;
+        let no_op = InputReport {
+            kind: "tap".to_string(),
+            accepted: true,
+            ack_seqs: vec![2],
+            path: None,
+            state_changed: false,
+        };
+        let envelope = input_envelope("req_1", "s_test", Ok(no_op), "tap");
+        let value = serde_json::to_value(&envelope).expect("serialize");
+        assert_eq!(value["status"], "pass");
+        let note = value["result"]["note"].as_str().expect("note present");
+        assert!(note.contains("may not have landed"), "{note}");
+
+        let fallback = InputReport {
+            kind: "text".to_string(),
+            accepted: true,
+            ack_seqs: Vec::new(),
+            path: Some("key-events".to_string()),
+            state_changed: true,
+        };
+        let envelope = input_envelope("req_2", "s_test", Ok(fallback), "text");
+        let value = serde_json::to_value(&envelope).expect("serialize");
+        let note = value["result"]["note"].as_str().expect("note present");
+        assert!(note.contains("key events"), "{note}");
     }
 }
