@@ -196,6 +196,26 @@ fn xml_attr_map(state: &XmlParserState, doc: &crate::res::xmlblock::XmlDocument)
     map
 }
 
+/// The current start tag's `style` attribute value, if present.
+///
+/// The framework's `ApplyStyle` treats the tag's `style` attribute as an
+/// intermediate source between the tag's own attributes and `defStyleAttr`
+/// (`AttributeResolution.cpp::GetXmlStyleBag`). A `?attr` value is resolved
+/// through the theme, a `@resid` is used directly.
+fn xml_style_value(
+    state: &XmlParserState,
+    doc: &crate::res::xmlblock::XmlDocument,
+) -> Option<ResValue> {
+    let Some(XmlEvent::StartTag(tag)) = doc.events.get(state.position) else {
+        return None;
+    };
+    let idx = tag.style_index;
+    if idx < 0 {
+        return None;
+    }
+    tag.attributes.get(idx as usize).map(|a| a.value)
+}
+
 impl AssetManager {
     /// `nativeRetrieveAttributes`: read requested attributes from the current
     /// XML start tag (no theme involvement).
@@ -303,7 +323,33 @@ impl AssetManager {
             }
         }
 
-        // 2. defStyleAttr resolved through the theme.
+        // 2. The XML tag's own `style` attribute, resolved through the theme
+        //    (`GetXmlStyleBag`). It sits between the tag's attributes and
+        //    `defStyleAttr`. Ignoring it dropped `style="?attr/..."` values
+        //    (for example the action bar `background=?attr/colorPrimary`), so
+        //    the action bar was never painted (W186-A).
+        if parser_state != 0 {
+            if let Some(state) = self.parse_state(parser_state) {
+                if let Some(block) = self.xml_block(state.block) {
+                    if let Some(v) = xml_style_value(state, &block.doc) {
+                        let resolved = match v.data_type {
+                            TYPE_ATTRIBUTE | TYPE_DYNAMIC_ATTRIBUTE => {
+                                self.theme(theme).and_then(|t| t.get(v.data))
+                            }
+                            TYPE_REFERENCE | TYPE_DYNAMIC_REFERENCE => Some(v),
+                            _ => None,
+                        };
+                        if let Some(r) = resolved {
+                            if r.is_reference() && r.data != 0 {
+                                sources.push(collect_style(self, &config, r.data, 0));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. defStyleAttr resolved through the theme.
         if def_style_attr != 0 {
             let style_id = self
                 .theme(theme)
@@ -315,12 +361,12 @@ impl AssetManager {
             }
         }
 
-        // 3. defStyleRes.
+        // 4. defStyleRes.
         if def_style_res != 0 {
             sources.push(collect_style(self, &config, def_style_res, 0));
         }
 
-        // 4. The theme itself.
+        // 5. The theme itself.
         if let Some(t) = self.theme(theme) {
             sources.push(t.values.clone());
         }

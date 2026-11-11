@@ -2470,7 +2470,13 @@ impl RenderContext {
         if effect.is_some() {
             self.canvas_save_layer_alpha(surface, Some(props.local_bounds), 255)?;
         }
-        if props.elevation > 0.0 {
+        // HWUI casts a node's shadow from its **outline**: a node with no
+        // outline (`ViewOutlineProvider` unset / background without an
+        // outline) draws no shadow at all, even when `elevation > 0`. ACOS
+        // previously fell back to `local_bounds`, which painted a blurred
+        // rectangle shadow under every elevated container. Gate on the real
+        // outline so this matches `ThreadedRenderer`/`SkShadowUtils`.
+        if props.elevation > 0.0 && !props.outline.is_empty() {
             self.draw_node_shadow(surface, &props)?;
         }
 

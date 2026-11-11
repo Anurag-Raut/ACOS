@@ -931,7 +931,9 @@ pub(crate) fn apply_color_filter(pixmap: &mut Pixmap, filter: &ColorFilterSpec) 
     match filter {
         ColorFilterSpec::None => {}
         ColorFilterSpec::PorterDuff { color, mode } => {
-            let (cr, cg, cb, ca) = unpack_unpremul(pack_word(*color));
+            // `color` is an Android `Color` int (`0xAARRGGBB`), not a packed
+            // premultiplied RGBA word; decode it as ARGB.
+            let (cr, cg, cb, ca) = crate::color::argb_to_rgba(*color);
             let src = [
                 cr as f32 / 255.0,
                 cg as f32 / 255.0,
@@ -948,10 +950,11 @@ pub(crate) fn apply_color_filter(pixmap: &mut Pixmap, filter: &ColorFilterSpec) 
         }
         ColorFilterSpec::BlendMode { color, mode } => {
             let blend = mode.to_blend();
-            let c = *color;
+            // `color` is an Android `Color` int (`0xAARRGGBB`), not a packed
+            // premultiplied RGBA word; decode it as ARGB.
+            let (cr, cg, cb, ca) = crate::color::argb_to_rgba(*color);
             for p in pixmap.pixels_mut() {
                 let (r, g, b, a) = unpack_unpremul(word_of(p));
-                let (cr, cg, cb, ca) = unpack_unpremul(c);
                 let (nr, ng, nb, na) = blend_pixel(blend, (cr, cg, cb, ca), (r, g, b, a));
                 set_premul(p, nr, ng, nb, na);
             }
@@ -1045,11 +1048,6 @@ fn set_premul(p: &mut tiny_skia::PremultipliedColorU8, r: u8, g: u8, b: u8, a: u
     if let Some(v) = tiny_skia::PremultipliedColorU8::from_rgba(pr, pg, pb, a) {
         *p = v;
     }
-}
-
-fn pack_word(argb: u32) -> u32 {
-    let (r, g, b, a) = unpack_unpremul(argb | 0xff00_0000);
-    crate::color::pack_premul(r, g, b, a)
 }
 
 /// Apply a mask filter (blur) over an RGBA8 pixmap. Box blur approximates a

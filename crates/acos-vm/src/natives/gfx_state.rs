@@ -118,6 +118,16 @@ pub(crate) fn render_paint_from(rec: &PaintRec) -> Paint {
             color,
         });
     }
+    // A `Paint.setColorFilter` (for example the `PorterDuff.SRC_IN` tint the
+    // framework's `GradientDrawable` installs for `android:tint`) must be
+    // carried into the frozen paint. Dropping it rendered the Material button
+    // shape's `@color/white` solid instead of the `?attr/colorButtonNormal`
+    // tint `#d6d7d7` (W186-A).
+    if rec.color_filter != 0 {
+        if let Some(spec) = super::gfx_paint::filter_spec(rec.color_filter) {
+            p.color_filter = Some(spec);
+        }
+    }
     p
 }
 
