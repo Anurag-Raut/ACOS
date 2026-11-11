@@ -46,12 +46,19 @@ import java.util.List;
 public final class AppMain {
 
     // device-accurate panel: 1080x2400 @ 420 dpi (all ACOS fixtures' oracle)
-    static final int PANEL_H = 2400;
+    static int PANEL_H = 2400;
+    /** The oracle's system-bar insets (statusBarBackground / navigationBarBackground). */
+    static int STATUS_INSET = 128, NAV_INSET = 63;
 
     static String sApk, sPkg, sOut;
     static int W = 1080, CONTENT_H = 2062, DENSITY = 420;
     /** The image's static RRO idmaps, in application order (may be empty). */
     static String[] sIdmaps = new String[0];
+    /** The activity's theme resource (0 = the platform default) and label. */
+    static int sThemeId;
+    static String sTitle = "";
+    static int sTargetSdk = 34;
+    static android.view.Window sWindow;
 
     static final List<String> notes = new ArrayList<>();
     static final List<String> warnings = new ArrayList<>();
@@ -69,6 +76,13 @@ public final class AppMain {
         if (args.length > 4) CONTENT_H = Integer.parseInt(args[4]);
         if (args.length > 5) DENSITY = Integer.parseInt(args[5]);
         if (args.length > 6 && !args[6].isEmpty()) sIdmaps = args[6].split(",");
+        // Window geometry + manifest-derived chrome (all data, no constants here).
+        if (args.length > 7) PANEL_H = Integer.parseInt(args[7]);
+        if (args.length > 8) STATUS_INSET = Integer.parseInt(args[8]);
+        if (args.length > 9) NAV_INSET = Integer.parseInt(args[9]);
+        if (args.length > 10) sThemeId = parseTheme(args[10]);
+        if (args.length > 11) sTitle = args[11];
+        if (args.length > 12) sTargetSdk = Integer.parseInt(args[12]);
         try {
             new File(sOut).mkdirs();
             run();
@@ -91,12 +105,21 @@ public final class AppMain {
         installStubWindowManager();
         seedTypeface();
         Context ctx = newContext();
-        View content = inflate(ctx);
-        FrameLayout root = layout(ctx, content);
-        String tree = dumpTree(root);
+        View decor = buildWindow(ctx);
+        layoutWindow(decor);
+        String tree = dumpTree(decor);
         write(new File(sOut, "tree.json"), tree);
-        int[] drawUs = draw(root);
-        emit("ok", null, null, t0, root, tree, drawUs);
+        int[] drawUs = draw(decor);
+        emit("ok", null, null, t0, decor, tree, drawUs);
+    }
+
+    static int parseTheme(String s) {
+        if (s == null || s.isEmpty() || s.equals("0")) return 0;
+        try {
+            return (int) Long.parseLong(s.replace("0x", ""), 16);
+        } catch (Throwable ignored) {
+            return 0;
+        }
     }
 
     static void stepGfx() throws Throwable {
@@ -140,6 +163,9 @@ public final class AppMain {
                 "register_android_text_AndroidCharacter",
                 "register_android_text_Hyphenator",
                 "register_android_util_CharsetUtils",
+                // Toolbar/RenderNode hold VirtualRefBasePtrs (native strong refs);
+                // a standalone class, no SurfaceControl <clinit> involved.
+                "register_com_android_internal_util_VirtualRefBasePtr",
                 // NOT registered on purpose: view_SurfaceControl/view_Surface/
                 // graphics_{GraphicBuffer,BLASTBufferQueue,SurfaceTexture}. Their
                 // register function runs the class initialiser, whose <clinit>
@@ -228,7 +254,14 @@ public final class AppMain {
              + " layout/main=0x" + Integer.toHexString(sLayoutId) + " root=<" + rootTag + ">");
 
         sTheme = sRes.newTheme();
-        sTheme.applyStyle(android.R.style.Theme_DeviceDefault_Light, true);
+        // The activity theme, exactly as ActivityThread applies it: the
+        // manifest's android:theme (an app style resource id) when present,
+        // otherwise the platform default for a day/light device.
+        // Resources.selectDefaultTheme(0, targetSdk >= N) => DeviceDefault.Light
+        // with the dark action bar, which is what the API-34 oracle shows.
+        int base = sThemeId != 0 ? sThemeId : android.R.style.Theme_DeviceDefault_Light_DarkActionBar;
+        sTheme.applyStyle(base, true);
+        note("theme=0x" + Integer.toHexString(base) + (sThemeId != 0 ? " (manifest)" : " (platform default)"));
         probeTheme();
     }
 
@@ -468,6 +501,7 @@ public final class AppMain {
             throw new IllegalStateException(
                     "no usable font in /system/fonts (no system fonts provisioned?)");
         }
+        note("SystemFonts.buildSystemTypefaces -> " + map.size() + " named families");
         if (map.isEmpty()) {
             // Never install an empty map: then Typeface.create(name) cannot resolve
             // anything and every themed family would silently collapse to the
@@ -575,6 +609,27 @@ public final class AppMain {
         @Override public android.content.pm.PackageManager getPackageManager() {
             return sPackageManager != null ? sPackageManager : super.getPackageManager();
         }
+        @Override public String getPackageName() { return sPkg; }
+        @Override public String getOpPackageName() { return sPkg; }
+
+        /**
+         * The *app's* ApplicationInfo, not the system context's. PhoneWindow
+         * derives targetSdk from it (pre-L vs modern window flags) and
+         * DecorView/Window read packageName/sourceDir.
+         */
+        @Override public android.content.pm.ApplicationInfo getApplicationInfo() {
+            if (ai == null) {
+                ai = new android.content.pm.ApplicationInfo();
+                ai.packageName = sPkg;
+                ai.sourceDir = sApk;
+                ai.publicSourceDir = sApk;
+                ai.targetSdkVersion = sTargetSdk;
+                ai.minSdkVersion = 26;
+                ai.uid = android.os.Process.myUid();
+            }
+            return ai;
+        }
+        private android.content.pm.ApplicationInfo ai;
         @Override public Resources getResources() { return res; }
         @Override public AssetManager getAssets() { return res.getAssets(); }
         @Override public Resources.Theme getTheme() { return th; }
@@ -591,7 +646,77 @@ public final class AppMain {
     static Context newContext() {
         installStubPackageManager();
         installStubInputMethodManager();
+        installStubSettingsProvider();
         return new MiniContext(sSystemContext, sRes, sTheme);
+    }
+
+    /**
+     * `PhoneWindow`'s constructor reads a `Settings.Global` int
+     * (`DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR`) and `Settings` reaches it
+     * through `ContentResolver` -> `IActivityManager.getContentProvider`, which
+     * a bare `dalvikvm64` has no peer for. Rather than proxying the whole
+     * ActivityManager, register a *local read-only* provider for the `settings`
+     * authority in `ActivityThread.mProviderMap`: that is the same map
+     * `acquireExistingProvider` consults first, so the framework's own
+     * `Settings.NameValueCache` path runs unchanged and unset keys fall through
+     * to the caller's default (exactly what a missing settings row means).
+     * No app data is invented: unknown keys return an empty answer.
+     */
+    static void installStubSettingsProvider() {
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Field f = at.getDeclaredField("mProviderMap");
+            f.setAccessible(true);
+            Object map = f.get(sActivityThread);
+            if (map == null) { warnings.add("settings_provider_no_map"); return; }
+
+            Class<?> icp = Class.forName("android.content.IContentProvider");
+            final Object[] binder = new Object[1];
+            Class<?> ibinder = Class.forName("android.os.IBinder");
+            binder[0] = java.lang.reflect.Proxy.newProxyInstance(
+                    ibinder.getClassLoader(), new Class<?>[]{ibinder}, (p, m, a) -> {
+                        String n = m.getName();
+                        if (n.equals("isBinderAlive") || n.equals("pingBinder")) return Boolean.TRUE;
+                        if (n.equals("toString")) return "ACOS local settings provider";
+                        if (n.equals("hashCode")) return System.identityHashCode(p);
+                        if (n.equals("equals")) return p == (a == null ? null : a[0]);
+                        if (n.equals("queryLocalInterface")) return null;
+                        return defaultOf(m.getReturnType());
+                    });
+            Object provider = java.lang.reflect.Proxy.newProxyInstance(
+                    icp.getClassLoader(), new Class<?>[]{icp}, (p, m, a) -> {
+                        String n = m.getName();
+                        if (n.equals("asBinder")) return binder[0];
+                        if (n.equals("toString")) return "ACOS local settings IContentProvider";
+                        if (n.equals("hashCode")) return System.identityHashCode(p);
+                        if (n.equals("equals")) return p == (a == null ? null : a[0]);
+                        if (n.equals("call")) return new android.os.Bundle();
+                        if (n.equals("query")) {
+                            String[] projection = a != null && a.length > 2 ? (String[]) a[2] : null;
+                            return new android.database.MatrixCursor(
+                                    projection != null ? projection : new String[]{"value"});
+                        }
+                        return defaultOf(m.getReturnType());
+                    });
+
+            Class<?> pk = Class.forName("android.app.ActivityThread$ProviderKey");
+            Constructor<?> pkc = pk.getDeclaredConstructor(String.class, int.class);
+            pkc.setAccessible(true);
+            Object key = pkc.newInstance("settings", 0);
+
+            Class<?> pcr = Class.forName("android.app.ActivityThread$ProviderClientRecord");
+            Constructor<?> pcrc = pcr.getDeclaredConstructor(
+                    at, String[].class, icp,
+                    Class.forName("android.content.ContentProvider"),
+                    Class.forName("android.app.ContentProviderHolder"));
+            pcrc.setAccessible(true);
+            Object rec = pcrc.newInstance(sActivityThread, new String[]{"settings"}, provider, null, null);
+            ((java.util.Map) map).put(key, rec);
+            note("local settings ContentProvider registered in ActivityThread.mProviderMap");
+        } catch (Throwable t) {
+            warnings.add("settings_provider_failed=" + unwrap(t));
+            note("local settings provider -> " + unwrap(t));
+        }
     }
 
     /**
@@ -617,7 +742,10 @@ public final class AppMain {
             Class<?> ctxImpl = Class.forName("android.app.ContextImpl");
             Constructor<?> c = apm.getDeclaredConstructor(ctxImpl, ipm);
             c.setAccessible(true);
-            sPackageManager = (android.content.pm.PackageManager) c.newInstance(null, pm);
+            // The real system ContextImpl: getDefaultActivityIcon() (reached by
+            // PhoneWindow.installDecor for the action bar's up icon) calls
+            // mContext.getDrawable(), so a null context NPEs.
+            sPackageManager = (android.content.pm.PackageManager) c.newInstance(sSystemContext, pm);
             note("stub PackageManager = " + sPackageManager.getClass().getName());
         } catch (Throwable t) {
             try {
@@ -683,6 +811,34 @@ public final class AppMain {
 
     static boolean sInputMethodManagerStub;
 
+    /** Window-attribute evidence (flags pick which insets the decor consumes). */
+    static void probeWindow(int stage, View decor) {
+        try {
+            android.view.WindowManager.LayoutParams lp = sWindow.getAttributes();
+            StringBuilder sb = new StringBuilder("window[" + stage + "] flags=0x"
+                    + Integer.toHexString(lp.flags) + " systemUi=0x"
+                    + Integer.toHexString(lp.systemUiVisibility));
+            try {
+                Field fd = sWindow.getClass().getDeclaredField("mDecorFitsSystemWindows");
+                fd.setAccessible(true);
+                sb.append(" decorFits=").append(fd.get(sWindow));
+            } catch (NoSuchFieldException ignored) {
+            }
+            for (Class<?> c = decor.getClass(); c != null; c = c.getSuperclass()) {
+                try {
+                    Field fd = c.getDeclaredField("mForceWindowDrawsBarBackgrounds");
+                    fd.setAccessible(true);
+                    sb.append(" forceBarBg=").append(fd.get(decor));
+                    break;
+                } catch (NoSuchFieldException ignored) {
+                }
+            }
+            note(sb.toString());
+        } catch (Throwable t) {
+            note("window probe -> " + unwrap(t));
+        }
+    }
+
     static Object defaultOf(Class<?> r) {
         if (r == boolean.class) return Boolean.FALSE;
         if (r == int.class) return 0;
@@ -698,37 +854,127 @@ public final class AppMain {
         return null;
     }
 
-    // ------------------------------------------------------------------ draw
+    // ------------------------------------------------------------- the window
 
-    static View inflate(Context ctx) throws Throwable {
-        LayoutInflater inf = LayoutInflater.from(ctx);
-        long t0 = System.nanoTime();
+    /**
+     * Build the window the way the framework does, without ViewRootImpl/WMS:
+     * a real {@code com.android.internal.policy.PhoneWindow} over the activity
+     * theme, {@code setContentView(layout)} (which runs the stock
+     * {@code installDecor}/{@code generateLayout}: DecorView, ActionBarOverlayLayout,
+     * ActionBarContainer, Toolbar, id/content) and the resulting DecorView.
+     * Everything inflated, measured and laid out below it is stock code; no
+     * node position is set by this guest.
+     */
+    static View buildWindow(Context ctx) throws Throwable {
+        Class<?> pw = Class.forName("com.android.internal.policy.PhoneWindow");
+        Constructor<?> c = pw.getDeclaredConstructor(Context.class);
+        c.setAccessible(true);
+        android.view.Window w = (android.view.Window) c.newInstance(ctx);
+        sWindow = w;
+        // Window.setWindowManager() casts to WindowManagerImpl; the local
+        // window manager is exactly what ActivityThread hands an Activity.
         try {
-            View v = inf.inflate(sLayoutId, null, false);
-            note("inflate " + v.getClass().getName() + " in " + (System.nanoTime() - t0) / 1000 + " us");
-            return v;
+            Object wm = ctx.getSystemService(Context.WINDOW_SERVICE);
+            w.setWindowManager((android.view.WindowManager) wm, null, sPkg, false);
+            note("setWindowManager(" + (wm == null ? "null" : wm.getClass().getName()) + ")");
         } catch (Throwable t) {
-            Throwable u = unwrap(t);
-            dumpChain(u);
-            throw u;
+            warnings.add("window_manager=" + unwrap(t));
+            note("setWindowManager -> " + unwrap(t));
+        }
+        if (sTitle != null && !sTitle.isEmpty()) w.setTitle(sTitle);
+        long t0 = System.nanoTime();
+        w.setContentView(sLayoutId);
+        View decor = w.getDecorView();
+        probeWindow(1, decor);
+        note("PhoneWindow.setContentView(0x" + Integer.toHexString(sLayoutId) + ") title=\""
+             + sTitle + "\" -> " + decor.getClass().getName() + " in "
+             + (System.nanoTime() - t0) / 1000 + " us");
+        return decor;
+    }
+
+    /**
+     * The ViewRootImpl half we do not have: dispatch the window's insets (the
+     * oracle's status/navigation bar frames), measure at the window frame and
+     * lay the decor out at (0,0). Insets come from argv, so the guest
+     * hardcodes no system-bar height.
+     */
+    static void layoutWindow(View decor) {
+        try {
+            android.graphics.Insets sys = android.graphics.Insets.of(0, STATUS_INSET, 0, NAV_INSET);
+            android.view.WindowInsets insets = new android.view.WindowInsets.Builder()
+                    .setSystemWindowInsets(sys)
+                    .setStableInsets(sys)
+                    .build();
+            decor.dispatchApplyWindowInsets(insets);
+            note("dispatchApplyWindowInsets(system=" + sys + ") -> decor padding l/t/r/b="
+                 + decor.getPaddingLeft() + "/" + decor.getPaddingTop() + "/"
+                 + decor.getPaddingRight() + "/" + decor.getPaddingBottom());
+        } catch (Throwable t) {
+            warnings.add("insets_dispatch_failed=" + unwrap(t));
+            note("dispatchApplyWindowInsets -> " + unwrap(t));
+        }
+        // DecorView.onLayout() (and a couple of window callbacks) dereference
+        // getViewRootImpl(); there is no ViewRootImpl here. Give the decor the
+        // minimal AttachInfo a window would have -- after the insets are
+        // dispatched, so updateColorViews() takes the no-ViewRootImpl branch.
+        installFakeViewRootImpl(decor);
+        probeWindow(2, decor);
+        long t0 = System.nanoTime();
+        decor.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                      View.MeasureSpec.makeMeasureSpec(PANEL_H, View.MeasureSpec.EXACTLY));
+        decor.layout(0, 0, W, PANEL_H);
+        note("window measure+layout " + W + "x" + PANEL_H + " insets="
+             + STATUS_INSET + "/" + NAV_INSET + " in " + (System.nanoTime() - t0) / 1000 + " us");
+    }
+
+    /**
+     * A zeroed {@code ViewRootImpl} (Unsafe.allocateInstance, no constructor:
+     * the real one needs IWindowSession/WMS) behind a View$AttachInfo, so
+     * `View.getViewRootImpl()` answers instead of NPEing. Only
+     * `requestInvalidateRootRenderNode()` (a boolean write) is reached on it.
+     */
+    static void installFakeViewRootImpl(View decor) {
+        try {
+            Class<?> unsafeCls = Class.forName("sun.misc.Unsafe");
+            Field uf = unsafeCls.getDeclaredField("theUnsafe");
+            uf.setAccessible(true);
+            Object unsafe = uf.get(null);
+            Method alloc = unsafeCls.getMethod("allocateInstance", Class.class);
+
+            ClassLoader cl = decor.getClass().getClassLoader();
+            Class<?> vri = Class.forName("android.view.ViewRootImpl", false, cl);
+            Class<?> ai = Class.forName("android.view.View$AttachInfo", false, cl);
+            Object root = alloc.invoke(unsafe, vri);
+            Object attach = alloc.invoke(unsafe, ai);
+            Field fVri = ai.getDeclaredField("mViewRootImpl");
+            fVri.setAccessible(true);
+            fVri.set(attach, root);
+            // A non-null AttachInfo makes View.sizeChange() rebuild the outline
+            // from AttachInfo.mTmpOutline into the view's RenderNode; supply both
+            // (a display-list RenderNode needs no GPU/surface).
+            Field fOutline = ai.getDeclaredField("mTmpOutline");
+            fOutline.setAccessible(true);
+            fOutline.set(attach, new android.graphics.Outline());
+            Field fAttach = View.class.getDeclaredField("mAttachInfo");
+            fAttach.setAccessible(true);
+            fAttach.set(decor, attach);
+            Field fNode = View.class.getDeclaredField("mRenderNode");
+            fNode.setAccessible(true);
+            if (fNode.get(decor) == null) {
+                fNode.set(decor, new android.graphics.RenderNode("decor"));
+            }
+            note("installed minimal View$AttachInfo/ViewRootImpl (no WMS)");
+        } catch (Throwable t) {
+            warnings.add("fake_view_root=" + unwrap(t));
+            note("fake ViewRootImpl -> " + unwrap(t));
         }
     }
 
-    static FrameLayout layout(Context ctx, View content) {
-        FrameLayout root = new FrameLayout(ctx);
-        root.addView(content, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        long t0 = System.nanoTime();
-        root.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
-                     View.MeasureSpec.makeMeasureSpec(CONTENT_H, View.MeasureSpec.EXACTLY));
-        root.layout(0, 0, W, CONTENT_H);
-        note("measure+layout " + W + "x" + CONTENT_H + " in " + (System.nanoTime() - t0) / 1000 + " us");
-        return root;
-    }
+    // ------------------------------------------------------------------ draw
 
-    static int[] draw(FrameLayout root) throws Throwable {
+    static int[] draw(View root) throws Throwable {
         int bg = windowBackgroundColor();
-        Bitmap bm = Bitmap.createBitmap(W, CONTENT_H, Bitmap.Config.ARGB_8888);
+        Bitmap bm = Bitmap.createBitmap(W, PANEL_H, Bitmap.Config.ARGB_8888);
         bm.eraseColor(bg);
         Canvas canvas = new Canvas(bm);
         // SOFTWARE DOWNGRADE (measured, E4H §3.4): RippleDrawable.draw() on a
@@ -751,8 +997,8 @@ public final class AppMain {
                 throw new IllegalStateException("Bitmap.compress(PNG) refused");
             }
         }
-        int[] px = new int[W * CONTENT_H];
-        bm.getPixels(px, 0, W, 0, 0, W, CONTENT_H);
+        int[] px = new int[W * PANEL_H];
+        bm.getPixels(px, 0, W, 0, 0, W, PANEL_H);
         int nonbg = 0;
         for (int p : px) if (p != bg) nonbg++;
         note("draw bg=#" + Integer.toHexString(bg) + " cold=" + cold + " us warm=" + warm + " us"
@@ -870,12 +1116,15 @@ public final class AppMain {
     }
 
     static void emit(String outcome, String code, String message, long t0,
-                     FrameLayout root, String tree, int[] drawUs) {
+                     View root, String tree, int[] drawUs) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"outcome\":\"").append(outcome).append("\"");
         if (code != null) sb.append(",\"code\":\"").append(esc(code)).append("\"");
         if (message != null) sb.append(",\"message\":\"").append(esc(message)).append("\"");
         sb.append(",\"width\":").append(W).append(",\"contentHeight\":").append(CONTENT_H)
+          .append(",\"panelHeight\":").append(PANEL_H)
+          .append(",\"statusInset\":").append(STATUS_INSET)
+          .append(",\"navInset\":").append(NAV_INSET)
           .append(",\"densityDpi\":").append(DENSITY);
         if (drawUs != null) {
             sb.append(",\"draw_cold_us\":").append(drawUs[0])

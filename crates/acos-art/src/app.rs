@@ -49,6 +49,30 @@
 //!    a ripple is a pressed-state animation and the static frame *is* its
 //!    content layer.
 //!
+//! ## The window chrome is the framework's
+//!
+//! The guest does not inflate the layout bare. It builds the activity window
+//! the way `ActivityThread` does: a real `com.android.internal.policy.PhoneWindow`
+//! over the activity theme (the manifest's `android:theme`, or — when the APK
+//! declares none — `Resources.selectDefaultTheme(0, targetSdk)` =
+//! `Theme.DeviceDefault.Light.DarkActionBar`), `setContentView(layout)` so stock
+//! `installDecor`/`generateLayout`/`DecorView.onResourcesLoaded` produce the
+//! DecorView, `ActionBarOverlayLayout`, `ActionBarContainer`, `Toolbar`, the
+//! ActionBar title and `id/content`, then the window's insets
+//! (`--status-inset`/`--nav-inset`, the oracle's system-bar frames) are
+//! dispatched and the DecorView is measured/laid out at
+//! `width × panelHeight`. The tree is dumped from the DecorView down, in device
+//! coordinates, and `frame.png` is the full window frame.
+//!
+//! Three pieces of `ViewRootImpl`/`system_server` are substituted, each a
+//! no-behaviour stand-in, never a different answer:
+//! `WindowManagerImpl` (the local window manager `Window.setWindowManager`
+//! expects), a read-only local `settings` provider in
+//! `ActivityThread.mProviderMap` (the `Settings.Global` int `PhoneWindow`'s
+//! constructor reads, with unset keys falling through to the caller's default),
+//! and a minimal `View$AttachInfo`/zeroed `ViewRootImpl` (only
+//! `requestInvalidateRootRenderNode()` is reached).
+//!
 //! (`View.<init>`'s `IWindowManager` call is answered by a reflective `Proxy`.)
 //!
 //! Never fake: a missing sysroot/SDK/overlay, an APK without a launcher layout,
@@ -88,9 +112,16 @@ pub struct AppOpts {
     pub out: Option<PathBuf>,
     /// Panel width in px (device oracle: 1080).
     pub width: u32,
-    /// App *content* height in px: the oracle's `mAppBounds` minus the status
-    /// bar and the action bar (1080×2400 @ 420 dpi ⇒ 2337 − 275 = 2062).
+    /// Window/display height in px (device oracle: 2400).
+    pub panel_height: u32,
+    /// The app *content* band height, kept for the P2a/P2e comparators
+    /// (1080×2400 @ 420 dpi ⇒ 2337 − 275 = 2062). The frame is now the full
+    /// window; this is metadata only.
     pub content_height: u32,
+    /// Status bar inset in px (the oracle's `statusBarBackground` frame).
+    pub status_inset: u32,
+    /// Navigation bar inset in px (the oracle's `navigationBarBackground` frame).
+    pub nav_inset: u32,
     pub density_dpi: u32,
     /// **Deprecated, no-op.** Kept so the CLI keeps parsing `--text-allcaps`.
     /// The value is never forced any more: the image's static overlays decide
@@ -127,7 +158,10 @@ impl Default for AppOpts {
             layout: None,
             out: None,
             width: 1080,
+            panel_height: 2400,
             content_height: 2062,
+            status_inset: 128,
+            nav_inset: 63,
             density_dpi: 420,
             text_all_caps: AllCaps::Device,
             timeout: Duration::from_secs(120),
@@ -147,7 +181,10 @@ pub struct AppResult {
     pub package: String,
     pub layout: String,
     pub width: u32,
+    pub panel_height: u32,
     pub content_height: u32,
+    pub status_inset: u32,
+    pub nav_inset: u32,
     pub density_dpi: u32,
     /// The image's static RROs applied to the resource path (idmap basenames).
     pub overlays: Vec<String>,
@@ -230,6 +267,11 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         Some(l) => l.clone(),
         None => pick_layout(&opts.apk, &package)?,
     };
+    // The window chrome is the APK's, not a renderer default: the activity
+    // theme comes from the binary manifest (0 = platform default) and the
+    // ActionBar title from the application label.
+    let (theme, title, target_sdk) = apk_chrome(&opts.apk)?;
+
     // The guest always writes into the sandbox's /data (it has no other writable
     // path); the artefacts are copied to --out afterwards.
     let staging = root.data.join("out/render-app");
@@ -252,6 +294,13 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         opts.density_dpi.to_string(),
         // On-device idmap paths of the image's static RROs (','-separated).
         overlays.guest_arg(),
+        // Window geometry + manifest-derived chrome (no bounds in the guest).
+        opts.panel_height.to_string(),
+        opts.status_inset.to_string(),
+        opts.nav_inset.to_string(),
+        theme,
+        title,
+        target_sdk.to_string(),
     ];
 
     // Property table (the art shim serves it) — Build.<clinit> needs the ABI
@@ -383,13 +432,21 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     if let Some(g) = &verdict {
         // The guest echoes the panel it rendered at; a mismatch means the
         // arguments did not survive the sandbox, not a style difference.
-        if (g.width, g.content_height, g.density_dpi)
-            != (Some(opts.width), Some(opts.content_height), Some(opts.density_dpi))
+        if (g.width, g.panel_height, g.density_dpi)
+            != (Some(opts.width), Some(opts.panel_height), Some(opts.density_dpi))
         {
             diags.push(format!(
                 "guest panel {:?}x{:?}@{:?} != requested {}x{}@{}",
-                g.width, g.content_height, g.density_dpi,
-                opts.width, opts.content_height, opts.density_dpi
+                g.width, g.panel_height, g.density_dpi,
+                opts.width, opts.panel_height, opts.density_dpi
+            ));
+        }
+        if (g.status_inset, g.nav_inset)
+            != (Some(opts.status_inset), Some(opts.nav_inset))
+        {
+            diags.push(format!(
+                "guest insets {:?}/{:?} != requested {}/{}",
+                g.status_inset, g.nav_inset, opts.status_inset, opts.nav_inset
             ));
         }
         notes = g.notes.clone();
@@ -456,7 +513,10 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         package,
         layout,
         width: opts.width,
+        panel_height: opts.panel_height,
         content_height: opts.content_height,
+        status_inset: opts.status_inset,
+        nav_inset: opts.nav_inset,
         density_dpi: opts.density_dpi,
         overlays: overlays.applied.clone(),
         idmap_bytes: overlays.idmap_bytes,
@@ -1045,6 +1105,67 @@ pub fn apk_package(apk: &Path) -> Result<String> {
 
 /// The layout resource to inflate: `main` when the APK has it, else
 /// `activity_main`, else the first `layout/*` entry the APK ships.
+/// The activity theme, application label and targetSdk from the APK's binary
+/// manifest — the window chrome `PhoneWindow` needs and the guest must not
+/// invent. Returns `(theme resource id as a hex string, label, targetSdk)`;
+/// `0` means "no `android:theme`", i.e. the platform default, exactly as
+/// `ActivityThread` treats a zero theme.
+///
+/// `aapt2` owns manifest parsing: `dump badging` for the label, `dump xmltree`
+/// for the `android:theme` reference. Nothing is hardcoded per app.
+pub fn apk_chrome(apk: &Path) -> Result<(String, String, u32)> {
+    let sdk = android_sdk()?;
+    let aapt2 = find_tool(&sdk, "aapt2")?;
+    let badging = Command::new(&aapt2).arg("dump").arg("badging").arg(apk).output()?;
+    if !badging.status.success() {
+        return Err(Error::Tool(format!(
+            "aapt2 could not read {}: {}",
+            apk.display(),
+            String::from_utf8_lossy(&badging.stderr).trim()
+        )));
+    }
+    let badging = String::from_utf8_lossy(&badging.stdout);
+    let label = badging
+        .lines()
+        .find_map(|l| l.strip_prefix("application-label:"))
+        .map(|v| v.trim().trim_matches('\'').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| {
+            badging
+                .lines()
+                .find_map(|l| l.strip_prefix("package: name='"))
+                .and_then(|v| v.split('\'').next().map(str::to_string))
+                .unwrap_or_default()
+        });
+
+    let target_sdk = badging
+        .lines()
+        .find_map(|l| l.strip_prefix("targetSdkVersion:'"))
+        .and_then(|v| v.split('\'').next())
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let tree = Command::new(&aapt2)
+        .args(["dump", "xmltree", "--file", "AndroidManifest.xml"])
+        .arg(apk)
+        .output()?;
+    let mut theme = "0".to_string();
+    if tree.status.success() {
+        for line in String::from_utf8_lossy(&tree.stdout).lines() {
+            let Some(idx) = line.find(":theme(") else { continue };
+            let Some(eq) = line[idx..].find('=') else { continue };
+            let value = line[idx + eq + 1..].trim().trim_start_matches('@');
+            // Numeric resource ids are stable ACOS-wide (the manifest's
+            // compile-time table); names would need a resource lookup.
+            if value.starts_with("0x") || value.chars().all(|c| c.is_ascii_digit()) {
+                theme = value.to_string();
+                break;
+            }
+        }
+    }
+    Ok((theme, label, target_sdk))
+}
+
 fn pick_layout(apk: &Path, package: &str) -> Result<String> {
     let sdk = android_sdk()?;
     let aapt2 = find_tool(&sdk, "aapt2")?;
@@ -1090,8 +1211,15 @@ struct GuestLine {
     code: Option<String>,
     message: Option<String>,
     width: Option<u32>,
+    #[serde(rename = "panelHeight")]
+    panel_height: Option<u32>,
     #[serde(rename = "contentHeight")]
+    #[allow(dead_code)] // kept in the guest verdict for the P2a/P2e comparators
     content_height: Option<u32>,
+    #[serde(rename = "statusInset")]
+    status_inset: Option<u32>,
+    #[serde(rename = "navInset")]
+    nav_inset: Option<u32>,
     #[serde(rename = "densityDpi")]
     density_dpi: Option<u32>,
     #[serde(rename = "draw_cold_us")]
@@ -1192,13 +1320,31 @@ mod tests {
 
     #[test]
     fn guest_line_parses() {
-        let line = r##"ACOSAPP {"outcome":"ok","code":null,"width":1080,"contentHeight":2062,"densityDpi":420,"draw_cold_us":450,"draw_warm_us":90,"nonbg_px":44097,"background":"#fff0f0f3","nodes":5,"wall_ms":216,"peak_rss_kb":247000,"warnings":[],"notes":["x"]}"##;
+        let line = r##"ACOSAPP {"outcome":"ok","code":null,"width":1080,"panelHeight":2400,"contentHeight":2062,"statusInset":128,"navInset":63,"densityDpi":420,"draw_cold_us":450,"draw_warm_us":90,"nonbg_px":44097,"background":"#fff0f0f3","nodes":5,"wall_ms":216,"peak_rss_kb":247000,"warnings":[],"notes":["x"]}"##;
         let g = parse_guest_line(line).expect("parsed");
         assert_eq!(g.outcome, "ok");
         assert_eq!(g.width, Some(1080));
+        assert_eq!(g.panel_height, Some(2400));
+        assert_eq!(g.status_inset, Some(128));
         assert_eq!(g.content_height, Some(2062));
         assert_eq!(g.draw_cold_us, Some(450));
         assert_eq!(g.nodes, Some(5));
+    }
+
+    #[test]
+    fn apk_chrome_reads_the_manifest() {
+        let apk = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/build/apps/counter.apk");
+        if !apk.is_file() {
+            return; // fixture not built on this host
+        }
+        let (theme, label, target_sdk) = match apk_chrome(&apk) {
+            Ok(v) => v,
+            Err(_) => return, // no SDK/aapt2 on this host
+        };
+        // No android:theme in counter's manifest => platform default (0).
+        assert_eq!(theme, "0");
+        assert_eq!(label, "Counter");
+        assert_eq!(target_sdk, 34);
     }
 
     #[test]

@@ -27,7 +27,8 @@ USAGE:
   acos-art props [print|write|get KEY]
   acos-art doctor
   acos-art render-app --apk FILE [--out DIR] [--package PKG] [--layout NAME]
-                     [--width PX] [--content-height PX] [--density DPI]
+                     [--width PX] [--panel-height PX] [--content-height PX]
+                     [--status-inset PX] [--nav-inset PX] [--density DPI]
                      [--text-allcaps device|theme]
   acos-art build-app
 
@@ -88,6 +89,9 @@ fn real_main() -> Result<ExitCode> {
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
+    let mut panel_height = 2400u32;
+    let mut status_inset = 128u32;
+    let mut nav_inset = 63u32;
     let mut all_caps = acos_art::app::AllCaps::Device;
 
     let mut i = 1;
@@ -139,7 +143,10 @@ fn real_main() -> Result<ExitCode> {
             "--package" => package = Some(next(&mut i)?),
             "--layout" => layout = Some(next(&mut i)?),
             "--width" => size.0 = next(&mut i)?.parse().unwrap_or(1080),
+            "--panel-height" => panel_height = next(&mut i)?.parse().unwrap_or(2400),
             "--content-height" => size.1 = next(&mut i)?.parse().unwrap_or(2062),
+            "--status-inset" => status_inset = next(&mut i)?.parse().unwrap_or(128),
+            "--nav-inset" => nav_inset = next(&mut i)?.parse().unwrap_or(63),
             "--density" => size.2 = next(&mut i)?.parse().unwrap_or(420),
             "--text-allcaps" => {
                 all_caps = match next(&mut i)?.as_str() {
@@ -226,7 +233,10 @@ fn real_main() -> Result<ExitCode> {
                 layout,
                 out,
                 width: size.0,
+                panel_height,
                 content_height: size.1,
+                status_inset,
+                nav_inset,
                 density_dpi: size.2,
                 text_all_caps: all_caps,
                 timeout: Duration::from_secs(timeout),
@@ -242,7 +252,7 @@ fn real_main() -> Result<ExitCode> {
                     res.frame_md5.as_deref().unwrap_or("-"),
                     res.nodes.map(|n| n.to_string()).unwrap_or_else(|| "-".into()),
                     res.width,
-                    res.content_height,
+                    res.panel_height,
                     res.density_dpi
                 );
                 println!(
