@@ -20,6 +20,8 @@
 #   build.prop                          /system/build.prop from the image
 #   fonts/                              /system/fonts/*.{ttf,otf,ttc} + fonts.xml
 #   framework-res.apk                   /system/framework/framework-res.apk
+#   overlays/<name>.apk                 static RROs over `android` (product/,
+#                                       system_ext/ `overlay/` partitions)
 #   manifest.json                       size + sha256 of every output file
 #
 # Reproducible + idempotent: if a complete manifest already exists the script
@@ -73,7 +75,7 @@ cleanup() {
 }
 trap cleanup EXIT
 rm -rf "$OUT"
-mkdir -p "$OUT/jars" "$OUT/dex" "$OUT/fonts" "$WORK"
+mkdir -p "$OUT/jars" "$OUT/dex" "$OUT/fonts" "$OUT/overlays" "$WORK"
 
 debugfs_dump() { # <image> <abs-path-in-image> <dest>
     local img="$1" path="$2" dest="$3"
@@ -185,6 +187,100 @@ if debugfs_dump_optional "$SYSIMG" "/system/etc/preloaded-classes" "$OUT/preload
 else
     log "warning: /system/etc/preloaded-classes not present in image"
 fi
+
+# --- 2b. static resource overlays (RROs) ------------------------------------
+# A **static** RRO (`<overlay android:isStatic="true">`) cannot be enabled or
+# disabled at runtime, so the framework always applies it. On the Google system
+# image `com.google.android.overlay.pixelconfigcommon` targets `android` and
+# flips `@bool/config_buttonTextAllCaps` from `true` (framework-res) to `false`,
+# which is why reference Button labels are mixed case and a Button measures
+# `text + 12dp/side` instead of the all-caps width.
+#
+# Overlays live on the `product` and `system_ext` dynamic partitions, not on
+# `system`, so those are unpacked too. Only static overlays are extracted: a
+# dynamic RRO is off unless `OverlayManager` enables it, and ACOS has no
+# overlay service to ask.
+log "unpacking product + system_ext for static overlays"
+mkdir -p "$OUT/overlays"
+for part in product system_ext; do
+    "$LPUNPACK" -p "$part" "$WORK/super.img" "$WORK/lp" >/dev/null 2>&1 || {
+        log "  ($part: lpunpack failed; skipping)"
+        continue
+    }
+    partimg="$WORK/lp/$part.img"
+    [ -f "$partimg" ] || { log "  ($part: no image; skipping)"; continue; }
+    for apk in $("$DEBUGFS" -R 'ls -l /overlay' "$partimg" 2>/dev/null \
+            | awk '{print $NF}' | grep -E '\.apk$' | sort); do
+        debugfs_dump_optional "$partimg" "/overlay/$apk" "$WORK/ov/$apk" || continue
+        # `aapt2 dump xmltree --file AndroidManifest.xml` is not available in
+        # every SDK, so read the `isStatic`/`targetPackage` attributes from the
+        # binary manifest with a tiny AXML scan instead.
+        if "$PYTHON" - "$WORK/ov/$apk" <<'PYEOF'
+import struct, sys, zipfile
+
+def pool(data, off):
+    _, _, size, count, _, flags, strings_start, _ = struct.unpack_from('<HHIIIIII', data, off)
+    utf8 = bool(flags & 0x100)
+    offs = [struct.unpack_from('<I', data, off + 28 + 4 * i)[0] for i in range(count)]
+    out = []
+    for o in offs:
+        p = off + strings_start + o
+        if utf8:
+            n = data[p]
+            p += 2 if n & 0x80 else 1
+            n = data[p]
+            if n & 0x80:
+                n = ((n & 0x7F) << 8) | data[p + 1]
+                p += 2
+            else:
+                p += 1
+            out.append(data[p:p + n].decode('utf-8', 'replace'))
+        else:
+            n = struct.unpack_from('<H', data, p)[0]
+            p += 2
+            out.append(data[p:p + 2 * n].decode('utf-16le', 'replace'))
+    return out
+
+try:
+    with zipfile.ZipFile(sys.argv[1]) as z:
+        data = z.read('AndroidManifest.xml')
+except Exception:
+    sys.exit(1)
+if struct.unpack_from('<H', data, 0)[0] != 0x0003:
+    sys.exit(1)
+strings = pool(data, 8)
+pos = struct.unpack_from('<H', data, 2)[0]
+static = target = None
+while pos + 8 <= len(data):
+    ctype, hsize, csize = struct.unpack_from('<HHI', data, pos)
+    if csize < 8:
+        break
+    if ctype == 0x0102:  # START_ELEMENT
+        ext = pos + hsize
+        name = strings[struct.unpack_from('<I', data, ext + 4)[0]]
+        attr_start, attr_size, attr_count = struct.unpack_from('<HHH', data, ext + 8)
+        if name == 'overlay':
+            for i in range(attr_count):
+                a = ext + attr_start + i * attr_size
+                aname = strings[struct.unpack_from('<I', data, a + 4)[0]]
+                raw = struct.unpack_from('<i', data, a + 8)[0]
+                dtype = data[a + 15]
+                if aname == 'isStatic' and dtype == 0x12:
+                    static = struct.unpack_from('<I', data, a + 16)[0] != 0
+                if aname == 'targetPackage' and raw >= 0:
+                    target = strings[raw]
+    pos += csize
+sys.exit(0 if (static and target == 'android') else 1)
+PYEOF
+        then
+            cp "$WORK/ov/$apk" "$OUT/overlays/$apk"
+            log "  overlay (static, target=android): $part/overlay/$apk"
+        fi
+    done
+done
+[ -n "$(ls -A "$OUT/overlays" 2>/dev/null)" ] \
+    && log "static overlays: $(ls "$OUT/overlays" | tr '\n' ' ')" \
+    || log "warning: no static android-target overlays extracted"
 
 # --- 3. APEX payloads --------------------------------------------------------
 # Every APEX may contribute a classpath fragment (`bootclasspath.pb` /

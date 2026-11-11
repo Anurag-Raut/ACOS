@@ -66,6 +66,7 @@ fn nine_patch_stretches_only_the_middle_bands() {
         x_divs: vec![2, 3],
         y_divs: vec![2, 3],
         colors: Vec::new(),
+        padding: [0; 4],
     };
     let frame = render(chunk);
     assert!(frame.unsupported_ops.is_empty(), "{:?}", frame.unsupported_ops);
@@ -92,6 +93,7 @@ fn nine_patch_chunk_round_trips_through_nptc_bytes() {
         x_divs: vec![2, 3],
         y_divs: vec![1, 4],
         colors: vec![0x9933_b5e5, 0xffff_ffff],
+        padding: [0; 4],
     };
     let bytes = chunk.to_bytes();
     let parsed = NinePatchChunk::parse(&bytes).expect("parse npTc");

@@ -644,3 +644,79 @@ fn retrieve_attributes_clears_unset_slots() {
     }
     mgr.destroy_parse_state(psh);
 }
+
+/// The Google system image ships `com.google.android.overlay.pixelconfigcommon`
+/// as a **static** RRO over `android` (`isStatic=true`, `targetPackage="android"`,
+/// `priority=1`). It sets `@bool/config_buttonTextAllCaps=false`, while
+/// `framework-res.apk` itself declares `true`. A static overlay cannot be
+/// disabled at runtime, so the reference emulator renders mixed-case Button
+/// labels and a Button measures `text + 12dp/side` instead of the all-caps
+/// width (the `counter` `inc` Button: 231 px, not 269).
+///
+/// This pins the overlay layer end to end: base value, overlay application,
+/// and the `get_resource_{name,package,type,entry}_name` identity of the
+/// overridden id.
+#[test]
+fn static_overlay_overrides_framework_bool() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    if !acos_test_support::have_fixture(".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk")
+    {
+        eprintln!("PixelConfigOverlayCommon.apk missing; skipping");
+        return;
+    }
+    let root = workspace_root();
+    let apk_path = root.join(".cache/boot/android-34/framework-res.apk");
+    let overlay_path = root.join(".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk");
+
+    // `@bool/config_buttonTextAllCaps` in the base table.
+    const ID: u32 = 0x0111_004a;
+    // A sibling bool the overlay does not declare.
+    const UNTOUCHED: u32 = 0x0111_004b;
+
+    let mut base = build_manager(&apk_path);
+    let name = base.get_resource_name(ID).expect("resource name");
+    assert_eq!(name, "android:bool/config_buttonTextAllCaps");
+    let (_, before) = base.get_resource_value(ID, 0, true).expect("base value");
+    assert_eq!(before.data_type, 0x12, "base is TYPE_INT_BOOLEAN");
+    assert_eq!(before.data, 1, "framework-res declares config_buttonTextAllCaps=true");
+    let untouched_before = base.get_resource_value(UNTOUCHED, 0, true).map(|(_, v)| v.data);
+
+    let overridden = base.apply_overlay(ApkAssets::open(&overlay_path).unwrap());
+    assert!(
+        overridden > 0,
+        "the overlay must map at least one framework resource"
+    );
+
+    let (_, after) = base.get_resource_value(ID, 0, true).expect("overlaid value");
+    assert_eq!(after.data_type, 0x12);
+    assert_eq!(
+        after.data, 0,
+        "the static RRO must set config_buttonTextAllCaps=false"
+    );
+    // The overridden id keeps its target identity so the framework's
+    // name/type lookups stay consistent.
+    assert_eq!(
+        base.get_resource_name(ID).as_deref(),
+        Some("android:bool/config_buttonTextAllCaps")
+    );
+    assert_eq!(
+        base.get_resource_entry_name(ID).as_deref(),
+        Some("config_buttonTextAllCaps")
+    );
+    assert_eq!(base.get_resource_type_name(ID).as_deref(), Some("bool"));
+    assert_eq!(
+        base.get_resource_package_name(ID).as_deref(),
+        Some("android")
+    );
+
+    // A resource the overlay does not declare keeps the base value.
+    if let Some(before) = untouched_before {
+        let after = base
+            .get_resource_value(UNTOUCHED, 0, true)
+            .map(|(_, v)| v.data);
+        assert_eq!(after, Some(before), "non-overlaid bools must not change");
+    }
+}

@@ -812,9 +812,35 @@ fn am_set_apk_assets(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
         if let Some(m) = reg.managers.get_mut(&mgr) {
             m.set_apk_assets(apks);
+            // Static resource overlays (RROs) shipped alongside the boot
+            // image. A static RRO cannot be toggled at runtime, so it is
+            // applied unconditionally to every manager whose base exposes
+            // its target package. On the Google system image this makes
+            // `@bool/config_buttonTextAllCaps` (framework-res `true`) resolve
+            // to the Pixel overlay's `false`.
+            for apk in load_boot_overlays(&boot) {
+                m.apply_overlay(apk);
+            }
         }
     });
     Ok(())
+}
+
+/// Static RRO APKs extracted into `<boot>/overlays/*.apk`, sorted by name.
+fn load_boot_overlays(boot: &Path) -> Vec<ApkAssets> {
+    let Ok(entries) = std::fs::read_dir(boot.join("overlays")) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "apk"))
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .filter_map(|p| ApkAssets::open(p).ok())
+        .collect()
 }
 
 fn am_set_configuration(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

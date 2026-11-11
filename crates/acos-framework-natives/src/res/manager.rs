@@ -116,6 +116,32 @@ fn parse_bcp47(locale: &str) -> Option<([u8; 2], [u8; 2])> {
     Some((language, country))
 }
 
+/// The `android:targetPackage` declared in an overlay APK's manifest.
+///
+/// `None` means the overlay did not declare one (or the manifest could not be
+/// read), in which case its entries are matched against any base package.
+fn overlay_target_package(apk: &ApkAssets) -> Option<String> {
+    let data = apk.read_entry("AndroidManifest.xml").ok()?;
+    let doc = crate::res::xmlblock::parse_axml(&data).ok()?;
+    for event in &doc.events {
+        let crate::res::xmlblock::XmlEvent::StartTag(tag) = event else {
+            continue;
+        };
+        if doc.string_block.get(tag.name_index) != Some("overlay") {
+            continue;
+        }
+        for attr in &tag.attributes {
+            if doc.string_block.get(attr.name_index) == Some("targetPackage") {
+                return doc
+                    .string_block
+                    .get(attr.raw_value_index)
+                    .map(str::to_string);
+            }
+        }
+    }
+    None
+}
+
 /// A resolved lookup hit.
 #[derive(Debug, Clone)]
 pub struct Lookup {
@@ -123,6 +149,24 @@ pub struct Lookup {
     pub source_index: usize,
     /// The resolved entry.
     pub entry: ResolvedEntry,
+}
+
+/// A static resource overlay (RRO) applied over the base sources.
+///
+/// A static overlay cannot be enabled or disabled at runtime, so it is applied
+/// unconditionally when its APK is loaded. `map` translates the overlay's own
+/// package-local resource ids to the *target* ids they override.
+///
+/// The overlay APK is deliberately kept out of `sources`: the Java
+/// `AssetManager` caches one `StringBlock` per `ApkAssets` it passes to
+/// `nativeSetApkAssets`, so an extra native source would desynchronise that
+/// array (`ArrayIndexOutOfBoundsException` in `getPooledStringForCookie`).
+#[derive(Debug)]
+pub struct Overlay {
+    /// The overlay APK.
+    pub apk: ApkAssets,
+    /// Target resource id -> overlay-local resource id.
+    pub map: HashMap<u32, u32>,
 }
 
 /// The Android `AssetManager` engine.
@@ -141,6 +185,8 @@ pub struct AssetManager {
     next_theme: u64,
     default_theme: u64,
     cookie_to_source: HashMap<i32, usize>,
+    /// Applied static overlays, in application (priority) order.
+    overlays: Vec<Overlay>,
 }
 
 impl AssetManager {
@@ -161,9 +207,63 @@ impl AssetManager {
     pub fn set_apk_assets(&mut self, apks: Vec<ApkAssets>) {
         self.sources.clear();
         self.cookie_to_source.clear();
+        self.overlays.clear();
         for apk in apks {
             self.add_apk_assets(apk);
         }
+    }
+
+    /// Apply a static RRO APK over the currently loaded base sources.
+    ///
+    /// Each overlay entry is matched to the base by `(target package, type,
+    /// key)` — the same name mapping `idmap2` produces for a simple static
+    /// overlay. The overlay is held out of `sources` and only its simple
+    /// scalar values (bool / int / colour / dimension / fraction) are applied;
+    /// a string or `@resid` would need the overlay's own string pool or
+    /// package id, neither of which the Java `AssetManager` can address for a
+    /// source it never saw. Returns the number of overridden resources.
+    pub fn apply_overlay(&mut self, apk: ApkAssets) -> usize {
+        let target_pkg = overlay_target_package(&apk);
+        let (Some(table), Some(bytes)) = (apk.resource_table(), apk.resource_bytes()) else {
+            return 0;
+        };
+        let entries = table.entries(bytes);
+        let mut map = HashMap::new();
+        for (local_id, type_name, key) in entries {
+            let name = format!("{type_name}/{key}");
+            if let Some(target_id) = self.find_target_id(&name, target_pkg.as_deref()) {
+                map.insert(target_id, local_id);
+            }
+        }
+        let count = map.len();
+        self.overlays.push(Overlay { apk, map });
+        count
+    }
+
+    /// The id of a resource in a base source, by name.
+    fn find_target_id(&self, name: &str, target_pkg: Option<&str>) -> Option<u32> {
+        for src in &self.sources {
+            let (Some(table), Some(bytes)) = (src.resource_table(), src.resource_bytes()) else {
+                continue;
+            };
+            if let Some(id) = table.identifier(bytes, name, None, target_pkg) {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    /// Resolve `id` against a base source, with the source index.
+    fn lookup_base(&self, id: u32, requested: &ResConfig) -> Option<(usize, ResolvedEntry)> {
+        for (i, src) in self.sources.iter().enumerate() {
+            let (Some(table), Some(bytes)) = (src.resource_table(), src.resource_bytes()) else {
+                continue;
+            };
+            if let Some(entry) = table.resolve(bytes, id, requested) {
+                return Some((i, entry));
+            }
+        }
+        None
     }
 
     /// The loaded sources.
@@ -224,6 +324,43 @@ impl AssetManager {
 
     /// Resolve `id` in an explicit configuration.
     pub fn lookup_with(&self, id: u32, requested: &ResConfig) -> Option<Lookup> {
+        // Static overlays win over the base, highest priority last.
+        for ov in self.overlays.iter().rev() {
+            let Some(local_id) = ov.map.get(&id) else {
+                continue;
+            };
+            let (Some(table), Some(bytes)) =
+                (ov.apk.resource_table(), ov.apk.resource_bytes())
+            else {
+                continue;
+            };
+            let Some(mut entry) = table.resolve(bytes, *local_id, requested) else {
+                continue;
+            };
+            // Skip values that would need the overlay's own string pool or
+            // package id (see `apply_overlay`).
+            if entry.value.data_type == crate::res::value::TYPE_STRING
+                || entry.value.is_reference()
+                || entry.bag.is_some()
+            {
+                continue;
+            }
+            // Present the target's identity so `get_resource_name` and the
+            // `get_resource_{package,type,entry}_name` natives stay consistent
+            // for an overridden id, and anchor the cookie on the base source
+            // the Java `AssetManager` knows about.
+            let base = self.lookup_base(id, requested);
+            let (source_index, base_entry) = base.unwrap_or((0, entry.clone()));
+            entry.package_name = base_entry.package_name;
+            entry.type_name = base_entry.type_name;
+            entry.key = base_entry.key;
+            entry.type_id = base_entry.type_id;
+            entry.entry_id = base_entry.entry_id;
+            return Some(Lookup {
+                source_index,
+                entry,
+            });
+        }
         for (i, src) in self.sources.iter().enumerate() {
             let Some(table) = src.resource_table() else {
                 continue;

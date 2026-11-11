@@ -422,6 +422,49 @@ impl ResTableIndex {
         None
     }
 
+    /// Enumerate every entry as `(resource id, type name, key name)`.
+    ///
+    /// A static RRO stores its entries under its own package id and the
+    /// framework maps them onto the target by `(package, type, key)` (what
+    /// `idmap2` does for a simple overlay), so the caller needs the overlay's
+    /// names before it can translate them to target ids.
+    pub fn entries(&self, data: &[u8]) -> Vec<(u32, String, String)> {
+        let mut out = Vec::new();
+        for pkg in &self.packages {
+            for (type_id, offsets) in pkg.chunk_offsets.iter().enumerate() {
+                if offsets.is_empty() {
+                    continue;
+                }
+                let type_name = pkg.type_name(data, type_id as u8).unwrap_or_default();
+                let mut seen: Vec<bool> = Vec::new();
+                for off in offsets {
+                    let Ok(chunk) = parse_type_chunk(data, *off as usize) else {
+                        continue;
+                    };
+                    if seen.len() < chunk.entry_count {
+                        seen.resize(chunk.entry_count, false);
+                    }
+                    for (i, done) in seen.iter_mut().enumerate() {
+                        if *done {
+                            continue;
+                        }
+                        let Some(entry_off) = lookup_entry_offset(data, &chunk, i as u16) else {
+                            continue;
+                        };
+                        let Ok(entry) = decode_entry(data, chunk.entries_at + entry_off) else {
+                            continue;
+                        };
+                        *done = true;
+                        let key = pkg.key_name(data, entry.key_index).unwrap_or_default();
+                        let id = (pkg.id << 24) | ((type_id as u32) << 16) | i as u32;
+                        out.push((id, type_name.clone(), key));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Distinct configurations that carry a size qualifier.
     pub fn size_configurations(&self, data: &[u8]) -> Vec<ResConfig> {
         let mut seen: Vec<ResConfig> = Vec::new();

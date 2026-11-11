@@ -180,14 +180,20 @@ impl Rect {
 ///
 /// aapt/aapt2 serialise the chunk as a 32-byte header followed by the div and
 /// colour arrays. The header's byte offsets are native-endian; the arrays are
-/// written in network (big-endian) order. ACOS consumes the divs to place the
-/// nine stretch regions; the colours are retained for completeness
-/// (`getTransparentRegion`).
+/// written in network (big-endian) order, as are the four padding fields.
+/// ACOS consumes the divs to place the nine stretch regions and the padding to
+/// size a nine-patch background (`NinePatchDrawable.getPadding`); the colours
+/// are retained for completeness (`getTransparentRegion`).
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct NinePatchChunk {
     pub x_divs: Vec<i32>,
     pub y_divs: Vec<i32>,
     pub colors: Vec<u32>,
+    /// Content padding in the source density, `[left, top, right, bottom]`.
+    ///
+    /// `Res_png_9patch` declares the fields in the order
+    /// `paddingLeft, paddingRight, paddingTop, paddingBottom`.
+    pub padding: [i32; 4],
 }
 
 impl NinePatchChunk {
@@ -224,11 +230,23 @@ impl NinePatchChunk {
                 })
                 .collect()
         };
+        let be_i32 = |o: usize| {
+            i32::from_be_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]])
+        };
         Some(NinePatchChunk {
             x_divs: read_i32(xo, nx),
             y_divs: read_i32(yo, ny),
             colors: read_u32(co, nc),
+            padding: [be_i32(12), be_i32(20), be_i32(16), be_i32(24)],
         })
+    }
+
+    /// The content padding scaled to the target density.
+    ///
+    /// Matches `NinePatchPeeker::scale` — `(int)(v * scale + 0.5f)` — so a
+    /// 480 dpi bucket drawn at 420 dpi scales `12` to `11`.
+    pub fn padding_scaled(&self, scale: f32) -> [i32; 4] {
+        self.padding.map(|v| ((v as f32) * scale + 0.5) as i32)
     }
 
     /// Serialise to the same `npTc` layout (used by tests and fixtures).
@@ -243,6 +261,11 @@ impl NinePatchChunk {
         out[4..8].copy_from_slice(&(xo as u32).to_le_bytes());
         out[8..12].copy_from_slice(&(yo as u32).to_le_bytes());
         out[28..32].copy_from_slice(&(co as u32).to_le_bytes());
+        let [left, top, right, bottom] = self.padding;
+        out[12..16].copy_from_slice(&left.to_be_bytes());
+        out[16..20].copy_from_slice(&right.to_be_bytes());
+        out[20..24].copy_from_slice(&top.to_be_bytes());
+        out[24..28].copy_from_slice(&bottom.to_be_bytes());
         for d in &self.x_divs {
             out.extend_from_slice(&d.to_be_bytes());
         }
@@ -336,5 +359,37 @@ mod tests {
         let a = RectF::new(0.0, 0.0, 10.0, 10.0);
         let b = RectF::new(20.0, 20.0, 30.0, 30.0);
         assert!(a.intersect(&b).is_none());
+    }
+
+    /// The real `res/drawable-xxhdpi-v4/textfield_default_mtrl_alpha.9.png`
+    /// `npTc` payload: `paddingLeft=0 paddingRight=0 paddingTop=0
+    /// paddingBottom=12`, in that (network-order) declaration order.
+    const TEXTFIELD_XXHDPI_NPTC: &[u8] = &[
+        0x00, 0x02, 0x02, 0x02, 0x20, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x30, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    ];
+
+    #[test]
+    fn nine_patch_padding_reads_left_top_right_bottom() {
+        let chunk = NinePatchChunk::parse(TEXTFIELD_XXHDPI_NPTC).expect("npTc parses");
+        assert_eq!(chunk.padding, [0, 0, 0, 12]);
+        // The 480 dpi bucket drawn at 420 dpi: 12 * 0.875 + 0.5 = 11.
+        assert_eq!(chunk.padding_scaled(420.0 / 480.0), [0, 0, 0, 11]);
+        assert_eq!(chunk.padding_scaled(1.0), [0, 0, 0, 12]);
+    }
+
+    #[test]
+    fn nine_patch_padding_round_trips() {
+        let chunk = NinePatchChunk {
+            x_divs: vec![0, 38],
+            y_divs: vec![0, 21],
+            colors: vec![0, 1],
+            padding: [3, 7, 5, 11],
+        };
+        let bytes = chunk.to_bytes();
+        assert_eq!(NinePatchChunk::parse(&bytes), Some(chunk));
     }
 }

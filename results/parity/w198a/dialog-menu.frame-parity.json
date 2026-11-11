@@ -1,0 +1,96 @@
+{
+  "candidate": "/home/Qui/Projects/acos/.cache/wt-w198a/results/parity/w198a/dialog-menu.png",
+  "diff": {
+    "alpha": {
+      "max_abs_error": 0,
+      "mean_abs_error": 0.0,
+      "rmse": 0.0
+    },
+    "blocks": {
+      "block_size": 8,
+      "blocks_x": 135,
+      "blocks_y": 300,
+      "changed_blocks": 6225,
+      "changed_fraction": 0.16468253968253968,
+      "max_block_mean_abs_error": 241.0
+    },
+    "blue": {
+      "max_abs_error": 243,
+      "mean_abs_error": 26.719503554894178,
+      "rmse": 73.65494532042925
+    },
+    "changed_bbox": [
+      0,
+      64,
+      1080,
+      2304
+    ],
+    "compared_pixels": 2419200,
+    "differing_fraction": 0.16269593253968254,
+    "differing_pixels": 393594,
+    "global_ssim": 0.20077530407090527,
+    "green": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.569836722883597,
+      "rmse": 73.16789328131246
+    },
+    "height": 2400,
+    "identical": false,
+    "luma": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.671392609126983,
+      "rmse": 73.37958895011224
+    },
+    "mask": [
+      [
+        0,
+        0,
+        1080,
+        64
+      ],
+      [
+        0,
+        2304,
+        1080,
+        2400
+      ]
+    ],
+    "masked_pixels": 172800,
+    "max_abs_error": 243,
+    "mean_abs_error": 26.718637290564374,
+    "mean_ssim": 0.8765069469103943,
+    "min_ssim": -0.8347764360717315,
+    "pixel_count": 2592000,
+    "pixel_threshold": 8,
+    "psnr_db": 10.7998109664099,
+    "red": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.866571593915342,
+      "rmse": 73.80885075137952
+    },
+    "rmse": 73.54440388096697,
+    "ssim_window": 9,
+    "width": 1080
+  },
+  "identical": false,
+  "masks": [
+    [
+      0,
+      0,
+      1080,
+      64
+    ],
+    [
+      0,
+      2304,
+      1080,
+      2400
+    ]
+  ],
+  "ok": true,
+  "reference": "/home/Qui/Projects/acos/.cache/wt-w198a/fixtures/reference/dialog-menu/art-api34-x86_64/screenshot_initial.png",
+  "threshold": {
+    "global_ssim": 0.98,
+    "mean_ssim": 0.99
+  }
+}

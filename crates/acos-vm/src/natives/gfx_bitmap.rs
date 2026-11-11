@@ -32,6 +32,8 @@ struct DecoderState {
     width: i32,
     height: i32,
     animated: bool,
+    /// `computeDstDensity() / Source.getDensity()`; `1.0` when unknown.
+    density_scale: f32,
 }
 
 thread_local! {
@@ -528,6 +530,35 @@ fn png_nine_patch_chunk(bytes: &[u8]) -> Option<Vec<u8>> {
     None
 }
 
+/// The nine-patch content padding `(left, top, right, bottom)` from the `npTc`
+/// payload, scaled by `scale`.
+///
+/// `NinePatchChunk::parse` owns the `Res_png_9patch` layout; this only locates
+/// the `npTc` chunk inside the PNG and applies the density scale.
+fn png_nine_patch_padding(bytes: &[u8], scale: f32) -> Option<(i32, i32, i32, i32)> {
+    let chunk = acos_render::geom::NinePatchChunk::parse(&png_nine_patch_chunk(bytes)?)?;
+    let [left, top, right, bottom] = chunk.padding_scaled(scale);
+    Some((left, top, right, bottom))
+}
+
+/// `BitmapFactory.Options.inTargetDensity / inDensity` (1.0 when unset).
+fn bitmap_density_scale(vm: &mut Vm, opts: u32) -> f32 {
+    if opts == 0 {
+        return 1.0;
+    }
+    let field = |vm: &mut Vm, name: &str| match vm.get_field(opts, name) {
+        Ok(JavaValue::Int(v)) => v,
+        _ => 0,
+    };
+    let source = field(vm, "inDensity");
+    let target = field(vm, "inTargetDensity");
+    if source > 0 && target > 0 {
+        target as f32 / source as f32
+    } else {
+        1.0
+    }
+}
+
 fn byte_array_prefix(vm: &Vm, h: u32, n: usize) -> Vec<u8> {
     match vm.heap.get(h) {
         Some(Object::Array(a)) => match &a.data {
@@ -575,7 +606,14 @@ fn read_stream(vm: &mut Vm, stream: u32, storage: u32) -> VmResult<Vec<u8>> {
     Ok(out)
 }
 
-fn register_decoder(bytes: Vec<u8>, format: ImageFormat, width: i32, height: i32, animated: bool) -> u64 {
+fn register_decoder(
+    bytes: Vec<u8>,
+    format: ImageFormat,
+    width: i32,
+    height: i32,
+    animated: bool,
+    density_scale: f32,
+) -> u64 {
     let handle = NEXT_DECODER.with(|c| {
         let h = c.get();
         c.set(h + 1);
@@ -590,10 +628,55 @@ fn register_decoder(bytes: Vec<u8>, format: ImageFormat, width: i32, height: i32
                 width,
                 height,
                 animated,
+                density_scale,
             },
         );
     });
     handle
+}
+
+/// The `ImageDecoder.Source` density ratio `computeDstDensity() / getDensity()`.
+///
+/// `Bitmap.DENSITY_NONE` (`0`) means the source has no density qualifier, in
+/// which case nothing is scaled. This mirrors `ImageDecoder::computeDensity`,
+/// which deliberately leaves a nine-patch's density alone so the *drawable*
+/// (not the bitmap) owns the scaling.
+fn source_density_scale(vm: &mut Vm, source: u32) -> f32 {
+    if source == 0 {
+        return 1.0;
+    }
+    let Ok(JavaValue::Int(src)) = vm.call_method(source, "getDensity", "()I", &[]) else {
+        return 1.0;
+    };
+    if src <= 0 {
+        return 1.0;
+    }
+    let dst = vm
+        .call_method(source, "getResources", "()Landroid/content/res/Resources;", &[])
+        .ok()
+        .and_then(|v| match v {
+            JavaValue::Object(r) if r != 0 => Some(r),
+            _ => None,
+        })
+        .and_then(|res| {
+            vm.call_method(
+                res,
+                "getDisplayMetrics",
+                "()Landroid/util/DisplayMetrics;",
+                &[],
+            )
+            .ok()
+        })
+        .and_then(|v| match v {
+            JavaValue::Object(m) if m != 0 => match vm.get_field(m, "densityDpi") {
+                Ok(JavaValue::Int(d)) => Some(d),
+                _ => None,
+            },
+            _ => None,
+        })
+        .filter(|d| *d > 0)
+        .unwrap_or(src);
+    dst as f32 / src as f32
 }
 
 fn decoder_state(handle: u64) -> Option<(Vec<u8>, ImageFormat, i32, i32, bool)> {
@@ -601,6 +684,15 @@ fn decoder_state(handle: u64) -> Option<(Vec<u8>, ImageFormat, i32, i32, bool)> 
         d.borrow()
             .get(&handle)
             .map(|s| (s.bytes.clone(), s.format, s.width, s.height, s.animated))
+    })
+}
+
+fn decoder_density_scale(handle: u64) -> f32 {
+    DECODERS.with(|d| {
+        d.borrow()
+            .get(&handle)
+            .map(|s| s.density_scale)
+            .unwrap_or(1.0)
     })
 }
 
@@ -629,9 +721,11 @@ fn decode_bytes(bytes: &[u8]) -> VmResult<(ImageFormat, i32, i32)> {
 fn id_create_stream(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let stream = vm.arg_ref(ctx, 0);
     let storage = vm.arg_ref(ctx, 1);
+    let source = vm.arg_ref(ctx, 3);
     let bytes = read_stream(vm, stream, storage)?;
     let (format, width, height) = decode_bytes(&bytes)?;
-    let handle = register_decoder(bytes, format, width, height, false);
+    let scale = source_density_scale(vm, source);
+    let handle = register_decoder(bytes, format, width, height, false, scale);
     let obj = new_decoder_object(vm, handle, width, height, false)?;
     vm.ret_ref(ctx, obj);
     Ok(())
@@ -649,7 +743,7 @@ fn id_create_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         Vec::new()
     };
     let (format, width, height) = decode_bytes(&slice)?;
-    let handle = register_decoder(slice, format, width, height, false);
+    let handle = register_decoder(slice, format, width, height, false, 1.0);
     let obj = new_decoder_object(vm, handle, width, height, false)?;
     vm.ret_ref(ctx, obj);
     Ok(())
@@ -707,12 +801,21 @@ fn id_get_mime_type(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn id_get_padding(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let handle = vm.arg_i64(ctx, 0) as u64;
     let rect = vm.arg_ref(ctx, 1);
-    if rect != 0 {
-        for f in ["left", "top", "right", "bottom"] {
-            let _ = vm.set_field(rect, f, JavaValue::Int(0));
-        }
+    if rect == 0 {
+        return Ok(());
     }
+    // `ImageDecoder.nGetPadding` reports the decoded nine-patch padding. The
+    // decoder has already produced a target-density bitmap, so no further
+    // scaling is applied here.
+    let (left, top, right, bottom) = decoder_state(handle)
+        .and_then(|(bytes, ..)| png_nine_patch_padding(&bytes, decoder_density_scale(handle)))
+        .unwrap_or((0, 0, 0, 0));
+    let _ = vm.set_field(rect, "left", JavaValue::Int(left));
+    let _ = vm.set_field(rect, "top", JavaValue::Int(top));
+    let _ = vm.set_field(rect, "right", JavaValue::Int(right));
+    let _ = vm.set_field(rect, "bottom", JavaValue::Int(bottom));
     Ok(())
 }
 
@@ -744,7 +847,7 @@ fn set_options_outputs(vm: &mut Vm, opts: u32, w: i32, h: i32, format: ImageForm
     }
 }
 
-fn bf_decode_bytes(vm: &mut Vm, ctx: NativeCtx, bytes: Vec<u8>) -> VmResult<()> {
+fn bf_decode_bytes(vm: &mut Vm, ctx: NativeCtx, bytes: Vec<u8>, pad: u32) -> VmResult<()> {
     let opts = vm.arg_ref(ctx, 3);
     let (format, w, h) = decode_bytes(&bytes)?;
     set_options_outputs(vm, opts, w, h, format);
@@ -755,6 +858,19 @@ fn bf_decode_bytes(vm: &mut Vm, ctx: NativeCtx, bytes: Vec<u8>) -> VmResult<()> 
     let hnd = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
         .map_err(|e| render_err("BitmapFactory.decode", e))?;
     let chunk = png_nine_patch_chunk(&bytes);
+    // `BitmapFactory.decodeResourceStream` hands the decoder's padding
+    // out-param to `NinePatchDrawable`; a nine-patch background is how
+    // `edit_text_material` sizes itself. Fill it from the `npTc` payload.
+    if pad != 0 {
+        if let Some((left, top, right, bottom)) =
+            png_nine_patch_padding(&bytes, bitmap_density_scale(vm, opts))
+        {
+            let _ = vm.set_field(pad, "left", JavaValue::Int(left));
+            let _ = vm.set_field(pad, "top", JavaValue::Int(top));
+            let _ = vm.set_field(pad, "right", JavaValue::Int(right));
+            let _ = vm.set_field(pad, "bottom", JavaValue::Int(bottom));
+        }
+    }
     let obj = wrap_bitmap(vm, hnd, chunk.as_deref())?;
     vm.ret_ref(ctx, obj);
     Ok(())
@@ -771,12 +887,13 @@ fn bf_decode_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     } else {
         Vec::new()
     };
-    bf_decode_bytes(vm, ctx, slice)
+    bf_decode_bytes(vm, ctx, slice, 0)
 }
 
 fn bf_decode_stream(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let stream = vm.arg_ref(ctx, 0);
     let storage = vm.arg_ref(ctx, 1);
+    let pad = vm.arg_ref(ctx, 2);
     let bytes = read_stream(vm, stream, storage)?;
-    bf_decode_bytes(vm, ctx, bytes)
+    bf_decode_bytes(vm, ctx, bytes, pad)
 }
