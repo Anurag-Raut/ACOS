@@ -1,0 +1,170 @@
+{
+ "app": "counter",
+ "ours": [
+  1080,
+  2062
+ ],
+ "ref": [
+  1080,
+  2062
+ ],
+ "ssim": 0.99196,
+ "mae": 0.432,
+ "pixel_exact": 0.98222,
+ "tree_exact": 3,
+ "tree_total": 8,
+ "content_exact": 3,
+ "content_total": 4,
+ "button_width": {
+  "inc": 267,
+  "reset": 231
+ },
+ "nodes": [
+  {
+   "key": "class:",
+   "result": "missing_in_ours",
+   "ref": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "ours": null,
+   "delta": null
+  },
+  {
+   "key": "class:android.widget.FrameLayout",
+   "result": "bounds",
+   "ref": [
+    0,
+    0,
+    1080,
+    2400
+   ],
+   "ours": [
+    0,
+    0,
+    1080,
+    2062
+   ],
+   "delta": [
+    0,
+    0,
+    0,
+    -338
+   ]
+  },
+  {
+   "key": "text:android.widget.TextView|Counter",
+   "result": "missing_in_ours",
+   "ref": [
+    42,
+    166,
+    231,
+    237
+   ],
+   "ours": null,
+   "delta": null
+  },
+  {
+   "key": "id:id/content",
+   "result": "missing_in_ours",
+   "ref": [
+    0,
+    275,
+    1080,
+    2337
+   ],
+   "ours": null,
+   "delta": null
+  },
+  {
+   "key": "class:android.widget.LinearLayout",
+   "result": "match",
+   "ref": [
+    0,
+    0,
+    1080,
+    2062
+   ],
+   "ours": [
+    0,
+    0,
+    1080,
+    2062
+   ],
+   "delta": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "key": "id:id/count",
+   "result": "match",
+   "ref": [
+    42,
+    42,
+    63,
+    93
+   ],
+   "ours": [
+    42,
+    42,
+    63,
+    93
+   ],
+   "delta": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "key": "id:id/inc",
+   "result": "bounds",
+   "ref": [
+    42,
+    93,
+    273,
+    219
+   ],
+   "ours": [
+    42,
+    93,
+    309,
+    219
+   ],
+   "delta": [
+    0,
+    0,
+    36,
+    0
+   ]
+  },
+  {
+   "key": "id:id/reset",
+   "result": "match",
+   "ref": [
+    42,
+    219,
+    273,
+    345
+   ],
+   "ours": [
+    42,
+    219,
+    273,
+    345
+   ],
+   "delta": [
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ ]
+}

@@ -41,7 +41,7 @@ import java.util.List;
  * {@code ACOSAPP {"outcome":"crash",...}} with a stable code and the full
  * cause chain.
  *
- * argv: apk pkg outDir width contentHeight densityDpi
+ * argv: apk pkg outDir width contentHeight densityDpi [idmap,idmap,...]
  */
 public final class AppMain {
 
@@ -50,6 +50,8 @@ public final class AppMain {
 
     static String sApk, sPkg, sOut;
     static int W = 1080, CONTENT_H = 2062, DENSITY = 420;
+    /** The image's static RRO idmaps, in application order (may be empty). */
+    static String[] sIdmaps = new String[0];
 
     static final List<String> notes = new ArrayList<>();
     static final List<String> warnings = new ArrayList<>();
@@ -66,6 +68,7 @@ public final class AppMain {
         if (args.length > 3) W = Integer.parseInt(args[3]);
         if (args.length > 4) CONTENT_H = Integer.parseInt(args[4]);
         if (args.length > 5) DENSITY = Integer.parseInt(args[5]);
+        if (args.length > 6 && !args[6].isEmpty()) sIdmaps = args[6].split(",");
         try {
             new File(sOut).mkdirs();
             run();
@@ -89,13 +92,6 @@ public final class AppMain {
         seedTypeface();
         Context ctx = newContext();
         View content = inflate(ctx);
-        if (!"theme".equals(System.getProperty("acosart.allcaps", "device"))) {
-            int n = setAllCaps(content, false);
-            if (n > 0) {
-                note("textAllCaps=false on " + n + " TextView(s) (device renders sentence case; "
-                     + "our theme resolves Widget.Material.Button.textAllCaps=true -- E4H \u00a77)");
-            }
-        }
         FrameLayout root = layout(ctx, content);
         String tree = dumpTree(root);
         write(new File(sOut, "tree.json"), tree);
@@ -189,13 +185,7 @@ public final class AppMain {
     static int sLayoutId;
 
     static void stepResources() throws Throwable {
-        Constructor<AssetManager> c = AssetManager.class.getDeclaredConstructor();
-        c.setAccessible(true);
-        AssetManager am = c.newInstance();
-        Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
-        addAssetPath.setAccessible(true);
-        addAssetPath.invoke(am, "/system/framework/framework-res.apk");
-        addAssetPath.invoke(am, sApk);
+        AssetManager am = buildAssetManager();
 
         DisplayMetrics dm = new DisplayMetrics();
         dm.widthPixels = W;
@@ -239,6 +229,142 @@ public final class AppMain {
 
         sTheme = sRes.newTheme();
         sTheme.applyStyle(android.R.style.Theme_DeviceDefault_Light, true);
+        probeTheme();
+    }
+
+    // ------------------------------------------------- the device's Resources
+
+    static final String TARGET_APK = "/system/framework/framework-res.apk";
+
+    /**
+     * Build the {@code AssetManager} the way {@code ResourcesManager} does at
+     * zygote time: target APK, then one {@code ApkAssets} per applied static
+     * overlay (from its idmap), then the app APK, all through
+     * {@code AssetManager.Builder}. No ACOS resource code and no hardcoded
+     * attribute: the idmaps come from the image's own {@code idmap2} and the
+     * overlay values are resolved by stock {@code libandroidfw} (P2c).
+     *
+     * Order is priority (later {@code addApkAssets} wins). The overlay APKs are
+     * loaded *by the idmap*, which names both the target and the overlay path,
+     * so they must not be added again.
+     *
+     * Falls back to the plain {@code AssetManager} constructor +
+     * {@code addAssetPath} when {@code ApkAssets}/{@code Builder} are missing
+     * (or an idmap is stale), and says so in the notes/warnings — it never
+     * silently renders a different resource set.
+     */
+    static AssetManager buildAssetManager() throws Throwable {
+        try {
+            AssetManager am = apkAssetsAssetManager();
+            return am;
+        } catch (Throwable t) {
+            Throwable u = unwrap(t);
+            warnings.add("apk_assets_unavailable=" + u);
+            note("AssetManager via ApkAssets.Builder unavailable (" + u + "); "
+                 + "falling back to addAssetPath (NO overlays applied)");
+            return legacyAssetManager();
+        }
+    }
+
+    static AssetManager legacyAssetManager() throws Throwable {
+        Constructor<AssetManager> c = AssetManager.class.getDeclaredConstructor();
+        c.setAccessible(true);
+        AssetManager am = c.newInstance();
+        Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
+        addAssetPath.setAccessible(true);
+        addAssetPath.invoke(am, TARGET_APK);
+        addAssetPath.invoke(am, sApk);
+        return am;
+    }
+
+    static AssetManager apkAssetsAssetManager() throws Throwable {
+        Class<?> aa = Class.forName("android.content.res.ApkAssets");
+        Method loadFromPath = aa.getMethod("loadFromPath", String.class);
+        Object target = loadFromPath.invoke(null, TARGET_APK);
+
+        java.util.List<Object> assets = new java.util.ArrayList<>();
+        assets.add(target);
+        if (sIdmaps.length > 0) {
+            Object[] idmapAssets = new Object[sIdmaps.length];
+            int loaded = 0;
+            long t0 = System.nanoTime();
+            for (String idmap : sIdmaps) {
+                try {
+                    idmapAssets[loaded] = apkAssetsOverlay(aa, idmap);
+                    assets.add(idmapAssets[loaded]);
+                    loaded++;
+                } catch (Throwable t) {
+                    Throwable u = unwrap(t);
+                    warnings.add("overlay_idmap_failed=" + idmap + ":" + u);
+                    note("idmap " + idmap + " not applied: " + u);
+                }
+            }
+            note("overlays: " + loaded + "/" + sIdmaps.length + " static RRO idmap(s) loaded in "
+                 + ((System.nanoTime() - t0) / 1000000.0) + " ms");
+            if (loaded == 0) warnings.add("overlays_unavailable=" + sIdmaps.length);
+        }
+        assets.add(loadFromPath.invoke(null, sApk));
+
+        Class<?> bc = Class.forName("android.content.res.AssetManager$Builder");
+        Constructor<?> ctor = bc.getDeclaredConstructor();
+        ctor.setAccessible(true);
+        Object builder = ctor.newInstance();
+        Method add = bc.getMethod("addApkAssets", aa);
+        add.setAccessible(true);
+        for (Object a : assets) add.invoke(builder, a);
+        Method build = bc.getMethod("build");
+        build.setAccessible(true);
+        AssetManager am = (AssetManager) build.invoke(builder);
+        note("AssetManager.Builder: " + assets.size() + " ApkAssets (" + TARGET_APK
+             + ", " + (assets.size() - 2) + " overlay(s), " + sApk + ")");
+        return am;
+    }
+
+    /**
+     * {@code ApkAssets.loadOverlayFromPath(idmapPath, loadFlags)} — API 34 takes
+     * an {@code int} flag (not a {@code boolean system}). The flag only records
+     * provenance; {@code PROPERTY_SYSTEM} (0x1) is what the framework passes.
+     */
+    static Object apkAssetsOverlay(Class<?> aa, String idmapPath) throws Throwable {
+        Method hit = null;
+        for (Method m : aa.getDeclaredMethods()) {
+            if (!m.getName().equals("loadOverlayFromPath")) continue;
+            Class<?>[] p = m.getParameterTypes();
+            if (p.length == 2 && p[0] == String.class && p[1] == int.class) { hit = m; break; }
+        }
+        if (hit == null) throw new NoSuchMethodException("ApkAssets.loadOverlayFromPath(String,int)");
+        hit.setAccessible(true);
+        int flags = 0x1;
+        try {
+            Field f = aa.getDeclaredField("PROPERTY_SYSTEM");
+            f.setAccessible(true);
+            flags = f.getInt(null);
+        } catch (Throwable ignored) {
+        }
+        return hit.invoke(null, idmapPath, flags);
+    }
+
+    /**
+     * Evidence that the *overlays* (not a guest override) decide the theme:
+     * the framework bool the Material button's text appearance reads, plus the
+     * overlaid font-family strings.
+     */
+    static void probeTheme() {
+        try {
+            int boolId = sRes.getIdentifier("config_buttonTextAllCaps", "bool", "android");
+            note("android:bool/config_buttonTextAllCaps=0x" + Integer.toHexString(boolId)
+                 + " -> " + (boolId == 0 ? "<none>" : String.valueOf(sRes.getBoolean(boolId)))
+                 + " (overlay decides; the guest never forces textAllCaps)");
+        } catch (Throwable t) {
+            note("config_buttonTextAllCaps probe -> " + t);
+        }
+        for (String n : new String[]{"config_bodyFontFamily", "config_headlineFontFamily"}) {
+            try {
+                int id = sRes.getIdentifier(n, "string", "android");
+                if (id != 0) note("android:string/" + n + " -> " + sRes.getString(id));
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     /**
@@ -291,57 +417,146 @@ public final class AppMain {
         Class<?> tf = Class.forName("android.graphics.Typeface");
         Field sdef = tf.getDeclaredField("sDefaultTypeface");
         sdef.setAccessible(true);
-        if (sdef.get(null) != null) {
-            note("Typeface.sDefaultTypeface already set: " + sdef.get(null));
-            return;
-        }
-        Typeface sans = null;
-        String seed = null;
-        for (String path : new String[]{"/system/fonts/Roboto-Regular.ttf",
-                "/system/fonts/RobotoStatic-Regular.ttf"}) {
-            if (!new File(path).isFile()) { note("no font at " + path); continue; }
+        Field fMap = tf.getDeclaredField("sSystemFontMap");
+        fMap.setAccessible(true);
+        Field fFallback = tf.getDeclaredField("sSystemFallbackMap");
+        fFallback.setAccessible(true);
+
+        // 1. What zygote builds: the preinstalled FontConfig -> sSystemFontMap /
+        //    sSystemFallbackMap. Both are @hide statics on SystemFonts.
+        java.util.Map<String, Typeface> map = new android.util.ArrayMap<>();
+        java.util.Map<String, Typeface> fallback = new android.util.ArrayMap<>();
+        String source = "none";
+        try {
+            Class<?> sf = Class.forName("android.graphics.fonts.SystemFonts");
+            Class<?> fcc = Class.forName("android.text.FontConfig");
+            Method pre = sf.getDeclaredMethod("getSystemPreinstalledFontConfig");
+            pre.setAccessible(true);
+            Object fc = pre.invoke(null);
             try {
-                Class<?> fb = Class.forName("android.graphics.fonts.Font$Builder");
-                Object fontB = fb.getConstructor(File.class).newInstance(new File(path));
-                Object font = fb.getMethod("build").invoke(fontB);
-                Class<?> fontCls = Class.forName("android.graphics.fonts.Font");
-                Class<?> ffamB = Class.forName("android.graphics.fonts.FontFamily$Builder");
-                Object familyB = ffamB.getConstructor(fontCls).newInstance(font);
-                Class<?> famCls = Class.forName("android.graphics.fonts.FontFamily");
-                Object family = ffamB.getMethod("build").invoke(familyB);
-                Object arr = java.lang.reflect.Array.newInstance(famCls, 1);
-                java.lang.reflect.Array.set(arr, 0, family);
-                Method m = Typeface.class.getDeclaredMethod(
-                        "createFromFamilies", String.class, arr.getClass());
-                m.setAccessible(true);
-                Object made = m.invoke(null, "sans-serif", arr);
-                if (made instanceof Typeface) { sans = (Typeface) made; seed = path; break; }
-            } catch (Throwable t) {
-                note("font family from " + path + " -> " + unwrap(t));
+                java.util.List<?> fams = (java.util.List<?>) fc.getClass()
+                        .getMethod("getFontFamilies").invoke(fc);
+                note("SystemFonts FontConfig families=" + fams.size()
+                     + " (font files the map/fallback are built from)");
+            } catch (Throwable ignored) {
             }
+            Method bst = sf.getDeclaredMethod("buildSystemTypefaces", fcc, java.util.Map.class);
+            bst.setAccessible(true);
+            bst.invoke(null, fc, map);
+            try {
+                Method bsf = sf.getDeclaredMethod("buildSystemFallback", fcc, android.util.ArrayMap.class);
+                bsf.setAccessible(true);
+                bsf.invoke(null, fc, fallback);
+            } catch (NoSuchMethodException e) {
+                note("SystemFonts.buildSystemFallback(FontConfig,ArrayMap) missing");
+            }
+            source = "SystemFonts";
+        } catch (Throwable t) {
+            note("SystemFonts font map -> " + unwrap(t));
         }
-        if (sans == null) throw new IllegalStateException("no usable font in /system/fonts");
+
+        // 2. The default family. If the map has no "sans-serif" (a bare font set
+        //    with no named families), build one from the real font files.
+        Typeface base = map.get("sans-serif");
+        if (base == null) {
+            base = typefaceFromFontFile("/system/fonts/Roboto-Regular.ttf");
+        }
+        if (base == null) {
+            base = typefaceFromFontFile("/system/fonts/RobotoStatic-Regular.ttf");
+        }
+        if (base == null) {
+            throw new IllegalStateException(
+                    "no usable font in /system/fonts (no system fonts provisioned?)");
+        }
+        if (map.isEmpty()) {
+            // Never install an empty map: then Typeface.create(name) cannot resolve
+            // anything and every themed family would silently collapse to the
+            // defaults (the image ships no Google Sans; the *device* does the same,
+            // but only for families it lacks, not for all of them).
+            map.put("sans-serif", base);
+            map.put("roboto", base);
+            source = "font-file fallback";
+        }
+
+        fMap.set(null, map);
+        fFallback.set(null, fallback);
+
+        // 3. The device default, on both sides: Typeface.setDefault() writes the
+        //    Java field *and* libhwui's gDefaultTypeface (the field alone trips
+        //    libhwui's ASSERT src == nullptr && gDefaultTypeface == nullptr).
         boolean installed = false;
         for (Method cand : Typeface.class.getDeclaredMethods()) {
             if (!cand.getName().equals("setDefault") || cand.getParameterCount() != 1) continue;
             try {
                 cand.setAccessible(true);
-                cand.invoke(null, sans);
+                cand.invoke(null, base);
                 installed = true;
             } catch (Throwable t) {
                 note("Typeface.setDefault -> " + unwrap(t));
             }
         }
         if (!installed) {
-            sdef.set(null, sans);   // Java-only: libhwui still asserts (documented)
+            sdef.set(null, base);   // Java-only: libhwui still asserts (documented)
             warnings.add("typeface_setDefault_unavailable");
         }
+
+        // 4. sDefaults[0..3] — the third zygote artefact. Typeface.create(name)
+        //    with a family the image does not have returns null and falls through
+        //    to create(null, style) == sDefaults[style]; the overlaid theme names
+        //    google-sans-text, which this image (and the device) does not ship
+        //    (P2c §4.2). All four entries must be non-null or inflate NPEs.
+        Typeface[] defaults = new Typeface[4];
+        defaults[0] = base;
+        defaults[1] = orElse(Typeface.create(base, Typeface.BOLD), base);
+        defaults[2] = orElse(Typeface.create(base, Typeface.ITALIC), base);
+        defaults[3] = orElse(Typeface.create(base, Typeface.BOLD_ITALIC), base);
         Field sd = tf.getDeclaredField("sDefaults");
         sd.setAccessible(true);
-        Typeface[] defaults = new Typeface[4];
-        for (int i = 0; i < 4; i++) defaults[i] = sans;
         sd.set(null, defaults);
-        note("Typeface default seeded from " + seed + " -> " + sans);
+        note("Typeface: sSystemFontMap=" + map.size() + " families (" + source + "), sSystemFallbackMap="
+             + fallback.size() + ", sDefaultTypeface=" + base + ", sDefaults=["
+             + (defaults[0] != null) + "," + (defaults[1] != null) + ","
+             + (defaults[2] != null) + "," + (defaults[3] != null) + "]");
+    }
+
+    static Typeface orElse(Typeface a, Typeface b) {
+        return a != null ? a : b;
+    }
+
+    /** {@code Typeface.createFromFamilies("sans-serif", FontFamily[1])} from a file. */
+    static Typeface typefaceFromFontFile(String path) {
+        if (!new File(path).isFile()) {
+            note("no font at " + path);
+            return null;
+        }
+        try {
+            Class<?> fb = Class.forName("android.graphics.fonts.Font$Builder");
+            Object fontB = fb.getConstructor(File.class).newInstance(new File(path));
+            Object font = fb.getMethod("build").invoke(fontB);
+            Class<?> fontCls = Class.forName("android.graphics.fonts.Font");
+            Class<?> ffamB = Class.forName("android.graphics.fonts.FontFamily$Builder");
+            Object familyB = ffamB.getConstructor(fontCls).newInstance(font);
+            Class<?> famCls = Class.forName("android.graphics.fonts.FontFamily");
+            Object family = ffamB.getMethod("build").invoke(familyB);
+            Object arr = java.lang.reflect.Array.newInstance(famCls, 1);
+            java.lang.reflect.Array.set(arr, 0, family);
+            Method m = Typeface.class.getDeclaredMethod(
+                    "createFromFamilies", String.class, arr.getClass());
+            m.setAccessible(true);
+            Object made = m.invoke(null, "sans-serif", arr);
+            if (made instanceof Typeface) {
+                note("font family from " + path + " -> " + made);
+                return (Typeface) made;
+            }
+        } catch (Throwable t) {
+            note("font family from " + path + " -> " + unwrap(t));
+        }
+        try {
+            return Typeface.createFromFile(path);
+        } catch (Throwable t) {
+            note("Typeface.createFromFile(" + path + ") -> " + unwrap(t));
+            return null;
+        }
     }
 
     // --------------------------------------------------------------- context
@@ -497,19 +712,6 @@ public final class AppMain {
             dumpChain(u);
             throw u;
         }
-    }
-
-    static int setAllCaps(View v, boolean caps) {
-        int n = 0;
-        if (v instanceof TextView && ((TextView) v).isAllCaps() != caps) {
-            ((TextView) v).setAllCaps(caps);
-            n++;
-        }
-        if (v instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) n += setAllCaps(g.getChildAt(i), caps);
-        }
-        return n;
     }
 
     static FrameLayout layout(Context ctx, View content) {
