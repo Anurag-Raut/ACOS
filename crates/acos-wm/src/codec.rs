@@ -446,22 +446,52 @@ impl ParcelCodec for ClientWindowFrames {
 /// uint32         format
 /// ```
 ///
-/// (`.cache/aosp/native/libs/gui/SurfaceControl.cpp:237`; the reader at
-/// `:250` mirrors it and **tolerates a null client/handle** — "we aren't the
-/// original owner of the surface".) Writing only an 8-byte handle here made the
-/// guest's native reader consume 24 bytes of the following fields as a binder
-/// object, which desynchronised the rest of the reply (W2 §3).
+/// (`.cache/aosp/native/libs/gui/SurfaceControl.cpp:237`; the reader mirrors
+/// it.) Writing only an 8-byte handle here made the guest's native reader
+/// consume 24 bytes of the following fields as a binder object, which
+/// desynchronised the rest of the reply (W2 §3).
 ///
-/// ACOS has no SurfaceFlinger layer, so the placeholder writes the Java shape
-/// with a real name/size/layer id and **null** client/handle binders: the
-/// framework constructs a `SurfaceControl` it can hand to a `Transaction`, and
-/// nothing in it is a lie about a compositor that does not exist.
+/// **The client/handle binders must not be null** (W3): the reader uses
+/// `SAFE_PARCEL(parcel.readStrongBinder, &client)` (and `&handle`), and
+/// `Parcel::readStrongBinder(sp<IBinder>*)` turns a *readable* null binder into
+/// `UNEXPECTED_NULL` (`-2147483640`) after logging `Expecting binder but got
+/// null!`, which aborts `readFromParcel` in the middle of the leash and leaves
+/// the enclosing `InsetsSourceControl$Array` walk 88 bytes out of step (the
+/// next leash's client read then lands at 1440 and its
+/// `SurfaceControl(Parcel)` constructor silently leaves `mNativeObject == 0`,
+/// so the reply ends up at the `float[]` with a bad count).
+///
+/// `readObject`'s null fast path (`binder == 0 && cookie == 0`) is real, but it
+/// only applies to `readNullableStrongBinder`; `readStrongBinder` treats the
+/// resulting null as an error. So ACOS writes a live **placeholder binder**
+/// (see [`placeholder_binder`]) for both, and the native `SurfaceControl` is
+/// the honest placeholder it always was: a Java object with no compositor
+/// behind it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceControlInfo {
     pub name: String,
     pub width: i32,
     pub height: i32,
     pub handle: Option<u64>,
+}
+
+/// Base of the id range used by the placeholder `SurfaceControl` body.
+const PLACEHOLDER_BINDER_BASE: u64 = 0x0100_0000;
+
+/// The binder id the placeholder `SurfaceControl` body carries in its `client`
+/// and layer-`handle` slots (W3).
+///
+/// It is a *live, routable* id (the peer turns it into a real node, the guest
+/// gets a real `BinderProxy`) but it is **not registered** with the
+/// `ServiceHost`: `INTERFACE_TRANSACTION` therefore answers the empty
+/// descriptor, so `interface_cast<ISurfaceComposerClient>` yields null — the
+/// framework's own "we aren't the original owner of the surface" case — and a
+/// transaction sent to it is answered with the peer's structured
+/// `UNKNOWN_BINDER`, never a fake success. It is never a real
+/// `ISurfaceComposerClient` and never a SurfaceFlinger layer.
+#[must_use]
+pub fn placeholder_binder(handle: u64) -> BinderId {
+    BinderId(PLACEHOLDER_BINDER_BASE | (handle & 0xffff))
 }
 
 impl ParcelCodec for SurfaceControlInfo {
@@ -477,9 +507,11 @@ impl ParcelCodec for SurfaceControlInfo {
         };
         p.write_int32(1);
         // `SurfaceControl::writeToParcel` (libgui): client, handle, layerId,
-        // layerName, transformHint, width, height, format.
-        p.write_strong_binder_opt(None); // client: ACOS has no ISurfaceComposerClient
-        p.write_strong_binder_opt(None); // handle: no SurfaceFlinger layer
+        // layerName, transformHint, width, height, format. Both binders are the
+        // placeholder (a null one aborts the reader, see the type docs).
+        let placeholder = placeholder_binder(handle);
+        p.write_strong_binder_opt(Some(placeholder)); // client
+        p.write_strong_binder_opt(Some(placeholder)); // layer handle
         p.write_int32(handle as i32); // layerId (the synthetic ACOS layer)
         p.write_string16(&self.name)?; // mLayerName (UTF-16 on the wire)
         p.write_int32(0); // transformHint

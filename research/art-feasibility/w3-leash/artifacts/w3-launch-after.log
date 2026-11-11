@@ -1,0 +1,20 @@
+# .cache/w3/fix2.out
+# outcome=crash code=GUEST_EXIT_AFTER_RESUME activity_launched=True
+
+## IWindowSession calls
+android.view.IWindowSession code=2 addToDisplayAsUser
+
+## logd entries tagged Parcel / SurfaceControl
+(none)
+
+## guest stack (from the launch stdout)
+java.lang.UnsatisfiedLinkError: No implementation found for long android.view.InputEventReceiver.nativeInit(java.lang.ref.WeakReference, android.view.InputChannel, android.os.MessageQueue) (tried Java_android_view_InputEventReceiver_nativeInit and Java_android_view_InputEventReceiver_nativeInit__Ljava_lang_ref_WeakReference_2Landroid_view_InputChannel_2Landroid_os_MessageQueue_2) - is the library loaded, e.g. System.loadLibrary?
+	at android.view.InputEventReceiver.nativeInit(Native Method)
+	at android.view.InputEventReceiver.<init>(InputEventReceiver.java:79)
+	at android.view.ViewRootImpl$WindowInputEventReceiver.<init>(ViewRootImpl.java:9312)
+	at android.view.ViewRootImpl.setView(ViewRootImpl.java:1455)
+	at android.view.WindowManagerGlobal.addView(WindowManagerGlobal.java:411)
+	at android.view.WindowManagerImpl.addView(WindowManagerImpl.java:150)
+	at android.app.ActivityThread.handleRes
+## guest summary
+ACOSLAUNCH {"outcome":"crash","code":"LOOPER_THREW","activity_resumed":true,"message":"java.lang.UnsatisfiedLinkError: No implementation found for long android.view.InputEventReceiver.nativeInit(java.lang.ref.WeakReference, android.view.InputChannel, android.os.MessageQueue) (tried Java_android_view_InputEventReceiver_nativeInit and Java_android_view_InputEventReceiver_nativeInit__Ljava_lang_ref_W

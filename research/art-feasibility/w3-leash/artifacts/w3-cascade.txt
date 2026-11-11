@@ -1,0 +1,18 @@
+frame research/art-feasibility/w3-leash/artifacts/w3-frame-add.hex: 2352 bytes
+controls: 3 (array walk starts at 1252)
+ctl0 id=0x3 type=8 leash=b'Surface(name=InputMethod animation-leash of insets_animation)/@0x3'
+ctl2 id=0x42 type=7667795 leash=None
+
+binder reads, in order:
+  InputChannel token @  16  binder 0x8 (object-table check)
+    leash client     @1352  NULL binder -> UNEXPECTED_NULL (-2147483640)
+    leash client     @1440  type 0x49003d is not a flat_binder_object
+
+first aborted leash client at 1352
+the stub reads exactly `count` elements, so after the aborted leash it
+stops 820 bytes early (at 1532 of 2352): the rest of the reply is never read
+trailing float[] count read at 1524 = 6357101 (the caller allocated 1 ->
+Parcel.readFloatArray throws 'bad array lengths'; scale bits = 6881396)
+
+=> the guest's log ('not in the object list at offset 1440') is the
+   SECOND leash's client read: 1352 + 88 = 1440.

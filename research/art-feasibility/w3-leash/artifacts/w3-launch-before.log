@@ -1,0 +1,28 @@
+# .cache/w3/base1.out
+# outcome=crash code=GUEST_EXIT_AFTER_RESUME activity_launched=True
+
+## IWindowSession calls
+android.view.IWindowSession code=2 addToDisplayAsUser
+
+## logd entries tagged Parcel / SurfaceControl
+Parcel          Expecting binder but got null!
+SurfaceControl  ERROR(Unknown error 2147483640, -2147483640). Failed to call parcel parcel.readStrongBinder(&client)
+Parcel          Attempt to read object from Parcel bb225030 at offset 1440 that is not in the object list
+SurfaceControl  ERROR(Unknown error 2147483647, -2147483647). Failed to call parcel parcel.readStrongBinder(&client)
+
+## guest stack (from the launch stdout)
+java.lang.RuntimeException: Adding window failed
+	at android.view.ViewRootImpl.setView(ViewRootImpl.java:1362)
+	at android.view.WindowManagerGlobal.addView(WindowManagerGlobal.java:411)
+	at android.view.WindowManagerImpl.addView(WindowManagerImpl.java:150)
+	at android.app.ActivityThread.handleResumeActivity(ActivityThread.java:5048)
+	at android.app.servertransaction.ResumeActivityItem.execute(ResumeActivityItem.java:57)
+	at android.app.servertransaction.ActivityTransactionItem.execute(ActivityTransactionItem.java:45)
+	at android.app.servertransaction.TransactionExecutor.executeLifecycleState(TransactionExecutor.java:180)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:98)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	a
+## guest summary
+ACOSLAUNCH {"outcome":"crash","code":"LOOPER_THREW","activity_resumed":true,"message":"java.lang.RuntimeException: Adding window failed"}

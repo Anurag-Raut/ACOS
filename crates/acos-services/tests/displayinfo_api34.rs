@@ -249,7 +249,6 @@ fn read_cutout(p: &mut Parcel) -> (i32, Option<CutoutGeometry>) {
         rotation: p.read_int32().unwrap(),
         scale: p.read_float().unwrap(),
         physical_pixel_display_size_ratio: p.read_float().unwrap(),
-        side_overrides: p.read_int32_array().unwrap(),
     };
     (variant, Some(geometry))
 }
@@ -547,7 +546,6 @@ fn variant_1_cutout_is_written_in_write_cutout_to_parcel_order() {
         rotation: 0,
         scale: 1.0,
         physical_pixel_display_size_ratio: 1.0,
-        side_overrides: Some(Vec::new()),
     });
 
     let mut parcel = Parcel::new();

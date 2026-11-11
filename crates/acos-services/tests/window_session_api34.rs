@@ -20,7 +20,9 @@
 //!   writeInt(requestedVisibleTypes) writeInt(sizeCompatScale.length)
 //! reply:
 //!   readInt()=result
-//!   readInt()=1 -> InputChannel.nativeReadFromParcel  (String16, fd, binder)
+//!   readInt()=1 -> InputChannel.writeToParcel (nativeReadFromParcel):
+//!                  readInt()=isInitialized, readStrongBinder()=token,
+//!                  readString16()=name, readFileDescriptor()=fd
 //!   readInt()=1 -> InsetsState.readFromParcel
 //!   readInt()=1 -> InsetsSourceControl$Array.readFromParcel
 //!   readInt()=1 -> Rect.readFromParcel
@@ -89,7 +91,9 @@ fn add_to_display_as_user_request(window: BinderId) -> Parcel {
     data.write_int32(-1); // layerStackId
     data.write_int32(0); // userId
     data.write_int32(0); // requestedVisibleTypes
-    data.write_int32(2); // sizeCompatScale.length (the client's out array)
+    // `out float[]`: the client preallocates the array and writes its length;
+    // the reply count must equal it (`Parcel.readFloatArray` compares them).
+    data.write_int32(2);
     data.set_data_position(0);
     data
 }
@@ -202,9 +206,14 @@ fn read_add_reply(reply: &mut Parcel) -> AddReply {
         1,
         "the app needs a real InputChannel to install its InputEventReceiver"
     );
+    assert_eq!(
+        reply.read_int32().expect("InputChannel isInitialized"),
+        1,
+        "nativeReadFromParcel reads the initialized flag before the channel body"
+    );
+    let channel_token = reply.read_strong_binder().expect("channel token");
     let channel_name = reply.read_string16().expect("channel name");
     let channel_fd = reply.read_file_descriptor().expect("channel fd");
-    let channel_token = reply.read_strong_binder().expect("channel token");
     assert_eq!(reply.read_int32().expect("InsetsState present"), 1);
     let insets = InsetsState::read_from_parcel(reply).expect("InsetsState");
     assert_eq!(
@@ -309,9 +318,10 @@ fn add_to_display_as_user_reply_is_api_34_exact() {
         let mut probe = reply.clone();
         probe.read_int32().expect("result");
         assert_eq!(probe.read_int32().expect("channel present"), 1);
+        assert_eq!(probe.read_int32().expect("channel initialized"), 1);
+        probe.read_strong_binder().expect("token");
         probe.read_string16().expect("name");
         probe.read_file_descriptor().expect("fd");
-        probe.read_strong_binder().expect("token");
         probe.data_position()
     };
     let add = read_add_reply(&mut reply);
@@ -355,8 +365,9 @@ fn add_to_display_as_user_reply_is_api_34_exact() {
     );
     assert_eq!(
         add.size_compat_scale,
-        vec![1.0],
-        "sizeCompatScale is the framework's [1.0] (no size compatibility)"
+        vec![1.0, 0.0],
+        "the reply carries exactly the client's array length (2 here), holding the policy's \
+         [1.0] and zero padding — `Parcel.readFloatArray` throws on any other count"
     );
 
     // Byte-exact re-encode of the parcelable tail.

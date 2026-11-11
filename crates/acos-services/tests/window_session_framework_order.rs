@@ -542,9 +542,13 @@ fn relayout_reply_reads_exactly_in_the_framework_order() {
     assert_eq!((width, height), (1080, 2209), "the app window surface size");
     let native = handle.expect("the placeholder carries a native object");
     assert!(
-        native.client_is_null && native.handle_is_null,
-        "ACOS has no ISurfaceComposerClient and no SurfaceFlinger layer: the placeholder writes \
-         null binders (libgui tolerates them) instead of pretending to own a compositor"
+        !native.client_is_null && !native.handle_is_null,
+        "the leash client/handle must be non-null: SurfaceControl::readFromParcel reads both with \
+         SAFE_PARCEL(parcel.readStrongBinder, ...), and Parcel::readStrongBinder turns a \
+         *readable* null binder into UNEXPECTED_NULL, aborting the parse and desynchronising the \
+         enclosing InsetsSourceControl$Array (W3 §2; `readObject`'s null fast path only helps \
+         readNullableStrongBinder). The binders are the documented placeholder — live and \
+         routable, but declaring no ISurfaceComposerClient interface."
     );
     assert_eq!(native.layer_name.as_deref(), Some(surface_name.as_str()));
     assert_eq!((native.width, native.height), (width, height));
