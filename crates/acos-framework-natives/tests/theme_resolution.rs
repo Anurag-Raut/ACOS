@@ -391,6 +391,152 @@ fn style_bag_string_keeps_its_asset_cookie() {
     );
 }
 
+/// Resolve `attr` through `theme`, then chase its `@resid` chain to a colour.
+fn theme_color(mgr: &AssetManager, theme: u64, attr: u32) -> (u32, u32) {
+    let value = mgr
+        .theme(theme)
+        .and_then(|t| t.get(attr))
+        .unwrap_or_else(|| panic!("theme has no value for attr {attr:#010x}"));
+    assert!(
+        value.is_reference() && value.data != 0,
+        "attr {attr:#010x} should be a @resid, got type {:#04x} data {:#x}",
+        value.data_type,
+        value.data
+    );
+    let (_src, entry, final_id) = mgr
+        .resolve_references(value.data, true)
+        .unwrap_or_else(|| panic!("cannot resolve {:#010x}", value.data));
+    assert!(
+        matches!(entry.value.data_type, TYPE_INT_COLOR_ARGB8..=0x1f),
+        "attr {attr:#010x} should resolve to a colour, got type {:#04x}",
+        entry.value.data_type
+    );
+    (entry.value.data, final_id)
+}
+
+/// The phone renders `Theme.DeviceDefault.Light.DarkActionBar` with a **dark**
+/// action bar: `Widget.Material.Light.ActionBar.Solid`'s `android:background`
+/// is `?attr/colorPrimary`, and the DeviceDefault theme overrides
+/// `colorPrimary`/`colorPrimaryDark` with the neutral-900 device colours.
+///
+/// This pins the whole chain so it cannot silently fall back to the
+/// `Theme.Material.Light` grandparent values (`primary_material_light`
+/// `#fff5f5f5` / `primary_dark_material_light` `#ff757575`), which is the light
+/// action bar the phone comparison shows ACOS is *not* supposed to draw.
+#[test]
+fn device_default_dark_action_bar_resolves_to_neutral_900() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = build_manager(&apk_path);
+    let theme = mgr.theme_create();
+    mgr.theme_apply_style(theme, 0x0103_013f, false);
+
+    // 1. `colorPrimary` / `colorPrimaryDark` are the DeviceDefault overrides,
+    //    not the Material grandparent ones.
+    let cp_ref = mgr.theme(theme).unwrap().get_raw(0x0101_0433).unwrap();
+    assert_eq!(
+        (cp_ref.data_type, cp_ref.data),
+        (0x01, 0x0106_02a9),
+        "colorPrimary must be @color/primary_device_default_dark"
+    );
+    let cpd_ref = mgr.theme(theme).unwrap().get_raw(0x0101_0434).unwrap();
+    assert_eq!(
+        (cpd_ref.data_type, cpd_ref.data),
+        (0x01, 0x0106_02a0),
+        "colorPrimaryDark must be @color/primary_dark_device_default_dark"
+    );
+
+    // 2. Both resolve to the same opaque neutral-900 device colour.
+    for (name, attr) in [("colorPrimary", 0x0101_0433u32), ("colorPrimaryDark", 0x0101_0434)] {
+        let (argb, final_id) = theme_color(&mgr, theme, attr);
+        assert_eq!(argb, 0xff19_1c1e, "{name} should be system_neutral1_900");
+        assert_eq!(final_id, 0x0106_0028, "{name} should end at system_neutral1_900");
+    }
+
+    // 3. `actionBarStyle` comes from the Material parent (the DeviceDefault
+    //    theme does not override it) ...
+    let abs = mgr.theme(theme).unwrap().get(0x0101_02ce).expect("actionBarStyle");
+    assert_eq!(
+        (abs.data_type, abs.data),
+        (0x01, 0x0103_0290),
+        "actionBarStyle must be Widget.Material.Light.ActionBar.Solid"
+    );
+    // ... whose `android:background` is `?attr/colorPrimary`.
+    let abs_theme = mgr.theme_create();
+    mgr.theme_apply_style(abs_theme, abs.data, false);
+    let bg = mgr.theme(abs_theme).unwrap().get_raw(0x0101_00d4);
+    assert_eq!(
+        bg.map(|v| (v.data_type, v.data)),
+        Some((0x02, 0x0101_0433)),
+        "the solid action bar background must be ?attr/colorPrimary"
+    );
+
+    // 4. `nativeApplyStyle` for the action bar (defStyleAttr = actionBarStyle)
+    //    writes the concrete dark colour into the TypedArray, which is what the
+    //    framework turns into the action bar's `ColorDrawable`.
+    let attrs = [0x0101_00d4i32];
+    let mut out_values = vec![0i32; 7];
+    let mut out_indices = vec![-1i32; 2];
+    mgr.apply_style(
+        theme,
+        0x0101_02ce, // defStyleAttr = android:attr/actionBarStyle
+        0,
+        0,
+        &attrs,
+        &mut out_values,
+        &mut out_indices,
+    );
+    let tv = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
+    eprintln!(
+        "action bar background -> type={:#04x} data={:#010x} (indices {:?})",
+        tv.data_type, tv.data, out_indices
+    );
+    assert_eq!(tv.data_type, 0x1d, "action bar background must be a colour");
+    assert_eq!(tv.data, 0xff19_1c1e, "action bar background must be #191c1e");
+}
+
+/// `actionBarTheme` (`ThemeOverlay.Material.Dark.ActionBar`) is applied to the
+/// action bar's `ContextThemeWrapper` with `force = true`. It must not touch
+/// `colorPrimary` / `colorPrimaryDark` — the overlay only retargets
+/// `colorControlNormal`/`windowBackground` — so the dark action bar colour
+/// survives the overlay.
+#[test]
+fn dark_action_bar_overlay_keeps_device_default_primaries() {
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = build_manager(&apk_path);
+    let theme = mgr.theme_create();
+    mgr.theme_apply_style(theme, 0x0103_013f, false);
+    // 0x0103024c = ThemeOverlay.Material.Dark.ActionBar (the theme's actionBarTheme).
+    mgr.theme_apply_style(theme, 0x0103_024c, true);
+    for (name, attr, want) in [
+        ("colorPrimary", 0x0101_0433u32, 0x0106_02a9u32),
+        ("colorPrimaryDark", 0x0101_0434, 0x0106_02a0),
+    ] {
+        let v = mgr.theme(theme).unwrap().get_raw(attr).unwrap();
+        assert_eq!(
+            (v.data_type, v.data),
+            (0x01, want),
+            "the dark action-bar overlay must not retarget {name}"
+        );
+    }
+    // The window background of the action-bar context does become the dark
+    // Material background (`?attr/windowBackground`), which is why the window
+    // background must be read from the *activity* theme, not this overlay.
+    let wb = mgr.theme(theme).unwrap().get(0x0101_0036).unwrap();
+    assert_eq!(
+        (wb.data_type, wb.data),
+        (0x01, 0x0106_0313),
+        "ThemeOverlay.Material.Dark sets the dark windowBackground"
+    );
+}
+
 #[test]
 fn theme_copy_and_rebase() {
     if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
