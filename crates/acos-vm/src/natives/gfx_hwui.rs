@@ -734,7 +734,19 @@ pub fn recorded_renderer_config() -> Vec<(String, String)> {
 }
 
 fn h_register_animating(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let h = proxy(vm, ctx)?;
+    // `RippleAnimationSession.enterHardware` -> `RenderNodeAnimator.setTarget`
+    // -> `RenderNode.addAnimator` registers the animating node through
+    // `HardwareRenderer.registerAnimatingRenderNode`. ACOS has no RenderThread,
+    // so the registration is never driven; it only has to not abort the
+    // traversal. The animation host can also outlive a `ThreadedRenderer`
+    // (the bridge caches the renderer), so a proxy that is no longer live is
+    // tolerated rather than treated as a stale-use bug: the recorded animating
+    // list would never be consumed under the synchronous renderer anyway. A
+    // live proxy still records the node (introspection only).
+    let h = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    if !HWUI.with(|s| s.borrow().proxies.contains(h)) {
+        return Ok(());
+    }
     let node = rh(vm.arg_i64(ctx, 1));
     HWUI.with(|s| {
         if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {

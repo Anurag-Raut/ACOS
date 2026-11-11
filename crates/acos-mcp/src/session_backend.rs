@@ -1007,9 +1007,17 @@ impl SessionBackend {
         }
         let tree = args.get("tree").and_then(Value::as_bool).unwrap_or(true);
         let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+        // `--screenshot <path>` writes the published frame's pixels to `path`.
+        // The stateless CLI builds this argument; honouring it here is what
+        // makes `acos observe --frame --screenshot` work against a live
+        // daemon session (the Flutter backend already did this).
+        let screenshot = args
+            .get("screenshot")
+            .and_then(Value::as_str)
+            .map(std::path::PathBuf::from);
         self.with_session(&id, |session| {
             let status = session.status().ok();
-            match session.observe(None) {
+            match session.observe(screenshot) {
                 Ok(report) => {
                     if tree || text {
                         return unsupported(
@@ -1029,6 +1037,21 @@ impl SessionBackend {
                             "meaningful": !frame.pixels.is_empty(),
                         })
                     });
+                    let mut result = json!({
+                        "session_id": id,
+                        "package": status.and_then(|s| s.package).unwrap_or_default(),
+                        "stage_reached": report.stage_reached,
+                        "published_frames": report.published_frames,
+                        "frame": frame,
+                    });
+                    let mut capabilities = vec!["ui.frame"];
+                    if let Some((path, bytes)) = &report.screenshot {
+                        result["screenshot"] = json!({
+                            "path": path.display().to_string(),
+                            "bytes": bytes,
+                        });
+                        capabilities.push("ui.screenshot");
+                    }
                     Envelope::pass(
                         request_id,
                         ProtocolBackend::AcosNative,
@@ -1036,14 +1059,8 @@ impl SessionBackend {
                         Metrics::wall_ms(0),
                     )
                     .with_session_id(id.clone())
-                    .with_value_result(json!({
-                        "session_id": id,
-                        "package": status.and_then(|s| s.package).unwrap_or_default(),
-                        "stage_reached": report.stage_reached,
-                        "published_frames": report.published_frames,
-                        "frame": frame,
-                    }))
-                    .with_capabilities(["ui.frame"])
+                    .with_value_result(result)
+                    .with_capabilities(capabilities)
                 }
                 Err(err) => session_error_envelope(request_id, Some(&id), &err),
             }
@@ -2095,6 +2112,11 @@ const MAX_CHILD_FRAME: u64 = 8 * 1024 * 1024;
 fn native_session_root(seq: u64) -> std::io::Result<PathBuf> {
     if let Some(root) = std::env::var_os("ACOS_SESSION_ROOT") {
         let root = PathBuf::from(root);
+        // Validate the caller-supplied root *before* `create_private_dir` would
+        // tighten it: a group/world-writable `ACOS_SESSION_ROOT` (an app data
+        // root another local user controls) is refused, not chmod-ed (W170-A
+        // E1). `create_private_dir` only creates or re-checks a private dir.
+        require_private_root("ACOS_SESSION_ROOT", &root)?;
         create_private_dir(&root)?;
         return Ok(root);
     }
@@ -2115,6 +2137,16 @@ fn native_session_root(seq: u64) -> std::io::Result<PathBuf> {
         }
     }
     Err(last)
+}
+
+/// Reject a group/world-writable or foreign-owned root, naming the knob.
+fn require_private_root(var: &str, path: &std::path::Path) -> std::io::Result<()> {
+    acos_runtime::private_root::ensure_private_root(var, path).map_err(|(code, msg)| {
+        std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("{}: {msg}", code.code()),
+        )
+    })
 }
 
 /// Create `path` as a fresh private directory (`0700`).
@@ -2176,6 +2208,13 @@ fn native_boot_root() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("ACOS_BOOT_DIR") {
         let path = PathBuf::from(dir);
         if path.is_dir() {
+            // The child loads this classpath; a wriable-by-others root lets
+            // another local user swap the DEX underneath a confined session.
+            // An invalid root disables the boot classpath instead of using it.
+            if let Err(e) = require_private_root("ACOS_BOOT_DIR", &path) {
+                eprintln!("acos-mcp: refusing ACOS_BOOT_DIR {}: {e}", path.display());
+                return None;
+            }
             return Some(path);
         }
     }

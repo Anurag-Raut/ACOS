@@ -451,8 +451,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nEqualsForTextMeasurement", "(JJ)Z", paint_equals_text);
     vm.register_native(p, "nGetTextPath", "(JI[CIIFFJ)V", paint_text_path_chars);
     vm.register_native(p, "nGetTextPath", "(JILjava/lang/String;IIFFJ)V", paint_text_path_string);
-    vm.register_native(p, "nGetTextRunCursor", "(J[CIIIII)I", unsupported_text_cursor);
-    vm.register_native(p, "nGetTextRunCursor", "(JLjava/lang/String;IIIII)I", unsupported_text_cursor);
+    vm.register_native(p, "nGetTextRunCursor", "(J[CIIIII)I", paint_text_run_cursor_chars);
+    vm.register_native(p, "nGetTextRunCursor", "(JLjava/lang/String;IIIII)I", paint_text_run_cursor_string);
     vm.register_native(p, "nGetFillPath", "(JJJ)Z", paint_get_fill_path);
 
     // Shaders (W75-A): gradient, bitmap-tile and compose shaders. A shader
@@ -1048,11 +1048,103 @@ fn paint_text_path_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn unsupported_text_cursor(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Err(VmError::unsupported_api(
-        "Paint.nGetTextRunCursor (bidi cursor movement)",
-        "android.graphics.Paint",
-    ))
+/// `Paint.nGetTextRunCursor`: the nearest usable cursor boundary at or around
+/// `offset` inside `[contextStart, contextEnd)`.
+///
+/// AOSP routes this to Minikin's bidi/grapheme layout. ACOS has no Minikin and
+/// models the text as a single LTR run; the implementation still honours the
+/// two properties the framework depends on — the cursor never lands inside a
+/// UTF-16 surrogate pair and never lands between a base character and a
+/// following combining mark. `cursorOpt` (`CURSOR_AT=0`,
+/// `CURSOR_AT_OR_BEFORE=1`, `CURSOR_AT_OR_AFTER=2`) chooses which side to snap
+/// to when `offset` is not itself a boundary. `isRtl` is accepted for the
+/// signature but does not change a single-run snap.
+fn paint_text_run_cursor_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let s = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
+    let units: Vec<u16> = s.encode_utf16().collect();
+    let result = text_run_cursor(
+        &units,
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i32(ctx, 4),
+        vm.arg_i32(ctx, 5),
+        vm.arg_i32(ctx, 6),
+    );
+    vm.ret_i32(ctx, result);
+    Ok(())
+}
+
+fn paint_text_run_cursor_chars(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let units = gfx_text::char_array(vm, vm.arg_ref(ctx, 1))?;
+    let result = text_run_cursor(
+        &units,
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i32(ctx, 4),
+        vm.arg_i32(ctx, 5),
+        vm.arg_i32(ctx, 6),
+    );
+    vm.ret_i32(ctx, result);
+    Ok(())
+}
+
+fn is_high_surrogate(u: u16) -> bool {
+    (0xD800..=0xDBFF).contains(&u)
+}
+
+fn is_low_surrogate(u: u16) -> bool {
+    (0xDC00..=0xDFFF).contains(&u)
+}
+
+/// A conservative subset of `Grapheme_Extend`: combining diacritical marks,
+/// combining marks for symbols, and the variation selectors. Enough to keep a
+/// cursor out of the middle of the clusters that occur in form input.
+fn is_combining(u: u16) -> bool {
+    matches!(u,
+        0x0300..=0x036F   // combining diacritical marks
+        | 0x0483..=0x0489 // Cyrillic combining
+        | 0x0591..=0x05BD | 0x05BF | 0x05C1..=0x05C2 | 0x05C4..=0x05C5 | 0x05C7
+        | 0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06DC
+        | 0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E
+        | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF
+        | 0x20D0..=0x20FF
+        | 0xFE00..=0xFE0F   // variation selectors
+        | 0xFE20..=0xFE2F   // combining half marks
+    )
+}
+
+fn text_run_cursor(
+    units: &[u16],
+    context_start: i32,
+    context_end: i32,
+    _is_rtl: i32,
+    offset: i32,
+    cursor_opt: i32,
+) -> i32 {
+    const CURSOR_AT_OR_BEFORE: i32 = 1;
+    const CURSOR_AT_OR_AFTER: i32 = 2;
+    let start = context_start.max(0) as usize;
+    let end = (context_end.max(0) as usize).min(units.len());
+    if start >= end {
+        return start as i32;
+    }
+    let mut off = offset.clamp(start as i32, end as i32) as usize;
+    // Never inside a surrogate pair.
+    if off > start && off < end && is_low_surrogate(units[off]) && is_high_surrogate(units[off - 1]) {
+        off = if cursor_opt == CURSOR_AT_OR_BEFORE {
+            off - 1
+        } else {
+            off + 1
+        };
+    }
+    // Never between a base and a following combining mark.
+    while off > start && off < end && is_combining(units[off]) {
+        if cursor_opt == CURSOR_AT_OR_AFTER {
+            break;
+        }
+        off -= 1;
+    }
+    off.clamp(start, end) as i32
 }
 
 /// `Paint.nGetFillPath(src, dst)`: apply stroking to `src` and write the

@@ -195,6 +195,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(RC, "nGetMaximumTextureWidth", "()I", ret_4096);
     vm.register_native(RC, "nGetMaximumTextureHeight", "()I", ret_4096);
     vm.register_native(RC, "nDrawRenderNode", "(JJ)V", rc_draw_render_node);
+    // `RippleDrawable` records its expanding AGSL ripple with this op. ACOS's
+    // software renderer does not evaluate the AGSL program, so the op is a
+    // declared no-op; the drawable's flat pressed-colour layer still records
+    // through the ordinary paint/rect path. See `gfx_ripple.rs` for the full
+    // press-feedback fallback rationale.
+    vm.register_native(RC, "nDrawRipple", "(JJJJJJJIJ)V", noop);
 
     // --- Canvas state ---
     vm.register_native(C, "nGetNativeFinalizer", "()J", ret_zero_long);

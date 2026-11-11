@@ -29,6 +29,7 @@ pub mod gfx_matrix;
 pub mod gfx_node;
 pub mod gfx_paint;
 pub mod gfx_path;
+mod gfx_ripple;
 mod gfx_state;
 pub mod gfx_vector;
 pub mod gfx_text;
@@ -122,6 +123,10 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     gfx_canvas::install(vm)?;
     gfx_vector::install(vm)?;
     gfx_bitmap::install(vm)?;
+    // `RuntimeShader` (AGSL) / `CanvasProperty` / `RenderNodeAnimator` — the
+    // ripple press-feedback surface whose absence aborted interaction
+    // traversals (see the module docs).
+    gfx_ripple::install(vm)?;
     gfx_hwui::install(vm)?;
     fwk_jni::install(vm)?;
     fwk_m2_filechannel::install(vm)?;

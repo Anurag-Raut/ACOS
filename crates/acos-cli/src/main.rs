@@ -54,6 +54,8 @@ enum Command {
     Key(session::KeyArgs),
     /// Swipe between two points.
     Swipe(session::SwipeArgs),
+    /// Type text into the focused editor (same path as `acos session text`).
+    Type(session::SessionTextArgs),
     /// Read the guest log buffer.
     Logs(session::LogsArgs),
     /// Run the local session daemon (unix socket) so the CLI is not stateless.
@@ -167,6 +169,7 @@ fn main() -> ExitCode {
         Command::Tap(args) => session::tap(args),
         Command::Key(args) => session::key(args),
         Command::Swipe(args) => session::swipe(args),
+        Command::Type(args) => session::session(session::SessionCommand::Text(args)),
         Command::Logs(args) => session::logs(args),
         Command::Serve(args) => serve::run(args),
         Command::Session { command } => session::session(command),

@@ -1,0 +1,53 @@
+{
+  "serial": "ZA222WGJPP",
+  "apk": "/home/Qui/Projects/acos/.cache/wt-w167a/fixtures/build/apps/counter.apk",
+  "mask": {
+    "top_px": 150,
+    "bottom_px": 150
+  },
+  "acos_tree_coords": "218 659",
+  "phone_located_coords": "152 396",
+  "tap_used": "phone-located",
+  "before": {
+    "ssim": 0.9244518696069078,
+    "error": null,
+    "mad": 16.54491622574956,
+    "phone": {
+      "path": "phone-before.png",
+      "size": [
+        1080,
+        2400
+      ]
+    },
+    "acos": {
+      "path": "acos-before.png",
+      "size": [
+        1080,
+        2400
+      ]
+    },
+    "acos_content_hash": "dc960f6116b443e2c179d632e42f52db",
+    "acos_frame_seq": 4
+  },
+  "after": {
+    "ssim": 0.9246151009459345,
+    "error": null,
+    "mad": 16.544968253968253,
+    "phone": {
+      "path": "phone-after.png",
+      "size": [
+        1080,
+        2400
+      ]
+    },
+    "acos": {
+      "path": "acos-after.png",
+      "size": [
+        1080,
+        2400
+      ]
+    },
+    "acos_content_hash": "6b991d647af3769952be81f4c574cab3",
+    "acos_frame_seq": 8
+  }
+}

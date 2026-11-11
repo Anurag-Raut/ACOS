@@ -2966,3 +2966,101 @@ before current-uptime handler messages.
 * No commit. The patch touches `crates/` plus this log only; scratch
   `fixtures/build`/`.cache/boot` symlinks and the `dexprogs` result file were
   removed/restored from the worktree.
+
+---
+
+# W167-A session — interaction loop through the product path: ripple natives + post-tap repaint
+
+Worktree: clean HEAD `ff36a17` at `.cache/wt-w167a` (`CARGO_TARGET_DIR=.cache/target-w167a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_BUILD_JOBS=2`, `ACOS_BOOT_DIR=.cache/boot/android-34`).
+No commits.
+
+## Bottom line
+
+The `acos launch` / `acos tap --text|--id` / `acos observe --tree` / `acos type`
+product path now drives **counter** (`0→1→2→3`, then reset→`0`),
+**hello-views** (tap the EditText, `acos type World`, tap Greet →
+`Hello, World! clicks: 1`) and **form-validation** (empty → "Name is required",
+no email → "Email is required", malformed → "Invalid email", valid →
+error cleared). A tap no longer only works once: the ripple natives that aborted
+the press traversal are implemented, so `View$PerformClick` runs on every tap.
+
+The post-tap frame is re-rendered: `observe --frame` after a tap returns a new
+content hash, and the new test `counter_tap_repaints_the_count_region` pins the
+changed pixels to the count's content area (not a full-frame redraw).
+
+## Root causes fixed
+
+| # | symptom | root cause | fix |
+|---|---|---|---|
+| 1 | only the first tap ran `onClick` | `RippleDrawable`'s press feedback allocates `RuntimeShader` / `CanvasProperty` / `RenderNodeAnimator` / `NativeInterpolatorFactory` state; each unbound native aborted the async traversal `View.setPressed` scheduled, so the sync `View$PerformClick` behind the barrier never ran | new `gfx_ripple.rs`: generation-checked `RuntimeShader` builder/instance (holds the AGSL source + uniforms), `CanvasProperty`, `RenderNodeAnimator` and `NativeInterpolatorFactory` records. AGSL evaluation is a **declared fallback** (`snapshot_paint` records `unsupported` and draws the paint's flat colour); nothing is faked |
+| 2 | then the traversal hit `nRegisterAnimatingRenderNode` with a stale renderer proxy | the `ViewAnimationHostBridge` can outlive a `ThreadedRenderer`; the registration has no effect without a RenderThread | `h_register_animating` tolerates a non-live proxy (no-op); a live proxy still records the node |
+| 3 | then the traversal aborted at `RecordingCanvas.nDrawRipple` | the op was unbound | registered as a declared no-op; the drawable's flat pressed-colour layer still records against the real bitmap |
+| 4 | form-validation valid email still showed "Invalid email" | a pending `Paint.nGetTextRunCursor` message aborted the pump before the submit click | implemented `nGetTextRunCursor` (surrogate/combining-mark-safe cursor snap; single LTR run) instead of `UNSUPPORTED_JAVA_API` |
+| 5 | `observe --frame` after a tap was byte-identical | `RenderNode::subtree_version` followed only `children`, but framework views link child nodes through `DisplayOp::DrawRenderNode`; a child re-record did not invalidate the surface's cached raster | `subtree_version` now folds `DrawRenderNode` ops; regression test added |
+| 6 | `observe --frame --screenshot` via the daemon never wrote the PNG | the native `call_observe` ignored the `screenshot` argument | it passes the path to `session.observe` and reports `screenshot` / `ui.screenshot` |
+
+Also added the top-level **`acos type`** command named by the product path (it is
+the `acos session text` path through the daemon).
+
+## Evidence
+
+| path | result |
+|---|---|
+| `cargo test -p acos-runtime --test counter_interaction` | **3 pass / 0 fail** (launch frame+tree, tap updates tree, tap repaints count region) |
+| `cargo test -p acos-vm --lib` | 129 pass / 0 fail |
+| `cargo test -p acos-render --lib` | 79 pass / 0 fail |
+| `cargo test -p acos-mcp --lib` | 41 pass / 0 fail |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | clean |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported** |
+
+Product-path probe (daemon session, frame hashes):
+
+```text
+acos launch counter.apk --keep   -> first_frame
+acos observe --tree              -> count="0" inc=Increment reset=Reset
+acos tap --text Increment        -> state_changed=true
+acos observe --tree              -> count="1"
+acos tap --id inc (x2)           -> count="2" then "3"
+acos tap --id reset              -> count="0"
+acos observe --frame --screenshot before/after -> content hash dc960f6… -> 6b991d6…
+```
+
+hello-views: `tap --id input` → `acos type World` (`text_path=input-connection`) →
+`tap --id btn` → tree `Hello, World! clicks: 1`. form-validation: submit empty →
+"Name is required"; +name → "Email is required"; `alice.example` → "Invalid
+email"; `alice.example@x.co` → error `""` (success path).
+
+## Phone parity
+
+`tools/phone-parity.sh` installs only `dev.acos.fixtures.counter` on the named
+device (default ZA222WGJPP), launches it, screenshots before, taps the increment
+button, screenshots after, captures the matching ACOS frames through the daemon,
+and uninstalls, leaving `results/parity/W167A.md` (SSIM/MAD with status+nav bars
+masked). Run once against the attached moto g35 5G (API 35, 1080x2400 @ 400):
+
+| phase | SSIM (masked) | MAD | ACOS hash |
+|---|---:|---:|---|
+| before tap | 0.9245 | 16.54 | `dc960f6…` |
+| after tap  | 0.9246 | 16.55 | `6b991d6…` |
+
+The ACOS `observe --tree` `id/inc` centre (`218,659`) does **not** land on the
+phone's button — the phone's API-35/400-dpi layout differs (phone button centre
+`152,396`) — so the harness retries at the screenshot-located centre; the phone
+then shows the count `0→1` change (281 changed pixels at the count glyph). This
+is recorded honestly rather than hidden: the ACOS tree coordinate space and a
+real device's differ for this theme/density.
+
+## Honesty
+
+* The ripple natives are a real native surface, not a fake: builder/instances
+  hold state and the handles are generation-checked. AGSL program evaluation is
+  **not** implemented; a `RuntimeShader`-backed paint is drawn with the flat
+  paint colour and `snapshot_paint` records the unsupported op.
+* `nStart`/`nEnd` do not run a render-thread animation (there is no RenderThread);
+  the animator records duration/delay/interpolator/listener for introspection.
+* The remaining, adjacent `enqueueTextToast` Binder-codec mismatch (form-validation
+  `Toast` on the failure path) still logs a structured `IllegalArgumentException`
+  after `error.setText`; the validation message itself is correct and the click
+  that follows runs. It is a services/AIDL task, not the interaction loop.

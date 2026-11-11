@@ -344,6 +344,17 @@ impl RenderNode {
                 for c in &n.children {
                     stack.push(*c);
                 }
+                // Framework-drawn views link child render nodes through
+                // `DisplayOp::DrawRenderNode`, not `children`. Both links must
+                // contribute to the digest: otherwise a child that re-records
+                // after `setText`/`invalidate` (for example the counter
+                // TextView) leaves the parent's cached raster stale, so the
+                // post-tap frame is byte-identical to the pre-tap frame.
+                for op in &n.display_list {
+                    if let DisplayOp::DrawRenderNode(child) = op {
+                        stack.push(*child);
+                    }
+                }
             }
         }
         acc
@@ -374,6 +385,28 @@ mod tests {
         table.get_mut(child).unwrap().set_alpha(0.3);
         let v2 = RenderNode::subtree_version(&table, root_h);
         assert_ne!(v1, v2);
+    }
+
+    /// W167-A: framework views link child render nodes through a
+    /// `DisplayOp::DrawRenderNode` op, not `add_child`. A child that
+    /// re-records (a `TextView` whose text changed) must still change the
+    /// parent subtree digest, or the frame cache returns stale pixels (the
+    /// counter tap produced a byte-identical post-tap frame).
+    #[test]
+    fn subtree_version_follows_draw_render_node_ops() {
+        let mut table: HandleTable<RenderNode> = HandleTable::new();
+        let child = table.insert(RenderNode::new("child"));
+        let mut parent = RenderNode::new("parent");
+        parent.push_op(DisplayOp::DrawRenderNode(child));
+        let parent_h = table.insert(parent);
+        let v1 = RenderNode::subtree_version(&table, parent_h);
+        // Re-record the child (new display list => version bump).
+        table.get_mut(child).unwrap().push_op(DisplayOp::Save);
+        let v2 = RenderNode::subtree_version(&table, parent_h);
+        assert_ne!(
+            v1, v2,
+            "a DrawRenderNode-linked child's version must contribute to the subtree digest"
+        );
     }
 
     #[test]
