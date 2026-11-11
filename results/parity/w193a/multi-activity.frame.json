@@ -1,0 +1,96 @@
+{
+  "candidate": "/home/Qui/Projects/acos/results/parity/w193a/multi-activity.png",
+  "diff": {
+    "alpha": {
+      "max_abs_error": 0,
+      "mean_abs_error": 0.0,
+      "rmse": 0.0
+    },
+    "blocks": {
+      "block_size": 8,
+      "blocks_x": 135,
+      "blocks_y": 300,
+      "changed_blocks": 6098,
+      "changed_fraction": 0.1613227513227513,
+      "max_block_mean_abs_error": 241.0
+    },
+    "blue": {
+      "max_abs_error": 243,
+      "mean_abs_error": 26.353963293650793,
+      "rmse": 73.44791078407182
+    },
+    "changed_bbox": [
+      0,
+      64,
+      1080,
+      2304
+    ],
+    "compared_pixels": 2419200,
+    "differing_fraction": 0.1596064814814815,
+    "differing_pixels": 386120,
+    "global_ssim": 0.20120222533681273,
+    "green": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.19930431547619,
+      "rmse": 72.91354988520153
+    },
+    "height": 2400,
+    "identical": false,
+    "luma": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.303955026455025,
+      "rmse": 73.13000013430096
+    },
+    "mask": [
+      [
+        0,
+        0,
+        1080,
+        64
+      ],
+      [
+        0,
+        2304,
+        1080,
+        2400
+      ]
+    ],
+    "masked_pixels": 172800,
+    "max_abs_error": 243,
+    "mean_abs_error": 26.349254712301587,
+    "mean_ssim": 0.8761534026197793,
+    "min_ssim": -0.8137641451502083,
+    "pixel_count": 2592000,
+    "pixel_threshold": 8,
+    "psnr_db": 10.827798949982705,
+    "red": {
+      "max_abs_error": 240,
+      "mean_abs_error": 26.494496527777777,
+      "rmse": 73.56033392629402
+    },
+    "rmse": 73.3078078669083,
+    "ssim_window": 9,
+    "width": 1080
+  },
+  "identical": false,
+  "masks": [
+    [
+      0,
+      0,
+      1080,
+      64
+    ],
+    [
+      0,
+      2304,
+      1080,
+      2400
+    ]
+  ],
+  "ok": true,
+  "reference": "/home/Qui/Projects/acos/.cache/wt-w193a/fixtures/reference/multi-activity/art-api34-x86_64/screenshot_initial.png",
+  "threshold": {
+    "global_ssim": 0.98,
+    "mean_ssim": 0.99
+  }
+}

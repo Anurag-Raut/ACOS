@@ -1,0 +1,33 @@
+{
+  "request_id": "req_b602e_18e6dd9e91b14813",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.frame",
+    "ui.screenshot"
+  ],
+  "result": {
+    "frame": {
+      "cause_id": "4",
+      "content_hash": "de371840a45ff2025d5cdce72c2f2c0d",
+      "frame_seq": 4,
+      "height": 2400,
+      "meaningful": true,
+      "width": 1080
+    },
+    "package": "dev.acos.fixtures.formvalidation",
+    "published_frames": 4,
+    "screenshot": {
+      "bytes": 10371258,
+      "path": "/home/Qui/Projects/acos/results/parity/w193a/form-validation.png"
+    },
+    "session_id": "s_cli",
+    "stage_reached": "first_frame"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "request_id": "req_b4e0c_18e6dd9300ae64d6",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "apk.inspect",
+    "lifecycle"
+  ],
+  "result": {
+    "activity": "dev.acos.fixtures.counter.MainActivity",
+    "classes_loaded": 2560,
+    "events": [
+      "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+      "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+      "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+      "Currently set values for:",
+      "  angle_gl_driver_selection_pkgs=[]",
+      "  angle_gl_driver_selection_values=[]",
+      "ANGLE GameManagerService for dev.acos.fixtures.counter: false",
+      "dev.acos.fixtures.counter is not listed in per-application setting",
+      "Neither updatable production driver nor prerelease driver is supported.",
+      "No service published for: netstats",
+      "TrafficStats not initialized, uid=10192",
+      "onCreate",
+      "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+      "onStart",
+      "onResume",
+      "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+      "Frame time is 3.357152 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+      "Frame time is 16.631691 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+      "Frame time is 16.59886 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+      "Frame time is 16.591345 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+      "Frame time is 16.591164 ms in the future!  Check that graphics HAL is generating vsync timestamps using the correct timebase.",
+      "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#2) as ready",
+      "Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#3) as ready"
+    ],
+    "package": "dev.acos.fixtures.counter",
+    "peak_rss_bytes": 778248192,
+    "reached_stage": "first_frame",
+    "stages": [
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "apk_parsed",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "process_booted",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "bind_application",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "application_on_create",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "client_transaction",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "activity_on_create",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "on_resume",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "first_frame",
+        "status": "ok"
+      }
+    ],
+    "wall_ms": 10482
+  },
+  "metrics": {
+    "wall_ms": 10482,
+    "peak_rss_bytes": 778248192,
+    "classes_loaded": 2560
+  }
+}

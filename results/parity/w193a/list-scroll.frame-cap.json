@@ -1,0 +1,33 @@
+{
+  "request_id": "req_b642a_18e6dda704fc5e8a",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.frame",
+    "ui.screenshot"
+  ],
+  "result": {
+    "frame": {
+      "cause_id": "1",
+      "content_hash": "4b67931a4a7751c1944221f9b56e1946",
+      "frame_seq": 1,
+      "height": 2400,
+      "meaningful": true,
+      "width": 1080
+    },
+    "package": "dev.acos.fixtures.listscroll",
+    "published_frames": 1,
+    "screenshot": {
+      "bytes": 10371258,
+      "path": "/home/Qui/Projects/acos/results/parity/w193a/list-scroll.png"
+    },
+    "session_id": "s_cli",
+    "stage_reached": "first_frame"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

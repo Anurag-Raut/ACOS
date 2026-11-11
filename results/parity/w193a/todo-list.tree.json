@@ -1,0 +1,329 @@
+{
+  "request_id": "req_b622a_18e6dda1afe6561e",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.tree"
+  ],
+  "result": {
+    "package": "dev.acos.fixtures.todolist",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "tree": {
+      "max_nodes": 2000,
+      "nodes": [
+        {
+          "bounds": [
+            0,
+            128,
+            1080,
+            2337
+          ],
+          "checked": false,
+          "children": [
+            {
+              "bounds": [
+                0,
+                128,
+                1080,
+                2337
+              ],
+              "checked": false,
+              "children": [
+                {
+                  "bounds": [
+                    0,
+                    275,
+                    1080,
+                    2337
+                  ],
+                  "checked": false,
+                  "children": [
+                    {
+                      "bounds": [
+                        0,
+                        275,
+                        1080,
+                        2337
+                      ],
+                      "checked": false,
+                      "children": [
+                        {
+                          "bounds": [
+                            42,
+                            317,
+                            1038,
+                            424
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.EditText",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": true,
+                          "id": "n5",
+                          "package": "dev.acos.fixtures.todolist",
+                          "resource_id": "dev.acos.fixtures.todolist:id/input",
+                          "scrollable": false,
+                          "text": "New item",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            42,
+                            424,
+                            1038,
+                            550
+                          ],
+                          "checked": false,
+                          "children": [
+                            {
+                              "bounds": [
+                                42,
+                                424,
+                                273,
+                                550
+                              ],
+                              "checked": false,
+                              "children": [],
+                              "class": "android.widget.Button",
+                              "clickable": true,
+                              "content_desc": "",
+                              "enabled": true,
+                              "focused": false,
+                              "id": "n7",
+                              "package": "dev.acos.fixtures.todolist",
+                              "resource_id": "dev.acos.fixtures.todolist:id/add",
+                              "scrollable": false,
+                              "text": "Add",
+                              "visible": true
+                            },
+                            {
+                              "bounds": [
+                                273,
+                                424,
+                                522,
+                                550
+                              ],
+                              "checked": false,
+                              "children": [],
+                              "class": "android.widget.Button",
+                              "clickable": true,
+                              "content_desc": "",
+                              "enabled": true,
+                              "focused": false,
+                              "id": "n8",
+                              "package": "dev.acos.fixtures.todolist",
+                              "resource_id": "dev.acos.fixtures.todolist:id/clear",
+                              "scrollable": false,
+                              "text": "Clear all",
+                              "visible": true
+                            }
+                          ],
+                          "class": "android.widget.LinearLayout",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n6",
+                          "package": "dev.acos.fixtures.todolist",
+                          "resource_id": "@0xffffffff",
+                          "scrollable": false,
+                          "text": "",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            42,
+                            550,
+                            1038,
+                            2295
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.ListView",
+                          "clickable": true,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n9",
+                          "package": "dev.acos.fixtures.todolist",
+                          "resource_id": "dev.acos.fixtures.todolist:id/list",
+                          "scrollable": false,
+                          "text": "",
+                          "visible": true
+                        }
+                      ],
+                      "class": "android.widget.LinearLayout",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n4",
+                      "package": "dev.acos.fixtures.todolist",
+                      "resource_id": "@0xffffffff",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": true
+                    }
+                  ],
+                  "class": "android.widget.FrameLayout",
+                  "clickable": false,
+                  "content_desc": "",
+                  "enabled": true,
+                  "focused": false,
+                  "id": "n3",
+                  "package": "dev.acos.fixtures.todolist",
+                  "resource_id": "android:id/content",
+                  "scrollable": false,
+                  "text": "",
+                  "visible": true
+                },
+                {
+                  "bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "checked": false,
+                  "children": [
+                    {
+                      "bounds": [
+                        0,
+                        128,
+                        1080,
+                        275
+                      ],
+                      "checked": false,
+                      "children": [
+                        {
+                          "bounds": [
+                            42,
+                            166,
+                            261,
+                            237
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.TextView",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n12",
+                          "package": "dev.acos.fixtures.todolist",
+                          "resource_id": "@0xffffffff",
+                          "scrollable": false,
+                          "text": "Todo List",
+                          "visible": true
+                        },
+                        {
+                          "bounds": [
+                            1080,
+                            128,
+                            1080,
+                            275
+                          ],
+                          "checked": false,
+                          "children": [],
+                          "class": "android.widget.ActionMenuView",
+                          "clickable": false,
+                          "content_desc": "",
+                          "enabled": true,
+                          "focused": false,
+                          "id": "n13",
+                          "package": "dev.acos.fixtures.todolist",
+                          "resource_id": "@0xffffffff",
+                          "scrollable": false,
+                          "text": "",
+                          "visible": true
+                        }
+                      ],
+                      "class": "android.widget.Toolbar",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n11",
+                      "package": "dev.acos.fixtures.todolist",
+                      "resource_id": "android:id/action_bar",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": true
+                    },
+                    {
+                      "bounds": [
+                        0,
+                        128,
+                        0,
+                        128
+                      ],
+                      "checked": false,
+                      "children": [],
+                      "class": "com.android.internal.widget.ActionBarContextView",
+                      "clickable": false,
+                      "content_desc": "",
+                      "enabled": true,
+                      "focused": false,
+                      "id": "n14",
+                      "package": "dev.acos.fixtures.todolist",
+                      "resource_id": "android:id/action_context_bar",
+                      "scrollable": false,
+                      "text": "",
+                      "visible": false
+                    }
+                  ],
+                  "class": "com.android.internal.widget.ActionBarContainer",
+                  "clickable": false,
+                  "content_desc": "",
+                  "enabled": true,
+                  "focused": false,
+                  "id": "n10",
+                  "package": "dev.acos.fixtures.todolist",
+                  "resource_id": "android:id/action_bar_container",
+                  "scrollable": false,
+                  "text": "",
+                  "visible": true
+                }
+              ],
+              "class": "com.android.internal.widget.ActionBarOverlayLayout",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n2",
+              "package": "dev.acos.fixtures.todolist",
+              "resource_id": "android:id/decor_content_parent",
+              "scrollable": false,
+              "text": "",
+              "visible": true
+            }
+          ],
+          "class": "com.android.internal.policy.DecorView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n1",
+          "package": "dev.acos.fixtures.todolist",
+          "resource_id": "@0xffffffff",
+          "scrollable": false,
+          "text": "",
+          "visible": true
+        }
+      ],
+      "truncated": false,
+      "windows": 1
+    },
+    "truncated": false,
+    "windows": 1
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

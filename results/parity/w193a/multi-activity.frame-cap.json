@@ -1,0 +1,33 @@
+{
+  "request_id": "req_b6392_18e6dda4b15af274",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.frame",
+    "ui.screenshot"
+  ],
+  "result": {
+    "frame": {
+      "cause_id": "4",
+      "content_hash": "c5cbcf5d419f339d38f303e51417baed",
+      "frame_seq": 4,
+      "height": 2400,
+      "meaningful": true,
+      "width": 1080
+    },
+    "package": "dev.acos.fixtures.multiactivity",
+    "published_frames": 4,
+    "screenshot": {
+      "bytes": 10371258,
+      "path": "/home/Qui/Projects/acos/results/parity/w193a/multi-activity.png"
+    },
+    "session_id": "s_cli",
+    "stage_reached": "first_frame"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

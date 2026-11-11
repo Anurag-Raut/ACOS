@@ -644,12 +644,32 @@ fn fbb_build(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 // Typeface
 // ---------------------------------------------------------------------------
 
+/// Android family-selection score for one candidate face.
+///
+/// `FontFamily.getFont` picks the closest weight, with the requested style
+/// breaking ties. A style mismatch is charged roughly one 100-weight step so an
+/// exact-weight italic face still beats an upright near-match.
+fn face_score(candidate_weight: i32, candidate_italic: bool, want_weight: i32, want_italic: bool) -> i64 {
+    let weight_delta = (i64::from(candidate_weight) - i64::from(want_weight)).abs();
+    let style_penalty = if candidate_italic == want_italic { 0 } else { 100 };
+    weight_delta * 2 + style_penalty
+}
+
 fn typeface_create_from_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ptrs = long_array(vm, vm.arg_ref(ctx, 0))?;
     let weight = vm.arg_i32(ctx, 2);
     let italic = vm.arg_i32(ctx, 3);
-    let mut chosen: Option<(Option<String>, i32, bool, FontRef)> = None;
-    'outer: for ptr in ptrs {
+    // Android's `Typeface.createFromFamilies` resolves the requested weight and
+    // style against each family's font list (`FontFamily.getFont`); the first
+    // entry is *not* the answer. The `sans-serif` family lists Roboto's variable
+    // axes in weight order, so taking the first entry picked `wght=100` for
+    // every 14sp `TextView` (the live text advance was ~4% narrow). Score every
+    // reachable face and keep the closest weight, preferring the requested
+    // style, exactly as the framework's family selection does.
+    let want_weight = if weight >= 0 { weight } else { 400 };
+    let want_italic = if italic >= 0 { italic != 0 } else { false };
+    let mut chosen: Option<(i64, Option<String>, FontRef)> = None;
+    for ptr in ptrs {
         let fam = match with_fonts(|s| s.family(ptr)) {
             Ok(f) => f,
             Err(_) => continue,
@@ -660,19 +680,19 @@ fn typeface_create_from_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
                 Err(_) => continue,
             };
             if let Some(fr) = font.resolved_font() {
-                let w = if weight >= 0 { weight } else { font.weight };
-                let it = if italic >= 0 { italic != 0 } else { font.italic };
-                let family = family_name_of(&fr).or_else(|| ttf_family_name(&fr));
-                chosen = Some((family, w, it, fr));
-                break 'outer;
+                let score = face_score(font.weight, font.italic, want_weight, want_italic);
+                if chosen.as_ref().is_none_or(|(best, _, _)| score < *best) {
+                    let family = family_name_of(&fr).or_else(|| ttf_family_name(&fr));
+                    chosen = Some((score, family, fr));
+                }
             }
         }
     }
     let rec = match chosen {
-        Some((family, weight, italic, font)) => TypefaceRec {
+        Some((_, family, font)) => TypefaceRec {
             family,
-            weight,
-            italic,
+            weight: if weight >= 0 { weight } else { want_weight },
+            italic: want_italic,
             font: Some(font),
             deferred: None,
         },
@@ -959,4 +979,37 @@ fn glyph_bounds(
         vm.set_instance_field_by_name(out, "bottom", bottom.to_bits());
     }
     Ok(advance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::face_score;
+
+    /// `sans-serif` (Roboto) lists the variable font once per weight, 100..900.
+    /// A 400 request must select 400, not the first (100) entry — taking the
+    /// first entry made every 14sp `TextView` shape at `wght=100` and measure
+    /// ~4% narrow (W193-A).
+    #[test]
+    fn face_score_selects_the_requested_weight() {
+        let weights = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+        let best = weights
+            .iter()
+            .min_by_key(|w| face_score(**w, false, 400, false))
+            .copied();
+        assert_eq!(best, Some(400));
+        assert_eq!(
+            weights
+                .iter()
+                .min_by_key(|w| face_score(**w, false, 700, false))
+                .copied(),
+            Some(700)
+        );
+    }
+
+    #[test]
+    fn face_score_prefers_style_on_a_weight_tie() {
+        // An exact-weight italic face beats an upright 100-step near match.
+        assert!(face_score(400, true, 400, true) < face_score(300, false, 400, true));
+        assert!(face_score(400, false, 400, false) < face_score(500, false, 400, false));
+    }
 }
