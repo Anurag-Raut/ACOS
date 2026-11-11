@@ -175,6 +175,81 @@ pub struct LogLine {
     pub line: String,
 }
 
+/// Parse a logcat priority filter: a level letter (`V`,`D`,`I`,`W`,`E`,`F`) or
+/// a numeric priority (`2`..=`7`). Unknown tokens return `None`.
+pub fn parse_log_priority(value: &str) -> Option<i32> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "V" | "VERBOSE" => Some(2),
+        "D" | "DEBUG" => Some(3),
+        "I" | "INFO" => Some(4),
+        "W" | "WARN" | "WARNING" => Some(5),
+        "E" | "ERROR" => Some(6),
+        "F" | "ASSERT" | "WTF" => Some(7),
+        other => other.parse::<i32>().ok().filter(|p| (2..=7).contains(p)),
+    }
+}
+
+/// One log record after tag/priority filtering, with runs of identical
+/// `(priority, tag, message)` records collapsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogViewRecord {
+    /// Priority (`2`..=`7`).
+    pub priority: i32,
+    /// Log tag.
+    pub tag: String,
+    /// Message.
+    pub message: String,
+    /// `logcat -v threadtime` rendering.
+    pub line: String,
+    /// How many consecutive identical records this one stands for (`1` = no
+    /// repetition). A framework stack trace logged six times collapses to one
+    /// record with `repeat_count = 6`.
+    pub repeat_count: usize,
+}
+
+/// Filter `lines` by tag substring (case-insensitive) and minimum priority, and
+/// collapse consecutive identical records.
+///
+/// Filters are applied first, so a repetition count only covers records that
+/// survived the filter. The returned order matches the buffer order.
+pub fn summarize_logs(
+    lines: &[LogLine],
+    tag: Option<&str>,
+    min_priority: Option<i32>,
+) -> Vec<LogViewRecord> {
+    let tag = tag.map(str::to_ascii_lowercase);
+    let mut out: Vec<LogViewRecord> = Vec::new();
+    for line in lines {
+        if let Some(min) = min_priority {
+            if line.priority < min {
+                continue;
+            }
+        }
+        if let Some(tag) = &tag {
+            if !line.tag.to_ascii_lowercase().contains(tag.as_str()) {
+                continue;
+            }
+        }
+        if let Some(last) = out.last_mut() {
+            if last.priority == line.priority
+                && last.tag == line.tag
+                && last.message == line.message
+            {
+                last.repeat_count += 1;
+                continue;
+            }
+        }
+        out.push(LogViewRecord {
+            priority: line.priority,
+            tag: line.tag.clone(),
+            message: line.message.clone(),
+            line: line.line.clone(),
+            repeat_count: 1,
+        });
+    }
+    out
+}
+
 /// Session status snapshot.
 #[derive(Debug, Clone)]
 pub struct SessionState {
@@ -323,6 +398,10 @@ enum Cmd {
     },
     TapText {
         label: String,
+        reply: Sender<Result<InputReport, SessionError>>,
+    },
+    TapId {
+        id: String,
         reply: Sender<Result<InputReport, SessionError>>,
     },
     Key {
@@ -497,6 +576,16 @@ impl AgentSession {
         })
     }
 
+    /// Tap a node found by Android resource id (the same `resource_id` the
+    /// `observe --tree` nodes expose). A bare local name (`button`) also matches
+    /// `pkg:id/button`, mirroring [`acos_protocol::Selector::by_id`].
+    pub fn tap_id(&self, id: impl Into<String>) -> Result<InputReport, SessionError> {
+        self.round_trip(|reply| Cmd::TapId {
+            id: id.into(),
+            reply,
+        })
+    }
+
     /// Press a key code (for example `4` = BACK, `66` = ENTER).
     pub fn key(&self, code: i32) -> Result<InputReport, SessionError> {
         self.round_trip(|reply| Cmd::Key { code, reply })
@@ -585,6 +674,9 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
             }
             Cmd::TapText { label, reply } => {
                 let _ = reply.send(do_tap_text(&mut state, &label));
+            }
+            Cmd::TapId { id, reply } => {
+                let _ = reply.send(do_tap_id(&mut state, &id));
             }
             Cmd::Key { code, reply } => {
                 let _ = reply.send(finish_input(
@@ -854,6 +946,41 @@ fn do_tap_text(state: &mut WorkerState, label: &str) -> Result<InputReport, Sess
     Ok(input_after_pump(state, report, before))
 }
 
+/// Resolve a resource id in the live view tree and tap its centre.
+///
+/// Matches the full `pkg:id/name` id or a bare `name`, exactly like
+/// [`acos_protocol::Selector::by_id`], so an `observe --tree` `resource_id`
+/// and a `tap --id` selector refer to the same node.
+fn do_tap_id(state: &mut WorkerState, id: &str) -> Result<InputReport, SessionError> {
+    let tree = do_observe_tree(state, crate::view_tree::DEFAULT_MAX_NODES)?;
+    let node = find_node_by_id(&tree, id).ok_or_else(|| {
+        SessionError::new(
+            "ELEMENT_NOT_FOUND",
+            format!("no node with resource id {id:?} in the view tree"),
+        )
+        .with_details(vec![
+            ("kind", "NoSuchNode".to_string()),
+            ("resource_id", id.to_string()),
+        ])
+    })?;
+    let [left, top, right, bottom] = node.bounds;
+    if right <= left || bottom <= top {
+        return Err(SessionError::new(
+            "ELEMENT_NOT_FOUND",
+            format!("node {id:?} has empty bounds {left},{top},{right},{bottom}"),
+        )
+        .with_details(vec![
+            ("kind", "EmptyBounds".to_string()),
+            ("resource_id", id.to_string()),
+        ]));
+    }
+    let x = (left + right) as f32 / 2.0;
+    let y = (top + bottom) as f32 / 2.0;
+    let before = tree_state_summary(&tree);
+    let report = finish_input("tap", input_java::inject_tap(x, y).map_err(input_error))?;
+    Ok(input_after_pump(state, report, before))
+}
+
 /// Inject a coordinate tap, pump the framework, and report whether the live
 /// tree visibly changed (the honest `state_changed` value).
 fn do_tap(state: &mut WorkerState, x: f32, y: f32) -> Result<InputReport, SessionError> {
@@ -900,6 +1027,27 @@ fn tree_state_summary(tree: &ViewTree) -> String {
         walk(node, &mut out);
     }
     out
+}
+
+/// Depth-first search for the first node whose `resource_id` matches `id`.
+///
+/// The full `pkg:id/name` id and the bare `name` suffix both match, mirroring
+/// [`acos_protocol::Selector::by_id`].
+fn find_node_by_id<'a>(tree: &'a ViewTree, id: &str) -> Option<&'a ViewNode> {
+    fn matches(node_id: &str, wanted: &str) -> bool {
+        node_id == wanted
+            || node_id
+                .rsplit_once('/')
+                .map(|(_, local)| local == wanted)
+                .unwrap_or(false)
+    }
+    fn search<'a>(node: &'a ViewNode, id: &str) -> Option<&'a ViewNode> {
+        if matches(&node.resource_id, id) {
+            return Some(node);
+        }
+        node.children.iter().find_map(|child| search(child, id))
+    }
+    tree.nodes.iter().find_map(|root| search(root, id))
 }
 
 /// Depth-first search for the first node whose `text` equals `label`.
