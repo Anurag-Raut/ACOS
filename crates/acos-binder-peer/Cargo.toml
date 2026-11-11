@@ -1,0 +1,19 @@
+[package]
+name = "acos-binder-peer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Userspace binder peer: stock libbinder (LD_PRELOAD driver) -> ACOS ServiceHost"
+build = "build.rs"
+
+[dependencies]
+acos-aidl = { path = "../acos-aidl" }
+acos-parcel = { path = "../acos-parcel" }
+acos-services = { path = "../acos-services" }
+libc = "0.2"
+serde_json = { workspace = true }
+
+[[bin]]
+name = "acos-binder-peer"
+path = "src/main.rs"
