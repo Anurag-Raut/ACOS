@@ -450,9 +450,22 @@ fn handle_session(
             };
             // The relayout argument order is `requestedWidth, requestedHeight,
             // viewVisibility, flags, seq, lastSyncSeqId`; the sync seq is the
-            // fifth int, not the first.
+            // fifth int, not the first. The first two are the client's measured
+            // (requested) size, which the real WMS uses for a `WRAP_CONTENT`
+            // window frame.
+            let requested_width = args.ints.first().copied().unwrap_or(-1);
+            let requested_height = args.ints.get(1).copied().unwrap_or(-1);
             let sync_seq = args.ints.get(4).copied().unwrap_or(-1);
-            let r = with_wms(|s| s.relayout(window.0, params, sync_seq)).map_err(err)?;
+            let r = with_wms(|s| {
+                s.relayout_with_requested(
+                    window.0,
+                    params,
+                    requested_width,
+                    requested_height,
+                    sync_seq,
+                )
+            })
+            .map_err(err)?;
             encode_relayout(&r, reply)?;
         }
         "remove" => {
@@ -529,8 +542,19 @@ fn handle_session(
                     None => with_wms(|s| s.wm.windows.get(&w.0).map(|rec| rec.params.clone())),
                 };
                 if let Some(params) = params {
+                    let requested_width = args.ints.first().copied().unwrap_or(-1);
+                    let requested_height = args.ints.get(1).copied().unwrap_or(-1);
                     let sync_seq = args.ints.get(4).copied().unwrap_or(-1);
-                    let _ = with_wms(|s| s.relayout(w.0, params, sync_seq)).map_err(err)?;
+                    let _ = with_wms(|s| {
+                        s.relayout_with_requested(
+                            w.0,
+                            params,
+                            requested_width,
+                            requested_height,
+                            sync_seq,
+                        )
+                    })
+                    .map_err(err)?;
                 }
             }
         }

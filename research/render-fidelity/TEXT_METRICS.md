@@ -16,22 +16,23 @@ bounds* and this column is the current state of that goal.
 
 | app | label | text | size (sp) | ref bounds | ref W | ACOS advance | ΔW | ACOS ascent | descent | leading | W+H | ref H | tight (w×h) |
 |---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| hello-views | title | `Hello ACOS` | 14 | [42,317][231,368] | 189 | 188.45 | 0.3% | -34.09 | 8.97 | 0.00 | 43.07 | 51 | 184.0×27.9 |
-| hello-views | result | `clicks: 0` | 14 | [42,612][175,663] | 133 | 132.61 | 0.3% | -34.09 | 8.97 | 0.00 | 43.07 | 51 | 128.9×27.9 |
-| counter | count | `0` | 14 | [42,317][63,368] | 21 | 20.65 | 1.6% | -34.09 | 8.97 | 0.00 | 43.07 | 51 | 16.5×26.8 |
-| hello-views | app-title | `Hello Views` | 20 | [42,166][321,237] | 279 | 274.37 | 1.7% | -48.71 | 12.82 | 0.00 | 61.52 | 71 | 267.4×39.9 |
-| counter | app-title | `Counter` | 20 | [42,166][231,237] | 189 | 184.85 | 2.2% | -48.71 | 12.82 | 0.00 | 61.52 | 71 | 181.0×38.3 |
-| todo-list | app-title | `Todo List` | 20 | [42,166][262,237] | 220 | 216.61 | 1.5% | -48.71 | 12.82 | 0.00 | 61.52 | 71 | 213.5×39.9 |
+| hello-views | title | `Hello ACOS` | 14 | [42,317][231,368] | 189 | 188.45 | 0.3% | -34.09 | 8.97 | 0.00 | 49.00 | 51 | 184.0×27.9 |
+| hello-views | result | `clicks: 0` | 14 | [42,612][175,663] | 133 | 132.61 | 0.3% | -34.09 | 8.97 | 0.00 | 49.00 | 51 | 128.9×27.9 |
+| counter | count | `0` | 14 | [42,317][63,368] | 21 | 20.65 | 1.6% | -34.09 | 8.97 | 0.00 | 49.00 | 51 | 16.5×26.8 |
+| hello-views | app-title | `Hello Views` | 20 | [42,166][321,237] | 279 | 274.37 | 1.7% | -48.71 | 12.82 | 0.00 | 71.00 | 71 | 267.4×39.9 |
+| counter | app-title | `Counter` | 20 | [42,166][231,237] | 189 | 184.85 | 2.2% | -48.71 | 12.82 | 0.00 | 71.00 | 71 | 181.0×38.3 |
+| todo-list | app-title | `Todo List` | 20 | [42,166][262,237] | 220 | 216.61 | 1.5% | -48.71 | 12.82 | 0.00 | 71.00 | 71 | 213.5×39.9 |
 
 ## Reading the table
 
 * At 14sp the advance matches the device to ~0.3% (`Hello ACOS` 188.45 vs 189 px,
 `clicks: 0` 132.61 vs 133 px). This is the FreeType-mask + rustybuzz path of
 ADR-0019 and the basis of the accepted per-glyph coverage error.
-* The `W+H` column is `descent - ascent` from `Paint.FontMetrics`; the View H
-is larger because Android adds font padding and, for `includeFontPadding`,
-the `top`/`bottom` extent. The current `font_metrics_for` sets
-`top = ascent` and `bottom = descent`, which is the known height gap.
+* The `W+H` column is the `wrap_content` TextView height with the default
+`includeFontPadding`, i.e. `FontMetricsInt.bottom - top`. W185-A derives
+`top`/`bottom` from the face bounding box (`head` yMax/yMin) exactly like
+Skia's FreeType backend, so the View height tracks ART to within 2 px (the
+reference captures resolve 14sp to 37 px via `getDimensionPixelSize`).
 * Subpixel positioning: advances stay fractional (linear metrics, Android's
 default `subpixel positioning on`); A8 masks are placed on the rounded integer
 pen (`(x).round() + bitmap_left`), matching the measured PoC in

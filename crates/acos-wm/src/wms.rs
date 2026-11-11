@@ -370,12 +370,39 @@ impl WindowManager {
         Ok(result)
     }
 
-    /// `IWindowSession.relayout`.
+    /// `IWindowSession.relayout` without a client-measured size.
     pub fn relayout(
         &mut self,
         session: SessionId,
         window: WindowId,
         params: LayoutParams,
+        sync_seq: i32,
+    ) -> Result<RelayoutResult> {
+        self.relayout_with_requested(
+            session,
+            window,
+            params,
+            UNSPECIFIED_LENGTH,
+            UNSPECIFIED_LENGTH,
+            sync_seq,
+        )
+    }
+
+    /// `IWindowSession.relayout` with the client-reported measured size.
+    ///
+    /// `requested_width`/`requested_height` are the six-int `relayout`
+    /// arguments (`requestedWidth`, `requestedHeight`, …) the real WMS stores
+    /// in `WindowState.mRequestedWidth/mRequestedHeight` and feeds to
+    /// `WindowLayout.computeFrames`. A `WRAP_CONTENT` window takes its frame
+    /// size from them; a `-1` ([`UNSPECIFIED_LENGTH`]) falls back to the layout
+    /// params or the parent frame, exactly like the framework.
+    pub fn relayout_with_requested(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        params: LayoutParams,
+        requested_width: i32,
+        requested_height: i32,
         sync_seq: i32,
     ) -> Result<RelayoutResult> {
         let display = self.display;
@@ -390,7 +417,12 @@ impl WindowManager {
         let old_frame = record.frame;
         let first = !record.first_relayout_done;
         record.params = params;
-        record.frame = compute_frame_for(&display, &record.params);
+        record.frame = compute_frame_for_requested(
+            &display,
+            &record.params,
+            requested_width,
+            requested_height,
+        );
         record.parent_frame = record.frame;
         let resized = record.frame != old_frame;
         record.relayout_seq += 1;
@@ -627,25 +659,199 @@ impl WindowManager {
     }
 }
 
-/// Frame computation: fixed sizes are honoured, otherwise the app bounds.
+/// `WindowManager.LayoutParams.MATCH_PARENT`.
+pub const MATCH_PARENT: i32 = -1;
+/// `WindowManager.LayoutParams.WRAP_CONTENT`.
+pub const WRAP_CONTENT: i32 = -2;
+/// `WindowLayout.UNSPECIFIED_LENGTH`: no client-measured size yet.
+pub const UNSPECIFIED_LENGTH: i32 = -1;
+
+/// Frame computation for `params` without a client-measured size.
+///
+/// Equivalent to [`compute_frame_for_requested`] with [`UNSPECIFIED_LENGTH`]
+/// requested dimensions, which is the real WMS's first-layout path
+/// (`WindowLayout.computeFrames` falls back to the layout params / parent
+/// frame).
 #[must_use]
 pub fn compute_frame_for(display: &DisplaySpec, params: &LayoutParams) -> RectI {
-    let app = display.app_bounds;
-    if params.width >= 0 && params.height >= 0 {
-        return RectI::new(
-            params.x,
-            params.y,
-            params.x + params.width,
-            params.y + params.height,
-        );
+    compute_frame_for_requested(display, params, UNSPECIFIED_LENGTH, UNSPECIFIED_LENGTH)
+}
+
+/// `WindowLayout.computeFrames` for the fullscreen, `compatScale == 1` case.
+///
+/// This mirrors `frameworks/base/core/java/android/view/WindowLayout.java`:
+/// a `MATCH_PARENT` axis takes the parent-frame extent, a `WRAP_CONTENT` axis
+/// takes the client-reported `requestedWidth`/`requestedHeight` (the real WMS's
+/// `WindowState.mRequestedWidth/mRequestedHeight`), and a fixed size is used
+/// verbatim. The frame is then positioned with `Gravity.apply` inside the
+/// parent frame and nudged on-screen with `Gravity.applyDisplay`.
+///
+/// The display content area [`DisplaySpec::app_bounds`] already excludes the
+/// system-bar insets in this model, so it is both the parent frame and the
+/// display frame here.
+#[must_use]
+pub fn compute_frame_for_requested(
+    display: &DisplaySpec,
+    params: &LayoutParams,
+    requested_width: i32,
+    requested_height: i32,
+) -> RectI {
+    let window_bounds = display.app_bounds;
+    let out_display_frame = window_bounds;
+    let out_parent_frame = window_bounds;
+    let pw = out_parent_frame.width();
+    let ph = out_parent_frame.height();
+
+    // `WindowLayout.computeFrames`: `rw`/`rh` are UNSPECIFIED_LENGTH until the
+    // view hierarchy has been measured; then fall back to the layout params or
+    // the parent frame.
+    let mut rw = requested_width;
+    let mut rh = requested_height;
+    if rw == UNSPECIFIED_LENGTH {
+        rw = if params.width >= 0 { params.width } else { pw };
     }
-    if params.width >= 0 {
-        return RectI::new(params.x, app.top, params.x + params.width, app.bottom);
+    if rh == UNSPECIFIED_LENGTH {
+        rh = if params.height >= 0 { params.height } else { ph };
     }
-    if params.height >= 0 {
-        return RectI::new(app.left, params.y, app.right, params.y + params.height);
+
+    let w = if params.width == MATCH_PARENT { pw } else { rw };
+    let h = if params.height == MATCH_PARENT { ph } else { rh };
+
+    let x = params.x + (params.horizontal_margin * pw as f32) as i32;
+    let y = params.y + (params.vertical_margin * ph as f32) as i32;
+
+    let mut out = RectI::default();
+    gravity_apply(params.gravity, w, h, out_parent_frame, x, y, &mut out);
+    gravity_apply_display(params.gravity, out_display_frame, &mut out);
+    out
+}
+
+/// `Gravity.AXIS_PULL_BEFORE`.
+const AXIS_PULL_BEFORE: i32 = 0x0002;
+/// `Gravity.AXIS_PULL_AFTER`.
+const AXIS_PULL_AFTER: i32 = 0x0004;
+/// `Gravity.AXIS_CLIP`.
+const AXIS_CLIP: i32 = 0x0008;
+/// `Gravity.DISPLAY_CLIP_VERTICAL`.
+const DISPLAY_CLIP_VERTICAL: i32 = 0x1000_0000;
+/// `Gravity.DISPLAY_CLIP_HORIZONTAL`.
+const DISPLAY_CLIP_HORIZONTAL: i32 = 0x0100_0000;
+
+/// `android.view.Gravity.apply(int, int, int, Rect, int, int, Rect)` (LTR).
+fn gravity_apply(
+    gravity: i32,
+    w: i32,
+    h: i32,
+    container: RectI,
+    x_adj: i32,
+    y_adj: i32,
+    out: &mut RectI,
+) {
+    // Horizontal axis. The mask keeps only the pull bits; the `AXIS_SPECIFIED`
+    // bit selects start/end alignment over centering.
+    match gravity & (AXIS_PULL_BEFORE | AXIS_PULL_AFTER) {
+        0 => {
+            out.left = container.left + (container.width() - w) / 2 + x_adj;
+            out.right = out.left + w;
+            if gravity & AXIS_CLIP == AXIS_CLIP {
+                out.left = out.left.max(container.left);
+                out.right = out.right.min(container.right);
+            }
+        }
+        value if value == AXIS_PULL_BEFORE => {
+            out.left = container.left + x_adj;
+            out.right = out.left + w;
+            if gravity & AXIS_CLIP == AXIS_CLIP {
+                out.right = out.right.min(container.right);
+            }
+        }
+        value if value == AXIS_PULL_AFTER => {
+            out.right = container.right - x_adj;
+            out.left = out.right - w;
+            if gravity & AXIS_CLIP == AXIS_CLIP {
+                out.left = out.left.max(container.left);
+            }
+        }
+        _ => {
+            out.left = container.left + x_adj;
+            out.right = container.right + x_adj;
+        }
     }
-    app
+
+    // Vertical axis (`AXIS_Y_SHIFT == 4`).
+    match gravity & ((AXIS_PULL_BEFORE | AXIS_PULL_AFTER) << 4) {
+        0 => {
+            out.top = container.top + (container.height() - h) / 2 + y_adj;
+            out.bottom = out.top + h;
+            if gravity & (AXIS_CLIP << 4) == AXIS_CLIP << 4 {
+                out.top = out.top.max(container.top);
+                out.bottom = out.bottom.min(container.bottom);
+            }
+        }
+        value if value == AXIS_PULL_BEFORE << 4 => {
+            out.top = container.top + y_adj;
+            out.bottom = out.top + h;
+            if gravity & (AXIS_CLIP << 4) == AXIS_CLIP << 4 {
+                out.bottom = out.bottom.min(container.bottom);
+            }
+        }
+        value if value == AXIS_PULL_AFTER << 4 => {
+            out.bottom = container.bottom - y_adj;
+            out.top = out.bottom - h;
+            if gravity & (AXIS_CLIP << 4) == AXIS_CLIP << 4 {
+                out.top = out.top.max(container.top);
+            }
+        }
+        _ => {
+            out.top = container.top + y_adj;
+            out.bottom = container.bottom + y_adj;
+        }
+    }
+}
+
+/// `android.view.Gravity.applyDisplay(int, Rect, Rect)`.
+fn gravity_apply_display(gravity: i32, display: RectI, obj: &mut RectI) {
+    if gravity & DISPLAY_CLIP_VERTICAL != 0 {
+        obj.top = obj.top.max(display.top);
+        obj.bottom = obj.bottom.min(display.bottom);
+    } else {
+        let mut off = 0;
+        if obj.top < display.top {
+            off = display.top - obj.top;
+        } else if obj.bottom > display.bottom {
+            off = display.bottom - obj.bottom;
+        }
+        if off != 0 {
+            if obj.height() > display.height() {
+                obj.top = display.top;
+                obj.bottom = display.bottom;
+            } else {
+                obj.top += off;
+                obj.bottom += off;
+            }
+        }
+    }
+
+    if gravity & DISPLAY_CLIP_HORIZONTAL != 0 {
+        obj.left = obj.left.max(display.left);
+        obj.right = obj.right.min(display.right);
+    } else {
+        let mut off = 0;
+        if obj.left < display.left {
+            off = display.left - obj.left;
+        } else if obj.right > display.right {
+            off = display.right - obj.right;
+        }
+        if off != 0 {
+            if obj.width() > display.width() {
+                obj.left = display.left;
+                obj.right = display.right;
+            } else {
+                obj.left += off;
+                obj.right += off;
+            }
+        }
+    }
 }
 
 /// `true` when `frame` touches all display edges (fullscreen).
@@ -944,6 +1150,62 @@ mod tests {
         assert_ne!(a.result & RELAYOUT_RES_FIRST_TIME, 0);
         assert_eq!(b.result & RELAYOUT_RES_FIRST_TIME, 0);
         assert_eq!(b.result & RELAYOUT_RES_SURFACE_RESIZED, 0);
+    }
+
+    fn wrap_content_params() -> LayoutParams {
+        LayoutParams {
+            width: WRAP_CONTENT,
+            height: WRAP_CONTENT,
+            ..LayoutParams::default()
+        }
+    }
+
+    /// A re-opened `AlertDialog`-style window: `WRAP_CONTENT` takes the
+    /// client-reported measured size, and `Gravity.apply` centers it in the app
+    /// bounds ([0,128][1080,2337]) because the default gravity is 0.
+    #[test]
+    fn wrap_content_window_uses_client_requested_size() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), wrap_content_params(), 0)
+            .unwrap();
+        let r = wm
+            .relayout_with_requested(sess, 1, wrap_content_params(), 776, 490, -1)
+            .unwrap();
+        // w=776, h=490 centered in [0,128][1080,2337]:
+        //   x = (1080 - 776)/2 = 152, y = 128 + (2209 - 490)/2 = 987.
+        assert_eq!(r.frames.frame, RectI::new(152, 987, 928, 1477));
+        assert_eq!(r.surface.width, 776);
+        assert_eq!(r.surface.height, 490);
+    }
+
+    /// The first layout has no measured size yet (`UNSPECIFIED_LENGTH`), so the
+    /// frame falls back to the parent frame, matching `WindowLayout`'s
+    /// `rw == UNSPECIFIED_LENGTH` branch.
+    #[test]
+    fn wrap_content_without_measure_falls_back_to_parent() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), wrap_content_params(), 0)
+            .unwrap();
+        let r = wm
+            .relayout_with_requested(sess, 1, wrap_content_params(), -1, -1, -1)
+            .unwrap();
+        assert_eq!(r.frames.frame, RectI::new(0, 128, 1080, 2337));
+    }
+
+    /// `MATCH_PARENT` ignores the requested size and takes the parent frame,
+    /// so the app window frame is unchanged by the requested-size path.
+    #[test]
+    fn match_parent_window_ignores_requested_size() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        wm.add_to_display_as_user(sess, BinderId(1), app_params(), 0)
+            .unwrap();
+        let r = wm
+            .relayout_with_requested(sess, 1, app_params(), 776, 490, -1)
+            .unwrap();
+        assert_eq!(r.frames.frame, RectI::new(0, 128, 1080, 2337));
     }
 
     #[test]

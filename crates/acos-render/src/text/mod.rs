@@ -40,14 +40,24 @@ pub struct FontMetricsInt {
     pub leading: i32,
 }
 
+/// `SkScalarRoundToInt` (`floor(x + 0.5)`), as used by
+/// `GraphicsJNI::set_metrics_int` for the round-half-up Ascent/Descent/Leading
+/// fields.
+fn scalar_round_to_int(x: f32) -> i32 {
+    (x + 0.5).floor() as i32
+}
+
+/// The exact `GraphicsJNI::set_metrics_int` conversion
+/// (`frameworks/base/libs/hwui/jni/Graphics.cpp`): `top` floors, `bottom`
+/// ceils, and `ascent`/`descent`/`leading` round half up.
 impl From<FontMetrics> for FontMetricsInt {
     fn from(m: FontMetrics) -> Self {
         FontMetricsInt {
             top: m.top.floor() as i32,
-            ascent: m.ascent.floor() as i32,
-            descent: m.descent.ceil() as i32,
+            ascent: scalar_round_to_int(m.ascent),
+            descent: scalar_round_to_int(m.descent),
             bottom: m.bottom.ceil() as i32,
-            leading: m.leading.ceil() as i32,
+            leading: scalar_round_to_int(m.leading),
         }
     }
 }
@@ -671,18 +681,29 @@ fn face_has_glyph(font: &FontRef, ch: char) -> bool {
     parse_face(font).glyph_index(ch).is_some()
 }
 
+/// `SkFontMetrics` for `font` at `size` px, matching Skia's FreeType backend
+/// (`SkFontHost_FreeType.cpp`, `generateFontMetrics`): `ascent`/`descent` come
+/// from `hhea`, `top`/`bottom` from the face bounding box (`head` yMax/yMin),
+/// and `leading` from the hhea line gap (clamped to 0).
+///
+/// `top`/`bottom` are what `TextView`/`BoringLayout` use for a `wrap_content`
+/// height when `includeFontPadding` is on (the default), so this is the pixel
+/// difference W179-A observed (`count` 64 px vs ART 51 px) at 14sp.
 fn font_metrics_for(font: &FontRef, size: f32) -> FontMetrics {
     let face = parse_face(font);
     let upem = face.units_per_em() as f32;
     let scale = if upem > 0.0 { size / upem } else { 1.0 };
     let ascent = -face.ascender() as f32 * scale;
     let descent = -face.descender() as f32 * scale;
-    let leading = face.line_gap() as f32 * scale;
+    let bbox = face.global_bounding_box();
+    let top = -bbox.y_max as f32 * scale;
+    let bottom = -bbox.y_min as f32 * scale;
+    let leading = (face.line_gap() as f32 * scale).max(0.0);
     FontMetrics {
-        top: ascent,
+        top,
         ascent,
         descent,
-        bottom: descent,
+        bottom,
         leading,
     }
 }
@@ -828,6 +849,65 @@ mod tests {
             features: Vec::new(),
             variations: Vec::new(),
         }
+    }
+
+    /// `GraphicsJNI::set_metrics_int`: `top` floors, `bottom` ceils, and
+    /// `ascent`/`descent`/`leading` round half up. Pins the conversion itself
+    /// so a species change in one field is caught without needing fonts.
+    #[test]
+    fn font_metrics_int_matches_graphics_jni_rounding() {
+        let m = FontMetrics {
+            top: -38.8136,
+            ascent: -34.09424,
+            descent: 8.972168,
+            bottom: 9.959106,
+            leading: 0.0,
+        };
+        let i = FontMetricsInt::from(m);
+        assert_eq!(i.top, -39, "top floors");
+        assert_eq!(i.ascent, -34, "ascent rounds half up");
+        assert_eq!(i.descent, 9, "descent rounds half up");
+        assert_eq!(i.bottom, 10, "bottom ceils");
+        assert_eq!(i.leading, 0);
+        assert_eq!(i.bottom - i.top, 49);
+    }
+
+    /// Ground truth from a real `art-api34-x86_64` emulator (1080x2400 @420):
+    /// `Paint.FontMetricsInt` at 14sp (36.75 px) is
+    /// `top=-39 asc=-34 desc=9 bot=10`, so a `wrap_content` TextView is 49 px;
+    /// the `Widget.DeviceDefault.TextView` default text size resolves to the
+    /// rounded 37 px, whose `top=-40 bot=11` gives the ART reference's 51 px.
+    #[test]
+    fn skia_metrics_match_art_api34_emulator() {
+        let Some(e) = engine_or_skip() else {
+            eprintln!("SKIP: no fonts available");
+            return;
+        };
+        // The host font set is not necessarily Roboto; only assert on Roboto.
+        let at = |size: f32| {
+            let mut st = style(&e);
+            st.size = size;
+            e.font_metrics_int(&st)
+        };
+        let check = at(36.75);
+        if !(check.ascent == -34 && check.descent == 9) {
+            eprintln!("SKIP: default font is not the ART Roboto ({check:?})");
+            return;
+        }
+        assert_eq!(check.top, -39, "14sp/36.75px top");
+        assert_eq!(check.bottom, 10, "14sp/36.75px bottom");
+        assert_eq!(check.bottom - check.top, 49, "14sp wrap_content height");
+
+        let check37 = at(37.0);
+        assert_eq!(check37.top, -40, "theme default 37px top");
+        assert_eq!(check37.ascent, -34, "theme default 37px ascent");
+        assert_eq!(check37.descent, 9, "theme default 37px descent");
+        assert_eq!(check37.bottom, 11, "theme default 37px bottom");
+        assert_eq!(
+            check37.bottom - check37.top,
+            51,
+            "ART counter `count` wrap_content height"
+        );
     }
 
     #[test]

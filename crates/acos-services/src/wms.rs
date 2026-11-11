@@ -160,14 +160,37 @@ impl WmsState {
             .add_to_display_as_user(self.session, window, params, requested_visible_types)
     }
 
-    /// `IWindowSession.relayout`.
+    /// `IWindowSession.relayout` without a client-measured size.
     pub fn relayout(
         &mut self,
         window: WindowId,
         params: LayoutParams,
         sync_seq: i32,
     ) -> WmResult<RelayoutResult> {
-        let r = self.wm.relayout(self.session, window, params, sync_seq)?;
+        self.relayout_with_requested(window, params, -1, -1, sync_seq)
+    }
+
+    /// `IWindowSession.relayout` with the client-reported measured size.
+    ///
+    /// The input dispatcher's routing frame is kept consistent with the frame
+    /// the client lays out in (the real WMS frame), so a `WRAP_CONTENT` dialog
+    /// whose frame is the measured size still hit-tests its buttons.
+    pub fn relayout_with_requested(
+        &mut self,
+        window: WindowId,
+        params: LayoutParams,
+        requested_width: i32,
+        requested_height: i32,
+        sync_seq: i32,
+    ) -> WmResult<RelayoutResult> {
+        let r = self.wm.relayout_with_requested(
+            self.session,
+            window,
+            params,
+            requested_width,
+            requested_height,
+            sync_seq,
+        )?;
         self.input.update_frame(window, r.frames.frame);
         Ok(r)
     }

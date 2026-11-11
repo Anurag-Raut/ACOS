@@ -264,7 +264,10 @@ fn text_metrics_parity_vs_art() {
             acos_ascent: metrics.ascent,
             acos_descent: metrics.descent,
             acos_leading: metrics.leading,
-            acos_height: metrics.descent - metrics.ascent,
+            // The `wrap_content` TextView height with the default
+            // `includeFontPadding`: `FontMetricsInt.bottom - top`. This is the
+            // quantity the ART reference bounds measure, not `descent - ascent`.
+            acos_height: metrics.bottom.ceil() - metrics.top.floor(),
             acos_tight: tight,
         });
     }
@@ -290,6 +293,16 @@ fn text_metrics_parity_vs_art() {
             let dw = (r.acos_advance - r.ref_w as f32).abs() / r.ref_w as f32;
             assert!(dw < 0.05, "{} advance delta {dw:.3}", r.text);
         }
+        // W185-A: the Skia `top`/`bottom` metrics make the wrap_content TextView
+        // height match the ART reference within the 2 px acceptance bound.
+        let dh = (r.acos_height - r.ref_h as f32).abs();
+        assert!(
+            dh <= 2.0,
+            "{} height {:.1} vs ref {} (+{dh:.1}px)",
+            r.text,
+            r.acos_height,
+            r.ref_h
+        );
     }
 }
 
@@ -346,10 +359,11 @@ bounds* and this column is the current state of that goal.\n\n",
 * At 14sp the advance matches the device to ~0.3% (`Hello ACOS` 188.45 vs 189 px,\n\
   `clicks: 0` 132.61 vs 133 px). This is the FreeType-mask + rustybuzz path of\n\
   ADR-0019 and the basis of the accepted per-glyph coverage error.\n\
-* The `W+H` column is `descent - ascent` from `Paint.FontMetrics`; the View H\n\
-  is larger because Android adds font padding and, for `includeFontPadding`,\n\
-  the `top`/`bottom` extent. The current `font_metrics_for` sets\n\
-  `top = ascent` and `bottom = descent`, which is the known height gap.\n\
+* The `W+H` column is the `wrap_content` TextView height with the default\n\
+  `includeFontPadding`, i.e. `FontMetricsInt.bottom - top`. W185-A derives\n\
+  `top`/`bottom` from the face bounding box (`head` yMax/yMin) exactly like\n\
+  Skia's FreeType backend, so the View height tracks ART to within 2 px (the\n\
+  reference captures resolve 14sp to 37 px via `getDimensionPixelSize`).\n\
 * Subpixel positioning: advances stay fractional (linear metrics, Android's\n\
   default `subpixel positioning on`); A8 masks are placed on the rounded integer\n\
   pen (`(x).round() + bitmap_left`), matching the measured PoC in\n\

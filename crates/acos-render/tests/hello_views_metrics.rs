@@ -78,9 +78,11 @@ fn hello_views_text_metrics_vs_art() {
         eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
         return;
     }
-    // DeviceDefault TextView default size is 14sp at density 2.625.
+    // The DeviceDefault TextView default size is 14sp, which the framework
+    // resolves with `getDimensionPixelSize` (round to the nearest px): at
+    // density 2.625 that is 37 px, not 36.75 px.
     let density = 2.625f32;
-    let text_size = 14.0 * density;
+    let text_size = (14.0 * density).round();
     let paint = ctx.paint_create();
     ctx.paint_set_text_size(paint, text_size).unwrap();
     let typeface = ctx.typeface_create(None, 400, false).unwrap();
@@ -91,13 +93,16 @@ fn hello_views_text_metrics_vs_art() {
     let w_title = ctx.paint_measure_text(paint, &title_text).unwrap();
     let w_result = ctx.paint_measure_text(paint, &result_text).unwrap();
     let metrics = ctx.paint_get_font_metrics(paint).unwrap();
-    let h_text = metrics.descent - metrics.ascent;
+    // A `wrap_content` TextView with the default `includeFontPadding` takes its
+    // height from `Paint.FontMetricsInt`, not the ascent/descent span:
+    // `bottom.ceil() - top.floor()`.
+    let h_text = metrics.bottom.ceil() - metrics.top.floor();
 
     let dw_title = (w_title - ref_title_w as f32).abs() / ref_title_w as f32 * 100.0;
     let dw_result = (w_result - ref_result_w as f32).abs() / ref_result_w as f32 * 100.0;
     let dh = (h_text - ref_title_h as f32).abs() / ref_title_h as f32 * 100.0;
     eprintln!(
-        "ACOS text metrics @14sp: title={:.2}px (ref {}px, delta {:.1}%), result={:.2}px (ref {}px, delta {:.1}%), height={:.2}px (ref {}px, delta {:.1}%)",
+        "ACOS text metrics @{text_size}px: title={:.2}px (ref {}px, delta {:.1}%), result={:.2}px (ref {}px, delta {:.1}%), wrap height={:.0}px (ref {}px, delta {:.1}%)",
         w_title, ref_title_w, dw_title, w_result, ref_result_w, dw_result, h_text, ref_title_h, dh
     );
     eprintln!(
@@ -109,5 +114,10 @@ fn hello_views_text_metrics_vs_art() {
     // bounded fidelity rather than pixel-exact equality.
     assert!(dw_title < 20.0, "title width delta {dw_title:.1}%");
     assert!(dw_result < 20.0, "result width delta {dw_result:.1}%");
-    assert!(dh < 25.0, "text height delta {dh:.1}%");
+    // W185-A: the Skia `top`/`bottom` metrics now reproduce the ART
+    // `wrap_content` TextView height (51 px) within the 2 px acceptance bound.
+    assert!(
+        (h_text - ref_title_h as f32).abs() <= 2.0,
+        "wrap height {h_text} vs reference {ref_title_h}"
+    );
 }
