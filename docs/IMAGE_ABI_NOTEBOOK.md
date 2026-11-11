@@ -27,3 +27,41 @@ Append verified facts. Columns: Contract | reader/writer location in image | evi
 | reverse callbacks never arrive | `TransactionCompletedListener::onTransactionCompleted` (`0xe4d30`), `BnTransactionCompletedListener::onTransact` (`0x12d520`), `BLASTBufferQueue::transactionCommittedCallback` (`0xcda10`), `onReleaseBuffer` (`0xbf330`) | none of these breakpoints is hit in a 20 s launch; BLAST acquires two buffers and waits forever for the commit callback, which is why the producer's fifth dequeue waits | `.cache/w7/bq.log` |
 | the image's legacy `setTransactionState` tail | `libgui.so` `BpSurfaceComposer` at `0xd030f` | **not yet conclusive**: skip=24 (the W5-correct timeline interpretation) advances to the end of the 700-byte parcel and then fails inside `BufferData`; skip=28 fails at the first binder (`object at 108 ... type 0x13`). The reader now tolerates a tail without `mergedTransactionIds` (4 bytes) and a tag-shaped parcel still decodes exactly, but the live parcel does not prove that field is absent — the observed underflow persists after the tolerance, so `BufferData` is the first mismatch | `crates/acos-services/tests/surface_client.rs` (`an_image_tail_without_merged_transaction_ids_decodes_exactly` is a tolerance test, not evidence about the image) |
 | the image's `BufferData` buffer field is **not** r75's `bool + GraphicBuffer flatten` | `BufferData::writeToParcel` in the image | live BLAST transaction: at the BufferData body (`flags` then one 4-byte value) the next word is an object reference (`0x…1385` pattern used by the guest's parcel driver for binders), not a `GraphicBuffer` flatten header (`len=88, fds=1`). C1 reads it as `len=1935813253` (`0x73622a85` = `BINDER_TYPE_BINDER`) + `fd_count=19`, then underflows. Unresolved: the exact image layout of `BufferData`'s buffer/cached-buffer/fence fields | `.cache/w7/run12.out`, `.cache/w7/run13.out` |
+
+## W8 (2026-11-11): the image's real `layer_state_t` tail and `BufferData`/`GraphicBuffer` bytes
+
+Read from `.cache/art/sysroot/system/lib64/libgui.so` (disassembly) and from two captured
+real `setTransactionState` parcels (`crates/acos-services/tests/fixtures/blast_txn_
+{1028,700}.bin`, README there has the offsets). Body offsets are after the 72-byte
+interface-token prelude the peer consumes.
+
+| contract | reader/writer in the image | evidence | replay fixture |
+|---|---|---|---|
+| `layer_state_t::write` frame-rate tail is **3 bytes**, not r75's 4 bytes + bool + byte: `writeByte` ×3, then `writeUint32 fixedTransformHint`, `writeBool autoRefresh`, `writeBool dimmingEnabled`, then `blurRegions` count. The image has **no** `frameRateCategory`, `frameRateCategorySmoothSwitchOnly` or `frameRateSelectionStrategy` on the wire | `layer_state_t::write` @ `0xd0cc0`: `writeByte` @0xd1c56/0xd1c6e/0xd1c86 (fields at +0x28c,+0x28d,+0x28e), `writeUint32` @0xd1c9d (+0x290), `writeBool` @0xd1cb5 (+0x294), `writeBool` @0xd1ccd (+0x2f0) | disassembly of the image; `layer_state_t::read` @0xad190 mirrors it (`readByte` ×3 @0xae2f6/0xae30d/0xae324) | `blast_txn_1028.bin` (blur count at body 472, stretch at 476) |
+| `BufferData`, `TrustedPresentationThresholds` and `TrustedPresentationListener` are written with `Parcel::writeParcelable(const Parcelable&)`, which **does write an int32 `1` presence marker**; `readParcelable` requires it (`cmp $0x1`) | `layer_state_t::write` @0xd24e1/0xd24f8/0xd250f → PLT `Parcel::writeParcelable(Parcelable const&)`; libbinder `0xa0b30` (`movl $0x1`) / `0xa2aa0` (`cmp $0x1`) | disassembly of libgui + libbinder; parcel bytes: marker 1 at body 560 then `flags` 7 at 564 | `blast_txn_1028.bin` |
+| `TrustedPresentationThresholds` on the wire is `[int32 size][payload]` where `size` **includes the size word** (`size >= 4`); the reader then `setDataPosition(start + size)`. It is not `[marker][size][payload]` as C1 reads it | `android::gui::TrustedPresentationThresholds::{read,write}ToParcel` @`0x169260`/`0x169360` | read: `readInt32(size)`, reject `size<4`, bound-check `dataAvail >= size`, then `setDataPosition(start+size)` | (post-buffer region of the fixtures) |
+| the image's `GraphicBuffer` flatten is r75-shaped: `[int32 size][int32 fdCount][size bytes = 13 header words + transport ints][fd objects]`; here `size=88` = (13 + 9) words | `libui` `GraphicBuffer::flatten` (tag); observed bytes | `blast_txn_1028.bin` body 572..692: 88, 1, 22 words, one `BINDER_TYPE_FD` | `blast_txn_1028.bin` |
+| the image's `GraphicBuffer` **magic is the reverse byte order of the tag's `'GB01'`**: memory bytes `31 30 42 47` (uint32 `0x47423031`), where the tag writes `47 42 30 31` (`0x31304247`). C1's magic check rejects it | image `libui` (`buf[0]`), verified in the captured flatten | body 580 = `31 30 42 47` immediately after `[88][1]`; the following words are width=1080, height=2209, stride=1080, format=1, layers=1, usageLo=2355, idHi=2, idLo=0, generation=0, numFds=1, numInts=9, usageHi=0 | `blast_txn_1028.bin` |
+| `BufferData` fields confirmed in place for the image: `flags`, `hasBuffer`, `GraphicBuffer`, `hasFence` + `Fence`, `frameNumber`, `releaseBufferListener`, `releaseBufferEndpoint`, `cachedToken`, `cachedBufferId`, `hasBarrier`, `barrierFrameNumber`, `producerId` (r75 order) | `BufferData::writeToParcel` @`0x131250` (image) | the whole 252-byte body of `blast_txn_1028.bin` (body 560..812) parses field for field, ending exactly at the next parcelable | `blast_txn_1028.bin` |
+| **unresolved**: the image's `layer_state_t` prefix is ~76 bytes longer than C1's `read_layer_state` assumes, so the tail lands at body 472 (blur count) instead of the decoder's 412; the exact prefix field(s) are still to be matched | — | same 1028-byte parcel: identity `colorTransform` ends at body 316 (anchor), verified `blurRegions` at 472; C1's model puts it at 396/412 | `blast_txn_{1028,700}.bin` (not yet a passing test) |
+
+### W8 addendum: the byte-exact layer-state tail (both captured fixtures consume exactly)
+
+Order and sizes from `Blast_txn_1028.bin` / `blast_txn_700.bin`, verified by a replay that
+consumes both parcels to the last byte (`END 956 of 956` and `END 628 of 628`, with
+`displayCount == 0` and a binder object at `applyToken`):
+
+`... blurRegions(count) | StretchEffect 40 | bufferCrop Rect | destinationFrame Rect |
+isTrustedOverlay bool | dropInputMode u32 | hasBufferData bool |
+[BufferData: marker 1, flags, hasBuffer, [GB size][GB fds][GB body][fd objects],
+hasFence, [Fence size][fence fds][numFds], frameNumber u64, 3 binders, cachedId u64,
+hasBarrier, barrierFrameNumber u64, producerId u32] |
+TrustedPresentationThresholds: marker 1, [size counts itself from the size word][size-4
+payload] | TrustedPresentationListener: marker 1, binder, **one zero word not in r75**,
+callbackId i32 | currentHdrSdrRatio f | desiredHdrSdrRatio f | cachingHint i32`
+
+The extra zero word sits between the listener binder and its `callbackId`; the image's
+`TrustedPresentationListener::readFromParcel` (`0x131e50`) only reads a nullable strong
+binder plus one `readInt32`, so the word has no name yet — consume it literally as one
+`read_int32` (do not add a heuristic lookahead). Also, `writeParcelable` in this image is
+libbinder's 4-byte-marker overload (`0xa0b30` writes 1, `0xa2aa0` requires 1).
