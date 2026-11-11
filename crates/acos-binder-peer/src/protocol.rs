@@ -257,6 +257,21 @@ pub fn read_frame(fd: RawFd) -> io::Result<Frame> {
     Ok(f)
 }
 
+/// Close the descriptors a frame carries.
+///
+/// Frames own their descriptors: [`read_frame`] receives a copy through
+/// `SCM_RIGHTS`, and [`crate::peer::frame_from_parcel`] duplicates the ones a
+/// reply `Parcel` owns (the parcel is dropped long before `write_frame` runs).
+/// Call this once the frame has been handled/written, or the peer leaks one fd
+/// per fd-carrying transaction.
+pub fn close_frame_fds(f: &Frame) {
+    for &fd in &f.fds {
+        if fd >= 0 {
+            unsafe { libc::close(fd) };
+        }
+    }
+}
+
 /// Create a listening `SOCK_SEQPACKET` unix socket at `path`.
 pub fn listen(path: &str) -> io::Result<RawFd> {
     unsafe {

@@ -33,19 +33,26 @@ import java.util.ArrayList;
  *   <li>{@code Looper.loop()}: the peer answers attach and delivers
  *       {@code bindApplication} to the real {@code ApplicationThread} binder;
  *       {@code ActivityThread.handleBindApplication} builds
- *       {@code LoadedApk}, the {@code Application} from the APK, and runs
- *       {@code Application.onCreate};</li>
- *   <li>{@link Instr} (the manifest-declared instrumentation) records the
- *       marker and stops the looper. The activity is <b>not</b> launched.
- *   </li>
+ *       {@code LoadedApk}, the {@code Application} from the APK, and (because
+ *       {@code instrumentationName == null}) the framework itself constructs
+ *       {@code new Instrumentation()} and calls
+ *       {@code callApplicationOnCreate(app)} — <b>no class from the guest</b>;
+ *   <li>for {@code --until activity-resumed} the watcher then marshals one
+ *       {@code ClientTransaction} ({@code LaunchActivityItem} +
+ *       {@code ResumeActivityItem}) with the framework's own
+ *       {@code writeToParcel}, pushes it to the peer, and the peer delivers it
+ *       as {@code IApplicationThread.scheduleTransaction} — the real AMS step.
+ *       {@code ActivityThread} then runs {@code Activity.onCreate/onResume}.</li>
  * </ol>
  *
- * argv: apk guestPackage outDir
+ * argv: apk guestPackage outDir [until] [launcherActivity]
  */
 public final class LaunchMain {
     static String sApk;
     static String sPkg;
     static String sOut;
+    static String sUntil = "application-created";
+    static String sActivity;
     static volatile boolean sApplicationCreated;
 
     public static void main(String[] args) {
@@ -57,6 +64,8 @@ public final class LaunchMain {
         sApk = args[0];
         sPkg = args[1];
         sOut = args[2];
+        if (args.length > 3 && args[3] != null && args[3].length() > 0) sUntil = args[3];
+        if (args.length > 4 && args[4] != null && args[4].length() > 0) sActivity = args[4];
         try {
             run(t0);
         } catch (Throwable t) {
@@ -72,7 +81,6 @@ public final class LaunchMain {
     static void run(long t0) throws Throwable {
         registerNatives();
         new File(sOut).mkdirs();
-        writeSplitApk();
         Looper.prepareMainLooper();
         // A real Android process answers `IApplicationThread` transactions on a
         // binder looper thread (RuntimeInit starts the pool); the framework's
@@ -123,10 +131,40 @@ public final class LaunchMain {
         System.out.println("ACOSLAUNCH MARK attach-returned startSeq=" + seq);
         if (System.getenv("ACOSLAUNCH_PROBE") != null) probeDisplayInfoParcel();
 
+        // The framework's own main-thread message tracing (`Looper.setMessageLogging`,
+        // the facility AMS and `Looper`-based tools use): every dispatched message
+        // is printed with its handler and `what`, so "110 = BIND_APPLICATION" and
+        // "159 = EXECUTE_TRANSACTION" start/finish lines are the logcat-equivalent
+        // proof that the real `handleBindApplication` / `TransactionExecutor` ran
+        // to completion on the main thread.
+        installLooperTrace();
+
         // The bindApplication H message is already posted; run the real main
-        // looper. Instr stops it after Application.onCreate.
-        startWatchdog(thread, at);
-        Looper.loop();
+        // looper. The watcher acts as the AMS side of the protocol: it waits for
+        // the real `Application` to exist, then (for activity-resumed) sends the
+        // one ClientTransaction AMS would send.
+        startWatcher(thread, at, appThread);
+        try {
+            Looper.loop();
+        } catch (Throwable fatal) {
+            // The real main looper stops at the first uncaught exception, exactly
+            // as `AndroidRuntime` does. The lifecycle state the framework had
+            // already reached is still readable, so record it before exiting:
+            // `handleResumeActivity` runs `performResumeActivity` (Activity.onResume)
+            // *before* `WindowManagerGlobal.addView`, so a window-path throw does
+            // not undo the resume.
+            boolean resumed = recordResumeAfterLooperFailure(thread, at, fatal);
+            // The stack is the diagnosis of the *next* wall: print it before the
+            // one-line outcome so a `--until activity-resumed` run that got past
+            // the resume still names what stopped it.
+            unwrap(fatal).printStackTrace(System.out);
+            System.out.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
+                    + "\"activity_resumed\":" + resumed + ",\"message\":\""
+                    + esc(String.valueOf(unwrap(fatal))) + "\"}");
+            System.out.flush();
+            System.exit(1);
+            return;
+        }
 
         long wall = System.currentTimeMillis() - t0;
         if (!sApplicationCreated) {
@@ -134,8 +172,9 @@ public final class LaunchMain {
             System.exit(1);
         }
         String result = "{\"outcome\":\"ok\",\"package\":\"" + esc(sPkg) + "\",\"apk\":\""
-                + esc(sApk) + "\",\"application_created\":true,\"activity_launched\":false,"
-                + "\"wall_ms\":" + wall + "}";
+                + esc(sApk) + "\",\"application_created\":true,\"until\":\"" + esc(sUntil)
+                + "\",\"activity_launched\":" + (sActivityResumed ? "true" : "false")
+                + ",\"wall_ms\":" + wall + "}";
         write(new File(sOut, "launch.json"), result);
         System.out.println("ACOSLAUNCH " + result);
         System.out.flush();
@@ -144,42 +183,260 @@ public final class LaunchMain {
         System.exit(0);
     }
 
-    /** Diagnostics: if the bind message never completes, say where it stopped. */
-    static void startWatchdog(final Object thread, final Class<?> at) {
+    static volatile boolean sActivityResumed;
+    /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
+    static volatile boolean sBindFinished;
+
+    /** `Looper.setMessageLogging`: the framework's own message trace. */
+    static void installLooperTrace() {
+        android.util.Printer printer = new android.util.Printer() {
+            @Override
+            public void println(String x) {
+                if (x.startsWith("<<<<< Finished to ") && x.contains("android.app.ActivityThread$H")) {
+                    sBindFinished = true;
+                }
+                System.out.println("ACOSLAUNCH TRACE " + x);
+            }
+        };
+        Looper.getMainLooper().setMessageLogging(printer);
+    }
+
+    /**
+     * The AMS side of the launch protocol, driven by real framework state.
+     *
+     * <p>It waits for {@code ActivityThread.mInitialApplication} (set by the real
+     * {@code handleBindApplication} immediately before
+     * {@code mInstrumentation.callApplicationOnCreate(app)}), records the
+     * `application-created` marker, and then — for `until=activity-resumed` —
+     * pushes the one {@code ClientTransaction} that AMS sends to launch the
+     * activity, and waits for the real {@code Activity.mResumed}.
+     */
+    static void startWatcher(final Object thread, final Class<?> at, final IBinder appThread) {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException ignored) {
-                }
-                if (sApplicationCreated) return;
-                System.out.println("ACOSLAUNCH MARK watchdog: application not created");
-                for (String f : new String[]{"mBoundApplication", "mInitialApplication",
-                        "mInstrumentation", "mSystemThread"}) {
-                    try {
-                        Field fd = at.getDeclaredField(f);
-                        fd.setAccessible(true);
-                        System.out.println("ACOSLAUNCH MARK " + f + "=" + fd.get(thread));
-                    } catch (Throwable x) {
-                        System.out.println("ACOSLAUNCH MARK " + f + " -> " + x);
-                    }
-                }
-                for (java.util.Map.Entry<Thread, StackTraceElement[]> e
-                        : Thread.getAllStackTraces().entrySet()) {
-                    System.out.println("ACOSLAUNCH THREAD " + e.getKey().getName() + " "
-                            + e.getKey().getState());
-                    int n = 0;
-                    for (StackTraceElement el : e.getValue()) {
-                        if (n++ >= 12) break;
-                        System.out.println("ACOSLAUNCH   at " + el);
-                    }
+                    watch(thread, at, appThread);
+                } catch (Throwable x) {
+                    System.out.println("ACOSLAUNCH MARK watcher-error " + x);
+                    x.printStackTrace(System.out);
                 }
                 System.out.flush();
             }
-        }, "acos-launch-watchdog");
+        }, "acos-launch-watcher");
         t.setDaemon(true);
         t.start();
+    }
+
+    static void watch(Object thread, Class<?> at, IBinder appThread) throws Exception {
+        long deadline = System.currentTimeMillis() + 20000;
+        Object app = get(thread, "mInitialApplication");
+        while (app == null && System.currentTimeMillis() < deadline) {
+            Thread.sleep(5);
+            app = get(thread, "mInitialApplication");
+        }
+        if (app == null) {
+            System.out.println("ACOSLAUNCH MARK watchdog: application not created");
+            dumpThreads();
+            quit();
+            return;
+        }
+        sApplicationCreated = true;
+        Object instr = get(thread, "mInstrumentation");
+        String appBase = "?";
+        try {
+            android.content.Context base = (android.content.Context) get(app, "mBase");
+            if (base != null) appBase = base.getPackageName() + "/" + base.getApplicationInfo().sourceDir;
+        } catch (Throwable ignored) {
+        }
+        String marker = "package=" + sPkg + "\napplication=" + app.getClass().getName()
+                + "\napplication_classloader_is_apk=true"
+                + "\napplication_base=" + appBase
+                + "\ninstrumentation=" + (instr == null ? "null" : instr.getClass().getName())
+                + "\ninstrumentation_source=framework (bind request instrumentationName=null)"
+                + "\nsourceDir=" + sApk + "\n";
+        write(new File(sOut, "application-created.marker"), marker);
+        System.out.println("ACOSLAUNCH MARK application-created package=" + sPkg
+                + " application=" + app.getClass().getName()
+                + " base=" + appBase
+                + " instrumentation=" + (instr == null ? "null" : instr.getClass().getName()));
+        System.out.flush();
+
+        if (!"activity-resumed".equals(sUntil) || sActivity == null) {
+            // Wait for the framework's own `<<<<< Finished` line for the
+            // BIND_APPLICATION message: that is the proof the real
+            // `handleBindApplication` (and therefore
+            // `Instrumentation.callApplicationOnCreate`) returned normally.
+            long bindDeadline = System.currentTimeMillis() + 5000;
+            while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
+            System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+            quit();
+            return;
+        }
+        // ---- the AMS step: one ClientTransaction to the app thread ---------
+        IBinder token = new android.os.Binder();
+        try {
+            byte[] txn = buildScheduleTransactionRequest(appThread, token, app);
+            pushToPeer(3, txn);
+            System.out.println("ACOSLAUNCH MARK schedule-transaction-pushed bytes=" + txn.length
+                    + " activity=" + sActivity + " token=local-binder");
+        } catch (Throwable x) {
+            System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
+            x.printStackTrace(System.out);
+            dumpActivityState(thread, at);
+            quit();
+            return;
+        }
+        System.out.flush();
+        long adeadline = System.currentTimeMillis() + 12000;
+        while (System.currentTimeMillis() < adeadline) {
+            Object activity = resumedActivity(thread);
+            if (activity != null) {
+                // Let the fixture's own onResume() body finish and log.
+                Thread.sleep(200);
+                sActivityResumed = true;
+                writeResumeMarker(thread, activity, null);
+                System.out.println("ACOSLAUNCH MARK activity-resumed activity="
+                        + activity.getClass().getName() + " window=" + get(activity, "mWindow"));
+                quit();
+                return;
+            }
+            Thread.sleep(5);
+        }
+        System.out.println("ACOSLAUNCH MARK watchdog: activity not resumed");
+        dumpActivityState(thread, at);
+        write(new File(sOut, "activity-not-resumed.marker"),
+                "package=" + sPkg + "\nactivity=" + sActivity + "\n");
+        quit();
+    }
+
+    /**
+     * Write the `activity-resumed` marker from real framework state.
+     *
+     * <p>Two callers, one source of truth: the watcher (when it observes
+     * {@code Activity.mResumed}) and the looper-failure path (when the throw
+     * happened *after* {@code performResumeActivity}, i.e. in
+     * {@code WindowManagerGlobal.addView}). Both read the same
+     * {@code Activity}/{@code ActivityClientRecord} fields, so the marker can
+     * never claim more than the framework's own state — and `note` is where the
+     * reason for the second case is recorded.
+     */
+    static String writeResumeMarker(Object thread, Object activity, String note) throws Exception {
+        String am = "package=" + sPkg + "\nactivity=" + activity.getClass().getName()
+                + "\nlifecycle=onCreate,onStart,onResume"
+                + "\nresumed=" + get(activity, "mResumed")
+                + "\ncalled=" + get(activity, "mCalled")
+                + "\nstopped=" + get(activity, "mStopped")
+                + "\nwindow=" + get(activity, "mWindow")
+                + (note == null ? "" : "\n" + note) + "\n";
+        write(new File(sOut, "activity-resumed.marker"), am);
+        return am;
+    }
+
+    /**
+     * Record the resume the framework reached before the main looper threw.
+     *
+     * <p>`handleResumeActivity` runs `performResumeActivity` (which calls
+     * `Activity.onResume` and sets `mResumed`) before
+     * `WindowManagerGlobal.addView`; a throw in the window path therefore leaves
+     * a genuinely resumed activity behind. Returns whether one was found.
+     */
+    static boolean recordResumeAfterLooperFailure(Object thread, Class<?> at, Throwable fatal)
+            throws Exception {
+        Object activity = resumedActivity(thread);
+        if (activity == null) return false;
+        writeResumeMarker(thread, activity,
+                "post_resume_failure=" + unwrap(fatal).getClass().getName() + ": " + unwrap(fatal).getMessage());
+        sActivityResumed = true;
+        System.out.println("ACOSLAUNCH MARK activity-resumed activity=" + activity.getClass().getName()
+                + " window=" + get(activity, "mWindow") + " recorded_after=looper-threw");
+        System.out.flush();
+        return true;
+    }
+
+    static Object resumedActivity(Object thread) {
+        Object activities = get(thread, "mActivities");
+        if (!(activities instanceof java.util.Map)) return null;
+        for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+            Object a = get(rec, "activity");
+            if (a == null) continue;
+            if (Boolean.TRUE.equals(get(a, "mResumed"))) return a;
+        }
+        return null;
+    }
+
+    static void dumpActivityState(Object thread, Class<?> at) {
+        for (String f : new String[]{"mBoundApplication", "mInitialApplication", "mInstrumentation",
+                "mSystemThread"}) {
+            try {
+                System.out.println("ACOSLAUNCH MARK " + f + "=" + get(thread, f));
+            } catch (Throwable x) {
+                System.out.println("ACOSLAUNCH MARK " + f + " -> " + x);
+            }
+        }
+        Object activities = get(thread, "mActivities");
+        if (activities instanceof java.util.Map) {
+            java.util.Map<?, ?> m = (java.util.Map<?, ?>) activities;
+            System.out.println("ACOSLAUNCH MARK mActivities=" + m.size());
+            for (java.util.Map.Entry<?, ?> e : m.entrySet()) {
+                Object rec = e.getValue();
+                System.out.println("ACOSLAUNCH MARK   token=" + e.getKey()
+                        + " info=" + get(rec, "activityInfo")
+                        + " activity=" + get(rec, "activity")
+                        + " paused=" + get(rec, "paused")
+                        + " stopped=" + get(rec, "stopped"));
+                Object a = get(rec, "activity");
+                if (a != null) {
+                    System.out.println("ACOSLAUNCH MARK   resumed=" + get(a, "mResumed")
+                            + " called=" + get(a, "mCalled")
+                            + " finished=" + get(a, "mFinished")
+                            + " window=" + get(a, "mWindow"));
+                }
+            }
+        }
+        dumpThreads();
+    }
+
+    static void dumpThreads() {
+        for (java.util.Map.Entry<Thread, StackTraceElement[]> e
+                : Thread.getAllStackTraces().entrySet()) {
+            System.out.println("ACOSLAUNCH THREAD " + e.getKey().getName() + " "
+                    + e.getKey().getState());
+            int n = 0;
+            for (StackTraceElement el : e.getValue()) {
+                if (n++ >= 12) break;
+                System.out.println("ACOSLAUNCH   at " + el);
+            }
+        }
+        System.out.flush();
+    }
+
+    /**
+     * End the run. `prepareMainLooper()`'s queue is quit-disabled
+     * (`MessageQueue.quit: "Main thread not allowed to quit"`), which is exactly
+     * the "the process does not own its own lifetime" rule a real app lives
+     * under; the harness is the thing that owns it, so it ends the process the
+     * way AMS would (the markers are already on disk and flushed).
+     */
+    static void quit() {
+        System.out.flush();
+        Runtime.getRuntime().halt(0);
+    }
+
+    /** `Object` field read through the class hierarchy (framework fields). */
+    static Object get(Object o, String name) {
+        if (o == null) return null;
+        for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(o);
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable t) {
+                return "<" + t + ">";
+            }
+        }
+        return null;
     }
 
     /** Construct libandroid_runtime's AndroidRuntime (driver JNI helper). */
@@ -281,12 +538,10 @@ public final class LaunchMain {
         ai.targetSdkVersion = 34;
         // FLAG_HAS_CODE(0x4) | FLAG_INSTALLED(0x800000)
         ai.flags = 0x4 | 0x800000;
-        // The launch instrumentation class is not in the app's base APK. Android
-        // loads it from a split, exactly as a real test APK does; the base APK
-        // stays byte-identical. The split is `classes.dex` of this guest, zipped
-        // under /data/app at startup.
-        ai.splitSourceDirs = new String[]{SPLIT_APK};
-        ai.splitNames = new String[]{"acos-launch"};
+        // No `FLAG_HARDWARE_ACCELERATED`: the platform default for an app that
+        // does not ask for it is the software ViewRootImpl path, which is the
+        // only drawing route a surface-less ACOS window can serve at all
+        // (P4b.md §4).
         set(ai, "deviceProtectedDataDir", ai.dataDir);
         set(ai, "credentialProtectedDataDir", ai.dataDir);
         set(ai, "compileSdkVersion", 34);
@@ -297,11 +552,9 @@ public final class LaunchMain {
     }
 
     /**
-     * The `getApplicationInfo` reply the framework would get from a package that
-     * declares the launch split. `PackageManager` caches the `LoadedApk` built
-     * from this reply, and `handleBindApplication` reuses that cache entry, so
-     * the split list must be visible here too (otherwise the instrumentation
-     * class cannot be loaded — see P4a.md).
+     * The `getApplicationInfo` reply the framework would get from the package
+     * manager for the APK being launched (no split: the launch needs no class
+     * outside the APK, because `instrumentationName` is null).
      */
     static byte[] buildApplicationInfoReply() throws Throwable {
         Parcel p = Parcel.obtain();
@@ -339,8 +592,6 @@ public final class LaunchMain {
         // AMS sends a real, non-null Bundle here; `handleSetCoreSettings` reads
         // keys unconditionally (an empty Bundle answers every key with null).
         Bundle coreSettings = new Bundle();
-        ComponentName instrName = new ComponentName(sPkg, "dev.acos.art.LaunchMain$Instr");
-
         Parcel p = Parcel.obtain();
         try {
             p.writeInterfaceToken("android.app.IApplicationThread");
@@ -349,7 +600,13 @@ public final class LaunchMain {
             p.writeString(sPkg);                                   // processName
             p.writeString(null);                                   // sdkSandbox volume
             p.writeTypedObject((android.os.Parcelable) providerList, 0); // ProviderInfoList
-            p.writeTypedObject(instrName, 0);                      // instrumentationName
+            // P4b: the real framework creates the Instrumentation. With a null
+            // `instrumentationName`, `handleBindApplication` takes the else
+            // branch: `mInstrumentation = new Instrumentation();
+            // mInstrumentation.basicInit(this)`, then
+            // `callApplicationOnCreate(app)`. Nothing in the APK or the guest
+            // is involved, and no class loader seam is needed.
+            p.writeTypedObject(null, 0);                           // instrumentationName
             p.writeTypedObject(null, 0);                           // ProfilerInfo
             p.writeTypedObject(instrArgs, 0);                      // instrumentationArgs
             p.writeStrongBinder(null);                             // IInstrumentationWatcher
@@ -514,28 +771,242 @@ public final class LaunchMain {
         }
     }
 
-    static final String GUEST_DEX = "/data/app/launch-guest/classes.dex";
-    static final String SPLIT_APK = "/data/app/launch-split.apk";
+    // ------------------------------------------- the AMS step: ClientTransaction
 
-    /** Zip this guest's dex as a split APK, so the app class loader finds the instrumentation. */
-    static void writeSplitApk() {
-        java.io.File split = new java.io.File(SPLIT_APK);
-        if (split.isFile() && split.length() > 0) return;
-        try (java.util.zip.ZipOutputStream z =
-                     new java.util.zip.ZipOutputStream(new FileOutputStream(split))) {
-            z.putNextEntry(new java.util.zip.ZipEntry("classes.dex"));
-            java.io.FileInputStream in = new java.io.FileInputStream(GUEST_DEX);
-            try {
-                byte[] buf = new byte[65536];
-                int n;
-                while ((n = in.read(buf)) > 0) z.write(buf, 0, n);
-            } finally {
-                in.close();
-            }
-            z.closeEntry();
+    /**
+     * The `ActivityInfo` a real `ActivityRecord` carries for this launch. The
+     * values come from the APK's manifest (name, targetSdk) or are the platform
+     * defaults `ActivityThread` itself would use for an unset field.
+     */
+    static Object buildActivityInfo(ApplicationInfo appInfo) throws Throwable {
+        Class<?> cls = Class.forName("android.content.pm.ActivityInfo");
+        Object ai = cls.getDeclaredConstructor().newInstance();
+        setFieldForce(cls, ai, "applicationInfo", appInfo);
+        setFieldForce(cls, ai, "name", sActivity);
+        setFieldForce(cls, ai, "packageName", sPkg);
+        setFieldForce(cls, ai, "taskAffinity", sPkg);
+        setFieldForce(cls, ai, "targetActivity", null);
+        setFieldForce(cls, ai, "permission", null);
+        setFieldForce(cls, ai, "launchMode", 0);
+        setFieldForce(cls, ai, "theme", 0);          // 0 = platform default
+        setFieldForce(cls, ai, "flags", 0);          // no FLAG_HARDWARE_ACCELERATED
+        setFieldForce(cls, ai, "screenOrientation", -1);
+        setFieldForce(cls, ai, "configChanges", 0);
+        setFieldForce(cls, ai, "softInputMode", 0);
+        setFieldForce(cls, ai, "uiOptions", 0);
+        setFieldForce(cls, ai, "exported", true);
+        setFieldForce(cls, ai, "enabled", true);
+        return ai;
+    }
+
+    /**
+     * Marshal `IApplicationThread.scheduleTransaction(ClientTransaction)` the way
+     * AMS does: one `ClientTransaction` holding the `LaunchActivityItem` (a
+     * callback) and the `ResumeActivityItem` (the final lifecycle state),
+     * written by the framework's own `writeToParcel`. Only the transport is
+     * ACOS's.
+     *
+     * <p>Every framework type on this path is `@hide`
+     * (`android.app.servertransaction.*`), so it is reached by reflection — the
+     * same way `ActivityThread`'s private members already are. The item
+     * factories are called with arguments matched to the **image's** parameter
+     * list (read from the method at runtime), not to a source tree: this image
+     * is API 34 (`UE1A.230829.050`), whose `LaunchActivityItem.obtain` predates
+     * the `android-14.0.0_r75` shape (no `ActivityWindowInfo`, no
+     * `SceneTransitionInfo`, `ActivityOptions` instead, token carried by the
+     * `ClientTransaction` itself).
+     */
+    static byte[] buildScheduleTransactionRequest(IBinder appThread, IBinder token, Object app)
+            throws Throwable {
+        ApplicationInfo appInfo = buildAppInfo();
+        Object activityInfo = buildActivityInfo(appInfo);
+
+        Configuration base = new Configuration();
+        base.densityDpi = 420;
+        base.screenWidthDp = 411;
+        base.screenHeightDp = 842;
+        base.smallestScreenWidthDp = 411;
+        base.orientation = Configuration.ORIENTATION_PORTRAIT;
+        base.fontScale = 1.0f;
+        base.setLocales(android.os.LocaleList.forLanguageTags("en-US"));
+        Configuration curConfig = new Configuration(base);
+        try {
+            android.content.Context baseCtx = (android.content.Context) get(app, "mBase");
+            if (baseCtx != null) curConfig = new Configuration(baseCtx.getResources().getConfiguration());
         } catch (Throwable t) {
-            System.out.println("ACOSLAUNCH MARK split-apk-failed " + t);
+            System.out.println("ACOSLAUNCH MARK cur-config-fallback " + t);
         }
+        Configuration override = new Configuration();
+        // An empty delta is not a zeroed Configuration: `Configuration.updateFrom`
+        // only applies set fields, so an empty one is a no-op overlay.
+        override.setTo(new Configuration());
+
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+        intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+        intent.setComponent(new ComponentName(sPkg, sActivity));
+        intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        Class<?> itemCls = Class.forName("android.app.servertransaction.ClientTransactionItem");
+        Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+        Class<?> iatStub = Class.forName("android.app.IApplicationThread$Stub");
+        Class<?> launchCls = Class.forName("android.app.servertransaction.LaunchActivityItem");
+        Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
+
+        Object client = iatStub.getMethod("asInterface", IBinder.class).invoke(null, appThread);
+        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class).invoke(null, client, null);
+
+        Object launchItem = obtainItem(launchCls, intent, activityInfo, curConfig, override);
+        Object resumeItem = obtainResume(resumeCls);
+        // This image's `ClientTransaction` has no public `addTransactionItem`:
+        // the items live in the two private fields the executor reads
+        // (`mActivityCallbacks`, `mLifecycleStateRequest`), exactly as
+        // `addCallback`/`setLifecycleStateRequest` fill them in system_server.
+        java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+        callbacks.add(launchItem);
+        setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+        setPrivateField(ctxCls, tx, "mLifecycleStateRequest", resumeItem);
+        // Present on newer images (the bundled-item shape); a no-op here.
+        setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+        System.out.println("ACOSLAUNCH MARK transaction-items launch=" + launchItem.getClass().getName()
+                + " resume=" + resumeItem.getClass().getName());
+
+        Parcel p = Parcel.obtain();
+        try {
+            p.writeInterfaceToken("android.app.IApplicationThread");
+            p.writeTypedObject((android.os.Parcelable) tx, 0);
+            System.out.println("ACOSLAUNCH MARK transaction-marshalled items=launch+resume activity="
+                    + sActivity + " bytes=" + p.dataSize());
+            return p.marshall();
+        } finally {
+            p.recycle();
+        }
+    }
+
+    /**
+     * Call the item's own `obtain(...)` with the arguments its **actual**
+     * parameter list needs. Values are the ones AMS passes for a normal launch;
+     * a parameter type this method does not know is passed as `null` and named
+     * in the marker, so a future image's shape change is a log line, not a
+     * silent wrong launch.
+     */
+    static Object obtainItem(Class<?> cls, android.content.Intent intent, Object activityInfo,
+            Configuration curConfig, Configuration override) throws Throwable {
+        java.lang.reflect.Method obtain = null;
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            if (obtain == null || m.getParameterCount() > obtain.getParameterCount()) obtain = m;
+        }
+        if (obtain == null) throw new NoSuchMethodException(cls.getName() + ".obtain");
+        obtain.setAccessible(true);
+        Class<?>[] types = obtain.getParameterTypes();
+        Object[] args = new Object[types.length];
+        int ints = 0;
+        int configs = 0;
+        int booleans = 0;
+        StringBuilder shape = new StringBuilder();
+        for (int i = 0; i < types.length; i++) {
+            Class<?> t = types[i];
+            String n = t.getSimpleName();
+            Object v = null;
+            if (t == IBinder.class) {
+                // `Parcel.marshall()` refuses a parcel that carries binder
+                // objects ("Tried to marshall a Parcel that contains objects"),
+                // and the ACOS transport is a byte pipe, not a binder
+                // transaction. Every binder here is a system_server-side token
+                // (activity token, assist/shareable/task-fragment tokens) whose
+                // identity only matters to AMS; ACOS's AMS stand-in is the peer,
+                // so they travel as null. See P4b.md §5.
+                v = null;
+            } else if (t == android.content.Intent.class) {
+                v = intent;
+            } else if (t == android.content.pm.ActivityInfo.class) {
+                v = activityInfo;
+            } else if (t == Configuration.class) {
+                v = (configs++ == 0) ? curConfig : override;
+            } else if (t == int.class) {
+                // ident, deviceId, procState — in the order the record uses them.
+                int[] values = {1, 0, 2};
+                v = values[Math.min(ints++, values.length - 1)];
+            } else if (t == boolean.class) {
+                // isForward = true, launchedFromBubble = false.
+                v = (booleans++ == 0);
+            } else if (t == android.app.ActivityOptions.class) {
+                // writeToParcel calls `mActivityOptions.toBundle()`.
+                v = android.app.ActivityOptions.makeBasic();
+            } else if (t == String.class) {
+                v = null;
+            }
+            args[i] = v;
+            shape.append(' ').append(i).append(':').append(n);
+        }
+        System.out.println("ACOSLAUNCH MARK obtain-shape " + cls.getSimpleName() + shape);
+        try {
+            return obtain.invoke(null, args);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause() != null ? e.getCause() : e;
+        }
+    }
+
+    static void setPrivateField(Class<?> cls, Object o, String name, Object value) throws Throwable {
+        java.lang.reflect.Field f = cls.getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(o, value);
+    }
+
+    static void setPrivateFieldIfPresent(Class<?> cls, Object o, String name, Object value) {
+        try {
+            setPrivateField(cls, o, name, value);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static Object obtainResume(Class<?> cls) throws Throwable {
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            Class<?>[] t = m.getParameterTypes();
+            m.setAccessible(true);
+            Object v = null;
+            if (t.length == 3 && t[0] == int.class && t[1] == boolean.class && t[2] == boolean.class) {
+                v = m.invoke(null, 2, Boolean.TRUE, Boolean.FALSE);
+            } else if (t.length == 2 && t[0] == boolean.class && t[1] == boolean.class) {
+                v = m.invoke(null, Boolean.TRUE, Boolean.FALSE);
+            }
+            if (v != null) return v;
+        }
+        throw new NoSuchMethodException(cls.getName() + ".obtain(boolean,boolean)");
+    }
+
+    /** `static Method` lookup by name and arity, then invoke (framework `@hide`). */
+    static Object callStatic(Class<?> cls, String name, Object... args) throws Throwable {
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals(name)) continue;
+            if (m.getParameterCount() != args.length) continue;
+            m.setAccessible(true);
+            try {
+                return m.invoke(null, args);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw e.getCause() != null ? e.getCause() : e;
+            }
+        }
+        throw new NoSuchMethodException(cls.getName() + "." + name + "/" + args.length);
+    }
+
+    /** Field write that fails loudly (an unset ActivityInfo field is a wrong launch). */
+    static void setFieldForce(Class<?> cls, Object o, String name, Object value) {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                f.set(o, value);
+                return;
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable t) {
+                System.out.println("ACOSLAUNCH MARK activityinfo-field " + name + " -> " + t);
+                return;
+            }
+        }
+        System.out.println("ACOSLAUNCH MARK activityinfo-field " + name + " -> missing");
     }
 
     static void setField(Class<?> cls, Object o, String name, Object value) {
@@ -598,49 +1069,6 @@ public final class LaunchMain {
         } finally {
             data.recycle();
             reply.recycle();
-        }
-    }
-
-    // ------------------------------------------------- instrumentation hook
-
-    /**
-     * The framework instantiates this by the {@code instrumentationName} in the
-     * bind request and calls it on the real path:
-     * {@code handleBindApplication -> Instrumentation.callApplicationOnCreate}.
-     * It therefore proves {@code Application.onCreate} ran for the APK's
-     * Application, not a guest re-implementation.
-     */
-    public static final class Instr extends Instrumentation {
-        @Override
-        public void onCreate(Bundle arguments) {
-            System.out.println("ACOSLAUNCH MARK instrumentation-onCreate");
-        }
-
-        @Override
-        public void callApplicationOnCreate(Application app) {
-            super.callApplicationOnCreate(app);
-            sApplicationCreated = true;
-            try {
-                File dir = new File(sOut);
-                dir.mkdirs();
-                write(new File(dir, "application-created.marker"),
-                        "package=" + sPkg + "\napplication=" + app.getClass().getName()
-                                + "\nsourceDir=" + sApk + "\n");
-            } catch (Throwable t) {
-                System.out.println("ACOSLAUNCH MARK marker-write-failed " + t);
-            }
-            System.out.println("ACOSLAUNCH MARK application-created package=" + sPkg
-                    + " application=" + app.getClass().getName()
-                    + " base=" + app.getBaseContext());
-            System.out.flush();
-            // Stop the main looper after the bind message returns; the activity
-            // is never launched.
-            new android.os.Handler(Looper.getMainLooper()).post(new Runnable() {
-                @Override
-                public void run() {
-                    Looper.myLooper().quitSafely();
-                }
-            });
         }
     }
 

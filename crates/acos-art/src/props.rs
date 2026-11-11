@@ -51,6 +51,15 @@ impl Props {
         let mut p = Props::default();
         for (k, v) in [
             ("ro.build.version.sdk", "34"),
+            // libbinder's `defaultServiceManager()` (IServiceManager.cpp:152)
+            // spins on this property before it ever asks for the context
+            // object: `while (!WaitForProperty("servicemanager.ready", "true", 1s))`
+            // logging ALOGE each second. ACOS has no servicemanager process,
+            // but the *service manager* (the `IServiceManager` node answered by
+            // `acos-binder-peer`/`ServiceHost`) is up before any guest starts, so
+            // the value is true for this system: the wait ends and the retry
+            // loop -- R1's log flood trigger -- cannot start.
+            ("servicemanager.ready", "true"),
             ("ro.build.version.release", "14"),
             ("ro.build.version.codename", "REL"),
             ("ro.build.version.all_codenames", "REL"),

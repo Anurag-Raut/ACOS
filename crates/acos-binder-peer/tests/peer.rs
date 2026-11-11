@@ -1,7 +1,8 @@
 //! The peer acceptance tests: a `Frame` in, `Frame`s out, no socket needed.
 
 use acos_binder_peer::{
-    frame_from_parcel, import_parcel, Frame, Peer, F_REQ, F_TXN, JAVA_TAG, NODE_TAG, TF_ONE_WAY,
+    frame_from_parcel, import_parcel, Frame, Peer, F_REQ, F_RSP, F_TXN, JAVA_TAG, NODE_TAG,
+    TF_ONE_WAY,
 };
 use acos_parcel::{BinderId, Parcel};
 use acos_services::codec;
@@ -404,4 +405,43 @@ fn the_forwarded_transaction_log_is_bounded() {
         peer.service_calls().len()
     );
     assert!(peer.resource_limits() >= 500, "the evictions are counted");
+}
+
+/// A reply that carries a file descriptor (`SettingsState`'s fd-backed
+/// `MemoryIntArray`, a `CursorWindow`'s ashmem) must hand `write_frame` a
+/// descriptor that is still open. The reply `Parcel` owns its duplicate and is
+/// dropped as soon as the frame exists, so the frame has to own one too —
+/// otherwise `sendmsg` fails with `EBADF` and the guest's `transact` blocks
+/// forever waiting for a reply that was never sent (P4c §4).
+#[test]
+fn reply_file_descriptors_stay_open_until_the_frame_is_written() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    use acos_binder_peer::close_frame_fds;
+    use acos_parcel::ParcelFd;
+
+    let fd = ParcelFd::memfd("acos-binder-peer-frame-fd").expect("memfd_create");
+    let mut file = std::fs::File::from(fd.try_clone().expect("dup").into_owned());
+    file.write_all(&7i32.to_le_bytes()).expect("write");
+    file.seek(SeekFrom::Start(0)).expect("seek");
+
+    let mut parcel = Parcel::new();
+    acos_services::exception::write_no_exception(&mut parcel);
+    parcel.write_file_descriptor(fd.as_fd()).expect("write fd");
+    let frame = frame_from_parcel(F_RSP, &Frame { seq: 9, ..Default::default() }, &parcel);
+    assert_eq!(
+        frame.fds.len(),
+        1,
+        "the BINDER_TYPE_FD object must move into the frame"
+    );
+    drop(parcel);
+
+    let mut buf = [0u8; 4];
+    let n = unsafe { libc::pread(frame.fds[0], buf.as_mut_ptr().cast(), 4, 0) };
+    assert_eq!(
+        n, 4,
+        "the frame's descriptor must outlive the reply parcel"
+    );
+    assert_eq!(i32::from_le_bytes(buf), 7, "same bytes the provider wrote");
+    close_frame_fds(&frame);
 }

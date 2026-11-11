@@ -8,7 +8,7 @@ use std::io::Write;
 use std::os::fd::RawFd;
 use std::process::ExitCode;
 
-use acos_binder_peer::{accept, listen, read_frame, write_frame, Peer};
+use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Peer};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -74,8 +74,10 @@ fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
             Err(e) => return Err(e),
         };
-        for out in peer.handle(frame) {
+        let outs = peer.handle(frame);
+        for out in outs {
             write_frame(fd, &out)?;
+            close_frame_fds(&out);
         }
         let _ = std::io::stderr().flush();
     }

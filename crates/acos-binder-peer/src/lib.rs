@@ -31,6 +31,6 @@ pub use peer::{
     UnsupportedRecord, JAVA_TAG, NODE_TAG,
 };
 pub use protocol::{
-    accept, listen, read_frame, write_frame, Frame, F_REP, F_REQ, F_RSP, F_TXN, PING_TRANSACTION,
-    TF_ONE_WAY, TF_STATUS_CODE,
+    accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_REP, F_REQ, F_RSP, F_TXN,
+    PING_TRANSACTION, TF_ONE_WAY, TF_STATUS_CODE,
 };

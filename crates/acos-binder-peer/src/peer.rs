@@ -82,6 +82,12 @@ pub const LAUNCH_PUSH_BIND: u32 = 1;
 /// Push `(descriptor, code, reply bytes)`; the reply is produced by the
 /// framework's own `writeToParcel` in the guest.
 pub const LAUNCH_PUSH_REPLY: u32 = 2;
+/// Push a marshalled `ClientTransaction` request, to be delivered to the app
+/// thread as `IApplicationThread.scheduleTransaction` (P4b). The bytes are
+/// written by the framework's own `ClientTransaction.writeToParcel`.
+pub const LAUNCH_PUSH_TRANSACTION: u32 = 3;
+/// `IApplicationThread.scheduleTransaction` transaction code (API 34).
+pub const SCHEDULE_TRANSACTION_CODE: u32 = 54;
 
 /// One transaction the peer forwarded during the launch, for the minimal
 /// service-surface report.
@@ -157,6 +163,11 @@ pub struct Peer {
     launch_app_thread: Option<u32>,
     /// The launch delivery was queued (once).
     launch_delivered: bool,
+    /// The `IApplicationThread.scheduleTransaction` request bytes stashed by the
+    /// guest (one `ClientTransaction`, framework-marshalled).
+    launch_txn: Option<Vec<u8>>,
+    /// The transaction delivery was queued (once).
+    launch_txn_delivered: bool,
     /// Reverse replies received from Java (peer-initiated transactions are
     /// two-way here, matching the runtime's `BinderDelivery`).
     pub reverse_replies: u64,
@@ -219,6 +230,8 @@ impl Peer {
             launch_replies: HashMap::new(),
             launch_app_thread: None,
             launch_delivered: false,
+            launch_txn: None,
+            launch_txn_delivered: false,
             reverse_replies: 0,
             reverse_failed: 0,
         }
@@ -278,6 +291,18 @@ impl Peer {
     #[must_use]
     pub fn launch_delivered(&self) -> bool {
         self.launch_delivered
+    }
+
+    /// The guest pushed a marshalled `ClientTransaction`.
+    #[must_use]
+    pub fn launch_txn_len(&self) -> Option<usize> {
+        self.launch_txn.as_ref().map(Vec::len)
+    }
+
+    /// True when the `scheduleTransaction` delivery was queued.
+    #[must_use]
+    pub fn launch_txn_delivered(&self) -> bool {
+        self.launch_txn_delivered
     }
 
     /// The framework-marshalled `getDisplayInfo` reply, if the guest pushed one.
@@ -560,7 +585,11 @@ impl Peer {
                 frame_from_parcel(F_RSP, frame, &reply)
             }
             Err(err) => {
-                self.record_error(frame, &mut data, &err);
+                // This parcel has already been decoded (the descriptor and
+                // method are known), so record *those* instead of re-peeking a
+                // consumed parcel — that is what left `<unknown>` in the
+                // evidence for every failing service call (P4a §5).
+                self.record_error_at(descriptor.as_deref(), frame.code, &err);
                 let reply = if reply.data_size() == 0 {
                     self.error_reply(frame, &err)
                 } else {
@@ -621,17 +650,19 @@ impl Peer {
     }
 
     fn record_error(&mut self, frame: &Frame, data: &mut Parcel, err: &ServiceError) {
-        let descriptor = data
-            .peek_interface_token()
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "<unknown>".into());
-        let method = acos_aidl::lookup(&descriptor, frame.code)
+        let descriptor = data.peek_interface_token().ok().flatten();
+        self.record_error_at(descriptor.as_deref(), frame.code, err);
+    }
+
+    /// Record a failing transaction whose descriptor is already known.
+    fn record_error_at(&mut self, descriptor: Option<&str>, code: u32, err: &ServiceError) {
+        let descriptor = descriptor.map_or_else(|| "<unknown>".to_string(), str::to_string);
+        let method = acos_aidl::lookup(&descriptor, code)
             .map(|m| m.name.clone())
-            .unwrap_or_else(|| format!("code {}", frame.code));
+            .unwrap_or_else(|| format!("code {code}"));
         let record = UnsupportedRecord {
             descriptor,
-            code: frame.code,
+            code,
             method,
             error: err.code().to_string(),
             message: err.to_string(),
@@ -751,6 +782,15 @@ impl Peer {
                 frame_from_parcel(F_RSP, frame, &reply)
             }
             Ok((None, bytes)) => {
+                if frame.code == LAUNCH_PUSH_TRANSACTION {
+                    eprintln!(
+                        "acos-binder-peer: launch ClientTransaction request stashed ({} bytes, framework-marshalled)",
+                        bytes.len()
+                    );
+                    self.launch_txn = Some(bytes);
+                    exception::write_no_exception(&mut reply);
+                    return frame_from_parcel(F_RSP, frame, &reply);
+                }
                 eprintln!(
                     "acos-binder-peer: launch bindApplication request stashed ({} bytes)",
                     bytes.len()
@@ -766,29 +806,54 @@ impl Peer {
         }
     }
 
-    /// Queue the one `bindApplication` delivery, after `attachApplication`.
+    /// Queue the one `bindApplication` delivery, after `attachApplication`, then
+    /// the one `scheduleTransaction` delivery once the guest pushed it (P4b).
     fn take_launch_delivery(&mut self) -> Option<Frame> {
-        if self.launch_delivered {
+        let wire = self.launch_app_thread?;
+        if !self.launch_delivered {
+            let bytes = self.launch_bind.clone()?;
+            let seq = self.next_launch_seq();
+            self.launch_delivered = true;
+            eprintln!(
+                "acos-binder-peer: delivering bindApplication ({} bytes, code {}) to java binder wire={wire}",
+                bytes.len(),
+                BIND_APPLICATION_CODE
+            );
+            return Some(Frame::plain(
+                F_TXN,
+                seq,
+                BIND_APPLICATION_CODE,
+                0,
+                u64::from(wire),
+                bytes,
+            ));
+        }
+        if self.launch_txn_delivered {
             return None;
         }
-        let wire = self.launch_app_thread?;
-        let bytes = self.launch_bind.clone()?;
-        let seq = self.next_txn_seq;
-        self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
-        self.launch_delivered = true;
+        let bytes = self.launch_txn.clone()?;
+        let seq = self.next_launch_seq();
+        self.launch_txn_delivered = true;
         eprintln!(
-            "acos-binder-peer: delivering bindApplication ({} bytes, code {}) to java binder wire={wire}",
+            "acos-binder-peer: delivering ClientTransaction ({} bytes, \
+             IApplicationThread.scheduleTransaction code {}) to java binder wire={wire}",
             bytes.len(),
-            BIND_APPLICATION_CODE
+            SCHEDULE_TRANSACTION_CODE
         );
         Some(Frame::plain(
             F_TXN,
             seq,
-            BIND_APPLICATION_CODE,
+            SCHEDULE_TRANSACTION_CODE,
             0,
             u64::from(wire),
             bytes,
         ))
+    }
+
+    fn next_launch_seq(&mut self) -> u32 {
+        let seq = self.next_txn_seq;
+        self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
+        seq
     }
 
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
@@ -962,7 +1027,25 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
         let mut add_stability = false;
         if parsed.is_file_descriptor() {
             if parsed.id != 0 && fds.len() < crate::protocol::MAX_FDS {
-                fds.push(parsed.id as i32);
+                // The descriptor the object records is owned by `parcel`, which
+                // the caller drops as soon as this frame exists (the reply
+                // `Parcel` lives for one transaction). Handing that number to
+                // `write_frame` closes nothing but the fd is **already gone** by
+                // then: `sendmsg` fails with `EBADF` and the guest's
+                // `transact` waits for a reply that can never arrive. Duplicate
+                // it so the frame owns a live descriptor until it is written
+                // (see `close_frame_fds`).
+                let dup = unsafe { libc::fcntl(parsed.id as i32, libc::F_DUPFD_CLOEXEC, 0) };
+                if dup >= 0 {
+                    fds.push(dup);
+                } else {
+                    eprintln!(
+                        "acos-binder-peer: ART_FD_UNAVAILABLE: cannot duplicate fd {} for the 
+                         reply frame: {}",
+                        parsed.id,
+                        std::io::Error::last_os_error()
+                    );
+                }
             }
         } else if parsed.is_binder() {
             add_stability = true;

@@ -15,15 +15,21 @@
 //! `acos.launch` binder before `attach`; the peer replays those exact bytes as
 //! a `BR_TRANSACTION` (P2f reverse delivery). No hand-written parcel codec.
 //!
-//! The run stops after `Application.onCreate` (`--until application-created`):
-//! no `ClientTransaction` is delivered, so no activity is launched.
+//! Two stop points (`--until`):
+//!
+//! * `application-created` — stop after the real `Application.onCreate`
+//!   (the framework's own `new Instrumentation()`, `instrumentationName == null`);
+//! * `activity-resumed` — then deliver one framework-marshalled
+//!   `ClientTransaction` (`LaunchActivityItem` + `ResumeActivityItem`) as
+//!   `IApplicationThread.scheduleTransaction`, so the real
+//!   `ActivityThread` runs `Activity.onCreate`/`onResume`.
 
 use crate::capture::{stream_cap_from_env, TailBuffer};
 use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{accept, listen, read_frame, write_frame, Frame, Peer};
+use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Frame, Peer};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -42,7 +48,7 @@ pub const GUEST_CLASS: &str = "dev.acos.art.LaunchMain";
 pub struct LaunchOpts {
     /// Host path of the APK.
     pub apk: PathBuf,
-    /// Stop point. Only `application-created` is implemented.
+    /// Stop point: `application-created` or `activity-resumed`.
     pub until: String,
     /// Output directory for the result + marker.
     pub out: Option<PathBuf>,
@@ -84,6 +90,16 @@ pub struct LaunchResult {
     pub until: String,
     pub application_created: bool,
     pub activity_launched: bool,
+    /// The APK's launcher activity (`aapt2 dump badging`), the class the
+    /// `LaunchActivityItem` names.
+    pub activity: Option<String>,
+    /// The `application-created` marker, verbatim (real framework state).
+    pub application_marker: Option<String>,
+    /// The activity lifecycle marker, verbatim.
+    pub activity_marker: Option<String>,
+    /// The framework's own main-looper trace (`Looper.setMessageLogging`),
+    /// filtered to the two messages this path dispatches.
+    pub looper_trace: Vec<String>,
     /// `bindApplication` transport facts.
     pub bind_application: BindDelivery,
     /// Every service transaction forwarded while the launch ran.
@@ -122,9 +138,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     if !opts.apk.is_file() {
         return Err(Error::Layout(format!("no APK at {}", opts.apk.display())));
     }
-    if opts.until != "application-created" {
+    if opts.until != "application-created" && opts.until != "activity-resumed" {
         return Err(Error::Layout(format!(
-            "launch --until {} is not implemented (only application-created)",
+            "launch --until {} is not implemented (application-created, activity-resumed)",
             opts.until
         )));
     }
@@ -152,7 +168,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
 
     let staging = root.data.join("out/launch");
     fs::create_dir_all(&staging)?;
-    for stale in ["launch.json", "application-created.marker", "unsupported.jsonl"] {
+    for stale in [
+        "launch.json",
+        "application-created.marker",
+        "activity-resumed.marker",
+        "activity-not-resumed.marker",
+        "unsupported.jsonl",
+    ] {
         let _ = fs::remove_file(staging.join(stale));
     }
     fs::create_dir_all(root.data.join("app-data").join(&package))?;
@@ -212,6 +234,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 bind_bytes: peer.launch_bind_len(),
                 app_thread: peer.launch_app_thread(),
                 delivered: peer.launch_delivered(),
+                txn_bytes: peer.launch_txn_len(),
+                txn_delivered: peer.launch_txn_delivered(),
                 reverse_replies: peer.reverse_replies,
                 reverse_failed: peer.reverse_failed,
                 resource_limits: peer.resource_limits(),
@@ -223,6 +247,11 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     });
 
     // --- guest -------------------------------------------------------------
+    let activity = if opts.until == "activity-resumed" {
+        Some(apk_launcher_activity(&opts.apk)?)
+    } else {
+        None
+    };
     let argv: Vec<String> = vec![
         "-cp".into(),
         "/data/app/launch-guest/classes.dex".into(),
@@ -230,6 +259,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         format!("/data/app/{apk_name}"),
         package.clone(),
         "/data/out/launch".into(),
+        opts.until.clone(),
+        activity.clone().unwrap_or_default(),
     ];
     let mut sb = root.sandbox();
     sb.with_shim(false);
@@ -342,8 +373,34 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
 
     let marker_path = staging.join("application-created.marker");
     let marker = fs::read_to_string(&marker_path).ok();
+    let activity_marker = fs::read_to_string(staging.join("activity-resumed.marker")).ok();
+    let activity_failed_marker =
+        fs::read_to_string(staging.join("activity-not-resumed.marker")).ok();
+    // The framework's own main-thread trace, paired: a `>>>>> Dispatching`
+    // line for 110 (BIND_APPLICATION) or 159 (EXECUTE_TRANSACTION) followed by
+    // its `<<<<< Finished` line — i.e. the real handler ran to completion.
+    let mut looper_trace: Vec<String> = Vec::new();
+    let mut pending = false;
+    for line in stdout.lines() {
+        let Some(line) = line.strip_prefix("ACOSLAUNCH TRACE ") else { continue };
+        if line.starts_with(">>>>> Dispatching") && line.contains("android.app.ActivityThread") {
+            pending = line.ends_with(": 110") || line.ends_with(": 159");
+            if pending {
+                looper_trace.push(line.to_string());
+            }
+        } else if pending && line.starts_with("<<<<< Finished") {
+            looper_trace.push(line.to_string());
+            pending = false;
+        }
+    }
     // Copy staging artefacts to --out when they differ.
-    for name in ["launch.json", "application-created.marker", "unsupported.jsonl"] {
+    for name in [
+        "launch.json",
+        "application-created.marker",
+        "activity-resumed.marker",
+        "activity-not-resumed.marker",
+        "unsupported.jsonl",
+    ] {
         let from = staging.join(name);
         let to = out.join(name);
         if from.is_file() && from != to {
@@ -352,12 +409,31 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     }
     let guest_ok = status.map(|s| s.success()).unwrap_or(false);
     let application_created = marker.is_some() && summary.delivered;
+    let activity_resumed = activity_marker.is_some();
+    let activity_wanted = opts.until == "activity-resumed";
     // A watchdog kill is a host resource outcome, not a guest crash.
     let host_over_limit = dog.as_ref().and_then(|d| d.trip());
-    let (mut outcome, mut code) = if application_created && guest_ok {
+    let (mut outcome, mut code) = if application_created
+        && guest_ok
+        && (!activity_wanted || activity_resumed)
+    {
         (Outcome::Ok, None)
     } else if timed_out {
         (Outcome::Timeout, Some("TIMEOUT".to_string()))
+    } else if application_created && activity_resumed {
+        // The requested lifecycle milestone was reached (the marker is written
+        // from `Activity.mResumed`), but the guest then failed: the *next*
+        // blocker, reported rather than folded into "not resumed".
+        (
+            Outcome::Crash,
+            Some("GUEST_EXIT_AFTER_RESUME".to_string()),
+        )
+    } else if application_created && activity_wanted && summary.txn_bytes.is_some() {
+        // Application.onCreate ran; the activity step did not reach onResume.
+        (
+            Outcome::Crash,
+            Some("NO_ACTIVITY_RESUMED".to_string()),
+        )
     } else if application_created {
         (
             Outcome::Crash,
@@ -410,7 +486,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         package,
         until: opts.until.clone(),
         application_created,
-        activity_launched: false,
+        activity_launched: activity_resumed,
+        activity: activity.clone(),
+        application_marker: marker.clone(),
+        activity_marker: activity_marker
+            .clone()
+            .or_else(|| activity_failed_marker.clone()),
+        looper_trace,
         bind_application: BindDelivery {
             request_bytes: summary.bind_bytes,
             delivered: summary.delivered,
@@ -425,8 +507,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         marker,
     };
     eprintln!(
-        "acos-art: launch wall={wall_ms}ms reverse_replies={} reverse_failed={} logd={} ({}) \
-         peer_resource_limits={}",
+        "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
+         txn={:?}/{} reverse_replies={} reverse_failed={} logd={} ({}) peer_resource_limits={}",
+        opts.until,
+        result.application_created,
+        activity_resumed,
+        summary.txn_bytes,
+        summary.txn_delivered,
         summary.reverse_replies,
         summary.reverse_failed,
         result.logs.len(),
@@ -446,6 +533,8 @@ struct PeerSummary {
     bind_bytes: Option<usize>,
     app_thread: Option<u32>,
     delivered: bool,
+    txn_bytes: Option<usize>,
+    txn_delivered: bool,
     reverse_replies: u64,
     reverse_failed: u64,
     resource_limits: u64,
@@ -458,8 +547,54 @@ fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
             Err(e) => return Err(e),
         };
-        for out in peer.handle(frame) {
-            write_frame(fd, &out)?;
+        // `ACOS_PEER_DEBUG=1` prints every frame the peer reads and writes. The
+        // reply/`write_frame` failure line is *not* gated: a reply the peer
+        // cannot send is the difference between a structured guest error and a
+        // main thread blocked in `transact`, so it must always be visible.
+        let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
+        if dbg {
+            eprintln!(
+                "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",
+                frame.ty,
+                frame.seq,
+                frame.code,
+                frame.flags,
+                frame.target,
+                frame.data.len(),
+                frame.offs.len(),
+                frame.fds.len()
+            );
+        }
+        let outs = peer.handle(frame);
+        if dbg {
+            eprintln!("peer-trace: handle -> {} frames", outs.len());
+        }
+        for out in outs {
+            if let Err(e) = write_frame(fd, &out) {
+                eprintln!(
+                    "peer-trace: write_frame FAILED: {e} (ty={} seq={} code={} data={} offs={} fds={})",
+                    out.ty,
+                    out.seq,
+                    out.code,
+                    out.data.len(),
+                    out.offs.len(),
+                    out.fds.len()
+                );
+                close_frame_fds(&out);
+                return Err(e);
+            }
+            if dbg {
+                eprintln!(
+                    "peer-trace: out ty={} seq={} code={} data={} offs={} fds={:?}",
+                    out.ty,
+                    out.seq,
+                    out.code,
+                    out.data.len(),
+                    out.offs.len(),
+                    out.fds
+                );
+            }
+            close_frame_fds(&out);
         }
         let _ = std::io::stderr().flush();
     }
@@ -658,6 +793,34 @@ fn ndk_clang() -> Result<PathBuf> {
     Err(Error::Tool(
         "no NDK clang found (set ANDROID_NDK_HOME; needs x86_64-linux-android34-clang)".into(),
     ))
+}
+
+/// The APK's launcher activity, from `aapt2 dump badging`
+/// (`launchable-activity: name='…'`). The class `LaunchActivityItem` names.
+fn apk_launcher_activity(apk: &Path) -> Result<String> {
+    let sdk = android_sdk()?;
+    let aapt2 = find_tool(&sdk, "aapt2")?;
+    let out = Command::new(&aapt2).arg("dump").arg("badging").arg(apk).output()?;
+    if !out.status.success() {
+        return Err(Error::Tool(format!(
+            "aapt2 could not read {}: {}",
+            apk.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let class = text
+        .lines()
+        .find_map(|l| l.strip_prefix("launchable-activity:"))
+        .and_then(|l| l.split("name='").nth(1))
+        .and_then(|l| l.split('\'').next())
+        .map(str::to_string);
+    class.ok_or_else(|| {
+        Error::Tool(format!(
+            "{} declares no launchable activity (aapt2 dump badging)",
+            apk.display()
+        ))
+    })
 }
 
 fn tail(s: &str, max: usize) -> String {
