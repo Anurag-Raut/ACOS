@@ -1,0 +1,398 @@
+program                        pass    exit   exp wall_ms notes
+01_hello                       PASS       0     0      67 
+02_int_arith                   PASS       0     0      67 
+03_long_arith                  PASS       0     0      67 
+04_float_double                PASS       0     0      67 
+05_branches_loops              PASS       0     0      67 
+06_switch                      PASS       0     0      67 
+07_static_methods_recursion    PASS       0     0      67 
+08_arrays                      PASS       0     0      67 
+09_strings                     PASS       0     0      67 
+10_objects_fields              PASS       0     0      67 
+11_inheritance_virtual         PASS       0     0      72 
+12_interfaces                  PASS       0     0      70 
+13_exceptions                  PASS       0     0      65 
+14_instanceof_casts            PASS       0     0      67 
+15_inner_lambda                PASS       0     0      67 
+16_enums                       PASS       0     0      67 
+17_generics_collections        PASS       0     0      67 
+18_string_format_misc          PASS       0     0      72 
+19_threads_sync                PASS       0     0      92 
+20_uncaught                    PASS       1     1      67 
+21_regex_basic                 PASS       0     0      67 
+22_regex_advanced              PASS       0     0      67 
+23_regex_split_replace         PASS       0     0      82 
+24_zip_roundtrip               PASS       0     0      82 
+25_security_digest             PASS       0     0      72 
+26_regex_matrix                PASS       0     0      77 
+27_annotations_reflection      PASS       0     0      67 
+28_sqlite_basic                skip       -     -       - no dex built
+
+27/27 pass, 0 fail (1 skipped)
+fatal ART log entries recorded: 0
+{
+  "engine": "art-dalvikvm64",
+  "fail": 0,
+  "pass": 27,
+  "programs": 27,
+  "results": [
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "01_hello",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "02_int_arith",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "03_long_arith",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "04_float_double",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "05_branches_loops",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "06_switch",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "07_static_methods_recursion",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "08_arrays",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "09_strings",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "10_objects_fields",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "11_inheritance_virtual",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 72
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "12_interfaces",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 70
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "13_exceptions",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 65
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "14_instanceof_casts",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "15_inner_lambda",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "16_enums",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "17_generics_collections",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "18_string_format_misc",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 72
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "19_threads_sync",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 92
+    },
+    {
+      "code": null,
+      "exit": 1,
+      "expected_exit": 1,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "20_uncaught",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 10,
+      "outcome": "ok",
+      "pass": true,
+      "program": "21_regex_basic",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 24,
+      "outcome": "ok",
+      "pass": true,
+      "program": "22_regex_advanced",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 24,
+      "outcome": "ok",
+      "pass": true,
+      "program": "23_regex_split_replace",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 82
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "24_zip_roundtrip",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 82
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "25_security_digest",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 72
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 66,
+      "outcome": "ok",
+      "pass": true,
+      "program": "26_regex_matrix",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 77
+    },
+    {
+      "code": null,
+      "exit": 0,
+      "expected_exit": 0,
+      "fatal_logs": 0,
+      "logs": 5,
+      "outcome": "ok",
+      "pass": true,
+      "program": "27_annotations_reflection",
+      "stderr_ok": true,
+      "stdout_ok": true,
+      "wall_ms": 67
+    },
+    {
+      "note": "no dex built",
+      "program": "28_sqlite_basic",
+      "skip": true
+    }
+  ],
+  "skipped": 1,
+  "sysroot": "/home/Qui/Projects/acos/.cache/art/sysroot"
+}

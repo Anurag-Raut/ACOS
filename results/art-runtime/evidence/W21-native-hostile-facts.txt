@@ -1,0 +1,28 @@
+# W21 wall-3 observation: native-hostile on the ART launch path
+
+## The fixture's own probe after the W21 rebuild (fixtures/build/apps/native-hostile.apk)
+outcome=ok application_created=True activity_resumed=True
+AcosFixture: hostile=1
+
+bit 0  open("/etc/passwd")              (Landlock filesystem rule)
+bit 1  socket(AF_INET, SOCK_STREAM, 0)  (seccomp network rule)
+bit 2  create+write "/tmp/acos-escape"  (Landlock write outside the data dir)
+
+Result on the ART launch path: hostile=1 -> bit 0, i.e. /etc/passwd was readable.
+This is NOT caused by W21: the ART sandbox deliberately ro-binds /etc/passwd
+for framework compatibility (crates/acos-art/src/lib.rs:1027-1028), and the W21
+diff only interposes setpriority in the LD_PRELOAD shim.
+1025-        }
+1026-        a.push("--ro-bind".into());
+1027:        a.push("/etc/passwd".into());
+1028:        a.push("/etc/passwd".into());
+1029-        for d in &self.dirs {
+
+The S8 negative expectation (hostile=0, i.e. every denied action fails) is the
+acos-native loader path and is asserted by
+crates/acos-cli/tests/native_launch.rs::native_hostile_actions_are_denied_by_confinement
+(W19-owned; result recorded in W21.md). The ART launch path never had a
+hostile=0 row: its only W15 scenario is launch+capture (
+results/art-runtime/W15.md: "native-hostile pass (weak)").
+
+No hostile fixture source or link line was changed by W21.

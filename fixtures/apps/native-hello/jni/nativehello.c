@@ -35,7 +35,12 @@ Java_dev_acos_fixtures_nativehello_NativeHelloApp_readAsset(JNIEnv *env, jobject
     if (mgr == NULL) {
         return (*env)->NewStringUTF(env, "no-manager");
     }
-    AAsset *asset = AAssetManager_open(mgr, "assets/hello.txt", AASSET_MODE_BUFFER);
+    /* `AAssetManager_open` takes a path relative to the APK's `assets/`
+     * directory: AssetManager2::Open() prepends "assets/" itself
+     * (base/libs/androidfw/AssetManager2.cpp:554), and `openAsNonAsset` is the
+     * only form that accepts a full APK path. Passing "assets/hello.txt" here
+     * looks for "assets/assets/hello.txt" and fails on a real device too. */
+    AAsset *asset = AAssetManager_open(mgr, "hello.txt", AASSET_MODE_BUFFER);
     if (asset == NULL) {
         return (*env)->NewStringUTF(env, "no-asset");
     }

@@ -1,0 +1,116 @@
+{
+  "app": {
+    "package": "dev.acos.fixtures.nativehello",
+    "path": "fixtures/build/apps/native-hello.apk",
+    "sha256": "8191fbd1de95d6f225a628747e4e438105bc1256f126e48f839953caf83274ff"
+  },
+  "backend": "acos-native",
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w21-native-hello",
+    "engine_report": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w21-native-hello/engine.json",
+    "verdict": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w21-native-hello/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-11T23:11:11.520Z",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.1.0",
+    "apk_path": "fixtures/build/apps/native-hello.apk",
+    "apk_sha256": "8191fbd1de95d6f225a628747e4e438105bc1256f126e48f839953caf83274ff",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/w21-native-hello.yaml",
+    "scenario_sha256": "bf8f4e2e7951554817f9b9f8d064dff1512defc0918b549800171ea58549095a"
+  },
+  "request_id": "req_2f93e6_18e72076378eebb8",
+  "resources": {
+    "events": 45,
+    "frames_captured": 2,
+    "memory_mib": 65,
+    "peak_rss_bytes": 68370432,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 1064
+  },
+  "scenario": {
+    "name": "w21-native-hello",
+    "path": "scenarios/w21-native-hello.yaml",
+    "sha256": "bf8f4e2e7951554817f9b9f8d064dff1512defc0918b549800171ea58549095a"
+  },
+  "schema_version": 1,
+  "session_id": "s_art_native-hello",
+  "started_at": "2026-11-11T23:11:10.456Z",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 538,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 524,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-capture.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "status": "pass",
+      "step": "capture"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

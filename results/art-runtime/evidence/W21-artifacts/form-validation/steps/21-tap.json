@@ -1,0 +1,36 @@
+{
+  "assertions": [
+    {
+      "kind": "state_change",
+      "matched_node_ids": [],
+      "message": "UI tree and screenshot both changed",
+      "passed": true
+    }
+  ],
+  "duration_ms": 2004,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/17.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/17.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/21-tap.json"
+    }
+  ],
+  "frame_seq": 17,
+  "index": 21,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

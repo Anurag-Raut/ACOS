@@ -1,0 +1,26 @@
+{
+  "assertions": [],
+  "duration_ms": 523,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/7.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/7.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/12-capture.json"
+    }
+  ],
+  "frame_seq": 7,
+  "index": 12,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "status": "pass",
+  "step": "capture",
+  "trust": "trusted"
+}

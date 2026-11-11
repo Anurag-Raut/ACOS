@@ -1,0 +1,5 @@
+# W21 matrix artifacts (pruned 2026-11-11T23:18Z)
+# Kept: per-row verdict.json, steps/, tree/, events.jsonl, engine.json, repro.*
+# Pruned: frames/ and art-frames/ (host PNG + RGBA dumps) for every row.
+# The full tree was 1.2 GB; the repo keeps the verdicts + trees and the frame
+# facts are recorded in W21.md / W21-*.json. Regenerate with .cache/w21/matrix.sh.

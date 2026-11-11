@@ -1,0 +1,51 @@
+# W21: native-hello after the public-NDK link-line and asset-path fixes.
+#
+# W20 proved that the app namespace already resolves the image's public NDK
+# libraries and that only the fixture's link line was missing the `DT_NEEDED`
+# entries for `libandroid.so`, `libjnigraphics.so` and `libnativewindow.so`.
+# W21 rebuilt the fixture with `-landroid -ljnigraphics -lnativewindow` and
+# fixed the AssetManager path (`AAssetManager_open` is relative to the APK's
+# `assets/` directory; `AssetManager2::Open` prepends "assets/", so the
+# argument is `hello.txt`, not `assets/hello.txt`).
+#
+# native-hello has no content view by design: the evidence is
+# Application.onCreate's log lines (see `results/art-runtime/evidence/W21-*`,
+# captured from `acos-art launch --json` -> `logs`). The ART verify backend
+# exposes launch/capture/tree/crash but not a `logs` step capability, so this
+# scenario asserts the lifecycle it must reach and a frame; the log assertions
+# are recorded as launch evidence instead of being faked here.
+version: 1
+name: w21-native-hello
+description: >-
+  Launch native-hello on real ART after the W21 link-line/asset-path fix: the
+  Application runs (libnativehello.so with DT_NEEDED libandroid/libjnigraphics/
+  libnativewindow is loaded and its JNI/NDK entry points resolve), the activity
+  resumes and a frame is produced.
+app: fixtures/build/apps/native-hello.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - jni
+  - native-loader
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.nativehello/.MainActivity
+      clear_state: true
+
+  - capture:
+      name: native-hello-first
+      format: png
+      fresh: true

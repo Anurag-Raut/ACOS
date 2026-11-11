@@ -512,8 +512,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // W10: the interactive session replaces the one-shot wait loop. The guest
     // is already spawned with the live probe; `interactive_serve` waits for the
     // Activity + first C1 buffer, prints the ready line on the launcher's
-    // stdout, then serves `tree` / `screenshot` / `tap` / `key` / `close`
-    // (line-JSON, one reply per command) until the caller closes it.
+    // stdout, then serves `tree` / `screenshot` / `tap` / `key` / `logs` /
+    // `close` (line-JSON, one reply per command) until the caller closes it.
     let mut interactive_clean = false;
     let status = if interactive {
         let frames_dir = out.join("live-frames");
@@ -530,6 +530,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             &package,
             activity.as_deref(),
             dog.as_ref(),
+            // W22: a live snapshot of the logd sink, so `assert_log` can read
+            // the guest's own log while the session is running.
+            &logd,
         );
         match dead {
             Ok(end) => {
@@ -1222,6 +1225,7 @@ fn interactive_serve(
     package: &str,
     activity: Option<&str>,
     dog: Option<&MemoryWatchdog>,
+    logd: &Logd,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -1688,10 +1692,31 @@ fn interactive_serve(
                     "png": capture.path.display().to_string(),
                 }));
             }
+            "logs" => {
+                // W22: the guest's own logd sink, snapshotted live. The CLI maps
+                // an entry's absolute ordinal to `LogRecord.seq`; entries are
+                // guest-asserted (docs/SANDBOX_CERTIFICATION.md §7) and never
+                // justify a pass on an untrusted run.
+                let entries = logd.snapshot();
+                let stats = logd.stats();
+                let reply = serde_json::json!({
+                    "ok": true, "cmd": "logs",
+                    "total": stats.total,
+                    "kept": entries.len(),
+                    "dropped": stats.dropped,
+                    "cap": stats.cap,
+                    "entries": entries,
+                });
+                protocol_write(&reply);
+                evidence.push(serde_json::json!({
+                    "cmd": "logs", "ok": true,
+                    "total": stats.total, "kept": entries.len(), "dropped": stats.dropped,
+                }));
+            }
             "reset" => {
                 let reply = serde_json::json!({
                     "ok": false, "cmd": "reset", "code": "UNSUPPORTED_ANDROID_API",
-                    "error": "the real launch session has no reset command; tap the app's Reset control (the scenario does)",
+                    "error": "the guest session cannot reset itself; the CLI relaunches the Activity in a fresh guest process for reset",
                 });
                 protocol_write(&reply);
                 evidence.push(reply);

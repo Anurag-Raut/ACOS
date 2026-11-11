@@ -1,0 +1,147 @@
+{
+  "request_id": "req_2f979b_18e72077ecd1a7c6",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_native-hostile",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w15-native-hostile",
+    "verdict": {
+      "app": {
+        "package": "dev.acos.fixtures.nativehostile",
+        "path": "fixtures/build/apps/native-hostile.apk",
+        "sha256": "e09f1b09be4f5e55e2a48a01624a4a798750995a1a180a451dc05debe9597d19"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w15-native-hostile",
+        "engine_report": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w15-native-hostile/engine.json",
+        "verdict": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w15-native-hostile/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-11T23:11:17.399Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": "fixtures/build/apps/native-hostile.apk",
+        "apk_sha256": "e09f1b09be4f5e55e2a48a01624a4a798750995a1a180a451dc05debe9597d19",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w15-native-hostile.yaml",
+        "scenario_sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea"
+      },
+      "request_id": "req_2f979b_18e72077ecd1a7c6",
+      "resources": {
+        "events": 39,
+        "frames_captured": 2,
+        "memory_mib": 64,
+        "peak_rss_bytes": 67706880,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 1097
+      },
+      "scenario": {
+        "name": "w15-native-hostile",
+        "path": "scenarios/w15-native-hostile.yaml",
+        "sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_native-hostile",
+      "started_at": "2026-11-11T23:11:16.302Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 529,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 563,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-capture.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "provenance": {
+            "frame": "host-observed"
+          },
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "/home/Qui/Projects/acos/results/art-runtime/evidence/W21-artifacts/w15-native-hostile/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 1097,
+    "peak_rss_bytes": 67706880
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "assertions": [
+    {
+      "diff": {
+        "actual": [
+          "AcosForm: validation_ok name=Ada email=not-an-emailada@example.com"
+        ],
+        "detail": "log patterns did not appear in the required order",
+        "expected": {
+          "min_matches": 1,
+          "ordered": true,
+          "patterns": [
+            "^validation_ok name=Ada email=ada@example.com$"
+          ]
+        }
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "duration_ms": 1,
+  "error": {
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "log assertion did not hold",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/22-assert_log.json"
+    }
+  ],
+  "index": 22,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "fail",
+  "step": "assert_log",
+  "trust": "trusted"
+}

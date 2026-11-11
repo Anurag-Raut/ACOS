@@ -1,0 +1,55 @@
+# W21 wall-2: rn-hello after the guest-only setpriority clamp
+
+## 1. What the clamp does (crates/acos-art/shim/artshim.c, LD_PRELOAD, guest-only)
+  setpriority(which, who, prio): prio < 0 -> prio = 0, report success, log once:
+433:      __android_log_print(5, "AcosPriority",
+434-                          "setpriority(%d) clamped to 0 (host RLIMIT_NICE is below "
+435-                          "stock init.rc's 40; guest-only adapter, W21)",
+436-                          requested);
+
+## 2. First guest error after the clamp (was: SecurityException in create_react_context)
+outcome=ok application_created=True activity_resumed=True wall_ms=20413
+notes: ['cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=122MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3101846-i7320922.scope)', 'seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0', 'logd: 109 entries']
+logd entries=109
+
+-- chronological entries from the first AcosPriority line --
+ 73 prio=5 AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+ 74 prio=6 logdw: dev.acos.fixtures.rnhello.MainActivity
+ 75 prio=6 logdw: dev.acos.fixtures.rnhello.MainActivity
+ 76 prio=6 logdw: dev.acos.fixtures.rnhello.MainActivity
+ 77 prio=3 CompatibilityChangeReporter: Compat change id reported: 237531167; UID 1000; state: ENABLED
+ 78 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+ 79 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+ 80 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+ 81 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+ 82 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+ 83 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ProgressBarShadowNode
+ 84 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+ 85 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+ 86 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchShadowNode
+ 87 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+ 88 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewShadowNode
+ 89 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+ 90 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+ 91 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageShadowNode
+ 92 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+ 93 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+ 94 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+ 95 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextShadowNode
+ 96 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+ 97 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputShadowNode
+ 98 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+ 99 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextShadowNode
+100 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+101 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+102 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextShadowNode
+103 prio=5 unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+104 prio=4 ReactNativeJS: Running "rnhello"
+105 prio=5 ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For 
+106 prio=6 (no tag): Invalid resource ID 0x0000000b.
+107 prio=6 (no tag): Invalid resource ID 0x0000000b.
+108 prio=4 (no tag): System.exit called, status: 0
+
+## 3. The probe tree at the end of the 20s hold (no children under ReactRootView)
+ACOSLAUNCH MARK viewroot-probe surface_valid=true view_visibility=0 host_visibility=0 app_visible=true decor_visibility=402653328 first=false display_state=2 renderer=null dirty=Rect(0, 0 - 0, 0) layout_requested=false last_touch=PointF(0.0, 0.0) touch_source=0 touch_device=null pending_input=0 in_touch_mode=true has_focus=true
+ACOSLAUNCH MARK input-probe count_text=<none> inc_bounds=<none> tree={0:DecorView@1080x2209+0+0 1:LinearLayout@1080x2209+0+0 2:ViewStub#action_mode_bar_stub@0x0+0+0(vis=8) 2:FrameLayout@1080x2209+0+0 3:FitWindowsLinearLayout#action_bar_root@1080x2209+0+0 4:ViewStubCompat#action_mode_bar_stub@0x0+0+0(vis=8) 4:ContentFrameLayout#content@1080x2209+0+0 5:ReactRootView@1080x2209+0+0}

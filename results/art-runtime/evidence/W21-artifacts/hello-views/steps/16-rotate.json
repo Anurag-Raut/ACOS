@@ -1,0 +1,32 @@
+{
+  "assertions": [],
+  "duration_ms": 0,
+  "error": {
+    "code": "UNSUPPORTED_BACKEND",
+    "details": {
+      "backend": "acos-art-session",
+      "capability": "input.rotate",
+      "context": "rotate",
+      "detail": "the ART session protocol has no rotate command yet"
+    },
+    "hint": "This ACOS backend does not provide `input.rotate` yet. Do not fake a pass; run the step on a backend that supports it or report it as unsupported.",
+    "message": "the ART session protocol has no rotate command yet (missing capability `input.rotate`)",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/16-rotate.json"
+    }
+  ],
+  "index": 16,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "unsupported",
+  "step": "rotate",
+  "trust": "trusted"
+}

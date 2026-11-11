@@ -1,0 +1,61 @@
+# W21: rn-hello after the guest-side priority adapter.
+#
+# W20's first error was `create_react_context` dying with
+# `SecurityException: No permission to set the priority of 17`
+# (`setpriority(-4)` refused by the host's hard `RLIMIT_NICE=0`). W21 adds the
+# guest-only clamp in the LD_PRELOAD shim (`crates/acos-art/shim/artshim.c`), so
+# the thread lives. The bundle now loads (Hermes) and the JS entry point runs
+# (`ReactNativeJS: Running "rnhello"`).
+#
+# W21 measurement: the React surface still has no children after 20 s (see
+# results/art-runtime/W21.md) and the first ERROR logged after the JS entry is
+# libandroidfw `Invalid resource ID 0x0000000b.` (x2, empty tag, from
+# AssetManager2::FindEntry). This scenario is the live teeth for the mount: it
+# gives the UI thread a traversal (one tap) and then requires the app's own text.
+# It must FAIL honestly until that wall is fixed; it is not a pass-by-relaxation
+# row.
+version: 1
+name: w21-rn-hello
+description: >-
+  Launch rn-hello on real ART, tap the surface to force a traversal, then wait
+  for the JS-rendered text "Hello ACOS". Honest pre-fix expectation: TIMEOUT /
+  empty ReactRootView (see results/art-runtime/W21.md §2).
+app: fixtures/build/apps/rn-hello.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+
+  - tap:
+      x: 540
+      y: 1100
+
+  - wait_for:
+      selector: {text: {exact: "Hello ACOS"}}
+      timeout_ms: 8000
+
+  - assert_text:
+      selector: {text: {exact: "Hello ACOS"}}
+      text: {exact: "Hello ACOS"}
+
+  - capture:
+      name: rn-hello-js
+      format: png
+      fresh: true

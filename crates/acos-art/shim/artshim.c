@@ -26,6 +26,20 @@
  * bionic's default aborter does: raise SIGABRT.  A `CHECK` failure therefore
  * kills the process, exactly as on device; the launcher reads the recorded
  * fatal entry plus the signal and reports `ART_FATAL_CHECK`.
+ *
+ * 3. Priority adapter (W21).  Stock `init.rc` sets `RLIMIT_NICE=40`, which is
+ *    what lets an app thread ask for a negative nice (e.g.
+ *    `Process.setThreadPriority(THREAD_PRIORITY_DISPLAY)` = -4).  An
+ *    unprivileged ACOS host session has a hard limit of 0, and a user-namespace
+ *    CAP_SYS_RESOURCE cannot raise it (the kernel checks the initial user
+ *    namespace).  `setpriority` is therefore interposed so a negative nice is
+ *    clamped to 0 and reported as success, inside this guest only: the app sees
+ *    its priority-setting call succeed, exactly as on device, while nothing on
+ *    the host is re-prioritised (the effective difference is that the thread
+ *    runs at nice 0 instead of -4).  Non-negative priorities take the same
+ *    syscall path as bionic's wrapper.  No capability is added and the seccomp
+ *    filter is unaffected; this is not a general errno-forgery switch (see
+ *    docs/IMAGE_ABI_NOTEBOOK.md, W21).
  */
 typedef unsigned long usize;
 typedef __builtin_va_list va_list;
@@ -46,6 +60,7 @@ typedef __builtin_va_list va_list;
 #define SYS_connect 42
 #define SYS_gettid 186
 #define SYS_tgkill 234
+#define SYS_setpriority 141
 #elif defined(__aarch64__)
 #define SYS_read 63
 #define SYS_write 64
@@ -53,6 +68,7 @@ typedef __builtin_va_list va_list;
 #define SYS_close 57
 #define SYS_tgkill 131
 #define SYS_gettid 178
+#define SYS_setpriority 140
 #define SYS_socket 198
 #define SYS_connect 203
 #define SYS_open 1024
@@ -397,4 +413,34 @@ int __system_property_foreach(
   for (int i = 0; i < nprops; i++)
     if (callback(props[i], cookie)) return i;
   return 0;
+}
+
+/* ---- priority adapter (see the header) ---------------------------------- */
+
+/* bionic's errno accessor; resolved from the guest's libc.so at load time.
+ * Weak so the same shim can be loaded by a host libc (tests) where the symbol
+ * does not exist: errno is then simply not recorded, which is the documented
+ * host-side test behaviour, never a guest path. */
+extern int *__errno(void) __attribute__((weak));
+
+int setpriority(int which, int who, int prio) {
+  static int clamped_once = 0;
+  int requested = prio;
+  if (prio < 0) {
+    prio = 0;
+    if (!clamped_once) {
+      clamped_once = 1;
+      __android_log_print(5, "AcosPriority",
+                          "setpriority(%d) clamped to 0 (host RLIMIT_NICE is below "
+                          "stock init.rc's 40; guest-only adapter, W21)",
+                          requested);
+    }
+  }
+  long r = sys3(SYS_setpriority, which, who, prio);
+  if (r == 0) return 0;
+  /* A clamped request is already a no-op: keep the app's call successful even
+   * if the kernel refuses the nice-0 write for another reason. */
+  if (requested < 0) return 0;
+  if (__errno) *__errno() = (int) -r;
+  return -1;
 }

@@ -1,0 +1,93 @@
+# W21: hello-jni's full native report, asserted without the stale W15 selectors.
+#
+# The W15 `hello-jni.yaml` row still expects a "Hello JNI" title text and
+# window-local bounds. After the W17 work the action-bar title is the activity
+# class name and the live tree is in display space, so that scenario fails at
+# its first assert_text step even though the JNI report is fully present (see
+# `results/art-runtime/evidence/W21-hello-jni-tree.txt`). This row asserts the
+# same native output through content the tree really contains; it changes no
+# app code and does not relax the expectations.
+version: 1
+name: w21-hello-jni
+description: >-
+  Launch hello-jni on real ART and assert the complete JNI report line by line
+  (NewStringUTF, primitive args, int array, native-to-Java callbacks,
+  RegisterNatives, ThrowNew caught in Java), selected by text instead of the
+  stale title/bounds selector.
+app: fixtures/build/apps/hello-jni.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - ui.offscreen
+  - jni
+  - native-loader
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hellojni/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "stringFromJNI=Hello from native C"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "stringFromJNI=Hello from native C"}
+      text: {contains: "stringFromJNI=Hello from native C"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "add(20,22)=42"}
+      text: {contains: "add(20,22)=42"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "sumArray([1,2,3,4,5])=15"}
+      text: {contains: "sumArray([1,2,3,4,5])=15"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "javaCallbackResult=42"}
+      text: {contains: "javaCallbackResult=42"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "voidCallback=from-native"}
+      text: {contains: "voidCallback=from-native"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "registeredEcho=echo!"}
+      text: {contains: "registeredEcho=echo!"}
+
+  - assert_text:
+      selector:
+        class: android.widget.TextView
+        text: {contains: "throwFromJNI caught=thrown from native"}
+      text: {contains: "throwFromJNI caught=thrown from native"}
+
+  - capture:
+      name: hello-jni-report
+      format: png
+      fresh: true

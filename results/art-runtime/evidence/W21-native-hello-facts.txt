@@ -1,0 +1,28 @@
+# W21 wall-1: native fixtures' public NDK link line and AssetManager path
+
+## 1. Rebuilt fixture .so now records the public NDK DT_NEEDED entries
+  (link line: clang -shared -fPIC -O2 -landroid -ljnigraphics -lnativewindow)
+ 0x0000000000000001 (NEEDED)             Shared library: [libandroid.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libjnigraphics.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libnativewindow.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+
+## 2. The NDK sysroot stubs that supply those sonames (API-26, NDK 27.1.12297006)
+libandroid.so: libandroid.so
+libjnigraphics.so: libjnigraphics.so
+libnativewindow.so: libnativewindow.so
+
+## 3. AssetManager2::Open prepends "assets/" (AOSP tag r75, base/libs/androidfw/AssetManager2.cpp)
+554:  const std::string new_path = "assets/" + filename;
+560:  const std::string new_path = "assets/" + filename;
+# so the fixture must ask for hello.txt; "assets/hello.txt" resolved to assets/assets/hello.txt
+# on a real device too (fixture bug, not an ACOS gap).
+
+## 4. Live evidence after the rebuild (shared target/debug/acos-art, W21)
+outcome=ok application_created=True activity_resumed=True wall_ms=323
+AcosFixture: nativeHello=hello-from-native
+AcosFixture: asset=hello-acos!!
+AcosFixture: bitmapPixels=12
+AcosFixture: bitmapPixel11=ff112233
+AcosFixture: frame=1

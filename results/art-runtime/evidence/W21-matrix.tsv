@@ -1,0 +1,27 @@
+w21-native-hello	pass	live	2	None			
+w15-native-hello	pass	live	2	None			
+w21-hello-jni	pass	live	10	None			
+hello-jni	fail	live	3	2	assert_text	ELEMENT_NOT_FOUND	selector Selector { id: None, text: Some(TextMatch { exact: Some("Hello JNI"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node
+w15-native-hostile	pass	live	2	None			
+w21-rn-hello	timeout	live	3	2	wait_for	TIMEOUT	wait_for timed out after 8000 ms: selector Selector { id: None, text: Some(TextMatch { exact: Some("Hello ACOS"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } did not satisfy the condition (require_visible=true)
+rn-hello	fail	live	2	1	assert_text	ELEMENT_NOT_FOUND	selector Selector { id: None, text: Some(TextMatch { exact: Some("Hello ACOS"), contains: None, regex: None }), hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node
+counter-v2	pass	live	11	None			
+w15-dialog-menu	pass	live	3	None			
+w15-dialogs-menus	pass	live	3	None			
+w15-fragments-nav	pass	live	3	None			
+w15-list-adapter	pass	live	3	None			
+w15-list-scroll	pass	live	2	None			
+w15-todo-dogfood	pass	live	4	None			
+w15-widget-gallery	pass	live	3	None			
+w15-sqlite-crud	pass	live	2	None			
+w15-canvas-shapes	pass	live	2	None			
+w15-two-activity	pass	live	3	None			
+w16-text-input	pass	live	7	None			
+w17-form-hint	pass	live	4	None			
+w17-todo-hint	pass	live	4	None			
+w17-multi-hint	pass	live	3	None			
+w17-hello-views-hint	pass	live	5	None			
+form-validation	fail	live	23	22	assert_log	ASSERTION_FAILED	log assertion did not hold
+hello-views	unsupported	live	17	16	rotate	UNSUPPORTED_BACKEND	the ART session protocol has no rotate command yet (missing capability `input.rotate`)
+multi-activity	error	live	8	7	tap	INTERNAL	acos-art: INTERNAL: the guest ended after the gesture without a settled frame (status exit status: 1)
+todo-list	fail	live	5	4	assert_text	ASSERTION_FAILED	expected bounds [273,435][504,561], got [273,435][522,561]

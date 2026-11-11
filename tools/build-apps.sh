@@ -28,6 +28,17 @@ ZIPALIGN="$BT/zipalign"
 APKSIGNER="$BT/apksigner"
 NDK="${ANDROID_NDK_HOME:-$SDK/ndk/27.1.12297006}"
 NDK_BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+# Public NDK seams used by the native fixtures. Stock bionic resolves an app
+# `.so`'s undefined symbols only from the global group plus its own DT_NEEDED
+# local group (bionic/linker/linker.cpp: `SymbolLookupList(global_group,
+# local_group)`), so a library that calls `AAssetManager_*`/`AndroidBitmap_*`/
+# `ANativeWindow_*` without the matching `-l` flag fails on a real device with
+# `cannot locate symbol` even though the app namespace is allowed to load the
+# library. The NDK sysroot's `<api>/lib{android,jnigraphics,nativewindow}.so`
+# are ABI stubs: they contribute the correct DT_SONAME/DT_NEEDED entry to the
+# APK's library and the API-34 image supplies the real implementations at
+# runtime (docs/IMAGE_ABI_NOTEBOOK.md, W20/W21).
+NATIVE_PUBLIC_LIBS="-landroid -ljnigraphics -lnativewindow"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -151,9 +162,11 @@ NATIVE_JNI_WORK="$BUILD_DIR/native-hello-jni"
 rm -rf "$NATIVE_JNI_WORK"
 mkdir -p "$NATIVE_JNI_WORK/x86_64" "$NATIVE_JNI_WORK/arm64-v8a"
 echo "build-apps: [native-hello] compiling native libs"
-"$NDK_BIN/x86_64-linux-android26-clang" -shared -fPIC -O2 \
+# shellcheck disable=SC2086
+"$NDK_BIN/x86_64-linux-android26-clang" -shared -fPIC -O2 $NATIVE_PUBLIC_LIBS \
     -o "$NATIVE_JNI_WORK/x86_64/libnativehello.so" "$APPS_DIR/native-hello/jni/nativehello.c"
-"$NDK_BIN/aarch64-linux-android26-clang" -shared -fPIC -O2 \
+# shellcheck disable=SC2086
+"$NDK_BIN/aarch64-linux-android26-clang" -shared -fPIC -O2 $NATIVE_PUBLIC_LIBS \
     -o "$NATIVE_JNI_WORK/arm64-v8a/libnativehello.so" "$APPS_DIR/native-hello/jni/nativehello.c"
 build_apk native-hello "$NATIVE_JNI_WORK:lib" "$APPS_DIR/native-hello/assets:assets"
 
