@@ -1,0 +1,8 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:31:33",
+ "memory": {},
+ "memory_samples": 0
+}

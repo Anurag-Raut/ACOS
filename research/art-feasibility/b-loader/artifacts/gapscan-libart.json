@@ -1,0 +1,902 @@
+{
+  "closure": [
+    "libbase.so",
+    "libc++.so",
+    "libdl_android.so",
+    "ld-android.so",
+    "liblzma.so",
+    "libprocinfo.so",
+    "libunwindstack.so",
+    "libart.so",
+    "libartbase.so",
+    "libartpalette.so",
+    "libdexfile.so",
+    "liblz4.so",
+    "libnativebridge.so",
+    "libnativeloader.so",
+    "libprofile.so",
+    "libsigchain.so",
+    "libstatssocket.so",
+    "heapprofd_client_api.so"
+  ],
+  "entry": "libart.so",
+  "libraries": {
+    "heapprofd_client_api.so": {
+      "corpus": 14,
+      "forwarded": 40,
+      "missing": 4,
+      "shimmed": 9
+    },
+    "ld-android.so": {
+      "corpus": 0,
+      "forwarded": 0,
+      "missing": 0,
+      "shimmed": 0
+    },
+    "libart.so": {
+      "corpus": 521,
+      "forwarded": 103,
+      "missing": 35,
+      "shimmed": 41
+    },
+    "libartbase.so": {
+      "corpus": 97,
+      "forwarded": 73,
+      "missing": 16,
+      "shimmed": 19
+    },
+    "libartpalette.so": {
+      "corpus": 2,
+      "forwarded": 1,
+      "missing": 0,
+      "shimmed": 4
+    },
+    "libbase.so": {
+      "corpus": 61,
+      "forwarded": 63,
+      "missing": 19,
+      "shimmed": 19
+    },
+    "libc++.so": {
+      "corpus": 0,
+      "forwarded": 76,
+      "missing": 23,
+      "shimmed": 36
+    },
+    "libdexfile.so": {
+      "corpus": 91,
+      "forwarded": 17,
+      "missing": 1,
+      "shimmed": 1
+    },
+    "libdl_android.so": {
+      "corpus": 8,
+      "forwarded": 0,
+      "missing": 0,
+      "shimmed": 0
+    },
+    "liblz4.so": {
+      "corpus": 0,
+      "forwarded": 8,
+      "missing": 0,
+      "shimmed": 0
+    },
+    "liblzma.so": {
+      "corpus": 0,
+      "forwarded": 11,
+      "missing": 0,
+      "shimmed": 5
+    },
+    "libnativebridge.so": {
+      "corpus": 3,
+      "forwarded": 10,
+      "missing": 1,
+      "shimmed": 7
+    },
+    "libnativeloader.so": {
+      "corpus": 88,
+      "forwarded": 17,
+      "missing": 0,
+      "shimmed": 8
+    },
+    "libprocinfo.so": {
+      "corpus": 8,
+      "forwarded": 13,
+      "missing": 4,
+      "shimmed": 4
+    },
+    "libprofile.so": {
+      "corpus": 85,
+      "forwarded": 23,
+      "missing": 12,
+      "shimmed": 3
+    },
+    "libsigchain.so": {
+      "corpus": 3,
+      "forwarded": 12,
+      "missing": 5,
+      "shimmed": 14
+    },
+    "libstatssocket.so": {
+      "corpus": 0,
+      "forwarded": 16,
+      "missing": 1,
+      "shimmed": 4
+    },
+    "libunwindstack.so": {
+      "corpus": 64,
+      "forwarded": 36,
+      "missing": 19,
+      "shimmed": 18
+    }
+  },
+  "missing": {
+    "_Unwind_Backtrace": [
+      "libunwindstack.so"
+    ],
+    "_Unwind_DeleteException": [
+      "libc++.so"
+    ],
+    "_Unwind_GetDataRelBase": [
+      "libunwindstack.so"
+    ],
+    "_Unwind_GetIP": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "_Unwind_GetIPInfo": [
+      "libunwindstack.so"
+    ],
+    "_Unwind_GetLanguageSpecificData": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "_Unwind_GetRegionStart": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "_Unwind_GetTextRelBase": [
+      "libunwindstack.so"
+    ],
+    "_Unwind_RaiseException": [
+      "libc++.so"
+    ],
+    "_Unwind_Resume": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "_Unwind_SetGR": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "_Unwind_SetIP": [
+      "libc++.so",
+      "libunwindstack.so"
+    ],
+    "__android_log_call_aborter": [
+      "libbase.so"
+    ],
+    "__android_log_error_write": [
+      "libart.so",
+      "libartbase.so"
+    ],
+    "__android_log_get_minimum_priority": [
+      "libbase.so"
+    ],
+    "__android_log_logd_logger": [
+      "libbase.so"
+    ],
+    "__android_log_set_aborter": [
+      "libbase.so"
+    ],
+    "__android_log_set_default_tag": [
+      "libbase.so"
+    ],
+    "__android_log_set_logger": [
+      "libbase.so"
+    ],
+    "__android_log_set_minimum_priority": [
+      "libbase.so"
+    ],
+    "__android_log_write_log_message": [
+      "libbase.so"
+    ],
+    "__assert": [
+      "heapprofd_client_api.so",
+      "libsigchain.so",
+      "libunwindstack.so"
+    ],
+    "__hwasan_tag_pointer": [
+      "libart.so"
+    ],
+    "__libc_current_sigrtmax": [
+      "libart.so"
+    ],
+    "__libc_current_sigrtmin": [
+      "libart.so"
+    ],
+    "__pread64_chk": [
+      "libartbase.so"
+    ],
+    "__pwrite64_chk": [
+      "libartbase.so"
+    ],
+    "__pwrite_chk": [
+      "libartbase.so",
+      "libbase.so"
+    ],
+    "__strlcpy_chk": [
+      "heapprofd_client_api.so",
+      "libbase.so",
+      "libsigchain.so",
+      "libunwindstack.so"
+    ],
+    "__strncpy_chk2": [
+      "libart.so"
+    ],
+    "__system_property_area_serial": [
+      "libbase.so"
+    ],
+    "__system_property_set": [
+      "libbase.so"
+    ],
+    "__system_property_wait": [
+      "libbase.so"
+    ],
+    "adler32": [
+      "libart.so",
+      "libdexfile.so"
+    ],
+    "adler32_combine": [
+      "libart.so"
+    ],
+    "android_fdsan_close_with_tag": [
+      "libart.so",
+      "libartbase.so",
+      "libbase.so",
+      "libprocinfo.so",
+      "libprofile.so",
+      "libunwindstack.so"
+    ],
+    "android_fdsan_create_owner_tag": [
+      "libart.so",
+      "libartbase.so",
+      "libbase.so",
+      "libprocinfo.so",
+      "libprofile.so",
+      "libunwindstack.so"
+    ],
+    "android_fdsan_exchange_owner_tag": [
+      "libart.so",
+      "libartbase.so",
+      "libbase.so",
+      "libprocinfo.so",
+      "libprofile.so",
+      "libunwindstack.so"
+    ],
+    "android_get_device_api_level": [
+      "libart.so",
+      "libartbase.so",
+      "libprofile.so"
+    ],
+    "android_handle_signal": [
+      "libsigchain.so"
+    ],
+    "android_log_destroy": [
+      "libart.so"
+    ],
+    "android_log_write_int32": [
+      "libart.so"
+    ],
+    "android_log_write_list": [
+      "libart.so"
+    ],
+    "android_log_write_string8": [
+      "libart.so"
+    ],
+    "android_log_write_string8_len": [
+      "libart.so"
+    ],
+    "basename": [
+      "libbase.so"
+    ],
+    "create_android_logger": [
+      "libart.so"
+    ],
+    "deflate": [
+      "libprofile.so"
+    ],
+    "deflateBound": [
+      "libprofile.so"
+    ],
+    "deflateEnd": [
+      "libprofile.so"
+    ],
+    "deflateInit_": [
+      "libprofile.so"
+    ],
+    "execv": [
+      "libart.so"
+    ],
+    "execve": [
+      "libart.so"
+    ],
+    "fallocate": [
+      "libart.so",
+      "libartbase.so"
+    ],
+    "fgetc": [
+      "libartbase.so"
+    ],
+    "fstatfs": [
+      "libartbase.so"
+    ],
+    "getline": [
+      "libprocinfo.so"
+    ],
+    "getpriority": [
+      "libart.so"
+    ],
+    "getprogname": [
+      "heapprofd_client_api.so",
+      "libbase.so"
+    ],
+    "getpwnam": [
+      "libartbase.so"
+    ],
+    "inflate": [
+      "libartbase.so",
+      "libprofile.so"
+    ],
+    "inflateEnd": [
+      "libartbase.so",
+      "libprofile.so"
+    ],
+    "inflateInit2_": [
+      "libartbase.so"
+    ],
+    "inflateInit_": [
+      "libprofile.so"
+    ],
+    "iswalpha": [
+      "libc++.so"
+    ],
+    "iswblank": [
+      "libc++.so"
+    ],
+    "iswcntrl": [
+      "libc++.so"
+    ],
+    "iswdigit": [
+      "libc++.so"
+    ],
+    "iswprint": [
+      "libc++.so"
+    ],
+    "iswpunct": [
+      "libc++.so"
+    ],
+    "iswspace": [
+      "libc++.so"
+    ],
+    "iswupper": [
+      "libc++.so"
+    ],
+    "iswxdigit": [
+      "libc++.so"
+    ],
+    "mallinfo": [
+      "libart.so"
+    ],
+    "mincore": [
+      "libart.so"
+    ],
+    "mkdtemp": [
+      "libbase.so"
+    ],
+    "mkostemps": [
+      "libprofile.so"
+    ],
+    "mount": [
+      "libnativebridge.so"
+    ],
+    "pidfd_open": [
+      "libart.so"
+    ],
+    "process_vm_readv": [
+      "libartbase.so",
+      "libunwindstack.so"
+    ],
+    "pthread_getcpuclockid": [
+      "libart.so"
+    ],
+    "pthread_gettid_np": [
+      "libart.so"
+    ],
+    "pthread_sigmask64": [
+      "libart.so"
+    ],
+    "ptrace": [
+      "libunwindstack.so"
+    ],
+    "sched_getparam": [
+      "libart.so"
+    ],
+    "sched_getscheduler": [
+      "libart.so"
+    ],
+    "setpgid": [
+      "libart.so"
+    ],
+    "sigaddset64": [
+      "libart.so"
+    ],
+    "sigemptyset64": [
+      "libart.so"
+    ],
+    "sigfillset64": [
+      "libsigchain.so"
+    ],
+    "sigwait64": [
+      "libart.so"
+    ],
+    "strtod_l": [
+      "libc++.so"
+    ],
+    "strtof_l": [
+      "libc++.so"
+    ],
+    "tgkill": [
+      "libunwindstack.so"
+    ],
+    "towlower": [
+      "libc++.so"
+    ],
+    "towupper": [
+      "libc++.so"
+    ],
+    "unshare": [
+      "libart.so"
+    ],
+    "waitid": [
+      "libart.so"
+    ],
+    "wcscoll": [
+      "libc++.so"
+    ],
+    "wcsxfrm": [
+      "libc++.so"
+    ],
+    "writev": [
+      "heapprofd_client_api.so",
+      "libsigchain.so",
+      "libstatssocket.so",
+      "libunwindstack.so"
+    ]
+  },
+  "relocs": {
+    "heapprofd_client_api.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 66,
+        "RELATIVE": 7,
+        "UNKNOWN": 1
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 74
+    },
+    "ld-android.so": {
+      "aps2_groups": 0,
+      "by_type": {},
+      "containers": [],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 0
+    },
+    "libart.so": {
+      "aps2_groups": 8,
+      "by_type": {
+        "64": 134,
+        "JUMP_SLOT": 649,
+        "RELATIVE": 7286,
+        "TLS_GD32": 192
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 14,
+      "textrel": false,
+      "total": 8261
+    },
+    "libartbase.so": {
+      "aps2_groups": 3,
+      "by_type": {
+        "64": 11,
+        "JUMP_SLOT": 230,
+        "NONE": 8,
+        "RELATIVE": 544,
+        "TLS_LDM": 184
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 4,
+      "textrel": false,
+      "total": 977
+    },
+    "libartpalette.so": {
+      "aps2_groups": 0,
+      "by_type": {
+        "JUMP_SLOT": 7,
+        "RELATIVE": 3
+      },
+      "containers": [
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 10
+    },
+    "libbase.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 241,
+        "RELATIVE": 15,
+        "UNKNOWN": 85
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "ANDROID_RELR",
+        "JMPREL-RELA"
+      ],
+      "ifuncs": [],
+      "init_array": 1,
+      "textrel": false,
+      "total": 341
+    },
+    "libc++.so": {
+      "aps2_groups": 2,
+      "by_type": {
+        "64": 4,
+        "JUMP_SLOT": 489,
+        "RELATIVE": 2815
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 1,
+      "textrel": false,
+      "total": 3308
+    },
+    "libdexfile.so": {
+      "aps2_groups": 2,
+      "by_type": {
+        "64": 5,
+        "JUMP_SLOT": 93,
+        "RELATIVE": 364,
+        "UNKNOWN": 35
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 497
+    },
+    "libdl_android.so": {
+      "aps2_groups": 0,
+      "by_type": {
+        "JUMP_SLOT": 8
+      },
+      "containers": [
+        "JMPREL-RELA"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 8
+    },
+    "liblz4.so": {
+      "aps2_groups": 0,
+      "by_type": {
+        "JUMP_SLOT": 44,
+        "RELATIVE": 3
+      },
+      "containers": [
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 47
+    },
+    "liblzma.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 119,
+        "RELATIVE": 11,
+        "UNKNOWN": 23
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 153
+    },
+    "libnativebridge.so": {
+      "aps2_groups": 0,
+      "by_type": {
+        "JUMP_SLOT": 21,
+        "RELATIVE": 3
+      },
+      "containers": [
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 24
+    },
+    "libnativeloader.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 89,
+        "RELATIVE": 164,
+        "UNKNOWN": 53
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 3,
+      "textrel": false,
+      "total": 306
+    },
+    "libprocinfo.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 31,
+        "RELATIVE": 3,
+        "UNKNOWN": 2
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 36
+    },
+    "libprofile.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 110,
+        "RELATIVE": 22,
+        "UNKNOWN": 23
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 1,
+      "textrel": false,
+      "total": 155
+    },
+    "libsigchain.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 39,
+        "RELATIVE": 4,
+        "UNKNOWN": 1
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 1,
+      "textrel": false,
+      "total": 44
+    },
+    "libstatssocket.so": {
+      "aps2_groups": 1,
+      "by_type": {
+        "JUMP_SLOT": 27,
+        "RELATIVE": 11,
+        "UNKNOWN": 1
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "JMPREL-RELA",
+        "RELR"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 39
+    },
+    "libunwindstack.so": {
+      "aps2_groups": 4,
+      "by_type": {
+        "64": 11,
+        "JUMP_SLOT": 464,
+        "RELATIVE": 1652,
+        "UNKNOWN": 929
+      },
+      "containers": [
+        "ANDROID_APS2",
+        "ANDROID_RELR",
+        "JMPREL-RELA"
+      ],
+      "ifuncs": [],
+      "init_array": 0,
+      "textrel": false,
+      "total": 3056
+    }
+  },
+  "root": ".cache/art-exp/sysroot",
+  "tls": {
+    "heapprofd_client_api.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "ld-android.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libart.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": true,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libartbase.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libartpalette.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libbase.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libc++.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libdexfile.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libdl_android.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "liblz4.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "liblzma.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libnativebridge.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libnativeloader.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libprocinfo.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libprofile.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libsigchain.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libstatssocket.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    },
+    "libunwindstack.so": {
+      "defined_tls_symbols": 0,
+      "general_dynamic": false,
+      "initial_exec": false,
+      "segment": null,
+      "tlsdesc": false
+    }
+  },
+  "unresolved_needed": []
+}

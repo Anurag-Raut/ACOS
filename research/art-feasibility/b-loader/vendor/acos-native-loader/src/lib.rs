@@ -1,0 +1,161 @@
+#![allow(clippy::missing_safety_doc)]
+//! # `acos-native-loader`
+//!
+//! Rust-owned native loader for ACOS: it maps Bionic-targeted x86_64 Android
+//! shared objects into the process, applies their relocations, binds their
+//! imports against a Rust bionic compatibility table, runs constructors, and
+//! exposes exported symbols (`JNI_OnLoad`, `Java_*`, ...).
+//!
+//! ```
+//! use acos_native_loader::{Loader, LoaderConfig};
+//!
+//! let loader = Loader::new(LoaderConfig::default());
+//! // `loader.load_file(std::path::Path::new("libhellojni.so"))`
+//! let _ = loader.report();
+//! ```
+//!
+//! ## Never fake
+//!
+//! An import absent from the bionic table is never silently stubbed. In the
+//! default [`MissingPolicy::Strict`] mode, load fails with
+//! `UNSUPPORTED_NATIVE_SYMBOL` listing every missing symbol and the library
+//! that needs it. In [`MissingPolicy::LazyTrap`] mode it is bound to a
+//! per-symbol aborting trap that names the exact symbol when called.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+pub mod bionic;
+pub mod dyninfo;
+pub mod elf;
+pub mod error;
+pub mod inventory;
+pub mod loader;
+pub mod report;
+pub mod testjni;
+pub mod tls;
+
+pub use bionic::ndk::{
+    clear_host as clear_ndk_host, install_host as install_ndk_host, ARect, BitmapInfo,
+    FrameCallback, NdkConfiguration, NdkHost, NdkResult, WindowBuffer, WindowInfo,
+};
+pub use error::{LibraryMissing, LoaderError, Result};
+pub use loader::{LibraryHandle, Loader, NativeLibrary};
+pub use report::Report;
+
+/// Sink for `__android_log_*` output. The runtime installs a sink to capture
+/// logcat-style lines without touching the host's real log.
+pub trait LogSink: Send + Sync {
+    /// Called for every guest log line.
+    fn log(&self, priority: i32, tag: &str, message: &str);
+}
+
+/// What to do when a guest import is not provided by the bionic table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MissingPolicy {
+    /// Fail the load with `UNSUPPORTED_NATIVE_SYMBOL` (default).
+    #[default]
+    Strict,
+    /// Bind the symbol to a per-symbol aborting trap (opt-in diagnostics).
+    LazyTrap,
+}
+
+/// Loader configuration.
+#[derive(Clone)]
+pub struct LoaderConfig {
+    /// Directories searched for `DT_NEEDED` libraries (e.g. the extracted
+    /// APK `lib/x86_64/` directory).
+    pub search_paths: Vec<PathBuf>,
+    /// Missing-import policy.
+    pub missing_policy: MissingPolicy,
+    /// Optional log sink for `__android_log_*`.
+    pub log_sink: Option<Arc<dyn LogSink>>,
+    /// Overrides / additions to the default Android system properties.
+    pub system_properties: HashMap<String, String>,
+    /// When `false` (the default), `dlopen`/`android_dlopen_ext` reject any
+    /// absolute path that does not canonicalise inside a configured
+    /// `search_paths` root, so an APK `.so` cannot name a host system library
+    /// (e.g. `/lib/x86_64-linux-gnu/libc.so.6`). Set `true` only for trusted
+    /// in-process tests. Native `.so` execution stays disabled for product
+    /// paths until a seccomp/landlock sandbox exists (see DECISIONS.md,
+    /// ADR-0018 note).
+    pub allow_host_paths: bool,
+    /// When `true` (the default), the loader refuses to map a guest `.so`
+    /// unless this process reports an active confinement (`PR_SET_NO_NEW_PRIVS`
+    /// + Landlock + seccomp; see [`acos_sandbox::confinement_active`]).
+    ///
+    /// Product paths must leave this on. Trusted in-process tests that map
+    /// their own test libraries without entering a sandbox disable it with
+    /// [`LoaderConfig::for_tests_without_confinement`]. See DECISIONS.md
+    /// ADR-0022.
+    pub require_confinement: bool,
+}
+
+impl Default for LoaderConfig {
+    fn default() -> Self {
+        LoaderConfig {
+            search_paths: Vec::new(),
+            missing_policy: MissingPolicy::default(),
+            log_sink: None,
+            system_properties: HashMap::new(),
+            allow_host_paths: false,
+            // Product default: never map guest `PROT_EXEC` code unless the
+            // process is confined (ADR-0022).
+            require_confinement: true,
+        }
+    }
+}
+
+impl std::fmt::Debug for LoaderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoaderConfig")
+            .field("search_paths", &self.search_paths)
+            .field("missing_policy", &self.missing_policy)
+            .field("log_sink", &self.log_sink.is_some())
+            .field("system_properties", &self.system_properties.len())
+            .field("require_confinement", &self.require_confinement)
+            .finish()
+    }
+}
+
+impl LoaderConfig {
+    /// Convenience builder: add a search path.
+    pub fn with_search_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.search_paths.push(path.into());
+        self
+    }
+
+    /// Convenience builder: choose the missing-symbol policy.
+    pub fn with_missing_policy(mut self, policy: MissingPolicy) -> Self {
+        self.missing_policy = policy;
+        self
+    }
+
+    /// Convenience builder: install a guest log sink.
+    pub fn with_log_sink(mut self, sink: Arc<dyn LogSink>) -> Self {
+        self.log_sink = Some(sink);
+        self
+    }
+
+    /// Convenience builder: allow absolute host paths (trusted tests only).
+    pub fn with_host_paths_allowed(mut self) -> Self {
+        self.allow_host_paths = true;
+        self
+    }
+
+    /// Test-only: a loader that does not require an active confinement.
+    ///
+    /// This exists for trusted in-process tests that map their own test
+    /// libraries and never run untrusted APK code. **Product code must not use
+    /// it** — it defeats the ADR-0022 guarantee that native APK code only runs
+    /// under a seccomp/landlock sandbox. Runs are still safe because the test
+    /// inputs are checked-in fixtures, not guest code.
+    #[doc(hidden)]
+    pub fn for_tests_without_confinement() -> Self {
+        LoaderConfig {
+            require_confinement: false,
+            ..LoaderConfig::default()
+        }
+    }
+}

@@ -1,0 +1,341 @@
+artspike: libart = /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libart.so
+artspike: loaded libart.so in 2.39894041s (bias 0x7f45f61d5000)
+{
+  "bionic_table": {
+    "forwarded": 544,
+    "shimmed": 350,
+    "total": 894
+  },
+  "libraries": [
+    {
+      "name": "libart.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libart.so",
+      "imports_total": 1176,
+      "imports_forwarded": 122,
+      "imports_shimmed": 68,
+      "imports_missing": [],
+      "imports_versioned": 31,
+      "relocations": 8414,
+      "tls": false,
+      "deps": [
+        "libartpalette.so",
+        "libbase.so",
+        "liblog.so",
+        "liblz4.so",
+        "liblzma.so",
+        "libnativebridge.so",
+        "libnativeloader.so",
+        "libsigchain.so",
+        "libunwindstack.so",
+        "libartbase.so",
+        "libdexfile.so",
+        "libprofile.so",
+        "libdl_android.so",
+        "libstatssocket.so",
+        "libz.so",
+        "heapprofd_client_api.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libartpalette.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libartpalette.so",
+      "imports_total": 7,
+      "imports_forwarded": 1,
+      "imports_shimmed": 4,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 10,
+      "tls": false,
+      "deps": [
+        "liblog.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libc++.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.runtime/lib64/libc++.so",
+      "imports_total": 2353,
+      "imports_forwarded": 98,
+      "imports_shimmed": 38,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 2700,
+      "tls": false,
+      "deps": [
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libbase.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.runtime/lib64/libbase.so",
+      "imports_total": 326,
+      "imports_forwarded": 60,
+      "imports_shimmed": 44,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 341,
+      "tls": false,
+      "deps": [
+        "liblog.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "liblz4.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/liblz4.so",
+      "imports_total": 44,
+      "imports_forwarded": 8,
+      "imports_shimmed": 0,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 47,
+      "tls": false,
+      "deps": [
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "liblzma.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/liblzma.so",
+      "imports_total": 142,
+      "imports_forwarded": 11,
+      "imports_shimmed": 5,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 153,
+      "tls": false,
+      "deps": [
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libnativebridge.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libnativebridge.so",
+      "imports_total": 21,
+      "imports_forwarded": 11,
+      "imports_shimmed": 7,
+      "imports_missing": [],
+      "imports_versioned": 1,
+      "relocations": 24,
+      "tls": false,
+      "deps": [
+        "liblog.so",
+        "libdl_android.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libdl_android.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.runtime/lib64/bionic/libdl_android.so",
+      "imports_total": 7,
+      "imports_forwarded": 0,
+      "imports_shimmed": 7,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 8,
+      "tls": false,
+      "deps": [
+        "ld-android.so"
+      ]
+    },
+    {
+      "name": "libnativeloader.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libnativeloader.so",
+      "imports_total": 142,
+      "imports_forwarded": 16,
+      "imports_shimmed": 9,
+      "imports_missing": [],
+      "imports_versioned": 3,
+      "relocations": 306,
+      "tls": false,
+      "deps": [
+        "liblog.so",
+        "libnativebridge.so",
+        "libbase.so",
+        "libdl_android.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libsigchain.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libsigchain.so",
+      "imports_total": 40,
+      "imports_forwarded": 13,
+      "imports_shimmed": 19,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 44,
+      "tls": false,
+      "deps": [
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libunwindstack.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libunwindstack.so",
+      "imports_total": 1171,
+      "imports_forwarded": 59,
+      "imports_shimmed": 32,
+      "imports_missing": [],
+      "imports_versioned": 1,
+      "relocations": 2823,
+      "tls": false,
+      "deps": [
+        "libbase.so",
+        "liblog.so",
+        "liblzma.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libartbase.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libartbase.so",
+      "imports_total": 374,
+      "imports_forwarded": 78,
+      "imports_shimmed": 33,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 918,
+      "tls": false,
+      "deps": [
+        "libz.so",
+        "liblog.so",
+        "libartpalette.so",
+        "libbase.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libdexfile.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libdexfile.so",
+      "imports_total": 125,
+      "imports_forwarded": 17,
+      "imports_shimmed": 2,
+      "imports_missing": [],
+      "imports_versioned": 2,
+      "relocations": 489,
+      "tls": false,
+      "deps": [
+        "libz.so",
+        "libartpalette.so",
+        "liblog.so",
+        "libbase.so",
+        "libartbase.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libprofile.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.art/lib64/libprofile.so",
+      "imports_total": 133,
+      "imports_forwarded": 31,
+      "imports_shimmed": 9,
+      "imports_missing": [],
+      "imports_versioned": 2,
+      "relocations": 155,
+      "tls": false,
+      "deps": [
+        "libartpalette.so",
+        "libbase.so",
+        "libz.so",
+        "libartbase.so",
+        "libdexfile.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libstatssocket.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.os.statsd/lib64/libstatssocket.so",
+      "imports_total": 28,
+      "imports_forwarded": 16,
+      "imports_shimmed": 5,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 39,
+      "tls": false,
+      "deps": [
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "heapprofd_client_api.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/heapprofd_client_api.so",
+      "imports_total": 67,
+      "imports_forwarded": 40,
+      "imports_shimmed": 13,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 74,
+      "tls": false,
+      "deps": [
+        "libbase.so",
+        "libprocinfo.so",
+        "libunwindstack.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    },
+    {
+      "name": "libprocinfo.so",
+      "path": "/home/Qui/Projects/acos/.cache/art-exp/sysroot/system/apex/com.android.runtime/lib64/libprocinfo.so",
+      "imports_total": 33,
+      "imports_forwarded": 13,
+      "imports_shimmed": 10,
+      "imports_missing": [],
+      "imports_versioned": 0,
+      "relocations": 36,
+      "tls": false,
+      "deps": [
+        "libbase.so",
+        "libc++.so",
+        "libc.so",
+        "libm.so",
+        "libdl.so"
+      ]
+    }
+  ]
+}
+artspike: preloaded libcutils.so
+artspike: preloaded libselinux.so

@@ -1,0 +1,18 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:32:56",
+ "memory": {
+  "Rss": 115.9,
+  "Pss": 115.6,
+  "Pss_Anon": 13.6,
+  "Pss_File": 103.1,
+  "Pss_Shmem": 0.0,
+  "Shared_Clean": 0.6,
+  "Private_Clean": 102.8,
+  "Private_Dirty": 13.6,
+  "Anonymous": 13.6
+ },
+ "memory_samples": 9
+}

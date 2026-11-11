@@ -1,0 +1,18 @@
+[package]
+name = "acos_jni_probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone (not a member of the ACOS workspace): this is an experiment
+# artefact, it must not change the main build.
+[workspace]
+
+[lib]
+name = "acosjniprobe"
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 2
+panic = "abort"
+codegen-units = 1

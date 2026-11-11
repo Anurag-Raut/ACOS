@@ -1,0 +1,45 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:33:33",
+ "memory": {
+  "noimage": {
+   "Rss": 113.7,
+   "Pss": 113.4,
+   "Pss_Anon": 10.4,
+   "Pss_File": 103.2,
+   "Pss_Shmem": 0.0,
+   "Shared_Clean": 0.6,
+   "Private_Clean": 103.0,
+   "Private_Dirty": 10.4,
+   "Anonymous": 10.4,
+   "samples": 3
+  },
+  "int": {
+   "Rss": 113.8,
+   "Pss": 113.5,
+   "Pss_Anon": 11.6,
+   "Pss_File": 101.9,
+   "Pss_Shmem": 0.0,
+   "Shared_Clean": 0.6,
+   "Private_Clean": 101.6,
+   "Private_Dirty": 11.6,
+   "Anonymous": 11.6,
+   "samples": 3
+  },
+  "aot": {
+   "Rss": 113.7,
+   "Pss": 113.4,
+   "Pss_Anon": 10.3,
+   "Pss_File": 103.1,
+   "Pss_Shmem": 0.0,
+   "Shared_Clean": 0.6,
+   "Private_Clean": 102.9,
+   "Private_Dirty": 10.3,
+   "Anonymous": 10.3,
+   "samples": 3
+  }
+ },
+ "memory_samples": 9
+}

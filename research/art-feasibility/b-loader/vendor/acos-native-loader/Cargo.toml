@@ -1,0 +1,21 @@
+[package]
+name = "acos-native-loader"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "VENDORED, PATCHED copy of crates/acos-native-loader for the b-loader feasibility spike. Never modify the real crate."
+build = "build.rs"
+
+[lib]
+name = "acos_native_loader"
+path = "src/lib.rs"
+
+[dependencies]
+acos-sandbox = { path = "../../../../../crates/acos-sandbox" }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[build-dependencies]
+cc = "1"

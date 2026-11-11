@@ -1,0 +1,63 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:31:18",
+ "shim_floor_ms": 28.4,
+ "startup": [
+  {
+   "program": "hello (prints 16 lines)",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 177.7,
+   "min_ms": 176.6,
+   "max_ms": 181.1,
+   "exit": 0
+  },
+  {
+   "program": "hello (prints 16 lines)",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 176.9,
+   "min_ms": 176.7,
+   "max_ms": 179.5,
+   "exit": 0
+  },
+  {
+   "program": "hello (prints 16 lines)",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 180.2,
+   "min_ms": 175.8,
+   "max_ms": 181.8,
+   "exit": 0
+  },
+  {
+   "program": "empty main()",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 180.1,
+   "min_ms": 178.7,
+   "max_ms": 184.0,
+   "exit": 0
+  },
+  {
+   "program": "empty main()",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 181.8,
+   "min_ms": 176.3,
+   "max_ms": 184.1,
+   "exit": 0
+  },
+  {
+   "program": "empty main()",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 182.4,
+   "min_ms": 179.5,
+   "max_ms": 188.9,
+   "exit": 0
+  }
+ ]
+}

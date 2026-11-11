@@ -1,0 +1,68 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:35:55",
+ "sharing": [
+  {
+   "n": 1,
+   "mode": "noimage",
+   "sampled": 1,
+   "sum_rss_mb": 119.1,
+   "sum_pss_mb": 118.8,
+   "sum_pss_file_mb": 103.1,
+   "sum_pss_anon_mb": 15.6,
+   "pss_per_proc_mb": 118.8
+  },
+  {
+   "n": 1,
+   "mode": "aot",
+   "sampled": 1,
+   "sum_rss_mb": 119.4,
+   "sum_pss_mb": 119.1,
+   "sum_pss_file_mb": 103.4,
+   "sum_pss_anon_mb": 15.6,
+   "pss_per_proc_mb": 119.1
+  },
+  {
+   "n": 5,
+   "mode": "noimage",
+   "sampled": 5,
+   "sum_rss_mb": 591.2,
+   "sum_pss_mb": 183.4,
+   "sum_pss_file_mb": 105.2,
+   "sum_pss_anon_mb": 78.2,
+   "pss_per_proc_mb": 36.7
+  },
+  {
+   "n": 5,
+   "mode": "aot",
+   "sampled": 5,
+   "sum_rss_mb": 590.8,
+   "sum_pss_mb": 183.6,
+   "sum_pss_file_mb": 105.2,
+   "sum_pss_anon_mb": 78.3,
+   "pss_per_proc_mb": 36.7
+  },
+  {
+   "n": 20,
+   "mode": "noimage",
+   "sampled": 20,
+   "sum_rss_mb": 2380.2,
+   "sum_pss_mb": 420.5,
+   "sum_pss_file_mb": 105.5,
+   "sum_pss_anon_mb": 314.7,
+   "pss_per_proc_mb": 21.0
+  },
+  {
+   "n": 20,
+   "mode": "aot",
+   "sampled": 20,
+   "sum_rss_mb": 2378.0,
+   "sum_pss_mb": 419.0,
+   "sum_pss_file_mb": 105.6,
+   "sum_pss_anon_mb": 313.1,
+   "pss_per_proc_mb": 21.0
+  }
+ ]
+}

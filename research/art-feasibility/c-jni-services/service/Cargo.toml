@@ -1,0 +1,16 @@
+[package]
+name = "acos-probe-service"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone workspace: this experiment must not perturb the ACOS build.
+[workspace]
+
+[dependencies]
+# Read-only path dependency on the real ACOS Parcel codec (proves the codec
+# compiles and runs outside the main workspace / outside the VM).
+acos-parcel = { path = "../../../../crates/acos-parcel" }
+
+[profile.release]
+opt-level = 2

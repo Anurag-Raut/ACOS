@@ -1,0 +1,152 @@
+{
+ "engine": "real Google ART 14 (com.android.art APEX, x86_64)",
+ "host": "Linux 7.2.11 x86_64, no KVM, bwrap user+mount namespace",
+ "reps": 5,
+ "stamp": "2026-11-11T10:35:01",
+ "bench": [
+  {
+   "program": "BenchFib",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 176.4,
+   "min_ms": 175.1,
+   "max_ms": 204.6
+  },
+  {
+   "program": "BenchFib",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 432.9,
+   "min_ms": 429.8,
+   "max_ms": 437.7
+  },
+  {
+   "program": "BenchFib",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 180.6,
+   "min_ms": 180.2,
+   "max_ms": 181.1
+  },
+  {
+   "program": "BenchLoop",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 217.3,
+   "min_ms": 214.3,
+   "max_ms": 219.0
+  },
+  {
+   "program": "BenchLoop",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 965.9,
+   "min_ms": 962.1,
+   "max_ms": 979.0
+  },
+  {
+   "program": "BenchLoop",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 220.1,
+   "min_ms": 218.2,
+   "max_ms": 221.4
+  },
+  {
+   "program": "BenchString",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 209.3,
+   "min_ms": 206.7,
+   "max_ms": 213.3
+  },
+  {
+   "program": "BenchString",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 1128.7,
+   "min_ms": 1127.7,
+   "max_ms": 1131.1
+  },
+  {
+   "program": "BenchString",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 207.4,
+   "min_ms": 204.6,
+   "max_ms": 207.6
+  },
+  {
+   "program": "BenchAlloc",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 212.0,
+   "min_ms": 209.2,
+   "max_ms": 214.3
+  },
+  {
+   "program": "BenchAlloc",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 898.3,
+   "min_ms": 890.4,
+   "max_ms": 910.0
+  },
+  {
+   "program": "BenchAlloc",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 217.6,
+   "min_ms": 207.6,
+   "max_ms": 220.2
+  },
+  {
+   "program": "BenchVirtual",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 212.0,
+   "min_ms": 208.0,
+   "max_ms": 213.6
+  },
+  {
+   "program": "BenchVirtual",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 1071.0,
+   "min_ms": 1070.2,
+   "max_ms": 1084.4
+  },
+  {
+   "program": "BenchVirtual",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 213.2,
+   "min_ms": 211.5,
+   "max_ms": 213.5
+  },
+  {
+   "program": "BenchGc",
+   "mode": "noimage",
+   "n": 5,
+   "p50_ms": 217.5,
+   "min_ms": 211.3,
+   "max_ms": 224.4
+  },
+  {
+   "program": "BenchGc",
+   "mode": "int",
+   "n": 5,
+   "p50_ms": 326.9,
+   "min_ms": 322.1,
+   "max_ms": 329.5
+  },
+  {
+   "program": "BenchGc",
+   "mode": "aot",
+   "n": 5,
+   "p50_ms": 219.4,
+   "min_ms": 218.2,
+   "max_ms": 226.3
+  }
+ ]
+}
