@@ -24,6 +24,7 @@
 //! silent fallback to another engine — the Rust VM stays a separate, explicit
 //! choice (see `docs/DECISION_ART_RUNTIME.md`).
 
+pub mod app;
 pub mod launcher;
 pub mod logd;
 pub mod props;

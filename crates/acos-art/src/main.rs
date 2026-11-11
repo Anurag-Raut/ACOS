@@ -7,6 +7,8 @@
 //! acos-art build-shim                                # libartshim.so
 //! acos-art props [print|write|get KEY]
 //! acos-art doctor                                    # layout/capability report
+//! acos-art render-app --apk FILE [--out DIR]          # first frame + view tree
+//! acos-art build-app                                  # guest dex + substrate shim
 //! ```
 
 use acos_art::{launcher, ArtRoot, Error, JitMode, LogMode, Props, Result, RunOpts};
@@ -24,6 +26,10 @@ USAGE:
   acos-art build-shim
   acos-art props [print|write|get KEY]
   acos-art doctor
+  acos-art render-app --apk FILE [--out DIR] [--package PKG] [--layout NAME]
+                     [--width PX] [--content-height PX] [--density DPI]
+                     [--text-allcaps device|theme]
+  acos-art build-app
 
 COMMON OPTIONS:
   --sysroot DIR      ART sysroot (default: $ACOS_ART_SYSROOT, .cache/art/sysroot,
@@ -78,6 +84,11 @@ fn real_main() -> Result<ExitCode> {
     let mut json_out: Option<PathBuf> = None;
     let mut programs: Option<PathBuf> = None;
     let mut expected: Option<PathBuf> = None;
+    let mut apk: Option<PathBuf> = None;
+    let mut package: Option<String> = None;
+    let mut layout: Option<String> = None;
+    let mut size: (u32, u32, u32) = (1080, 2062, 420);
+    let mut all_caps = acos_art::app::AllCaps::Device;
 
     let mut i = 1;
     while i < args.len() {
@@ -124,6 +135,18 @@ fn real_main() -> Result<ExitCode> {
             "--programs" | "--fixtures" => programs = Some(PathBuf::from(next(&mut i)?)),
             "--expected" => expected = Some(PathBuf::from(next(&mut i)?)),
             "--out" => out = Some(PathBuf::from(next(&mut i)?)),
+            "--apk" => apk = Some(PathBuf::from(next(&mut i)?)),
+            "--package" => package = Some(next(&mut i)?),
+            "--layout" => layout = Some(next(&mut i)?),
+            "--width" => size.0 = next(&mut i)?.parse().unwrap_or(1080),
+            "--content-height" => size.1 = next(&mut i)?.parse().unwrap_or(2062),
+            "--density" => size.2 = next(&mut i)?.parse().unwrap_or(420),
+            "--text-allcaps" => {
+                all_caps = match next(&mut i)?.as_str() {
+                    "theme" => acos_art::app::AllCaps::Theme,
+                    _ => acos_art::app::AllCaps::Device,
+                }
+            }
             "--force" => force = true,
             "--" => {
                 program_args.extend(args[i + 1..].iter().cloned());
@@ -187,6 +210,55 @@ fn real_main() -> Result<ExitCode> {
             let p = acos_art::build_shim(&root.data.join("shim"))?;
             println!("{}", p.display());
             Ok(ExitCode::SUCCESS)
+        }
+        "build-app" => {
+            let guest = acos_art::app::build_guest(&root)?;
+            let shim = acos_art::app::build_render_shim(&root)?;
+            println!("{}", guest.dex_dir.join("classes.dex").display());
+            println!("{}", shim.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        "render-app" => {
+            let apk = apk.ok_or_else(|| Error::Layout("render-app needs --apk FILE".into()))?;
+            let opts = acos_art::app::AppOpts {
+                apk,
+                package,
+                layout,
+                out,
+                width: size.0,
+                content_height: size.1,
+                density_dpi: size.2,
+                text_all_caps: all_caps,
+                timeout: Duration::from_secs(timeout),
+            };
+            let res = acos_art::app::render_app(&root, &opts)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&res).unwrap());
+            } else {
+                println!(
+                    "frame={} tree={} md5={} nodes={} {}x{}@{}",
+                    res.frame.as_deref().unwrap_or("-"),
+                    res.tree.as_deref().unwrap_or("-"),
+                    res.frame_md5.as_deref().unwrap_or("-"),
+                    res.nodes.map(|n| n.to_string()).unwrap_or_else(|| "-".into()),
+                    res.width,
+                    res.content_height,
+                    res.density_dpi
+                );
+                println!(
+                    "outcome={} code={} wall={}ms draw_cold={}us draw_warm={}us peak_rss={}MB",
+                    format!("{:?}", res.outcome).to_lowercase(),
+                    res.code.as_deref().unwrap_or("-"),
+                    res.wall_ms,
+                    res.draw_cold_us.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
+                    res.draw_warm_us.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
+                    res.peak_rss_mb.map(|v| format!("{v:.0}")).unwrap_or_else(|| "-".into())
+                );
+                for d in &res.diagnostics {
+                    eprintln!("acos-art: {d}");
+                }
+            }
+            Ok(if res.succeeded() { ExitCode::SUCCESS } else { ExitCode::from(1) })
         }
         "props" => {
             let what = program_args.first().map(String::as_str).unwrap_or("print");
