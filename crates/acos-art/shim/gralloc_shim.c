@@ -366,6 +366,7 @@ void mapper_get_transport_size(void *self, const nh_t *nh, uint32_t *outFds, uin
      * (13 + numInts) ints + numFds fds, and unflatten rejects a mismatch. */
     if (outFds) *outFds = 1;
     if (outInts) *outInts = NH_NINTS;
+    LOG("getTransportSize -> (1 fd, %d ints)", NH_NINTS);
 }
 
 /* ----------------------------------------------------------------- lock ---- */

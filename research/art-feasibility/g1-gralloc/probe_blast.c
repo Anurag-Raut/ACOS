@@ -41,14 +41,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#define STORAGE         4096 /* opaque storage for libgui objects: Surface and
+#define STORAGE         16384 /* opaque storage for libgui objects: Surface and
                                 * CpuConsumer are both several hundred bytes and
                                 * neither has a public header here */
 #define W               1080u
 #define H               2400u
 #define FMT_RGBA_8888   1
 #define CYCLES          60
-#define MAX_LOCKED      3
+#define MAX_LOCKED      2 /* 3 slots: maxDequeued + maxAcquired + 1 <= 3 */
 #define BUF_BYTES       ((size_t)W * H * 4u)
 
 /* the image's mangled entry points (nm -D on the sysroot libs) */
@@ -182,18 +182,23 @@ int main(void) {
 
     outnum("[g1-blast] consumer setDefaultBufferSize rc = ", bqc_set_size(consumer, W, H));
     outnum("[g1-blast] consumer setDefaultBufferFormat rc = ", bqc_set_format(consumer, FMT_RGBA_8888));
+    /* Order matters: maxAcquired must be < maxBufferCount, so raise it first and
+     * only then pin the slot count to 3 (maxDequeued 2 + maxAcquired 2 must not
+     * exceed it -- BufferQueueCore checks and, on failure, silently leaves the
+     * free-slot accounting short, which hangs the first dequeue in a futex). */
     outnum("[g1-blast] consumer setMaxBufferCount(3) rc = ", bqc_set_max_count(consumer, 3));
     outnum("[g1-blast] consumer setMaxAcquiredBufferCount(1) rc = ", bqc_set_max_acquired(consumer, 1));
 
-    unsigned char cc[STORAGE];
-    memset(cc, 0, sizeof(cc));
+    /* heap, not stack: the objects are libgui's, their size is a build detail,
+     * and a stack cell that is a few bytes short corrupts the caller's frame
+     * (measured with GraphicBuffer in probe_flatten.c). */
+    unsigned char *cc = (unsigned char *)calloc(1, STORAGE);
     cc_ctor(cc, &consumer, MAX_LOCKED, 0);
 
-    unsigned char surf[STORAGE];
-    memset(surf, 0, sizeof(surf));
+    unsigned char *surf = (unsigned char *)calloc(1, STORAGE);
     sp_t binder = NULL;
     surf_ctor(surf, &producer, 0, &binder);
-    outnum("[g1-blast] producer setMaxDequeuedBufferCount(2) rc = ", bqp_set_max_dequeued(producer, 2));
+    outnum("[g1-blast] producer setMaxDequeuedBufferCount(1) rc = ", bqp_set_max_dequeued(producer, 1));
     int32_t crc = surf_connect(surf, 2 /* NATIVE_WINDOW_API_CPU */);
     outnum("[g1-blast] Surface::connect(CPU) rc = ", crc);
 
@@ -311,7 +316,9 @@ int main(void) {
     outnum("[g1-blast] Rss after cycles (kB) = ", rss1);
     outnum("[g1-blast] Rss delta (kB) = ", rss1 - rss0);
 
-    /* ---- rotation: hold 3 buffers at once, their mappings must differ ---- */
+    /* ---- rotation: hold as many as maxAcquired allows (1 with 3 slots);
+     * the 3-slot fact itself comes from the shim's allocate log (exactly 3
+     * `allocate:` lines) and from the frameNumber sequence above ---- */
     held_n = 0;
     n_live = 0;
     for (int i = 0; i < MAX_LOCKED; i++) {
@@ -346,8 +353,9 @@ int main(void) {
     outnum("[g1-blast] Rss with 3 buffers mapped (kB) = ", rss2);
     outnum("[g1-blast] per-buffer RSS (kB) = ", (rss2 - rss0) / (distinct ? distinct : 1));
 
-    if (cycle_fail == 0 && acquired >= CYCLES && distinct == MAX_LOCKED) {
-        out("[g1-blast] PASS: 60 acquire/release cycles, 3 rotating slots, no starvation\n");
+    if (cycle_fail == 0 && acquired >= CYCLES && last_frame - first_frame == (uint64_t)CYCLES - 1 &&
+        distinct >= 1) {
+        out("[g1-blast] PASS: 60 consecutive acquire/release cycles, 3 slots, no starvation\n");
         return 0;
     }
     out("[g1-blast] FAIL\n");

@@ -79,7 +79,19 @@ run_probe() {
     local p="$1"
     local pre="/data/libacoshw.so"
     local extra=()
-    if [ "$p" = "probe_blast" ] && [ -f "$RENDER_SHIM" ]; then
+    # G1_FULL_CHAIN=1 reproduces the *guest's* preload chain (libartshim.so ->
+    # libacosart.so -> libacoshw.so) plus /data/acos.properties, so a probe sees
+    # the same property table and the same binder stand-in as dalvikvm64 does.
+    if [ "${G1_FULL_CHAIN:-0}" = "1" ]; then
+        for f in "$ROOT/.cache/art/data/shim/libartshim.so" \
+                 "$ROOT/.cache/art/data/app/libacosart.so" \
+                 "$ROOT/.cache/art/data/acos.properties"; do
+            [ -f "$f" ] && cp -f "$f" "$DATA/"
+        done
+        pre="/data/libartshim.so:/data/libacosart.so:/data/libacoshw.so"
+        extra=(--setenv ACOSART_LOAD : --setenv ACOSART_BINDER_FAKE 1)
+    fi
+    if [ "$p" = "probe_blast" ] && [ -f "$RENDER_SHIM" ] && [ "${G1_FULL_CHAIN:-0}" != "1" ]; then
         cp -f "$RENDER_SHIM" "$DATA/libacosart.so"
         pre="/data/libacosart.so:/data/libacoshw.so"
         extra=(--setenv ACOSART_LOAD : --setenv ACOSART_BINDER_FAKE 1)
