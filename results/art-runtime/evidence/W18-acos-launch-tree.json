@@ -1,0 +1,23 @@
+{
+  "request_id": "req_2e14f1_18e71da1fe49ba4d",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "error": {
+    "code": "UNSUPPORTED_BACKEND",
+    "message": "WindowManagerGlobal has no root view: the app has not added a window yet",
+    "hint": "The app has not added a window yet, so there is no View hierarchy to walk. Run `acos launch` and read its ladder: a tree only exists after `activity_on_create` completes. Do not treat this as a pass.",
+    "retryable": false,
+    "details": {
+      "capability": "ui.tree",
+      "reason": "not_ready",
+      "stage_reached": "on_resume"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

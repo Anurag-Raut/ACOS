@@ -1,0 +1,18 @@
+These two files are COPIES of a phone capture made by a DIFFERENT task earlier
+the same day; they are NOT W18 phone evidence.
+
+  origin: results/parity/w175a-phone-before.png
+          results/parity/w175a-phone-tree.json
+  task:   W175-A (see results/parity/W175A.md)
+  device: moto g35 5G, serial ZA222WGJPP, Android 15 (API 35), 1080x2400 @ 400 dpi,
+          gesture navigation
+  state:  dev.acos.fixtures.counter launched, count = 0, BEFORE any tap
+  method: agent-device install/open/snapshot(--json --force-full)/screenshot
+  clock:  the phone status bar shows 7:02, i.e. the capture is from ~07:00-07:15Z
+          on 2026-11-11 (before the W18 session started at 22:16Z)
+
+Why they are here: W18's phone axis could not run (no device attached, see
+../W18-device-absence.txt). The W18 report uses these ONLY as a historical
+reference for a counter-frame structural comparison, clearly labelled as such.
+They must not be re-used as fresh parity evidence; re-run the recipe in
+results/art-runtime/W18.md once the phone is attached.

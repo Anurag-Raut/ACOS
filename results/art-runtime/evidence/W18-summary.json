@@ -1,0 +1,471 @@
+{
+ "task": "W18",
+ "generated_utc": "2026-11-11T22:21:27Z",
+ "repo_head": "c2928e4",
+ "binary": {
+  "path": "target/debug/acos",
+  "sha256_16": "a97f693c20ccb31f",
+  "built_utc": "2026-11-11T22:14:26Z (mtime 2026-11-12 03:44:26+0530)"
+ },
+ "phone": {
+  "probe": "results/art-runtime/evidence/W18-device-absence.txt",
+  "attached": false,
+  "fresh_capture": "NOT CAPTURED",
+  "reason": "adb devices listed no device; adb server restarted; lsusb shows no Android USB interface; agent-device lists no Android target"
+ },
+ "acos_runs": {
+  "counter": {
+   "cli_exit_code": 0,
+   "ok": true,
+   "status": "pass",
+   "mode": "live",
+   "fidelity": "art-reference",
+   "engine": "art",
+   "apk_sha256": "a0254db0b54d1960c7dcdb273041e09de644c356a436ba139c4d8c37766bd3aa",
+   "display": {
+    "density_dpi": 420,
+    "height": 2400,
+    "mode": "offscreen",
+    "width": 1080
+   },
+   "resources": {
+    "events": 11,
+    "frames_captured": 11,
+    "memory_mib": 86,
+    "peak_rss_bytes": 90214400,
+    "sessions": 1,
+    "steps": 11,
+    "wall_ms": 6688
+   },
+   "steps": [
+    {
+     "index": 0,
+     "step": "launch",
+     "status": "pass",
+     "frame_seq": null,
+     "evidence": [
+      "steps/00-launch.json"
+     ]
+    },
+    {
+     "index": 1,
+     "step": "wait_for",
+     "status": "pass",
+     "frame_seq": 1,
+     "evidence": [
+      "tree/1.json",
+      "frames/1.png",
+      "steps/01-wait_for.json"
+     ]
+    },
+    {
+     "index": 2,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 1,
+     "evidence": [
+      "tree/1.json",
+      "frames/1.png",
+      "steps/02-assert_text.json"
+     ]
+    },
+    {
+     "index": 3,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 1,
+     "evidence": [
+      "tree/1.json",
+      "frames/1.png",
+      "steps/03-assert_text.json"
+     ]
+    },
+    {
+     "index": 4,
+     "step": "tap",
+     "status": "pass",
+     "frame_seq": 3,
+     "evidence": [
+      "tree/3.json",
+      "frames/3.png",
+      "steps/04-tap.json"
+     ]
+    },
+    {
+     "index": 5,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 3,
+     "evidence": [
+      "tree/3.json",
+      "frames/3.png",
+      "steps/05-assert_text.json"
+     ]
+    },
+    {
+     "index": 6,
+     "step": "capture",
+     "status": "pass",
+     "frame_seq": 4,
+     "evidence": [
+      "tree/4.json",
+      "frames/4.png",
+      "steps/06-capture.json"
+     ]
+    },
+    {
+     "index": 7,
+     "step": "tap",
+     "status": "pass",
+     "frame_seq": 6,
+     "evidence": [
+      "tree/6.json",
+      "frames/6.png",
+      "steps/07-tap.json"
+     ]
+    },
+    {
+     "index": 8,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 6,
+     "evidence": [
+      "tree/6.json",
+      "frames/6.png",
+      "steps/08-assert_text.json"
+     ]
+    },
+    {
+     "index": 9,
+     "step": "tap",
+     "status": "pass",
+     "frame_seq": 8,
+     "evidence": [
+      "tree/8.json",
+      "frames/8.png",
+      "steps/09-tap.json"
+     ]
+    },
+    {
+     "index": 10,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 8,
+     "evidence": [
+      "tree/8.json",
+      "frames/8.png",
+      "steps/10-assert_text.json"
+     ]
+    }
+   ],
+   "tree_files": [
+    "1.json",
+    "3.json",
+    "4.json",
+    "6.json",
+    "8.json"
+   ]
+  },
+  "text-input": {
+   "cli_exit_code": 0,
+   "ok": true,
+   "status": "pass",
+   "mode": "live",
+   "fidelity": "art-reference",
+   "engine": "art",
+   "apk_sha256": "1265ff4cc5e2e1a761ed6a2ae84065426fdcbe87eff23e47c4dbd539e8125160",
+   "display": {
+    "density_dpi": 420,
+    "height": 2400,
+    "mode": "offscreen",
+    "width": 1080
+   },
+   "resources": {
+    "events": 7,
+    "frames_captured": 7,
+    "memory_mib": 86,
+    "peak_rss_bytes": 90566656,
+    "sessions": 1,
+    "steps": 7,
+    "wall_ms": 3072
+   },
+   "steps": [
+    {
+     "index": 0,
+     "step": "launch",
+     "status": "pass",
+     "frame_seq": null,
+     "evidence": [
+      "steps/00-launch.json"
+     ]
+    },
+    {
+     "index": 1,
+     "step": "wait_for",
+     "status": "pass",
+     "frame_seq": 1,
+     "evidence": [
+      "tree/1.json",
+      "frames/1.png",
+      "steps/01-wait_for.json"
+     ]
+    },
+    {
+     "index": 2,
+     "step": "capture",
+     "status": "pass",
+     "frame_seq": 2,
+     "evidence": [
+      "tree/2.json",
+      "frames/2.png",
+      "steps/02-capture.json"
+     ]
+    },
+    {
+     "index": 3,
+     "step": "tap",
+     "status": "pass",
+     "frame_seq": 4,
+     "evidence": [
+      "tree/4.json",
+      "frames/4.png",
+      "steps/03-tap.json"
+     ]
+    },
+    {
+     "index": 4,
+     "step": "type",
+     "status": "pass",
+     "frame_seq": 5,
+     "evidence": [
+      "tree/5.json",
+      "frames/5.png",
+      "steps/04-type.json"
+     ]
+    },
+    {
+     "index": 5,
+     "step": "assert_text",
+     "status": "pass",
+     "frame_seq": 5,
+     "evidence": [
+      "tree/5.json",
+      "frames/5.png",
+      "steps/05-assert_text.json"
+     ]
+    },
+    {
+     "index": 6,
+     "step": "capture",
+     "status": "pass",
+     "frame_seq": 6,
+     "evidence": [
+      "tree/6.json",
+      "frames/6.png",
+      "steps/06-capture.json"
+     ]
+    }
+   ],
+   "tree_files": [
+    "1.json",
+    "2.json",
+    "4.json",
+    "5.json",
+    "6.json"
+   ]
+  }
+ },
+ "frame_metrics": {
+  "ssim_aligned_whole_window": 0.9685,
+  "ssim_content_only": 0.988,
+  "mad_aligned_whole_window": 3.23,
+  "mad_content_only": 1.56,
+  "ssim_density_normalised": 0.9773,
+  "mad_density_normalised": 2.47,
+  "acos_frame": {
+   "size": [
+    1080,
+    2209
+   ],
+   "density": 420
+  },
+  "phone_capture": {
+   "size": [
+    1080,
+    2400
+   ],
+   "density": 400,
+   "app_window_top_px": 108
+  }
+ },
+ "structural_deltas_counter_count0": [
+  {
+   "node": "dev.acos.fixtures.counter:id/count",
+   "acos_bounds_px420": [
+    42,
+    189,
+    63,
+    240
+   ],
+   "acos_bounds_normalised_to_phone": [
+    40,
+    288,
+    60,
+    337
+   ],
+   "acos_class": "android.widget.TextView",
+   "acos_text": "0",
+   "phone_bounds_px": [
+    40,
+    288,
+    61,
+    334
+   ],
+   "phone_class": "android.widget.TextView",
+   "phone_text": "0",
+   "delta_normalised": [
+    0,
+    0,
+    -1,
+    3
+   ]
+  },
+  {
+   "node": "dev.acos.fixtures.counter:id/inc",
+   "acos_bounds_px420": [
+    42,
+    240,
+    310,
+    366
+   ],
+   "acos_bounds_normalised_to_phone": [
+    40,
+    337,
+    295,
+    457
+   ],
+   "acos_class": "android.widget.Button",
+   "acos_text": "Increment",
+   "phone_bounds_px": [
+    40,
+    334,
+    262,
+    454
+   ],
+   "phone_class": "android.widget.Button",
+   "phone_text": "Increment",
+   "delta_normalised": [
+    0,
+    3,
+    33,
+    3
+   ]
+  },
+  {
+   "node": "dev.acos.fixtures.counter:id/reset",
+   "acos_bounds_px420": [
+    42,
+    366,
+    273,
+    492
+   ],
+   "acos_bounds_normalised_to_phone": [
+    40,
+    457,
+    260,
+    577
+   ],
+   "acos_class": "android.widget.Button",
+   "acos_text": "Reset",
+   "phone_bounds_px": [
+    40,
+    454,
+    260,
+    574
+   ],
+   "phone_class": "android.widget.Button",
+   "phone_text": "Reset",
+   "delta_normalised": [
+    0,
+    3,
+    0,
+    3
+   ]
+  },
+  {
+   "node": "android:id/content",
+   "acos_bounds_px420": [
+    0,
+    147,
+    1080,
+    2209
+   ],
+   "acos_bounds_normalised_to_phone": [
+    0,
+    248,
+    1029,
+    2212
+   ],
+   "acos_class": "android.widget.FrameLayout",
+   "acos_text": "",
+   "phone_bounds_px": [
+    0,
+    248,
+    1080,
+    2400
+   ],
+   "phone_class": "android.widget.FrameLayout",
+   "phone_text": null,
+   "delta_normalised": [
+    0,
+    0,
+    -51,
+    -188
+   ]
+  },
+  {
+   "node": "android:id/action_bar",
+   "acos_bounds_px420": [
+    0,
+    0,
+    1080,
+    147
+   ],
+   "acos_bounds_normalised_to_phone": [
+    0,
+    108,
+    1029,
+    248
+   ],
+   "acos_class": "android.widget.Toolbar",
+   "acos_text": "",
+   "phone_bounds_px": null,
+   "phone_class": null,
+   "phone_text": null,
+   "delta_normalised": null,
+   "note": "node not present in the agent-device full snapshot"
+  }
+ ],
+ "title_text": {
+  "acos": "dev.acos.fixtures.counter.MainActivity",
+  "acos_bounds": [
+   42,
+   38,
+   952,
+   109
+  ],
+  "phone": "Counter",
+  "phone_bounds": [
+   40,
+   145,
+   221,
+   211
+  ]
+ },
+ "historical_phone_reference": {
+  "provenance": "results/art-runtime/evidence/W18-phone-reference/PROVENANCE.txt",
+  "capture_task": "W175-A",
+  "captured_clock_utc_approx": "2026-11-11T07:02Z",
+  "is_w18_evidence": false
+ }
+}

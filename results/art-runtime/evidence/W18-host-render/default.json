@@ -1,0 +1,16 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+/home/Qui/Projects/acos/.cache/art-locks/data-W18-render-3022651/shim/artshim.c:79:13: warning: unused function 'sys6' [-Wunused-function]
+   79 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/Projects/acos/.cache/art-locks/data-W18-render-3022651/shim/artshim.c:95:13: warning: unused function 'sb_putn' [-Wunused-function]
+   95 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+frame=results/art-runtime/evidence/W18-host-render/default/frame.png tree=results/art-runtime/evidence/W18-host-render/default/tree.json md5=9ec17f055843a2b9d18078ec595e9300 nodes=13 1080x2400@420
+outcome=ok code=- wall=166ms draw_cold=492us draw_warm=206us peak_rss=247MB
+acos-art: provisioned 208 system fonts into /home/Qui/Projects/acos/.cache/art/sysroot/system/fonts (0 hard links, 0 copies)
+acos-art: static overlays: 5 applied (5 idmaps generated, 0 cached, 2952 B)
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=74MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3022852-i7239410.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: logd: 969 entries
+acos-art: guest dex: /home/Qui/Projects/acos/.cache/art-locks/data-W18-render-3022651/app/guest (built)

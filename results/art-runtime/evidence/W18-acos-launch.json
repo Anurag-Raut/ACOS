@@ -1,0 +1,113 @@
+{
+  "request_id": "req_2e1368_18e71d9d27baf86a",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "apk.inspect",
+    "lifecycle"
+  ],
+  "error": {
+    "code": "UNSUPPORTED_BACKEND",
+    "message": "the app process reached `first_frame` but no frame has been published; the render/handoff path has not produced a completed frame",
+    "hint": "Choose a backend listed by capability-report; do not silently fall back. If escalation is allowed, record the backend actually used.",
+    "retryable": false,
+    "details": {
+      "capability": "ui.frame",
+      "reason": "not_ready",
+      "stage": "first_frame"
+    }
+  },
+  "result": {
+    "activity": "dev.acos.fixtures.counter.MainActivity",
+    "classes_loaded": 2374,
+    "events": [
+      "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+      "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+      "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+      "Currently set values for:",
+      "  angle_gl_driver_selection_pkgs=[]",
+      "  angle_gl_driver_selection_values=[]",
+      "ANGLE GameManagerService for dev.acos.fixtures.counter: false",
+      "dev.acos.fixtures.counter is not listed in per-application setting",
+      "Neither updatable production driver nor prerelease driver is supported.",
+      "No service published for: netstats",
+      "TrafficStats not initialized, uid=10192",
+      "onCreate",
+      "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+      "onStart",
+      "onResume",
+      "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+      "Caught a RuntimeException from the binder stub implementation.\nandroid.os.BadParcelableException: Parcel data not fully consumed, unread size: 796\n\tat java.lang.Throwable.fillInStackTrace(Unknown Source:819)\n\tat java.lang.Throwable.<init>(Unknown Source:286)\n\tat java.lang.Exception.<init>(Unknown Source:67)\n\tat java.lang.RuntimeException.<init>(Unknown Source:63)\n\tat android.util.AndroidRuntimeException.<init>(Unknown Source:27)\n\tat android.os.BadParcelableException.<init>(Unknown Source:30)\n\tat android.os.Parcel.enforceNoDataAvail(Unknown Source:963)\n\tat android.view.IWindow$Stub.onTransact(Unknown Source:269)\n\tat android.os.Binder.execTransactInternal(Unknown Source:1344)\n\tat android.os.Binder.execTransact(Unknown Source:1275)\n\tat android.os.BinderProxy.transact(Unknown Source:584)\n\tat android.view.IWindowSession$Stub$Proxy.addToDisplayAsUser(Unknown Source:1249)\n\tat android.view.ViewRootImpl.setView(Unknown Source:1340)\n\tat android.view.WindowManagerGlobal.addView(Unknown Source:411)\n\tat android.view.WindowManagerImpl.addView(Unknown Source:150)\n\tat android.app.ActivityThread.handleResumeActivity(Unknown Source:5048)\n\tat android.app.servertransaction.ResumeActivityItem.execute(Unknown Source:57)\n\tat android.app.servertransaction.ActivityTransactionItem.execute(Unknown Source:45)\n\tat android.app.servertransaction.TransactionExecutor.executeLifecycleState(Unknown Source:180)\n\tat android.app.servertransaction.TransactionExecutor.execute(Unknown Source:98)\n\tat android.app.ActivityThread$H.handleMessage(Unknown Source:2443)\n\tat android.os.Handler.dispatchMessage(Unknown Source:106)\n\tat android.os.Looper.loopOnce(Unknown Source:205)\n\tat android.os.Looper.loop(Unknown Source:294)\n\tat java.lang.Object.<init>(Unknown Source:56)\n"
+    ],
+    "package": "dev.acos.fixtures.counter",
+    "peak_rss_bytes": 648691712,
+    "reached_stage": "on_resume",
+    "stages": [
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "apk_parsed",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "process_booted",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "bind_application",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "application_on_create",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "client_transaction",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "activity_on_create",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "on_resume",
+        "status": "ok"
+      },
+      {
+        "blocker": {
+          "code": "UNSUPPORTED_BACKEND",
+          "details": {
+            "capability": "ui.frame",
+            "reason": "not_ready",
+            "stage": "first_frame"
+          },
+          "message": "the app process reached `first_frame` but no frame has been published; the render/handoff path has not produced a completed frame"
+        },
+        "ok": false,
+        "stage": "first_frame",
+        "status": "blocked"
+      }
+    ],
+    "wall_ms": 11035
+  },
+  "metrics": {
+    "wall_ms": 11035,
+    "peak_rss_bytes": 648691712,
+    "classes_loaded": 2374
+  }
+}

@@ -1,0 +1,11 @@
+{"seq":1,"timestamp_ms":1000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
+{"seq":2,"timestamp_ms":2000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
+{"seq":3,"timestamp_ms":3000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
+{"seq":4,"timestamp_ms":4000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
+{"seq":5,"timestamp_ms":5000,"session_id":"s_art_counter","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"8f293608062a2626864f95018d60cf89"}
+{"seq":6,"timestamp_ms":6000,"session_id":"s_art_counter","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"8f293608062a2626864f95018d60cf89"}
+{"seq":7,"timestamp_ms":7000,"session_id":"s_art_counter","kind":"frame","frame_seq":4,"cause_id":"art","meaningful":true,"content_hash":"8f293608062a2626864f95018d60cf89"}
+{"seq":8,"timestamp_ms":8000,"session_id":"s_art_counter","kind":"frame","frame_seq":6,"cause_id":"art","meaningful":true,"content_hash":"906f5533d8e2ee06eb5c532486510039"}
+{"seq":9,"timestamp_ms":9000,"session_id":"s_art_counter","kind":"frame","frame_seq":6,"cause_id":"art","meaningful":true,"content_hash":"906f5533d8e2ee06eb5c532486510039"}
+{"seq":10,"timestamp_ms":10000,"session_id":"s_art_counter","kind":"frame","frame_seq":8,"cause_id":"art","meaningful":true,"content_hash":"8f293608062a2626864f95018d60cf89"}
+{"seq":11,"timestamp_ms":11000,"session_id":"s_art_counter","kind":"frame","frame_seq":8,"cause_id":"art","meaningful":true,"content_hash":"8f293608062a2626864f95018d60cf89"}
