@@ -1,0 +1,281 @@
+{
+ "task": "W11",
+ "what": "repeated real taps, one live ART session, default maxAcquired=2",
+ "started_utc": "2026-11-11T20:29:35Z",
+ "pairs": 8,
+ "min_frames": 60,
+ "steps": [
+  {
+   "pair": 0,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 59,
+   "frame_number": 59,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 7,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 59
+  },
+  {
+   "pair": 0,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 111,
+   "frame_number": 111,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 59,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 111
+  },
+  {
+   "pair": 1,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 163,
+   "frame_number": 163,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 111,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 163
+  },
+  {
+   "pair": 1,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 215,
+   "frame_number": 215,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 163,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 215
+  },
+  {
+   "pair": 2,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 267,
+   "frame_number": 267,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 215,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 267
+  },
+  {
+   "pair": 2,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 319,
+   "frame_number": 319,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 267,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 319
+  },
+  {
+   "pair": 3,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 371,
+   "frame_number": 371,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 319,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 371
+  },
+  {
+   "pair": 3,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 423,
+   "frame_number": 423,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 371,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 423
+  },
+  {
+   "pair": 4,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 475,
+   "frame_number": 475,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 423,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 475
+  },
+  {
+   "pair": 4,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 527,
+   "frame_number": 527,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 475,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 527
+  },
+  {
+   "pair": 5,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 579,
+   "frame_number": 579,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 527,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 579
+  },
+  {
+   "pair": 5,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 631,
+   "frame_number": 631,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 579,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 631
+  },
+  {
+   "pair": 6,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 683,
+   "frame_number": 683,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 631,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 683
+  },
+  {
+   "pair": 6,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 735,
+   "frame_number": 735,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 683,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 735
+  },
+  {
+   "pair": 7,
+   "tap": "increment",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 787,
+   "frame_number": 787,
+   "md5": "8f293608062a2626864f95018d60cf89",
+   "generation_before": 735,
+   "counter": "1",
+   "texts": [
+    "1"
+   ],
+   "tree_gen": 787
+  },
+  {
+   "pair": 7,
+   "tap": "reset",
+   "ok": true,
+   "code": null,
+   "buffer_generation": 839,
+   "frame_number": 839,
+   "md5": "906f5533d8e2ee06eb5c532486510039",
+   "generation_before": 787,
+   "counter": "0",
+   "texts": [
+    "0"
+   ],
+   "tree_gen": 839
+  }
+ ],
+ "failures": [],
+ "ready": {
+  "activity": "dev.acos.fixtures.counter.MainActivity",
+  "buffer_generation": 7,
+  "capture_source": "acos-c1-buffer",
+  "cmd": "ready",
+  "density": 420,
+  "height": 2209,
+  "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+  "ok": true,
+  "package": "dev.acos.fixtures.counter",
+  "probe_seq": 1,
+  "width": 1080
+ },
+ "counter_at_ready": null,
+ "tree_at_ready": {},
+ "close": {
+  "capture_source": "acos-c1-buffer",
+  "cmd": "close",
+  "frame_seq": 49,
+  "ok": true
+ },
+ "c1_generations_start": 7,
+ "c1_generations_end": 839,
+ "stored_frames": 832,
+ "last_value": "0",
+ "launcher_tail": "{\n  \"outcome\": \"ok\",\n  \"code\": null,\n  \"apk\": \"/home/Qui/Projects/acos/fixtures/build/apps/counter.apk\",\n  \"package\": \"dev.acos.fixtures.counter\",\n  \"until\": \"activity-resumed\",\n  \"application_created\": true,\n  \"activity_launched\": true,\n  \"guest_exit\": 0,\n  \"guest_signal\": null,\n  \"wall_ms\": 38144,\n  \"activity\": \"dev.acos.fixtures.counter.MainActivity\",\n  \"application_marker\": \"package=dev.acos.fixtures.counter\\napplication=android.app.Application\\napplication_classloader_is_apk=true\\napplication_base=dev.acos.fixtures.counter//data/app/counter.apk\\ninstrumentation=android.app.Instrumentation\\ninstrumentation_source=framework (bind request instrumentationName=null)\\nsourceDir=/data/app/counter.apk\\n\",\n  \"activity_marker\": \"package=dev.acos.fixtures.counter\\nactivity=dev.acos.fixtures.counter.MainActivity\\nlifecycle=onCreate,onStart,onResume\\nresumed=true\\ncalled=true\\nstopped=false\\nwindow=com.android.internal.policy.PhoneWindow@68c7a36\\n\",\n  \"looper_trace\": [\n    \">>>>> Dispatching to Handler (android.app.ActivityThread$H) {7104473} null: 110\",\n    \"<<<<< Finished to Handler (android.app.ActivityThread$H) {7104473} null\",\n    \">>>>> Dispatching to Handler (android.app.ActivityThread$H) {7104473} null: 159\",\n    \"<<<<< Finished to Handler (android.app.ActivityThread$H) {7104473} null\"\n  ],\n  \"bind_application\": {\n    \"request_bytes\": 1324,\n    \"delivered\": true,\n    \"app_thread_wire\": 1,\n    \"code\": 5\n  },\n  \"service_calls\": [\n    {\n      \"descriptor\": \"android.app.IActivityManager\",\n      \"code\": 25,\n      \"method\": \"attachApplication\"\n    },\n    {\n      \"descriptor\": \"android.hardware.display.IDisplayManager\",\n      \"code\": 41,\n      \"method\": \"getPreferredWideGamutColorSpaceId\"\n    },\n    {\n      \"descriptor\": \"android.hardware.display.IDisplayManager\",\n      \"code\": 55,\n      \"method\": \"getOverlaySupport\"\n    },\n    {\n      \"descriptor\": \"android.hardware.display.IDisplayManager\",\n      \"code\": 1,\n      \"method\": \"getDisplayInfo\"\n    },\n    {\n      \"descriptor\"",
+ "allocations": 2,
+ "locks": 2515,
+ "guest_stderr_bytes": 169064,
+ "finished_utc": "2026-11-11T20:30:15Z",
+ "verdict": "pass"
+}

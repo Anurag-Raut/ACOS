@@ -11,7 +11,7 @@ use acos_parcel::{BinderId, Parcel};
 use acos_services::compositor_client::{self, DisplayDescriptor};
 use acos_services::exception::NO_EXCEPTION;
 use acos_services::surface_client::{
-    self, CallbackId, ReleaseCallbackId, SurfaceState,
+    self, CallbackId, SurfaceState,
 };
 use acos_services::{ServiceError, ServiceHost};
 
@@ -205,7 +205,7 @@ fn write_graphic_buffer(
 #[allow(clippy::too_many_arguments)]
 fn write_buffer_data(
     data: &mut Parcel,
-    fd: &OwnedFd,
+    fd: Option<&OwnedFd>,
     width: u32,
     height: u32,
     frame_number: u64,
@@ -214,8 +214,10 @@ fn write_buffer_data(
 ) {
     data.write_int32(1); // Parcelable BufferData non-null
     data.write_int32(0x04 | 0x02 | 0x01); // flags: cached/frame/fence changed
-    data.write_bool(true); // has buffer
-    write_graphic_buffer(data, fd, width, height, width, 1, buffer_id);
+    data.write_bool(fd.is_some()); // has buffer
+    if let Some(fd) = fd {
+        write_graphic_buffer(data, fd, width, height, width, 1, buffer_id);
+    }
     data.write_bool(false); // no acquire fence
     data.write_uint64(frame_number);
     data.write_strong_binder(listener); // releaseBufferListener
@@ -227,13 +229,49 @@ fn write_buffer_data(
     data.write_uint32(1); // producerId
 }
 
+/// How a transaction names its buffer.
+///
+/// `Inline` carries the flattened `GraphicBuffer`; `Cached` is the shape the
+/// image's own client sends for a buffer it has **already** sent
+/// (`Transaction::cacheBuffers` strips it and references the id instead).
+#[derive(Clone, Copy)]
+enum BufferSpec {
+    /// `GraphicBuffer` in the parcel.
+    Inline {
+        /// `releaseBufferListener`.
+        listener: BinderId,
+        /// Frame number.
+        frame: u64,
+        /// `GraphicBuffer::getId()`.
+        id: u64,
+    },
+    /// `client_cache_t` reference to a buffer sent earlier.
+    Cached {
+        /// `releaseBufferListener`.
+        listener: BinderId,
+        /// Frame number.
+        frame: u64,
+        /// `client_cache_t.id` (the `GraphicBuffer` id).
+        id: u64,
+    },
+}
+
+impl BufferSpec {
+    fn parts(self) -> (BinderId, u64, u64, bool) {
+        match self {
+            Self::Inline { listener, frame, id } => (listener, frame, id, true),
+            Self::Cached { listener, frame, id } => (listener, frame, id, false),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn write_layer_state(
     data: &mut Parcel,
     handle: BinderId,
     layer_id: i32,
     what: u64,
-    buffer: Option<(BinderId, u64, u64)>,
+    buffer: Option<BufferSpec>,
     listeners: &[(BinderId, Vec<CallbackId>)],
     window_info_full: bool,
 ) {
@@ -313,11 +351,13 @@ fn write_layer_state(
     data.write_bool(false); // isTrustedOverlay
     data.write_uint32(0); // dropInputMode
 
-    if let Some((listener, frame_number, buffer_id)) = buffer {
+    if let Some(spec) = buffer {
         data.write_bool(true);
+        let (listener, frame_number, buffer_id, inline) = spec.parts();
         // A File kept alive by the caller; the parcel dups the descriptor.
         let fd = test_memfd();
-        write_buffer_data(data, &fd, 64, 48, frame_number, buffer_id, listener);
+        let fd = if inline { Some(&fd) } else { None };
+        write_buffer_data(data, fd, 64, 48, frame_number, buffer_id, listener);
     } else {
         data.write_bool(false);
     }
@@ -361,7 +401,7 @@ fn test_memfd() -> OwnedFd {
 type ComposerSpec = (
     BinderId,
     i32,
-    Option<(BinderId, u64, u64)>,
+    Option<BufferSpec>,
     Vec<(BinderId, Vec<CallbackId>)>,
 );
 
@@ -549,7 +589,7 @@ fn the_live_capture_reads_the_newest_c1_buffer_and_reports_its_generation() {
 
     for (frame, id) in [(1u64, 100u64), (2, 200)] {
         let mut parcel =
-            transaction_parcel(&[(handle, layer_id, Some((listener, frame, id)), Vec::new())], &[0, 0, 0, 0, 0, 3], &[], frame);
+            transaction_parcel(&[(handle, layer_id, Some(BufferSpec::Inline { listener, frame, id }), Vec::new())], &[0, 0, 0, 0, 0, 3], &[], frame);
         transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("transaction");
     }
     {
@@ -583,7 +623,7 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         &[(
             handle,
             layer_id,
-            Some((listener, 1, 100)),
+            Some(BufferSpec::Inline { listener, frame: 1, id: 100 }),
             vec![(listener, vec![callback])],
         )],
         &[0, 0, 0, 0, 0, 1],
@@ -609,7 +649,7 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         &[(
             handle,
             layer_id,
-            Some((listener, 2, 200)),
+            Some(BufferSpec::Inline { listener, frame: 2, id: 200 }),
             vec![(listener, vec![callback])],
         )],
         &[0, 0, 0, 0, 0, 2],
@@ -627,33 +667,14 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     }
 
     let second = host.take_deliveries();
-    let release = find_release(&second, listener);
-    let mut data = release.data.clone();
-    data.enforce_interface(ITRANSACTION_LISTENER).expect("token");
-    assert_eq!(data.read_int32().expect("marker"), 1);
-    let id = ReleaseCallbackId {
-        buffer_id: data.read_uint64().expect("buffer id"),
-        frame_number: data.read_uint64().expect("frame number"),
-    };
+    // Stock `SurfaceFlinger` reports the replaced buffer inside the completion
+    // stats, not in a second `onReleaseBuffer`; a duplicate would pop the
+    // client's release callback twice (W11).
     assert_eq!(
-        id,
-        ReleaseCallbackId {
-            buffer_id: 100,
-            frame_number: 1
-        },
-        "the release must be for the buffer frame 2 replaced"
+        second.len(),
+        1,
+        "frame 2 must answer with one completion callback and no duplicate release"
     );
-    // Fence::NO_FENCE then maxAcquired (the compositor node's current pool
-    // depth, W10: BLAST sizes its pool from it).
-    assert_eq!(data.read_int32().expect("fence len"), 4);
-    assert_eq!(data.read_int32().expect("fence fds"), 0);
-    assert_eq!(data.read_int32().expect("fence body"), 0);
-    assert_eq!(
-        data.read_uint32().expect("maxAcquired"),
-        acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS
-    );
-    assert_eq!(data.data_avail(), 0, "release parcel has trailing bytes");
-
     let completed = find_completed(&second, listener);
     let mut stats = completed.data.clone();
     stats.enforce_interface(ITRANSACTION_LISTENER).expect("token");
@@ -681,7 +702,17 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS
     );
     assert_eq!(stats.read_int32().expect("event stats marker"), 1);
-    assert_eq!(stats.read_uint64().expect("event frame"), 1);
+    // The stats name the frame this transaction *latched* (the new buffer), and
+    // `previousReleaseCallbackId` names the one it replaced. `BLASTBufferQueue`
+    // releases with the second and unblocks its shadow queue with the first
+    // (`mSyncedFrameNumbers.erase(frameEventStats.frameNumber)` +
+    // `currFrameNumber > key.framenumber`); with the old (one-behind) value no
+    // merged frame's slot was ever returned (W11).
+    assert_eq!(
+        stats.read_uint64().expect("event frame"),
+        2,
+        "eventStats.frameNumber must be the latched frame, not the replaced one"
+    );
     assert!(!stats.read_bool().expect("gpu fence"));
     for _ in 0..5 {
         let _ = stats.read_int64().expect("compositor timing");
@@ -691,6 +722,140 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     assert_eq!(stats.read_uint64().expect("previous buffer id"), 100);
     assert_eq!(stats.read_uint64().expect("previous frame"), 1);
     assert_eq!(stats.data_avail(), 0, "completion stats have trailing bytes");
+}
+
+#[test]
+fn a_client_cached_buffer_reference_stores_the_frame_it_names() {
+    // The image's own client caches every `GraphicBuffer` it sends
+    // (`Transaction::cacheBuffers`) and from then on references it by id: the
+    // parcel carries a `client_cache_t` instead of the flattened buffer, with
+    // `hasBuffer == false`. A producer recycles slots, so after the first few
+    // frames *most* frames arrive this way (W11 measured 213 of 215). A
+    // compositor that ignores the reference stores only the first two frames and
+    // the app's pixels never advance.
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "blast");
+
+    let listener = host.register_aux(ITRANSACTION_LISTENER);
+    let callback = CallbackId { id: 7, kind: 0 };
+
+    // Frames 1 and 2 are sent inline; frame 3 reuses frame 1's buffer id and is
+    // sent as a cache reference only (the client never drops the fd, so the
+    // pixels are still the ones it wrote).
+    for (frame, id, inline) in [(1u64, 100u64, true), (2, 101, true), (3, 100, false)] {
+        let spec = if inline {
+            BufferSpec::Inline {
+                listener,
+                frame,
+                id,
+            }
+        } else {
+            BufferSpec::Cached {
+                listener,
+                frame,
+                id,
+            }
+        };
+        let mut parcel = transaction_parcel(
+            &[(handle, layer_id, Some(spec), vec![(listener, vec![callback])])],
+            &[0, 0, 0, 0, 0, 1],
+            &[(listener, vec![callback])],
+            frame,
+        );
+        transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
+            .unwrap_or_else(|e| panic!("frame {frame} transaction: {e}"));
+        let s = score_state(&state);
+        assert_eq!(
+            s.latest_generation(),
+            frame,
+            "every frame must advance the store, frame {frame} included"
+        );
+        let latest = s.latest_buffer(handle).expect("latest buffer");
+        assert_eq!(latest.frame_number, frame);
+        assert_eq!(latest.buffer_id, id);
+        assert_eq!((latest.width, latest.height), (64, 48));
+        let _ = host.take_deliveries();
+    }
+
+    // A reference to an id the client never sent is a structured miss, not a
+    // blank frame: the newest stored frame stays the previous one.
+    let mut parcel = transaction_parcel(
+        &[(
+            handle,
+            layer_id,
+            Some(BufferSpec::Cached {
+                listener,
+                frame: 4,
+                id: 999,
+            }),
+            vec![(listener, vec![callback])],
+        )],
+        &[0, 0, 0, 0, 0, 1],
+        &[(listener, vec![callback])],
+        4,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
+        .expect("unknown cache id transaction");
+    {
+        let s = score_state(&state);
+        assert_eq!(s.latest_generation(), 3);
+        assert_eq!(
+            s.latest_buffer(handle).expect("latest buffer").frame_number,
+            3
+        );
+    }
+}
+
+#[test]
+fn a_buffer_transaction_without_callbacks_releases_via_on_release_buffer() {
+    // `SurfaceFlinger` falls back to a standalone `onReleaseBuffer` when the
+    // transaction that replaced the buffer registered no completion callback
+    // (`Layer::callReleaseBufferCallback`). The replaced buffer must still be
+    // released, or the producer's slot is lost.
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "blast");
+
+    let listener = host.register_aux(ITRANSACTION_LISTENER);
+    for frame in 1..=2u64 {
+        let mut parcel = transaction_parcel(
+            &[(
+                handle,
+                layer_id,
+                Some(BufferSpec::Inline {
+                    listener,
+                    frame,
+                    id: 100 + frame,
+                }),
+                Vec::new(),
+            )],
+            &[0, 0, 0, 0, 0, 1],
+            &[],
+            frame,
+        );
+        transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("transaction");
+    }
+    let deliveries = host.take_deliveries();
+    let release = find_release(&deliveries, listener);
+    let mut data = release.data.clone();
+    data.enforce_interface(ITRANSACTION_LISTENER).expect("token");
+    assert_eq!(data.read_int32().expect("marker"), 1);
+    assert_eq!(data.read_uint64().expect("buffer id"), 101);
+    assert_eq!(data.read_uint64().expect("frame"), 1);
+    assert_eq!(data.read_int32().expect("fence len"), 4);
+    assert_eq!(data.read_int32().expect("fence fds"), 0);
+    assert_eq!(data.read_int32().expect("fence body"), 0);
+    assert_eq!(
+        data.read_uint32().expect("maxAcquired"),
+        acos_services::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS
+    );
+    assert_eq!(data.data_avail(), 0);
+    assert_eq!(score_state(&state).latest_generation(), 2);
 }
 
 #[test]

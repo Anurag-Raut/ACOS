@@ -282,6 +282,38 @@ pub struct LayerRecord {
     pub latest_generation: u64,
 }
 
+/// A `GraphicBuffer` the client sent inline, kept so a later `client_cache_t`
+/// reference to the same id can be resolved (`Transaction::cacheBuffers`).
+#[derive(Debug)]
+struct CachedBuffer {
+    /// A duplicate of the guest's memfd, absent when the entry could not be kept.
+    fd: Option<OwnedFd>,
+    /// Width.
+    width: u32,
+    /// Height.
+    height: u32,
+    /// Row stride in bytes.
+    stride: u32,
+    /// `PixelFormat`.
+    format: i32,
+    /// `GraphicBuffer::getId()`.
+    id: u64,
+}
+
+impl CachedBuffer {
+    /// A private duplicate so the cache entry outlives one transaction.
+    fn duplicate(&self) -> Option<Self> {
+        Some(Self {
+            fd: Some(self.fd.as_ref()?.try_clone().ok()?),
+            width: self.width,
+            height: self.height,
+            stride: self.stride,
+            format: self.format,
+            id: self.id,
+        })
+    }
+}
+
 /// `android.gui.FrameStats` counters for `getLayerFrameStats`.
 #[derive(Clone, Debug, Default)]
 struct FrameStats {
@@ -316,6 +348,15 @@ pub struct SurfaceState {
     /// the compositor-client's own "a new frame landed" signal (the W10 live
     /// session binds its captures to it).
     buffer_generations: u64,
+    /// `BufferCache` entries by `GraphicBuffer` id (see
+    /// [`SurfaceState::cache_buffer`]). The client strips a buffer it has already
+    /// sent from later parcels and references it as a `client_cache_t`
+    /// (`{token, id}`) instead — `Transaction::cacheBuffers()` in the image's
+    /// `libgui`. A compositor that ignores that reference sees every frame after
+    /// the first few as a *bufferless* transaction (W11: 213 of 215).
+    buffer_cache: HashMap<u64, CachedBuffer>,
+    /// Insertion order for [`SurfaceState::buffer_cache`] (drop-oldest).
+    buffer_cache_order: Vec<u64>,
 }
 
 impl SurfaceState {
@@ -334,7 +375,43 @@ impl SurfaceState {
                 .unwrap_or(crate::compositor_client::DEFAULT_MAX_ACQUIRED_BUFFERS),
             transactions_decoded: 0,
             buffer_generations: 0,
+            buffer_cache: HashMap::new(),
+            buffer_cache_order: Vec::new(),
         }
+    }
+
+    /// Remember a buffer the client sent inline so a later `client_cache_t`
+    /// reference to the same `GraphicBuffer` id can be resolved.
+    ///
+    /// The image's client-side `BufferCache` keys on `GraphicBuffer::getId()`
+    /// and its cache id **is** that id (`BufferCache::cache` returns
+    /// `buffer->getId()`), so no separate id space is involved. It holds at most
+    /// `BUFFER_CACHE_MAX_SIZE` buffers, so a small drop-oldest table is enough;
+    /// a miss is a structured error, never a blank frame.
+    fn cache_buffer(state: &mut SurfaceState, meta: &GraphicBufferMeta) {
+        const MAX_CACHED_BUFFERS: usize = 16;
+        if meta.id == 0 {
+            return;
+        }
+        if state.buffer_cache.contains_key(&meta.id) {
+            return;
+        }
+        while state.buffer_cache_order.len() >= MAX_CACHED_BUFFERS {
+            let oldest = state.buffer_cache_order.remove(0);
+            state.buffer_cache.remove(&oldest);
+        }
+        state.buffer_cache_order.push(meta.id);
+        state.buffer_cache.insert(
+            meta.id,
+            CachedBuffer {
+                fd: Some(meta.fd.try_clone().expect("dup of a memfd")),
+                width: meta.width,
+                height: meta.height,
+                stride: meta.stride,
+                format: meta.format,
+                id: meta.id,
+            },
+        );
     }
 
     /// C1's monotonic buffer store counter (0 = no frame has landed yet).
@@ -962,9 +1039,54 @@ fn apply_layer_state(
 
     // The previous buffer is released only once the replacement is applied;
     // this is what returns a slot to the producer's BufferQueue.
+    if std::env::var_os("ACOS_W5_BUF").is_some() {
+        if let Some(b) = &layer.buffer {
+            eprintln!(
+                "ACOSDBG BUFFERDATA flags={:#x} has_buffer={} frame={} cached_id={} has_barrier={} barrier_frame={} producer={}",
+                b.flags,
+                b.buffer.is_some(),
+                b.frame_number,
+                b.cached_buffer_id,
+                b.has_barrier,
+                b.barrier_frame_number,
+                b.producer_id
+            );
+        }
+    }
     let mut release: Option<(BinderId, ReleaseCallbackId)> = None;
+    let mut latched_frame_number = 0u64;
     if let Some(buffer) = &layer.buffer {
-        if let Some(meta) = &buffer.buffer {
+        // The client strips a `GraphicBuffer` it has already sent from later
+        // parcels: `Transaction::cacheBuffers()` replaces it with a
+        // `client_cache_t` whose `id` **is** the `GraphicBuffer` id. Both shapes
+        // are the same frame for a compositor that keeps what it was sent.
+        let resolved: Option<CachedBuffer> = match &buffer.buffer {
+            Some(meta) => {
+                SurfaceState::cache_buffer(state, meta);
+                Some(CachedBuffer {
+                    fd: Some(try_clone(meta)),
+                    width: meta.width,
+                    height: meta.height,
+                    stride: meta.stride,
+                    format: meta.format,
+                    id: meta.id,
+                })
+            }
+            None if buffer.cached_buffer_id != 0 => state
+                .buffer_cache
+                .get(&buffer.cached_buffer_id)
+                .and_then(CachedBuffer::duplicate),
+            None => None,
+        };
+        if let Some(CachedBuffer {
+            fd: Some(fd),
+            width: cached_width,
+            height: cached_height,
+            stride: cached_stride,
+            format: cached_format,
+            id: cached_id,
+        }) = resolved
+        {
             // The generation is reserved before the record is borrowed mutably:
             // a stored buffer always advances C1's monotonic store counter.
             state.buffer_generations = state.buffer_generations.saturating_add(1);
@@ -987,14 +1109,15 @@ fn apply_layer_state(
                     release = Some((target, previous.release_id()));
                 }
             }
+            latched_frame_number = buffer.frame_number;
             record.latest = Some(LatestBuffer {
-                fd: try_clone(meta),
-                width: meta.width,
-                height: meta.height,
-                stride: meta.stride,
-                format: meta.format,
+                fd,
+                width: cached_width,
+                height: cached_height,
+                stride: cached_stride,
+                format: cached_format,
                 frame_number: buffer.frame_number,
-                buffer_id: meta.id,
+                buffer_id: cached_id,
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });
@@ -1008,14 +1131,19 @@ fn apply_layer_state(
             }
             if std::env::var_os("ACOS_W5_BUF").is_some() {
                 eprintln!(
-                    "ACOSDBG BUFFER layer={} frame={} {}x{} stride={} fmt={} id={}",
+                    "ACOSDBG BUFFER layer={} frame={} {}x{} stride={} fmt={} id={}{}",
                     record.layer_id,
                     buffer.frame_number,
-                    meta.width,
-                    meta.height,
-                    meta.stride,
-                    meta.format,
-                    meta.id
+                    cached_width,
+                    cached_height,
+                    cached_stride,
+                    cached_format,
+                    cached_id,
+                    if buffer.buffer.is_none() {
+                        " (from client cache)"
+                    } else {
+                        ""
+                    }
                 );
             }
             record.latest_listener = listener;
@@ -1038,9 +1166,25 @@ fn apply_layer_state(
         record.transactions += 1;
     }
 
-    // `previousReleaseCallbackId` in the completion stats must be the buffer
-    // this transaction replaced (not the new one), so take it from the release
-    // decision made above.
+    // The completion stats carry two different frame numbers and the client
+    // (`BLASTBufferQueue`) uses both:
+    //
+    // * `FrameEventHistoryStats.frameNumber` is the frame **this transaction
+    //   latched** (`SurfaceFlinger`'s `Layer::setTransactionCompletedListeners`
+    //   copies `mDrawingState.frameNumber`, the *new* buffer's number).
+    //   `BLASTBufferQueue::transactionCommittedCallback` removes exactly that
+    //   number from `mSyncedFrameNumbers` and only flushes the shadow queue
+    //   once the set is empty, and `transactionCallback` releases every
+    //   submitted buffer whose frame is **older** than it
+    //   (`currFrameNumber > key.framenumber`, `fakeRelease`). Reporting the
+    //   replaced (one-behind) buffer's number here suppresses both: no slot of
+    //   a merged/dropped frame is ever returned, the acquired set only grows,
+    //   and the producer starves once `2 + maxAcquired` buffers are allocated
+    //   (W11: with maxAcquired 2 the fourth allocation is followed by a dequeue
+    //   that never returns).
+    // * `previousReleaseCallbackId` is the buffer this transaction replaced
+    //   (`Layer::mPreviousReleaseCallbackId`), i.e. the one the client may now
+    //   recycle.
     let previous_id = release.map_or(
         ReleaseCallbackId {
             buffer_id: 0,
@@ -1049,16 +1193,34 @@ fn apply_layer_state(
         |(_, id)| id,
     );
 
+    // Stock `SurfaceFlinger` reports the replaced buffer inside the completion
+    // stats (`previousReleaseCallbackId`); it sends a standalone
+    // `onReleaseBuffer` only for a buffer it releases without such a
+    // transaction (`Layer::callReleaseBufferCallback`). Sending both would pop
+    // the client's release callback twice (the second pop finds nothing and
+    // logs "buffer not found"), so pick the same path stock does.
+    let stats_carry_the_release = callbacks
+        .iter()
+        .any(|c| !c.listener.is_null() && !c.callback_ids.is_empty());
     if let Some((target, id)) = release {
         if std::env::var_os("ACOS_W5_BUF").is_some() {
             eprintln!(
-                "ACOSDBG RELEASE target={:#x} buffer={} frame={}",
-                target.0, id.buffer_id, id.frame_number
+                "ACOSDBG RELEASE target={:#x} buffer={} frame={} via={}",
+                target.0,
+                id.buffer_id,
+                id.frame_number,
+                if stats_carry_the_release {
+                    "stats"
+                } else {
+                    "onReleaseBuffer"
+                }
             );
         }
-        state
-            .deliveries
-            .push(on_release_buffer_delivery(target, id, state.max_acquired_buffers));
+        if !stats_carry_the_release {
+            state
+                .deliveries
+                .push(on_release_buffer_delivery(target, id, state.max_acquired_buffers));
+        }
     }
     // One `onTransactionCompleted` per listener that registered callback ids.
     for listener in callbacks {
@@ -1077,6 +1239,7 @@ fn apply_layer_state(
             listener.listener,
             &listener.callback_ids,
             handle,
+            latched_frame_number,
             &previous_id,
             latch_time,
             state.max_acquired_buffers,
@@ -1188,10 +1351,15 @@ fn on_release_buffer_delivery(
 }
 
 /// Build `onTransactionCompleted(ListenerStats)` for one listener.
+///
+/// `latched_frame_number` is the frame this transaction latched (the new
+/// buffer's `frameNumber`), `previous` is the buffer it replaced. See the
+/// comment in [`apply_layer_state`] for why the two are not interchangeable.
 fn on_transaction_completed_delivery(
     target: BinderId,
     callback_ids: &[CallbackId],
     handle: BinderId,
+    latched_frame_number: u64,
     previous: &ReleaseCallbackId,
     latch_time: i64,
     max_acquired: u32,
@@ -1221,8 +1389,10 @@ fn on_transaction_completed_delivery(
     data.write_bool(false); // no transform hint
     data.write_uint32(max_acquired);
     // Parcelable FrameEventHistoryStats (image: one uint64 + fence bool + 5 int64).
+    // The image has `frametimestamps_previousrelease` off, so the number here is
+    // the frame this transaction **latched**, not the one it replaced.
     data.write_int32(1);
-    data.write_uint64(previous.frame_number);
+    data.write_uint64(latched_frame_number);
     data.write_bool(false);
     for _ in 0..5 {
         data.write_int64(0);

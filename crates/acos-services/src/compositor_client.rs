@@ -51,23 +51,21 @@
 //! * `getDisplayStats.vsyncTime` is `CLOCK_MONOTONIC` **now** and
 //!   `vsyncPeriod` is the same 60 Hz period the vsync thread uses, so
 //!   `Surface::getDisplayRefreshCycleDuration` and the clock agree.
-//! * `getMaxAcquiredBufferCount` is [`DEFAULT_MAX_ACQUIRED_BUFFERS`] (12). A
-//!   real `SurfaceFlinger` computes it from the refresh rate and the
-//!   app/SF/display pipeline depth. ACOS has no presentation, so the value must
-//!   cover the *verification* pipeline instead: BLAST sizes its whole buffer
-//!   pool as `maxDequeued(2) + maxAcquired`, and with the old
-//!   `MIN_UNDEQUEUED_BUFFERS` (2) an interactive session blocked in
-//!   `Surface.nativeLockCanvas` after four C1-accepted frames (W10 measured:
-//!   the fifth dequeue never returned; every later gesture stalled).
-//!   W10 also measured that BLAST allocates a **new** buffer per stored frame
-//!   (10 allocations for 10 stores), i.e. C1's release callbacks do not return
-//!   slots to BLAST's pool on this image. The pool must therefore cover a whole
-//!   verification session (startup + ripple frames + gestures), not just the
-//!   display pipeline depth; 24 (26 buffers) covers the counter scenario at
-//!   ~9.5 MiB per 1080×2209 buffer. The node's reply shape is unchanged;
-//!   `ACOS_MAX_ACQUIRED_BUFFERS` overrides it for measurement (1..=64).
-//!   Removing that dependency needs the real release path (W9/W10 residual;
-//!   not a display-pipeline issue ACOS can synthesize modestly).
+//! * `getMaxAcquiredBufferCount` is [`DEFAULT_MAX_ACQUIRED_BUFFERS`] (2), the
+//!   value a real `SurfaceFlinger` computes from the refresh rate and the
+//!   app/SF pipeline depth (`SurfaceFlinger::calculateMaxAcquiredBufferCount`
+//!   is `max(min_acquired_buffers, ceil(presentLatency/period) - 1)`: 1..=2 at
+//!   60 Hz, 3 at 120 Hz — never 12+). `BufferQueueCore`'s own ctor default is
+//!   1 and BLAST's `setMaxDequeuedBufferCount(2)` adds the other 2 slots. BLAST sizes its whole buffer pool as
+//!   `maxDequeued(2) + maxAcquired`, so this number is also ACOS's per-session
+//!   frame budget *if* released slots were not recycled. They are: C1 returns a
+//!   slot on every latched frame through the stock contract —
+//!   `FrameEventHistoryStats.frameNumber` names the frame just latched and
+//!   `previousReleaseCallbackId` names the buffer it replaced, which is what
+//!   `BLASTBufferQueue` recycles (+ its stale-release sweep for merged frames).
+//!   W11 measured 4 allocations across a >60-frame interactive session at this
+//!   default, so no larger pool is needed. `ACOS_MAX_ACQUIRED_BUFFERS` overrides
+//!   it for measurement (1..=64).
 //! * `getSupportedFrameTimestamps` answers `POSTED..RELEASE` (0..=9, i.e. every
 //!   `FrameEvent` except `EVENT_COUNT`). ACOS produces none of them; the list
 //!   only tells the framework which `FrameEventHistory` slots exist.
@@ -368,11 +366,9 @@ impl ServiceObject for SurfaceComposerService {
             }
             codes::GET_MAX_ACQUIRED_BUFFER_COUNT => {
                 exception::write_no_exception(reply);
-                // `MIN_UNDEQUEUED_BUFFERS`: a synthesized constant, see the
-                // module docs. BLAST sizes its buffer pool from this value
-                // (`getMaxBufferCountLocked = maxDequeued + maxAcquired`), so a
-                // measurement can raise it without changing the node's shape
-                // (W10 frame-slot experiment; no override ⇒ 2 as before).
+                // The stock answer is small; the release contract (not the
+                // pool depth) is what keeps a session's frame budget bounded
+                // (W11). Never a display-pipeline number larger than the phone's.
                 let acquired = std::env::var("ACOS_MAX_ACQUIRED_BUFFERS")
                     .ok()
                     .and_then(|v| v.trim().parse::<u32>().ok())
@@ -393,9 +389,11 @@ impl ServiceObject for SurfaceComposerService {
 
 /// BLAST's acquired-buffer budget when `ACOS_MAX_ACQUIRED_BUFFERS` is unset.
 ///
-/// See the module docs: this is the verification pipeline's depth, not a
-/// display pipeline's.
-pub const DEFAULT_MAX_ACQUIRED_BUFFERS: u32 = 24;
+/// The stock-like value (see the module docs); the buffer *pool* is
+/// `maxDequeued(2) + this`, and the release path (not the pool) is what makes a
+/// long session allocate a bounded number of buffers (W11: 2 allocations across
+/// 832 stored frames).
+pub const DEFAULT_MAX_ACQUIRED_BUFFERS: u32 = 2;
 
 /// Best-effort method name for a code, for the structured-unsupported record.
 #[must_use]
