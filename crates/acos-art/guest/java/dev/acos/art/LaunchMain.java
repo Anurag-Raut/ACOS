@@ -54,6 +54,17 @@ public final class LaunchMain {
     static String sUntil = "application-created";
     static String sActivity;
     static volatile boolean sApplicationCreated;
+    /**
+     * Frame-probe progress: `-1` = probe disabled, otherwise the number of
+     * completed `doFrame` callbacks. The watcher waits for this before sending
+     * the activity transaction so the probe evidence is not cut short by the
+     * window-path exception (it is a timing guard for a diagnostic run only).
+     */
+    static volatile int sProbeFrames = -1;
+    static final int PROBE_TARGET_FRAMES = 8;
+    static final long[] sProbeDeltas = new long[PROBE_TARGET_FRAMES];
+    static volatile long sProbeFirst;
+    static volatile long sProbeLast;
 
     public static void main(String[] args) {
         long t0 = System.currentTimeMillis();
@@ -150,12 +161,18 @@ public final class LaunchMain {
         // createDisplayEventConnection → stealReceiveChannel → BitTube) and
         // registers the BitTube's receive fd with the main `Looper`; the callback
         // can only fire if a 216-byte vsync event actually arrives on that fd from
-        // the Rust clock. This is the same receiver instance `ViewRootImpl`'s
-        // constructor gets (Choreographer is a ThreadLocal). Off by default: the
-        // probe's job is evidence, and the vsync payload still trips an NPE in
-        // `Choreographer$FrameData.update` (L1 §4), which would end the run before
-        // the activity transaction.
-        if (System.getenv("ACOSLAUNCH_FRAME_PROBE") != null) postFrameProbe();
+        // the Rust clock, and `Choreographer$FrameData.update` also calls
+        // `getLatestVsyncEventData` (the parcelable reply), so a frame proves both
+        // halves. This is the same receiver instance `ViewRootImpl`'s constructor
+        // gets (Choreographer is a ThreadLocal). Off by default.
+        // `launch.rs`'s sandbox clears the environment and re-seeds a fixed
+        // allowlist (`ACOSLAUNCH_PROBE`, not `ACOSLAUNCH_FRAME_PROBE`), so both
+        // spellings enable the diagnostic probe. The frame probe's own name is
+        // preferred; `ACOSLAUNCH_PROBE` is the one the launcher actually forwards.
+        if (System.getenv("ACOSLAUNCH_FRAME_PROBE") != null
+                || System.getenv("ACOSLAUNCH_PROBE") != null) {
+            postFrameProbe();
+        }
         try {
             Looper.loop();
         } catch (Throwable fatal) {
@@ -282,10 +299,12 @@ public final class LaunchMain {
             long bindDeadline = System.currentTimeMillis() + 5000;
             while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
             System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+            awaitFrameProbe();
             quit();
             return;
         }
         // ---- the AMS step: one ClientTransaction to the app thread ---------
+        awaitFrameProbe();
         IBinder token = new android.os.Binder();
         try {
             byte[] txn = buildScheduleTransactionRequest(appThread, token, app);
@@ -546,19 +565,64 @@ public final class LaunchMain {
                 + (missing.length() == 0 ? "" : " missing:" + missing));
     }
 
-    /** Frame-clock probe: three real vsync callbacks on the main looper. */
+    /**
+     * Diagnostic-only barrier: when the frame probe is enabled, let it collect
+     * `PROBE_TARGET_FRAMES` real vsync callbacks before the activity transaction
+     * runs. The transaction's `addToDisplayAsUser` reply is the next wall and
+     * throws on the main thread, which would otherwise stop the probe after one
+     * frame. No-op (and never waits) when the probe is disabled.
+     */
+    static void awaitFrameProbe() {
+        if (sProbeFrames < 0) return;
+        long deadline = System.currentTimeMillis() + 3000;
+        while (sProbeFrames < PROBE_TARGET_FRAMES && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException ignored) {
+            }
+        }
+        System.out.println("ACOSLAUNCH MARK vsync-probe frames=" + sProbeFrames
+                + " target=" + PROBE_TARGET_FRAMES);
+        if (sProbeFrames > 0) {
+            StringBuilder deltas = new StringBuilder();
+            boolean monotonic = true;
+            long previous = 0;
+            for (int i = 0; i < sProbeFrames; i++) {
+                if (i > 0) deltas.append(',');
+                deltas.append(sProbeDeltas[i]);
+                if (i > 0 && sProbeDeltas[i] <= 0) monotonic = false;
+                previous += sProbeDeltas[i];
+            }
+            boolean contiguous = sProbeLast - sProbeFirst == previous;
+            System.out.println("ACOSLAUNCH MARK vsync-probe-summary first=" + sProbeFirst
+                    + " last=" + sProbeLast + " monotonic=" + monotonic
+                    + " contiguous=" + contiguous + " deltasNanos=" + deltas);
+        }
+        System.out.flush();
+    }
+
+    /** Frame-clock probe: real vsync callbacks on the main looper. */
     static void postFrameProbe() {
         try {
             final android.view.Choreographer c = android.view.Choreographer.getInstance();
+            sProbeFrames = 0;
             c.postFrameCallback(new android.view.Choreographer.FrameCallback() {
                 int seen;
+                long previous;
 
                 @Override
                 public void doFrame(long frameTimeNanos) {
                     seen++;
+                    long delta = previous == 0 ? 0 : frameTimeNanos - previous;
+                    previous = frameTimeNanos;
+                    if (seen == 1) sProbeFirst = frameTimeNanos;
+                    sProbeLast = frameTimeNanos;
+                    if (seen <= PROBE_TARGET_FRAMES) sProbeDeltas[seen - 1] = delta;
+                    sProbeFrames = seen;
                     System.out.println("ACOSLAUNCH MARK vsync-frame count=" + seen
-                            + " frameTimeNanos=" + frameTimeNanos);
-                    if (seen < 3) c.postFrameCallback(this);
+                            + " frameTimeNanos=" + frameTimeNanos
+                            + " deltaNanos=" + delta);
+                    if (seen < PROBE_TARGET_FRAMES) c.postFrameCallback(this);
                 }
             });
             System.out.println("ACOSLAUNCH MARK choreographer-ready");

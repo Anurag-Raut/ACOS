@@ -23,8 +23,9 @@
 //!
 //! IDisplayEventConnection.requestNextVsync (code 3): oneway, no reply body.
 //! IDisplayEventConnection.getLatestVsyncEventData (code 4) reply:
-//!   readInt()=0  readInt64(frameInterval) readUint32(preferred)
-//!   readUint32(length) then 3 x readInt64 per timeline
+//!   readInt()=0  readInt()=1 (Parcel::writeParcelable's non-null flag)
+//!   readInt64(frameInterval) readUint32(preferred) readUint32(length)
+//!   then 3 x readInt64 per timeline
 //! ```
 
 use std::time::{Duration, Instant};
@@ -315,6 +316,13 @@ fn latest_vsync_event_data_decodes_in_the_frameworks_read_order() {
     let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
         .expect("transact");
     no_exception(&mut reply);
+    // `BpDisplayEventConnection::getLatestVsyncEventData` reads the return with
+    // `Parcel::readParcelable` (libgui.so 0x161ac5), i.e. present flag first.
+    assert_eq!(
+        reply.read_int32().expect("present flag"),
+        display_events::NON_NULL_PARCELABLE_FLAG,
+        "Parcel::readParcelable rejects any flag other than 1 (BAD_TYPE)"
+    );
     let frame_interval = reply.read_int64().expect("frameInterval");
     let preferred = reply.read_uint32().expect("preferredFrameTimelineIndex");
     let length = reply.read_uint32().expect("frameTimelinesLength");
@@ -327,6 +335,59 @@ fn latest_vsync_event_data_decodes_in_the_frameworks_read_order() {
     let expected = reply.read_int64().expect("expectedPresentationTime");
     assert!(vsync_id > 0);
     assert_eq!(expected, deadline + frame_interval);
+    assert_eq!(reply.data_avail(), 0);
+}
+
+/// Regression for the L1 §3.8 NPE: the reply must be exactly
+/// `status + present + body`, 4 + 4 + 32 = 40 bytes with one timeline. Both
+/// halves of the failure are covered: the flag `readParcelable` requires, and
+/// the `ParcelableVsyncEventData::readFromParcel` field order the image reads
+/// (`libgui.so` 0x14a550: i64, u32, u32, then 3 x i64 per timeline).
+#[test]
+fn latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte() {
+    let mut host = ServiceHost::standard();
+    let sf = composer(&mut host);
+    let mut data = create_connection_request(
+        acos_services::compositor_client::VSYNC_SOURCE_APP,
+        0,
+        false,
+    );
+    let mut reply =
+        transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
+    no_exception(&mut reply);
+    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+
+    let mut data = Parcel::new();
+    data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
+        .expect("token");
+    data.set_data_position(0);
+    let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
+        .expect("transact");
+
+    // Total wire size: exception header (4) + present flag (4) + body (8+4+4+24).
+    assert_eq!(reply.data_size(), 48, "status + flag + one timeline");
+    no_exception(&mut reply);
+    assert_eq!(reply.read_int32().expect("flag"), 1);
+    let body = reply.data_avail();
+    let decoded = display_events::VsyncEventData::read_from_parcel(&mut reply).expect("body");
+    assert_eq!(body, 40, "frameInterval+preferred+length+one timeline");
+    assert_eq!(decoded.frame_interval, PERIOD_NS_60HZ);
+    assert_eq!(decoded.preferred_frame_timeline_index, 0);
+    assert_eq!(decoded.frame_timelines_length, 1);
+    assert_eq!(decoded.frame_timelines[0].expected_presentation_time,
+        decoded.frame_timelines[0].deadline_timestamp + PERIOD_NS_60HZ);
+    assert_eq!(reply.data_avail(), 0);
+
+    // The framework's own reader must accept the whole reply (flag + body).
+    let mut data = Parcel::new();
+    data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
+        .expect("token");
+    data.set_data_position(0);
+    let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
+        .expect("transact");
+    no_exception(&mut reply);
+    display_events::VsyncEventData::read_parcelable_from(&mut reply)
+        .expect("Parcel::readParcelable accepts the reply");
     assert_eq!(reply.data_avail(), 0);
 }
 

@@ -35,6 +35,19 @@
 //! * `VsyncSource`/`EventRegistration` are AIDL enums with the default `byte`
 //!   backing, but `libbinder`'s `Parcel::writeByte` is `writeInt32(int32_t(val))`
 //!   (`native/libs/binder/Parcel.cpp:1395`), so both are 4 bytes on the wire.
+//! * `getLatestVsyncEventData`'s reply carries its `ParcelableVsyncEventData`
+//!   return **through `Parcel::writeParcelable`**, i.e. with an `int32`
+//!   `kNonNullParcelableFlag` (1) *before* the body: the image's
+//!   `BpDisplayEventConnection::getLatestVsyncEventData` reads it with
+//!   `Parcel::readParcelable` (`libgui.so` 0x161ac5), which consumes that flag
+//!   and rejects anything else (`libbinder.so` `readParcelable` 0xa2aa0,
+//!   `cmp $0x1`). Without it the guest logs `Failed to get latest vsync event
+//!   data`, returns null from `nativeGetLatestVsyncEventData`, and
+//!   `Choreographer$FrameData.update` throws on the null (`L1` §3.8, W2 §E3).
+//!   The body itself is `ParcelableVsyncEventData::readFromParcel`'s order
+//!   (`libgui.so` 0x14a550): `frameInterval` i64, `preferredFrameTimelineIndex`
+//!   u32, `frameTimelinesLength` u32, then `vsyncId`/`deadlineTimestamp`/
+//!   `expectedPresentationTime` i64 per timeline.
 //! * `sizeof(DisplayEventReceiver::Event)` in the image is **216** (`0xd8`),
 //!   read out of the immediate `BitTube::sendObjects(..., objSize)` in
 //!   `DisplayEventReceiver::sendEvents` (`0x118b84`) and `getEvents`
@@ -154,6 +167,10 @@ impl Default for VsyncEventData {
     }
 }
 
+/// `Parcel::writeParcelable`'s `kNonNullParcelableFlag`: the `int32` that
+/// precedes a non-null parcelable body on the wire.
+pub const NON_NULL_PARCELABLE_FLAG: i32 = 1;
+
 impl VsyncEventData {
     /// The `EventThread`-shaped single-timeline payload ACOS synthesizes.
     #[must_use]
@@ -185,6 +202,26 @@ impl VsyncEventData {
             parcel.write_int64(t.deadline_timestamp);
             parcel.write_int64(t.expected_presentation_time);
         }
+    }
+
+    /// The whole wire form of the parcelable return:
+    /// `Parcel::writeParcelable` writes `kNonNullParcelableFlag` (1) and then
+    /// calls `ParcelableVsyncEventData::writeToParcel` ([`Self::write_to_parcel`]).
+    pub fn write_parcelable_to(&self, parcel: &mut Parcel) {
+        parcel.write_parcelable_marker(true);
+        self.write_to_parcel(parcel);
+    }
+
+    /// `Parcel::readParcelable`: the present flag first, then the body.
+    /// Fails on a flag other than 1, exactly as `libbinder` does (`BAD_TYPE`).
+    pub fn read_parcelable_from(parcel: &mut Parcel) -> SResult<Self> {
+        let present = parcel.read_int32().map_err(perr)?;
+        if present != NON_NULL_PARCELABLE_FLAG {
+            return Err(ServiceError::Internal(format!(
+                "ParcelableVsyncEventData: expected present flag {NON_NULL_PARCELABLE_FLAG}, got {present}"
+            )));
+        }
+        Self::read_from_parcel(parcel)
     }
 
     /// `ParcelableVsyncEventData::readFromParcel`, in the same order.
@@ -753,7 +790,10 @@ impl ServiceObject for DisplayEventConnectionService {
                     .slot
                     .with_clock(ConnectionClock::latest_vsync_data)
                     .unwrap_or_default();
-                data.write_to_parcel(reply);
+                // The image reads this return with `Parcel::readParcelable`
+                // (`libgui.so` 0x161ac5), so the parcelable's non-null flag is
+                // part of the wire form, not decoration.
+                data.write_parcelable_to(reply);
                 Ok(true)
             }
             _ => Err(ServiceError::UnsupportedAndroidApi {
@@ -912,5 +952,41 @@ mod tests {
         p.set_data_position(0);
         assert_eq!(VsyncEventData::read_from_parcel(&mut p).unwrap(), data);
         assert_eq!(p.data_avail(), 0);
+    }
+
+    #[test]
+    fn vsync_event_data_parcelable_wire_form_starts_with_the_present_flag() {
+        // Byte-exact: `Parcel::writeParcelable` = int32 1, then the body in
+        // `ParcelableVsyncEventData::writeToParcel` order. Every read below is
+        // the image's own width and order, and `data_avail() == 0` pins the
+        // total length, so the byte layout is fully determined.
+        let data = VsyncEventData::single_timeline(PERIOD_NS_60HZ, 11, 5_000);
+        let mut p = Parcel::new();
+        data.write_parcelable_to(&mut p);
+        assert_eq!(p.data_size(), 4 + 8 + 4 + 4 + 24);
+        p.set_data_position(0);
+        assert_eq!(
+            p.read_int32().unwrap(),
+            NON_NULL_PARCELABLE_FLAG,
+            "Parcel::readParcelable consumes this int32 before the body"
+        );
+        assert_eq!(p.read_int64().unwrap(), PERIOD_NS_60HZ);
+        assert_eq!(p.read_uint32().unwrap(), 0); // preferredFrameTimelineIndex
+        assert_eq!(p.read_uint32().unwrap(), 1); // frameTimelinesLength
+        assert_eq!(p.read_int64().unwrap(), 11); // vsyncId
+        assert_eq!(p.read_int64().unwrap(), 5_000); // deadlineTimestamp
+        assert_eq!(p.read_int64().unwrap(), 5_000 + PERIOD_NS_60HZ); // expected
+        assert_eq!(p.data_avail(), 0);
+
+        p.set_data_position(0);
+        assert_eq!(VsyncEventData::read_parcelable_from(&mut p).unwrap(), data);
+        assert_eq!(p.data_avail(), 0);
+
+        // A body without the flag is what `readParcelable` rejects (the first
+        // body word, 0x00fe4e6b, is not 1).
+        let mut body_only = Parcel::new();
+        data.write_to_parcel(&mut body_only);
+        body_only.set_data_position(0);
+        assert!(VsyncEventData::read_parcelable_from(&mut body_only).is_err());
     }
 }
