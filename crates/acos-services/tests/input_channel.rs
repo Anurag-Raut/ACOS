@@ -696,8 +696,8 @@ fn registry_keys_channels_by_window_token() {
     registry.register(TOKEN, "w0").expect("register 0");
     registry.register(other, "w1").expect("register 1");
     assert_eq!(registry.len(), 2);
-    assert_eq!(registry.name(TOKEN), Some("w0 (client)"));
-    assert_eq!(registry.name(other), Some("w1 (client)"));
+    assert_eq!(registry.name(TOKEN), Some("w0 client"));
+    assert_eq!(registry.name(other), Some("w1 client"));
     assert_eq!(
         registry.publisher(TOKEN).map(|p| p.name()),
         Some("w0 (server)")
@@ -731,7 +731,7 @@ fn parcel_body_is_the_w2_shape_and_round_trips() {
     assert_eq!(reply.read_strong_binder().expect("token"), Some(TOKEN));
     assert_eq!(
         reply.read_string16().expect("name").as_deref(),
-        Some("Surface(name=w) (client)")
+        Some("Surface(name=w) client")
     );
     let fd = reply.read_file_descriptor().expect("fd");
     assert!(fd.is_some_and(|fd| fd >= 0), "a real descriptor");
