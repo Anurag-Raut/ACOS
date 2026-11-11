@@ -12,7 +12,8 @@
 #   cgroups     systemd scopes under /sys/fs/cgroup with a memory ceiling
 #               (MemoryMax) that belong to an acos/guarded run
 #   scratch     per-run directories under the repo: target/tmp/guarded.*,
-#               .cache/tmp, .cache/acos-*, .cache/art/data/session/*
+#               .cache/tmp, .cache/acos-*, .cache/art/data/session/*,
+#               .cache/art/data/runs/* (S4 per-run data roots)
 #   sockets     listening AF_UNIX/AF_INET sockets owned by a matched process
 #   memfds      memfd: file descriptors held by a matched process
 #
@@ -150,7 +151,7 @@ for dirpath, dirnames, filenames in os.walk(cg_root):
 # ---- per-run scratch directories ----------------------------------------
 scratch = []
 for pat in ("target/tmp/*", ".cache/tmp/*", ".cache/acos-*",
-            ".cache/art/data/session/*"):
+            ".cache/art/data/session/*", ".cache/art/data/runs/*"):
     scratch += glob.glob(os.path.join(root, pat))
 for r in extra:
     scratch += glob.glob(os.path.join(r, "*"))
