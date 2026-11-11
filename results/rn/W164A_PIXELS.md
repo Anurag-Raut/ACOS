@@ -378,3 +378,181 @@ class loader.
 
 No `pms.rs`, `flutter_*`, `bench/pool`, tap/ripple, ICU/fonts/AVD, or
 `boot_image_cache.rs` file was edited.
+
+---
+
+# W174-A — the app class loader rung is closed: `FLAG_HAS_CODE` is `0x4`, not `0x1`
+
+Follow-on to W168-A. The W168-A blocker (empty `DexPathList` while
+`sourceDir`/`FLAG_HAS_CODE` looked right) is fully rooted: the flag value W164-A
+wrote was `0x1`, which is `ApplicationInfo.FLAG_SYSTEM`; the real
+`FLAG_HAS_CODE` is `1 << 2 == 0x4`. With the correct bit the framework's own
+`PathClassLoader` receives the staged APK dex path, `MainApplication` is
+instantiated, `Application.onCreate` runs, `SoLoader.init` prepares the APK's
+`lib/x86_64`, and the launch advances to the Activity construction.
+
+## At a glance
+
+| step | result |
+|---|---|
+| W168-A blocker | **root-caused**: `LoadedApk.mIncludeCode` false because `flags & 4` was 0 |
+| fix | `FLAG_HAS_CODE = 0x0000_0004` in `AppInfo::from_manifest` (+ test) |
+| new native | `BaseDexClassLoader.computeClassLoaderContextsNative()` returns `String[0]` (dexopt class-loader-context protocol, no dexopt pipeline) |
+| launch before | `reached_stage=bind_application`, `application_on_create=Blocked` (`ClassNotFoundException`, `DexPathList[[]]`) |
+| launch after | `reached_stage=client_transaction`; `bind_application`/`application_on_create`/`client_transaction` all **Ok**, 1 892 classes, 6.5 s |
+| SoLoader rung | **reached**: `Preparing SO source: DirectApkSoSource[root = [.../base.apk!/lib/x86_64]]` |
+| next blocker | `ComponentActivity.<init>` → `androidx.lifecycle.SavedStateHandleSupport.enableSavedStateHandles` — the class is **not packaged in the fixture APK** |
+| `/data/user_de/0/<pkg>` `mkdir` ENOENT | **gone** (`apk_loader::ensure_app_data_dirs` runs on the `AgentSession::launch` path; no `Failed to ensure` record in the run) |
+
+## 1. Root cause, from the framework DEX (not from prose)
+
+`.cache/boot/android-34/dex/framework/classes.dex`,
+`ActivityThread.getPackageInfo(ApplicationInfo;CompatibilityInfo;ClassLoader;ZZZZ)`
+builds the `LoadedApk` `includeCode` argument as:
+
+```
+009c: if-eqz v20, 0x00a6          # the caller's includeCode boolean
+009e: iget v1, v10, ApplicationInfo.flags
+00a0: and-int/lit8 v1, v1, #int 4 # ApplicationInfo.FLAG_HAS_CODE == 1 << 2
+00a2: if-eqz v1, 0x00a6          # no FLAG_HAS_CODE -> includeCode = 0
+00a4: move v7, v2                # includeCode = 1
+```
+
+`LoadedApk.createOrUpdateClassLoaderLocked` then branches on `mIncludeCode`
+(`01b2: iget-boolean mIncludeCode; if-nez -> 0x01fc`):
+
+* `mIncludeCode == true` → `0x01fc`: join the `makePaths` zip list and call
+  `ApplicationLoaders.getClassLoaderWithSharedLibraries(dexPath, …)`;
+* `mIncludeCode == false` → `0x01b6`: build `mDefaultClassLoader` with the
+  literal empty dex path `const-string v10, ""`, while `makePaths` still filled
+  the native-library list. That is exactly the observed
+  `DexPathList[[],nativeLibraryDirectories=[…]]`.
+
+The W164-A constant `FLAG_HAS_CODE: i32 = 0x0000_0001` is
+`ApplicationInfo.FLAG_SYSTEM`. `flags=0x20000001` therefore had bit 2 clear, and
+`mIncludeCode` was false on every fixture whose manifest names an application
+class. The counter fixture masked it because its `<application>` has no
+`android:name`.
+
+Fix: `crates/acos-services/src/pms.rs` now uses `0x0000_0004`, with the value
+and the compiled mask documented at the call site;
+`pms::tests::application_info_flags_include_has_code` was updated to the real
+bit so it can no longer lock in `FLAG_SYSTEM`.
+
+## 2. The next native: `BaseDexClassLoader.computeClassLoaderContextsNative`
+
+With the dex path non-empty the framework builds a real `PathClassLoader` and,
+at the end of `BaseDexClassLoader.<init>` (`002d`), calls
+`reportClassLoaderChain()`. With a non-null `DexLoadReporter` that reaches the
+native `computeClassLoaderContextsNative()[Ljava/lang/String;`, which ACOS did
+not implement.
+
+`reportClassLoaderChain` maps the returned array two-by-two and hands it to
+`DexLoadReporter.report`; a **zero-length** array is an explicit
+"nothing to report" early return (`array-length v1, v0; if-nez v1 -> return`).
+ACOS runs the DEX directly with no dexopt/oat pipeline (`DexFile.isDexOptNeeded`
+is already `false`), so the honest answer is an empty array, not a fabricated
+context that would only fail in `DexLoadReporter`/`VMRuntime.notifyDexLoad`
+downstream. `crates/acos-vm/src/natives/fwk_dexfile.rs` registers it next to the
+other `dalvik.system` natives and documents the divergence.
+
+## 3. Measured advance
+
+`results/rn/w174a-platform.txt` (re-run of `rn_platform_launch_probe`):
+
+```
+reached_stage=client_transaction  classes_loaded=1892  wall_ms=6500
+stages: apk_parsed Ok, process_booted Ok, bind_application Ok,
+        application_on_create Ok, client_transaction Ok, activity_on_create Blocked
+W164A_EVENTS:
+  Recording new base apk path: /data/user/0/dev.acos.fixtures.rnhello/base.apk
+  Preparing SO source: DirectApkSoSource[root = [/data/user/0/dev.acos.fixtures.rnhello/base.apk!/lib/x86_64]]
+```
+
+The native tail now contains `Ldalvik/system/DexFile;->openDexFileNative` (the
+class-loader rung), `Ldalvik/system/BaseDexClassLoader;->computeClassLoaderContextsNative`,
+and `Ldalvik/system/VMRuntime;->registerAppInfo` — i.e. the real
+`PathClassLoader` is built over the staged multi-dex APK and the app's
+own `MainApplication` + `Application.onCreate` ran. Rung 3 of W164-A §5
+(`SoLoader` discovers the APK's native libraries) is now **proven on this
+path**: `SoLoader.init` found `base.apk!/lib/x86_64`.
+
+## 4. New blocker: the fixture APK is missing an AndroidX class
+
+`activity_on_create` is blocked at
+
+```
+androidx/activity/ComponentActivity.<init>()V
+  -> Landroidx/lifecycle/SavedStateHandleSupport;.enableSavedStateHandles(
+         Landroidx/savedstate/SavedStateRegistryOwner;)V   (not implemented)
+```
+
+`SavedStateHandleSupport` is **not defined in either dex of the fixture**.
+`dexdump` over the APK's `classes.dex`/`classes2.dex`
+(`/tmp/rn-classes1.txt`) finds only references; there is no
+`class Landroidx/lifecycle/SavedStateHandleSupport;`. `androidx.lifecycle` (model)
+and `androidx.savedstate` are packaged, but the
+`lifecycle-viewmodel-savedstate` artifact (which owns
+`SavedStateHandleSupport`) is absent. `ComponentActivity.<init>` calls it
+unconditionally, so the APK would also fail on a real device: this is a fixture
+packaging gap, not a VM bug.
+
+`tools/rn-hello-deps.py` output confirms it: the resolver emits
+`lifecycle-viewmodel`, `lifecycle-viewmodel-android`, and `savedstate`, but no
+`lifecycle-viewmodel-savedstate`. The Gradle cache has that artifact
+(2.5.1/2.6.1/2.6.2/2.8.3/2.9.3/2.10.0), so the fix is to add an explicit root
+(the activity/fragment POM edge is not being followed) and rebuild
+`fixtures/build/apps/rn-hello.apk`. That rebuild was **not** done in this slice
+to stay inside the file-in-flight / 45-minute bounds; it is the first item of
+the next session.
+
+## 5. `rn_pixels` guard changed to the current rung
+
+The W164-A guard conflated two facts (`classes_loaded > 1000` **and** no
+`ClassNotFoundException`) with the same failure. W174-A replaces it with an
+assertion of the rung actually reached: `bind_application` and
+`application_on_create` are `Ok`, the root blocker is not a
+`ClassNotFoundException`, and the `SoLoader` evidence
+(`Preparing SO source` + `base.apk!/lib/x86_64`) is present in the launch
+events. It deliberately does not pin the next blocker, which is a fixture
+packaging gap owned by the fixture workstream.
+
+## 6. Files touched (uncommitted, not committed)
+
+* `crates/acos-services/src/pms.rs` — `FLAG_HAS_CODE = 0x0000_0004` (was
+  `0x0000_0001` = `FLAG_SYSTEM`) + corrected test constant.
+* `crates/acos-vm/src/natives/fwk_dexfile.rs` —
+  `BaseDexClassLoader.computeClassLoaderContextsNative` → empty `String[]`.
+* `crates/acos-runtime/tests/rn_pixels.rs` — guard asserts the
+  class-loader/SoLoader rung instead of the legacy conflation.
+* `results/rn/w174a-platform.txt` — measured platform-launch evidence.
+* `results/rn/W164A_PIXELS.md` — this section.
+
+No `flutter_*`, `bench/pool`, tap/ripple (`acos-wm`), JNI/loader hardening,
+dialogs/DatePicker/`fwk_res`, ICU/fonts/AVD, `boot_image_cache.rs`, CLI
+(`session_backend.rs`/`parity.rs`/`launch.rs`) or fixture-build file was edited.
+
+## 7. Acceptance
+
+| check | result |
+|---|---|
+| `cargo test -p acos-services --lib` | **45 passed** (corrected flag test included) |
+| `cargo test -p acos-vm --lib` | **129 passed** |
+| `cargo test -p acos-runtime --test rn_pixels` | **1 passed** (child inert without its env var) |
+| `cargo test -p acos-runtime --test rn_pixels -- --exact rn_platform_launch_probe` | **1 passed** (`reached_stage=client_transaction`, `application_on_create=Ok`, SoLoader evidence asserted) |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** (`exit=0`) |
+| `cargo check --workspace --all-targets` | **clean** (`exit=0`) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** (`exit=0`) |
+
+## 8. Exact next session
+
+1. Add `androidx.lifecycle:lifecycle-viewmodel-savedstate` as an explicit root
+   in `tools/rn-hello-deps.py` (pick a version whose main artifact carries the
+   classes) and rebuild `rn-hello.apk`.
+2. Re-run `rn_platform_launch_probe`; expect `activity_on_create` to complete
+   (`ReactActivity.onCreate`) and the next blocker at `ReactRootView` /
+   `ReactInstanceManager` — record it the same way.
+3. Only once the real `ReactRootView` is in `WindowManagerGlobal` (the counter
+   `view_tree` walk can read it) switch `RnSession::frame()` /
+   `acos observe --frame` to the `FrameStore`; until a real frame is published
+   the structured `UNSUPPORTED_RN_NO_RENDERER` stays.

@@ -110,11 +110,14 @@ fn rn_pixels_child_worker() {
 
 #[test]
 fn rn_platform_launch_probe() {
-    let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");
-    if !apk.is_file() {
+    const APK_FIXTURE: &str = "fixtures/build/apps/rn-hello.apk";
+    // Routed through the global gate: `ACOS_REQUIRE_FIXTURES=1` must fail, not
+    // skip, when the React Native fixture is absent (W170-A C4/H5).
+    if !acos_test_support::have_fixture(APK_FIXTURE) {
         eprintln!("SKIP rn_platform_launch_probe: no fixture apk");
         return;
     }
+    let apk = repo_root().join(APK_FIXTURE);
     let exe = std::env::current_exe().expect("test exe");
     let scratch = repo_root().join("target/tmp/w164a-platform");
     let out = Command::new(exe)
@@ -126,20 +129,33 @@ fn rn_platform_launch_probe() {
         .expect("spawn child");
     let text = String::from_utf8_lossy(&out.stdout);
     let mut launch: Option<serde_json::Value> = None;
+    let mut events: Option<serde_json::Value> = None;
     for line in text.lines().filter(|l| l.starts_with("W164A_")) {
         println!("{line}");
         if let Some(rest) = line.strip_prefix("W164A_LAUNCH ") {
             launch = serde_json::from_str(rest).ok();
+        } else if let Some(rest) = line.strip_prefix("W164A_EVENTS ") {
+            events = serde_json::from_str(rest).ok();
         }
     }
     eprintln!("{}", String::from_utf8_lossy(&out.stderr));
 
-    // W164-A regression guard: the manifest `android:name` must be loadable by
-    // the framework's own `PathClassLoader`. Before `FLAG_HAS_CODE`
-    // (`acos-services::pms::AppInfo::from_manifest`) the launch stopped at
-    // `application_on_create` with `ClassNotFoundException` and
-    // `DexPathList[[]]`. The probe does not require the whole Activity window
-    // yet; it fails only if class loading regresses.
+    // W174-A guard: assert the *current* rung, not the legacy conflated one.
+    //
+    // The class-loader rung is now closed: `AppInfo::from_manifest` sets the
+    // real `ApplicationInfo.FLAG_HAS_CODE` (0x4, `1 << 2`; W164-A used 0x1,
+    // which is `FLAG_SYSTEM`), so `LoadedApk.mIncludeCode` is true and the
+    // framework's own `PathClassLoader` receives the staged APK dex path. The
+    // app's `MainApplication` is instantiated, `Application.onCreate` runs, and
+    // `SoLoader.init` prepares the APK's `lib/x86_64` SO source. The next
+    // blocker is no longer class loading: it is `ComponentActivity.<init>`
+    // calling `androidx.lifecycle.SavedStateHandleSupport.enableSavedStateHandles`,
+    // a class this fixture APK does not package (see W164A_PIXELS.md §W174-A).
+    //
+    // The guard therefore requires: the framework booted; the app's own classes
+    // resolve (no `ClassNotFoundException`, no empty `DexPathList`); and the real
+    // `SoLoader` rung was reached. It does not pin the next blocker, which is a
+    // fixture packaging gap another workstream may close.
     let launch = launch.expect("child printed W164A_LAUNCH");
     assert_ne!(launch["reached_stage"], "apk_parsed", "launch: {launch}");
     assert!(
@@ -150,5 +166,35 @@ fn rn_platform_launch_probe() {
     assert!(
         !blocker.contains("ClassNotFoundException"),
         "the app class loader is empty again (FLAG_HAS_CODE regression): {blocker}"
+    );
+    let stages = launch["stages"].as_array().cloned().unwrap_or_default();
+    let stage_status = |name: &str| -> Option<String> {
+        stages
+            .iter()
+            .find(|s| s.get(0).and_then(|v| v.as_str()) == Some(name))
+            .and_then(|s| s.get(1).and_then(|v| v.as_str()).map(str::to_string))
+    };
+    assert_eq!(
+        stage_status("bind_application").as_deref(),
+        Some("Ok"),
+        "bindApplication did not complete: {launch}"
+    );
+    assert_eq!(
+        stage_status("application_on_create").as_deref(),
+        Some("Ok"),
+        "Application.onCreate did not run (class loader rung regressed): {launch}"
+    );
+    let events = events.expect("child printed W164A_EVENTS");
+    let events = events
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        events.contains("Preparing SO source") && events.contains("base.apk!/lib/x86_64"),
+        "SoLoader did not prepare the APK SO source; events:\n{events}"
     );
 }

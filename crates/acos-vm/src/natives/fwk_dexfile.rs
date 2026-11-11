@@ -125,6 +125,15 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "()Z",
         ret_false,
     );
+    // `BaseDexClassLoader.reportClassLoaderChain()` (called at the end of the
+    // `PathClassLoader` constructor) reaches this native. It is part of the
+    // dexopt class-loader-context protocol, not class loading itself.
+    vm.register_native(
+        "Ldalvik/system/BaseDexClassLoader;",
+        "computeClassLoaderContextsNative",
+        "()[Ljava/lang/String;",
+        compute_class_loader_contexts,
+    );
     Ok(())
 }
 
@@ -532,5 +541,25 @@ fn ret_no_dexopt_needed(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn ret_filter(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = vm.new_string("assume-verified")?;
     vm.ret_ref(ctx, h);
+    Ok(())
+}
+
+/// `BaseDexClassLoader.computeClassLoaderContextsNative()`.
+///
+/// ART builds the dexopt class-loader-context chain here (the context strings
+/// the runtime records per loaded dex so dexopt can re-optimise the whole
+/// chain). ACOS runs the DEX directly and has no dexopt/oat pipeline, so there
+/// is no context to hand to `DexLoadReporter`. `reportClassLoaderChain` treats
+/// a zero-length array as "nothing to report" and returns without invoking the
+/// reporter, which is the structural result of a chain with no dexopt work.
+/// With a non-empty array the real `DexLoadReporter.report` would run and reach
+/// `VMRuntime.notifyDexLoad` (also absent), so returning empty is the honest
+/// terminal answer rather than a fabricated context that would only fail
+/// downstream.
+fn compute_class_loader_contexts(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let arr = vm
+        .new_array_empty("java.lang.String", 0)
+        .map_err(bridge)?;
+    vm.ret_ref(ctx, arr);
     Ok(())
 }

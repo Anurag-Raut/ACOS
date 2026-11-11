@@ -187,7 +187,17 @@ impl AppInfo {
         // framework's `PathClassLoader` cannot load the app's own classes
         // (`ClassNotFoundException` on the manifest `android:name`) even though
         // `sourceDir` points at the staged APK.
-        const FLAG_HAS_CODE: i32 = 0x0000_0001;
+        //
+        // The value is AOSP's: `ApplicationInfo.FLAG_SYSTEM = 1 << 0` (0x1),
+        // `FLAG_DEBUGGABLE = 1 << 1` (0x2), `FLAG_HAS_CODE = 1 << 2` (0x4).
+        // `ActivityThread.getPackageInfo` derives `LoadedApk.mIncludeCode`
+        // from `includeCode && (ai.flags & FLAG_HAS_CODE)`, which the framework
+        // dex compiles as `and-int/lit8 ..., #int 4` (W174-A, disassembled from
+        // `.cache/boot/android-34/dex/framework/classes.dex`). Using 0x1 here
+        // set FLAG_SYSTEM and left `mIncludeCode` false, so the real
+        // `PathClassLoader` was built with an empty dex path (`DexPathList[[]]`)
+        // while the native-library path was populated.
+        const FLAG_HAS_CODE: i32 = 0x0000_0004;
         let hardware_accelerated = manifest
             .application
             .hardware_accelerated
@@ -1253,7 +1263,7 @@ mod tests {
             providers: Vec::new(),
         };
         let app = AppInfo::from_manifest(&manifest, Path::new("/tmp/app.apk"), FIXTURE_UID);
-        const FLAG_HAS_CODE: i32 = 0x0000_0001;
+        const FLAG_HAS_CODE: i32 = 0x0000_0004;
         const FLAG_HARDWARE_ACCELERATED: i32 = 0x2000_0000;
         assert_eq!(
             app.flags & FLAG_HAS_CODE,
