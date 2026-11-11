@@ -12,3 +12,5 @@ Rules:
 - Give up (accepted): whole-heap snapshots, virtual-time determinism on the ART path. Mitigate with fresh/forked processes.
 - Milestones: M-A framework Java classes run on ART; M-B counter.apk first frame; M-C tap + UI tree; M-D V1 verify items + M1-M11 vs ACOS-VM.
 - Paused JNI-fidelity work (W188/W197/W199) stays paused.
+
+Update 2026-11-11: no time-based abandonment of ART; see ENGINEERING_POLICY.md fallback policy.

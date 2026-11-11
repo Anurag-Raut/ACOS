@@ -1,3 +1,5 @@
+> SUPERSEDED in part (2026-11-11): agent-day estimates and kill criteria below are void. See docs/PLAN_V2.md and docs/ENGINEERING_POLICY.md (one-hour rule, no automatic ART abandonment, reuse ladder).
+
 # ART runtime implementation plan
 
 Status: proposed implementation, 2026-11-11. Analysis only; no runtime changes made.

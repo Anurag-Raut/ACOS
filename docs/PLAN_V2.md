@@ -36,17 +36,21 @@ For each layer try in order; stop at the first rung that works on counter.apk:
 Phase 0 - probes (running now, ~1 day): D (libandroid_runtime/Binder on ART), E (graphics seam), F (launcher crate, properties, logd, CHECK fix), W200 (render).
   T0.1 read E2D/E2E/F reports; fix the rung choice for natives, binder, graphics. Owner: orchestrator.
   T0.2 re-baseline: memory of a bare ART process with framework classes loaded (M-A style) -> start the ART-path M1/M2/M12 numbers. Owner: Haiku.
-Phase 1 - M-A framework classes run (cap 18 d): T1.1 S1 substrate productised (fatal CHECK gone, props, logs, crash map); T1.2 natives rung implementation; T1.3 binder rung implementation (Parcel/BinderProxy round trip to ServiceHost, fds, callbacks); T1.4 `tools/art-runtime/accept.sh M-A`.
-Phase 2 - M-B counter first frame (cap 46 d cumulative): T2.1 resources via chosen rung; T2.2 ActivityThread attach/launch via ServiceHost (reuse acos-services state machines); T2.3 WMS relayout/surface; T2.4 graphics rung -> frame in FrameStore; T2.5 `acos verify --engine art` selector, backend=art metadata.
-Phase 3 - M-C tap + UI tree (cap 58 d): T3.1 input channel -> real ViewRootImpl; T3.2 live View-tree walker helper; T3.3 two-session isolation test.
-Phase 4 - profile + gated optimisation (only after M-C): T4.1 where does PSS go (baseline vs per-session slope); T4.2 candidate list judged by the gate: warm-fork pool, shared boot image, JIT vs -Xint tuning, on-demand services, fast reset; T4.3 M12 benchmark vs Rust VM and legacy.
+Phase 1 - M-A framework classes run : T1.1 S1 substrate productised (fatal CHECK gone, props, logs, crash map); T1.2 natives rung implementation; T1.3 binder rung implementation (Parcel/BinderProxy round trip to ServiceHost, fds, callbacks); T1.4 `tools/art-runtime/accept.sh M-A`.
+Phase 2 - M-B counter first frame : T2.1 resources via chosen rung; T2.2 ActivityThread attach/launch via ServiceHost (reuse acos-services state machines); T2.3 WMS relayout/surface; T2.4 graphics rung -> frame in FrameStore; T2.5 `acos verify --engine art` selector, backend=art metadata.
+Phase 3 - M-C tap + UI tree : T3.1 input channel -> real ViewRootImpl; T3.2 live View-tree walker helper; T3.3 two-session isolation test.
+Phase 4 - profile + gated optimisation (only after M-C; headline metric: verified tasks per GiB-minute at N=10): T4.1 where does PSS go (baseline vs per-session slope); T4.2 candidate list judged by the gate: warm-fork pool, shared boot image, JIT vs -Xint tuning, on-demand services, fast reset; T4.3 M12 benchmark vs Rust VM and legacy.
 Phase 5 - V1 parity on ART (M-D, cap 77 d): hello-views, hello-jni (real JNI, free), recreate, reset, negatives, concurrency N=1..20, M1-M12 table, V1 gate rerun with `--engine art`.
 Phase 6 - breadth: RN hello, Gaten (arm64 via qemu or x86 build), Flutter (deferred), dogfood waves, parity vs phone.
 
-## 4. Kill / fallback rules
-- M-A not passing by 18 agent-days, M-B by 46, M-C by 58, or no >=2x memory or throughput win after M-D + 8 tuning days -> stop ART, return default to Rust VM, request a new decision.
-- Never silently fall back to the Rust VM on an ART run. Never claim determinism/snapshots on ART.
-- Any new component needs the three-question gate recorded in its report.
+## 4. Fallback rules (no time-based kill criteria)
+- ART is not abandoned on a missed deadline or failed integration step. On a blocker: name the failing component, inspect Google's implementation, try a minimal shim, compare with a hybrid, consider the legacy Android-container backend for unsupported capabilities, and present alternatives with evidence before changing the primary architecture.
+- Never silently fall back between engines; Rust VM stays as reference and explicit fallback; no determinism/snapshot claims on ART.
+- One-hour rule: no task runs >60 min without justification and user approval (see ENGINEERING_POLICY.md). Phases are split into small tasks; each task carries a start time and is reported at 60 min.
+- Each new component records the three-question gate in its report.
 
 ## 5. Agent policy for this plan
 Max 5 DeepSeek (pi/opencode-go, thinking high) concurrently; Haiku for gates/profiling/doc work; advisor codex gpt-6.1-sol analysis-only. Commit verified work by pathspec, push to origin/main.
+
+## 6. Phase list (final direction)
+0 finish probes D/E/F/G/H, ART memory baseline with framework loaded. 1 real framework on ART (CHECK fix, props, logs, crash map, registrations, Parcel/Handler/Binder/fd vs Rust services, M-A). 2 launch counter.apk (resources, Activity, first correct frame, `acos verify --engine art`). 3 interaction loop (input, tap 0->1, live View tree, freshness, two-session isolation, reset/relaunch). 4 measure then optimise (fixed core memory, per-session graphics, shared ART pages, warm-fork, on-demand services, reset speed). 5 full V1 on ART. 6 broader apps (View/Compose, RN, Gaten, Flutter) vs real Android with explicit unsupported list.
