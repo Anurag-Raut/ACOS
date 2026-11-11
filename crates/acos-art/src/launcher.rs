@@ -146,14 +146,17 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     }
 
     let shim_built = if opts.shim { Some(crate::build_shim(&root.data.join("shim"))?) } else { None };
+    // Private per-run data root (S4): the guest writes only here (and to the
+    // read-only shared inputs), and the tree is gone when this function returns.
+    let run = root.new_run_dir("run")?;
     let logd = match (opts.log, shim_built.is_some()) {
-        (LogMode::Logd, true) => Some(Logd::start(&root.data.join("socket")).map_err(Error::Io)?),
+        (LogMode::Logd, true) => Some(Logd::start(&run.dir("socket")).map_err(Error::Io)?),
         _ => None,
     };
 
-    // Provision the DEX files: copy into the data dir so the bind source is a
+    // Provision the DEX files: copy into the run root so the bind source is a
     // regular file we own, then reference by device path.
-    let task = root.data.join("task");
+    let task = run.dir("task");
     std::fs::create_dir_all(&task)?;
     let mut cp_dev = Vec::new();
     let mut dex_names = Vec::new();
@@ -181,6 +184,7 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
         .unwrap_or(false);
 
     let mut sb = root.sandbox();
+    sb.run_root(run.path());
     sb.with_shim(shim_built.is_some());
     sb.dir("/data/task");
     sb.args(Vec::new());

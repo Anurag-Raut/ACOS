@@ -38,6 +38,7 @@ USAGE:
                      # line-JSON on stdin/stdout, or on --socket PATH:
                      # screenshot|tree|tap|key|reset|close
   acos-art build-app
+  acos-art janitor                      # reap stale per-run data roots (S4)
 
 RESOURCE LIMITS (ADR-0018 / R1):
   ACOS_ART_RSS_MAX   launcher RSS ceiling (default 2G, 0 = off): crossing it
@@ -364,6 +365,13 @@ fn real_main() -> Result<ExitCode> {
             doctor(&root);
             Ok(ExitCode::SUCCESS)
         }
+        "janitor" => {
+            // Same sweep every run performs at startup, callable on its own so a
+            // host can reap an orphaned run root without starting a guest.
+            let n = root.sweep_stale_runs()?;
+            println!("janitor: removed {n} stale run dir(s) under {}", root.runs_dir().display());
+            Ok(ExitCode::SUCCESS)
+        }
         other => Err(Error::Layout(format!("unknown command {other}"))),
     }
 }
@@ -546,7 +554,10 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
         argv.push(format!("--dex-file={j}"));
         argv.push(format!("--dex-location={j}"));
     }
+    // Host-side build step: staging mode (shared <data>, writable) — the boot
+    // image is produced here, so this is the one route allowed to write it.
     let mut sb = root.sandbox();
+    sb.staging(true);
     sb.rw_bind(&out, "/data/img");
     sb.env(
         "LD_LIBRARY_PATH",

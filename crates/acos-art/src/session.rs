@@ -380,9 +380,11 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         .session_id
         .clone()
         .unwrap_or_else(|| format!("s{}-{}", std::process::id(), started.elapsed().as_nanos()));
-    let sdir = root.data.join("session").join(&session_id);
-    let out_dir = sdir.join("out");
-    fs::create_dir_all(&out_dir)?;
+    // Private per-run root (S4): it *is* the session dir, bound into the guest at
+    // `/data/session/<id>`; it is removed when this function returns.
+    let run = root.new_run_dir(&format!("session-{session_id}"))?;
+    let sdir = run.path().to_path_buf();
+    let out_dir = run.dir("out");
 
     // The APK lives under /data (bound read-write), as in render-app.
     let app_dir = root.data.join("app");
@@ -450,9 +452,14 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     );
 
     let mut sb = root.sandbox();
+    sb.run_root(run.path());
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
+    // The session dir is writable to the guest, but only this session's:
+    // `/data/session/<id>` is the run root, `/data/session` itself is a plain
+    // temp dir with nothing in it.
+    sb.rw_bind(&sdir, &format!("/data/session/{session_id}"));
     sb.rw_bind(&sock_dir, "/dev/socket");
     sb.env("LD_PRELOAD", "/data/shim/libartshim.so:/data/app/libacosart.so");
     sb.env("ACOSART_LOAD", "libandroid_runtime.so:libhwui.so");
@@ -865,6 +872,13 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let _ = &shim;
     if let Some(p) = &socket_path {
         let _ = fs::remove_file(p);
+    }
+    // Scratch is scratch (H1's leak finding, S4): the per-run tree goes away on
+    // every exit path, including a crashed guest — the artefacts the caller
+    // asked for are copied to `--out` above, and the janitor is only for a
+    // SIGKILLed launcher. `ACOS_ART_KEEP_SESSION=1` keeps it for diagnosis.
+    if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() {
+        run.keep();
     }
 
     Ok(SessionReport {

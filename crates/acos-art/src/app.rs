@@ -249,6 +249,11 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     let shim = build_render_shim(root)?;
     let art_shim = crate::build_shim(&root.data.join("shim"))?;
 
+    // Private per-run data root (S4): the guest writes `/data/out/render-app`
+    // inside it; the shared inputs (`/data/app`, `/data/overlay`, the boot
+    // image, the property table, `/linkerconfig`) are read-only in the guest.
+    let run = root.new_run_dir("render")?;
+
     // The APK and the guest classpath live under /data, which the sandbox
     // already binds read-write.
     let app_dir = root.data.join("app");
@@ -274,9 +279,9 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     // ActionBar title from the application label.
     let (theme, title, target_sdk) = apk_chrome(&opts.apk)?;
 
-    // The guest always writes into the sandbox's /data (it has no other writable
-    // path); the artefacts are copied to --out afterwards.
-    let staging = root.data.join("out/render-app");
+    // The guest always writes into the sandbox's /data staging dir; the
+    // artefacts are copied to --out afterwards.
+    let staging = run.dir("out").join("render-app");
     fs::create_dir_all(&staging)?;
     for stale in ["frame.png", "tree.json"] {
         let _ = fs::remove_file(staging.join(stale));
@@ -309,14 +314,15 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     // list, ResourcesImpl.updateConfiguration needs ro.build.version.sdk.
     crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
 
-    let logd = Logd::start(&root.data.join("socket")).map_err(Error::Io)?;
+    let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
     let mut sb = root.sandbox();
+    sb.run_root(run.path());
     // LD_PRELOAD is managed here (not by Sandbox::with_shim) so that the logd /
     // property shim and the substrate shim are loaded together, in this order.
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
-    sb.rw_bind(root.data.join("socket"), "/dev/socket");
+    sb.rw_bind(run.dir("socket"), "/dev/socket");
     sb.env(
         "LD_PRELOAD",
         "/data/shim/libartshim.so:/data/app/libacosart.so",
@@ -1077,7 +1083,10 @@ fn sandbox_tool(
     argv: &[String],
     secs: u64,
 ) -> Result<(std::process::ExitStatus, String, String)> {
-    let sb = root.sandbox();
+    let mut sb = root.sandbox();
+    // Host-side build step (idmap2). It writes /data/overlay, so it is the
+    // shared-tree staging layout, never a per-run root.
+    sb.staging(true);
     let mut cmd = sb.command(program, argv)?;
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd

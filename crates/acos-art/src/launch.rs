@@ -154,6 +154,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let substrate = crate::app::build_render_shim(root)?;
     let art_shim = crate::build_shim(&root.data.join("shim"))?;
     let driver = build_driver(root)?;
+    // Private per-run data root (S4): app data, out staging and the importer
+    // socket are this run's; everything else under /data is read-only.
+    let run = root.new_run_dir("launch")?;
 
     let app_dir = root.data.join("app");
     fs::create_dir_all(&app_dir)?;
@@ -166,7 +169,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     fs::copy(&opts.apk, &apk)?;
     let package = crate::app::apk_package(&opts.apk)?;
 
-    let staging = root.data.join("out/launch");
+    let staging = run.dir("out").join("launch");
     fs::create_dir_all(&staging)?;
     for stale in [
         "launch.json",
@@ -177,15 +180,15 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     ] {
         let _ = fs::remove_file(staging.join(stale));
     }
-    fs::create_dir_all(root.data.join("app-data").join(&package))?;
+    fs::create_dir_all(run.dir("app-data").join(&package))?;
     let out = opts.out.clone().unwrap_or_else(|| staging.clone());
     fs::create_dir_all(&out)?;
 
     crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
-    let logd = Logd::start(&root.data.join("socket")).map_err(Error::Io)?;
+    let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
 
     // --- peer (in-process, real ServiceHost) -------------------------------
-    let sock = root.data.join("acos-launch.sock");
+    let sock = run.dir("sock").join("acos-launch.sock");
     let _ = fs::remove_file(&sock);
     let listener = listen(&sock.to_string_lossy()).map_err(Error::Io)?;
     let unsupported_log = staging.join("unsupported.jsonl");
@@ -263,11 +266,14 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         activity.clone().unwrap_or_default(),
     ];
     let mut sb = root.sandbox();
+    sb.run_root(run.path());
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&substrate, "/data/app/libacosart.so");
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
-    sb.rw_bind(root.data.join("socket"), "/dev/socket");
+    sb.rw_bind(run.dir("socket"), "/dev/socket");
+    // The importer socket is the only writable file the peer needs in /data.
+    sb.rw_bind(&sock, "/data/acos-launch.sock");
     sb.env(
         "LD_PRELOAD",
         "/data/shim/libartshim.so:/data/app/libacosart.so:/data/lib/libacos_binder_driver.so",

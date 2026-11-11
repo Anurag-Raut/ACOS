@@ -174,12 +174,14 @@ impl ArtRoot {
     // ---- layout -----------------------------------------------------------
 
     /// Create the writable `/data` skeleton and refresh the derived files
-    /// (`apex-info-list.xml`, property table). Idempotent.
+    /// (`apex-info-list.xml`, property table). Idempotent. Also runs the
+    /// per-run janitor (see [`ArtRoot::sweep_stale_runs`]).
     pub fn ensure_data(&self) -> Result<()> {
         for d in [
             "dalvik-cache/x86_64",
             "misc/apexdata/com.android.art/dalvik-cache/x86_64",
             "linkerconfig",
+            "runs",
             "socket",
             "system/environ",
             "tmp",
@@ -190,7 +192,98 @@ impl ArtRoot {
         }
         self.write_apex_info_list()?;
         Props::android34().write(&self.data.join(props::PROPS_FILE))?;
+        // A launcher that was SIGKILLed cannot remove its own run dir; every
+        // later invocation reaps the stale ones (S4).
+        if let Ok(n) = self.sweep_stale_runs() {
+            if n > 0 {
+                eprintln!("acos-art: janitor removed {n} stale run dir(s)");
+            }
+        }
         Ok(())
+    }
+
+    // ---- per-run data roots (S4) -----------------------------------------
+
+    /// `<data>/runs`: one directory per APK run/session, removed on exit.
+    pub fn runs_dir(&self) -> PathBuf {
+        self.data.join("runs")
+    }
+
+    /// Create a fresh per-run writable root with the subtrees ART and the guest
+    /// legitimately write (`dalvik-cache`, `tmp`, `out`, `task`, `socket`,
+    /// `session`, `app-data`). The returned [`RunDir`] removes the tree on drop.
+    pub fn new_run_dir(&self, tag: &str) -> Result<RunDir> {
+        // Short on purpose: the logd/importer sockets live inside the run root
+        // and a `sun_path` is 108 bytes — a long id would make a deep `--data`
+        // dir fail at `bind()` ("path must be shorter than SUN_LEN").
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = format!("{}-{seq}", std::process::id());
+        let label: String = tag
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let path = self.runs_dir().join(&id);
+        for d in [
+            "dalvik-cache/x86_64",
+            "misc/apexdata/com.android.art/dalvik-cache/x86_64",
+            "tmp",
+            "out",
+            "task",
+            "socket",
+            "session",
+            "app-data",
+        ] {
+            fs::create_dir_all(path.join(d))?;
+        }
+        // Owner record: pid + starttime, so the janitor can tell a live run
+        // from a pid that has been reused since (H1's leak-check lesson).
+        let start = fs::read_to_string("/proc/self/stat")
+            .ok()
+            .and_then(|s| s.rfind(')').map(|i| s[i + 2..].split_whitespace().nth(19).map(str::to_string)).flatten())
+            .unwrap_or_else(|| "0".to_string());
+        fs::write(
+            path.join("owner"),
+            format!("pid={}\nstart={}\ntag={}\n", std::process::id(), start, label),
+        )?;
+        let keep = std::env::var_os("ACOS_ART_KEEP_RUN").is_some();
+        Ok(RunDir { path, keep })
+    }
+
+    /// Remove run dirs that have no live owner pid and are older than the TTL
+    /// (`ACOS_ART_RUN_TTL_SECS`, default 1800 s). This is the SIGKILL fallback:
+    /// `--die-with-parent` kills the guest and bwrap, but the host directory can
+    /// only be removed by a process that outlives them.
+    pub fn sweep_stale_runs(&self) -> Result<usize> {
+        let ttl = run_ttl_from_env();
+        let root = self.runs_dir();
+        let Ok(rd) = fs::read_dir(&root) else { return Ok(0) };
+        let mut removed = 0;
+        for e in rd.flatten() {
+            let path = e.path();
+            if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            if run_dir_is_live(&path) {
+                continue;
+            }
+            let stamp = path.join("owner");
+            let meta = fs::metadata(&stamp).or_else(|_| fs::metadata(&path));
+            let age = meta
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .unwrap_or_default();
+            if age.as_secs() < ttl {
+                continue;
+            }
+            match fs::remove_dir_all(&path) {
+                Ok(()) => removed += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => eprintln!("acos-art: janitor could not remove {}: {e}", path.display()),
+            }
+        }
+        Ok(removed)
     }
 
     fn apex_info_list(&self) -> PathBuf {
@@ -256,6 +349,7 @@ impl ArtRoot {
         // are invisible (liblog has nowhere to write) and it just aborts.
         crate::build_shim(&self.data.join("shim"))?;
         let mut sb = self.sandbox();
+        sb.staging(true); // host build step: /linkerconfig is regenerated here
         sb.with_shim(true);
         let mut cmd = sb.command("/apex/com.android.runtime/bin/linkerconfig", &[
             "--target".into(),
@@ -349,6 +443,7 @@ impl ArtRoot {
         // derive_classpath is a bionic binary: the shim gives it logd + props.
         crate::build_shim(&self.data.join("shim"))?;
         let mut sb = self.sandbox();
+        sb.staging(true); // host build step: derive_classpath writes /data/system/environ
         sb.with_shim(true);
         let mut cmd = sb.command(derive, &[])?;
         let out_log = cmd.output()?;
@@ -580,6 +675,82 @@ impl ArtRoot {
     }
 }
 
+/// A per-run writable data root: everything the guest may write (`dalvik-cache`,
+/// `tmp`, `out`, `task`, `socket`, `session`, `app-data`) lives here, while the
+/// shared build inputs (`app`, `overlay`, `shim`, `system/environ`,
+/// `acos.properties`, `linkerconfig`, the boot image) are bound read-only. The
+/// tree is removed on drop, which covers every exit path of a route (ok, guest
+/// crash, timeout, launcher error); a SIGKILLed launcher is covered by
+/// [`ArtRoot::sweep_stale_runs`]. See `results/art-runtime/S4.md`.
+pub struct RunDir {
+    pub path: PathBuf,
+    keep: bool,
+}
+
+impl RunDir {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Create (if needed) and return a writable subdirectory of the run root.
+    pub fn dir(&self, sub: &str) -> PathBuf {
+        let p = self.path.join(sub);
+        let _ = fs::create_dir_all(&p);
+        p
+    }
+
+    /// Leave the tree in place (debugging: `ACOS_ART_KEEP_RUN=1`).
+    pub fn keep(mut self) {
+        self.keep = true;
+    }
+}
+
+impl Drop for RunDir {
+    fn drop(&mut self) {
+        if self.keep {
+            return;
+        }
+        match fs::remove_dir_all(&self.path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!(
+                "acos-art: warning: could not remove run dir {}: {e}",
+                self.path.display()
+            ),
+        }
+    }
+}
+
+/// `ACOS_ART_RUN_TTL_SECS` (default 30 min): how long an orphaned run dir is
+/// kept before the janitor removes it.
+fn run_ttl_from_env() -> u64 {
+    std::env::var("ACOS_ART_RUN_TTL_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(1800)
+}
+
+/// Is the pid recorded in `<run>/owner` still alive **and** the same process?
+fn run_dir_is_live(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path.join("owner")) else { return false };
+    let mut pid = 0u32;
+    let mut start = String::new();
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("pid=") {
+            pid = v.trim().parse().unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("start=") {
+            start = v.trim().to_string();
+        }
+    }
+    if pid == 0 {
+        return false;
+    }
+    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else { return false };
+    let Some(i) = stat.rfind(')') else { return false };
+    let now_start = stat[i + 2..].split_whitespace().nth(19).unwrap_or("").to_string();
+    !start.is_empty() && now_start == start
+}
+
 /// Hardening flags every ART run gets, in this order, **before** the first
 /// mount (`--tmpfs /`): the namespace has to exist before any mount is set up.
 ///
@@ -617,6 +788,11 @@ pub struct Sandbox<'a> {
     shim: bool,
     image: Option<PathBuf>,
     args: Vec<String>,
+    /// Per-run writable data root (`None` = the one shared `<data>` tree).
+    run_root: Option<PathBuf>,
+    /// Host-side build step: keep today's fully-writable `<data>` (regenerating
+    /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
+    staging: bool,
 }
 
 impl<'a> Sandbox<'a> {
@@ -642,6 +818,32 @@ impl<'a> Sandbox<'a> {
             shim: false,
             image: None,
             args: Vec::new(),
+            run_root: None,
+            staging: false,
+        }
+    }
+
+    /// Use a per-run writable data root: shared inputs become read-only in the
+    /// guest and everything writable is private to this run (S4).
+    pub fn run_root(&mut self, dir: impl AsRef<Path>) -> &mut Self {
+        self.run_root = Some(dir.as_ref().to_path_buf());
+        self
+    }
+
+    /// Staging mode (host-side build steps only): keep the shared `<data>` tree
+    /// writable, and never apply the per-run layout.
+    pub fn staging(&mut self, staging: bool) -> &mut Self {
+        self.staging = staging;
+        self
+    }
+
+    /// The effective per-run root, if this sandbox is a run rather than a
+    /// host-side staging step.
+    fn active_run_root(&self) -> Option<&Path> {
+        if self.staging {
+            None
+        } else {
+            self.run_root.as_deref()
         }
     }
 
@@ -709,12 +911,75 @@ impl<'a> Sandbox<'a> {
             a.push(r.sysroot.join("system/apex").join(&m.name).into());
             a.push(guest.into());
         }
-        a.push("--bind".into());
-        a.push(r.data.join("linkerconfig").into());
-        a.push("/linkerconfig".into());
-        a.push("--bind".into());
-        a.push(r.data.clone().into());
-        a.push("/data".into());
+        let run_root = self.active_run_root();
+        if let Some(run) = run_root {
+            // `/linkerconfig` is a **host build input** at run time: regenerating
+            // it is a staging step (`ensure_linkerconfig`), never part of an APK
+            // run, so the guest only ever sees the generated file read-only.
+            a.push("--ro-bind".into());
+            a.push(r.data.join("linkerconfig").into());
+            a.push("/linkerconfig".into());
+            // A fresh /data: shared inputs read-only, the writable subtrees are
+            // this run's private root (S4). Nothing else under <data> is visible.
+            a.push("--dir".into());
+            a.push("/data".into());
+            for sub in ["system", "app", "overlay", "lib", "shim"] {
+                let host = r.data.join(sub);
+                if host.exists() {
+                    a.push("--ro-bind".into());
+                    a.push(host.into());
+                    a.push(format!("/data/{sub}").into());
+                }
+            }
+            for f in ["apex-info-list.xml", props::PROPS_FILE] {
+                let host = r.data.join(f);
+                if host.exists() {
+                    a.push("--ro-bind".into());
+                    a.push(host.into());
+                    a.push(format!("/data/{f}").into());
+                }
+            }
+            // `ACOS_ART_DALVIK_CACHE=shared` keeps the historic warm shared
+            // cache (fast, but a guest can poison a later run); the default is
+            // the per-run cache. Measured in results/art-runtime/S4.md.
+            let shared_cache = std::env::var("ACOS_ART_DALVIK_CACHE")
+                .map(|v| v == "shared")
+                .unwrap_or(false);
+            for (sub, guest) in [
+                ("dalvik-cache", "/data/dalvik-cache"),
+                ("misc", "/data/misc"),
+            ] {
+                let host = if shared_cache { r.data.join(sub) } else { run.join(sub) };
+                let _ = fs::create_dir_all(&host);
+                a.push("--bind".into());
+                a.push(host.into());
+                a.push(guest.into());
+            }
+            for (sub, guest) in [
+                ("tmp", "/data/tmp"),
+                ("out", "/data/out"),
+                ("task", "/data/task"),
+                ("app-data", "/data/app-data"),
+            ] {
+                let host = run.join(sub);
+                if host.exists() {
+                    a.push("--bind".into());
+                    a.push(host.into());
+                    a.push(guest.into());
+                }
+            }
+            // Per-session dirs (`/data/session/<id>`) are bound by the route
+            // that opens a session; the parent only has to exist.
+            a.push("--dir".into());
+            a.push("/data/session".into());
+        } else {
+            a.push("--bind".into());
+            a.push(r.data.join("linkerconfig").into());
+            a.push("/linkerconfig".into());
+            a.push("--bind".into());
+            a.push(r.data.clone().into());
+            a.push("/data".into());
+        }
         a.push("--dev".into());
         a.push("/dev".into());
         a.push("--proc".into());
@@ -722,7 +987,14 @@ impl<'a> Sandbox<'a> {
         a.push("--ro-bind".into());
         a.push("/sys".into());
         a.push("/sys".into());
-        for d in ["/vendor", "/product", "/system_ext", "/data/tmp", "/data/local/tmp"] {
+        let mut fixed_dirs = vec!["/vendor", "/product", "/system_ext"];
+        if run_root.is_none() {
+            // Present only in the shared-tree layout; a run gets /data/tmp from
+            // its own root instead (`--dir` over a bind would be redundant).
+            fixed_dirs.push("/data/tmp");
+        }
+        fixed_dirs.push("/data/local/tmp");
+        for d in fixed_dirs {
             a.push("--dir".into());
             a.push(d.into());
         }
@@ -757,9 +1029,13 @@ impl<'a> Sandbox<'a> {
             a.push(shim.into());
             a.push("/data/shim/libartshim.so".into());
             // The logd socket lives in the data dir, so bind the socket dir
-            // over the bwrap-supplied /dev.
+            // over the bwrap-supplied /dev. A run's socket dir is its own, not
+            // the shared one.
             a.push("--bind".into());
-            a.push(r.data.join("socket").into());
+            match run_root {
+                Some(run) => a.push(run.join("socket").into()),
+                None => a.push(r.data.join("socket").into()),
+            };
             a.push("/dev/socket".into());
         }
 
@@ -791,7 +1067,10 @@ impl<'a> Sandbox<'a> {
             a.push("/data/shim/libartshim.so".into());
         }
         if let Some(img) = &self.image {
-            a.push("--bind".into());
+            // A boot image is a build input: the guest may read it, never
+            // rewrite it (S4's canary test). Staging (`build-image`) keeps the
+            // writable bind, because that is where dex2oat writes it.
+            a.push(if run_root.is_some() { "--ro-bind".into() } else { "--bind".into() });
             a.push(img.clone().into());
             a.push("/data/img".into());
         }
@@ -1035,6 +1314,116 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// S4: in a run, every shared input is `--ro-bind` and every writable path
+    /// comes from the per-run root; the shared `<data>` tree is never bound.
+    #[test]
+    fn run_root_makes_shared_inputs_read_only() {
+        let data = scratch_dir("run-root");
+        for d in ["system/environ", "app", "overlay", "lib", "shim", "linkerconfig", "img/x86_64"] {
+            fs::create_dir_all(data.join(d)).unwrap();
+        }
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        for f in ["acos.properties", "apex-info-list.xml", "shim/libartshim.so"] {
+            fs::write(data.join(f), "x").unwrap();
+        }
+        fs::write(data.join("img/x86_64/boot.art"), "x").unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        let run = root.new_run_dir("test").expect("run dir");
+
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        sb.with_image(Some(data.join("img")));
+        let argv: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        // 1. Simplest statement of the whole change: the shared tree is gone.
+        let data_s = data.display().to_string();
+        for (i, a) in argv.iter().enumerate() {
+            if a == "--bind" {
+                let src = &argv[i + 1];
+                assert!(
+                    !src.trim_end_matches('/').eq(&data_s),
+                    "the whole shared <data> tree must not be bound rw in a run: {argv:?}"
+                );
+            }
+        }
+        // 2. Each shared input is read-only, including the boot image.
+        for sub in ["system", "app", "overlay", "lib", "shim", "img"] {
+            let src = data.join(sub).display().to_string();
+            let dst = format!("/data/{sub}");
+            assert!(
+                has_pair(&argv, "--ro-bind", &src, &dst),
+                "{sub} must be --ro-bind in a run ({src} -> {dst}): {argv:?}"
+            );
+        }
+        assert!(
+            has_pair(&argv, "--ro-bind", &data.join("linkerconfig").display().to_string(), "/linkerconfig"),
+            "linkerconfig must be read-only in a run"
+        );
+        for f in ["acos.properties", "apex-info-list.xml"] {
+            assert!(
+                has_pair(&argv, "--ro-bind", &data.join(f).display().to_string(), &format!("/data/{f}")),
+                "{f} must be read-only in a run"
+            );
+        }
+        // 3. The writable paths are this run's own root.
+        let run_s = run.path().display().to_string();
+        for (sub, guest) in [
+            ("dalvik-cache", "/data/dalvik-cache"),
+            ("misc", "/data/misc"),
+            ("tmp", "/data/tmp"),
+            ("out", "/data/out"),
+        ] {
+            assert!(
+                has_pair(&argv, "--bind", &format!("{run_s}/{sub}"), guest),
+                "{guest} must be the run root's {sub} ({run_s}): {argv:?}"
+            );
+        }
+        // 4. Staging keeps the old, fully writable layout (host build steps only).
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        sb.staging(true);
+        let staged: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            staged.iter().enumerate().any(|(i, a)| a == "--bind" && staged[i + 1].trim_end_matches('/') == data_s),
+            "staging mode must still bind the shared tree rw: {staged:?}"
+        );
+        assert!(
+            !staged.iter().any(|a| a.contains("/runs/")),
+            "staging mode must not use a per-run root: {staged:?}"
+        );
+        drop(run);
+        assert!(!data.join("runs").read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
+            "RunDir::drop must remove the tree");
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    /// `flag src dst` appears as consecutive argv elements.
+    fn has_pair(argv: &[String], flag: &str, src: &str, dst: &str) -> bool {
+        argv.iter()
+            .enumerate()
+            .any(|(i, a)| a == flag && argv.get(i + 1).map(String::as_str) == Some(src) && argv.get(i + 2).map(String::as_str) == Some(dst))
     }
 
     /// The argv `Sandbox::command` builds: hardening flags are the prefix (so

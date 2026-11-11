@@ -369,6 +369,15 @@ fn render_app_leaves_no_processes_or_scratch_behind() {
     let new: Vec<&String> = sessions_after.difference(&sessions_before).collect();
     assert!(new.is_empty(), "render-app left scratch behind under {}/session: {new:?}", data.display());
 
+    // S4: the per-run writable root (dalvik-cache, tmp, out, socket) must be
+    // removed on the normal exit path, not merely emptied.
+    let runs = dir_entries(&data.join("runs"));
+    assert!(
+        runs.is_empty(),
+        "render-app left per-run data roots behind under {}/runs: {runs:?}",
+        data.display()
+    );
+
     let _ = std::fs::remove_dir_all(&scratch);
 }
 
@@ -447,6 +456,364 @@ fn sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it() {
          Started by the run:{victim_detail}\nSurvivors:{detail}",
         survivors.len()
     );
+
+    // A SIGKILLed launcher cannot remove its own per-run root: that is exactly
+    // the case the startup janitor exists for (S4). Prove the leftover is there
+    // (not silently absent) and that one janitor sweep with a zero TTL removes
+    // it while a live owner is untouched.
+    let leftovers = dir_entries(&data.join("runs"));
+    assert!(
+        !leftovers.is_empty(),
+        "expected the SIGKILLed run's data root to survive (it is the janitor's job)"
+    );
+    let jan = launcher("janitor", &data)
+        .env("ACOS_ART_RUN_TTL_SECS", "0")
+        .output()
+        .expect("spawn acos-art janitor");
+    assert!(jan.status.success(), "janitor failed: {jan:?}");
+    let after = dir_entries(&data.join("runs"));
+    assert!(
+        after.is_empty(),
+        "janitor left {} run dir(s) after a zero-TTL sweep: {after:?}",
+        after.len()
+    );
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+// ---------------------------------------------------------------------------
+// 2b. S4 canary: the guest cannot rewrite the shared read-only inputs
+// ---------------------------------------------------------------------------
+
+/// md5 of a file via `md5sum` (the crate's own helper is not exported to tests).
+fn md5(path: &Path) -> String {
+    let out = Command::new("md5sum")
+        .arg(path)
+        .output()
+        .unwrap_or_else(|e| panic!("md5sum {}: {e}", path.display()));
+    assert!(out.status.success(), "md5sum failed for {}", path.display());
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .expect("md5sum output")
+        .to_string()
+}
+
+fn toolchain_d8() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("D8") {
+        return Some(PathBuf::from(p));
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Some(p) = std::env::var_os(var) {
+            roots.push(PathBuf::from(p));
+        }
+    }
+    roots.push(home.join("Android/Sdk"));
+    for root in roots {
+        let bt = root.join("build-tools");
+        let Ok(rd) = std::fs::read_dir(&bt) else { continue };
+        let mut versions: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
+        versions.sort();
+        for v in versions.into_iter().rev() {
+            let d8 = v.join("d8");
+            if d8.is_file() {
+                return Some(d8);
+            }
+        }
+    }
+    None
+}
+
+/// Compile the canary DEX (javac + d8). `None` = the host lacks the toolchain,
+/// which is a skip, not a failure (`d8` comes from the Android SDK).
+fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
+    let Some(d8) = toolchain_d8() else {
+        eprintln!("SKIP canary test: no d8 (Android build-tools) on this host");
+        return None;
+    };
+    let src = scratch.join("canary/Canary.java");
+    std::fs::create_dir_all(src.parent().unwrap()).ok()?;
+    let targets = [
+        "/data/img/x86_64/boot.art",
+        "/data/system/environ/classpath",
+        "/data/acos.properties",
+        "/data/shim/libartshim.so",
+        "/data/app/guest/classes.dex",
+        "/linkerconfig/ld.config.txt",
+    ];
+    let mut java = String::from("import java.io.FileOutputStream;\n\npublic class Canary {\n  public static void main(String[] a) {\n    String[] t = {\n");
+    for t in targets {
+        java.push_str(&format!("      \"{t}\",\n"));
+    }
+    java.push_str(
+        // Read first (the input must be *visible* to the guest), then try to write
+        // (it must be denied). Without the read half, a FileNotFoundException
+        // could just mean the path is absent from the sandbox.
+        "    };\n    for (String p : t) {\n      try (java.io.FileInputStream in = new java.io.FileInputStream(p)) {\n        in.read();\n        System.out.println(\"READ \" + p);\n      } catch (Exception e) {\n        System.out.println(\"UNREADABLE \" + p + \" \" + e.getClass().getSimpleName());\n      }\n      try (FileOutputStream f = new FileOutputStream(p, true)) {\n        f.write(0);\n        System.out.println(\"WROTE \" + p);\n      } catch (Exception e) {\n        System.out.println(\"DENIED \" + p + \" \" + e.getClass().getSimpleName());\n      }\n    }\n  }\n}\n",
+    );
+    std::fs::write(&src, java).ok()?;
+    let classes = scratch.join("canary/classes");
+    let st = Command::new("javac")
+        .arg("-d")
+        .arg(&classes)
+        .arg(&src)
+        .status()
+        .ok()?;
+    if !st.success() {
+        eprintln!("SKIP canary test: javac failed");
+        return None;
+    }
+    let out = scratch.join("canary/dex");
+    std::fs::create_dir_all(&out).ok()?;
+    // d8 takes program *files* (class files or a jar), not a directory.
+    let mut class_files: Vec<PathBuf> = std::fs::read_dir(&classes)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("class"))
+        .collect();
+    class_files.sort();
+    if class_files.is_empty() {
+        eprintln!("SKIP canary test: javac produced no class files");
+        return None;
+    }
+    let st = Command::new(&d8)
+        .arg("--output")
+        .arg(&out)
+        .args(&class_files)
+        .status()
+        .ok()?;
+    if !st.success() {
+        eprintln!("SKIP canary test: d8 failed ({})", d8.display());
+        return None;
+    }
+    let dex = out.join("classes.dex");
+    dex.is_file().then_some(dex)
+}
+
+#[test]
+fn guest_cannot_overwrite_boot_art_or_the_classpath() {
+    let _serial = art_guard();
+    let Some(()) = require_art() else { return };
+    let scratch = scratch("canary");
+    let data = seed_data(&scratch);
+    let Some(dex) = build_canary_dex(&scratch) else {
+        let _ = std::fs::remove_dir_all(&scratch);
+        return;
+    };
+
+    // A real boot image if the host has one (`.cache/art-exp` from the
+    // feasibility spike; `acos-art build-image` produces `.cache/art/data/img`).
+    // The guest then really can attempt `boot.art`, not just a path that is
+    // absent from the sandbox.
+    let image = [".cache/art/data/img", ".cache/art-exp/data/img"]
+        .iter()
+        .map(|p| repo_root().join(p))
+        .find(|p| p.join("x86_64/boot.art").is_file());
+
+    let mut inputs: Vec<(&str, PathBuf)> = vec![
+        ("/data/system/environ/classpath", data.join("system/environ/classpath")),
+        ("/data/acos.properties", data.join("acos.properties")),
+        ("/data/shim/libartshim.so", data.join("shim/libartshim.so")),
+        ("/data/app/guest/classes.dex", data.join("app/guest/classes.dex")),
+        ("/linkerconfig/ld.config.txt", data.join("linkerconfig/ld.config.txt")),
+    ];
+    if let Some(img) = &image {
+        inputs.push(("/data/img/x86_64/boot.art", img.join("x86_64/boot.art")));
+    }
+    for (_, host) in &inputs {
+        assert!(host.is_file(), "canary target missing on the host: {}", host.display());
+    }
+    let before: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
+
+    let mut cmd = launcher("run", &data);
+    cmd.arg("--dex").arg(&dex).arg("--class").arg("Canary");
+    if let Some(img) = &image {
+        cmd.arg("--image").arg(img);
+    }
+    let out = cmd.output().expect("spawn acos-art run (canary)");
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(
+        out.status.success(),
+        "the canary run itself failed (rc={:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        out.status.code()
+    );
+
+    for (guest, _host) in &inputs {
+        assert!(
+            stdout.contains(&format!("READ {guest}")),
+            "the shared input {guest} is not even visible/readable in the guest\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("DENIED {guest}")),
+            "the guest was not denied write access to {guest}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            !stdout.contains(&format!("WROTE {guest}")),
+            "the guest WROTE the shared input {guest} (S4 regression)\nstdout:\n{stdout}"
+        );
+    }
+    let after: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
+    // The host-side proof: the bytes are identical, not just the guest's opinion.
+    assert_eq!(before, after, "a shared input changed on the host during the canary run");
+
+    // And the run root is gone, so the canary left nothing behind either.
+    let runs = dir_entries(&data.join("runs"));
+    assert!(runs.is_empty(), "canary run left per-run roots behind: {runs:?}");
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+// ---------------------------------------------------------------------------
+// 2b-bis. A *guest crash* is still a normal host exit: the run root goes away
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guest_crash_still_removes_the_run_root() {
+    let _serial = art_guard();
+    let Some(()) = require_art() else { return };
+    let scratch = scratch("crash");
+    let data = seed_data(&scratch);
+    let sock = scratch.join("session.sock");
+    let log = std::fs::File::create(scratch.join("session.log")).expect("session log");
+    let before = snapshot();
+
+    // A real session, then SIGKILL the *guest* (not the launcher): the launcher
+    // must survive the crash, report it, and still remove its run root.
+    let mut cmd = launcher("session", &data);
+    cmd.arg("--apk")
+        .arg(apk())
+        .arg("--out")
+        .arg(scratch.join("out"))
+        .arg("--socket")
+        .arg(&sock)
+        .arg("--session-id")
+        .arg("h1crash")
+        // A session whose guest dies does not end early (it waits for the
+        // protocol relay), so the wall-clock budget is what ends it. Short, so
+        // this test is about the *cleanup*, not about waiting.
+        .arg("--timeout")
+        .arg("8")
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(log));
+    let mut child = Reaper(cmd.spawn().expect("spawn acos-art session"));
+
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut guests = Vec::new();
+    while Instant::now() < deadline {
+        guests = new_procs(&before).into_iter().filter(Proc::is_guest).collect();
+        if !guests.is_empty() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        !guests.is_empty(),
+        "no dalvikvm64 guest appeared within 60 s; log at {}",
+        scratch.join("session.log").display()
+    );
+    for g in &guests {
+        unsafe {
+            libc::kill(g.pid as i32, libc::SIGKILL);
+        }
+    }
+
+    // A session waits for its client, so close it (the guest is already gone;
+    // the close must not resurrect it) and let the launcher finish on its own.
+    if let Ok(mut s) = UnixStream::connect(&sock) {
+        let _ = s.write_all(b"{\"cmd\":\"close\"}\n");
+        let _ = s.flush();
+    }
+    assert!(
+        child.wait_or_kill(Duration::from_secs(25)),
+        "the launcher did not exit within 25 s of its guest being SIGKILLed (timeout 8 s)"
+    );
+    let survivors = wait_until_clean(&before, Duration::from_secs(3));
+    let detail = describe(&survivors);
+    reap(&survivors);
+    assert!(survivors.is_empty(), "a crashed guest left processes behind:{detail}");
+
+    let runs = dir_entries(&data.join("runs"));
+    assert!(
+        runs.is_empty(),
+        "a crashed guest left its per-run data root behind: {runs:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+// ---------------------------------------------------------------------------
+// 2c. The startup janitor (the SIGKILL fallback) keeps live runs, reaps dead
+// ---------------------------------------------------------------------------
+
+fn own_pid_start() -> (u32, String) {
+    let stat = std::fs::read_to_string("/proc/self/stat").expect("/proc/self/stat");
+    let i = stat.rfind(')').expect("comm");
+    let start = stat[i + 2..]
+        .split_whitespace()
+        .nth(19)
+        .expect("starttime")
+        .to_string();
+    (std::process::id(), start)
+}
+
+fn age(path: &Path, spec: &str) {
+    let st = Command::new("touch")
+        .arg("-d")
+        .arg(spec)
+        .arg(path)
+        .status()
+        .expect("touch");
+    assert!(st.success(), "touch -d {spec} {}", path.display());
+}
+
+#[test]
+fn janitor_reaps_stale_runs_and_keeps_live_ones() {
+    let _serial = art_guard();
+    let Some(()) = require_art() else { return };
+    let scratch = scratch("janitor");
+    let data = seed_data(&scratch);
+    let runs = data.join("runs");
+    std::fs::create_dir_all(&runs).expect("create runs dir");
+
+    let mk = |name: &str, owner: Option<String>| -> PathBuf {
+        let d = runs.join(name);
+        std::fs::create_dir_all(&d).expect("run dir");
+        if let Some(o) = owner {
+            std::fs::write(d.join("owner"), o).expect("owner file");
+        }
+        d
+    };
+    let stale = mk("stale", Some("pid=999999\nstart=1\ntag=stale\n".into()));
+    let no_owner = mk("no-owner", None);
+    let dead_fresh = mk("dead-fresh", Some("pid=999998\nstart=1\ntag=fresh\n".into()));
+    let (pid, start) = own_pid_start();
+    let live = mk("live", Some(format!("pid={pid}\nstart={start}\ntag=live\n")));
+    for d in [stale.as_path(), no_owner.as_path(), live.as_path()] {
+        age(&d.join("owner"), "2 hours ago");
+        age(d, "2 hours ago");
+    }
+
+    // Default TTL (30 min): old + dead is reaped, old + live is not, fresh + dead
+    // is kept in case its owner is still finishing.
+    let out = launcher("janitor", &data).output().expect("janitor");
+    assert!(out.status.success(), "janitor failed: {out:?}");
+    assert!(!stale.exists(), "janitor kept a stale run dir with no live owner");
+    assert!(!no_owner.exists(), "janitor kept an old run dir with no owner record");
+    assert!(live.exists(), "janitor reaped a LIVE run dir (pid {pid})");
+    assert!(dead_fresh.exists(), "janitor reaped a fresh run dir before the TTL");
+
+    // Zero TTL: the SIGKILL case — the pid is gone, the age does not matter.
+    let out = launcher("janitor", &data)
+        .env("ACOS_ART_RUN_TTL_SECS", "0")
+        .output()
+        .expect("janitor (ttl=0)");
+    assert!(out.status.success(), "janitor failed: {out:?}");
+    assert!(!dead_fresh.exists(), "a zero-TTL sweep must reap a dead owner's run dir");
+    assert!(live.exists(), "a zero-TTL sweep must still keep a live run dir");
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
@@ -554,14 +921,26 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     let mut child = Reaper(cmd.spawn().expect("spawn acos-art session"));
     let pid = child.pid();
 
-    // The launcher's logd binds a per-session `<data>/session/<id>/socket/logdw`;
-    // once it exists the guest is up and the sink is the real one R1 hit.
-    let logdw = data.join("session/h1spam/socket/logdw");
+    // The launcher's logd binds a per-session socket; under S4 the session dir
+    // is the run's private root (`<data>/runs/<id>/socket/logdw`), so find it by
+    // name rather than by the old shared `<data>/session/<id>` path.
     let deadline = Instant::now() + Duration::from_secs(60);
+    let mut logdw = data.join("session/h1spam/socket/logdw");
     while !logdw.exists() {
+        if let Ok(rd) = std::fs::read_dir(data.join("runs")) {
+            for e in rd.flatten() {
+                let cand = e.path().join("socket/logdw");
+                if cand.exists() {
+                    logdw = cand;
+                }
+            }
+        }
+        if logdw.exists() {
+            break;
+        }
         if Instant::now() >= deadline {
             let tail = std::fs::read_to_string(scratch.join("session.log")).unwrap_or_default();
-            panic!("no logd sink at {} within 60 s:\n{tail}", logdw.display());
+            panic!("no logd sink under {} within 60 s:\n{tail}", data.join("runs").display());
         }
         std::thread::sleep(Duration::from_millis(25));
     }
