@@ -113,10 +113,17 @@ fn default_driver_dex() -> PathBuf {
 
 /// Session options for a product launch (geometry from the reference device).
 #[must_use]
-pub fn flush_options(scratch: PathBuf) -> FlutterSessionOptions {
+pub fn flush_options(apk: &Path, scratch: PathBuf) -> FlutterSessionOptions {
     let lib_dir = default_lib_dir();
     FlutterSessionOptions {
-        prefer_probe_snapshot: lib_dir.join("libapp_probe.so").is_file(),
+        // W189-A: a real APK is always authoritative — stage its own
+        // `lib/<abi>/libapp.so`, never the shared engine dir's snapshot (which
+        // may be a different app's, or the W93-A instrumented probe). The one
+        // exemption is the raw probe fixture itself (`flutter-hello.apk`), which
+        // has no semantics in its shipped snapshot and is exercised through the
+        // instrumented `libapp_probe.so` when it is present.
+        prefer_probe_snapshot: apk.file_stem().and_then(|s| s.to_str()) == Some("flutter-hello")
+            && lib_dir.join("libapp_probe.so").is_file(),
         lib_dir,
         scratch,
         driver_dex: Some(default_driver_dex()),
@@ -243,6 +250,15 @@ impl FlutterDriver for RealDriver {
         if let Some(err) = self.session.driver_error() {
             out.push(format!("error: {err}"));
         }
+        // W189-A diagnostics: whether the engine was asked for semantics and
+        // how many updates it delivered (a real framework app only builds a
+        // tree once `setSemanticsEnabled(true)` reaches Dart).
+        out.push(format!(
+            "diag: semantics_requested={} seq={} java={}",
+            self.session.semantics_requested(),
+            self.session.semantics_seq(),
+            self.session.semantics_debug()
+        ));
         out
     }
 }
@@ -513,7 +529,7 @@ impl FlutterSessions {
         scratch: PathBuf,
     ) -> Result<(), FlutterSessionError> {
         let _ = self.remove(id);
-        let worker = spawn_real_worker(apk.to_path_buf(), flush_options(scratch))?;
+        let worker = spawn_real_worker(apk.to_path_buf(), flush_options(apk, scratch))?;
         if let Ok(mut map) = self.held.lock() {
             map.insert(id.to_string(), worker);
         }

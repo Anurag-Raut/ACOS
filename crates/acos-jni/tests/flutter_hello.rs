@@ -373,6 +373,12 @@ fn flutter_child_worker() {
             .env
             .push(("ACOS_BOOT_DIR".to_string(), boot_dir.display().to_string()));
     }
+    // W189-A: `NewDirectByteBuffer` validates caller-owned ranges against
+    // `/proc/self/maps`. Landlock denies that file unless the child's own proc
+    // dir is granted, so the first semantics update aborts the engine inside
+    // `PlatformViewAndroidJNI`. Grant `/proc/self` only (the Landlock wrapper
+    // adds EXECUTE on `/proc`, nothing else).
+    profile = profile.with_read_only("/proc/self");
     // Diagnostics pass-through (harness only): confinement clears the
     // environment (`sanitize_env`), so an opt-in trace switch must be forwarded
     // explicitly to be visible inside the confined child.

@@ -344,7 +344,7 @@ fn ensure_libs(apk: &Path, libdir: &Path, abi: &str) -> Result<(), FlutterSessio
         .map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|e| setup("open-apk", e.to_string()))?;
-    for name in ["libflutter.so", "libapp.so"] {
+    for name in ["libflutter.so"] {
         let dest = libdir.join(name);
         if dest.is_file() {
             continue;
@@ -427,20 +427,21 @@ impl FlutterSession {
             .map_err(|e| setup("scratch", format!("{}: {e}", opts.scratch.display())))?;
         ensure_libs(&apk, &opts.lib_dir, &abi)?;
 
-        // Stage the AOT snapshot.
+        // Stage the AOT snapshot. W189-A: always take the APK's own
+        // `lib/<abi>/libapp.so`; the shared engine lib dir may hold an
+        // unrelated app's snapshot (a stale `libapp.so` there silently ran the
+        // old probe for a real-widget app). `prefer_probe_snapshot` remains the
+        // harness-only escape hatch for the instrumented W93-A snapshot.
         let app_path = opts.scratch.join("libapp.so");
         let probe_src = opts.lib_dir.join("libapp_probe.so");
-        let app_src = if opts.prefer_probe_snapshot && probe_src.is_file() {
-            probe_src
+        if opts.prefer_probe_snapshot && probe_src.is_file() {
+            std::fs::copy(&probe_src, &app_path).map_err(|e| {
+                setup("stage-snapshot", format!("{}: {e}", probe_src.display()))
+            })?;
         } else {
-            opts.lib_dir.join("libapp.so")
-        };
-        std::fs::copy(&app_src, &app_path).map_err(|e| {
-            setup(
-                "stage-snapshot",
-                format!("{}: {e}", app_src.display()),
-            )
-        })?;
+            let entry = format!("lib/{abi}/libapp.so");
+            extract_asset(&apk, &entry, &app_path)?;
+        }
 
         // Stage the flutter_assets manifests the engine reads.
         let assets_dir = opts.scratch.join("flutter_assets");
@@ -472,6 +473,18 @@ impl FlutterSession {
             .as_ref()
             .map(|d| d.join("BOOTCLASSPATH").is_file())
             .unwrap_or(false);
+        // W189-A: the engine's Skia font manager opens `/system/etc/fonts.xml`
+        // (and `/system/fonts/*`) by absolute path. The native-loader's path
+        // translation maps those onto the extracted boot tree named by
+        // `ACOS_BOOT_DIR`; the confined child sanitises the environment, so the
+        // session must export it itself. Without it a real framework app lays
+        // out correctly but draws zero glyphs (the raw probe happened to render
+        // because the W130-A harness set the variable explicitly).
+        if boot_ok {
+            if let Some(dir) = &boot_dir {
+                std::env::set_var("ACOS_BOOT_DIR", dir);
+            }
+        }
         let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
         let mut vm = Box::new(
             Vm::new(VmOptions {
@@ -905,6 +918,31 @@ impl FlutterSession {
     #[must_use]
     pub fn vsync_delivered(&self) -> usize {
         self.vsync_delivered
+    }
+
+    /// Whether `enableSemantics` has been sent to the engine (diagnostic).
+    #[must_use]
+    pub fn semantics_requested(&self) -> bool {
+        self.semantics_requested
+    }
+
+    /// The engine's semantics update sequence (diagnostic).
+    #[must_use]
+    pub fn semantics_seq(&self) -> i32 {
+        self.semantics_seq
+    }
+
+    /// The Java driver's own semantics state (`semanticsDebug()`): whether
+    /// `setSemanticsEnabled` succeeded, the update sequence, and any capture
+    /// error. Diagnostic only.
+    pub fn semantics_debug(&mut self) -> String {
+        match self.call_driver("semanticsDebug", "()Ljava/lang/String;", &[]) {
+            Ok(JavaValue::Object(h)) => {
+                self.vm.java_string_to_rust(h).unwrap_or_default()
+            }
+            Ok(other) => format!("semanticsDebug returned {other:?}"),
+            Err(e) => format!("semanticsDebug failed: {e}"),
+        }
     }
 
     /// The geometry/budget options this session was created with.

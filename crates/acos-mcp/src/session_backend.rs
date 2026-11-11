@@ -358,6 +358,15 @@ impl SessionBackend {
                 read_only.push(lib_dir.clone());
                 flutter_lib = Some(lib_dir);
             }
+            // W189-A: the engine wraps native memory in `NewDirectByteBuffer`
+            // for the semantics stream (`FlutterJNI.updateSemantics`). ACOS
+            // validates the caller-owned range against `/proc/self/maps`, which
+            // Landlock denies unless the confined child's own proc dir is
+            // granted. Without it the first real-widget semantics update throws
+            // `IllegalArgumentException` inside `PlatformViewAndroidJNI` and
+            // aborts the engine. Grant the child's own `/proc/self` (read-only)
+            // only: the traversal chain adds EXECUTE on `/proc`, nothing else.
+            read_only.push(PathBuf::from("/proc/self"));
         }
 
         // A React Native APK extracts its runtime libraries from the APK into
