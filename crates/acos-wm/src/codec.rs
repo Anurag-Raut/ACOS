@@ -430,10 +430,32 @@ impl ParcelCodec for ClientWindowFrames {
 
 /// `android.view.SurfaceControl` as it crosses the Parcel.
 ///
-/// Java writes `mName` (`String8`), `mWidth`/`mHeight` (`writeInt`), a non-null
-/// marker, then `nativeWriteToParcel`. ACOS's native layer substitutes an
-/// 8-byte layer handle for the native pointer (the real `nativeWriteToParcel`
-/// bytes are a libgui object; see `results/wm/README.md`).
+/// The image's `SurfaceControl.java` `writeToParcel` writes the Java fields
+/// (`String8 mName`, `int mWidth`, `int mHeight`, an `int` "has a native
+/// object" marker) and then calls `nativeWriteToParcel`, which is
+/// `SurfaceControl::writeToParcel` in libgui:
+///
+/// ```text
+/// strong binder  client   (ISurfaceComposerClient)
+/// strong binder  handle   (the layer handle)
+/// int32          layerId
+/// String16       layerName
+/// uint32         transformHint
+/// uint32         width
+/// uint32         height
+/// uint32         format
+/// ```
+///
+/// (`.cache/aosp/native/libs/gui/SurfaceControl.cpp:237`; the reader at
+/// `:250` mirrors it and **tolerates a null client/handle** — "we aren't the
+/// original owner of the surface".) Writing only an 8-byte handle here made the
+/// guest's native reader consume 24 bytes of the following fields as a binder
+/// object, which desynchronised the rest of the reply (W2 §3).
+///
+/// ACOS has no SurfaceFlinger layer, so the placeholder writes the Java shape
+/// with a real name/size/layer id and **null** client/handle binders: the
+/// framework constructs a `SurfaceControl` it can hand to a `Transaction`, and
+/// nothing in it is a lie about a compositor that does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceControlInfo {
     pub name: String,
@@ -449,11 +471,21 @@ impl ParcelCodec for SurfaceControlInfo {
         p.write_string8(&self.name)?;
         p.write_int32(self.width);
         p.write_int32(self.height);
-        match self.handle {
-            Some(_) => p.write_int32(1),
-            None => p.write_int32(0),
-        }
-        p.write_int64(self.handle.unwrap_or(0) as i64);
+        let Some(handle) = self.handle else {
+            p.write_int32(0); // no native object; nothing follows
+            return Ok(());
+        };
+        p.write_int32(1);
+        // `SurfaceControl::writeToParcel` (libgui): client, handle, layerId,
+        // layerName, transformHint, width, height, format.
+        p.write_strong_binder_opt(None); // client: ACOS has no ISurfaceComposerClient
+        p.write_strong_binder_opt(None); // handle: no SurfaceFlinger layer
+        p.write_int32(handle as i32); // layerId (the synthetic ACOS layer)
+        p.write_string16(&self.name)?; // mLayerName (UTF-16 on the wire)
+        p.write_int32(0); // transformHint
+        p.write_int32(self.width);
+        p.write_int32(self.height);
+        p.write_int32(1); // format: PIXEL_FORMAT_RGBA_8888
         Ok(())
     }
 
@@ -462,12 +494,24 @@ impl ParcelCodec for SurfaceControlInfo {
         let width = p.read_int32()?;
         let height = p.read_int32()?;
         let present = p.read_int32()? != 0;
-        let raw = p.read_int64()? as u64;
+        let handle = if present {
+            let _client = p.read_strong_binder()?;
+            let _handle = p.read_strong_binder()?;
+            let layer_id = p.read_int32()?;
+            let _layer_name = p.read_string16()?;
+            let _transform_hint = p.read_int32()?;
+            let _w = p.read_int32()?;
+            let _h = p.read_int32()?;
+            let _format = p.read_int32()?;
+            Some(layer_id as u32 as u64)
+        } else {
+            None
+        };
         Ok(SurfaceControlInfo {
             name,
             width,
             height,
-            handle: if present && raw != 0 { Some(raw) } else { None },
+            handle,
         })
     }
 }

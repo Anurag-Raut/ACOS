@@ -228,8 +228,6 @@ pub struct CutoutGeometry {
     pub scale: f32,
     /// `mCutoutPathParserInfo.physicalPixelDisplaySizeRatio`.
     pub physical_pixel_display_size_ratio: f32,
-    /// `mSideOverrides` (`writeIntArray`).
-    pub side_overrides: Option<Vec<i32>>,
 }
 
 /// The three wire variants of `writeCutoutToParcel`.
@@ -268,7 +266,6 @@ impl DisplayCutout {
                 values.push(Value::Int(g.rotation));
                 values.push(Value::Float(g.scale));
                 values.push(Value::Float(g.physical_pixel_display_size_ratio));
-                values.push(Value::IntArray(g.side_overrides.clone()));
             }
         }
         Parcelable::ordered(parcelable::DISPLAY_CUTOUT_CLASS, values)
@@ -280,7 +277,7 @@ impl DisplayCutout {
             -1 => Some(Self::Null),
             0 => Some(Self::None),
             1 => {
-                if f.len() != 14 {
+                if f.len() != 13 {
                     return None;
                 }
                 let safe_insets = rect_fields(f.get(1)?.as_parcelable()?)?;
@@ -310,10 +307,6 @@ impl DisplayCutout {
                     rotation: f.get(10)?.as_int()?,
                     scale: f.get(11)?.as_float()?,
                     physical_pixel_display_size_ratio: f.get(12)?.as_float()?,
-                    side_overrides: match f.get(13)? {
-                        Value::IntArray(a) => a.clone(),
-                        _ => return None,
-                    },
                 }))
             }
             _ => None,

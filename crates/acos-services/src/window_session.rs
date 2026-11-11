@@ -60,7 +60,7 @@ use std::sync::{Arc, Mutex};
 use acos_parcel::{BinderId, Parcel};
 use acos_wm::codec::{LayoutParams, ParcelCodec};
 use acos_wm::geom::RectI;
-use acos_wm::wms::{AddWindowResult, RelayoutResult, ADD_OKAY};
+use acos_wm::wms::{AddWindowResult, RelayoutResult};
 
 use crate::error::{Result as SResult, ServiceError};
 use crate::host::ServiceObject;
@@ -234,9 +234,27 @@ fn present<T: ParcelCodec>(reply: &mut Parcel, value: Option<&T>) -> SResult<()>
     }
 }
 
-/// `out InputChannel` exactly as `InputChannel.nativeWriteToParcel` puts it on
-/// the wire: `String16 name`, one file descriptor, the token binder. The AIDL
-/// layer's presence marker is written by the caller.
+/// `out InputChannel` exactly as the image's AIDL stub + `InputChannel`
+/// natives put it on the wire:
+///
+/// ```text
+/// int32  1                 // AIDL `writeTypedObject(InputChannel)` presence
+/// int32  1                 // `nativeReadFromParcel`'s `isInitialized`
+/// strong binder  token     // `InputChannel::writeToParcel` (libinput.so:0x78d40)
+/// String16       name      //   `writeUtf8AsUtf16`
+/// file descriptor fd       //   `writeUniqueFileDescriptor`
+/// ```
+///
+/// The order is **not** `name, fd, token`: `InputChannel::readFromParcel`
+/// (`libinput.so:0x78dc0`, reached from
+/// `android_view_InputChannel_nativeReadFromParcel` which first reads the
+/// `isInitialized` int) reads the token binder, then the name, then the
+/// descriptor. Writing the name first desynchronises the whole reply at the
+/// first native read, which is what made the guest mis-parse the
+/// `InsetsState` that follows (`results/art-runtime/L1.md` E2). Evidence:
+/// the image's own `IWindowSession$Stub.onTransact` writes
+/// `writeTypedObject(inputChannel, flags)` and `libandroid_runtime.so`'s
+/// native write calls `InputChannel::writeToParcel` inline.
 ///
 /// The descriptor is a duplicate of the client end of the window's socketpair,
 /// so the framework installs an `InputEventReceiver` on a channel the ACOS
@@ -248,51 +266,67 @@ fn write_input_channel(state: &mut WmsState, add: &AddWindowResult, reply: &mut 
         .channels
         .get(handle)
         .and_then(acos_wm::transport::Channel::duplicate_client_fd);
+    // The image's stub creates the `InputChannel` object *before* the call
+    // (`new-instance ... InputChannel; <init>()V`) and then writes it with
+    // `writeTypedObject`, so the AIDL presence marker is **always** `1`; a
+    // channel the server never initialised is written as `isInitialized = 0`
+    // (`nativeWriteToParcel`: `parcel->writeInt32(0)`), not as an absent
+    // object. That is also the failure path of a rejected add.
+    reply.write_int32(1);
     let Some(fd) = fd else {
-        // No fd-backed channel (in-memory pair, e.g. a unit test): write an
-        // absent channel rather than a bogus descriptor.
-        reply.write_int32(0);
+        reply.write_int32(0); // native `isInitialized`
         return Ok(());
     };
     use std::os::fd::AsFd;
-    reply.write_int32(1);
+    reply.write_int32(1); // native `isInitialized`
+    reply.write_strong_binder_opt(add.input_channel.token);
     reply
         .write_string16_opt(Some(&add.input_channel.name))
         .map_err(perr)?;
     reply.write_file_descriptor(fd.as_fd()).map_err(perr)?;
-    reply.write_strong_binder_opt(add.input_channel.token);
     Ok(())
+}
+
+/// `out float[] sizeCompatScale`.
+///
+/// An AIDL `out float[]` is **caller-allocated**: the client writes its length in
+/// the request (`data.writeInt(array.length)`, visible in
+/// `IWindowSession$Stub$Proxy.addToDisplayAsUser` as `array-length`), the stub
+/// allocates exactly that many floats, and `Parcel.readFloatArray(val)` throws
+/// `RuntimeException("bad array lengths")` unless the reply's count matches
+/// `val.length` (`Parcel.java:1719`). So the count is the client's length, not
+/// ours: pad with `0.0` / truncate the policy values to it.
+fn write_size_compat_scale(reply: &mut Parcel, values: &[f32], client_len: i32) -> SResult<()> {
+    let len = usize::try_from(client_len).unwrap_or(0);
+    let mut out = vec![0.0f32; len];
+    for (slot, value) in out.iter_mut().zip(values) {
+        *slot = *value;
+    }
+    reply.write_float_array(Some(&out)).map_err(perr)
 }
 
 /// `addToDisplayAsUser`'s reply, in the image's read order:
 /// `int result`, then `InputChannel`, `InsetsState`,
 /// `InsetsSourceControl$Array`, `Rect attachedFrame` (each typed) and
 /// `float[] sizeCompatScale`.
+///
+/// The image's `onTransact` creates all four out objects before dispatching and
+/// writes them unconditionally (`writeTypedObject` + `writeFloatArray`), so the
+/// presence markers do not depend on the result: a rejected add still carries a
+/// full `InsetsState`/controls body (the values `acos-wm` returns for the
+/// rejection) and an uninitialised channel.
 fn write_add_result(
     state: &mut WmsState,
-    result: i32,
-    add: Option<&AddWindowResult>,
+    add: &AddWindowResult,
+    size_compat_scale_len: i32,
     reply: &mut Parcel,
 ) -> SResult<()> {
-    reply.write_int32(result);
-    match add {
-        Some(a) if result == ADD_OKAY => {
-            write_input_channel(state, a, reply)?;
-            present(reply, Some(&a.insets_state))?;
-            present(reply, Some(&a.insets_controls))?;
-            present(reply, Some(&a.out_frame))?;
-            reply.write_float_array(Some(&a.out_float)).map_err(perr)?;
-        }
-        _ => {
-            // Every out parameter absent, exactly like a rejected add.
-            reply.write_int32(0); // InputChannel
-            reply.write_int32(0); // InsetsState
-            reply.write_int32(0); // InsetsSourceControl.Array
-            reply.write_int32(0); // Rect attachedFrame
-            reply.write_float_array(Some(&[])).map_err(perr)?;
-        }
-    }
-    Ok(())
+    reply.write_int32(add.result);
+    write_input_channel(state, add, reply)?;
+    present(reply, Some(&add.insets_state))?;
+    present(reply, Some(&add.insets_controls))?;
+    present(reply, Some(&add.out_frame))?;
+    write_size_compat_scale(reply, &add.out_float, size_compat_scale_len)
 }
 
 /// `relayout`'s reply, in the image's read order: `int result`,
@@ -358,6 +392,9 @@ impl ServiceObject for WindowSessionService {
                     0
                 };
                 let requested_visible_types = data.read_int32().map_err(perr)?;
+                // The client's `float[]` out array length (`array-length` in the
+                // image's proxy). The reply count must match it exactly.
+                let size_compat_scale_len = data.read_int32().map_err(perr)?;
                 let params = params.ok_or_else(|| {
                     ServiceError::Internal(format!(
                         "{DESCRIPTOR}: {}: missing LayoutParams",
@@ -367,9 +404,8 @@ impl ServiceObject for WindowSessionService {
                 let add = state
                     .add_to_display_as_user(window, params, requested_visible_types)
                     .map_err(werr)?;
-                let result = add.result;
                 crate::exception::write_no_exception(reply);
-                write_add_result(&mut state, result, Some(&add), reply)?;
+                write_add_result(&mut state, &add, size_compat_scale_len, reply)?;
                 // `viewVisibility` is not part of the add policy yet; record it
                 // in the trace surface only (see W1.md §4).
                 let _ = view_visibility;
@@ -379,19 +415,19 @@ impl ServiceObject for WindowSessionService {
                 let params = read_layout_params(data)?;
                 let _ = data.read_int32().map_err(perr)?; // viewVisibility
                 let _ = data.read_int32().map_err(perr)?; // layerStackId
+                let size_compat_scale_len = data.read_int32().map_err(perr)?;
                 let params = params.ok_or_else(|| {
                     ServiceError::Internal(format!(
                         "{DESCRIPTOR}: addToDisplayWithoutInputChannel: missing LayoutParams"
                     ))
                 })?;
                 let add = state.add_to_display_as_user(window, params, 0).map_err(werr)?;
-                let result = add.result;
                 crate::exception::write_no_exception(reply);
-                reply.write_int32(result);
+                reply.write_int32(add.result);
                 // InsetsState, Rect attachedFrame typed; no InputChannel.
                 present(reply, Some(&add.insets_state))?;
                 present(reply, Some(&add.out_frame))?;
-                reply.write_float_array(Some(&add.out_float)).map_err(perr)?;
+                write_size_compat_scale(reply, &add.out_float, size_compat_scale_len)?;
             }
             codes::REMOVE => {
                 if let Some(binder) = read_window(data)? {

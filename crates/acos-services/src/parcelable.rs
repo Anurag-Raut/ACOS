@@ -1264,7 +1264,21 @@ pub static SPECS: &[ParcelableSpec] = &[
     // bounding rects, the waterfall insets and the path-parser info. The
     // private static helper is not a `writeToParcel` method, so the DEX
     // scanner cannot verify this table; the layout is transcribed from
-    // `classes4.dex:Landroid/view/DisplayCutout$ParcelableWrapper;`.
+    // `classes4.dex:Landroid/view/DisplayCutout$ParcelableWrapper;`:
+    // `readCutoutFromParcel` (`0x192ac4`) reads
+    //
+    //   int variant  (-1 null / 0 NO_CUTOUT / else present)
+    //   readTypedObject(Rect)          safe insets
+    //   `new Rect[4]` + readTypedArray(mBounds rects)
+    //   readTypedObject(Insets)        waterfall insets
+    //   int,int,int,int, float, String16, int, float, float
+    //
+    // **The image writes no `mSideOverrides` int array** (`android-14.0.0_r75`
+    // does), and the bounds array is not `createTypedArray`: the reader
+    // preallocates `Rect[4]`, so `Parcel.readTypedArray` throws
+    // `RuntimeException("bad array lengths")` unless the wire count is exactly
+    // 4. Both facts are image-only; the tag transcription is wrong for this
+    // build.
     ParcelableSpec {
         class: "android.view.DisplayCutout",
         fields: &[FieldOp::Cond(&[
@@ -2233,6 +2247,10 @@ fn write_fd(parcel: &mut Parcel, value: &Value) -> Result<()> {
 /// (`frameworks/base/core/java/android/view/DisplayCutout.java:1462-1483`).
 pub const DISPLAY_CUTOUT_CLASS: &str = "android.view.DisplayCutout";
 
+/// `DisplayCutout.Bounds.BOUNDS_POSITION_LENGTH`: the framework reads the
+/// bounding rects into a preallocated `Rect[4]`.
+pub const CUTOUT_BOUNDS_LEN: usize = 4;
+
 /// Read a `writeTypedObject` field (presence marker + bare payload).
 fn read_typed_class(parcel: &mut Parcel, class: &str) -> Result<Value> {
     if parcel.read_int32()? == 0 {
@@ -2269,6 +2287,18 @@ fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
                 values.push(Value::List(None));
             } else {
                 let n = n as usize;
+                // The image's `readCutoutFromParcel` reads into a **fixed**
+                // `Rect[4]` via `Parcel.readTypedArray(T[] val, Creator)`, which
+                // throws `RuntimeException("bad array lengths")` when the wire
+                // count differs. Reject it the same way instead of decoding a
+                // shape the framework cannot read.
+                if n != CUTOUT_BOUNDS_LEN {
+                    return Err(bad(format!(
+                        "DisplayCutout bounds: the image reads Rect[{}], the parcel has {n} \
+                         (Parcel.readTypedArray throws 'bad array lengths')",
+                        CUTOUT_BOUNDS_LEN
+                    )));
+                }
                 if n > parcel.remaining() {
                     return Err(ParcelError::BadLength {
                         len: n,
@@ -2292,7 +2322,6 @@ fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
             values.push(Value::Int(parcel.read_int32()?)); // rotation
             values.push(Value::Float(parcel.read_float()?)); // scale
             values.push(Value::Float(parcel.read_float()?)); // physicalPixelDisplaySizeRatio
-            values.push(Value::IntArray(parcel.read_int32_array()?)); // sideOverrides
         }
         other => return Err(bad(format!("unmodelled DisplayCutout variant {other}"))),
     }
@@ -2318,9 +2347,9 @@ fn write_cutout(parcel: &mut Parcel, value: &Value) -> Result<()> {
     if variant != 1 {
         return Err(bad(format!("unmodelled DisplayCutout variant {variant}")));
     }
-    if fields.len() != 14 {
+    if fields.len() != 13 {
         return Err(bad(format!(
-            "DisplayCutout variant 1 expects 14 fields, got {}",
+            "DisplayCutout variant 1 expects 13 fields, got {}",
             fields.len()
         )));
     }
@@ -2347,7 +2376,6 @@ fn write_cutout(parcel: &mut Parcel, value: &Value) -> Result<()> {
     parcel.write_int32(expect_int(&fields[10])?); // rotation
     parcel.write_float(expect_float(&fields[11])?); // scale
     parcel.write_float(expect_float(&fields[12])?); // physicalPixelDisplaySizeRatio
-    parcel.write_int32_array(expect_int_array(&fields[13])?)?; // sideOverrides
     Ok(())
 }
 
