@@ -28,6 +28,8 @@ pub struct ApplicationInfo {
     pub debuggable: Option<bool>,
     pub allow_backup: Option<bool>,
     pub extract_native_libs: Option<bool>,
+    /// `android:hardwareAccelerated` (absent = application default, see PMS).
+    pub hardware_accelerated: Option<bool>,
     pub theme: Option<u32>,
     pub process: Option<String>,
 }
@@ -243,6 +245,7 @@ fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
         debuggable: attr_bool(app, "debuggable"),
         allow_backup: attr_bool(app, "allowBackup"),
         extract_native_libs: attr_bool(app, "extractNativeLibs"),
+        hardware_accelerated: attr_bool(app, "hardwareAccelerated"),
         theme: attr_ref(app, "theme"),
         process: attr_string(app, "process"),
     }

@@ -166,6 +166,27 @@ impl AppInfo {
             .unwrap_or_default();
         let theme = manifest.application.theme.unwrap_or(0) as i32;
         let label_res = manifest.application.label_ref.unwrap_or(0) as i32;
+        let target_sdk = manifest.target_sdk.unwrap_or(34) as i32;
+        // AOSP `ParsingPackageUtils.parseBaseApplication`:
+        //   sa.getBoolean(AndroidManifestApplication_hardwareAccelerated,
+        //                 owner.getTargetSdkVersion() >= ICE_CREAM_SANDWICH)
+        // where ICE_CREAM_SANDWICH == 14; the result sets
+        // `ApplicationInfo.FLAG_HARDWARE_ACCELERATED` (0x2000_0000). This is the
+        // real device truth for targets >= 14 when the attribute is absent —
+        // verified against the Android 14 `framework.jar` bytecode in
+        // `results/perf/PMS_FLAGS_W151A.md` and the fixture manifest
+        // (`targetSdkVersion=34`, no `android:hardwareAccelerated`).
+        const ICE_CREAM_SANDWICH: i32 = 14;
+        const FLAG_HARDWARE_ACCELERATED: i32 = 0x2000_0000;
+        let hardware_accelerated = manifest
+            .application
+            .hardware_accelerated
+            .unwrap_or(target_sdk >= ICE_CREAM_SANDWICH);
+        let flags = if hardware_accelerated {
+            FLAG_HARDWARE_ACCELERATED
+        } else {
+            0
+        };
         Self {
             package_name: package.clone(),
             name: String::new(),
@@ -177,9 +198,9 @@ impl AppInfo {
             credential_protected_data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
             native_library_dir,
             uid,
-            flags: 0x2000_0000, // ApplicationInfo.FLAG_HARDWARE_ACCELERATED (API default, targetSdk >= 14)
+            flags,
             private_flags: 0,
-            target_sdk: manifest.target_sdk.unwrap_or(34) as i32,
+            target_sdk,
             min_sdk: manifest.min_sdk.unwrap_or(26) as i32,
             process_name,
             theme,

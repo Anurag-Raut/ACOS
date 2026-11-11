@@ -6,6 +6,18 @@
 //! `fixtures/reference/hello-views/art-api34-x86_64/manifest.json` (package,
 //! versionCode/Name, minSdk 26, targetSdk 34) and `display.txt` (uid 10192).
 //! `sourceDir`/`dataDir` come from the ACOS VFS layout.
+//!
+//! `app.flags=536870912` (0x2000_0000, `ApplicationInfo.FLAG_HARDWARE_ACCELERATED`)
+//! is **not** something the reference capture recorded: the `art-api34-x86_64`
+//! capture set has no `dumpsys package` / `ApplicationInfo` dump, so the field
+//! has no measured source. It is instead the AOSP-parser truth for this APK,
+//! verified from the real Android 14 `framework.jar` bytecode:
+//! `PackageParser.parseBaseApplication` computes
+//! `sa.getBoolean(AndroidManifestApplication_hardwareAccelerated,
+//! targetSdkVersion >= 14)` and ORs in the flag. The fixture manifest declares
+//! `targetSdkVersion=34` and no `android:hardwareAccelerated`, so a real device
+//! sets the flag. The earlier golden value `0` was an ACOS-authored placeholder.
+//! Full evidence and the disassembly offsets: `results/perf/PMS_FLAGS_W151A.md`.
 
 mod common;
 
