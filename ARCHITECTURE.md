@@ -188,8 +188,11 @@ Invariants:
   the architecture is revisited (ADR-0012 alternative).
 - **Rendering (ADR-0011):** Rust software 2D; no GPU; no surface unless asked;
   unsupported draw ops recorded per frame.
-- **Native code (ADR-0014):** x86_64 first; missing symbol → structured
-  `UNSUPPORTED_NATIVE_SYMBOL`; ARM-only → `WRONG_ABI`.
+- **Native code (ADR-0014, ADR-0018 W59-A):** x86_64 first; missing symbol →
+  structured `UNSUPPORTED_NATIVE_SYMBOL`; an APK with native code but no
+  host-ABI `lib/<abi>/` → `UNSUPPORTED_ABI` (both the CLI gate and the daemon
+  RN/Flutter backends); `WRONG_ABI` only for an individual ELF whose
+  `e_machine` the loader cannot map. Full table: `docs/ERROR_CODES.md`.
 - Measure both `anon+shmem` and cgroup `memory.current`, PSS where permitted,
   host `MemAvailable`, GPU allocations and zram; never mix metric types
   (`BENCHMARKS.md`).

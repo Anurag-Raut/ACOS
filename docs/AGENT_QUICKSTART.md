@@ -490,7 +490,8 @@ tree out. `tap --text`/`--testID` resolve to the nearest clickable ancestor, so
 * `UNSUPPORTED_RN_NO_RENDERER` — `observe --frame` (missing native view
   managers ⇒ no pixel frame yet);
 * `UNSUPPORTED_RN_NO_TARGET` — `tap --text`/`--testID` found nothing;
-* `WRONG_ABI` — no RN/Hermes library for the host ABI.
+* `UNSUPPORTED_ABI` — no RN/Hermes library for the host ABI (an APK-level
+  ABI miss; `WRONG_ABI` is the loader's per-ELF `e_machine` mismatch).
 
 ### 8.5 Product path (W162-A)
 

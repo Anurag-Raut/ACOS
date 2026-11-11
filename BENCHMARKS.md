@@ -1616,7 +1616,7 @@ M9 stays **FAIL** (input-level independence is still not proven), unchanged.
 | gate | result |
 |---|---|
 | `cargo test -p acos-runtime` (boot cache, snapshot, session encode + new CRC/Adler vectors) | **36 unit + all integration suites pass, 0 failed** |
-| `cargo test -p acos-cli` | all pass (serving/verify 2/2) **except** the pre-existing, fixture-gated `native_launch::wrong_abi_apk_is_rejected_before_any_execution`: the source emits `WRONG_ABI` while the test expects `UNSUPPORTED_ABI` for `rn-hello-arm64.apk`. This predates W183-A and touches no daemon/PNG path; it only runs when the gitignored `fixtures/build/apps/rn-hello-arm64.apk` exists (a fresh `git worktree add` does not copy it). |
+| `cargo test -p acos-cli` | all pass (serving/verify 2/2) **except** the pre-existing, fixture-gated `native_launch::wrong_abi_apk_is_rejected_before_any_execution`: the source emits `WRONG_ABI` while the test expects `UNSUPPORTED_ABI` for `rn-hello-arm64.apk`. This predates W183-A and touches no daemon/PNG path; it only runs when the gitignored `fixtures/build/apps/rn-hello-arm64.apk` exists (a fresh `git worktree add` does not copy it). **Corrected (E1, 2026-11-11):** the mismatch was the daemon RN backend's `WRONG_ABI`; the CLI gate and the daemon RN/Flutter backends now all report `UNSUPPORTED_ABI` (ADR-0018 E1 note). The W183-A row is kept as the historical result at that commit. |
 | `cargo test -p acos-mcp` (incl. `e2e`) | **pass** after the same fixture placement + `target/release/acos` link |
 | `cargo clippy -p acos-runtime -p acos-cli -p acos-mcp --all-targets --no-deps -- -D warnings` | **clean (exit 0)** |
 | `cargo check --workspace --all-targets` | **pass (exit 0)** |

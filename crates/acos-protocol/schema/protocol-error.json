@@ -96,6 +96,55 @@
           "type": "string"
         },
         {
+          "description": "The APK is not structurally a React Native APK (no RN/Hermes runtime or no JS bundle).",
+          "enum": [
+            "UNSUPPORTED_RN"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A React Native session failed before the bridge mounted.",
+          "enum": [
+            "UNSUPPORTED_RN_SETUP"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The React Native Java driver failed to mount or drive the bridge.",
+          "enum": [
+            "UNSUPPORTED_RN_DRIVER"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "React Native bridge has no native view managers, so it cannot produce a pixel frame (`observe --frame`).",
+          "enum": [
+            "UNSUPPORTED_RN_NO_RENDERER"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Key input is not wired through the React Native bridge.",
+          "enum": [
+            "UNSUPPORTED_RN_KEY"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Text input is not wired through the React Native bridge.",
+          "enum": [
+            "UNSUPPORTED_RN_TEXT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A `tap --text`/`--testID` selector matched no node in the RN tree.",
+          "enum": [
+            "UNSUPPORTED_RN_NO_TARGET"
+          ],
+          "type": "string"
+        },
+        {
           "description": "No frame satisfying the request (freshness / sequencing) exists.",
           "enum": [
             "NO_FRESH_FRAME"
@@ -421,6 +470,13 @@
           "description": "The process could not enter its confinement sandbox; native code is refused (fail closed).",
           "enum": [
             "CONFINEMENT_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The Landlock filesystem layer could not be assembled or proven on a kernel that supports it (fail closed). Distinct from `SECCOMP_UNAVAILABLE`.",
+          "enum": [
+            "LANDLOCK_UNAVAILABLE"
           ],
           "type": "string"
         },

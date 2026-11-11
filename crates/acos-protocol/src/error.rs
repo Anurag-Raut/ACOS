@@ -174,6 +174,9 @@ pub enum ErrorCode {
     IsolationUnavailable,
     /// The process could not enter its confinement sandbox; native code is refused (fail closed).
     ConfinementUnavailable,
+    /// The Landlock filesystem layer could not be assembled or proven on a kernel
+    /// that supports it (fail closed). Distinct from `SECCOMP_UNAVAILABLE`.
+    LandlockUnavailable,
     /// The requested isolation level is advertised but its guarantees are unmet.
     IsolationUnsatisfied,
     /// A memory admission/guard rule was triggered.
@@ -289,6 +292,7 @@ impl ErrorCode {
             ErrorCode::SessionBusy => "SESSION_BUSY",
             ErrorCode::IsolationUnavailable => "ISOLATION_UNAVAILABLE",
             ErrorCode::ConfinementUnavailable => "CONFINEMENT_UNAVAILABLE",
+            ErrorCode::LandlockUnavailable => "LANDLOCK_UNAVAILABLE",
             ErrorCode::IsolationUnsatisfied => "ISOLATION_UNSATISFIED",
             ErrorCode::RamGuard => "RAM_GUARD",
             ErrorCode::RamAbort => "RAM_ABORT",
@@ -466,6 +470,9 @@ impl ErrorCode {
             ErrorCode::ConfinementUnavailable => {
                 "Native code is refused because the process could not enter the seccomp/Landlock confinement. Do not retry unchanged; fix the confinement stack or launch without native loading."
             }
+            ErrorCode::LandlockUnavailable => {
+                "The kernel supports Landlock but the guest ruleset was not applied or its `OK landlock=active` evidence is missing. Do not treat the run as sandboxed; fix the Landlock plan/applier or use a kernel without Landlock (documented fallback)."
+            }
             ErrorCode::IsolationUnsatisfied => {
                 "The requested isolation is not actually guaranteed. Do not claim data independence; escalate or report unsupported."
             }
@@ -555,7 +562,8 @@ impl ErrorCode {
             | ErrorCode::RamAbort
             | ErrorCode::IsolationUnavailable
             | ErrorCode::IsolationUnsatisfied
-            | ErrorCode::ConfinementUnavailable => Status::Blocked,
+            | ErrorCode::ConfinementUnavailable
+            | ErrorCode::LandlockUnavailable => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
             | ErrorCode::UnsupportedBytecode
@@ -720,6 +728,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::SessionBusy,
     ErrorCode::IsolationUnavailable,
     ErrorCode::ConfinementUnavailable,
+    ErrorCode::LandlockUnavailable,
     ErrorCode::IsolationUnsatisfied,
     ErrorCode::RamGuard,
     ErrorCode::RamAbort,
