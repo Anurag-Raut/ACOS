@@ -24,6 +24,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-arm64"
+version = "0.1.0"
+dependencies = [
+ "acos-sandbox",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "acos-cli"
 version = "0.1.0"
 dependencies = [
@@ -201,6 +211,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "acos-seccomp-guard"
+version = "0.1.0"
+dependencies = [
+ "acos-sandbox",
+ "libc",
 ]
 
 [[package]]

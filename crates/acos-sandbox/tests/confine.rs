@@ -201,3 +201,79 @@ fn probe_reports_which_layers_are_active() {
         );
     }
 }
+
+fn layer_status(report: &serde_json::Value, layer: &str) -> String {
+    report["layers"]
+        .as_array()
+        .expect("layers array")
+        .iter()
+        .find(|entry| entry["layer"] == layer)
+        .and_then(|entry| entry["status"].as_str())
+        .unwrap_or("missing")
+        .to_string()
+}
+
+/// W191-A: a deferred seccomp layer is recorded as `deferred`, satisfies the
+/// fail-closed required-layer check, and leaves the process *not* confined,
+/// because the filter is only installed after `execve` by the preload guard.
+#[test]
+fn deferred_seccomp_is_reported_but_not_active() {
+    let sandbox = Sandbox::new();
+    let guard = sandbox.root.join("libacos_seccomp_guard.so");
+    std::fs::write(&guard, b"placeholder").expect("write guard placeholder");
+    let output = Command::new(child_bin())
+        .arg("--action")
+        .arg("probe")
+        .arg("--rw")
+        .arg(sandbox.root.join("rw"))
+        .arg("--seccomp-deferred")
+        .arg(&guard)
+        .output()
+        .expect("spawn sandbox_child probe");
+    assert!(
+        output.status.success(),
+        "probe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("probe emitted JSON");
+    assert_eq!(layer_status(&report, "seccomp"), "deferred");
+    assert_eq!(layer_status(&report, "landlock"), "active");
+    assert_eq!(
+        report["active"],
+        serde_json::Value::Bool(false),
+        "a deferred seccomp layer must not mark the process confined: {report}"
+    );
+}
+
+/// W191-A: a missing deferred guard is recorded as `failed`, so the caller
+/// can fail closed with an exact remedy instead of pretending seccomp exists.
+#[test]
+fn deferred_seccomp_missing_guard_is_a_failure() {
+    let sandbox = Sandbox::new();
+    let missing = sandbox.root.join("no-such-guard.so");
+    let output = Command::new(child_bin())
+        .arg("--action")
+        .arg("probe")
+        .arg("--rw")
+        .arg(sandbox.root.join("rw"))
+        .arg("--seccomp-deferred")
+        .arg(&missing)
+        .output()
+        .expect("spawn sandbox_child probe");
+    assert!(output.status.success());
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("probe emitted JSON");
+    assert_eq!(layer_status(&report, "seccomp"), "failed");
+    let detail = report["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["layer"] == "seccomp")
+        .and_then(|entry| entry["detail"].as_str())
+        .unwrap_or_default();
+    assert!(
+        detail.contains("acos-seccomp-guard") && detail.contains("ACOS_SECCOMP_GUARD"),
+        "failure detail must name the remedy: {detail}"
+    );
+}

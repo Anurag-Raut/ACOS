@@ -44,6 +44,7 @@ fn run() -> i32 {
     let ro = value_of(&args, "--ro").map(PathBuf::from);
     let rw = value_of(&args, "--rw").map(PathBuf::from);
     let outside = value_of(&args, "--outside").map(PathBuf::from);
+    let seccomp_deferred = value_of(&args, "--seccomp-deferred").map(PathBuf::from);
 
     if action == "probe" {
         let scratch = rw
@@ -52,6 +53,9 @@ fn run() -> i32 {
         let mut profile = acos_sandbox::ConfineProfile::probe(scratch);
         if let Some(path) = &ro {
             profile.read_only_paths.push(path.clone());
+        }
+        if let Some(path) = &seccomp_deferred {
+            profile.seccomp = acos_sandbox::SeccompMode::DeferredPreload(path.clone());
         }
         return match acos_sandbox::confine(&profile) {
             Ok(report) => {
@@ -72,6 +76,9 @@ fn run() -> i32 {
         }
         if let Some(path) = &rw {
             profile.read_write_paths.push(path.clone());
+        }
+        if let Some(path) = &seccomp_deferred {
+            profile.seccomp = acos_sandbox::SeccompMode::DeferredPreload(path.clone());
         }
         if let Err(e) = acos_sandbox::confine(&profile) {
             eprintln!("CONFINE_FAILED: {e}");

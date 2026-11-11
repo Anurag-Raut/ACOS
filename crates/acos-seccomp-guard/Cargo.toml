@@ -1,0 +1,16 @@
+[package]
+name = "acos-seccomp-guard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "LD_PRELOAD guard that installs the audited acos-sandbox seccomp-bpf filter after execve, for the arm64 qemu transport (W191-A)."
+
+[lib]
+name = "acos_seccomp_guard"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+acos-sandbox = { path = "../acos-sandbox" }
+libc = "0.2"

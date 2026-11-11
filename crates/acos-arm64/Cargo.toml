@@ -1,0 +1,23 @@
+[package]
+name = "acos-arm64"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ARM64 (aarch64) transport for ACOS: spawn qemu-aarch64 under the acos-sandbox confinement with a deferred post-execve seccomp guard (W191-A/W192-A)."
+
+[lib]
+name = "acos_arm64"
+path = "src/lib.rs"
+
+[[bin]]
+name = "arm64_child"
+path = "src/bin/arm64_child.rs"
+
+[dependencies]
+acos-sandbox = { path = "../acos-sandbox" }
+libc = "0.2"
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

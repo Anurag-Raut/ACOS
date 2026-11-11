@@ -50,6 +50,32 @@ pub struct ConfineProfile {
     pub rlimits: RlimitProfile,
     /// Optional namespaces.
     pub namespaces: NamespacePlan,
+    /// How the seccomp-bpf layer is installed.
+    pub seccomp: SeccompMode,
+}
+
+/// How [`confine`] installs the seccomp-bpf layer.
+///
+/// The x86_64 native path uses [`SeccompMode::Inline`] and is unchanged. The
+/// arm64 transport must `execve` qemu *after* confinement, and the filter
+/// denies `execve`, so it uses [`SeccompMode::DeferredPreload`]: [`confine`]
+/// applies every other layer, records the seccomp layer as
+/// [`LayerStatus::Deferred`], and the audited filter is installed inside the
+/// exec'd process by an `LD_PRELOAD` guard (the `acos-seccomp-guard` crate, or
+/// any shared object that calls
+/// [`install_deferred_seccomp`](crate::install_deferred_seccomp)). Because the
+/// filter is not yet installed, [`confinement_active`](crate::confinement_active)
+/// stays `false`; the caller must confirm the guard's post-exec status before
+/// trusting the child.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SeccompMode {
+    /// Install the audited filter inline, as the final layer of [`confine`].
+    #[default]
+    Inline,
+    /// Do not install seccomp here; install it after `execve` from the guard
+    /// shared object at this path, which the caller preloads into the child.
+    DeferredPreload(PathBuf),
 }
 
 /// Resource limits installed by [`confine`].
@@ -138,6 +164,7 @@ impl Default for ConfineProfile {
             env: default_env(),
             rlimits: RlimitProfile::default(),
             namespaces: NamespacePlan::default(),
+            seccomp: SeccompMode::default(),
         }
     }
 }
@@ -197,6 +224,11 @@ pub enum LayerStatus {
     Failed,
     /// The layer was not requested.
     Skipped,
+    /// The layer is installed after `execve` by a preloaded guard, not by
+    /// [`confine`] (`SeccompMode::DeferredPreload`). It counts as satisfied
+    /// for the fail-closed required-layer check but does **not** make
+    /// [`confinement_active`](crate::confinement_active) true.
+    Deferred,
 }
 
 /// One layer's outcome.
@@ -300,15 +332,45 @@ pub fn confine(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineErr
         linux::apply_landlock(&profile.read_only_paths, &profile.read_write_paths),
     );
 
-    // 7. seccomp-bpf syscall filter.
-    record(&mut report, Layer::Seccomp, linux::install_seccomp());
+    // 7. seccomp-bpf syscall filter. Inline by default; the arm64 transport
+    //    defers it to a post-`execve` LD_PRELOAD guard, which is the only way
+    //    to confine a process that must still be able to `execve` qemu.
+    match &profile.seccomp {
+        SeccompMode::Inline => {
+            record(&mut report, Layer::Seccomp, linux::install_seccomp());
+        }
+        SeccompMode::DeferredPreload(path) => {
+            if path.is_file() {
+                report.set(
+                    Layer::Seccomp,
+                    LayerStatus::Deferred,
+                    Some(format!("deferred to LD_PRELOAD guard {}", path.display())),
+                );
+            } else {
+                report.set(
+                    Layer::Seccomp,
+                    LayerStatus::Failed,
+                    Some(format!(
+                        "deferred guard {} is not a regular file; build acos-seccomp-guard \
+                         or set ACOS_SECCOMP_GUARD",
+                        path.display()
+                    )),
+                );
+            }
+        }
+    }
 
-    // Fail closed.
+    // Fail closed. A deferred seccomp layer satisfies its `required` entry:
+    // the filter is installed by the guard after `execve`, and the caller
+    // verifies that over a status pipe. It is deliberately *not* `Active`, so
+    // the `TRUSTED` check below still leaves `confinement_active()` false.
     let missing: Vec<Layer> = profile
         .required
         .iter()
         .copied()
-        .filter(|l| !report.is_active(*l))
+        .filter(|l| {
+            !report.is_active(*l) && report.status(*l) != Some(LayerStatus::Deferred)
+        })
         .collect();
     if !missing.is_empty() {
         let message = report

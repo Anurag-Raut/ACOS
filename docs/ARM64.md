@@ -1,9 +1,19 @@
 # ACOS — ARM64 execution via qemu-user (design)
 
-**Status:** design + spike (W190-A, 2026-11-11). The spike is recorded in
-`results/arm64/W190A.md`; nothing here is committed and no product code is
-changed. Owner decision recorded: **ARM64 via qemu-user is approved**
-(user-mode only; no `sudo`, no system install).
+**Status:** design + spike (W190-A) plus transport implementation and bionic
+sysroot acquisition (W191-A/W192-A, 2026-11-11). The spike is recorded in
+`results/arm64/W190A.md`. Owner decision recorded: **ARM64 via qemu-user is
+approved** (user-mode only; no `sudo`, no system install).
+
+The transport now exists as code: `crates/acos-arm64` (discovery, confined
+spawn, structured errors), `crates/acos-seccomp-guard` (the post-`execve`
+seccomp guard), `SeccompMode::DeferredPreload` in `acos-sandbox`, and
+`tools/fetch-bionic-sysroot.sh` / `tools/fetch-qemu-aarch64.sh` /
+`tools/build-arm64-guard.sh`. A **dynamic** aarch64 bionic hello built with the
+NDK and run under `qemu-aarch64 -L .cache/bionic-arm64` inside the sandbox
+passes; see §8. Lifting `UNSUPPORTED_ABI` for arm64-only APKs (W195-A) and the
+cross-built runtime (W193-A/W194-A) are still ahead; the x86_64 path is
+unchanged.
 
 **Goal:** an APK whose only native ABI is `arm64-v8a` (e.g. the on-device Gaten
 v12 artifact, `results/gaten/W177A.md` §4.4) must be *runnable* rather than
@@ -230,8 +240,8 @@ chosen when the APK ships an x86_64 `lib/` directory.
 | Step | Deliverable | Estimate |
 |---|---|---|
 | **W190-A (this task)** | design doc + confined qemu spike (static bionic hello) | **~45 min** ✅ |
-| W191-A | qemu discovery + `acos-arm64` transport crate; `SeccompMode::DeferredPreload` in `acos-sandbox`; guard `.so` from the audited filter | 1–1.5 days |
-| W192-A | bionic sysroot from the attached arm64 device; run a **dynamic** aarch64 `.so` (e.g. a tiny NDK `.so` via a host aarch64 driver) under `-L`; document the `ld.config`/property gaps | 1 day |
+| W191-A ✅ | qemu discovery + `acos-arm64` transport crate; `SeccompMode::DeferredPreload` in `acos-sandbox`; guard `.so` from the audited filter (`acos-seccomp-guard`) | 1–1.5 days |
+| W192-A ✅ | bionic sysroot from the attached arm64 device (`tools/fetch-bionic-sysroot.sh`); a **dynamic** aarch64 bionic hello runs under `-L` inside the sandbox; `ld.config.txt` gap documented | 1 day |
 | W193-A | cross-build spike: `cargo build -p acos-sandbox -p acos-native-loader -p acos-jni` for `aarch64-unknown-linux-gnu` (or `-linux-android`); enumerate and fix `#[cfg(target_arch)]` sites | 1–2 days |
 | W194-A | run an APK's real `lib/arm64-v8a/*.so` through `acos-native-loader` inside the aarch64 runtime under qemu (start with a small fixture, then Gaten's `libhermesvm.so`) | 2–4 days |
 | W195-A | lift `UNSUPPORTED_ABI` for arm64-only APKs; full `acos launch` of the Gaten v12 arm64 artifact; performance + fidelity report | 2–4 days |
@@ -256,3 +266,72 @@ fix.
   its thread still joins. No new seccomp allowance was required.
 * Dynamic NDK binary fails with `Could not open '/system/bin/linker64'` —
   confirming the bionic-sysroot requirement in §3.
+
+---
+
+## 8. Implementation status (W191-A / W192-A)
+
+### 8.1 Transport (`crates/acos-arm64`)
+
+`acos_arm64::launch(LaunchSpec)` assembles and runs the confined child:
+
+1. discovery, fail-closed with a structured `ARM64_UNAVAILABLE` and an exact
+   remedy (`ACOS_QEMU_AARCH64`, `ACOS_BIONIC_ROOT`, `ACOS_SECCOMP_GUARD`; or
+   `<workspace>/.cache/{qemu-user,bionic-arm64,arm64-guard}`);
+2. an `x86_64`/`arm64-v8a` ABI selector (`select_guest_abi`) that returns the
+   structured `UNSUPPORTED_ABI` for anything else;
+3. the `arm64_child` launcher applies `PR_SET_NO_NEW_PRIVS`, fd/env/rlimit
+   hygiene and Landlock (`read_only`: sysroot, `/usr`, `/lib`, `/lib64`,
+   `/proc`, `/dev`, the qemu/guard/guest directories; `read_write`: one session
+   root), then `execve`s `qemu-aarch64 -U LD_PRELOAD -U ACOS_GUARD_STATUS_FD -L
+   <sysroot>`;
+4. the preloaded `acos-seccomp-guard` constructor installs the audited filter
+   and reports `OK ...`/`ERR ...` on a pipe held across the exec;
+   `launch` returns only when the filter is proven installed, and kills the
+   child otherwise.
+
+The `-U LD_PRELOAD` matters: without it qemu forwards the host-only
+`LD_PRELOAD` to the guest and bionic's linker rejects the x86_64 guard with a
+`EM_X86_64 instead of EM_AARCH64` error. The arm64 profile raises `RLIMIT_AS`
+from the x86_64 default 4 GiB to 32 GiB because bionic's scudo allocator
+reserves a large virtual region at startup; the cgroup `MemoryMax` still bounds
+resident memory.
+
+`SeccompMode::DeferredPreload(PathBuf)` in `acos-sandbox` records the seccomp
+layer as `LayerStatus::Deferred` (satisfying `required`, but leaving
+`confinement_active()` false until the guard reports). The x86_64 path keeps
+`SeccompMode::Inline` and is byte-for-byte unchanged.
+
+### 8.2 Sysroot (`tools/fetch-bionic-sysroot.sh`)
+
+Read-only `adb pull` from the attached `ZA222WGJPP` (`arm64-v8a`) of
+`/system/bin/linker64` and `/system/lib64/{libc,libm,libdl,liblog,libandroid,
+libz,libjnigraphics}.so`; `libc++_shared.so` comes from the NDK when the device
+has none. No device settings, no install, no push. Layout:
+
+```
+.cache/bionic-arm64/system/bin/linker64
+.cache/bionic-arm64/system/lib64/libc.so
+.cache/bionic-arm64/linkerconfig/ld.config.txt
+```
+
+The `linkerconfig/ld.config.txt` is a minimal local file (default namespace
+only); bionic otherwise warns `failed to find generated linker configuration`.
+An empty config is enough for a single-process sysroot; richer
+`namespace`/property behaviour is only needed when real APK `.so` loading
+starts (W194-A).
+
+### 8.3 Evidence
+
+`crates/acos-arm64/tests/arm64_launch.rs` compiles the dynamic guest
+(`tests/data/hello_dynamic.c`) with `aarch64-linux-android29-clang` and asserts:
+
+* the real bionic `linker64`/`libc.so` resolved (the guest prints its pid);
+* Landlock denies `/etc/hostname` (`hostname_errno=13`);
+* the deferred seccomp guard denies `unshare` and `setuid` (`EACCES`), while
+  the guard receipt reports `92 bpf insns, 61 denied syscalls`.
+
+The test prints `SKIP ...` and returns when the NDK, qemu, sysroot or guard is
+absent, so it stays green on a host without the device. qemu-user TCG means the
+guest's own `ptrace` returns `ENOSYS` from qemu before the host filter sees it,
+so `ptrace` is not used as the seccomp witness.

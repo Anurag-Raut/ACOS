@@ -54,11 +54,28 @@ mod probe;
 
 pub use confine::{
     confine, confinement_active, ConfineProfile, ConfinementReport, LayerReport, LayerStatus,
-    NamespacePlan, RlimitProfile,
+    NamespacePlan, RlimitProfile, SeccompMode,
 };
 pub use error::{ConfineError, CONFINEMENT_FAILED, CONFINEMENT_UNAVAILABLE};
 pub use live::probe_live;
 pub use probe::{probe, systemd_user_scope_available, Capabilities};
+
+/// Install the audited seccomp-bpf filter in the current process.
+///
+/// This is the entry point an `LD_PRELOAD` guard calls from its constructor
+/// after `execve` when the session runs with
+/// [`SeccompMode::DeferredPreload`](confine::SeccompMode::DeferredPreload). It
+/// installs exactly the same filter [`confine`] installs inline — there is one
+/// policy, not a second copy — and returns the same human-readable detail
+/// string. The caller must arrange for the process to have
+/// `PR_SET_NO_NEW_PRIVS` set and Landlock applied first (which [`confine`]
+/// already did in the parent before the `execve`).
+///
+/// Fails closed: an error return means the filter was **not** installed and
+/// the process must not be trusted.
+pub fn install_deferred_seccomp() -> Result<String, String> {
+    linux::install_seccomp()
+}
 
 /// A confinement layer that can be independently probed and reported.
 ///
