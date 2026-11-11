@@ -467,12 +467,23 @@ impl ParcelCodec for ClientWindowFrames {
 /// (see [`placeholder_binder`]) for both, and the native `SurfaceControl` is
 /// the honest placeholder it always was: a Java object with no compositor
 /// behind it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SurfaceControlInfo {
     pub name: String,
     pub width: i32,
     pub height: i32,
+    /// The layer id written as `SurfaceControl.mLayerId`.
     pub handle: Option<u64>,
+    /// W5: the **real** `android.gui.ISurfaceComposerClient` binder behind this
+    /// control, when ACOS has one (the relayout window surface, whose layer is
+    /// issued by `acos-services::surface_client`).
+    ///
+    /// `None` keeps W3's placeholder binder — the insets leashes are still
+    /// structural placeholders with no compositor client behind them.
+    pub client: Option<BinderId>,
+    /// W5: the compositor-issued layer handle binder (`CreateSurfaceResult.
+    /// binder`) for this layer. `None` keeps the placeholder handle.
+    pub layer_binder: Option<BinderId>,
 }
 
 /// Base of the id range used by the placeholder `SurfaceControl` body.
@@ -507,12 +518,14 @@ impl ParcelCodec for SurfaceControlInfo {
         };
         p.write_int32(1);
         // `SurfaceControl::writeToParcel` (libgui): client, handle, layerId,
-        // layerName, transformHint, width, height, format. Both binders are the
-        // placeholder (a null one aborts the reader, see the type docs).
+        // layerName, transformHint, width, height, format. A null binder aborts
+        // the reader (see the type docs), so the fallback is the W3
+        // placeholder; the window surface (W5) carries the compositor's real
+        // client node and the layer handle `createSurface` issued.
         let placeholder = placeholder_binder(handle);
-        p.write_strong_binder_opt(Some(placeholder)); // client
-        p.write_strong_binder_opt(Some(placeholder)); // layer handle
-        p.write_int32(handle as i32); // layerId (the synthetic ACOS layer)
+        p.write_strong_binder_opt(Some(self.client.unwrap_or(placeholder))); // client
+        p.write_strong_binder_opt(Some(self.layer_binder.unwrap_or(placeholder))); // handle
+        p.write_int32(handle as i32); // layerId (compositor layer id, or synthetic)
         p.write_string16(&self.name)?; // mLayerName (UTF-16 on the wire)
         p.write_int32(0); // transformHint
         p.write_int32(self.width);
@@ -526,9 +539,11 @@ impl ParcelCodec for SurfaceControlInfo {
         let width = p.read_int32()?;
         let height = p.read_int32()?;
         let present = p.read_int32()? != 0;
+        let mut client = None;
+        let mut layer_binder = None;
         let handle = if present {
-            let _client = p.read_strong_binder()?;
-            let _handle = p.read_strong_binder()?;
+            client = p.read_strong_binder()?;
+            layer_binder = p.read_strong_binder()?;
             let layer_id = p.read_int32()?;
             let _layer_name = p.read_string16()?;
             let _transform_hint = p.read_int32()?;
@@ -544,6 +559,8 @@ impl ParcelCodec for SurfaceControlInfo {
             width,
             height,
             handle,
+            client,
+            layer_binder,
         })
     }
 }

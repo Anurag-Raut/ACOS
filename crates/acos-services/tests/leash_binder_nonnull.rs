@@ -404,6 +404,7 @@ fn every_surface_control_body_writes_the_placeholder_binders() {
         width: 1080,
         height: 2209,
         handle: Some(0x1002),
+        ..Default::default()
     };
     let mut p = Parcel::new();
     sc.write_to_parcel(&mut p).expect("SurfaceControlInfo");

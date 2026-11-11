@@ -34,7 +34,7 @@
 use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
-use acos_wm::codec::LayoutParams;
+use acos_wm::codec::{LayoutParams, SurfaceControlInfo};
 use acos_wm::display::DisplaySpec;
 use acos_wm::error::{Result as WmResult, WmError};
 use acos_wm::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
@@ -85,6 +85,20 @@ impl DisplayFacts {
     }
 }
 
+/// A real compositor layer bound to one `acos-wm` window surface handle (W5).
+///
+/// `acos-wm` allocates a *synthetic* handle per window (`0x1000 + n`) which is
+/// not a binder. This record maps it to the layer `surface_client` issued, so
+/// the `SurfaceControl` that goes on the wire carries the compositor's client
+/// node, a registered layer-handle binder and the compositor's layer id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceLayerBinding {
+    /// The layer-handle binder `createSurface` issued (what a transaction names).
+    pub handle: BinderId,
+    /// `CreateSurfaceResult.layerId`.
+    pub layer_id: u64,
+}
+
 /// The window-manager state machine plus the session a single app process uses.
 #[derive(Debug)]
 pub struct WmsState {
@@ -113,6 +127,9 @@ pub struct WmsState {
     /// per-window frame writers; this state owns hit-testing, sequencing and
     /// ack accounting.
     pub input: crate::input::InputDispatcher,
+    /// The real compositor layer behind each `acos-wm` window surface handle
+    /// (W5). Populated on the first `relayout` of a window.
+    pub surface_layers: std::collections::HashMap<u64, SurfaceLayerBinding>,
 }
 
 impl Default for WmsState {
@@ -146,6 +163,7 @@ impl WmsState {
             finish_drawing_count: 0,
             frames_published: 0,
             input: crate::input::InputDispatcher::new(),
+            surface_layers: std::collections::HashMap::new(),
         }
     }
 
@@ -156,6 +174,60 @@ impl WmsState {
         self.session = session;
         self.session_binder = binder;
         binder
+    }
+
+    /// Bind `surface` to a real layer in the compositor-client registry and
+    /// rewrite the control so the guest's `SurfaceControl` carries that
+    /// compositor's client binder, layer-handle binder and layer id (W5).
+    ///
+    /// Idempotent per `acos-wm` surface handle: repeated relayouts of the same
+    /// window reuse one layer (the handle pool is bounded at
+    /// [`crate::surface_client::LAYER_HANDLE_POOL`]). Returns `None` when the
+    /// pool is exhausted or the control has no handle; the caller then leaves
+    /// the W3 placeholder body in place rather than fabricating a layer.
+    pub fn bind_surface_layer(
+        &mut self,
+        surface: &mut SurfaceControlInfo,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> Option<SurfaceLayerBinding> {
+        let wm_handle = surface.handle?;
+        let client = {
+            let state = compositor
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.client_binder
+        };
+        if client.is_null() {
+            // No `ISurfaceComposerClient` node installed: the placeholder is
+            // the honest answer (W3), and no layer can be created.
+            return None;
+        }
+        let binding = if let Some(binding) = self.surface_layers.get(&wm_handle).copied() {
+            binding
+        } else {
+            let mut state = compositor
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let (handle, layer_id) = state.create_layer(
+                &surface.name,
+                surface.width.max(0).unsigned_abs(),
+                surface.height.max(0).unsigned_abs(),
+                1, // PIXEL_FORMAT_RGBA_8888, the format the control writes
+                0,
+                None,
+            )?;
+            drop(state);
+            let binding = SurfaceLayerBinding {
+                handle,
+                layer_id: layer_id.unsigned_abs().into(),
+            };
+            self.surface_layers.insert(wm_handle, binding);
+            binding
+        };
+        surface.client = Some(client);
+        surface.layer_binder = Some(binding.handle);
+        surface.handle = Some(binding.layer_id);
+        Some(binding)
     }
 
     /// `IWindowSession.addToDisplayAsUser`.

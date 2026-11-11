@@ -449,6 +449,50 @@ fn create_connection_and_surface_produce_a_routable_layer_handle() {
     assert_eq!(layer.layer_id, 1);
 }
 
+/// W5: the image's own `Transaction::apply` parcel writes
+/// `FrameTimelineInfo`'s size word **including the word itself** (a live
+/// BLAST transaction measured 28 for the 24 byte field set). The old decoder
+/// skipped the raw word, so every real `setTransactionState` read four bytes
+/// late and the layer's `flat_binder_object` was decoded as its own flags.
+#[test]
+fn the_image_timeline_size_word_that_counts_itself_decodes() {
+    let mut host = ServiceHost::new();
+    let (_pool, _state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "image-timeline");
+
+    // `transaction_parcel` writes the body-only size (24), which is what the
+    // hand-built tests and older writers emit.
+    let mut parcel = transaction_parcel(
+        &[(handle, layer_id, None, Vec::new())],
+        &[0, 0, 0, 0, 0, 12],
+        &[],
+        7,
+    );
+    let mut probe = Parcel::new();
+    probe
+        .write_interface_token(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
+    let size_pos = probe.data_position();
+    let mut bytes = parcel.marshall();
+    bytes[size_pos..size_pos + 4].copy_from_slice(&28i32.to_le_bytes());
+    parcel.unmarshall(&bytes);
+    parcel
+        .enforce_interface(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
+
+    let decoded =
+        surface_client::decode_transaction_state(&mut parcel).expect("image shape must decode");
+    assert_eq!(decoded.composers.len(), 1, "the layer state must be found");
+    assert_eq!(decoded.composers[0].layer_id, layer_id);
+    assert_eq!(
+        decoded.transaction_id, 7,
+        "the trailer is reached exactly (a four byte shift loses it)"
+    );
+    assert_eq!(parcel.data_avail(), 0, "the body ends at the parcel end");
+}
+
 #[test]
 fn a_hand_built_transaction_decodes_to_the_last_byte() {
     let mut host = ServiceHost::new();

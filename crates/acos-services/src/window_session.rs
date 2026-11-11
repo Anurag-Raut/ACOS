@@ -126,6 +126,10 @@ pub struct WindowSessionService {
     /// The `IWindowId` binder `getWindowId` answers with (registered as an aux
     /// binder so it is routable rather than a fabricated id).
     window_id_binder: BinderId,
+    /// The compositor-client registry `relayout` binds the window's
+    /// `SurfaceControl` to (W5). `None` keeps the W3 placeholder body — that is
+    /// the state of a host with no compositor installed.
+    compositor: Option<Arc<Mutex<crate::surface_client::SurfaceState>>>,
 }
 
 impl std::fmt::Debug for WindowSessionService {
@@ -143,7 +147,23 @@ impl WindowSessionService {
         Self {
             state,
             window_id_binder,
+            compositor: None,
         }
+    }
+
+    /// Serve `relayout` with a real compositor behind it (W5).
+    ///
+    /// Without this the reply's `SurfaceControl` carries W3's placeholder
+    /// binders; with it, the control names the compositor's
+    /// `ISurfaceComposerClient` node and a layer handle that
+    /// `createSurface`/`setTransactionState` resolve in that registry.
+    #[must_use]
+    pub fn with_compositor(
+        mut self,
+        compositor: Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> Self {
+        self.compositor = Some(compositor);
+        self
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, WmsState> {
@@ -406,6 +426,12 @@ impl ServiceObject for WindowSessionService {
                     .map_err(werr)?;
                 crate::exception::write_no_exception(reply);
                 write_add_result(&mut state, &add, size_compat_scale_len, reply)?;
+                // W5 finding: the real WMS also sends `IWindow`
+                // `dispatchAppVisibility(true)` here. Delivering it from this
+                // node made the guest hang in the run that tried it, so the
+                // queued callbacks are left in `acos-wm` and the wall is
+                // recorded in results/art-runtime/W5.md (see
+                // `getHostVisibility()`/`View.GONE`).
                 // `viewVisibility` is not part of the add policy yet; record it
                 // in the trace surface only (see W1.md §4).
                 let _ = view_visibility;
@@ -464,7 +490,7 @@ impl ServiceObject for WindowSessionService {
                             ))
                         })?,
                 };
-                let r = state.relayout_with_requested(
+                let mut r = state.relayout_with_requested(
                     window.0,
                     params,
                     requested_width,
@@ -472,8 +498,25 @@ impl ServiceObject for WindowSessionService {
                     seq,
                 )
                 .map_err(werr)?;
+                // W5: bind the window's `SurfaceControl` to a real compositor
+                // layer before it goes on the wire. A failure (exhausted handle
+                // pool) leaves the W3 placeholder body, which is a legal reply
+                // but cannot get a BLAST surface — the framework's own
+                // "invalid SurfaceControl" path, never a fabricated layer.
+                if let Some(compositor) = self.compositor.clone() {
+                    if state.bind_surface_layer(&mut r.surface, &compositor).is_none() {
+                        eprintln!(
+                            "{DESCRIPTOR}: relayout: no compositor layer bound for window {}; \
+                             replying with the placeholder SurfaceControl",
+                            window.0
+                        );
+                    }
+                }
                 crate::exception::write_no_exception(reply);
                 write_relayout_result(&r, reply)?;
+                // W5 finding: `resized(reportDraw=true)` is the other callback
+                // the client needs before it will draw; same open item as the
+                // visibility callback above.
             }
             codes::RELAYOUT_ASYNC => {
                 // Oneway: same request shape, no reply body.
@@ -530,9 +573,21 @@ impl ServiceObject for WindowSessionService {
             codes::FINISH_DRAWING => {
                 let window = read_window(data)?;
                 // `SurfaceControl$Transaction` is a typed object whose body is
-                // the native op buffer; skipped, not interpreted.
+                // the native op buffer. It is **not** interpreted yet (the
+                // post-draw transaction is a different flatten from the
+                // `setTransactionState` parcel; see results/art-runtime/W5.md).
+                // Record its size and whether it carries a `GraphicBuffer`
+                // (`GB01`) so the next wall is measurable from the peer log.
                 if data.read_int32().map_err(perr)? != 0 {
-                    let _ = data.read_byte_array().map_err(perr)?;
+                    let body = data.read_byte_array().map_err(perr)?;
+                    if std::env::var_os("ACOS_W5_BUF").is_some() {
+                        let bytes = body.as_deref().unwrap_or(&[]);
+                        let has_gb = bytes.windows(4).any(|w| w == b"GB01");
+                        eprintln!(
+                            "ACOSW5 finishDrawing transaction bytes={} has_gralloc_buffer={has_gb}",
+                            bytes.len()
+                        );
+                    }
                 }
                 let seq = data.read_int32().map_err(perr)?;
                 if let Some(window) = window {

@@ -851,5 +851,7 @@ pub fn surface_control(name: &str, width: i32, height: i32, handle: u64) -> Surf
         width,
         height,
         handle: Some(handle),
+        client: None,
+        layer_binder: None,
     }
 }

@@ -289,6 +289,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
     }
+    // W5: keep the guest's main looper alive for N ms after `activity-resumed`
+    // so the first traversal's draw (lockCanvas -> queueBuffer -> BLAST) can be
+    // observed. Diagnostic only; the stop point is unchanged.
+    if let Ok(hold) = std::env::var("ACOSLAUNCH_HOLD_MS") {
+        sb.env("ACOSLAUNCH_HOLD_MS", &hold);
+    }
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
     let started = Instant::now();

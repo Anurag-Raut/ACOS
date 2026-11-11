@@ -151,6 +151,21 @@ pub fn install(host: &mut ServiceHost) {
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
     let wms_state = crate::wms::install(host);
 
+    // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
+    // the `ServiceManager` name `SurfaceFlinger` (that is how
+    // `ComposerServiceAIDL::getComposerService()` finds it), and it hands out
+    // `android.gui.IDisplayEventConnection` nodes from a small pre-allocated
+    // pool — `Choreographer`'s `DisplayEventReceiver` steals the `BitTube` from
+    // one of them. See `results/art-runtime/V1.md`.
+    //
+    // It also installs the compositor-**client** node (C1) and returns its
+    // shared state; the session installs it first so `relayout` can bind the
+    // window's `SurfaceControl` to a real layer (W5).
+    let (_frame_clock, compositor) = crate::compositor_client::install_full(
+        host,
+        crate::compositor_client::DisplayDescriptor::reference(),
+    );
+
     // W1: the `IWindowSession` node. `IWindowManager.openSession` answers this
     // binder; every `ViewRootImpl` window call lands here, byte-exact (see
     // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
@@ -159,26 +174,15 @@ pub fn install(host: &mut ServiceHost) {
     let session_state = Arc::clone(&wms_state);
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",
-        Box::new(crate::window_session::WindowSessionService::new(
-            session_state,
-            window_id,
-        )),
+        Box::new(
+            crate::window_session::WindowSessionService::new(session_state, window_id)
+                .with_compositor(Arc::clone(&compositor)),
+        ),
     );
     wms_state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .host_session = session_binder;
-
-    // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
-    // the `ServiceManager` name `SurfaceFlinger` (that is how
-    // `ComposerServiceAIDL::getComposerService()` finds it), and it hands out
-    // `android.gui.IDisplayEventConnection` nodes from a small pre-allocated
-    // pool — `Choreographer`'s `DisplayEventReceiver` steals the `BitTube` from
-    // one of them. See `results/art-runtime/V1.md`.
-    let _frame_clock = crate::compositor_client::install(
-        host,
-        crate::compositor_client::DisplayDescriptor::reference(),
-    );
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.

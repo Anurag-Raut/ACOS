@@ -441,6 +441,10 @@ impl WindowManager {
             width: record.frame.width(),
             height: record.frame.height(),
             handle: record.surface_handle,
+            // The services layer binds this control to a real compositor layer
+            // (`SurfaceState::bind_layer`, W5) before it goes on the wire.
+            client: None,
+            layer_binder: None,
         };
         let insets_state = record.insets_state.clone();
         let insets_controls = record.insets_controls.clone();
@@ -1026,6 +1030,11 @@ pub fn reference_insets_controls(
         width: display.frame.width(),
         height: display.frame.height(),
         handle: Some(base_layer + id),
+        // Insets leashes stay W3 placeholders: no compositor layer exists for
+        // them, so the placeholder binders (and their structured
+        // `UNKNOWN_BINDER`/no-layer behaviour) are the honest answer.
+        client: None,
+        layer_binder: None,
     };
     InsetsSourceControlArray(vec![
         InsetsSourceControl {

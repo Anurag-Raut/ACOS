@@ -212,6 +212,41 @@ public final class LaunchMain {
         System.exit(0);
     }
 
+    /**
+     * W5 diagnostic: why the first traversal did not draw. Prints the real
+     * `ViewRootImpl` state after the hold (surface validity, visibility, first
+     * traversal, display state, BLAST queue, dirty rect). Nothing is modified.
+     */
+    static void probeViewRoot(Object activity) {
+        try {
+            Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+            Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+            java.lang.reflect.Method m = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl");
+            Object vr = m.invoke(decor);
+            if (vr == null) {
+                System.out.println("ACOSLAUNCH MARK viewroot-probe: no ViewRootImpl");
+                return;
+            }
+            Object surface = get(vr, "mSurface");
+            Object attach = get(vr, "mAttachInfo");
+            Object bbq = get(vr, "mBlastBufferQueue");
+            Object dirty = get(vr, "mDirty");
+            System.out.println("ACOSLAUNCH MARK viewroot-probe surface_valid="
+                    + (surface == null ? "null" : surface.getClass().getMethod("isValid").invoke(surface))
+                    + " surface=" + surface
+                    + " view_visibility=" + get(vr, "mViewVisibility")
+                    + " first=" + get(vr, "mFirst")
+                    + " display_state=" + (attach == null ? "null" : get(attach, "mDisplayState"))
+                    + " renderer=" + (attach == null ? "null" : get(attach, "mThreadedRenderer"))
+                    + " blast_queue=" + (bbq == null ? "null" : "set")
+                    + " dirty=" + dirty
+                    + " layout_requested=" + get(vr, "mLayoutRequested"));
+        } catch (Throwable x) {
+            System.out.println("ACOSLAUNCH MARK viewroot-probe failed " + x);
+        }
+    }
+
     static volatile boolean sActivityResumed;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
@@ -329,6 +364,22 @@ public final class LaunchMain {
                 writeResumeMarker(thread, activity, null);
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
                         + activity.getClass().getName() + " window=" + get(activity, "mWindow"));
+                // Diagnostic hold (W5): the watcher's `quit()` stops the main
+                // looper before the first traversal's draw, so a run that ends
+                // at `activity-resumed` never reaches `lockCanvas`/`queueBuffer`.
+                // Holding here keeps the real looper alive, which is the only
+                // way to observe the frame path without inventing a second
+                // stop point. Off unless the launcher forwards the variable.
+                String hold = System.getenv("ACOSLAUNCH_HOLD_MS");
+                if (hold != null) {
+                    try {
+                        long ms = Long.parseLong(hold);
+                        Thread.sleep(ms);
+                        System.out.println("ACOSLAUNCH MARK held-after-resume ms=" + ms);
+                        probeViewRoot(activity);
+                    } catch (Throwable ignored) {
+                    }
+                }
                 quit();
                 return;
             }
@@ -535,6 +586,14 @@ public final class LaunchMain {
                 // an `ObjectAnimator`, whose `PropertyValuesHolder` setup uses
                 // the stock reflection helper natives.
                 "register_android_animation_PropertyValuesHolder",
+                // After the resume, `PhoneWindow.preparePanel` ->
+                // `KeyCharacterMap.load` -> `InputManagerGlobal.getInputDevice`
+                // -> `InputDevice.<init>` -> `KeyCharacterMap.<init>` ->
+                // `nativeReadFromParcel`. Both registrations exist in the
+                // image's libandroid_runtime; without them the looper throws
+                // (`LOOPER_THREW`) right after `activity-resumed` (W5).
+                "register_android_view_InputDevice",
+                "register_android_view_KeyCharacterMap",
                 "register_android_text_AndroidCharacter",
                 "register_android_text_Hyphenator",
                 "register_android_util_CharsetUtils",

@@ -308,6 +308,48 @@ impl SurfaceState {
     fn take_handle(&mut self) -> Option<BinderId> {
         self.handle_pool.pop()
     }
+
+    /// Create a layer record and return `(layer-handle binder, layer id)` (W5).
+    ///
+    /// This is the **one** allocation path for layers. `createSurface` uses it
+    /// for the client's own layers (BLAST's `bbq-wrapper` child), and
+    /// `IWindowSession.relayout` uses it to bind the window's `SurfaceControl`
+    /// to a real record, so the parent handle BLAST passes to `createSurface`
+    /// and every transaction the client applies against a layer handle land in
+    /// this registry.
+    ///
+    /// `None` means the bounded handle pool is exhausted; the caller reports
+    /// that as a structured error rather than inventing an id.
+    pub fn create_layer(
+        &mut self,
+        name: &str,
+        width: u32,
+        height: u32,
+        format: i32,
+        flags: i32,
+        parent: Option<BinderId>,
+    ) -> Option<(BinderId, i32)> {
+        let handle = self.take_handle()?;
+        let layer_id = self.next_layer_id;
+        self.next_layer_id += 1;
+        let record = LayerRecord {
+            handle,
+            layer_id,
+            name: name.to_string(),
+            width,
+            height,
+            format,
+            flags,
+            parent,
+            latest: None,
+            latest_listener: BinderId(0),
+            transactions: 0,
+            posted_frames: Vec::new(),
+        };
+        self.layers.insert(handle.0, record);
+        self.stats.entry(handle.0).or_default();
+        Some((handle, layer_id))
+    }
 }
 
 /// The `ISurfaceComposerClient` node.
@@ -372,41 +414,26 @@ impl ServiceObject for SurfaceClientService {
                 read_layer_metadata(data)?;
 
                 let mut state = self.lock();
-                let handle = state.take_handle().ok_or_else(|| ServiceError::BadRequest {
-                    interface: CLIENT_DESCRIPTOR.to_string(),
-                    method: "createSurface".into(),
-                    detail: format!(
-                        "layer-handle pool exhausted ({} handles); a real compositor allocates one per layer",
-                        LAYER_HANDLE_POOL
-                    ),
-                })?;
-                let layer_id = state.next_layer_id;
-                state.next_layer_id += 1;
-                let record = LayerRecord {
-                    handle,
-                    layer_id,
-                    name: name.clone(),
-                    width: 0,
-                    height: 0,
-                    format: 0,
-                    flags,
-                    parent,
-                    latest: None,
-                    latest_listener: BinderId(0),
-                    transactions: 0,
-                    posted_frames: Vec::new(),
-                };
-                state.layers.insert(handle.0, record);
-                state.stats.entry(handle.0).or_default();
+                let (handle, layer_id) = state
+                    .create_layer(&name, 0, 0, 0, flags, parent)
+                    .ok_or_else(|| ServiceError::BadRequest {
+                        interface: CLIENT_DESCRIPTOR.to_string(),
+                        method: "createSurface".into(),
+                        detail: format!(
+                            "layer-handle pool exhausted ({} handles); a real compositor allocates one per layer",
+                            LAYER_HANDLE_POOL
+                        ),
+                    })?;
 
                 exception::write_no_exception(reply);
                 // `CreateSurfaceResult` is an AIDL parcelable: marker 1, then
                 // the inline size word, then
                 // IBinder handle, int layerId, String layerName, int transformHint.
-                let payload = surface_result_payload(handle, layer_id, &name, 0);
-                reply.write_int32(1);
-                reply.write_int32(payload.len() as i32);
-                write_words(reply, &payload);
+                // The binder must be written directly into the reply, not
+                // copied out of a scratch parcel (see `write_aidl_parcelable`).
+                write_aidl_parcelable(reply, |p| {
+                    write_create_surface_result(p, handle, layer_id, &name, 0)
+                })?;
                 Ok(true)
             }
             codes::CLEAR_LAYER_FRAME_STATS => {
@@ -474,19 +501,42 @@ fn perr(e: impl std::fmt::Display) -> ServiceError {
     ServiceError::Internal(format!("{CLIENT_DESCRIPTOR}: parcel: {e}"))
 }
 
-/// Build the `CreateSurfaceResult` payload (without the outer markers).
-fn surface_result_payload(
+/// Write an AIDL `Parcelable` body into `reply` as `(marker, size, fields...)`.
+///
+/// The size word has to be known before the body, so the fields are measured in
+/// a scratch parcel first and then **written again into the reply through the
+/// normal `Parcel` writers**. Copying the marshalled scratch bytes instead
+/// (what C1 originally did) loses the reply parcel's object-table entry for the
+/// binder: the guest's libbinder then reads a `flat_binder_object` at an offset
+/// that is not in the object list and reports
+/// `Attempt to read object ... that is not in the object list`, which is what
+/// made `SurfaceComposerClient::createSurface` fail with `UNKNOWN_ERROR` while
+/// every in-process `acos-parcel` test still passed (W5).
+fn write_aidl_parcelable(
+    reply: &mut Parcel,
+    write: impl Fn(&mut Parcel) -> std::result::Result<(), acos_parcel::ParcelError>,
+) -> SResult<()> {
+    let mut scratch = Parcel::new();
+    write(&mut scratch).map_err(perr)?;
+    let size = scratch.data_size();
+    reply.write_int32(1); // AIDL parcelable / typed-object marker
+    reply.write_int32(size as i32);
+    write(reply).map_err(perr)
+}
+
+/// Build the `CreateSurfaceResult` body (the fields after the size word).
+fn write_create_surface_result(
+    p: &mut Parcel,
     handle: BinderId,
     layer_id: i32,
     name: &str,
     transform_hint: u32,
-) -> Vec<u8> {
-    let mut p = Parcel::new();
+) -> std::result::Result<(), acos_parcel::ParcelError> {
     p.write_strong_binder(handle);
     p.write_int32(layer_id);
-    p.write_string16(name).ok();
+    p.write_string16(name)?;
     p.write_uint32(transform_hint);
-    p.marshall()
+    Ok(())
 }
 
 fn write_words(parcel: &mut Parcel, bytes: &[u8]) {
@@ -549,7 +599,27 @@ pub fn apply_transaction_state(
     data: &mut Parcel,
     reply: &mut Parcel,
 ) -> SResult<bool> {
-    let transaction = read_transaction_state(data)?;
+    let transaction = match read_transaction_state(data) {
+        Ok(t) => t,
+        Err(e) => {
+            // Diagnostic (opt-in): dump the request parcel that failed to
+            // decode so a wire-shape mismatch can be compared with the
+            // decoder. Off by default: a failed transaction already produces a
+            // structured `UNSUPPORTED_ANDROID_API` line.
+            if std::env::var_os("ACOS_W5_DUMP").is_some() {
+                let mut probe = data.clone();
+                probe.set_data_position(0);
+                let bytes = probe.marshall();
+                eprintln!(
+                    "ACOS W5: setTransactionState decode failed size={} at pos {}: {e}; bytes={:02x?}",
+                    bytes.len(),
+                    data.data_position(),
+                    bytes
+                );
+            }
+            return Err(e);
+        }
+    };
     let mut s = state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -774,6 +844,18 @@ fn apply_layer_state(
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });
+            if std::env::var_os("ACOS_W5_BUF").is_some() {
+                eprintln!(
+                    "ACOSDBG BUFFER layer={} frame={} {}x{} stride={} fmt={} id={}",
+                    record.layer_id,
+                    buffer.frame_number,
+                    meta.width,
+                    meta.height,
+                    meta.stride,
+                    meta.format,
+                    meta.id
+                );
+            }
             record.latest_listener = listener;
             record.transactions += 1;
             record.posted_frames.push(buffer.frame_number);
@@ -927,10 +1009,67 @@ pub fn decode_transaction_state(data: &mut Parcel) -> SResult<TransactionState> 
 }
 
 fn read_transaction_state(data: &mut Parcel) -> SResult<TransactionState> {
-    // `FrameTimelineInfo` is an AIDL parcelable written directly (no marker):
-    // int32 size then the payload. Skip it, we do not schedule frames.
-    let frame_timeline_size = data.read_int32().map_err(perr)?;
-    skip_bytes(data, frame_timeline_size)?;
+    let start = data.data_position();
+    let mut probe = data.clone();
+    let size_word = probe.read_int32().map_err(perr)?;
+    let body = usize::try_from(size_word.max(0)).unwrap_or(0);
+    // `FrameTimelineInfo` is an AIDL parcelable written directly (no presence
+    // marker): an `int32` size word then the fields. The image's writer counts
+    // the size word **itself** (measured from a live `Transaction::apply`:
+    // word 28, fields `int64 vsyncId, int32 inputEventId, int64
+    // startTimeNanos, bool` = 24; with 24 the composer count and the layer's
+    // `flat_binder_object` line up, with 28 the binder read starts on the
+    // object's flags word). Hand-built parcels (C1's tests, and a future
+    // writer that flattens body-only) use the body length, so both
+    // interpretations are tried and the one that consumes the parcel exactly
+    // wins. Before W5 the decoder always skipped the raw word, which put every
+    // `setTransactionState` four bytes late and made the buffer transaction
+    // undecodable.
+    let mut candidates = vec![body.saturating_sub(4), body];
+    candidates.dedup();
+    let mut last_error: Option<ServiceError> = None;
+    let mut inexact: Option<TransactionState> = None;
+    for skip in candidates {
+        data.set_data_position(start);
+        let frame_timeline_size = data.read_int32().map_err(perr)?;
+        match read_transaction_state_body(data, frame_timeline_size, skip) {
+            Ok(t) if data.data_avail() == 0 => return Ok(t),
+            Ok(t) => {
+                if std::env::var_os("ACOS_W5_DUMP").is_some() {
+                    eprintln!(
+                        "ACOSDBG timeline skip={skip} size_word={frame_timeline_size} parses but leaves {} bytes",
+                        data.data_avail()
+                    );
+                }
+                inexact = inexact.or(Some(t));
+            }
+            Err(e) => {
+                if std::env::var_os("ACOS_W5_DUMP").is_some() {
+                    eprintln!(
+                        "ACOSDBG timeline skip={skip} size_word={frame_timeline_size} failed at {}: {e}",
+                        data.data_position()
+                    );
+                }
+                last_error = Some(e);
+            }
+        }
+    }
+    if let Some(t) = inexact {
+        return Ok(t);
+    }
+    Err(last_error.unwrap_or_else(|| {
+        ServiceError::Internal(format!("{CLIENT_DESCRIPTOR}: empty transaction parcel"))
+    }))
+}
+
+/// The body of a transaction after `FrameTimelineInfo` (see the caller for the
+/// size-word rule).
+fn read_transaction_state_body(
+    data: &mut Parcel,
+    frame_timeline_size: i32,
+    timeline_body: usize,
+) -> SResult<TransactionState> {
+    skip_bytes(data, i32::try_from(timeline_body).unwrap_or(0))?;
 
     let composer_count = data.read_uint32().map_err(perr)? as usize;
     let mut composers = Vec::with_capacity(composer_count.min(64));
@@ -943,11 +1082,16 @@ fn read_transaction_state(data: &mut Parcel) -> SResult<TransactionState> {
         read_display_state(data)?;
     }
 
+    let dbg = std::env::var_os("ACOS_W5_TAIL").is_some();
+    if dbg { eprintln!("ACOSDBG tail displays at {}", data.data_position()); }
     let flags = data.read_uint32().map_err(perr)?;
     let apply_token = data.read_strong_binder().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG tail iwc at {}", data.data_position()); }
     read_input_window_commands(data)?;
+    if dbg { eprintln!("ACOSDBG tail desired at {}", data.data_position()); }
     let desired_present_time = data.read_int64().map_err(perr)?;
     let is_auto_timestamp = data.read_bool().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG tail uncache at {}", data.data_position()); }
 
     let uncache_count = data.read_uint32().map_err(perr)? as usize;
     for _ in 0..uncache_count {
@@ -955,6 +1099,7 @@ fn read_transaction_state(data: &mut Parcel) -> SResult<TransactionState> {
         let _id = data.read_uint64().map_err(perr)?;
     }
 
+    if dbg { eprintln!("ACOSDBG tail listeners at {}", data.data_position()); }
     let has_listener_callbacks = data.read_bool().map_err(perr)?;
     let listener_count = data.read_int32().map_err(perr)?;
     let mut listener_callbacks = Vec::new();
@@ -969,6 +1114,7 @@ fn read_transaction_state(data: &mut Parcel) -> SResult<TransactionState> {
         }
     }
 
+    if dbg { eprintln!("ACOSDBG tail txnid at {}", data.data_position()); }
     let transaction_id = data.read_uint64().map_err(perr)?;
     let merged_count = data.read_uint32().map_err(perr)? as usize;
     let mut merged_transaction_ids = Vec::with_capacity(merged_count.min(64));
@@ -993,6 +1139,18 @@ fn read_transaction_state(data: &mut Parcel) -> SResult<TransactionState> {
 }
 
 fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
+    if std::env::var_os("ACOS_W5_DUMP").is_some() {
+        let start = data.data_position();
+        let mut probe = data.clone();
+        let mut bytes = Vec::new();
+        for _ in 0..64 {
+            match probe.read_byte() {
+                Ok(b) => bytes.push(b),
+                Err(_) => break,
+            }
+        }
+        eprintln!("ACOSDBG layer_state size={} at {start}: {bytes:02x?}", data.data_size());
+    }
     let surface = data.read_strong_binder().map_err(perr)?;
     let layer_id = data.read_int32().map_err(perr)?;
     let what = data.read_uint64().map_err(perr)?;
@@ -1015,14 +1173,19 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     // transformHint, uint32 width, uint32 height, uint32 format).
     read_nullable_surface_control(data)?;
     read_nullable_surface_control(data)?;
+    let dbg = std::env::var_os("ACOS_W5_LS").is_some();
+    if dbg { eprintln!("ACOSDBG ls nsc at {}", data.data_position()); }
 
     for _ in 0..4 {
         let _ = data.read_float().map_err(perr)?;
     }
+    if dbg { eprintln!("ACOSDBG ls color at {}", data.data_position()); }
     read_window_info(data)?;
+    if dbg { eprintln!("ACOSDBG ls windowinfo at {}", data.data_position()); }
 
     let transparent_region_size = data.read_int32().map_err(perr)?;
     skip_bytes(data, transparent_region_size)?;
+    if dbg { eprintln!("ACOSDBG ls region at {}", data.data_position()); }
     let buffer_transform = data.read_uint32().map_err(perr)?;
     let transform_to_display_inverse = data.read_bool().map_err(perr)?;
     let _border_enabled = data.read_bool().map_err(perr)?;
@@ -1063,6 +1226,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let background_blur_radius = data.read_uint32().map_err(perr)?;
 
     read_layer_metadata(data)?;
+    if dbg { eprintln!("ACOSDBG ls metadata at {}", data.data_position()); }
 
     for _ in 0..4 {
         let _ = data.read_float().map_err(perr)?;
@@ -1081,6 +1245,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         });
     }
 
+    if dbg { eprintln!("ACOSDBG ls listeners at {}", data.data_position()); }
     let _shadow_radius = data.read_float().map_err(perr)?;
     let _frame_rate_selection_priority = data.read_int32().map_err(perr)?;
     let _frame_rate = data.read_float().map_err(perr)?;
@@ -1105,6 +1270,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         }
     }
 
+    if dbg { eprintln!("ACOSDBG ls blur at {}", data.data_position()); }
     // `StretchEffect` is fixed-size (6 floats + 4-float bounds = 40 bytes).
     for _ in 0..10 {
         let _ = data.read_float().map_err(perr)?;
@@ -1113,21 +1279,27 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let destination_frame = read_rect(data)?;
     let _is_trusted_overlay = data.read_bool().map_err(perr)?;
     let drop_input_mode = data.read_uint32().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG ls trusted at {}", data.data_position()); }
 
     let has_buffer_data = data.read_bool().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG ls hasbuf={has_buffer_data} at {}", data.data_position()); }
     let buffer = if has_buffer_data {
         Some(read_buffer_data(data, buffer_crop)?)
     } else {
         None
     };
+    if dbg { eprintln!("ACOSDBG ls buffer at {}", data.data_position()); }
 
     // Parcelable TrustedPresentationThresholds (AIDL: marker + size + payload).
     read_aidl_parcelable(data)?;
+    if dbg { eprintln!("ACOSDBG ls tpt at {}", data.data_position()); }
     // Parcelable TrustedPresentationListener (C++: marker + binder + int32).
     let _present = data.read_int32().map_err(perr)?;
     let _listener = data.read_strong_binder().map_err(perr)?;
     let _id = data.read_int32().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG ls tpl2 at {}", data.data_position()); }
 
+    if dbg { eprintln!("ACOSDBG ls tpl at {}", data.data_position()); }
     let _current_hdr_sdr_ratio = data.read_float().map_err(perr)?;
     let _desired_hdr_sdr_ratio = data.read_float().map_err(perr)?;
     let _caching_hint = data.read_int32().map_err(perr)?;
@@ -1196,24 +1368,36 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
             detail: "null BufferData in a present-buffer transaction".into(),
         });
     }
+    let dbg = std::env::var_os("ACOS_W5_BD").is_some();
     let flags = data.read_int32().map_err(perr)?;
-    let buffer = if data.read_bool().map_err(perr)? {
+    let has_buf = data.read_bool().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG bd flags at {} hasbuf={has_buf}", data.data_position()); }
+    let buffer = if has_buf {
         Some(read_graphic_buffer(data)?)
     } else {
         None
     };
-    if data.read_bool().map_err(perr)? {
+    if dbg { eprintln!("ACOSDBG bd gb at {}", data.data_position()); }
+    let has_fence = data.read_bool().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG bd fenceflag={has_fence} at {}", data.data_position()); }
+    if has_fence {
         // An acquire fence: `Parcel::write(Fence)`.
         read_fence(data)?;
+        if dbg { eprintln!("ACOSDBG bd fence at {}", data.data_position()); }
     }
     let frame_number = data.read_uint64().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG bd frame={frame_number} at {}", data.data_position()); }
     let release_buffer_listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
+    if dbg { eprintln!("ACOSDBG bd listener at {}", data.data_position()); }
     let release_buffer_endpoint = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
+    if dbg { eprintln!("ACOSDBG bd endpoint at {}", data.data_position()); }
     let _cached_token = data.read_strong_binder().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG bd cachedtok at {}", data.data_position()); }
     let cached_buffer_id = data.read_uint64().map_err(perr)?;
     let has_barrier = data.read_bool().map_err(perr)?;
     let barrier_frame_number = data.read_uint64().map_err(perr)?;
     let producer_id = data.read_uint32().map_err(perr)?;
+    if dbg { eprintln!("ACOSDBG bd producer at {}", data.data_position()); }
     Ok(BufferData {
         flags,
         buffer,
@@ -1231,6 +1415,9 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
 fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let len = data.read_int32().map_err(perr)?;
     let fd_count = data.read_int32().map_err(perr)?;
+    if std::env::var_os("ACOS_W5_BD").is_some() {
+        eprintln!("ACOSDBG gb header len={len} fdc={fd_count} at {}", data.data_position());
+    }
     if len < 13 * 4 || fd_count < 0 {
         return Err(ServiceError::BadRequest {
             interface: LEGACY_COMPOSER_DESCRIPTOR.to_string(),
@@ -1242,6 +1429,9 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let mut header = vec![0i32; words];
     for w in &mut header {
         *w = data.read_int32().map_err(perr)?;
+    }
+    if std::env::var_os("ACOS_W5_BD").is_some() {
+        eprintln!("ACOSDBG gb len={len} fdc={fd_count} words={header:?}");
     }
     let magic = header[0];
     if magic != i32::from_le_bytes(*b"GB01") && magic != i32::from_le_bytes(*b"GBFR") {
