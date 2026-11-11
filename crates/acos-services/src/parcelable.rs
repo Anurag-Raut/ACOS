@@ -104,6 +104,17 @@ pub enum FieldOp {
     /// A `writeInt` count followed by that many `writeTypedObject` elements
     /// (the API-34 `InsetsState.mSources` loop).
     CountedTyped(&'static str),
+    /// A `writeInt` count followed by that many **bare** `writeToParcel`
+    /// payloads (no presence marker, no class name). API-34
+    /// `DisplayInfo.writeToParcel` writes `supportedModes` this way:
+    /// `dest.writeInt(supportedModes.length)` then
+    /// `supportedModes[i].writeToParcel(dest, flags)`, and `readFromParcel`
+    /// mirrors it with `Display.Mode.CREATOR.createFromParcel(source)`.
+    CountedNested(&'static str),
+    /// `DisplayCutout$ParcelableWrapper.writeCutoutToParcel`: an `int` variant
+    /// marker (`-1` null, `0` `NO_CUTOUT`, `1` full cutout) and, for variant
+    /// `1`, the full geometry. See [`read_cutout`]/[`write_cutout`].
+    Cutout,
     /// A payload ACOS cannot model. Reading or writing it raises a structured
     /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
     Unsupported(&'static str),
@@ -130,6 +141,10 @@ pub struct ParcelableSpec {
     /// Coverage of the real method.
     pub verification: Verification,
 }
+
+/// The dotted class name of `android.view.DisplayInfo` (the codec key and the
+/// name [`crate::display::DisplayInfo::to_parcelable`] writes).
+pub const DISPLAY_INFO_CLASS: &str = "android.view.DisplayInfo";
 
 /// Every codec ACOS ships.
 pub static SPECS: &[ParcelableSpec] = &[
@@ -573,32 +588,125 @@ pub static SPECS: &[ParcelableSpec] = &[
     // `classes4.dex:Landroid/view/DisplayInfo;->writeToParcel`. The nested
     // `DisplayCutout`, `DisplayShape`, supported `Mode[]` and the trailing
     // `SparseArray` are modelled with ACOS-owned placeholders (gap list).
+    // DisplayInfo: the **full** API-34 `writeToParcel`, transcribed line by line
+    // from `android-14.0.0_r75`
+    // `frameworks/base/core/java/android/view/DisplayInfo.java:587-647` and read
+    // back in the mirror order of `readFromParcel`
+    // (`DisplayInfo.java:520-584`). The two 2024-era `IgnoredNamed`
+    // placeholders that desynchronised the framework's own reader are gone: the
+    // cutout is written by [`FieldOp::Cutout`] and `supportedModes` by
+    // [`FieldOp::CountedNested`].
+    //
+    // `Verification::Prefix` because the DEX scanner collapses the two `for`
+    // loops (`supportedModes`, `supportedColorModes`) and the explicit
+    // `writeInt(length)` of the first one; the field order is instead pinned by
+    // `tests/displayinfo_api34.rs::displayinfo_spec_is_the_api34_write_order`
+    // and proven byte-for-byte against a hand-built parcel.
     ParcelableSpec {
-        class: "android.view.DisplayInfo",
+        class: DISPLAY_INFO_CLASS,
         fields: &[
-            FieldOp::Int,              // displayId
-            FieldOp::Int,              // logicalWidth
-            FieldOp::Int,              // logicalHeight
-            FieldOp::Int,              // appWidth
-            FieldOp::Int,              // appHeight
-            FieldOp::IgnoredNamed("android.view.DisplayCutout"),
-            FieldOp::IgnoredNamed("android.view.DisplayShape"),
-            FieldOp::Str8,             // name
-            FieldOp::Int,              // flags
-            FieldOp::Int,              // type
-            FieldOp::Int,              // address
-            FieldOp::Int,              // deviceProductInfo
-            FieldOp::Int,              // rotation
-            FieldOp::Int,              // modeId
-            FieldOp::Int,              // renderFrameRate
-            FieldOp::Int,              // supportedModes marker
-            FieldOp::Int,              // logicalDensityDpi
-            FieldOp::Int,              // state
-            FieldOp::Float,            // refreshRate
-            FieldOp::Int,              // colorMode
-            FieldOp::Int,              // installOrientation
+            FieldOp::Int,  // layerStack
+            FieldOp::Int,  // flags
+            FieldOp::Int,  // type
+            FieldOp::Int,  // displayId
+            FieldOp::Int,  // displayGroupId
+            FieldOp::Named("android.view.DisplayAddress"), // address
+            FieldOp::Named("android.hardware.display.DeviceProductInfo"), // deviceProductInfo
+            FieldOp::Str8, // name
+            FieldOp::Int,  // appWidth
+            FieldOp::Int,  // appHeight
+            FieldOp::Int,  // smallestNominalAppWidth
+            FieldOp::Int,  // smallestNominalAppHeight
+            FieldOp::Int,  // largestNominalAppWidth
+            FieldOp::Int,  // largestNominalAppHeight
+            FieldOp::Int,  // logicalWidth
+            FieldOp::Int,  // logicalHeight
+            FieldOp::Cutout, // DisplayCutout.ParcelableWrapper.writeCutoutToParcel
+            FieldOp::Int,  // rotation
+            FieldOp::Int,  // modeId
+            FieldOp::Float, // renderFrameRate
+            FieldOp::Int,  // defaultModeId
+            FieldOp::Int,  // userPreferredModeId
+            FieldOp::CountedNested("android.view.Display$Mode"), // supportedModes
+            FieldOp::Int,  // colorMode
+            FieldOp::IntArray, // supportedColorModes
+            FieldOp::Named("android.view.Display$HdrCapabilities"), // hdrCapabilities
+            FieldOp::Bool, // minimalPostProcessingSupported
+            FieldOp::Int,  // logicalDensityDpi
+            FieldOp::Float, // physicalXDpi
+            FieldOp::Float, // physicalYDpi
+            FieldOp::Long, // appVsyncOffsetNanos
+            FieldOp::Long, // presentationDeadlineNanos
+            FieldOp::Int,  // state
+            FieldOp::Int,  // committedState
+            FieldOp::Int,  // ownerUid
+            FieldOp::Str8, // ownerPackageName
+            FieldOp::Str8, // uniqueId
+            FieldOp::Int,  // removeMode
+            FieldOp::Float, // refreshRateOverride
+            FieldOp::Float, // brightnessMinimum
+            FieldOp::Float, // brightnessMaximum
+            FieldOp::Float, // brightnessDefault
+            FieldOp::Typed("android.view.RoundedCorners"), // roundedCorners
+            FieldOp::IntArray, // userDisabledHdrTypes
+            FieldOp::Int,  // installOrientation
+            FieldOp::Typed("android.view.DisplayShape"), // displayShape
+            FieldOp::Typed("android.view.SurfaceControl$RefreshRateRange"), // layoutLimitedRefreshRate
+            FieldOp::Float, // hdrSdrRatio
+            FieldOp::SparseArray, // thermalRefreshRateThrottling
+            FieldOp::Str8, // thermalBrightnessThrottlingDataId
         ],
         verification: Verification::Prefix,
+    },
+    // `android.view.Display$Mode.writeToParcel`.
+    //
+    // The **image** build wins over the tag here: `android-14.0.0_r75`
+    // `Display.java:2375-2382` writes `mVsyncRate` between `mPeakRefreshRate`
+    // and `mAlternativeRefreshRates`, but the API-34 image's
+    // `classes4.dex:Landroid/view/Display$Mode;->writeToParcel` has exactly six
+    // `Parcel.write*` calls and no `writeFloat(mVsyncRate)` (verified with
+    // `examples/scan-parcelables`). ACOS follows the image, because the image's
+    // reader is the one that has to stay in sync.
+    ParcelableSpec {
+        class: "android.view.Display$Mode",
+        fields: &[
+            FieldOp::Int,        // mModeId
+            FieldOp::Int,        // mWidth
+            FieldOp::Int,        // mHeight
+            FieldOp::Float,      // mPeakRefreshRate
+            FieldOp::FloatArray, // mAlternativeRefreshRates
+            FieldOp::IntArray,   // mSupportedHdrTypes
+        ],
+        verification: Verification::Full,
+    },
+    // `android.view.DisplayShape.writeToParcel` (DisplayShape.java:247-256).
+    ParcelableSpec {
+        class: "android.view.DisplayShape",
+        fields: &[
+            FieldOp::Str8,  // mDisplayShapeSpec
+            FieldOp::Int,   // mDisplayWidth
+            FieldOp::Int,   // mDisplayHeight
+            FieldOp::Float, // mPhysicalPixelDisplaySizeRatio
+            FieldOp::Int,   // mRotation
+            FieldOp::Int,   // mOffsetX
+            FieldOp::Int,   // mOffsetY
+            FieldOp::Float, // mScale
+        ],
+        verification: Verification::Full,
+    },
+    // `android.view.SurfaceControl$RefreshRateRange.writeToParcel`
+    // (SurfaceControl.java:2013-2016).
+    ParcelableSpec {
+        class: "android.view.SurfaceControl$RefreshRateRange",
+        fields: &[FieldOp::Float, FieldOp::Float],
+        verification: Verification::Full,
+    },
+    // `android.graphics.Insets.writeToParcel` (Insets.java:181-186); the cutout's
+    // `waterfallInsets`.
+    ParcelableSpec {
+        class: "android.graphics.Insets",
+        fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int, FieldOp::Int],
+        verification: Verification::Full,
     },
     // `android.os.LocaleList.writeToParcel` is a single `writeString8`
     // (`mStringRepresentation`); `Configuration` wraps it in
@@ -1271,6 +1379,11 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             let n = parcel.read_int32()?;
             if n < 0 {
                 Value::Skipped
+            } else if n == 0 {
+                // `writeSparseArray(new SparseArray<>())` writes a `0` count
+                // (the framework's `DisplayInfo()` initial value). Only the
+                // empty array is modelled; see `write_field`.
+                Value::List(Some(Vec::new()))
             } else {
                 return Err(unsupported("android.util.SparseArray"));
             }
@@ -1391,6 +1504,27 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
         }
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
+        FieldOp::Cutout => read_cutout(parcel)?,
+        FieldOp::CountedNested(class) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    out.push(Value::Parcelable(read_payload(class, parcel)?));
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::Named(class) | FieldOp::IgnoredNamed(class) => {
             let name = parcel.read_string16()?;
             match name {
@@ -1446,6 +1580,9 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::ByteArray => parcel.write_byte_array(expect_byte_array(value)?)?,
         FieldOp::SparseArray => match value {
             Value::Skipped | Value::List(None) => parcel.write_int32(-1),
+            // `DisplayInfo.thermalRefreshRateThrottling` defaults to an empty
+            // `SparseArray`, which writes a `0` count, not the null `-1`.
+            Value::List(Some(items)) if items.is_empty() => parcel.write_int32(0),
             _ => return Err(unsupported("android.util.SparseArray")),
         },
         FieldOp::Bundle => write_bundle(parcel, expect_bundle(value)?)?,
@@ -1553,6 +1690,19 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected counted typed list, got {value:?}"))),
         },
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
+        FieldOp::Cutout => write_cutout(parcel, value)?,
+        FieldOp::CountedNested(_class) => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("counted payloads too large"))?,
+                );
+                for item in items {
+                    write_payload(parcel, expect_parcelable(item)?)?;
+                }
+            }
+            _ => return Err(bad(format!("expected counted payloads, got {value:?}"))),
+        },
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
             match p {
@@ -2072,6 +2222,136 @@ fn write_fd(parcel: &mut Parcel, value: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// DisplayCutout$ParcelableWrapper.writeCutoutToParcel
+// ---------------------------------------------------------------------------
+
+/// The class name ACOS uses for a decoded `writeCutoutToParcel` value.
+///
+/// The wire form is *not* `DisplayCutout.writeToParcel` (there is none):
+/// `ParcelableWrapper.writeCutoutToParcel` writes an `int` variant marker
+/// (`-1` null, `0` `NO_CUTOUT`, `1` geometry) and the geometry inline
+/// (`frameworks/base/core/java/android/view/DisplayCutout.java:1462-1483`).
+pub const DISPLAY_CUTOUT_CLASS: &str = "android.view.DisplayCutout";
+
+/// Read a `writeTypedObject` field (presence marker + bare payload).
+fn read_typed_class(parcel: &mut Parcel, class: &str) -> Result<Value> {
+    if parcel.read_int32()? == 0 {
+        Ok(Value::Parcelable(Parcelable::Null))
+    } else {
+        Ok(Value::Parcelable(read_payload(class, parcel)?))
+    }
+}
+
+/// Write a `writeTypedObject` field (presence marker + bare payload).
+fn write_typed_value(parcel: &mut Parcel, value: &Value) -> Result<()> {
+    match expect_parcelable(value)? {
+        Parcelable::Null => {
+            parcel.write_int32(0);
+            Ok(())
+        }
+        p @ Parcelable::Ordered { .. } => {
+            parcel.write_int32(1);
+            write_payload(parcel, p)
+        }
+        Parcelable::Fd(_) => Err(bad("typed parcelable is an fd")),
+    }
+}
+
+fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
+    let variant = parcel.read_int32()?;
+    let mut values = vec![Value::Int(variant)];
+    match variant {
+        -1 | 0 => {}
+        1 => {
+            values.push(read_typed_class(parcel, "android.graphics.Rect")?); // safeInsets
+            let n = parcel.read_int32()?; // writeTypedArray(mBounds.getRects())
+            if n < 0 {
+                values.push(Value::List(None));
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut rects = Vec::with_capacity(n);
+                for _ in 0..n {
+                    rects.push(read_typed_class(parcel, "android.graphics.Rect")?);
+                }
+                values.push(Value::List(Some(rects)));
+            }
+            values.push(read_typed_class(parcel, "android.graphics.Insets")?); // waterfallInsets
+            values.push(Value::Int(parcel.read_int32()?)); // displayWidth
+            values.push(Value::Int(parcel.read_int32()?)); // displayHeight
+            values.push(Value::Int(parcel.read_int32()?)); // physicalDisplayWidth
+            values.push(Value::Int(parcel.read_int32()?)); // physicalDisplayHeight
+            values.push(Value::Float(parcel.read_float()?)); // density
+            values.push(Value::Str(parcel.read_string16()?)); // cutoutSpec
+            values.push(Value::Int(parcel.read_int32()?)); // rotation
+            values.push(Value::Float(parcel.read_float()?)); // scale
+            values.push(Value::Float(parcel.read_float()?)); // physicalPixelDisplaySizeRatio
+            values.push(Value::IntArray(parcel.read_int32_array()?)); // sideOverrides
+        }
+        other => return Err(bad(format!("unmodelled DisplayCutout variant {other}"))),
+    }
+    Ok(Value::Parcelable(Parcelable::ordered(
+        DISPLAY_CUTOUT_CLASS,
+        values,
+    )))
+}
+
+fn write_cutout(parcel: &mut Parcel, value: &Value) -> Result<()> {
+    let p = expect_parcelable(value)?;
+    let fields = p
+        .fields()
+        .ok_or_else(|| bad("DisplayCutout must be an ordered parcelable"))?;
+    let variant = fields
+        .first()
+        .and_then(Value::as_int)
+        .ok_or_else(|| bad("DisplayCutout variant"))?;
+    parcel.write_int32(variant);
+    if variant == -1 || variant == 0 {
+        return Ok(());
+    }
+    if variant != 1 {
+        return Err(bad(format!("unmodelled DisplayCutout variant {variant}")));
+    }
+    if fields.len() != 14 {
+        return Err(bad(format!(
+            "DisplayCutout variant 1 expects 14 fields, got {}",
+            fields.len()
+        )));
+    }
+    write_typed_value(parcel, &fields[1])?; // safeInsets
+    match &fields[2] {
+        Value::Skipped | Value::List(None) => parcel.write_int32(-1),
+        Value::List(Some(items)) => {
+            parcel.write_int32(
+                i32::try_from(items.len()).map_err(|_| bad("cutout bounds too large"))?,
+            );
+            for item in items {
+                write_typed_value(parcel, item)?;
+            }
+        }
+        other => return Err(bad(format!("expected cutout bounds, got {other:?}"))),
+    }
+    write_typed_value(parcel, &fields[3])?; // waterfallInsets
+    parcel.write_int32(expect_int(&fields[4])?); // displayWidth
+    parcel.write_int32(expect_int(&fields[5])?); // displayHeight
+    parcel.write_int32(expect_int(&fields[6])?); // physicalDisplayWidth
+    parcel.write_int32(expect_int(&fields[7])?); // physicalDisplayHeight
+    parcel.write_float(expect_float(&fields[8])?); // density
+    parcel.write_string16_opt(expect_str(&fields[9])?)?; // cutoutSpec
+    parcel.write_int32(expect_int(&fields[10])?); // rotation
+    parcel.write_float(expect_float(&fields[11])?); // scale
+    parcel.write_float(expect_float(&fields[12])?); // physicalPixelDisplaySizeRatio
+    parcel.write_int32_array(expect_int_array(&fields[13])?)?; // sideOverrides
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // DEX verification oracle
 // ---------------------------------------------------------------------------
 
@@ -2172,6 +2452,10 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // linear scanner, so only the marker can be verified.
         FieldOp::Cond(_) => call == "writeInt",
         FieldOp::CountedTyped(_) => call == "writeInt",
+        // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
+        // helper, which the scanner records as a nested `writeToParcel` call.
+        FieldOp::Cutout => call == "writeParcelable",
+        FieldOp::CountedNested(_) => call == "writeInt",
         FieldOp::Unsupported(_) => false,
     }
 }
@@ -2224,6 +2508,17 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
                 _ => 1,
             }
         }
+        FieldOp::CountedNested(_) => match first.as_str() {
+            "writeInt" => match calls.get(1).map(String::as_str) {
+                Some("writeParcelable") => 2,
+                _ => 1,
+            },
+            // The scanner collapses the loop and drops the explicit
+            // `writeInt(supportedModes.length)` before the body, so the first
+            // surviving call is the element's nested `writeToParcel`.
+            "writeParcelable" => 1,
+            _ => 0,
+        },
         _ => usize::from(field_matches(field, first)),
     }
 }

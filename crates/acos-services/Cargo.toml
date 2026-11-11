@@ -23,3 +23,7 @@ proptest = "1"
 [[example]]
 name = "scan-parcelables"
 path = "examples/scan_parcelables.rs"
+
+[[example]]
+name = "scan-write-calls"
+path = "examples/scan_write_calls.rs"

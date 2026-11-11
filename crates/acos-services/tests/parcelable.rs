@@ -214,7 +214,20 @@ fn every_spec_round_trips_through_a_parcel() {
         parcelable::write_payload(&mut parcel, &value).expect("write payload");
         parcel.set_data_position(0);
         let decoded = parcelable::read_payload(spec.class, &mut parcel).expect("read payload");
-        if spec.class == "android.os.ParcelFileDescriptor" {
+        if spec.class == "android.view.DisplayInfo" {
+            // `hdrSdrRatio` is `Float.NaN` on the wire (the framework's "no
+            // SDR/HDR ratio known" value) and NaN is not equal to itself, so
+            // compare the decoded struct (which is what consumers see) rather
+            // than the raw field list.
+            assert_eq!(
+                acos_services::display::DisplayInfo::from_parcelable(&decoded)
+                    .expect("decode DisplayInfo"),
+                acos_services::display::DisplayInfo::from_parcelable(&value)
+                    .expect("decode the original DisplayInfo"),
+                "{} did not round-trip",
+                spec.class
+            );
+        } else if spec.class == "android.os.ParcelFileDescriptor" {
             // Descriptors are duplicated by the parcel, so compare presence.
             // Field 0 is the `mCommFd` presence marker, field 1 the fd.
             assert!(matches!(value.field(1), Some(Value::RawFd(Some(_)))));
@@ -259,6 +272,20 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             Parcelable::ordered(class, vec![Value::Bundle(Some(b))])
         }
         "android.view.DisplayInfo" => acos_services::display::DisplayInfo::hello_views().to_parcelable(),
+        "android.view.Display$Mode" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(1),
+                Value::Int(1080),
+                Value::Int(2400),
+                Value::Float(60.000004),
+                Value::FloatArray(Some(vec![50.0, 120.0])),
+                Value::IntArray(Some(vec![1, 3])),
+            ],
+        ),
+        "android.view.SurfaceControl$RefreshRateRange" => {
+            Parcelable::ordered(class, vec![Value::Float(60.0), Value::Float(120.0)])
+        }
         "android.content.pm.ApplicationInfo" => {
             acos_services::pms::AppInfo::hello_views_fallback(std::path::Path::new("hello-views.apk"))
                 .to_parcelable()
