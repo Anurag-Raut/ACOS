@@ -51,6 +51,12 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub flutter: bool,
 
+    /// Force the React Native product path. Auto-detected from the APK layout
+    /// (`libreactnative*`/`libhermes.so` + `assets/index.android.bundle`) when
+    /// omitted.
+    #[arg(long)]
+    pub rn: bool,
+
     /// Keep the session alive in the `acos serve` daemon after launching, so
     /// separate `acos observe/tap/logs` invocations see the same live session.
     #[arg(long)]
@@ -62,6 +68,11 @@ pub fn detect_flutter(apk: &std::path::Path) -> bool {
     matches!(acos_jni::flutter::detect(apk), Ok(Some(_)))
 }
 
+/// Structurally detect a React Native APK (RN/Hermes `.so` + JS bundle).
+pub fn detect_react_native(apk: &std::path::Path) -> bool {
+    matches!(acos_jni::react_native::detect(apk), Ok(Some(_)))
+}
+
 /// Run `acos launch`.
 pub fn run(args: LaunchArgs) -> ExitCode {
     let request_id = new_request_id();
@@ -69,8 +80,9 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     // routes through the daemon even without `--keep`: the session must outlive
     // this process for `acos observe`/`tap` to address it.
     let flutter = args.flutter || detect_flutter(&args.apk);
-    if args.keep || flutter {
-        return run_keep(&args, &request_id, flutter);
+    let rn = args.rn || detect_react_native(&args.apk);
+    if args.keep || flutter || rn {
+        return run_keep(&args, &request_id, flutter, rn);
     }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
@@ -116,8 +128,8 @@ pub fn run(args: LaunchArgs) -> ExitCode {
 }
 
 /// Launch through the `acos serve` daemon and leave the session running.
-fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool) -> ExitCode {
-    let native = crate::native_launch::native_requested(args.native) || flutter;
+fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> ExitCode {
+    let native = crate::native_launch::native_requested(args.native) || flutter || rn;
     let mut client = match crate::serve::ensure_daemon() {
         Ok(client) => client,
         Err(e) => {
@@ -132,6 +144,7 @@ fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool) -> ExitCode {
         "apk": apk.display().to_string(),
         "native": native,
         "flutter": flutter,
+        "rn": rn,
         "timeout_ms": args.timeout.saturating_mul(1000),
     });
     let envelope = match client.call("acos_launch", &daemon_args) {

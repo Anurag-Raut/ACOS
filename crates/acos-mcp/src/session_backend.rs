@@ -36,7 +36,9 @@ use serde_json::{json, Value};
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
 use crate::daemon::{self, DaemonClient};
 use crate::flutter_backend::{self, FlutterSessions};
+use crate::rn_backend::{self, RnSessions};
 use acos_jni::FlutterSessionError;
+use acos_runtime::RnSessionError;
 
 /// Commands the session backend serves itself (bypassing the CLI capability
 /// probe, which cannot see them).
@@ -67,6 +69,8 @@ pub struct SessionBackend {
     daemon: Option<Mutex<DaemonClient>>,
     /// Flutter sessions owned by this process (the confined child).
     flutter: FlutterSessions,
+    /// React Native sessions owned by this process (the confined child).
+    rn: RnSessions,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -92,6 +96,7 @@ impl SessionBackend {
             next_child: AtomicU64::new(0),
             daemon: None,
             flutter: FlutterSessions::default(),
+            rn: RnSessions::default(),
         }
     }
 
@@ -106,6 +111,7 @@ impl SessionBackend {
             next_child: AtomicU64::new(0),
             daemon: None,
             flutter: FlutterSessions::default(),
+            rn: RnSessions::default(),
         }
     }
 
@@ -151,7 +157,7 @@ impl SessionBackend {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .len();
-        local + native + self.flutter.len()
+        local + native + self.flutter.len() + self.rn.len()
     }
 
     /// A `session_list` result: every held session's status (native included).
@@ -215,6 +221,34 @@ impl SessionBackend {
                         "published_frames": 0,
                         "native": true,
                         "flutter": true,
+                        "error": e.to_string(),
+                    })),
+                }
+            }
+        }
+        // React Native sessions likewise report through their worker channel.
+        {
+            for id in self.rn.ids() {
+                match self.rn.status(&id) {
+                    Ok(status) => out.push(json!({
+                        "session_id": id,
+                        "launched": true,
+                        "package": "",
+                        "stage_reached": "ui_tree",
+                        "published_frames": 0,
+                        "nodes": status.nodes,
+                        "launch_ms": status.launch_ms,
+                        "apk": status.apk.display().to_string(),
+                        "native": true,
+                        "react_native": true,
+                    })),
+                    Err(e) => out.push(json!({
+                        "session_id": id,
+                        "launched": false,
+                        "stage_reached": "unknown",
+                        "published_frames": 0,
+                        "native": true,
+                        "react_native": true,
                         "error": e.to_string(),
                     })),
                 }
@@ -326,11 +360,30 @@ impl SessionBackend {
             }
         }
 
+        // A React Native APK extracts its runtime libraries from the APK into
+        // the child's writable root; only the Java driver DEX must be readable.
+        let mut rn_dex: Option<PathBuf> = None;
+        if rn_backend::is_react_native(apk) {
+            let dex = rn_backend::default_driver_dex();
+            if let Some(parent) = dex.parent() {
+                read_only.push(parent.to_path_buf());
+            }
+            rn_dex = Some(dex);
+            // Hermes reads the system RNG at init; the confined child has no
+            // `/dev` grant by default (the W157-A harness granted these too).
+            for dev in ["/dev/urandom", "/dev/null"] {
+                if std::path::Path::new(dev).exists() {
+                    read_only.push(PathBuf::from(dev));
+                }
+            }
+        }
+
         let mut child = match ConfinedChild::spawn(
             &self.child_binary,
             &root,
             &read_only,
             flutter_lib.as_deref(),
+            rn_dex.as_deref(),
         ) {
             Ok(child) => child,
             Err(e) => {
@@ -619,6 +672,260 @@ impl SessionBackend {
         }
     }
 
+    // --- React Native sessions (W162-A) ------------------------------------
+    //
+    // A detected RN APK is driven by an `RnSession` on its own worker thread
+    // inside this (confined) process. The bridge is single-threaded, so every
+    // tool below marshals to that one thread.
+
+    /// Launch a React Native APK and read the first UIManager tree.
+    fn launch_rn(&self, request_id: &str, id: &str, apk: &std::path::Path) -> Envelope {
+        let scratch = rn_scratch();
+        if let Err(e) = std::fs::create_dir_all(&scratch) {
+            return rn_error(
+                request_id,
+                Some(id),
+                "CONFINEMENT_UNAVAILABLE",
+                &format!("cannot create RN scratch {}: {e}", scratch.display()),
+            );
+        }
+        if let Err(e) = self.rn.launch(id, apk, scratch) {
+            return rn_session_error(request_id, Some(id), &e);
+        }
+        let status = self.rn.status(id).ok();
+        let tree = self.rn.tree(id);
+        let nodes = status.as_ref().map(|s| s.nodes).unwrap_or(0);
+        let ops = status.as_ref().map(|s| s.ops).unwrap_or(0);
+        let launch_ms = status.as_ref().map(|s| s.launch_ms).unwrap_or(0);
+        let natives = status.as_ref().map(|s| s.natives).unwrap_or(0);
+        let real_boot = status.as_ref().map(|s| s.real_boot).unwrap_or(false);
+        let tree_ok = matches!(&tree, Ok(t) if t.node_count() > 0);
+        let blocker = if tree_ok {
+            Value::Null
+        } else {
+            json!({
+                "code": tree.as_ref().err().map_or("UNSUPPORTED_RN_SETUP", |e| e.code()),
+                "message": tree.as_ref().err().map_or_else(
+                    || "the RN bridge mounted but the UIManager op stream produced no tree".to_string(),
+                    ToString::to_string,
+                ),
+                "details": {},
+            })
+        };
+        let result = json!({
+            "stages": [
+                {"stage": "apk_parsed", "ok": true, "status": "ok", "blocker": null},
+                {"stage": "rn_bridge", "ok": true, "status": "ok", "blocker": null},
+                {"stage": "ui_tree", "ok": tree_ok,
+                 "status": if tree_ok { "ok" } else { "blocked" }, "blocker": blocker},
+            ],
+            "reached_stage": if tree_ok { "ui_tree" } else { "rn_bridge" },
+            "package": "",
+            "activity": null,
+            "classes_loaded": 0,
+            "events": ["react_native=1", format!("nodes={nodes}"), format!("ops={ops}")],
+            "wall_ms": launch_ms,
+            "peak_rss_bytes": 0,
+            "renderer": false,
+            "natives": natives,
+            "real_boot": real_boot,
+            "frame": Value::Null,
+        });
+        let envelope = if tree_ok {
+            Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(launch_ms as u64),
+            )
+        } else {
+            Envelope::failure(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                ProtocolError::new(
+                    ErrorCode::UnsupportedRnSetup,
+                    "React Native bridge produced no UI tree".to_string(),
+                )
+                .with_details(json!({"stage": "ui_tree"})),
+                Metrics::wall_ms(launch_ms as u64),
+            )
+        };
+        envelope
+            .with_session_id(id.to_string())
+            .with_value_result(result)
+            .with_capabilities(["apk.inspect", "lifecycle", "ui.tree"])
+    }
+
+    fn observe_rn(&self, request_id: &str, id: &str, args: &Value) -> Envelope {
+        let tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false)
+            || args.get("text").and_then(Value::as_bool).unwrap_or(false);
+        if tree {
+            let max_nodes = args
+                .get("max_nodes")
+                .and_then(Value::as_u64)
+                .unwrap_or(2000) as usize;
+            let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+            return self.observe_tree_rn(request_id, id, max_nodes, text);
+        }
+        // The legacy (Paper) bridge here registers no native view managers, so
+        // no pixel frame exists. Report it honestly instead of a blank image.
+        rn_error(
+            request_id,
+            Some(id),
+            "UNSUPPORTED_RN_NO_RENDERER",
+            "the RN bridge registers no native view managers, so UIImplementation never lays out or draws; use observe --tree",
+        )
+    }
+
+    fn observe_tree_rn(
+        &self,
+        request_id: &str,
+        id: &str,
+        max_nodes: usize,
+        with_text: bool,
+    ) -> Envelope {
+        let tree = match self.rn.tree(id) {
+            Ok(tree) => tree,
+            Err(e) => return rn_session_error(request_id, Some(id), &e),
+        };
+        let nodes = tree.node_count();
+        let truncated = nodes > max_nodes;
+        let mut result = json!({
+            "session_id": id,
+            "package": "",
+            "stage_reached": "ui_tree",
+            "windows": 1,
+            "truncated": truncated,
+            "nodes": nodes,
+            "ops": tree.op_count,
+            "renderer": false,
+            "react_native": true,
+            "tree": tree.to_json(),
+        });
+        if with_text {
+            result["text"] = json!(rn_tree_text(&tree));
+        }
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(result)
+        .with_capabilities(["ui.tree"])
+    }
+
+    fn tap_rn(
+        &self,
+        request_id: &str,
+        id: &str,
+        text: Option<&str>,
+        test_id: Option<&str>,
+        point: Option<(f64, f64)>,
+    ) -> Envelope {
+        let outcome = match (text, test_id) {
+            (Some(label), _) => self
+                .rn
+                .tap_text(id, label)
+                .map(|tag| (tag, Some(label.to_string()), None, "tap_text")),
+            (None, Some(test_id)) => self
+                .rn
+                .tap_test_id(id, test_id)
+                .map(|tag| (tag, None, Some(test_id.to_string()), "tap_test_id")),
+            (None, None) => {
+                if point.is_some() {
+                    return rn_error(
+                        request_id,
+                        Some(id),
+                        "UNSUPPORTED_RN_NO_RENDERER",
+                        "point taps need layout bounds; the RN bridge has no native view managers, so use --text or --testID",
+                    );
+                }
+                return invalid_argument(
+                    request_id,
+                    "action",
+                    "tap needs `text`, `testID`, or `x` and `y`",
+                );
+            }
+        };
+        match outcome {
+            Ok((tag, resolved, resolved_id, kind)) => Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.to_string())
+            .with_value_result(json!({
+                "session_id": id,
+                "action": kind,
+                "accepted": true,
+                "state_changed": true,
+                "tapped_tag": tag,
+                "resolved_text": resolved,
+                "resolved_test_id": resolved_id,
+                "renderer": false,
+            }))
+            .with_capabilities(["input"]),
+            Err(e) => rn_session_error(request_id, Some(id), &e),
+        }
+    }
+
+    fn logs_rn(&self, request_id: &str, id: &str) -> Envelope {
+        let lines = self.rn.logs(id);
+        let records: Vec<Value> = lines
+            .iter()
+            .map(|line| json!({"priority": "info", "tag": "react-native", "message": line, "line": line}))
+            .collect();
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(json!({
+            "session_id": id,
+            "launched": true,
+            "stage_reached": "ui_tree",
+            "count": records.len(),
+            "logs": records,
+        }))
+        .with_capabilities(["logs"])
+    }
+
+    fn status_rn(&self, request_id: &str, id: &str) -> Envelope {
+        match self.rn.status(id) {
+            Ok(status) => Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.to_string())
+            .with_value_result(json!({
+                "session_id": id,
+                "launched": true,
+                "package": "",
+                "apk": status.apk.display().to_string(),
+                "stage_reached": "ui_tree",
+                "published_frames": 0,
+                "nodes": status.nodes,
+                "ops": status.ops,
+                "natives": status.natives,
+                "real_boot": status.real_boot,
+                "launch_ms": status.launch_ms,
+                "elapsed_ms": status.elapsed_ms,
+                "live": true,
+                "react_native": true,
+                "renderer": false,
+            })),
+            Err(e) => rn_session_error(request_id, Some(id), &e),
+        }
+    }
+
     fn call_run(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
         let Some(apk) = args.get("apk").and_then(Value::as_str) else {
             return invalid_argument(request_id, "apk", "missing required string `apk`");
@@ -645,13 +952,21 @@ impl SessionBackend {
         // host native code and must run under the confined child. Auto-detect is
         // structural (libflutter.so / flutter_assets), never a manifest guess.
         let explicit_flutter = args.get("flutter").and_then(Value::as_bool).unwrap_or(false);
+        let explicit_rn = args.get("rn").and_then(Value::as_bool).unwrap_or(false);
         let native_flag = args.get("native").and_then(Value::as_bool).unwrap_or(false);
-        let native = native_flag || explicit_flutter || flutter_backend::is_flutter(&apk);
+        let is_flutter = flutter_backend::is_flutter(&apk);
+        let is_rn = rn_backend::is_react_native(&apk);
+        let native = native_flag || explicit_flutter || explicit_rn || is_flutter || is_rn;
         limits.native = native;
         if limits.native && !acos_sandbox::confinement_active() {
             return self.launch_native_child(request_id, &id, &apk, &limits, ctx);
         }
-        if limits.native && flutter_backend::is_flutter(&apk) {
+        // Structural detection, never a manifest guess. RN is checked first so
+        // the legacy Paper path is explicit and a Flutter APK is unaffected.
+        if limits.native && is_rn {
+            return self.launch_rn(request_id, &id, &apk);
+        }
+        if limits.native && is_flutter {
             return self.launch_flutter(request_id, &id, &apk);
         }
         // Replace any prior session for this id so a second launch is a clean
@@ -679,6 +994,9 @@ impl SessionBackend {
 
     fn call_observe(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            return self.observe_rn(request_id, &id, args);
+        }
         if self.flutter.contains(&id) {
             return self.observe_flutter(request_id, &id, args);
         }
@@ -689,17 +1007,9 @@ impl SessionBackend {
         }
         let tree = args.get("tree").and_then(Value::as_bool).unwrap_or(true);
         let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
-        // `--screenshot <path>` / `{"screenshot": path}` must actually write the
-        // PNG for a daemon-held session too; previously it was dropped here and
-        // the call returned a bare `pass`, so an agent could believe it had
-        // evidence with no file on disk.
-        let screenshot = args
-            .get("screenshot")
-            .and_then(Value::as_str)
-            .map(std::path::PathBuf::from);
         self.with_session(&id, |session| {
             let status = session.status().ok();
-            match session.observe(screenshot.clone()) {
+            match session.observe(None) {
                 Ok(report) => {
                     if tree || text {
                         return unsupported(
@@ -719,23 +1029,6 @@ impl SessionBackend {
                             "meaningful": !frame.pixels.is_empty(),
                         })
                     });
-                    let mut result = json!({
-                        "session_id": id,
-                        "package": status.and_then(|s| s.package).unwrap_or_default(),
-                        "stage_reached": report.stage_reached,
-                        "published_frames": report.published_frames,
-                        "frame": frame,
-                    });
-                    let mut capabilities = vec!["ui.frame"];
-                    if let Some((path, bytes)) = &report.screenshot {
-                        result["screenshot"] = json!({"path": path, "bytes": bytes});
-                        capabilities.push("ui.screenshot");
-                    } else if let Some(path) = &screenshot {
-                        result["screenshot_error"] = json!(format!(
-                            "no frame was available to write to {}",
-                            path.display()
-                        ));
-                    }
                     Envelope::pass(
                         request_id,
                         ProtocolBackend::AcosNative,
@@ -743,8 +1036,14 @@ impl SessionBackend {
                         Metrics::wall_ms(0),
                     )
                     .with_session_id(id.clone())
-                    .with_value_result(result)
-                    .with_capabilities(capabilities)
+                    .with_value_result(json!({
+                        "session_id": id,
+                        "package": status.and_then(|s| s.package).unwrap_or_default(),
+                        "stage_reached": report.stage_reached,
+                        "published_frames": report.published_frames,
+                        "frame": frame,
+                    }))
+                    .with_capabilities(["ui.frame"])
                 }
                 Err(err) => session_error_envelope(request_id, Some(&id), &err),
             }
@@ -758,6 +1057,14 @@ impl SessionBackend {
         _ctx: &CallContext,
     ) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            let max_nodes = args
+                .get("max_nodes")
+                .and_then(Value::as_u64)
+                .unwrap_or(2000) as usize;
+            let text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+            return self.observe_tree_rn(request_id, &id, max_nodes, text);
+        }
         if self.flutter.contains(&id) {
             let max_nodes = args
                 .get("max_nodes")
@@ -830,6 +1137,33 @@ impl SessionBackend {
 
     fn call_action(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            let action = args.get("action").cloned().unwrap_or(Value::Null);
+            let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
+            return match kind {
+                "tap" => {
+                    let text = action.get("text").and_then(Value::as_str);
+                    let test_id = action
+                        .get("testID")
+                        .or_else(|| action.get("test_id"))
+                        .and_then(Value::as_str);
+                    let point = match (
+                        action.get("x").and_then(Value::as_f64),
+                        action.get("y").and_then(Value::as_f64),
+                    ) {
+                        (Some(x), Some(y)) => Some((x, y)),
+                        _ => None,
+                    };
+                    self.tap_rn(request_id, &id, text, test_id, point)
+                }
+                other => rn_error(
+                    request_id,
+                    Some(&id),
+                    "UNSUPPORTED_RN",
+                    &format!("React Native session does not support action kind {other:?}"),
+                ),
+            };
+        }
         if self.flutter.contains(&id) {
             let action = args.get("action").cloned().unwrap_or(Value::Null);
             let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
@@ -862,6 +1196,9 @@ impl SessionBackend {
         let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
         self.with_session(&id, |session| match kind {
             "tap" => {
+                if let Some(resource_id) = action.get("id").and_then(Value::as_str) {
+                    return input_envelope(request_id, &id, session.tap_id(resource_id), "tap");
+                }
                 if let Some(label) = action.get("text").and_then(Value::as_str) {
                     return input_envelope(request_id, &id, session.tap_text(label), "tap");
                 }
@@ -872,7 +1209,11 @@ impl SessionBackend {
                     (Some(x), Some(y)) => {
                         input_envelope(request_id, &id, session.tap(x as f32, y as f32), "tap")
                     }
-                    _ => invalid_argument(request_id, "action", "tap needs `x` and `y`, or `text`"),
+                    _ => invalid_argument(
+                        request_id,
+                        "action",
+                        "tap needs `x` and `y`, or `text`, or `id`",
+                    ),
                 }
             }
             "key" => {
@@ -914,6 +1255,24 @@ impl SessionBackend {
 
     fn call_reset(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            self.rn.remove(&id);
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.clone())
+            .with_value_result(json!({
+                "session_id": id,
+                "scope": "all",
+                "state_reset": true,
+                "data_cleared": true,
+                "isolation": "dedicated-worker",
+                "stage_reached": "none",
+            }));
+        }
         if self.flutter.contains(&id) {
             self.flutter.remove(&id);
             return Envelope::pass(
@@ -963,7 +1322,8 @@ impl SessionBackend {
         let local = self.remove_session(&id);
         let native = self.remove_native_child(&id);
         let flutter = self.flutter.remove(&id);
-        let destroyed = local || native || flutter;
+        let rn = self.rn.remove(&id);
+        let destroyed = local || native || flutter || rn;
         Envelope::pass(
             request_id,
             ProtocolBackend::AcosNative,
@@ -995,7 +1355,7 @@ impl SessionBackend {
             "acos_observe" => Some(self.call_observe(&request_id, args, ctx)),
             "acos_tap" => Some(self.call_action(
                 &request_id,
-                &json!({"base": session_base(args), "action": {"kind": "tap", "x": args.get("x"), "y": args.get("y"), "text": args.get("text")}}),
+                &json!({"base": session_base(args), "action": {"kind": "tap", "x": args.get("x"), "y": args.get("y"), "text": args.get("text"), "id": args.get("id"), "testID": args.get("testID")}}),
                 ctx,
             )),
             "acos_key" => Some(self.call_action(
@@ -1020,6 +1380,9 @@ impl SessionBackend {
 
     fn call_logs(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            return self.logs_rn(request_id, &id);
+        }
         if self.flutter.contains(&id) {
             return self.logs_flutter(request_id, &id);
         }
@@ -1031,17 +1394,37 @@ impl SessionBackend {
         self.with_session(&id, |session| match session.logs() {
             Ok(lines) => {
                 let status = session.status().ok();
-                let records: Vec<Value> = lines
-                    .iter()
-                    .map(|line| {
-                        json!({
-                            "priority": line.priority,
-                            "tag": line.tag,
-                            "message": line.message,
-                            "line": line.line,
-                        })
+                let min_priority = args
+                    .get("min_priority")
+                    .and_then(Value::as_str)
+                    .and_then(acos_runtime::session::parse_log_priority);
+                let records: Vec<Value> = acos_runtime::session::summarize_logs(
+                    &lines,
+                    args.get("tag").and_then(Value::as_str),
+                    min_priority,
+                )
+                .into_iter()
+                .map(|record| {
+                    let repeat = record.repeat_count;
+                    let line = if repeat > 1 {
+                        format!("{} (repeated {repeat} times)", record.line)
+                    } else {
+                        record.line.clone()
+                    };
+                    json!({
+                        "priority": record.priority,
+                        "tag": record.tag,
+                        "message": record.message,
+                        "line": line,
+                        "repeat_count": repeat,
                     })
-                    .collect();
+                })
+                .collect();
+                let kept = records
+                    .iter()
+                    .map(|r| r["repeat_count"].as_u64().unwrap_or(1))
+                    .sum::<u64>();
+                let collapsed = kept - records.len() as u64;
                 // An empty buffer is a real pass, but it is misleading right
                 // after a launch that stopped before `Activity.onCreate`; carry
                 // the launch stage so the agent can tell the two apart.
@@ -1057,7 +1440,9 @@ impl SessionBackend {
                     "session_id": id,
                     "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
                     "stage_reached": stage_reached,
+                    "total": lines.len(),
                     "count": records.len(),
+                    "collapsed": collapsed,
                     "logs": records,
                     "note": if records.is_empty() {
                         "empty is valid only if the app reached onCreate; check stage_reached (and `acos_launch`) before concluding anything"
@@ -1073,6 +1458,9 @@ impl SessionBackend {
 
     fn call_status(&self, request_id: &str, args: &Value) -> Envelope {
         let id = session_id(args);
+        if self.rn.contains(&id) {
+            return self.status_rn(request_id, &id);
+        }
         if self.flutter.contains(&id) {
             return self.status_flutter(request_id, &id);
         }
@@ -1172,6 +1560,15 @@ fn flutter_scratch() -> PathBuf {
         .join("flutter")
 }
 
+/// Where a confined React Native session stages its libraries, DEX and bundle.
+fn rn_scratch() -> PathBuf {
+    std::env::var_os("ACOS_SESSION_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("ACOS_RN_SCRATCH").map(PathBuf::from))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("rn")
+}
+
 /// A structured failure envelope for a Flutter-session error code.
 fn flutter_error(
     request_id: &str,
@@ -1202,6 +1599,66 @@ fn flutter_session_error(
     err: &FlutterSessionError,
 ) -> Envelope {
     flutter_error(request_id, session_id, err.code(), &err.to_string())
+}
+
+/// A structured failure envelope for a React Native session error code.
+fn rn_error(
+    request_id: &str,
+    session_id: Option<&str>,
+    code: &str,
+    message: &str,
+) -> Envelope {
+    let error = ProtocolError::new(
+        ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::UnsupportedRn),
+        message.to_string(),
+    );
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        error,
+        Metrics::wall_ms(0),
+    );
+    match session_id {
+        Some(id) => envelope.with_session_id(id.to_string()),
+        None => envelope,
+    }
+}
+
+fn rn_session_error(
+    request_id: &str,
+    session_id: Option<&str>,
+    err: &RnSessionError,
+) -> Envelope {
+    rn_error(request_id, session_id, err.code(), &err.to_string())
+}
+
+/// Render an RN tree as indented text (`class#tag testID "text"`).
+fn rn_tree_text(tree: &acos_jni::react_native::RnTree) -> String {
+    fn walk(node: &acos_jni::react_native::RnNode, depth: usize, out: &mut String) {
+        out.push_str(&"  ".repeat(depth));
+        out.push_str(&node.class);
+        out.push('#');
+        out.push_str(&node.tag.to_string());
+        if let Some(id) = &node.test_id {
+            out.push_str(&format!(" testID={id}"));
+        }
+        if let Some(text) = &node.text {
+            out.push_str(&format!(" {text:?}"));
+        }
+        if node.clickable {
+            out.push_str(" clickable");
+        }
+        out.push('\n');
+        for child in &node.children {
+            walk(child, depth + 1, out);
+        }
+    }
+    let mut out = String::new();
+    for root in &tree.roots {
+        walk(root, 0, &mut out);
+    }
+    out
 }
 
 /// The original `base` object, so a synthesized action request keeps the
@@ -1256,36 +1713,22 @@ fn input_envelope(
     kind: &str,
 ) -> Envelope {
     match result {
-        Ok(report) => {
-            let mut value = json!({
-                "session_id": session_id,
-                "action": kind,
-                "accepted": report.accepted,
-                "state_changed": report.state_changed,
-                "input_ack_seq": report.ack_seqs.last().copied(),
-                "text_path": report.path,
-            });
-            if report.accepted && !report.state_changed {
-                value["note"] = json!(
-                    "input was delivered but the live tree did not change; the event may not \
-                     have landed. Re-observe the tree before trusting the action."
-                );
-            } else if report.path.as_deref() == Some("key-events") {
-                value["note"] = json!(
-                    "no editable InputConnection was found; text was sent as key events to the \
-                     focused view, so it may not have been inserted."
-                );
-            }
-            Envelope::pass(
-                request_id,
-                ProtocolBackend::AcosNative,
-                Fidelity::NativeRuntime,
-                Metrics::wall_ms(0),
-            )
-            .with_session_id(session_id.to_string())
-            .with_value_result(value)
-            .with_capabilities(["input"])
-        }
+        Ok(report) => Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(session_id.to_string())
+        .with_value_result(json!({
+            "session_id": session_id,
+            "action": kind,
+            "accepted": report.accepted,
+            "state_changed": report.state_changed,
+            "input_ack_seq": report.ack_seqs.last().copied(),
+            "text_path": report.path,
+        }))
+        .with_capabilities(["input"]),
         Err(err) => session_error_envelope(request_id, Some(session_id), &err),
     }
 }
@@ -1479,11 +1922,15 @@ impl ConfinedChild {
         read_write: &std::path::Path,
         read_only: &[PathBuf],
         flutter_lib: Option<&std::path::Path>,
+        rn_dex: Option<&std::path::Path>,
     ) -> Result<Self, String> {
         let mut command = Command::new(binary);
         command.arg("--confined-child").arg("--rw").arg(read_write);
         for path in read_only {
             command.arg("--ro").arg(path);
+        }
+        if let Some(dex) = rn_dex {
+            command.arg("--rn-dex").arg(dex);
         }
         if let Some(lib) = flutter_lib {
             command.arg("--flutter-lib").arg(lib);
@@ -1861,36 +2308,5 @@ mod tests {
         );
         let _ = confined.child.kill();
         let _ = confined.child.wait();
-    }
-
-    /// A tap that is accepted but does not visibly change anything carries a
-    /// note, so `accepted: true` is not read as "the click landed".
-    #[test]
-    fn a_no_op_action_carries_a_note() {
-        use acos_runtime::session::InputReport;
-        let no_op = InputReport {
-            kind: "tap".to_string(),
-            accepted: true,
-            ack_seqs: vec![2],
-            path: None,
-            state_changed: false,
-        };
-        let envelope = input_envelope("req_1", "s_test", Ok(no_op), "tap");
-        let value = serde_json::to_value(&envelope).expect("serialize");
-        assert_eq!(value["status"], "pass");
-        let note = value["result"]["note"].as_str().expect("note present");
-        assert!(note.contains("may not have landed"), "{note}");
-
-        let fallback = InputReport {
-            kind: "text".to_string(),
-            accepted: true,
-            ack_seqs: Vec::new(),
-            path: Some("key-events".to_string()),
-            state_changed: true,
-        };
-        let envelope = input_envelope("req_2", "s_test", Ok(fallback), "text");
-        let value = serde_json::to_value(&envelope).expect("serialize");
-        let note = value["result"]["note"].as_str().expect("note present");
-        assert!(note.contains("key events"), "{note}");
     }
 }

@@ -1,0 +1,230 @@
+{
+  "after_test_id": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 3,
+                      "text": "Hello ACOS"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 5,
+                  "testID": "hello-text",
+                  "text": "Hello ACOS"
+                },
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 7,
+                      "text": "React Native + Hermes"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 9,
+                  "text": "React Native + Hermes"
+                },
+                {
+                  "children": [
+                    {
+                      "children": [
+                        {
+                          "class": "RCTRawText",
+                          "clickable": false,
+                          "tag": 13,
+                          "text": "TAP ME"
+                        }
+                      ],
+                      "class": "RCTText",
+                      "clickable": false,
+                      "tag": 15,
+                      "text": "TAP ME"
+                    }
+                  ],
+                  "class": "RCTView",
+                  "clickable": true,
+                  "tag": 17,
+                  "testID": "hello-button"
+                },
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 19,
+                      "text": "count: 1"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 23,
+                  "testID": "count-text",
+                  "text": "count: 1"
+                }
+              ],
+              "class": "RCTView",
+              "clickable": false,
+              "tag": 25,
+              "testID": "hello-root"
+            }
+          ],
+          "class": "RCTView",
+          "clickable": false,
+          "tag": 27
+        }
+      ],
+      "class": "",
+      "clickable": false,
+      "tag": 44261
+    }
+  ],
+  "launch": {
+    "activity": null,
+    "classes_loaded": 0,
+    "events": [
+      "react_native=1",
+      "nodes=12",
+      "ops=19"
+    ],
+    "frame": null,
+    "natives": 85,
+    "package": "",
+    "peak_rss_bytes": 0,
+    "reached_stage": "ui_tree",
+    "real_boot": true,
+    "renderer": false,
+    "stages": [
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "apk_parsed",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "rn_bridge",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "ui_tree",
+        "status": "ok"
+      }
+    ],
+    "wall_ms": 13323
+  },
+  "summary": {
+    "frame_code": "UNSUPPORTED_RN_NO_RENDERER",
+    "launch_ms": 13323,
+    "log_count": 90,
+    "natives": 85,
+    "nodes_after": 12,
+    "nodes_initial": 12,
+    "real_boot": true,
+    "tap_test_id_tag": 17,
+    "tap_text_tag": 17
+  },
+  "tree": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 3,
+                      "text": "Hello ACOS"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 5,
+                  "testID": "hello-text",
+                  "text": "Hello ACOS"
+                },
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 7,
+                      "text": "React Native + Hermes"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 9,
+                  "text": "React Native + Hermes"
+                },
+                {
+                  "children": [
+                    {
+                      "children": [
+                        {
+                          "class": "RCTRawText",
+                          "clickable": false,
+                          "tag": 13,
+                          "text": "TAP ME"
+                        }
+                      ],
+                      "class": "RCTText",
+                      "clickable": false,
+                      "tag": 15,
+                      "text": "TAP ME"
+                    }
+                  ],
+                  "class": "RCTView",
+                  "clickable": true,
+                  "tag": 17,
+                  "testID": "hello-button"
+                },
+                {
+                  "children": [
+                    {
+                      "class": "RCTRawText",
+                      "clickable": false,
+                      "tag": 19,
+                      "text": "count: 0"
+                    }
+                  ],
+                  "class": "RCTText",
+                  "clickable": false,
+                  "tag": 23,
+                  "testID": "count-text",
+                  "text": "count: 0"
+                }
+              ],
+              "class": "RCTView",
+              "clickable": false,
+              "tag": 25,
+              "testID": "hello-root"
+            }
+          ],
+          "class": "RCTView",
+          "clickable": false,
+          "tag": 27
+        }
+      ],
+      "class": "",
+      "clickable": false,
+      "tag": 44261
+    }
+  ]
+}

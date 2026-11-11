@@ -50,6 +50,22 @@ pub enum ErrorCode {
     RenderUnsupportedOp,
     /// The requested backend does not exist in this build.
     UnsupportedBackend,
+    /// The APK is not structurally a React Native APK (no RN/Hermes runtime or
+    /// no JS bundle).
+    UnsupportedRn,
+    /// A React Native session failed before the bridge mounted.
+    UnsupportedRnSetup,
+    /// The React Native Java driver failed to mount or drive the bridge.
+    UnsupportedRnDriver,
+    /// React Native bridge has no native view managers, so it cannot produce a
+    /// pixel frame (`observe --frame`).
+    UnsupportedRnNoRenderer,
+    /// Key input is not wired through the React Native bridge.
+    UnsupportedRnKey,
+    /// Text input is not wired through the React Native bridge.
+    UnsupportedRnText,
+    /// A `tap --text`/`--testID` selector matched no node in the RN tree.
+    UnsupportedRnNoTarget,
 
     // ---- evidence / freshness --------------------------------------------
     /// No frame satisfying the request (freshness / sequencing) exists.
@@ -219,6 +235,13 @@ impl ErrorCode {
             ErrorCode::UnsupportedRelocation => "UNSUPPORTED_RELOCATION",
             ErrorCode::RenderUnsupportedOp => "RENDER_UNSUPPORTED_OP",
             ErrorCode::UnsupportedBackend => "UNSUPPORTED_BACKEND",
+            ErrorCode::UnsupportedRn => "UNSUPPORTED_RN",
+            ErrorCode::UnsupportedRnSetup => "UNSUPPORTED_RN_SETUP",
+            ErrorCode::UnsupportedRnDriver => "UNSUPPORTED_RN_DRIVER",
+            ErrorCode::UnsupportedRnNoRenderer => "UNSUPPORTED_RN_NO_RENDERER",
+            ErrorCode::UnsupportedRnKey => "UNSUPPORTED_RN_KEY",
+            ErrorCode::UnsupportedRnText => "UNSUPPORTED_RN_TEXT",
+            ErrorCode::UnsupportedRnNoTarget => "UNSUPPORTED_RN_NO_TARGET",
             ErrorCode::NoFreshFrame => "NO_FRESH_FRAME",
             ErrorCode::UnverifiedFidelity => "UNVERIFIED_FIDELITY",
             ErrorCode::ApkNotZip => "APK_NOT_ZIP",
@@ -328,6 +351,27 @@ impl ErrorCode {
             }
             ErrorCode::UnsupportedBackend => {
                 "Choose a backend listed by capability-report; do not silently fall back. If escalation is allowed, record the backend actually used."
+            }
+            ErrorCode::UnsupportedRn => {
+                "The APK is not structurally React Native (needs libreactnative*/libhermes plus assets/index.android.bundle). Do not force the RN path; inspect the APK layout."
+            }
+            ErrorCode::UnsupportedRnSetup => {
+                "Read details.stage: the RN bridge could not stage the guest tree, DEX, JNI or JS bundle. Check the APK ABI, the driver DEX and the writable session root."
+            }
+            ErrorCode::UnsupportedRnDriver => {
+                "Read details.stage: the RN bridge mounted but the Java driver failed. The RN Paper bridge is single-threaded; do not re-run main on a live session."
+            }
+            ErrorCode::UnsupportedRnNoRenderer => {
+                "This RN bridge registers no native view managers, so UIImplementation never lays out or draws. Use observe --tree and tap --text/--testID; do not expect a pixel frame."
+            }
+            ErrorCode::UnsupportedRnKey => {
+                "The RN bridge does not model key events yet. Use a tap/text selector instead."
+            }
+            ErrorCode::UnsupportedRnText => {
+                "The RN bridge does not model text input yet. Use a tap selector instead."
+            }
+            ErrorCode::UnsupportedRnNoTarget => {
+                "The selector matched no node in the current RN tree. Observe --tree first and use the exact text/testID it reports."
             }
             ErrorCode::NoFreshFrame => {
                 "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry."
@@ -524,7 +568,14 @@ impl ErrorCode {
             | ErrorCode::NoText
             | ErrorCode::UnsupportedRelocation
             | ErrorCode::RenderUnsupportedOp
-            | ErrorCode::UnsupportedBackend => Status::Unsupported,
+            | ErrorCode::UnsupportedBackend
+            | ErrorCode::UnsupportedRn
+            | ErrorCode::UnsupportedRnSetup
+            | ErrorCode::UnsupportedRnDriver
+            | ErrorCode::UnsupportedRnNoRenderer
+            | ErrorCode::UnsupportedRnKey
+            | ErrorCode::UnsupportedRnText
+            | ErrorCode::UnsupportedRnNoTarget => Status::Unsupported,
             _ => Status::Error,
         }
     }
@@ -615,6 +666,13 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::UnsupportedRelocation,
     ErrorCode::RenderUnsupportedOp,
     ErrorCode::UnsupportedBackend,
+    ErrorCode::UnsupportedRn,
+    ErrorCode::UnsupportedRnSetup,
+    ErrorCode::UnsupportedRnDriver,
+    ErrorCode::UnsupportedRnNoRenderer,
+    ErrorCode::UnsupportedRnKey,
+    ErrorCode::UnsupportedRnText,
+    ErrorCode::UnsupportedRnNoTarget,
     ErrorCode::NoFreshFrame,
     ErrorCode::UnverifiedFidelity,
     ErrorCode::ApkNotZip,

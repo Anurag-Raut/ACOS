@@ -449,6 +449,16 @@ pub fn confined_child_profile() -> Option<acos_sandbox::ConfineProfile> {
                 }
                 i += 2;
             }
+            // The React Native Java driver DEX; re-exported because the
+            // sandbox clears the environment.
+            "--rn-dex" => {
+                if let Some(path) = args.get(i + 1) {
+                    profile
+                        .env
+                        .push(("ACOS_RN_DRIVER_DEX".to_string(), path.clone()));
+                }
+                i += 2;
+            }
             "--as-bytes" => {
                 if let Some(bytes) = args.get(i + 1).and_then(|v| v.parse::<u64>().ok()) {
                     profile.rlimits.address_space_bytes = Some(bytes);

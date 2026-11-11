@@ -149,6 +149,11 @@ pub struct ObserveArgs {
     #[arg(long)]
     pub text: bool,
 
+    /// Explicitly request the frame (the default `observe` result). Mutually
+    /// exclusive with `--tree`/`--text`; accepted so `observe --frame` works.
+    #[arg(long)]
+    pub frame: bool,
+
     /// Wall-clock ceiling for an `--apk` launch, in seconds.
     #[arg(long, default_value_t = 120)]
     pub timeout: u64,
@@ -160,6 +165,15 @@ pub struct ObserveArgs {
 
 /// Run `acos observe`.
 pub fn observe(args: ObserveArgs) -> ExitCode {
+    if args.frame && (args.tree || args.text) {
+        let envelope = fail(
+            &new_request_id(),
+            ErrorCode::InvalidArgument,
+            "`--frame` cannot be combined with `--tree`/`--text`",
+            json!({"field": "frame"}),
+        );
+        return emit(&envelope, args.json);
+    }
     if args.apk.is_none() {
         let tool = if args.tree || args.text {
             "acos_observe_tree"
@@ -299,6 +313,15 @@ pub struct TapArgs {
     #[arg(long = "text")]
     pub label: Option<String>,
 
+    /// Tap the node whose `resource_id` equals this value (or its bare local
+    /// name after `/`), the same value `observe --tree` exposes.
+    #[arg(long = "id")]
+    pub id: Option<String>,
+    /// Tap the React Native node with this `testID` (resolves to the nearest
+    /// clickable ancestor; requires an RN session).
+    #[arg(long = "testID")]
+    pub test_id: Option<String>,
+
     /// Launch this APK first, then tap.
     #[arg(long)]
     pub apk: Option<PathBuf>,
@@ -320,6 +343,8 @@ pub fn tap(args: TapArgs) -> ExitCode {
             "x": args.x,
             "y": args.y,
             "text": args.label,
+            "id": args.id,
+            "testID": args.test_id,
         });
         if let Some(code) = call_running_daemon("acos_tap", &daemon_args, args.json) {
             return code;
@@ -331,7 +356,20 @@ pub fn tap(args: TapArgs) -> ExitCode {
         return emit(&envelope, args.json);
     }
 
-    let result = if let Some(label) = &args.label {
+    let result = if let Some(id) = &args.id {
+        session.tap_id(id.clone())
+    } else if let Some(test_id) = &args.test_id {
+        // A testID selector only exists on a React Native tree, which is owned
+        // by the session daemon's confined child; the stateless CLI cannot
+        // resolve it.
+        let envelope = fail(
+            &request_id,
+            ErrorCode::InvalidArgument,
+            format!("`--testID {test_id}` needs a live React Native session in the `acos serve` daemon"),
+            json!({"field": "testID"}),
+        );
+        return emit(&envelope, args.json);
+    } else if let Some(label) = &args.label {
         session.tap_text(label.clone())
     } else {
         match (args.x, args.y) {
@@ -340,7 +378,7 @@ pub fn tap(args: TapArgs) -> ExitCode {
                 let envelope = fail(
                     &request_id,
                     ErrorCode::InvalidArgument,
-                    "tap needs both `x` and `y`, or `--text <label>`",
+                    "tap needs both `x` and `y`, `--text <label>`, `--id <resource_id>`, or `--testID <id>`",
                     json!({"field": "x/y"}),
                 );
                 return emit(&envelope, args.json);
@@ -496,36 +534,22 @@ fn finish_input(
     result: Result<acos_runtime::session::InputReport, SessionError>,
 ) -> ExitCode {
     let envelope = match result {
-        Ok(report) => {
-            let mut value = json!({
-                "session_id": session_id,
-                "action": report.kind,
-                "accepted": report.accepted,
-                "state_changed": report.state_changed,
-                "input_ack_seq": report.ack_seqs.last().copied(),
-                "text_path": report.path,
-            });
-            if report.accepted && !report.state_changed {
-                value["note"] = json!(
-                    "input was delivered but the live tree did not change; the event may not \
-                     have landed. Re-observe the tree before trusting the action."
-                );
-            } else if report.path.as_deref() == Some("key-events") {
-                value["note"] = json!(
-                    "no editable InputConnection was found; text was sent as key events to the \
-                     focused view, so it may not have been inserted."
-                );
-            }
-            Envelope::pass(
-                request_id,
-                ProtocolBackend::AcosNative,
-                Fidelity::NativeRuntime,
-                Metrics::wall_ms(0),
-            )
-            .with_session_id(session_id)
-            .with_value_result(value)
-            .with_capabilities(["input"])
-        }
+        Ok(report) => Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(session_id)
+        .with_value_result(json!({
+            "session_id": session_id,
+            "action": report.kind,
+            "accepted": report.accepted,
+            "state_changed": report.state_changed,
+            "input_ack_seq": report.ack_seqs.last().copied(),
+            "text_path": report.path,
+        }))
+        .with_capabilities(["input"]),
         Err(err) => session_error_envelope(request_id, &err),
     };
     emit(&envelope, json)
@@ -550,6 +574,15 @@ pub struct LogsArgs {
     #[arg(long, default_value_t = 120)]
     pub timeout: u64,
 
+    /// Only keep records whose tag contains this substring (case-insensitive).
+    #[arg(long)]
+    pub tag: Option<String>,
+
+    /// Only keep records at or above this logcat priority (`V`/`D`/`I`/`W`/`E`/`F`
+    /// or `2`..=`7`).
+    #[arg(long = "min-priority")]
+    pub min_priority: Option<String>,
+
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -558,7 +591,11 @@ pub struct LogsArgs {
 /// Run `acos logs`.
 pub fn logs(args: LogsArgs) -> ExitCode {
     if args.apk.is_none() {
-        let daemon_args = json!({"base": daemon_base(&args.session)});
+        let daemon_args = json!({
+            "base": daemon_base(&args.session),
+            "tag": args.tag,
+            "min_priority": args.min_priority,
+        });
         if let Some(code) = call_running_daemon("acos_logs", &daemon_args, args.json) {
             return code;
         }
@@ -571,17 +608,37 @@ pub fn logs(args: LogsArgs) -> ExitCode {
     let envelope = match session.logs() {
         Ok(lines) => {
             let status = session.status().ok();
-            let records: Vec<Value> = lines
-                .iter()
-                .map(|line| {
-                    json!({
-                        "priority": line.priority,
-                        "tag": line.tag,
-                        "message": line.message,
-                        "line": line.line,
-                    })
+            let min_priority = args
+                .min_priority
+                .as_deref()
+                .and_then(acos_runtime::session::parse_log_priority);
+            let records: Vec<Value> = acos_runtime::session::summarize_logs(
+                &lines,
+                args.tag.as_deref(),
+                min_priority,
+            )
+            .into_iter()
+            .map(|record| {
+                let repeat = record.repeat_count;
+                let line = if repeat > 1 {
+                    format!("{} (repeated {repeat} times)", record.line)
+                } else {
+                    record.line.clone()
+                };
+                json!({
+                    "priority": record.priority,
+                    "tag": record.tag,
+                    "message": record.message,
+                    "line": line,
+                    "repeat_count": repeat,
                 })
-                .collect();
+            })
+            .collect();
+            let kept = records
+                .iter()
+                .map(|r| r["repeat_count"].as_u64().unwrap_or(1))
+                .sum::<u64>();
+            let collapsed = kept - records.len() as u64;
             // An empty buffer is a real pass, but it is misleading right after a
             // launch that stopped before `Activity.onCreate`; carry the launch
             // stage so the agent can tell the two apart.
@@ -597,7 +654,9 @@ pub fn logs(args: LogsArgs) -> ExitCode {
                 "session_id": args.session,
                 "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
                 "stage_reached": stage_reached,
+                "total": lines.len(),
                 "count": records.len(),
+                "collapsed": collapsed,
                 "logs": records,
                 "note": if records.is_empty() {
                     "empty is valid only if the app reached onCreate; check stage_reached (and `acos launch`) before concluding anything"
@@ -631,6 +690,14 @@ pub struct SessionCmdArgs {
     #[arg(long, default_value_t = 120)]
     pub timeout: u64,
 
+    /// Only keep log records whose tag contains this substring (`session logs`).
+    #[arg(long)]
+    pub tag: Option<String>,
+
+    /// Only keep log records at or above this priority (`session logs`).
+    #[arg(long = "min-priority")]
+    pub min_priority: Option<String>,
+
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -656,6 +723,12 @@ pub struct SessionObserveArgs {
     /// Request the flat text rendering.
     #[arg(long)]
     pub text: bool,
+    /// Explicitly request the frame (the default result).
+    #[arg(long)]
+    pub frame: bool,
+    /// Write the completed frame as PNG to this path.
+    #[arg(long)]
+    pub screenshot: Option<PathBuf>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -674,6 +747,12 @@ pub struct SessionTapArgs {
     /// Tap the node whose text equals this label.
     #[arg(long = "text")]
     pub label: Option<String>,
+    /// Tap the node whose `resource_id` equals this value.
+    #[arg(long = "id")]
+    pub id: Option<String>,
+    /// Tap the React Native node with this `testID`.
+    #[arg(long = "testID")]
+    pub test_id: Option<String>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -792,6 +871,8 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         "base": daemon_base(&args.session),
         "tree": args.tree,
         "text": args.text,
+        "png": args.screenshot.is_some(),
+        "screenshot": args.screenshot.as_ref().map(|p| p.display().to_string()),
     });
     if let Some(code) = call_ensure_daemon(tool, &daemon_args, args.json) {
         return code;
@@ -799,9 +880,10 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
     observe(ObserveArgs {
         session: args.session,
         apk: None,
-        screenshot: None,
+        screenshot: args.screenshot,
         tree: args.tree,
         text: args.text,
+        frame: args.frame,
         timeout: 120,
         json: args.json,
     })
@@ -813,6 +895,8 @@ fn session_tap(args: SessionTapArgs) -> ExitCode {
         "x": args.x,
         "y": args.y,
         "text": args.label,
+        "id": args.id,
+        "testID": args.test_id,
     });
     if let Some(code) = call_ensure_daemon("acos_tap", &daemon_args, args.json) {
         return code;
@@ -822,6 +906,8 @@ fn session_tap(args: SessionTapArgs) -> ExitCode {
         x: args.x,
         y: args.y,
         label: args.label,
+        id: args.id,
+        test_id: args.test_id,
         apk: None,
         timeout: 120,
         json: args.json,
@@ -872,7 +958,11 @@ fn session_text(args: SessionTextArgs) -> ExitCode {
 }
 
 fn session_logs(args: SessionCmdArgs) -> ExitCode {
-    let daemon_args = json!({"base": daemon_base(&args.session)});
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "tag": args.tag,
+        "min_priority": args.min_priority,
+    });
     if let Some(code) = call_ensure_daemon("acos_logs", &daemon_args, args.json) {
         return code;
     }
@@ -880,6 +970,8 @@ fn session_logs(args: SessionCmdArgs) -> ExitCode {
         session: args.session,
         apk: None,
         timeout: args.timeout,
+        tag: args.tag,
+        min_priority: args.min_priority,
         json: args.json,
     })
 }

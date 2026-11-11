@@ -397,7 +397,7 @@ software GLES sink in the child also republishes the first RGBA buffer, so
 tap-frame pixels are identical (the counter is proven by the Dart log). See
 `results/flutter/FLUTTER_PARITY.md` §W149-A.
 
-## 8. React Native APKs (W158-A)
+## 8. React Native APKs (W158-A/W162-A)
 
 React Native's legacy (Paper) renderer builds the Android `View` tree in
 JavaScript and ships every mutation to the host as a `UIManagerModule`
@@ -453,15 +453,50 @@ tree out. `tap --text`/`--testID` resolve to the nearest clickable ancestor, so
 * `UNSUPPORTED_RN_NO_TARGET` — `tap --text`/`--testID` found nothing;
 * `WRONG_ABI` — no RN/Hermes library for the host ABI.
 
-### 8.5 Evidence and boundary
+### 8.5 Product path (W162-A)
 
-Fixture-gated e2e `crates/acos-runtime/tests/rn_product.rs` (confined child):
-mount → tree contains `Hello ACOS` and `TAP ME` → `tap --testID hello-button` →
-tree says `count: 1`; `observe --frame` returns
-`UNSUPPORTED_RN_NO_RENDERER`. Evidence: `results/rn/w158a-product.json`.
+`acos launch <rn.apk>` auto-detects the APK structurally (or `--rn` forces it),
+implies native, and routes through the `acos serve` daemon into the same
+confined `acos --confined-child` used by Flutter. The child holds an
+`RnSessions` table: one `RnSession` per session on a dedicated long-lived
+worker thread (64 MiB stack), so the single-threaded Paper bridge is always
+driven from the thread that created it. RN runtime libraries are extracted from
+the APK into the child's writable session root; the Java driver DEX is passed
+as `--rn-dex` (re-exported as `ACOS_RN_DRIVER_DEX` because the sandbox clears
+the environment).
 
-**Boundary:** the library and its e2e are landed; the MCP/CLI product routing
-(`acos launch <rn.apk>` → daemon `RnSessions` table, `acos observe --tree`,
-`acos tap --text`) is **not** wired in this wave. Until it is, an RN APK
-launched through `acos launch` still falls through to the framework ladder.
-See `results/rn/W158A_PRODUCT.md`.
+```bash
+acos launch fixtures/build/apps/rn-hello.apk
+acos observe --tree                 # UI tree JSON (Hello ACOS, testID, text)
+acos tap --testID hello-button      # real TouchEvent -> onPress -> setCount
+acos observe --tree                 # count: 1
+acos tap --text "TAP ME"            # resolves RCTText -> touchable RCTView
+acos observe --frame                # UNSUPPORTED_RN_NO_RENDERER (structured)
+acos logs
+acos session status
+acos session reset
+acos session destroy
+```
+
+Every command goes through the same MCP tools (`acos_launch`,
+`acos_observe`, `acos_observe_tree`, `acos_tap { testID }`, `acos_logs`,
+`acos_status`, `acos_reset`, `acos_destroy`).
+
+### 8.6 Evidence
+
+* `crates/acos-runtime/tests/rn_product.rs` — library e2e (confined child):
+  mount → `Hello ACOS`/`TAP ME` → `tap --testID hello-button` → `count: 1`;
+  `frame()` returns `UNSUPPORTED_RN_NO_RENDERER`. Evidence:
+  `results/rn/w158a-product.json`.
+* `crates/acos-mcp/tests/rn_session.rs` — **product** e2e through
+  `SessionBackend` → confined `acos-mcp` child → `RnSessions`: launch →
+  `observe_tree` contains `Hello ACOS` → `tap --testID hello-button` →
+  `count: 1` → `tap --text "TAP ME"` → `count: 2` → `observe --frame` returns
+  `UNSUPPORTED_RN_NO_RENDERER` → status/logs/reset/destroy. Evidence:
+  `results/rn/w162a-rn-session.json`.
+
+The only honest limitation is unchanged: there is **no pixel frame** (the
+bridge registers no native view managers) and no layout bounds, so point taps
+are rejected and the tree is the product surface. Key/text input are structured
+`UNSUPPORTED_RN_KEY`/`UNSUPPORTED_RN_TEXT`. See
+`results/rn/W158A_PRODUCT.md` §6 (W162-A follow-up).

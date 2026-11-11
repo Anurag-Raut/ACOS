@@ -121,3 +121,82 @@ copy-back because the main tree already carries them as uncommitted changes.
 Measured e2e (confined child): mount 19 ops → 12 nodes, `Hello ACOS` (tag 3),
 `TAP ME` (tag 13), `hello-button` → tag 17; tap → raw text tag 19 moves from
 `count: 0` to `count: 1`; 149 registered natives.
+
+## 6. W162-A follow-up — the product surface is wired
+
+W158-A left the routing as the "next wave". W162-A lands it without touching any
+`flutter_*` source: `acos launch <rn.apk>` auto-detects RN structurally (or
+`--rn` forces it), implies native, and routes through the `acos serve` daemon
+into the confined `acos --confined-child`. The child holds a new `RnSessions`
+table (`crates/acos-mcp/src/rn_backend.rs`) built on the same
+dedicated-worker-thread + bounded-channel pattern as `FlutterSessions`, so the
+single-threaded Paper bridge is always driven from the thread that created it.
+RN runtime `.so`s are extracted from the APK into the child's writable root; the
+driver DEX travels as `--rn-dex` (re-exported as `ACOS_RN_DRIVER_DEX`).
+
+### 6.1 What routes where
+
+| surface | result |
+|---|---|
+| `acos launch <rn.apk>` | structural detect → native → daemon → confined child → `RnSession::launch`; ladder `apk_parsed → rn_bridge → ui_tree` |
+| `acos observe --tree` / `--text` | `RnTree` JSON (nested `children`, tag/class/testID/text/clickable; **no bounds**) |
+| `acos tap --text "TAP ME"` | resolves `RCTText` → clickable `RCTView` tag 17, real `TouchEvent` |
+| `acos tap --testID hello-button` | same touchable via the JS `testID` prop |
+| `acos observe --frame` / `--screenshot` | structured **`UNSUPPORTED_RN_NO_RENDERER`** (no native view managers) |
+| `acos logs` / `acos status` | captured driver `ACOS_RN_*` lines / node+op+natives snapshot |
+| `acos session reset` / `destroy` | drops the `RnSessions` entry (destroy also reaps the child) |
+| `acos tap x y` on RN | structured unsupported: no layout bounds |
+
+The MCP tools are the same table: `acos_launch`, `acos_observe`,
+`acos_observe_tree`, `acos_tap { testID }`, `acos_logs`, `acos_status`,
+`acos_reset`, `acos_destroy`. The protocol gained the `UNSUPPORTED_RN*` codes so
+the envelope's `error.code` is the actual RN code, not `INTERNAL`.
+
+### 6.2 A real defect the product e2e found
+
+`RnTree`'s builder read `children` with `Value::as_i64()`, but the Java driver
+serialises a `ReadableArray` as doubles (`[3.0]`). Every `setChildren` edge was
+silently dropped, so the tree was a flat list of roots and `tap --text` could
+not walk to a clickable ancestor (the W158-A unit test used integer JSON and
+missed it). `react_native::json_tag` now accepts integral floats for `tag`,
+`rootTag` and child arrays; `tree_accepts_float_encoded_tags` locks it. After
+the fix the mount tree is nested (`44261 → 27 → 25 → {5,9,17,23}`) and both
+selectors resolve tag 17.
+
+### 6.3 Measured e2e
+
+`crates/acos-mcp/tests/rn_session.rs` (`ACOS_REQUIRE_FIXTURES=1`) drives
+`SessionBackend` → confined `acos-mcp` child → `RnSessions`:
+
+| step | result |
+|---|---|
+| `acos_launch` | **pass**, `reached_stage=ui_tree`, wall **12.8 s**, 12 nodes / 19 ops, 45 JNI natives at launch, real boot classpath |
+| `acos_observe_tree` | **pass**, `Hello ACOS` + `TAP ME`, `react_native=true`, `renderer=false` |
+| `acos_tap { testID: "hello-button" }` | **pass**, tag **17**, tree → `count: 1` |
+| `acos_tap { text: "TAP ME" }` | **pass**, tag **17**, tree → `count: 2` |
+| `acos_observe` | **error `UNSUPPORTED_RN_NO_RENDERER`** (status `unsupported`) |
+| `acos_status` / `acos_logs` | pass; `published_frames=0`, driver lines present |
+| `acos_reset` / `acos_destroy` | pass (`state_reset=true`; destroy idempotent) |
+
+Evidence: `results/rn/w162a-rn-session.json`. The library e2e
+`crates/acos-runtime/tests/rn_product.rs` still passes and now also reports the
+nested tree (`149` registered natives in that confined child).
+
+### 6.4 Acceptance (W162-A worktree, clean HEAD `b467193`)
+
+| check | result |
+|---|---|
+| `cargo test -p acos-mcp --test rn_session` | **1 passed** |
+| `cargo test -p acos-runtime --test rn_product` | **2 passed** |
+| `cargo test -p acos-jni --lib react_native::` | **4 passed** |
+| `cargo test -p acos-mcp --lib rn_backend` | **3 passed** |
+| `cargo test -p acos-protocol --lib` | **29 passed** |
+| `cargo test -p acos-mcp --test native_session` | **1 passed** |
+| `cargo test -p acos-mcp --test flutter_session` | **fails before/after W162-A** — the pre-existing `FlutterJNI.updateSemantics` `JNI_NATIVE_FAULT` reproduced on the untouched W159-A build against the current fixtures; not caused by this diff (no `flutter_*` file changed) |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | **clean** |
+| `cargo check --workspace --all-targets` | **clean** |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail / 0 unsupported of 27** |
+
+No `flutter_*`, counter-M2 or boot-cache source changed. `session_backend.rs`,
+`launch.rs`, `serve.rs` and `acos-mcp/src/main.rs` received only additive RN
+branches/arguments; the Flutter branches are byte-for-byte unchanged.

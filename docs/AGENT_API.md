@@ -93,6 +93,13 @@ Optional fields (`validated_against`, `session_id`, `isolation`, `frame`,
 always present: `request_id`, `ok`, `status`, `backend`, `fidelity`,
 `capabilities_used` and `metrics`.
 
+> **Where the frame lives.** Commands that attach a frame to the envelope
+> (`capture`, `action`) put its metadata at the top-level `frame`. **`observe`
+> does not**: it nests the frame inside `result` (`result.frame`, alongside
+> `result.tree` for `--tree`, as the CLI and MCP do today). Read
+> `result.frame.frame_seq` from `observe`, and the top-level `frame` from the
+> frame-producing commands.
+
 ### 2.1 Invariants (structural, not advisory)
 
 * `ok: true` **iff** `status: "pass"`.
@@ -366,7 +373,9 @@ Common errors: `WRONG_ABI`, `ISOLATION_UNAVAILABLE`, `ISOLATION_UNSATISFIED`,
 
 ### 8.4 `observe`
 
-Read the UI tree/text and frame metadata.
+Read the UI tree/text and frame metadata. In the CLI/MCP JSON the frame is at
+`result.frame` (not the top-level `frame`); `result.tree` carries the tree when
+`--tree` is set.
 
 ```json
 {"base": {"request_id": "req_4", "session_id": "s_views"}, "tree": true, "text": true, "include_frame": true, "max_nodes": 200}

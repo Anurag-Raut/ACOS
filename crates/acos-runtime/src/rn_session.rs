@@ -32,7 +32,8 @@ use std::path::{Path, PathBuf};
 use acos_dex::DexFile;
 use acos_jni::react_native::{build_tree_from_json, ReactNativeApk};
 use acos_vm::vm::ThreadStatus;
-use acos_vm::{CoreLib, JavaValue, VmOptions};
+use acos_vm::{JavaValue, VmOptions};
+pub use acos_vm::CoreLib;
 
 use acos_jni::{JniConfig, JniRuntime};
 
@@ -213,6 +214,35 @@ impl RnSession {
             .map_err(|e| RnSessionError::Setup { stage: "detect", detail: e.to_string() })
     }
 
+    /// Extract every `lib/<abi>/` entry from `apk` into `dest` (flat).
+    ///
+    /// The product path stages the RN runtime libraries from the APK into its
+    /// writable session root instead of requiring a pre-extracted `.cache`
+    /// directory. Returns the extracted file names.
+    pub fn extract_native_libs(apk: &Path, abi: &str, dest: &Path) -> Result<Vec<String>, RnSessionError> {
+        std::fs::create_dir_all(dest).map_err(|e| setup("stage-lib", e))?;
+        let bytes = std::fs::read(apk).map_err(|e| setup("read-apk", e))?;
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| setup("zip", e))?;
+        let prefix = format!("lib/{abi}/");
+        let mut extracted = Vec::new();
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| setup("apk-lib", e))?;
+            if !entry.name().starts_with(&prefix) || entry.is_dir() {
+                continue;
+            }
+            let Some(name) = entry.name().rsplit('/').next().map(str::to_string) else {
+                continue;
+            };
+            let mut data = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut data).map_err(|e| setup("stage-lib", e))?;
+            std::fs::write(dest.join(&name), &data).map_err(|e| setup("stage-lib", e))?;
+            extracted.push(name);
+        }
+        extracted.sort();
+        Ok(extracted)
+    }
+
     /// Boot the runtime + JNI, stage the VFS, mount the JS bundle, and capture
     /// the first UIManager batch as a tree.
     pub fn launch(apk: &Path, options: RnSessionOptions) -> Result<Self, RnSessionError> {
@@ -325,15 +355,29 @@ impl RnSession {
         let outcome = rt.vm_mut().run_virtual(DRIVER_CLASS, &args);
 
         // The driver mounts and drains; any uncaught framework failure is a
-        // structured setup error, not silently ignored.
+        // structured setup error, not silently ignored. The driver prints its
+        // stage markers to stdout, so the tail is the only diagnostic that
+        // survives a failure that never returns a tree.
+        let stdout_tail = || {
+            let lines: Vec<&str> = outcome.stdout.lines().rev().take(8).collect();
+            lines.into_iter().rev().collect::<Vec<_>>().join(" | ")
+        };
         if let Some(err) = &outcome.vm_error {
             return Err(RnSessionError::Driver {
                 stage: "mount",
-                detail: format!("{err:?}"),
+                detail: format!("{err:?} | {}", stdout_tail()),
             });
         }
-        if let Some(acos_vm::VmError::JavaException(h)) = outcome.vm_error {
-            let _ = h;
+        if let Some(uncaught) = &outcome.uncaught {
+            return Err(RnSessionError::Driver {
+                stage: "mount",
+                detail: format!(
+                    "uncaught {}: {:?} | {}",
+                    uncaught.class,
+                    uncaught.message,
+                    stdout_tail()
+                ),
+            });
         }
 
         let mut session = Self {
@@ -485,6 +529,40 @@ impl RnSession {
     #[must_use]
     pub fn registered_natives(&self) -> usize {
         self.jni.registered_natives().len()
+    }
+
+    /// The guest `System.out`/`System.err` captured so far (mount + taps).
+    ///
+    /// The driver dex prints one `ACOS_RN_OP` line per UIManager op; the product
+    /// `logs` tool surfaces the same lines so an agent can see the bridge's own
+    /// trace without a separate stdout channel.
+    #[must_use]
+    pub fn logs(&self) -> Vec<String> {
+        let vm = self.runtime.vm();
+        let mut out = Vec::new();
+        for line in String::from_utf8_lossy(&vm.out_buf).lines() {
+            if !line.is_empty() {
+                out.push(format!("stdout: {line}"));
+            }
+        }
+        for line in String::from_utf8_lossy(&vm.err_buf).lines() {
+            if !line.is_empty() {
+                out.push(format!("stderr: {line}"));
+            }
+        }
+        out
+    }
+
+    /// Number of nodes in the current tree (diagnostic convenience).
+    #[must_use]
+    pub fn node_count(&self) -> usize {
+        self.tree.node_count()
+    }
+
+    /// Number of UIManager ops replayed into the current tree.
+    #[must_use]
+    pub fn op_count(&self) -> usize {
+        self.tree.op_count
     }
 
     /// The JNI runtime error, if any (diagnostic).

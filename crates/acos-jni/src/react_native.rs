@@ -280,6 +280,23 @@ impl RnTree {
     }
 }
 
+/// Read a React tag from a JSON number that may be integer- or float-encoded.
+///
+/// The RN driver serialises `ReadableArray` children through `ReadableArray ->
+/// JSON`, which prints each tag as a double (`3.0`). The tree builder must
+/// accept both spellings or every `setChildren` edge is silently dropped.
+fn json_tag(value: &Value) -> Option<i32> {
+    if let Some(tag) = value.as_i64() {
+        return i32::try_from(tag).ok();
+    }
+    let float = value.as_f64()?;
+    if float.fract() == 0.0 && (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&float) {
+        Some(float as i32)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Default)]
 struct NodeMeta {
     class: String,
@@ -301,16 +318,15 @@ impl TreeBuilder {
         };
         match kind {
             "createView" | "updateView" => {
-                let Some(tag) = object.get("tag").and_then(Value::as_i64) else {
+                let Some(tag) = object.get("tag").and_then(json_tag) else {
                     return;
                 };
-                let tag = tag as i32;
                 let entry = self.meta.entry(tag).or_default();
                 if let Some(class) = object.get("class").and_then(Value::as_str) {
                     entry.class = class.to_string();
                 }
-                if let Some(root) = object.get("rootTag").and_then(Value::as_i64) {
-                    entry.root_tag = Some(root as i32);
+                if let Some(root) = object.get("rootTag").and_then(json_tag) {
+                    entry.root_tag = Some(root);
                 }
                 if let Some(props) = object.get("props").and_then(Value::as_object) {
                     for (k, v) in props {
@@ -319,16 +335,15 @@ impl TreeBuilder {
                 }
             }
             "setChildren" | "manageChildren" => {
-                let Some(tag) = object.get("tag").and_then(Value::as_i64) else {
+                let Some(tag) = object.get("tag").and_then(json_tag) else {
                     return;
                 };
-                let tag = tag as i32;
                 let mut kids = Vec::new();
                 for key in ["children", "add"] {
                     if let Some(array) = object.get(key).and_then(Value::as_array) {
                         for child in array {
-                            if let Some(n) = child.as_i64() {
-                                kids.push(n as i32);
+                            if let Some(n) = json_tag(child) {
+                                kids.push(n);
                             }
                         }
                     }
@@ -493,6 +508,26 @@ mod tests {
         let apk = detect_bytes(&bytes).unwrap().unwrap();
         assert_eq!(apk.native_abis, vec!["x86_64"]);
         assert!(apk.has_bundle);
+    }
+
+    #[test]
+    fn tree_accepts_float_encoded_tags() {
+        // The driver's `json(ReadableArray)` prints children as doubles.
+        let ops: Vec<Value> = serde_json::from_str(
+            r#"[
+            {"op":"createView","tag":3,"class":"RCTRawText","rootTag":1,"props":{"text":"TAP ME"}},
+            {"op":"createView","tag":17,"class":"RCTView","rootTag":1,"props":{"testID":"hello-button","onStartShouldSetResponder":true}},
+            {"op":"setChildren","tag":17,"children":[3.0]},
+            {"op":"setChildren","tag":1.0,"children":[17.0]}
+        ]"#,
+        )
+        .unwrap();
+        let tree = build_tree(&ops);
+        assert_eq!(tree.roots.len(), 1);
+        assert_eq!(tree.roots[0].tag, 1);
+        assert_eq!(tree.roots[0].children[0].tag, 17);
+        assert_eq!(tree.tag_for_text("TAP ME"), Some(17));
+        assert_eq!(tree.tag_for_test_id("hello-button"), Some(17));
     }
 
     #[test]

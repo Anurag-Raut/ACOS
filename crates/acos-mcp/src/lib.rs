@@ -30,6 +30,7 @@ pub mod gate;
 pub mod help;
 pub mod jsonrpc;
 pub mod process;
+pub mod rn_backend;
 pub mod safety;
 pub mod server;
 pub mod session;

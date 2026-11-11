@@ -322,15 +322,21 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_tap" => (
-            "Tap in the held session. Identify the target either by `text` (a node whose text or \
-             content-desc equals it; requires `acos_observe_tree` first) or by a point `x`,`y` \
-             (both required). `text` wins when both are given. Returns action/accepted/input_ack_seq. \
-             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoUiTree` (observe first), \
-             `NoWindowAtPoint` (no frame yet), TIMEOUT.",
+            "Tap in the held session. Identify the target by `id` (a node whose `resource_id` \
+             equals it, or its bare local name after `/`, exactly what `acos_observe_tree` \
+             exposes), by `text` (a node whose text or content-desc equals it), by a React Native \
+             `testID` (resolves to the nearest clickable ancestor), or by a point `x`,`y` (both \
+             required). Precedence is `id`, then `text`, then `testID`, then `x`/`y`. Requires \
+             `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq. \
+             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoSuchNode`/`NoUiTree` (observe \
+             first), `NoWindowAtPoint` (no frame yet), TIMEOUT. A React Native session has no View \
+             tree and no pixel frame, so point taps are unsupported there.",
             with_base(json!({
                 "x": {"type": "integer", "description": "X coordinate for a point tap (requires `y`)."},
                 "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
-                "text": {"type": "string", "description": "Node label to tap; takes precedence over x/y."}
+                "text": {"type": "string", "description": "Node label to tap."},
+                "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over text and x/y."},
+                "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."}
             })),
         ),
         "acos_key" => (
@@ -367,11 +373,17 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_logs" => (
-            "Read the guest log buffer of the held session. Returns `count` plus `launched` and \
-             `stage_reached`. An empty buffer is a valid pass, but is only meaningful once the \
-             app reached `onCreate`; check `stage_reached` before concluding the run was clean. \
-             It never fabricates lifecycle lines.",
-            with_base(json!({})),
+            "Read the guest log buffer of the held session. Optional `tag` (substring, \
+             case-insensitive) and `min_priority` (`V`/`D`/`I`/`W`/`E`/`F` or `2`..=`7`) filter the \
+             records. Consecutive identical records are collapsed: each carries `repeat_count` and \
+             its `line` gains a `(repeated N times)` suffix. Returns `total`, `count` and \
+             `collapsed` plus `launched` and `stage_reached`. An empty buffer is a valid pass, but \
+             is only meaningful once the app reached `onCreate`; check `stage_reached` before \
+             concluding the run was clean. It never fabricates lifecycle lines.",
+            with_base(json!({
+                "tag": {"type": "string", "description": "Keep only records whose tag contains this substring."},
+                "min_priority": {"type": ["string", "integer"], "description": "Minimum logcat priority (`V`/`D`/`I`/`W`/`E`/`F` or 2..7)."}
+            })),
         ),
         "acos_status" => (
             "Report whether the held session has launched, the last launch stage reached, and the \
