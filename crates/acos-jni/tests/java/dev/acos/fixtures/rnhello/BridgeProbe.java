@@ -402,10 +402,14 @@ public final class BridgeProbe {
       return c;
     }
 
-    // NOTE: the spec also declares `getAndroidID`, but a sync `@ReactMethod`
-    // forces `JavaNativeModule::getMethods()` to build a `MethodInvoker`, which
-    // calls JNI `FromReflectedMethod` (not implemented by the probe VM yet).
-    // `Platform.android.js` never calls it during startup, so it is omitted.
+    // W153-A: the spec's sync `getAndroidID` is registered now that JNI
+    // `FromReflectedMethod` is implemented. Registering it exercises the
+    // `JavaNativeModule::getMethods()` -> `MethodInvoker` path at startup;
+    // returning a fixed value keeps the probe deterministic.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public String getAndroidID() {
+      return "acos-probe";
+    }
   }
 
   /**
@@ -636,18 +640,6 @@ public final class BridgeProbe {
     // runs before the native `initializeRuntime` task posted by `initializeBridge`.
     new android.os.Handler(Looper.getMainLooper())
         .post(() -> stage("diag", "pre-bridge"));
-    // W143-A: force `ReadableType.<clinit>`. fbjni's `ReadableNativeMap.importTypes`
-    // reads the enum constants with JNI `GetStaticObjectField`; the VM's
-    // `jni_GetStaticFieldID` does not trigger class initialisation (the JNI spec
-    // requires it), so without this the enum static fields are still null and
-    // `ReadableNativeMap.localTypeMap` throws
-    // "null cannot be cast to non-null type com.facebook.react.bridge.ReadableType"
-    // as soon as any module calls `WritableMap.toHashMap()` (e.g. `DeviceInfo`).
-    try {
-      stage("readabletype-init", "values=" + ReadableType.values().length);
-    } catch (Throwable t) {
-      emit("{\"phase\":\"readabletype-init-error\",\"error\":\"" + esc(t.toString()) + "\"}");
-    }
     String bundlePath = args.length > 0 ? args[0] : "";
     String libDir = args.length > 1 ? args[1] : "";
     String sourceDir = args.length > 2 ? args[2] : bundlePath;

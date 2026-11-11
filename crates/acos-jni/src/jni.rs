@@ -147,6 +147,30 @@ fn throw_class(ctx: &mut Ctx, desc: &str, message: &str) -> i32 {
     }
 }
 
+/// Record a `BridgeError` from a VM class/field/method lookup. A pending Java
+/// exception becomes a real JNI throw; anything else is a structured fault.
+fn record_bridge(ctx: &mut Ctx, function: &str, e: BridgeError) {
+    if let BridgeError::JavaException { class, message } = e {
+        let desc = class_descriptor(&class);
+        let _ = throw_class(ctx, &desc, &message);
+    } else {
+        record(ctx, bridge_error(function, e));
+    }
+}
+
+/// JNI `GetStaticFieldID` / `GetStaticMethodID` must run the class `<clinit>`
+/// before handing out an ID (JNI spec). Returns `false` (and leaves a pending
+/// exception) when initialisation failed.
+fn ensure_static_init(ctx: &mut Ctx, cid: ClassId, function: &str) -> bool {
+    match ctx.vm().initialize_class_for_jni(cid) {
+        Ok(()) => true,
+        Err(e) => {
+            record_bridge(ctx, function, e);
+            false
+        }
+    }
+}
+
 fn live(ctx: &mut Ctx, h: Handle, what: &str, function: &str) -> Result<Handle, JniError> {
     if h == NULL {
         return Err(JniError::NullReference {
@@ -772,6 +796,9 @@ pub unsafe extern "C" fn jni_GetStaticMethodID(
         0,
         class_id(&mut ctx, cls as Handle, "GetStaticMethodID")
     );
+    if !ensure_static_init(&mut ctx, cid, "GetStaticMethodID") {
+        return 0;
+    }
     let name = cstr(name);
     let sig = cstr(sig);
     make_method_id(&mut ctx, cid, &name, &sig, true).unwrap_or(0)
@@ -860,9 +887,146 @@ pub unsafe extern "C" fn jni_GetStaticFieldID(
         0,
         class_id(&mut ctx, cls as Handle, "GetStaticFieldID")
     );
+    if !ensure_static_init(&mut ctx, cid, "GetStaticFieldID") {
+        return 0;
+    }
     let name = cstr(name);
     let sig = cstr(sig);
     make_field_id(&mut ctx, cid, &name, &sig, true).unwrap_or(0)
+}
+
+/// `FromReflectedMethod(jobject method)` — a `java.lang.reflect.Method` mirror
+/// back to its `jmethodID`.
+pub unsafe extern "C" fn jni_FromReflectedMethod(_env: usize, method: usize) -> usize {
+    let mut ctx = guard!("FromReflectedMethod", false, 0);
+    let h = or_fail!(
+        ctx,
+        0,
+        live(&mut ctx, method as Handle, "java.lang.reflect.Method", "FromReflectedMethod")
+    );
+    let vm = ctx.vm();
+    let Some(mid) = vm.reflected_method_id(h) else {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/IllegalArgumentException;",
+            "FromReflectedMethod: not a Method/Constructor mirror",
+        );
+        return 0;
+    };
+    let (cid, name, sig, is_static) = {
+        let m = &vm.methods[mid as usize];
+        (m.class, m.name.clone(), m.sig.clone(), m.is_static())
+    };
+    make_method_id(&mut ctx, cid, &name, &sig, is_static).unwrap_or(0)
+}
+
+/// `FromReflectedField(jobject field)` — a `java.lang.reflect.Field` mirror
+/// back to its `jfieldID`.
+pub unsafe extern "C" fn jni_FromReflectedField(_env: usize, field: usize) -> usize {
+    let mut ctx = guard!("FromReflectedField", false, 0);
+    let h = or_fail!(
+        ctx,
+        0,
+        live(&mut ctx, field as Handle, "java.lang.reflect.Field", "FromReflectedField")
+    );
+    let Some((class, name, desc, is_static)) = ctx.vm().reflected_field_parts(h) else {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/IllegalArgumentException;",
+            "FromReflectedField: not a Field mirror",
+        );
+        return 0;
+    };
+    let cid = match ctx.vm().load_class(&class) {
+        Ok(cid) => cid,
+        Err(e) => {
+            record_bridge(&mut ctx, "FromReflectedField", BridgeError::Vm(e));
+            return 0;
+        }
+    };
+    make_field_id(&mut ctx, cid, &name, &desc, is_static).unwrap_or(0)
+}
+
+/// `ToReflectedMethod(jclass cls, jmethodID methodID, jboolean isStatic)` — a
+/// real `java.lang.reflect.Method` mirror for a resolved method ID.
+pub unsafe extern "C" fn jni_ToReflectedMethod(
+    _env: usize,
+    cls: usize,
+    mid: usize,
+    is_static: u8,
+) -> usize {
+    let mut ctx = guard!("ToReflectedMethod", false, 0);
+    let cid = or_fail!(
+        ctx,
+        0,
+        class_id(&mut ctx, cls as Handle, "ToReflectedMethod")
+    );
+    let Some(info) = method_info(&mut ctx, mid) else {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/IllegalArgumentException;",
+            "ToReflectedMethod: bad jmethodID",
+        );
+        return 0;
+    };
+    let kind = if is_static != 0 {
+        InvokeKind::Static
+    } else {
+        InvokeKind::Virtual
+    };
+    let resolved = {
+        let vm = ctx.vm();
+        vm.find_method(cid, &info.name, &info.sig, kind)
+            .or_else(|_| vm.find_method(cid, &info.name, &info.sig, InvokeKind::Direct))
+    };
+    match resolved {
+        Ok(mid) => match ctx.vm().make_reflected_method(cid, mid) {
+            Ok(h) => local(&mut ctx, h) as usize,
+            Err(e) => {
+                record(&ctx, bridge_error("ToReflectedMethod", e));
+                0
+            }
+        },
+        Err(_) => {
+            let _ = throw_class(
+                &mut ctx,
+                "Ljava/lang/NoSuchMethodError;",
+                &format!("{}{}", info.name, info.sig),
+            );
+            0
+        }
+    }
+}
+
+/// `ToReflectedField(jclass cls, jfieldID fieldID, jboolean isStatic)` — a real
+/// `java.lang.reflect.Field` mirror for a resolved field ID.
+pub unsafe extern "C" fn jni_ToReflectedField(
+    _env: usize,
+    cls: usize,
+    fid: usize,
+    _is_static: u8,
+) -> usize {
+    let mut ctx = guard!("ToReflectedField", false, 0);
+    let _ = or_fail!(
+        ctx,
+        0,
+        class_id(&mut ctx, cls as Handle, "ToReflectedField")
+    );
+    let Some(info) = field_info(&mut ctx, fid) else {
+        let _ = throw_class(
+            &mut ctx,
+            "Ljava/lang/IllegalArgumentException;",
+            "ToReflectedField: bad jfieldID",
+        );
+        return 0;
+    };
+    match ctx.vm().make_reflected_field(&info.class, &info.name, info.is_static) {
+        Ok(h) => local(&mut ctx, h) as usize,
+        Err(e) => {
+            record(&ctx, bridge_error("ToReflectedField", e));
+            0
+        }
+    }
 }
 
 fn field_info(ctx: &mut Ctx, fid: usize) -> Option<FieldInfo> {

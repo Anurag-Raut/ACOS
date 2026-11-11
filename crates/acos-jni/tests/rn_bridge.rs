@@ -456,19 +456,28 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
         summary["confined"], true,
         "child did not report active confinement (fail closed): {summary}\nstderr:\n{stderr}"
     );
+    // W153-A: with the JNI `<clinit>` fix (no `ReadableType.values()` priming) and
+    // `FromReflectedMethod` implemented (the sync `getAndroidID` is registered),
+    // the bridge must still reach `runApplication` and capture the same first
+    // UIManager batch.
+    assert_eq!(
+        ops.len(),
+        19,
+        "expected 19 captured UIManager ops, got {}: {ops:#?}\nstderr:\n{stderr}",
+        ops.len()
+    );
 
     let out_dir = repo_root().join("results/rn");
     let _ = std::fs::create_dir_all(&out_dir);
-    // W143-A: the bridge artifact is `w143a-ops.json`. It carries the captured
+    // W153-A: the bridge artifact is `w153a-ops.json`. It carries the captured
     // `ACOS_RN_OP` batch under `ops` plus the full `ACOS_RN_BRIDGE` stage trail
     // (main-looper preparation, `ReactChoreographer`, `initializeBridge`,
-    // `runJSBundle`, `AppRegistry.runApplication`). W140-A got `runJSBundle`
-    // through the real core-library concurrency code; W143-A fixes the loader
-    // ordering (async file loader) so the queued
-    // `NativeToJsBridge::initializeRuntime` installs `global.nativeModuleProxy`
-    // before the bundle is evaluated.
+    // `runJSBundle`, `AppRegistry.runApplication`). W153-A implements the two
+    // JNI contracts the W143-A probe worked around: `GetStaticFieldID` /
+    // `GetStaticMethodID` run `<clinit>`, and `FromReflectedMethod` (plus the
+    // `ToReflected*` pair) is real, so the sync `getAndroidID` is registered.
     let _ = std::fs::write(
-        out_dir.join("w143a-ops.json"),
+        out_dir.join("w153a-ops.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "summary": summary,
             "stages": stage_lines,

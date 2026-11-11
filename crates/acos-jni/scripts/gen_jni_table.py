@@ -17,6 +17,8 @@ TRAPS_OUT = os.path.join(ROOT, "src", "traps.rs")
 # Slots implemented as Rust `extern "C" fn jni_<Slot>` in src/jni.rs.
 RUST_IMPL = {
     "GetVersion", "FindClass", "GetSuperclass", "IsAssignableFrom",
+    "FromReflectedMethod", "FromReflectedField",
+    "ToReflectedMethod", "ToReflectedField",
     "Throw", "ThrowNew", "ExceptionOccurred", "ExceptionDescribe",
     "ExceptionClear", "ExceptionCheck", "PushLocalFrame", "PopLocalFrame",
     "NewGlobalRef", "DeleteGlobalRef", "DeleteLocalRef", "IsSameObject",

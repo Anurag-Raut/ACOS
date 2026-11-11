@@ -7,8 +7,4 @@
 #![allow(non_snake_case, clippy::too_many_arguments)]
 
 pub unsafe extern "C" fn trap_DefineClass(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("DefineClass"); 0 }
-pub unsafe extern "C" fn trap_FromReflectedMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("FromReflectedMethod"); 0 }
-pub unsafe extern "C" fn trap_FromReflectedField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("FromReflectedField"); 0 }
-pub unsafe extern "C" fn trap_ToReflectedMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("ToReflectedMethod"); 0 }
-pub unsafe extern "C" fn trap_ToReflectedField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("ToReflectedField"); 0 }
 pub unsafe extern "C" fn trap_FatalError(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("FatalError"); 0 }

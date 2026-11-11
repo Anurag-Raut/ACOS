@@ -139,7 +139,7 @@ fn empty_field_array(vm: &mut Vm) -> VmResult<Handle> {
 }
 
 /// Materialise one `java.lang.reflect.Field` exactly like `natives::reflect`.
-fn make_field(vm: &mut Vm, cid: ClassId, def: &FieldDef, idx: usize) -> VmResult<Handle> {
+pub(crate) fn make_field(vm: &mut Vm, cid: ClassId, def: &FieldDef, idx: usize) -> VmResult<Handle> {
     let field_class = vm.load_class("Ljava/lang/reflect/Field;")?;
     let obj = vm.alloc_instance(field_class)?;
     vm.native_roots.push(obj);

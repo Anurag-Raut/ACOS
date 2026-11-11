@@ -333,6 +333,80 @@ impl Vm {
         Ok(())
     }
 
+    /// Ensure a class is initialised for a JNI `GetStaticFieldID` /
+    /// `GetStaticMethodID`-style lookup (the JNI spec requires both to run
+    /// `<clinit>` before returning an ID). This is the same prologue as
+    /// [`Vm::call_static`], exposed for the `acos-jni` ID functions.
+    pub fn initialize_class_for_jni(&mut self, cid: ClassId) -> BridgeResult<()> {
+        self.ensure_host_thread().map_err(BridgeError::from)?;
+        if let Err(e) = self.initialize_class(cid) {
+            let _ = self.ensure_host_thread();
+            return Err(self.map_vm_error(e));
+        }
+        Ok(())
+    }
+
+    /// The ACOS `MethodId` a `java.lang.reflect.Method` / `Constructor` mirror
+    /// carries in its `artMethod` field, if it is a valid method.
+    pub fn reflected_method_id(&self, obj: Handle) -> Option<MethodId> {
+        crate::natives::fwk_annotations::mirror_method_id(self, obj)
+    }
+
+    /// Materialise a real `java.lang.reflect.Method` mirror for `(cid, mid)`.
+    pub fn make_reflected_method(&mut self, cid: ClassId, mid: MethodId) -> BridgeResult<Handle> {
+        crate::natives::fwk_annotations::make_method(self, cid, mid).map_err(BridgeError::from)
+    }
+
+    /// `(declaring_class_descriptor, name, descriptor, is_static)` for a
+    /// `java.lang.reflect.Field` mirror.
+    pub fn reflected_field_parts(&self, obj: Handle) -> Option<(String, String, String, bool)> {
+        let dc = self.get_instance_field_by_name(obj, "declaringClass")?;
+        let cid = self.class_id_of_class_object(dc)?;
+        let idx = self.get_instance_field_by_name(obj, "artFieldIndex").unwrap_or(0) as usize;
+        let access = self.get_instance_field_by_name(obj, "accessFlags").unwrap_or(0);
+        let is_static = access & acos_dex::access::STATIC != 0;
+        let c = &self.classes[cid as usize];
+        let def = if is_static {
+            c.declared_static_fields.get(idx)
+        } else {
+            c.declared_instance_fields.get(idx)
+        }?;
+        Some((
+            c.descriptor.clone(),
+            def.name.clone(),
+            def.desc.clone(),
+            is_static,
+        ))
+    }
+
+    /// Materialise a real `java.lang.reflect.Field` mirror for a declared field.
+    pub fn make_reflected_field(
+        &mut self,
+        class: &str,
+        name: &str,
+        is_static: bool,
+    ) -> BridgeResult<Handle> {
+        let cid = self.load_class_named(class)?;
+        let located = {
+            let c = &self.classes[cid as usize];
+            let list = if is_static {
+                &c.declared_static_fields
+            } else {
+                &c.declared_instance_fields
+            };
+            list.iter()
+                .position(|f| f.name == name)
+                .map(|idx| (idx, list[idx].clone()))
+        };
+        let Some((idx, def)) = located else {
+            return Err(BridgeError::FieldNotFound {
+                class: class.to_string(),
+                field: name.to_string(),
+            });
+        };
+        crate::natives::fwk_reflect::make_field(self, cid, &def, idx).map_err(BridgeError::from)
+    }
+
     /// Call an instance method, using normal virtual dispatch for `obj`.
     pub fn call_method(
         &mut self,

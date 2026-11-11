@@ -43,7 +43,7 @@ mod fwk_m2_chain6;
 mod fwk_proxy;
 pub mod fwk_surface;
 pub mod fwk_vsync;
-mod fwk_reflect;
+pub(crate) mod fwk_reflect;
 mod fwk_res;
 mod fwk_sqlite;
 mod icu;
