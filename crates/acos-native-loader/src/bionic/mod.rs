@@ -19,6 +19,7 @@ use std::sync::OnceLock;
 pub mod dl;
 pub mod engine_gaps;
 pub mod gles;
+mod maps;
 pub mod ndk;
 pub mod pthread;
 pub mod shims;

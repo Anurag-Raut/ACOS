@@ -42,6 +42,7 @@ pub mod lifecycle;
 pub mod native_bridge;
 pub mod parcel_java;
 pub mod pms_java;
+pub mod private_root;
 pub mod rn_session;
 pub mod session;
 pub mod session_pool;

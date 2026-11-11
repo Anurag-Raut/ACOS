@@ -1,24 +1,35 @@
 # ACOS — Status
 
-**As of 2026-11-11, HEAD `65856f2`** (W159-A; `main` advanced through
-`b467193`/`20663b3` after the W160-A build). `git log` is authoritative.
-**`BENCHMARKS.md` §9 is the authoritative measured table**; its raw artifact is
-`results/bench/v1-2026-11-11-061354.json`, measured on a release build of
-**`20663b3` + the uncommitted W160-A patch** (the HEAD when this wave started)
-— `main` moved to `b467193`/`65856f2` during the run, so W158-A/W159-A are newer
-than the numbers. `TASKS.md` is the plan; `docs/V1.md` is the V1 definition;
-`docs/FINDINGS.md` is the append-only findings log; `EXPERIMENTS.md` is history.
+**As of 2026-11-11, HEAD `fd1a887`** (W165-A; `main` also carries W161-A through
+W171-A). `git log` is authoritative, and `tools/status-check.sh` fails when this
+line drifts more than 3 commits (`tools/verify-all.sh` now **fails** on it, not
+warns). **`BENCHMARKS.md` §9 is the authoritative measured table**; §9.7
+(W165-A) is the newest V1 run (`results/bench/v1-w165a.json`) and reports
+**7 PASS / 4 FAIL** with M4/M6/M9/M10/M11 now measured. §9.1's rows are the
+earlier W160-A run and its M8 ("tap does not land") row is **stale**: the tap
+test passes at HEAD (`results/m2/M2_LOG.md` §W161-A,
+`crates/acos-runtime/tests/counter_interaction.rs`) and W167-A added the post-tap
+repaint invalidation. §9.7's M10 note ("the assert fails") must be re-measured
+by the next bench wave before it is quoted. `TASKS.md` is the plan;
+`docs/V1.md` is the V1 definition; `docs/FINDINGS.md` is the append-only
+findings log; `EXPERIMENTS.md` is history; `docs/SECURITY.md` lists the
+safety-relevant `ACOS_*` knobs and the private-root rule.
 
 ## One line
 
 **`counter.apk` reaches `first_frame` through a real launched Activity
-(`ThreadedRenderer.draw` → `FrameStore`); `hello-views`, `form-validation` and
-`list-scroll` reach `first_frame` at W147-A. The default boot-cache **restore**
-path is fixed (W154-A carried native regions, W160-A records their file source
-and re-reads it): a warm `acos launch` now reaches `first_frame` **5/5** at
-0.806 s p50 with a **25.58 MB** cache entry. A live `View` tree is observable
-(M7 49.8 ms p50), but a tap is accepted and still does not land
-(`state_changed=false`).** The
+(`ThreadedRenderer.draw` → `FrameStore`), and a tap on it now lands: the app's
+own `onClick` runs and the live tree shows `count=1` (W161-A,
+`crates/acos-runtime/tests/counter_interaction.rs`, un-ignored). `hello-views`,
+`form-validation` and `list-scroll` reach `first_frame` at W147-A; the W166-A
+fixtures `dialogs-menus`, `list-adapter` and `fragments-nav` reach it too. The
+default boot-cache **restore** path is fixed (W154-A carried native regions,
+W160-A records their file source and re-reads it): a warm `acos launch`
+reaches `first_frame` **5/5** at 0.806 s p50 with a **25.58 MB** cache entry. A
+live `View` tree is observable (M7 49.8 ms p50). The pressed-state **ripple** is
+a **declared flat-colour fallback** (W167-A implemented the AGSL/RippleShader
+natives to draw the declared flat colour, not the agsl shader); it is a named
+visual divergence, not a fake frame.** The
 Rust VM runs the real Android 14 core-library bytecode, the real boot-classpath
 DEX is extracted unprivileged, `acos inspect`/`run-dex`/`verify` exist, and the
 Rust service layer (`acos-services`, `acos-wm`), the SQLite engine
@@ -41,7 +52,7 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 | **M1** println on the real core library | console programs execute on real `core-oj`/`core-libart`/`core-icu4j` DEX and match the ART oracle | **done** (art-reference) | `results/m1/README.md` (20/20 byte-identical, normal + GC-stress); `results/vm/OS_NATIVES_AUDIT.md` §3 (`--corelib real`: 25 pass / 0 fail / 0 unsupported of 25); `results/vm/dexprogs-real-normal.json` |
 | **M2** `Application` + `Activity.onCreate` | `bindApplication` delivered; lifecycle `onCreate→onStart→onResume` matches ART | **done for counter** (gate enabled W147-A) | `bindApplication` + `Application.onCreate` run; the launch reaches `on_resume` and `first_frame` on `counter.apk` (`results/m2/M2_LOG.md`; `BENCHMARKS.md` §9.1 M3); `hello-views`/`form-validation`/`list-scroll` reach `first_frame` at W147-A (`f3120d5`); `crates/acos-runtime/tests/m2.rs` |
 | **M3** first frame in `acos-render` | real non-black frame with `frame_seq`/cause/hash from a launched Activity | **done for counter** (W133-A) | `results/render/M3_LOG.md`, `results/render/m3-hello-views-vs-art.json`, `crates/acos-runtime/src/frame_handoff.rs`; framework-bound `acos launch counter.apk` → `first_frame` in **0.806 s p50** on the **default warm path** (5/5; cold control 1.073 s p50), `BENCHMARKS.md` §9.1 M3; the launched frame is not yet ART-scored |
-| **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **partial** — tree live, tap does not land | live `View` tree via `acos observe --tree` (M7 49.9 ms, `results/wm/README.md`); `acos tap --text Increment` is `accepted: true` but `state_changed: false`; W144-A input leash landed after the measured commit (`BENCHMARKS.md` §9.1 M7/M8) |
+| **M4** input + UI tree | `ui_initial.json` equality; tap → `clicks: 1` | **partial** — tree live, tap lands on `counter` | live `View` tree via `acos observe --tree` (M7 49.9 ms, `results/wm/README.md`); `acos tap --text Increment` on a kept session runs the app's `onClick` and the tree shows `count=1` (`results/m2/M2_LOG.md` §W161-A, `crates/acos-runtime/tests/counter_interaction.rs`); still missing: `ui_initial.json` equality against ART and the real AGSL shader (the ripple is a declared flat-colour fallback, W167-A). The §9.1 M8 row predates the tap fix (§9.5 item 3 is stale); §9.7 (W165-A) is the newer measurement |
 | **M5** interaction trace | `lifecycle-summary.txt` + `ui_after_*` + native-diff | **not started** | depends on M2–M4 |
 | **V1 gate** `acos verify` full verdict | `acos verify --apk … --scenario … --json --artifacts …` passes on the two fixtures with no Android boot | **not started** | runner exists (`crates/acos-verify`, `scenarios/`), but the native backend stops at the first UI step (`docs/DEV_WORKFLOW.md` §9; `scenarios/README.md`). The V1 benchmark measures the gap: `BENCHMARKS.md` §9.1 M10 |
 
@@ -69,14 +80,21 @@ plus M10/M11 unmeasured. ACOS-native: process→`Vm` 21.83 ms, boot→attach
 54.01 MB, and warm launch is no slower (before/after: 919.3 → 810.4 ms p50;
 `results/perf/BOOTIMAGE_CACHE.md` §W160-A).
 
-**Test counts.** The full suite was **not** re-run in this wave (the tree is
-shared with other agents), but W160-A's own gates are green at
-`20663b3`+W160-A: `acos-vm` lib (native_mem 6/6, vfs 18/18), `acos-vm`
-snapshot 16/16, `acos-vm` native_mem integration 1/1, `acos-runtime`
-boot_image_cache 6/6, `acos-cli` session 11/11 (incl. the warm-cache
-regression), clippy `-D warnings --no-deps` clean, `cargo check --workspace
---all-targets` pass, and `tools/diff-dexprogs.sh --corelib real` 27/27 normal
-and GC-stress.
+**Test counts.** The full suite is **not** re-run every wave (the tree is shared
+with other agents); each wave records its own gates. W160-A's gates were green
+at `20663b3`+W160-A (`acos-vm` lib native_mem 6/6, vfs 18/18, snapshot 16/16,
+`acos-runtime` boot_image_cache 6/6, `acos-cli` session 11/11 incl. the warm-cache
+regression). W172-A adds: `acos-native-loader` lib 39/39 (sem membership + guest-stack
+validation), `acos-jni` lib 30/30 (`NewDirectByteBuffer` range validation),
+`acos-runtime` lib 35/35 (private-root + boot-cache rejection), boot-cache
+6/6, `counter_interaction` 3/3, `m2` 3/3, `acos-cli` session 11/11,
+`native_session` 1/1, `serve_daemon` 1/1, clippy `-D warnings --no-deps` clean
+on the touched crates, `cargo check --workspace --all-targets` pass and
+`tools/diff-dexprogs.sh --corelib real` **27 pass / 0 fail**, all re-run at
+`fd1a887` in `.cache/target-w172a` through `tools/guarded.sh`. W172-A also
+strengthened the `native_session`/`serve_daemon` frame assertions, gated the
+boot-cache and RN-pixel skips on `have_fixture`, and made
+`verify-all.sh`'s status-check step **fail** instead of warn.
 
 ### Known gaps (V1)
 
@@ -84,15 +102,25 @@ and GC-stress.
    regions; W160-A records their file *source* and re-reads it, failing closed
    on a changed file. Warm `acos launch` reaches `first_frame` **5/5** at
    0.806 s p50 with a **25.58 MB** cache entry. Evidence: `BENCHMARKS.md` §9.1
-   M3, `results/perf/BOOTIMAGE_CACHE.md` §W160-A.
+   M3, `results/perf/BOOTIMAGE_CACHE.md` §W160-A. Regression guard:
+   `crates/acos-cli/tests/session.rs::warm_boot_cache_reaches_first_frame_on_every_launch`
+   (1 cold process + 5 warm processes).
 2. **Launched frame not ART-scored.** `acos-render` produces a correct
    hello-views frame (cold 2.22 ms, SSIM 0.9938 vs the ART capture) and a
    launched Activity publishes through `frame_handoff` (M3), but no ART-diff
    has been recorded for the launched frame. Evidence:
    `results/render/README.md`, `results/render/M3_LOG.md`.
-3. **Input / reset.** A live `View` tree is observable (M7 49.8 ms p50), but
-   `acos tap --text Increment` is `accepted: true` yet `state_changed=false`;
-   pool reset is core-VM-only (M6). Evidence: `BENCHMARKS.md` §9.1 M6–M8.
+3. **[CLOSED for `counter`] Tap / input.** `acos tap --text Increment` now runs
+   the app's `onClick` and the live tree shows `count=1` (W161-A; the W152-A
+   blocker was a sync-barrier traversal, fixed by cancelling the pending
+   traversal after input delivery and re-anchoring the vsync grid).
+   `results/m2/M2_LOG.md` §W161-A, `crates/acos-runtime/tests/counter_interaction.rs`.
+   The pressed-state **ripple** is a **declared flat-colour fallback**: W167-A
+   implemented the AGSL/RippleShader natives well enough to draw the declared
+   flat colour rather than the shader, which is a named visual divergence (not a
+   fake frame). Pool reset is still core-VM-only (M6). Evidence:
+   `BENCHMARKS.md` §9.1 M6/M8 (measured before the tap fix), §9.7 (W165-A),
+   `results/m2/M2_LOG.md` §W161-A.
 4. **M9 not independent.** One process-global Binder transport: N sessions are a
    memory/throughput experiment, not N isolated workers.
 5. **RN bridge.** Hermes/JNI confined-stack probes exist (`results/rn/`,
@@ -181,9 +209,11 @@ differential fixture.
   **`acos launch` is wired** (the old "not wired yet" claim is false at this
   HEAD): `acos launch counter.apk --json` reaches `first_frame` in **0.903 s
   p50** with `ACOS_NO_BOOT_CACHE=1`, 617 MiB peak RSS (`BENCHMARKS.md` §9.2).
-  The cache **restore** path is currently broken for launch: with a warm cache
-  the launch fails at `activity_on_create` ~9/10 (ICU `DatPackageReader`), so
-  the cold path must be forced until that is fixed.
+  The cache **restore** path is **fixed** (W154-A carried the native regions,
+  W160-A records their file source): a warm launch reaches `first_frame` 5/5 at
+  0.806 s p50 (`BENCHMARKS.md` §9.1 M3; regression guard
+  `crates/acos-cli/tests/session.rs::warm_boot_cache_reaches_first_frame_on_every_launch`).
+  Forcing the cold path (`ACOS_NO_BOOT_CACHE=1`) is no longer required.
 
 ## What is unsupported (`UNSUPPORTED_JAVA_API` sites, by area)
 
@@ -242,48 +272,54 @@ The authoritative ACOS-vs-legacy table is **`BENCHMARKS.md` §9.1** (measured at
 `2c682c7`, 2026-11-11, release, 3 rounds;
 `results/bench/v1-2026-11-11-051824.json`). Result: **4 PASS / 7 FAIL** against
 owner directive D2 — M1/M2 memory, M3 framework-bound first frame and M7 live UI
-tree beat the legacy ACVM; M4/M5/M6/M8/M9/M10/M11 are missing or fail (the tap
-is accepted but does not land). The older `results/bench/REPORT.md` table
-(commit `ced0d70`) is retained as wave history but is no longer the V1 record.
+tree beat the legacy ACVM; M4/M5/M6/M8/M9/M10/M11 are missing or fail. Note the
+table predates W161-A, so its "tap does not land" rows (M8, §9.5 item 3) are
+stale at HEAD: the tap lands on `counter.apk` (`results/m2/M2_LOG.md`
+§W161-A). The next `tools/bench-v1.sh` run must refresh them. The older
+`results/bench/REPORT.md` table (commit `ced0d70`) is retained as wave history
+but is no longer the V1 record.
 
 ## Next 10 tasks
 
-1. **Fix the boot-image restore path** so a warm `acos launch` reaches
-   `first_frame` deterministically (currently ~9/10 fail at
-   `activity_on_create`; `BENCHMARKS.md` §9.5 item 1). This is the top blocker.
-2. Land the W144-A input leash so `acos tap --text` changes state (today
-   `accepted: true`, `state_changed: false`).
-3. Route `observe --screenshot` through the kept daemon session and score the
-   launched `counter` frame against the ART reference (M5 and M3 correctness).
-4. Close the M2 gate with an ART-order lifecycle diff now that `on_resume` and
-   `first_frame` are reached.
-5. Finish the framework file/`/system` I/O substrate (FileChannel, `/system`
+Closed since the last refresh (do not re-open): **boot-image warm restore**
+(W154-A/W160-A) and the **`counter` tap** (W161-A). Current list:
+
+1. Re-run `tools/bench-v1.sh` on the committed post-W161-A HEAD so the V1 table
+   reflects the tap fix, M8 and the ripple gap; record the exact committed SHA in
+   the artefact (W170-A C1/C2). Owner: bench wave, not this doc.
+2. Score the launched `counter` frame against the ART reference and route
+   `observe --screenshot` evidence into a scenario (M5/M3 correctness).
+3. Close the M2 gate with an ART-order lifecycle diff now that `on_resume` and
+   `first_frame` are reached (`crates/acos-runtime/tests/m2.rs`), and decide the
+   post-`onResume` error tolerance explicitly.
+4. Finish the framework file/`/system` I/O substrate (FileChannel, `/system`
    fonts/resources) so `handleBindApplication` runs without a structured block.
+5. Replace the W167-A flat-colour ripple fallback with real AGSL/RippleShader
+   output, and keep the divergence declared in every interaction frame until then
+   (`results/m2/M2_LOG.md` §W161-A/W167-A).
 6. Commit the W25-B `OsConstants` + `libcore.io.Linux` work and clear the 9
    pending Linux natives (`results/vm/OS_NATIVES_AUDIT.md` §2).
 7. Cover ICU regex constructs that currently raise, or record each as a declared
    divergence when it cannot change fixture output.
 8. Give each session its own Binder transport so N workers are independently
    usable (M9/V1 §5.1; `results/bench/MEMORY_PROFILE.md` §5).
-9. Keep `tools/bench-v1.sh` as the reproducible V1 record; extend it to M3–M11
-   as those capabilities land and run ≥20 reps for the latency rows when the
-   host is quiet. Keep the regression gate (`tools/bench-acos.sh --check`).
+9. Keep the fixture-gate coverage honest: every fixture-dependent test calls
+   `have_fixture` and is listed in `tools/verify-all.sh`'s `FIXTURE_TESTS`
+   (W172-A extended it to the boot cache, M2, interaction and the RN/Flutter
+   product targets).
 10. Run the `scenarios/negative/*` suite (and a differential against the now
     captured `fixtures/reference-device/`) to prove zero false passes before any
     V1 verdict claim.
 
 ## Working tree / concurrency
 
-HEAD `00950ce` (W144-A) is the committed checkpoint; the V1 benchmark was
-measured at `2c682c7`, four commits earlier. The working tree carries
-uncommitted wave work from concurrent agents
-(W57/W61/W64/W65/W66 native/JNI/render additions, W68-A `gfx_vector` and
-`acos-runtime`/`acos-services`, W69-A frame/interp/vm/jni bisecting, W70-A
-`acos-render`, W71-A's W67-A security/test-honesty fixes, and W96-A/W97-A
-`gfx_vector`/M2-chain work: `crates/acos-vm/src/natives/gfx_vector.rs`,
-`fwk_m2_chain6.rs`). Shared files (`heap.rs`, `reflect.rs`, `interp.rs`,
-`vm.rs`, `snapshot.rs`) were edited in place; concurrent agents re-read before
-editing. Validate on a scratch worktree if the shared tree does not build.
+HEAD `fd1a887` (W165-A) is the committed checkpoint (W172-A below it). The tree is shared with
+concurrent waves (bench/pool, RN `fs` natives, ripple/tap, resources/input,
+ICU), so the working tree carries their in-flight edits; each agent builds into
+its own `CARGO_TARGET_DIR` (`.cache/target-w<N>`) through `tools/guarded.sh`.
+Shared files (`heap.rs`, `reflect.rs`, `interp.rs`, `vm.rs`, `snapshot.rs`,
+`vfs.rs`, `natives/*`) are edited in place; re-read before editing and never
+`git stash`. Validate on a scratch worktree if the shared tree does not build.
 
 ## Decisions in force
 

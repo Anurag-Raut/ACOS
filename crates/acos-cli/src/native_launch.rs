@@ -90,6 +90,23 @@ fn session_root() -> Result<PathBuf, SessionError> {
             root
         }
     };
+    // `ACOS_SESSION_ROOT` names the only writable path a confined child gets.
+    // A root owned by another user, or group/world-writable, would let that
+    // user swap the app data; refuse it before creating anything under it
+    // (W170-A E1). The code is the protocol's `UNSAFE_PATH`.
+    if let Err((code, msg)) = acos_runtime::private_root::ensure_private_root(
+        "ACOS_SESSION_ROOT",
+        &root,
+    ) {
+        return Err(error(
+            code.protocol_code(),
+            msg,
+            vec![
+                ("root", root.display().to_string()),
+                ("root_error", code.code().to_string()),
+            ],
+        ));
+    }
     std::fs::create_dir_all(root.join("data/user/0")).map_err(|e| {
         error(
             "CONFINEMENT_UNAVAILABLE",

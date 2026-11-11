@@ -146,6 +146,25 @@ fn m2_lifecycle_create_start_resume_matches_reference() {
         "lifecycle callbacks/order differ from the ART oracle (error={:?})",
         report.error
     );
+    // No framework error at all on the oracle host at this HEAD (W172-A
+    // re-measured `error=None`): the milestone must be a clean run, not one
+    // that reached `onResume` and then threw (W170-A H7 restored this guard).
+    // `ACOS_M2_ALLOW_POST_RESUME_ERROR=1` is the explicit, printed tolerance for
+    // a host where the first traversal raises after `onResume`.
+    if report.error.is_some() && std::env::var_os("ACOS_M2_ALLOW_POST_RESUME_ERROR").is_some()
+    {
+        eprintln!(
+            "tolerating a post-onResume framework error because \
+             ACOS_M2_ALLOW_POST_RESUME_ERROR is set: {:?}",
+            report.error
+        );
+    } else {
+        assert!(
+            report.error.is_none(),
+            "M2 reached onResume but the framework raised a structured error: {:?}",
+            report.error
+        );
+    }
 }
 
 /// Progress guard: the real `IApplicationThread.bindApplication` receivership

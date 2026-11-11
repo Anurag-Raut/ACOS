@@ -346,6 +346,14 @@ pub fn native_mem_alloc(len: usize) -> Result<i64, String> {
     super::native_mem::alloc(len, false).map_err(|e| format!("{e:?}"))
 }
 
+/// The configured `ACOS_NATIVE_MEM_MAX` cap in bytes (default 256 MiB).
+///
+/// `NewDirectByteBuffer` must not copy more caller bytes than the substrate
+/// could ever hold; the cap is the natural upper bound for that check.
+pub fn native_mem_cap() -> usize {
+    super::native_mem::cap_bytes()
+}
+
 /// True when `addr` names a live region with at least `len` accessible bytes.
 pub fn native_mem_check(addr: i64, len: usize) -> bool {
     super::native_mem::with_bytes(addr, len, |_| ()).is_ok()

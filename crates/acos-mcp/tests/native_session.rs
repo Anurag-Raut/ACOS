@@ -105,14 +105,32 @@ fn native_launch_runs_in_a_confined_child_session() {
         observed["status"], "pass",
         "observe must read the confined child's frame: {observed:#?}"
     );
-    // The native renderer keeps presenting while the session is live, so the
-    // frame count is monotonic, not exactly 1: the launch ladder already saw
-    // `frame=1`, and a subsequent pump can publish another frame before
-    // `observe` samples the store. Assert the frame is present, not the exact
-    // count (the old `== 1` was a stale assumption).
+    // Pin the launch's own count first, then treat `observe` as a *delta*.
+    //
+    // The launch is deterministic: the child publishes exactly one frame from
+    // `ThreadedRenderer.draw` and reports it as `frame=1` (asserted above).
+    // `observe` samples a monotonic counter, so a later pump can legitimately
+    // make it 2+; the honest assertion is therefore "no frame was lost": the
+    // observed count must be at least the launch count. Pre-hardening the test
+    // pinned `>= 1` *instead of* pinning the launch count, which could not tell
+    // "one launch frame" from "several leaked frames".
+    let launch_frames: u64 = events
+        .iter()
+        .filter_map(|e| e.strip_prefix("frame="))
+        .filter_map(|n| n.parse().ok())
+        .max()
+        .expect("the launch must report a frame count");
+    assert_eq!(
+        launch_frames, 1,
+        "the launch ladder must publish exactly one frame; events: {events:#?}"
+    );
+    let observed_frames = observed["result"]["published_frames"]
+        .as_u64()
+        .unwrap_or(0);
     assert!(
-        observed["result"]["published_frames"].as_u64().unwrap_or(0) >= 1,
-        "observe must see at least the launch frame: {observed:#?}"
+        observed_frames >= launch_frames,
+        "observe must see at least the {launch_frames} launch frame(s), saw {observed_frames}: \
+         {observed:#?}"
     );
     assert!(
         observed["result"]["frame"]["width"].as_u64().unwrap_or(0) > 0

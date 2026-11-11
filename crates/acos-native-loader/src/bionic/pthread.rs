@@ -428,10 +428,13 @@ pub unsafe extern "C" fn pthread_getattr_np(thread: libc::pthread_t, attr: usize
     let usable = rc == 0 && got == 0 && !addr.is_null() && size >= 16 * 1024;
     if !usable && is_current_thread(thread) {
         if let Some((base, len)) = current_thread_stack_region() {
-            // SAFETY: `p` is a live host attribute; `base`/`len` describe a
-            // mapped region that stays valid for the thread's lifetime.
-            if unsafe { libc::pthread_attr_setstack(p, base, len) } == 0 {
-                return 0;
+            if valid_stack_bounds(base as usize, len) {
+                // SAFETY: `p` is a live host attribute; `base`/`len` were just
+                // validated as one live, writable, page-aligned mapping big
+                // enough to hold a stack.
+                if unsafe { libc::pthread_attr_setstack(p, base, len) } == 0 {
+                    return 0;
+                }
             }
         }
     }
@@ -440,6 +443,34 @@ pub unsafe extern "C" fn pthread_getattr_np(thread: libc::pthread_t, attr: usize
     } else {
         got
     }
+}
+
+/// Minimum stack a `pthread` attribute may name (the POSIX `PTHREAD_STACK_MIN`
+/// is 16 KiB on x86_64 Linux; below that the attribute is nonsense).
+const MIN_STACK_BYTES: usize = 16 * 1024;
+/// Upper bound for a stack an attribute may name: far above any real thread
+/// stack (the host default is 8 MiB) and far below `usize::MAX`.
+const MAX_STACK_BYTES: usize = 64 * 1024 * 1024;
+
+/// Validate a `(base, len)` stack range before it is written into a real
+/// `pthread_attr_t` and later backs a `pthread_create`.
+///
+/// A guest-controlled `pthread_attr_setstack` would otherwise let a guest pick
+/// the stack of a host thread. ACOS does not expose `pthread_attr_setstack` as
+/// a shim (an unmapped import fails the load), and the one internal caller here
+/// derives the bounds from `/proc/self/maps`; this check keeps that invariant
+/// explicit so a future shim cannot turn it into arbitrary-stack execution
+/// (W170-A S3): the base must be non-null and page-aligned, the length must be
+/// within `[MIN_STACK_BYTES, MAX_STACK_BYTES]`, and the whole range must be one
+/// live writable mapping of *this* process.
+fn valid_stack_bounds(base: usize, len: usize) -> bool {
+    if base == 0 || !base.is_multiple_of(super::maps::page_size()) {
+        return false;
+    }
+    if !(MIN_STACK_BYTES..=MAX_STACK_BYTES).contains(&len) {
+        return false;
+    }
+    super::maps::range_is_mapped(base, len, true)
 }
 
 /// `pthread_attr_getstack(attr, addr, size)` against the host attribute box.
@@ -865,6 +896,34 @@ mod tests {
             pthread_cond_destroy(addr(&c));
             pthread_mutex_destroy(addr(&m));
             pthread_condattr_destroy(ap);
+        }
+    }
+
+    /// The stack range written into a real `pthread_attr_t` (and later used by
+    /// `pthread_create`) must be a live, writable, sane-size mapping.
+    #[test]
+    fn stack_bounds_are_validated_before_setstack() {
+        // A real heap allocation is not page-aligned, so it must be rejected
+        // unless its page-aligned interior is used.
+        let buf = vec![0u8; 64 * 1024];
+        let addr = buf.as_ptr() as usize;
+        assert!(!valid_stack_bounds(addr, 32 * 1024), "unaligned base");
+        assert!(!valid_stack_bounds(0, MIN_STACK_BYTES), "null base");
+        assert!(!valid_stack_bounds(addr, 1024), "below MIN_STACK_BYTES");
+        assert!(
+            !valid_stack_bounds(addr, MAX_STACK_BYTES + 4096),
+            "above MAX_STACK_BYTES"
+        );
+        assert!(
+            !valid_stack_bounds(0x7fff_ffff_0000, MIN_STACK_BYTES),
+            "unmapped base"
+        );
+        // The main-thread fallback's own bounds must pass the check.
+        if let Some((base, len)) = current_thread_stack_region() {
+            assert!(
+                valid_stack_bounds(base as usize, len),
+                "the /proc/self/maps stack region must validate"
+            );
         }
     }
 

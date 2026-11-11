@@ -540,11 +540,16 @@ fn open_private_exclusive(path: &Path) -> io::Result<File> {
     options.open(path)
 }
 
+/// Create (if needed) and validate the cache root.
+///
+/// The policy lives in [`crate::private_root::ensure_private_root`]: a symlinked
+/// or non-directory root is refused *before* `create_dir_all` (which would
+/// follow a link), a root owned by another uid is refused, and a group/world
+/// **writable** root (`mode & 0o022`) is refused outright rather than silently
+/// `chmod`-ed — an attacker-supplied `ACOS_CACHE_DIR` must not be trusted just
+/// because we can tighten it (W170-A E1). Other group/other access is tightened
+/// to `0700`, then re-checked.
 fn ensure_private_dir(dir: &Path) -> io::Result<()> {
-    // Reject a symlinked cache root before creating anything: `create_dir_all`
-    // follows symlinks, so an attacker-supplied `ACOS_CACHE_DIR` pointing at a
-    // symlink would otherwise be silently accepted. `symlink_metadata` does not
-    // follow the final component.
     if let Ok(meta) = fs::symlink_metadata(dir) {
         if meta.file_type().is_symlink() {
             return Err(io::Error::new(
@@ -554,64 +559,12 @@ fn ensure_private_dir(dir: &Path) -> io::Result<()> {
         }
     }
     fs::create_dir_all(dir)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        // Re-check after creation (the final component could have been swapped
-        // in between) and require a directory owned by the effective user with
-        // no group/other access. The cache is private and metadata-only, but a
-        // shared/attacker-owned directory would let another local user pre-seed
-        // an entry under a non-secret key.
-        let meta = fs::symlink_metadata(dir)?;
-        if meta.file_type().is_symlink() || !meta.is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("cache dir {} is not a real directory", dir.display()),
-            ));
-        }
-        if meta.uid() != nix_effective_uid() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "cache dir {} is owned by uid {} (effective {})",
-                    dir.display(),
-                    meta.uid(),
-                    nix_effective_uid()
-                ),
-            ));
-        }
-        let mode = meta.permissions().mode() & 0o777;
-        if mode & 0o077 != 0 {
-            // The cache is private; tighten a pre-existing directory, then
-            // verify the change stuck.
-            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
-        }
-        let mode = fs::metadata(dir)?.permissions().mode() & 0o777;
-        if mode & 0o077 != 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("cache dir {} is not private (mode {mode:o})", dir.display()),
-            ));
-        }
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn nix_effective_uid() -> u32 {
-    // `geteuid` is the only libc call needed here; the crate avoids `unsafe`,
-    // and `std` does not expose the effective uid, so read `/proc/self/status`
-    // instead. The parse falls back to `u32::MAX` (which can never match a real
-    // file owner) so an unreadable `/proc` fails closed.
-    fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .find_map(|l| l.strip_prefix("Uid:"))
-                .and_then(|rest| rest.split_whitespace().nth(1))
-                .and_then(|uid| uid.parse().ok())
-        })
-        .unwrap_or(u32::MAX)
+    crate::private_root::ensure_private_root("ACOS_CACHE_DIR", dir).map_err(|(code, msg)| {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{}: {msg}", code.code()),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -811,6 +764,33 @@ mod tests {
         // `ensure_private_dir` must refuse the symlinked root, so the cache is
         // disabled rather than following an attacker-controlled link.
         assert!(BootImageCache::with_dir(&link).is_err());
+    }
+
+    /// W170-A E1: another local user must not be able to pre-seed an entry under
+    /// a non-secret key, so a group/world-writable `ACOS_CACHE_DIR` is a hard
+    /// error (not a silent `chmod`).
+    #[test]
+    #[cfg(unix)]
+    fn writable_by_others_cache_dir_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        for mode in [0o777u32, 0o770, 0o775] {
+            let dir = TempDir::new("shared");
+            fs::set_permissions(dir.path(), fs::Permissions::from_mode(mode)).unwrap();
+            let err = BootImageCache::with_dir(dir.path()).expect_err("shared cache dir");
+            let msg = err.to_string();
+            assert!(
+                msg.contains("ROOT_WRITABLE_BY_OTHERS") && msg.contains("ACOS_CACHE_DIR"),
+                "mode {mode:o} must be rejected with a structured code: {msg}"
+            );
+            fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        // A plain 0755 root is tightened, not rejected (developer checkouts).
+        let dir = TempDir::new("tighten");
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        let cache = BootImageCache::with_dir(dir.path()).expect("0755 is tightened");
+        assert_eq!(cache.dir(), dir.path());
+        let mode = fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
     }
 
     #[test]

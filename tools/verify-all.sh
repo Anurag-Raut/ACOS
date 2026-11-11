@@ -60,6 +60,19 @@ FIXTURE_TESTS=(
     "acos-mcp:native_session"
     "acos-runtime:provider_java"
     "acos-jni:gles_fixture"
+    # The boot-image cache and the product paths (W170-A H5/C3): these were
+    # absent, so `ACOS_REQUIRE_FIXTURES=1` CI could be green with zero
+    # boot-cache, interaction, M2, RN or Flutter coverage.
+    "acos-runtime:boot_image_cache"
+    "acos-runtime:counter_interaction"
+    "acos-runtime:m2"
+    "acos-runtime:rn_product"
+    "acos-runtime:rn_runtime"
+    "acos-runtime:rn_pixels"
+    "acos-mcp:flutter_session"
+    "acos-mcp:rn_session"
+    "acos-jni:flutter_hello"
+    "acos-jni:rn_bridge"
 )
 
 echo "verify-all: running the fixture gate + fixture-dependent tests"
@@ -70,12 +83,13 @@ for spec in "${FIXTURE_TESTS[@]}"; do
     cargo test -p "$pkg" --test "$target" "${EXTRA[@]}"
 done
 
-# STATUS.md is a doc claim, not a test: warn (never fail the suite) when its
-# recorded HEAD has drifted from git HEAD. See tools/status-check.sh.
+# STATUS.md is a doc claim, not a test, but a stale claim is exactly the
+# failure mode the honesty audit names (W170-A H1): the recorded HEAD drifted 10
+# commits behind and the doc still described closed bugs as open. So the drift
+# now FAILS the suite instead of warning. `ACOS_STATUS_MAX_LAG` still tunes how
+# many commits of drift are tolerated. See tools/status-check.sh.
 if [ -x tools/status-check.sh ]; then
-    if ! tools/status-check.sh; then
-        echo "verify-all: WARNING: STATUS.md is stale (see status-check above)" >&2
-    fi
+    tools/status-check.sh
 fi
 
 echo "verify-all: OK (fixtures present, no test skipped)"

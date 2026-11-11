@@ -126,13 +126,18 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    The first non-`ok` rung carries the blocker; `reached_stage` is the honest
    answer to "how far did it get?".
 
-   **Current ceiling (2026-11-11, HEAD `1041c21`).** A `TextView`/`Button`
-   activity reaches `on_resume` for real (`counter.apk`); a themed activity that
-   inflates a `ListView` or `EditText` still stops at `activity_on_create` with
+   **Current ceiling (2026-11-11, HEAD `fd1a887`, verify with
+   `tools/status-check.sh`).** A `TextView`/`Button` activity reaches
+   `first_frame` for real: `counter.apk` and the W166-A fixtures
+   (`dialogs-menus`, `list-adapter`, `fragments-nav`) return
+   `reached_stage: first_frame`. A themed activity that inflates a `ListView`
+   or `EditText` in the older fixtures (`todo-dogfood`, `list-scroll`,
+   `text-input`) still stops at `activity_on_create` with
    `UNSUPPORTED_JAVA_API` whose `root_cause` is
-   `android.content.IContentProvider code 0 (LIST_config)`. `first_frame` is
-   `UNSUPPORTED_BACKEND` (`ui.frame`, `not_ready`) even when `on_resume` ran, so
-   `acos observe --tree` works but `acos observe` (frame) does not. See §6.
+   `android.content.IContentProvider code 0 (LIST_config)`. When nothing has
+   been launched yet, `first_frame` is `UNSUPPORTED_BACKEND` (`ui.frame`,
+   `not_ready`), so `acos observe --tree` answers `not_ready` too. Read
+   `reached_stage` rather than assuming. See §6.
 4. **Check the state before observing.** `acos_status { session_id }`. Tells
    "never started" from "started but no window yet". `acos_logs` now also
    returns `launched` and `stage_reached`: an empty log buffer is only a clean
@@ -218,6 +223,15 @@ tools/e2e-dogfood.sh todo-dogfood
 # evidence: results/dogfood/launch/<app>.json + .summary.txt + SUMMARY.md
 ```
 
+`tools/build-apps.sh` builds every fixture app (`fixtures/apps/*`) into
+`fixtures/build/apps/`, which is what `tools/verify-all.sh` uses. Three apps
+added at W166-A reach `first_frame` and are the best starting point for a new
+UI fixture: `dialogs-menus` (dialogs + option menus), `list-adapter`
+(`ListView`/adapter) and `fragments-nav` (fragments). Check the ladder after a
+launch instead of assuming: `tools/build-apps.sh && acos launch
+fixtures/build/apps/list-adapter.apk --json` should report
+`reached_stage: first_frame`.
+
 ---
 
 ## 4. Parity check (device ↔ ACOS UI tree)
@@ -260,13 +274,25 @@ Two session-specific hints worth memorizing:
 * `UNSUPPORTED_BACKEND` + `details.reason = "not_ready"` → the app has no
   window/frame yet. Run `acos launch` and read the ladder; a tree/frame only
   exists after `activity_on_create` / the render handoff completes.
-* `ELEMENT_NOT_FOUND` + `details.kind = NoUiTree` / `NoWindowAtPoint` /
-  `NoFocusedWindow` → the session has no window to receive input. Launch and
-  observe before tapping/typing.
+  **This is the code `tap --text` returns when there is no tree yet**: it
+  resolves a node by label, so with no `View` hierarchy it answers
+  `UNSUPPORTED_BACKEND` / `reason: not_ready` / `capability: ui.tree`
+  (`crates/acos-cli/tests/session.rs::tap_text_without_a_tree_is_a_structured_error`).
+  There is no `ELEMENT_NOT_FOUND`/`NoUiTree` for that case any more.
+* `ELEMENT_NOT_FOUND` + `details.kind = NoWindowAtPoint` / `NoFocusedWindow` →
+  the session has no window at that point / no focused window, so a coordinate
+  `tap`, `key` or `swipe` cannot be delivered. Launch and observe before acting.
+  (`NoUiTree` is no longer produced for the no-tree case above.)
+
+If you set `ACOS_SESSION_ROOT`, `ACOS_CACHE_DIR` or `ACOS_BOOT_DIR`, they must be
+real directories you own that are **not** group/world-writable; otherwise the
+command fails with `UNSAFE_PATH` and `details.root_error`
+(`ROOT_WRITABLE_BY_OTHERS`, `ROOT_NOT_OWNED`, `ROOT_NOT_A_DIRECTORY`). See
+`docs/SECURITY.md`.
 
 ---
 
-## 6. Known state (as of 2026-11-11, HEAD `2c682c7`)
+## 6. Known state (as of 2026-11-11, HEAD `fd1a887`)
 
 `tools/build-dogfood-apps.sh` builds the framework-only fixtures. On this HEAD:
 
@@ -280,18 +306,31 @@ Two session-specific hints worth memorizing:
   also writes the PNG and reports `result.screenshot` with the
   `ui.screenshot` capability; `result.screenshot_error` is set when no frame
   exists yet.
-* **⚠ Boot-image restore is broken for launch.** The first (cold) launch
-  reaches `first_frame` (~0.9 s), but with the on-disk cache already populated
-  the warm launch fails at `activity_on_create`
-  (`java.lang.ExceptionInInitializerError` → ICU `DatPackageReader` index error)
-  **9/10 times**. Force the cold path with `ACOS_NO_BOOT_CACHE=1` (5/5 there).
-  This is an open runtime bug, not a tooling/tree problem; do not quote
-  "counter launches" without it.
-* **Tap is acked but does not land.** `acos tap --text Increment --json` returns
-  `accepted: true`, `state_changed: false`; the count stays `0`. Input delivery
-  is pending the W144-A leash fix.
-* **`hello-views.apk` reaches `on_resume`** (W138-A); its frame/correctness is
-  not yet scored. `counter` is the app that reaches `first_frame`.
+* **Boot-image restore works (fixed W154-A/W160-A).** A cold launch reaches
+  `first_frame` (~0.9 s) and a *warm* launch restores the cached snapshot and
+  also reaches `first_frame` — 5/5 at 0.806 s p50 with a 25.58 MB cache entry
+  (`BENCHMARKS.md` §9.1 M3). Do **not** force `ACOS_NO_BOOT_CACHE=1` to "work
+  around" the old `DatPackageReader` crash; that bug is closed. The regression
+  guard is
+  `crates/acos-cli/tests/session.rs::warm_boot_cache_reaches_first_frame_on_every_launch`
+  (1 cold + 5 warm processes). If a warm launch fails there, that is a *new*
+  bug — report it with the launch ladder, don't disable the cache silently.
+* **Tap lands on `counter.apk` (fixed W161-A).** `acos tap --text Increment
+  --json` on a kept session returns `accepted: true`, `state_changed: true`, the
+  app's own `onClick` runs (`AcosCounter: increment value=1`) and `acos observe
+  --tree` then shows `count=1`. Evidence:
+  `crates/acos-runtime/tests/counter_interaction.rs` (both tests un-ignored),
+  `results/m2/M2_LOG.md` §W161-A. The older "acked but does not land" text and
+  `BENCHMARKS.md` §9.5 item 3 describe the pre-W161-A binary.
+* **The pressed-state ripple is a declared flat-colour fallback (W167-A).** The
+  AGSL/`RippleShader` natives now draw the *declared flat colour* instead of the
+  real shader animation, and a post-tap repaint invalidation makes the state
+  visible. Do not read the interaction frame as pixel-identical to a device: the
+  ripple shading is a named divergence, not a faked pass. `CanvasProperty` and
+  `RenderNodeAnimator` coverage is partial — an unregistered op still raises a
+  structured `UNSUPPORTED_JAVA_API`, never a silent default.
+* **`hello-views.apk` reaches `on_resume`** (W138-A) and `first_frame`
+  (W147-A); its frame/correctness is not ART-scored yet.
 * `acos observe --tree` on a kept daemon session returns the live tree in
   ~40 ms; with no session it still answers `UNSUPPORTED_BACKEND not_ready`.
 * Flutter: the separate engine path reaches a first frame and a tap on

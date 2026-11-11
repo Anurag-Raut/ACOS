@@ -124,15 +124,28 @@ fn daemon_holds_a_native_session_across_cli_invocations_and_idles_out() {
     let observe = run(&["session", "observe", "--json"]);
     let observe_json = parse_json(&observe.stdout);
     assert_eq!(observe_json["status"], "pass", "{observe_json:#?}");
-    // The native renderer keeps presenting while the session is live, so the
-    // count is monotonic; the launch already saw `frame=1`. Assert presence,
-    // not an exact count (the old `== 1` was a stale assumption, same as
-    // `native_session.rs`).
+    // The renderer keeps presenting while the session is live, so an absolute
+    // `published_frames` is not stable. Pin the launch frame instead (the
+    // ladder above requires `first_frame` to be ok) and assert a *delta* across
+    // two samples: the counter must never go backwards and the first sample
+    // must already carry the launch frame. Pre-hardening this test asserted a
+    // bare `>= 1`, which could not distinguish the launch frame from leakage.
+    let before = observe_json["result"]["published_frames"]
+        .as_u64()
+        .unwrap_or(0);
     assert!(
-        observe_json["result"]["published_frames"]
-            .as_u64()
-            .unwrap_or(0)
-            >= 1
+        before >= 1,
+        "the daemon observe must see at least the launch frame: {observe_json:#?}"
+    );
+    let again = run(&["session", "observe", "--json"]);
+    let again_json = parse_json(&again.stdout);
+    assert_eq!(again_json["status"], "pass", "{again_json:#?}");
+    let after = again_json["result"]["published_frames"]
+        .as_u64()
+        .unwrap_or(0);
+    assert!(
+        after >= before,
+        "published_frames must be monotonic ({before} -> {after}): {again_json:#?}"
     );
     assert!(
         observe_json["result"]["frame"]["width"]

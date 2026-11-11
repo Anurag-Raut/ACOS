@@ -49,8 +49,22 @@ impl Drop for TempDir {
     }
 }
 
+/// The gitignored boot-classpath fixture every template test needs.
+const BOOT_FIXTURE: &str = ".cache/boot/android-34/BOOTCLASSPATH";
+
+/// Real-corelib options, or `None` when the boot classpath is absent.
+///
+/// The boot classpath is a gitignored artifact, so the skip is routed through
+/// `have_fixture`: under `ACOS_REQUIRE_FIXTURES=1` a missing classpath is a
+/// hard failure, not a green SKIP (W170-A H5).
 fn real_options() -> Option<VmOptions> {
-    let boot_dir = acos_vm::vm::default_boot_dir(None)?;
+    let boot_dir = match acos_vm::vm::default_boot_dir(None) {
+        Some(dir) => dir,
+        None => {
+            let _ = acos_test_support::have_fixture(BOOT_FIXTURE);
+            return None;
+        }
+    };
     Some(VmOptions {
         corelib: CoreLib::Real,
         boot_dir: Some(boot_dir),
@@ -62,11 +76,13 @@ fn real_options() -> Option<VmOptions> {
 /// byte-identical output.
 #[test]
 fn cached_snapshot_restores_a_runnable_vm() {
-    let dex_path = repo_root().join("fixtures/build/dexprogs/01_hello/classes.dex");
-    let Ok(bytes) = std::fs::read(&dex_path) else {
+    const DEX_FIXTURE: &str = "fixtures/build/dexprogs/01_hello/classes.dex";
+    if !acos_test_support::have_fixture(DEX_FIXTURE) {
         eprintln!("SKIP cached_snapshot_restores_a_runnable_vm: fixture missing");
         return;
-    };
+    }
+    let dex_path = repo_root().join(DEX_FIXTURE);
+    let bytes = std::fs::read(&dex_path).expect("have_fixture guaranteed the DEX");
     let dex = DexFile::parse(bytes).expect("parse fixture");
 
     let options = VmOptions {
@@ -270,11 +286,12 @@ fn cold_restore_helper() {
 fn cold_restore_matches_uncached_ladder() {
     use std::process::Command;
 
-    let apk = repo_root().join("fixtures/build/apps/counter.apk");
-    if !apk.is_file() {
+    const APK_FIXTURE: &str = "fixtures/build/apps/counter.apk";
+    if !acos_test_support::have_fixture(APK_FIXTURE) {
         eprintln!("SKIP cold_restore_matches_uncached_ladder: counter.apk missing");
         return;
     }
+    let apk = repo_root().join(APK_FIXTURE);
     let Some(options) = real_options() else {
         eprintln!("SKIP cold_restore_matches_uncached_ladder: no boot classpath");
         return;

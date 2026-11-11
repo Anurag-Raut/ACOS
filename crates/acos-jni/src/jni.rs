@@ -2528,6 +2528,47 @@ fn new_direct_buffer_object(
     })
 }
 
+/// Validate a caller-supplied `(address, capacity)` before ACOS copies it.
+///
+/// `NewDirectByteBuffer` is the one JNI slot that reads *host* memory that the
+/// VM does not own: the caller asserts `address..address+capacity` is readable.
+/// Trusting that blindly lets a hostile or buggy guest native pass an unmapped
+/// address (or an absurd capacity) and fault the process — a self-DoS in the
+/// confined child, and a host crash for an in-process embedder. This check
+/// fails closed instead:
+///
+/// * reject an overflow of `address + capacity`,
+/// * reject `capacity` above the `ACOS_NATIVE_MEM_MAX` substrate cap (the copy
+///   target could never hold it),
+/// * reject a range that is not covered by one readable `/proc/self/maps`
+///   mapping with the full length.
+///
+/// It cannot prove the mapping stays alive (the JNI contract owns that), and it
+/// does not touch the bytes; the residual is a bounded, documented trust on the
+/// caller's own buffer, not an unchecked dereference of arbitrary values.
+fn validate_direct_buffer_range(address: usize, capacity: usize, cap: usize) -> Result<(), String> {
+    if address == 0 {
+        return Err("null address".to_string());
+    }
+    if capacity > cap {
+        return Err(format!(
+            "capacity {capacity} exceeds the ACOS_NATIVE_MEM_MAX cap {cap}"
+        ));
+    }
+    if capacity == 0 {
+        return Ok(());
+    }
+    let end = address
+        .checked_add(capacity)
+        .ok_or_else(|| format!("address {address:#x} + capacity {capacity} overflows"))?;
+    if !crate::hostmem::range_is_readable(address, end) {
+        return Err(format!(
+            "address {address:#x}..{end:#x} is not a readable host mapping"
+        ));
+    }
+    Ok(())
+}
+
 pub unsafe extern "C" fn jni_NewDirectByteBuffer(
     _env: usize,
     address: usize,
@@ -2568,6 +2609,16 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
         // obtained from `GetDirectBufferAddress`).
         (address as i64, 0i64)
     } else {
+        // Validate the caller's range *before* allocating or dereferencing it.
+        let cap = acos_vm::natives::jni_glue::native_mem_cap();
+        if let Err(m) = validate_direct_buffer_range(address, capacity as usize, cap) {
+            let _ = throw_class(
+                &mut ctx,
+                "Ljava/lang/IllegalArgumentException;",
+                &format!("NewDirectByteBuffer: {m}"),
+            );
+            return 0;
+        }
         let synthetic = match acos_vm::natives::jni_glue::native_mem_alloc(capacity as usize) {
             Ok(a) => a,
             Err(m) => {
@@ -2580,8 +2631,10 @@ pub unsafe extern "C" fn jni_NewDirectByteBuffer(
             }
         };
         if capacity > 0 {
-            // SAFETY: the JNI contract says `address` points at `capacity`
-            // readable bytes owned by the caller for the duration of this call.
+            // SAFETY: `validate_direct_buffer_range` proved `address..capacity`
+            // is covered by a readable host mapping and that `capacity` is
+            // within the substrate cap; the JNI contract says the caller keeps
+            // it alive for the duration of this call.
             let bytes =
                 unsafe { std::slice::from_raw_parts(address as *const u8, capacity as usize) };
             if let Err(e) = acos_vm::natives::jni_glue::native_mem_write(synthetic, bytes) {
@@ -3164,6 +3217,26 @@ mod tests {
         assert!(valid_descriptor("[Ljava/lang/String;"));
         assert!(!valid_descriptor("V"));
         assert!(!valid_descriptor("!"));
+    }
+
+    #[test]
+    fn direct_byte_buffer_range_is_validated_before_dereferencing() {
+        let buf = [0u8; 64];
+        let start = buf.as_ptr() as usize;
+        let cap = 1024;
+        assert!(validate_direct_buffer_range(start, buf.len(), cap).is_ok());
+        // A zero-length buffer at a live address is allowed (nothing is read).
+        assert!(validate_direct_buffer_range(start, 0, cap).is_ok());
+        // A null address is never a valid caller buffer.
+        assert!(validate_direct_buffer_range(0, 8, cap).is_err());
+        // Capacity above the substrate cap can never be stored.
+        assert!(validate_direct_buffer_range(start, cap + 1, cap).is_err());
+        // Unmapped address: the pre-hardening code dereferenced this.
+        assert!(validate_direct_buffer_range(0x7fff_ffff_0000, 16, cap).is_err());
+        // `address + capacity` overflow.
+        assert!(validate_direct_buffer_range(usize::MAX - 3, 16, usize::MAX).is_err());
+        // A range that runs past the end of its mapping.
+        assert!(validate_direct_buffer_range(start, usize::MAX - start - 8, usize::MAX).is_err());
     }
 
     #[test]

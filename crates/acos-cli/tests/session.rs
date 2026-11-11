@@ -88,6 +88,29 @@ fn launch_counter_reports_the_honest_stage_ladder() {
         assert_eq!(v["ok"], false);
         let error = &v["error"];
         assert!(error["code"].as_str().is_some_and(|c| !c.is_empty()));
+        // No false pass (W170-A H4): on the oracle host a launch that stops
+        // before `first_frame` is a regression, not an accepted variance. The
+        // oracle record reaches it 5/5
+        // (`results/bench/v1-2026-11-11-061354.json` `fw.launch_default`) and
+        // the boot classpath was checked above, so this holds by default.
+        // `ACOS_ALLOW_NO_FIRST_FRAME=1` is the explicit, printed escape hatch
+        // for a host that genuinely cannot render; it tolerates an honest
+        // non-pass envelope, it never tolerates a pass without `first_frame`
+        // (that case is asserted below for both branches).
+        if std::env::var_os("ACOS_ALLOW_NO_FIRST_FRAME").is_some() {
+            eprintln!(
+                "tolerating a launch that stopped at reached_stage={} because \
+                 ACOS_ALLOW_NO_FIRST_FRAME is set",
+                result["reached_stage"]
+            );
+        } else {
+            panic!(
+                "the launch regressed before first_frame (status={}, reached_stage={}, \
+                 error={}); set ACOS_ALLOW_NO_FIRST_FRAME=1 only if this host \
+                 genuinely cannot render",
+                v["status"], result["reached_stage"], error["code"]
+            );
+        }
     }
 
     // The ladder is present, ordered and complete.

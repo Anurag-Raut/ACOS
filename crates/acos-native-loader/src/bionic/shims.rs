@@ -649,20 +649,30 @@ fn sem_waiters() -> &'static Mutex<HashMap<usize, Arc<SemWait>>> {
 /// the returned reference is tied to the guest object's lifetime.
 ///
 /// # Safety
-/// `sem` must point to at least [`SEM_BYTES`] readable+writable guest bytes,
-/// aligned to `align_of::<c_int>()` (which every bionic `sem_t` is).
+/// `sem` must name a live, readable+writable mapping of at least [`SEM_BYTES`]
+/// bytes, aligned to `align_of::<c_int>()` (which every bionic `sem_t` is).
+/// [`check_sem`] is the only caller and establishes all three.
 unsafe fn sem_word(sem: *mut c_void) -> &'static AtomicI32 {
-    // SAFETY: guaranteed by the caller (checked for null/alignment by the
-    // entry points below).
+    // SAFETY: guaranteed by the caller (`check_sem` validated non-null,
+    // alignment, mapping membership and the 4-byte length).
     unsafe { &*(sem as *const AtomicI32) }
 }
 
 /// Validate a guest `sem_t` pointer the way bionic does (`EINVAL`).
+///
+/// Null, misaligned, unmapped and undersized-at-the-end-of-a-mapping pointers
+/// are all rejected *before* the word is dereferenced. Without the mapping
+/// check, a guest `sem_post((sem_t*)0xdeadbeef)` would SIGSEGV the confined
+/// child instead of returning `-1`/`EINVAL` (W170-A S2).
 fn check_sem(sem: *mut c_void) -> Result<&'static AtomicI32, c_int> {
     if sem.is_null() || !(sem as usize).is_multiple_of(std::mem::align_of::<c_int>()) {
         return Err(libc::EINVAL);
     }
-    // SAFETY: non-null and correctly aligned; the guest object is `sem_t`.
+    if !super::maps::range_is_mapped(sem as usize, SEM_BYTES, true) {
+        return Err(libc::EINVAL);
+    }
+    // SAFETY: non-null, correctly aligned, and a live writable mapping of at
+    // least `SEM_BYTES` bytes; the guest object is a `sem_t`.
     Ok(unsafe { sem_word(sem) })
 }
 
@@ -1373,6 +1383,32 @@ mod sem_tests {
         assert_eq!(sem.counter(), 0, "the token was consumed");
         // SAFETY: same live object.
         unsafe { assert_eq!(sem_destroy(sem.raw()), 0) };
+    }
+
+    /// A guest pointer that is not a live, writable mapping is rejected with
+    /// `EINVAL` before it is dereferenced (W170-A S2). Pre-hardening this read
+    /// the word through `&*(sem as *const AtomicI32)` and faulted the process.
+    #[test]
+    fn unmapped_semaphore_pointer_is_rejected() {
+        // x86_64 user space ends well below this address: nothing is mapped.
+        let bad = 0x7fff_ffff_0000usize as *mut c_void;
+        let mut out: c_int = -1;
+        // SAFETY: the point of the test is that the shims reject the pointer
+        // instead of dereferencing it.
+        unsafe {
+            assert_eq!(sem_init(bad, 0, 1), -1, "sem_init rejects an unmapped sem");
+            assert_eq!(errno(), libc::EINVAL);
+            assert_eq!(sem_post(bad), -1);
+            assert_eq!(errno(), libc::EINVAL);
+            assert_eq!(sem_trywait(bad), -1);
+            assert_eq!(errno(), libc::EINVAL);
+            assert_eq!(sem_getvalue(bad, &mut out), -1);
+            assert_eq!(errno(), libc::EINVAL);
+            assert_eq!(sem_destroy(bad), -1);
+            assert_eq!(errno(), libc::EINVAL);
+            // The null pointer is still rejected exactly as before.
+            assert_eq!(sem_post(std::ptr::null_mut()), -1);
+        }
     }
 
     /// `sem_getvalue` reports the guest counter, and bad pointers fail with
