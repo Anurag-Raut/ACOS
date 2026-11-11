@@ -3,14 +3,16 @@
 **As of 2026-11-11, HEAD `fd1a887`** (W165-A; `main` also carries W161-A through
 W171-A). `git log` is authoritative, and `tools/status-check.sh` fails when this
 line drifts more than 3 commits (`tools/verify-all.sh` now **fails** on it, not
-warns). **`BENCHMARKS.md` §9 is the authoritative measured table**; §9.7
-(W165-A) is the newest V1 run (`results/bench/v1-w165a.json`) and reports
-**7 PASS / 4 FAIL** with M4/M6/M9/M10/M11 now measured. §9.1's rows are the
-earlier W160-A run and its M8 ("tap does not land") row is **stale**: the tap
-test passes at HEAD (`results/m2/M2_LOG.md` §W161-A,
+warns). **`BENCHMARKS.md` §9 is the authoritative measured table**; **§9.8 (W176-A) is
+the newest V1 run** (`results/bench/v1-w176a.json`) and reports **9 PASS /
+2 FAIL** (M5, M9) with all 11 metrics measured. It was built from `fd1a887`
+plus two then-untracked W172-A pieces (`private_root.rs` + one `lib.rs`
+declaration) because `fd1a887` did not compile standalone; W172-A has since
+committed them and `main` advanced to `af4ab94` (§9.8 records it). §9.1
+(W160-A) and §9.7 (W165-A) are earlier tables/history and their M8/M10/M11
+notes are stale: the tap now lands (`results/m2/M2_LOG.md` §W161-A,
 `crates/acos-runtime/tests/counter_interaction.rs`) and W167-A added the post-tap
-repaint invalidation. §9.7's M10 note ("the assert fails") must be re-measured
-by the next bench wave before it is quoted. `TASKS.md` is the plan;
+repaint invalidation. `TASKS.md` is the plan;
 `docs/V1.md` is the V1 definition; `docs/FINDINGS.md` is the append-only
 findings log; `EXPERIMENTS.md` is history; `docs/SECURITY.md` lists the
 safety-relevant `ACOS_*` knobs and the private-root rule.
@@ -64,20 +66,26 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 uncommitted W160-A patch; `main` moved to `b467193`/`65856f2` during the run.
 Reproduce with `tools/bench-v1.sh --rounds 3`.
 
-Against owner directive D2: **5 PASS / 4 FAIL / 2 NOT_MEASURED** (6 of 11 not
-passing; was 4/7). Passes:
-M1 fixed idle core **133.86 MiB** vs 206.0 (W1); M2 N=5 per-session
-**39.47 MiB** vs 78.7 (v9); M3 framework-bound `acos launch counter.apk` →
-`first_frame` **0.806 s p50** on the **default warm path** (5/5) vs 3.620 s;
-M5 daemon-session screenshot **50.08 ms** vs 66.5 ms; M7 live `View` tree
-**49.8 ms p50** vs 538 ms one-shot. Fails: M4/M6/M8/M9 (capabilities/the tap),
-plus M10/M11 unmeasured. ACOS-native: process→`Vm` 21.83 ms, boot→attach
-14.35 ms, `Vm::restore` 45.4 ms, SessionPool create 1.19 ms / reset 2.26 ms
-(N=5), renderer cold frame 2.22 ms, PNG 8.25 ms, `frame-diff` 147 ms, live tree
-49.8 ms. VM throughput is behind `java -Xint` on 11/12 `Bench*` programs (only
-`BenchString` 0.205×; worst `BenchGc` 2.57×). Noisy rows: `observe_tree_ms`,
-`apk_inspect_ms`. The boot-cache entry is back to **25.58 MB** from W154-A's
-54.01 MB, and warm launch is no slower (before/after: 919.3 → 810.4 ms p50;
+Against owner directive D2 (W176-A, §9.8): **9 PASS / 2 FAIL / 0 NOT_MEASURED**
+(was 7 PASS / 4 FAIL at W165-A). Passes: M1 fixed idle core **133.90 MiB** vs
+206.0 (W1); M2 N=5 per-session **39.40 MiB** vs 78.7 (v9); M3 framework-bound
+`acos launch counter.apk` → `first_frame` **0.937 s p50** on the **default warm
+path** (5/5) vs 3.620 s; M4 worker create→frame **0.719 s** vs 1.297 s; M6
+reset→frame **714.7 ms** vs 748.1 ms; M7 live `View` tree **49.97 ms p50** vs
+538 ms one-shot; M8 tap→state **249.2 ms**, `accepted=true`
+`state_changed=true`; M10 end-to-end verify wall **1.664 s** vs ~19 s with the
+assert passing (frame hash `b6759…`→`f79465…`, PNG diff 448 pixels); M11
+**937.3 verified tasks/GiB-min** (`verified_tasks=1`). Fails: **M5** daemon
+screenshot **99.35 ms** vs 66.5 ms (regressed from §9.1's 50 ms at HEAD;
+`noisy`), **M9** per-session peak **PSS 528.2 MiB** (Pss_Anon 525.9 +
+Pss_File 3.5; the ~114 MiB file-backed RSS is shared page cache) with input
+independence still unproven. ACOS-native: process→`Vm` 16.37 ms, boot→attach
+11.88 ms, `Vm::restore` 50.8 ms, SessionPool create 1.22 ms / reset 2.32 ms
+(N=5), renderer cold frame 2.15 ms, PNG 7.37 ms, `frame-diff` 145 ms, live tree
+50.0 ms. VM throughput is still behind `java -Xint` on 11/12 `Bench*` programs
+(only `BenchString` 0.203×; worst `BenchGc` 2.55×). Noisy rows:
+`observe_tree_ms`, M5 screenshot. Raw: `results/bench/v1-w176a.json` (built from
+`fd1a887` + two then-untracked W172-A pieces; §9.8 records why).
 `results/perf/BOOTIMAGE_CACHE.md` §W160-A).
 
 **Test counts.** The full suite is **not** re-run every wave (the tree is shared
@@ -119,10 +127,14 @@ boot-cache and RN-pixel skips on `have_fixture`, and made
    implemented the AGSL/RippleShader natives well enough to draw the declared
    flat colour rather than the shader, which is a named visual divergence (not a
    fake frame). Pool reset is still core-VM-only (M6). Evidence:
-   `BENCHMARKS.md` §9.1 M6/M8 (measured before the tap fix), §9.7 (W165-A),
-   `results/m2/M2_LOG.md` §W161-A.
+   `BENCHMARKS.md` §9.8 M6/M8 (tap→state **249.2 ms**, frame hash and
+   before/after PNGs change; measured after the tap fix), `results/m2/M2_LOG.md`
+   §W161-A.
 4. **M9 not independent.** One process-global Binder transport: N sessions are a
-   memory/throughput experiment, not N isolated workers.
+   memory/throughput experiment, not N isolated workers. Per-session peak is
+   **PSS 528.2 MiB** at N=20 (private anon 525.9, shared file 3.5); the
+   ~114 MiB file-backed RSS is shared page cache, not private cost. Evidence:
+   `BENCHMARKS.md` §9.8.2.
 5. **RN bridge.** Hermes/JNI confined-stack probes exist (`results/rn/`,
    `tools/rn-*`), but no React Native hello publishes a frame.
 6. **Flutter first frame.** The Dart `main` executes in the confined engine

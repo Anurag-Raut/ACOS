@@ -1,9 +1,11 @@
 # ACOS — Benchmarks
 
-**Status:** methodology defined; **ACOS measurements exist** as of the W160-A
-run (2026-11-11, `20663b3` + W160-A patch) in **§9**, the single authoritative
-V1 table. §8.x is the
-wave-by-wave history that led there. The legacy baseline below is copied from
+**Status:** methodology defined; **ACOS measurements exist**. The single
+authoritative V1 table is **§9.8** (W176-A rerun at committed HEAD `fd1a887`,
+2026-11-11): **9 PASS / 2 FAIL (M5, M9), all 11 legacy-gated metrics
+measured**. §9.1 (W160-A) and §9.7 (W165-A) are the earlier tables and
+measurement notes and are retained as history; their M8/M10/M11 rows are stale.
+§8.x is the wave-by-wave history that led there. The legacy baseline below is copied from
 the frozen ACVM repo and is a *reference*, not an ACOS result; nothing outside
 §9 may be used as an ACOS speed claim.
 
@@ -1130,6 +1132,11 @@ path** (`launch_default`, boot cache on); W148-A had to fall back to
 `ACOS_NO_BOOT_CACHE` because the restore path was broken, which W154-A fixed
 and W160-A keeps correct.
 
+> **Superseded for the V1 verdict by §9.8 (W176-A, committed HEAD `fd1a887`):
+> 9 PASS / 2 FAIL (M5, M9), all 11 metrics measured.** The table below is the
+> W160-A run and is history; the tap-fix rows (M8/M10/M11) are re-measured in
+> §9.8.
+
 **Method record**
 
 ```yaml
@@ -1368,3 +1375,154 @@ Every ACOS number here comes from the same `tools/bench-v1.sh` run as §9.1.
 The M4/M6 verdicts are taken from a run only when `frames_published == samples`;
 otherwise the row is FAIL/NOT_MEASURED with the blocker recorded. No row is
 promoted on a measurement type, engine state or scope the data does not support.
+
+> **W176-A update (§9.8):** the M8 tap now lands (`accepted=true` **and**
+> `state_changed=true`), M10's assert passes (frame `content_hash` changes and
+> the same-session before/after PNGs differ: `differing_pixels=448`,
+> `changed_bbox=[44,202,301,364]`), and M11 reports one verified task at a
+> measured **937.3 tasks/GiB-min**. M9 is re-measured with PSS in §9.8.
+
+---
+
+### 9.8 V1 rerun at committed HEAD `fd1a887` (2026-11-11, W176-A)
+
+At committed HEAD the tap fix landed (W161-A) and the post-tap repaint
+invalidation was added (W167-A), so the M8/M10/M11 rows were re-measured. The
+build is a clean worktree of committed HEAD, with one recorded exception below.
+
+**Build-record exception (honesty):** committed HEAD `fd1a887` does **not**
+build standalone: `crates/acos-mcp/src/session_backend.rs` (committed) calls
+`acos_runtime::private_root::ensure_private_root`, but
+`crates/acos-runtime/src/private_root.rs` is an **untracked W172-A in-flight
+file** and the `pub mod private_root;` declaration in
+`crates/acos-runtime/src/lib.rs` was **uncommitted**. The release build below
+was made from HEAD plus exactly those two W172-A pieces (private_root.rs
+sha256 `12f4a0c0841563d6888725144b5c23bf5f9d3778b2a4c8179039b057b9f94ba4`, and
+one `pub mod private_root;` line). No other uncommitted patch is in the binary.
+HEAD stayed `fd1a887` for the whole run; no other agent's work was committed
+during it.
+
+**Method record**
+
+```yaml
+date: 2026-11-11T07:15+05:30
+built_from: fd1a887 (committed HEAD, W165-A) + W172-A minimal uncommitted pieces
+           (private_root.rs + one lib.rs module declaration) — see exception
+host: {kernel: 7.2.11-arch1-1, nproc: 32, mem_total: 61908 MiB,
+       mem_available_at_start: 36294 MiB, loadavg1: 0.86, loadavg5: 2.14,
+       uptime: other agents active (builds/clippy) but load lower than §9}
+profile: release
+rounds: 3 (self-contained/new-capability rows: 5)
+interleaving: every metric timed in one host window; Bench* vs `java -Xint`
+              alternated per round in the same window
+fidelity: native-runtime (ACOS executes the code); NOT ART-verified
+memory_type: anon+shmem (RssAnon+RssShmem) unless the row says PSS;
+             PSS divides shared pages; never summed with PSS or a cgroup value
+report: min and median (p50); spread = (max-min)/median; p95 where n>=5
+noise: rows with spread > 15 % are flagged `noisy`
+cache: ACOS_CACHE_DIR=results/tmp/w176a-bench-cache (private, fixed),
+       ACOS_PROFILE_OUT fixed so the snapshot property_hash is stable
+raw: results/bench/v1-2026-11-11-071510.json (copy: v1-w176a.json)
+```
+
+#### 9.8.1 Legacy-gated table (D2)
+
+| # | Metric | ACOS (measured) | Legacy ACVM | Ratio | Verdict | Plan / caveat |
+|---|---|---|---|---|---|---|
+| M1 | Fixed idle core memory (anon+shmem, booted framework) | **133.90 MiB** (Vm-only 21.74; PSS 141.81) | 206.0 MiB (W1) | **0.650** | **PASS** | unchanged vs §9.1 |
+| M2 | Incremental memory per session at N=5 (anon+shmem) | **39.40 MiB/session** (N=1 133.89, N=2 74.86, N=10 27.57; marginal ~15.8) | 78.7 MiB (v9) | **0.501** | **PASS** | still loses to W2 opt-in 33.2 |
+| M3 | Cold start → first correct frame | **0.9368 s p50** `acos launch counter.apk` → `first_frame`, default warm path, 5/5 | 3.620 s (v12) | **0.259** | **PASS** | slower than §9.1's 0.8062 s under host load; frame still not ART-scored |
+| M4 | Worker create → correct frame | **0.7188 s p50** (3/3 fresh frames) | 1.297 s p50 | **0.554** | **PASS** | frame not ART-scored |
+| M5 | Fresh screenshot | **99.35 ms p50** daemon-session completed-frame retrieval (raw 98.9–120.7, spread 22 % `noisy`) | 0.0665 s p50 | **1.494** | **FAIL** | **regressed from §9.1's 50.08 ms at HEAD**; the daemon path now writes the 10.37 MB PNG (verified) and is ~2× the legacy value. The renderer-only warm encode is 8.19 ms |
+| M6 | Reset-to-ready | **714.7 ms p50** (3/3 fresh frames) | 748.1 ms → frame p50 | **0.955** | **PASS** | template reset, not in-place app state |
+| M7 | UI tree with text | **49.97 ms p50** live View tree from a kept daemon session | 538–768 ms one-shot | **0.093** | **PASS** | loses to legacy persistent 4.1 ms |
+| M8 | Action-to-state latency | **249.2 ms p50** `tap --text Increment`, `accepted=true` **`state_changed=true`**; post-tap tree 6.9 ms; frame `content_hash` changes | not cleanly published | — | **PASS** | capability pass, not a D2 ratio; the tap now waits for the repaint |
+| M9 | Concurrent workloads | **528.2 MiB peak PSS/session** at N=20 (Pss_Anon 525.9 + Pss_File 3.5); RSS 640.0 (RssAnon 525.9 + RssFile 113.9); N=20 20/20 frames+trees, wall 2.01 s | N=5 scorecard, N=10 measured | — | **FAIL** | input-level independence still not proven; memory is now PSS-honest (see §9.8.2) |
+| M10 | End-to-end verify wall | **1.664 s** launch→tree→shot→tap→tree→shot→frame-diff on one kept session; assert passes (hash `b6759…`→`f79465…`; PNG diff `differing_pixels=448`) | ~19 s install-bound | **0.088** | **PASS** | single-task assert, not the T01–T12 suite |
+| M11 | Verified tasks / GiB-minute | **937.3 tasks/GiB-min**, `verified_tasks=1` (60 / (M10 wall s × M2 GiB/session)) | not published | — | **PASS** | one verified task; uses the in-process M2 memory, not the M9 PSS |
+
+**Result against D2: 9 PASS / 2 FAIL / 0 NOT_MEASURED among the 11 legacy-gated
+metrics** (M5 and M9 fail; were 7 PASS / 4 FAIL at W165-A). M5 is a measured
+regression at HEAD and is not hidden.
+
+#### 9.8.2 M9 memory: VmHWM is not mostly shared page cache
+
+Each M9 child is a **separate OS process** running
+`acos observe --apk counter --tree` (launch + live tree). At N=20, sampled while
+alive from `/proc/<pid>/smaps_rollup` + `/proc/<pid>/status`:
+
+| Per session (N=20, p50) | MiB | What it is |
+|---|---:|---|
+| `RssAnon` | 525.93 | private anonymous (touched heap/arenas) |
+| `RssFile` | 113.90 | file-backed pages resident in this process |
+| `Rss` (≈ `VmHWM`) | 640.04 | peak resident set |
+| `Pss_Anon` | 525.93 | private anon share (≈ `RssAnon`; not shared) |
+| `Pss_File` | 3.48 | **shared** file-backed share after dividing by sharers |
+| `Pss` | **528.20** | honest per-session memory |
+
+Findings:
+
+* The ~114 MiB of file-backed RSS is **shared page cache** (chiefly
+  `framework-res.apk`, mapped several times per process, plus the `acos`
+  binary and libc). PSS divides it to **3.5 MiB/session at N=20** (6.3 MiB at
+  N=5). Reporting `VmHWM`/RSS as per-session memory therefore overstates it by
+  ~112 MiB at N=20.
+* But the peak is **not** mostly shared: 525.9 of 640.0 MiB (82 %) is private
+  anon. The `VmHWM` number is not an artifact of shared mappings; the process
+  really touches ~526 MiB of private heap/arenas at its peak.
+* The peak is a **transient**: the M1 booted-framework idle footprint is
+  133.90 MiB anon+shmem / **141.81 MiB PSS** at the same HEAD. The per-session
+  in-process marginal is M2 **15.8 MiB** (N=5→6), i.e. a separate process pays
+  the whole framework boot anew. That, not double-counted sharing, is the gap
+  to M2's 39.4 MiB N=5 incremental.
+* Cheap-reduction candidates checked against the measurement: the boot cache is
+  **25.6 MB** read into anon (`fs::read`/`read_to_end`; an mmap read-only would
+  move it to shared file-backed, ≤25.6 MB), DEX raw bytes are ~50 MB retained
+  (`results/bench/MEMORY_PROFILE.md` §1), and the launch snapshot is only
+  **3.64 MB**. All are ≤5 % of the 526 MiB peak. The dominant peak is a handful
+  of large transient allocator arenas (a SIGSTOP `smaps` at ~400 MiB showed
+  120.7 / 63.8 / 63.6 / 62.1 / 27.1 MiB `[anon]` regions) reclaimed before
+  idle; no cheap per-allocation reduction was found. The structural fix remains
+  the zygote-like template (`MEMORY_PROFILE.md` §5).
+
+#### 9.8.3 ACOS-native rows (from the same run)
+
+| Metric | p50 | Type / state |
+|---|---:|---|
+| Cold process → `Vm` ready | 16.37 ms | wall, cold |
+| Framework boot → `attachApplication` (warm cache) | 11.88 ms | wall, warm |
+| Launch snapshot restore (`Vm::restore`) | 50.77 ms | wall, warm restore |
+| Launch before snapshot (`Vm::new` + boot) | 629.3 ms | wall, cold |
+| Launch after snapshot (restore + launch) | 528.9 ms | wall, warm (spread high) |
+| SessionPool create / reset (N=5) | 1.22 / 2.32 ms | wall, warm restore |
+| SessionPool total anon+shmem (N=20) | 58.03 MiB | anon+shmem |
+| Renderer cold first frame (hello-views) | 2.147 ms | wall, cold |
+| Renderer warm re-render | 0.820 ms | wall, warm |
+| PNG `FastFiltered` 1080×2400 | 7.37 ms | wall, warm |
+| `frame-diff` 1080×2400 | 145.2 ms | wall |
+| `acos inspect` hello-views APK | 1.47 ms | wall, static |
+| `observe --tree` (no session, not_ready) | 1.72 ms | wall, `noisy` (14.7 %) |
+
+All ACOS-native rows are `native-runtime`; none is ART-verified.
+
+**Reproduce** (from a clean worktree of `fd1a887`, after adding the W172-A
+`private_root.rs` + `pub mod private_root;` needed to compile):
+
+```sh
+CARGO_TARGET_DIR=$PWD/.cache/target-w176a CARGO_PROFILE_DEV_DEBUG=0 \
+  CARGO_BUILD_JOBS=2 tools/guarded.sh --mem 12G --time 3600 -- \
+  cargo build --release -p acos-cli -p acos-mcp --bins
+CARGO_TARGET_DIR=$PWD/.cache/target-w176a CARGO_PROFILE_DEV_DEBUG=0 \
+  CARGO_BUILD_JOBS=2 tools/guarded.sh --mem 12G --time 3600 -- \
+  cargo build --release -p acos-vm --example vmbench -p acos-render --example bench_render
+ACOS_BIN=$PWD/.cache/target-w176a/release/acos \
+ACOS_MCP_BIN=$PWD/.cache/target-w176a/release/acos-mcp \
+VMBENCH_BIN=$PWD/.cache/target-w176a/release/examples/vmbench \
+RENDER_BIN=$PWD/.cache/target-w176a/release/examples/bench_render \
+ACOS_CACHE_DIR=$PWD/results/tmp/w176a-bench-cache \
+ACOS_PROFILE_OUT=$PWD/results/tmp/w176a-profile.json \
+  tools/guarded.sh --mem 40G --time 3600 -- tools/bench-v1.sh --rounds 3
+```
+
+This writes `results/bench/v1-2026-11-11-071510.json`; the table above is
+§9.8.1.
