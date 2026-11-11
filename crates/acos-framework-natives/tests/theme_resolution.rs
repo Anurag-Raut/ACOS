@@ -363,6 +363,35 @@ fn null_theme_reference_becomes_type_null() {
 }
 
 #[test]
+fn style_bag_string_keeps_its_asset_cookie() {
+    // Regression for the DatePicker `TypedArray.getString` NPE: a
+    // `TYPE_STRING` taken from a style/theme bag stores its `data` as an index
+    // into that APK's *global* string pool. It must be written with
+    // `assetCookie = source_index + 1` so `TypedArray.loadStringValueAt` reads
+    // `mAssets.getPooledStringForCookie(...)` instead of the (null for
+    // `obtainStyledAttributes(styleRes, ...)`) XML pool.
+    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
+        eprintln!("framework-res.apk missing; skipping");
+        return;
+    }
+    let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
+    let mut mgr = build_manager(&apk_path);
+    let theme = mgr.theme_create();
+    // `android:style/TextAppearance.StatusBar.EventContent.Title` sets
+    // `android:fontFamily = "sans-serif-light"` as a raw `string8`.
+    let attrs = [0x0101_03aci32];
+    let mut out_values = vec![0i32; attrs.len() * 7];
+    let mut out_indices = vec![-1i32; attrs.len() + 1];
+    mgr.apply_style(theme, 0, 0x0103_0068, 0, &attrs, &mut out_values, &mut out_indices);
+    let tv = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
+    assert_eq!(tv.data_type, 0x03, "fontFamily must be TYPE_STRING");
+    assert_eq!(
+        tv.asset_cookie, 1,
+        "style-bag string must carry the ARSC asset cookie"
+    );
+}
+
+#[test]
 fn theme_copy_and_rebase() {
     if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
         return;

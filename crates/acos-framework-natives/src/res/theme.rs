@@ -12,9 +12,21 @@ use crate::res::config::ResConfig;
 use crate::res::manager::{AssetManager, MAX_REFERENCE_DEPTH};
 use crate::res::value::{
     ResValue, TypedValueOut, STYLE_NUM_ENTRIES, TYPE_ATTRIBUTE, TYPE_DYNAMIC_ATTRIBUTE,
-    TYPE_DYNAMIC_REFERENCE, TYPE_NULL, TYPE_REFERENCE,
+    TYPE_DYNAMIC_REFERENCE, TYPE_NULL, TYPE_REFERENCE, TYPE_STRING,
 };
 use crate::res::xmlblock::{XmlEvent, XmlParserState};
+
+/// Provenance of a resolved resource value.
+///
+/// `None` means the value came from the layout XML start tag, so a
+/// `TYPE_STRING` `data` is an index into the parser's own `StringBlock` and the
+/// value keeps asset cookie `-1`. `Some(source_index)` means it came from a
+/// style/theme bag in `AssetManager::sources[source_index]`, so `data` indexes
+/// that APK's ARSC global string pool and the value must be written with
+/// `assetCookie == source_index + 1`.
+pub(crate) type TaggedValue = (Option<usize>, ResValue);
+/// An `attr id -> (provenance, value)` map.
+pub(crate) type TaggedMap = HashMap<u32, TaggedValue>;
 
 /// A resolved theme: attribute id -> value, plus the ordered list of applied
 /// styles (used for `getTheme()` and `rebase`).
@@ -22,8 +34,8 @@ use crate::res::xmlblock::{XmlEvent, XmlParserState};
 pub struct Theme {
     /// Configuration the theme was created with.
     pub config: ResConfig,
-    /// Attribute id -> raw value.
-    pub values: HashMap<u32, ResValue>,
+    /// Attribute id -> (provenance, raw value).
+    pub values: TaggedMap,
     /// Applied style resource ids, in application order.
     pub styles: Vec<u32>,
     /// Whether each applied style was forced.
@@ -43,7 +55,7 @@ impl Theme {
 
     /// The raw value for `attr_id`, if the theme defines it.
     pub fn get_raw(&self, attr_id: u32) -> Option<ResValue> {
-        self.values.get(&attr_id).copied()
+        self.values.get(&attr_id).map(|(_, v)| *v)
     }
 
     /// The value for `attr_id`, resolving `?attr` chains (but not `@resid`).
@@ -51,11 +63,27 @@ impl Theme {
         self.get_inner(attr_id, 0)
     }
 
+    /// Like [`Theme::get`], but keeps the provenance of the final value.
+    pub(crate) fn get_tagged(&self, attr_id: u32) -> Option<TaggedValue> {
+        self.get_tagged_inner(attr_id, 0)
+    }
+
+    fn get_tagged_inner(&self, attr_id: u32, depth: usize) -> Option<TaggedValue> {
+        if depth > MAX_REFERENCE_DEPTH {
+            return None;
+        }
+        let tagged = *self.values.get(&attr_id)?;
+        match tagged.1.data_type {
+            TYPE_ATTRIBUTE => self.get_tagged_inner(tagged.1.data, depth + 1),
+            _ => Some(tagged),
+        }
+    }
+
     fn get_inner(&self, attr_id: u32, depth: usize) -> Option<ResValue> {
         if depth > MAX_REFERENCE_DEPTH {
             return None;
         }
-        let value = *self.values.get(&attr_id)?;
+        let (_, value) = *self.values.get(&attr_id)?;
         match value.data_type {
             TYPE_ATTRIBUTE => self.get_inner(value.data, depth + 1),
             _ => Some(value),
@@ -112,7 +140,7 @@ impl Theme {
         }
     }
 
-    fn merge(&mut self, map: HashMap<u32, ResValue>, force: bool) {
+    fn merge(&mut self, map: TaggedMap, force: bool) {
         for (k, v) in map {
             match self.values.get(&k) {
                 Some(_) if !force => {}
@@ -126,36 +154,42 @@ impl Theme {
 
 /// Recursively merge a style bag and its parents into `attr id -> value`.
 ///
-/// The parent is inserted first so the child overrides it.
+/// The parent is inserted first so the child overrides it. Every entry is
+/// tagged with the [`AssetManager::sources`] index of the bag it came from, so
+/// string values can be written with the matching asset cookie.
 pub(crate) fn collect_style(
     mgr: &AssetManager,
     config: &ResConfig,
     res_id: u32,
     depth: usize,
-) -> HashMap<u32, ResValue> {
-    let mut out = HashMap::new();
+) -> TaggedMap {
+    let mut out = TaggedMap::new();
     if depth > MAX_REFERENCE_DEPTH {
         return out;
     }
-    let Some(bag) = mgr.bag_for(res_id, config) else {
+    let Some(hit) = mgr.lookup_with(res_id, config) else {
+        return out;
+    };
+    let source_index = hit.source_index;
+    let Some(bag) = hit.entry.bag else {
         return out;
     };
     if bag.parent != 0 && bag.parent != res_id {
         out.extend(collect_style(mgr, config, bag.parent, depth + 1));
     }
     for (name, value) in bag.entries {
-        out.insert(name, value);
+        out.insert(name, (Some(source_index), value));
     }
     out
 }
 
 /// Extract the current start tag's attributes as `attr id -> value`.
-fn xml_attr_map(state: &XmlParserState, doc: &crate::res::xmlblock::XmlDocument) -> HashMap<u32, ResValue> {
-    let mut map = HashMap::new();
+fn xml_attr_map(state: &XmlParserState, doc: &crate::res::xmlblock::XmlDocument) -> TaggedMap {
+    let mut map = TaggedMap::new();
     if let Some(XmlEvent::StartTag(tag)) = doc.events.get(state.position) {
         for a in &tag.attributes {
             if a.resource_id != 0 {
-                map.insert(a.resource_id, a.value);
+                map.insert(a.resource_id, (None, a.value));
             }
         }
     }
@@ -258,7 +292,7 @@ impl AssetManager {
             .theme(theme)
             .map(|t| t.config.clone())
             .unwrap_or_else(|| self.config().clone());
-        let mut sources: Vec<HashMap<u32, ResValue>> = Vec::new();
+        let mut sources: Vec<TaggedMap> = Vec::new();
 
         // 1. XML attributes (highest priority).
         if parser_state != 0 {
@@ -311,7 +345,7 @@ impl AssetManager {
             .theme(theme)
             .map(|t| t.config.clone())
             .unwrap_or_else(|| self.config().clone());
-        let mut sources: Vec<HashMap<u32, ResValue>> = Vec::new();
+        let mut sources: Vec<TaggedMap> = Vec::new();
         if def_style_attr != 0 {
             let style_id = self
                 .theme(theme)
@@ -343,13 +377,13 @@ impl AssetManager {
                 .filter(|v| *v != 0)
                 .unwrap_or(attr);
             let resolved = themed
-                .get(wanted)
+                .get_tagged(wanted)
                 .or_else(|| {
                     sources
                         .iter()
                         .find_map(|m| m.get(&wanted).copied())
                 });
-            if let Some(value) = resolved {
+            if let Some((prov, value)) = resolved {
                 // Chase the value to its concrete form, exactly like
                 // `AssetManager2::ResolveAttributeReference` + `ResolveReference`:
                 // a `?attr` chain is followed through the theme, then a `@resid`
@@ -360,7 +394,7 @@ impl AssetManager {
                 // `Resources.loadColorStateList`, whose `loadComplexColor` raised
                 // `UnsupportedOperationException: Can't convert to ComplexColor:
                 // type=0x1`.
-                let chained = resolve_theme_attributes(themed, value);
+                let (chained_prov, chained) = resolve_theme_attributes(themed, (prov, value));
                 let built = if chained.is_reference() && chained.data != 0 {
                     self.resolve_references(chained.data, true).and_then(
                         |(source_index, entry, final_id)| {
@@ -372,7 +406,7 @@ impl AssetManager {
                 };
                 let tv = match built {
                     Some((_cookie, tv)) => tv,
-                    None => null_or_raw_typed_value(chained, attr),
+                    None => self.raw_typed_value(chained, attr, chained_prov),
                 };
                 tv.write_style(&mut out_values_direct[i * STYLE_NUM_ENTRIES..]);
                 let slot = out_count as usize + 1;
@@ -395,7 +429,7 @@ impl AssetManager {
         &self,
         theme: u64,
         attrs: &[i32],
-        sources: &[HashMap<u32, ResValue>],
+        sources: &[TaggedMap],
         out_values: &mut [i32],
         out_indices: &mut [i32],
         zero_missing: bool,
@@ -405,13 +439,13 @@ impl AssetManager {
         for i in 0..n {
             let attr = attrs[i] as u32;
             let mut found = None;
-            for (src_index, map) in sources.iter().enumerate() {
-                if let Some(value) = map.get(&attr).copied() {
-                    found = Some((src_index, value));
+            for map in sources {
+                if let Some(&(prov, value)) = map.get(&attr) {
+                    found = Some((prov, value));
                     break;
                 }
             }
-            if let Some((_src_index, value)) = found {
+            if let Some((prov, value)) = found {
                 // A `?attr` (from the XML or a style) is resolved through this
                 // `TypedArray`'s theme first (`ResolveAttributeReference`),
                 // then any resulting `@resid` through the resource table
@@ -420,18 +454,19 @@ impl AssetManager {
                 // which case it is written through as-is. `build_typed_value`
                 // supplies the right asset cookie and pooled string; concrete
                 // XML values keep the `-1` cookie that routes string reads
-                // through the parser's own `StringBlock`.
+                // through the parser's own `StringBlock`, while style/theme
+                // strings keep the ARSC cookie for their source.
                 let themed = if value.data_type == TYPE_ATTRIBUTE
                     || value.data_type == crate::res::value::TYPE_DYNAMIC_ATTRIBUTE
                 {
-                    self.theme(theme).map(|t| resolve_theme_attributes(t, value))
+                    self.theme(theme).map(|t| resolve_theme_attributes(t, (prov, value)))
                 } else {
-                    Some(value)
+                    Some((prov, value))
                 };
-                let built = match themed {
-                    Some(v)
-                        if v.data_type == TYPE_REFERENCE
-                            || v.data_type == crate::res::value::TYPE_DYNAMIC_REFERENCE =>
+                let (prov, value) = themed.unwrap_or((prov, value));
+                let built = match value {
+                    v if v.data_type == TYPE_REFERENCE
+                        || v.data_type == crate::res::value::TYPE_DYNAMIC_REFERENCE =>
                     {
                         if v.data == 0 {
                             None
@@ -444,7 +479,7 @@ impl AssetManager {
                 .and_then(|(si, entry, fid)| self.build_typed_value(si, &entry, attr, fid, 0));
                 let tv = match built {
                     Some((_cookie, tv)) => tv,
-                    None => null_or_raw_typed_value(themed.unwrap_or(value), attr),
+                    None => self.raw_typed_value(value, attr, prov),
                 };
                 tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
                 let slot = count as usize + 1;
@@ -463,23 +498,48 @@ impl AssetManager {
         }
     }
 
+    /// Build the `TypedValue` for a concrete (non-`@resid`) value, keeping the
+    /// asset cookie required to read a style/theme string from the ARSC pool.
+    fn raw_typed_value(&self, value: ResValue, attr: u32, prov: Option<usize>) -> TypedValueOut {
+        match prov {
+            Some(source_index) => self.res_table_typed_value(value, attr, source_index),
+            None => null_or_raw_typed_value(value, attr),
+        }
+    }
+
+    fn res_table_typed_value(
+        &self,
+        value: ResValue,
+        attr: u32,
+        source_index: usize,
+    ) -> TypedValueOut {
+        if value.is_reference() && value.data == 0 {
+            return null_or_raw_typed_value(value, attr);
+        }
+        let mut out = null_or_raw_typed_value(value, attr);
+        out.asset_cookie = source_index as i32 + 1;
+        if value.data_type == TYPE_STRING {
+            out.string = self.pooled_string(source_index, value.data);
+        }
+        out
+    }
 }
 
 /// Follow a `?attr` chain through the theme's own values, stopping at the
 /// first non-attribute (or on a depth/cycle bound). `@resid` references are
 /// left for [`AssetManager::resolve_references`], which owns the resource-table
-/// lookup.
-fn resolve_theme_attributes(theme: &Theme, mut value: ResValue) -> ResValue {
+/// lookup. The provenance of the final value is preserved.
+fn resolve_theme_attributes(theme: &Theme, mut tagged: TaggedValue) -> TaggedValue {
     for _ in 0..MAX_REFERENCE_DEPTH {
-        match value.data_type {
-            TYPE_ATTRIBUTE | TYPE_DYNAMIC_ATTRIBUTE => match theme.get_raw(value.data) {
-                Some(next) => value = next,
+        match tagged.1.data_type {
+            TYPE_ATTRIBUTE | TYPE_DYNAMIC_ATTRIBUTE => match theme.values.get(&tagged.1.data) {
+                Some(&next) => tagged = next,
                 None => break,
             },
             _ => break,
         }
     }
-    value
+    tagged
 }
 
 /// The `TypedValue` for a raw style value that did not resolve.

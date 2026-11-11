@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use crate::res::arsc::{Bag, ResolvedEntry};
+use crate::res::arsc::ResolvedEntry;
 use crate::res::assets::{ApkAssets, AssetHandle, AssetSource};
 use crate::res::config::ResConfig;
 use crate::res::error::{ResError, Result, RES_BAD_HANDLE};
@@ -357,6 +357,18 @@ impl AssetManager {
             }
         }
         Some((cookie, out))
+    }
+
+    /// The ARSC global string at `idx` in `sources[source_index]`.
+    ///
+    /// A `TYPE_STRING` value taken from a style/theme bag stores its `data` as
+    /// an index into that APK's global string pool (identified to the framework
+    /// by `assetCookie = source_index + 1`). XML-tag values keep cookie `-1`
+    /// and read through the parser's own `StringBlock` instead.
+    pub(crate) fn pooled_string(&self, source_index: usize, idx: u32) -> Option<String> {
+        let src = self.sources.get(source_index)?;
+        let table = src.resource_table()?;
+        table.global_string(src.resource_bytes()?, idx)
     }
 
     /// `nativeGetResourceValue` (without reference resolution this returns the
@@ -889,10 +901,5 @@ impl AssetManager {
                 v.density = requested.density;
                 (c, v)
             })
-    }
-
-    /// Convenience used by `Theme` to resolve bags from the manager.
-    pub(crate) fn bag_for(&self, id: u32, requested: &ResConfig) -> Option<Bag> {
-        self.lookup_with(id, requested)?.entry.bag
     }
 }
