@@ -233,3 +233,73 @@ tools/diff-dexprogs.sh --gc-stress --corelib real               -> 27 pass / 0 f
 ```
 
 Nothing committed.
+
+## W150-A refresh (HEAD `af4ab94`, worktree `.cache/wt-w150a-final`)
+
+The W147-A brief reported `counter` as "0.0143 vs 0.8765 in W138-A" and read a
+regression. It is a **metric-name collision**, not a regression: both numbers
+are from the same run and the same JSON record.
+
+* `globalSsim` = 0.0143 — whole-frame SSIM, dominated by the ~17 % of blocks
+  that differ in background luminance against the ART capture.
+* `meanSsim` = 0.8765 — mean of per-block SSIM. This is the number the table
+  below has always tracked (0.2964 → 0.8783 → 0.8782 → 0.8765, the last delta
+  being W173/W175 theme + text-run changes).
+
+The harness now always prints the metric name, so the two can no longer be
+confused:
+
+```
+PIPELINE counter          mean=30.8888 rmse=81.4726 psnr=9.91 differing=16.761% \
+                          ssim(mean=0.8765 global=0.0143 masked=0.9407)
+```
+
+| app | pipeline status | mean SSIM | global SSIM | masked-mean SSIM |
+|---|---|---:|---:|---:|
+| canvas-shapes | frame produced | 0.8261 | 0.2612 | 0.8907 |
+| counter | frame produced | 0.8765 | 0.0143 | 0.9407 |
+| form-validation | inflation failed (`Settings$Config.getContentResolver` NPE, no `ActivityThread`/`Application` in the VM harness) | — | — | — |
+| text-input | same as form-validation | — | — | — |
+| widget-gallery | stopped past ICU/`Typeface` **and** past the whole `AnimatedVectorDrawable` native block; next gap is `PathParser.nInterpolatePathData` (morph evaluator) | — | — | — |
+
+### Harness change: the display service stand-in
+
+Blocker #2 (ICU) is gone at this HEAD; blocker "no `IDisplayManager`" is fixed
+in the test harness itself. `NoServices::transact` in
+`crates/acos-vm/tests/render_views.rs` now answers
+`IServiceManager.getService("display")` with a `BinderProxy`, and that proxy
+answers `IDisplayManager` codes 1/2/3/41/55. `getDisplayInfo` returns a **real**
+`android.view.DisplayInfo` marshalled through its own `writeToParcel` — the
+same invariant `research/service-layer/REPORT.md` §3.6 requires, so the frame
+geometry is not a hand-written guess.
+
+Effect: `Choreographer.getRefreshRate()` (and therefore `StateListAnimator` and
+`AnimationHandler`) no longer NPEs, and `widget-gallery` inflates through the
+AVD block.
+
+### `AnimatedVectorDrawable` natives
+
+All 14 API-34 `AnimatedVectorDrawable` natives are implemented (see
+`results/m2/M2_LOG.md` §W150-A §2). `PathParser.nCanMorph` was additionally
+implemented as a real structural comparison, because `AnimatorInflater` turns a
+non-morphable `pathData` pair into an `InflateException`.
+
+### W150-A final numbers on `main` @ `70bc624`
+
+Re-run after the W150-A copy-back (only `gfx_vector.rs` + this harness differ
+from HEAD):
+
+| app | pipeline status | mean SSIM | global SSIM | masked-mean SSIM |
+|---|---|---:|---:|---:|
+| canvas-shapes | frame produced | 0.8300 | 0.3612 | 0.8943 |
+| counter | frame produced | 0.8772 | 0.0384 | 0.9414 |
+| form-validation | inflation failed (`Settings$Config.getContentResolver` NPE — no `ActivityThread`/`Application` in the VM harness; W101-A blocker #1) | — | — | — |
+| text-input | same as form-validation | — | — | — |
+| widget-gallery | **inflates**; the `IDisplayManager` stand-in and all 14 AVD natives now work, so it no longer fails with `UnsupportedApi`. The harness run then does not terminate (killed by the wall-clock guard) — a post-inflate animation-scheduling hang, which is the next independent task. | — | — | — |
+
+Caveat for anyone re-running from a worktree-shared `CARGO_TARGET_DIR`:
+`acos-test-support::repo_root()` bakes `CARGO_MANIFEST_DIR` at compile time, so
+a cached `libacos_test_support` built inside a since-deleted worktree makes
+every fixture resolve to a missing path and the suite prints
+`SKIP … missing reference` for all five scenes. Remove
+`<target>/debug/deps/libacos_test_support-*` to force the correct rebuild.

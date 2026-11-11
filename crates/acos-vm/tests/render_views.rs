@@ -63,13 +63,79 @@ impl BinderTransport for NoServices {
 
     fn transact(
         &self,
-        _vm: &mut Vm,
-        _binder: BinderId,
-        _code: u32,
-        _data: &mut Parcel,
+        vm: &mut Vm,
+        binder: BinderId,
+        code: u32,
+        data: &mut Parcel,
         reply: &mut Parcel,
         _flags: u32,
     ) -> Result<Vec<BinderDelivery>, String> {
+        // `ServiceManager.getService("display")` -> a `BinderProxy` for the
+        // display service. `DisplayManagerGlobal` is constructed lazily from
+        // this binder, and `Choreographer.getRefreshRate()` asks it for the
+        // display's refresh rate. Without this, the whole `AnimationHandler`
+        // path (and therefore `widget-gallery`'s `StateListAnimator`) NPEs.
+        //
+        // `getService` is transaction 1; some framework paths use
+        // `checkService` (transaction 2), so both return the same binder.
+        if binder.0 == 1
+            && (code == 1 || code == 2)
+            && data.enforce_interface("android.os.IServiceManager").is_ok()
+        {
+            if let Ok(Some(name)) = data.read_string16() {
+                if name == "display" {
+                    reply.reset();
+                    reply.write_int32(0);
+                    reply.write_strong_binder_opt(Some(BinderId(2)));
+                    return Ok(Vec::new());
+                }
+            }
+        }
+        if binder.0 == 2
+            && data
+                .enforce_interface("android.hardware.display.IDisplayManager")
+                .is_ok()
+        {
+            match code {
+                    // getDisplayInfo(int) -> DisplayInfo
+                    1 => {
+                        if let Err(e) = display_info_reply(vm, reply) {
+                            eprintln!("display-info-reply: {e}");
+                        }
+                        return Ok(Vec::new());
+                    }
+                    // getDisplayIds(boolean) -> int[]
+                    2 => {
+                        reply.reset();
+                        reply.write_int32(0);
+                        reply.write_int32_array(Some(&[0])).ok();
+                        return Ok(Vec::new());
+                    }
+                    // isUidPresentOnDisplay(int, int) -> boolean
+                    3 => {
+                        reply.reset();
+                        reply.write_int32(0);
+                        reply.write_int32(1);
+                        return Ok(Vec::new());
+                    }
+                    // getPreferredWideGamutColorSpaceId() -> int
+                    41 => {
+                        reply.reset();
+                        reply.write_int32(0);
+                        reply.write_int32(1);
+                        return Ok(Vec::new());
+                    }
+                    // getOverlaySupport() -> OverlayProperties (null = none)
+                    55 => {
+                        reply.reset();
+                        reply.write_int32(0);
+                        reply.write_int32(0);
+                        return Ok(Vec::new());
+                    }
+                    _ => {}
+                }
+        }
+        // Everything else: the truthful "no service" answer.
         reply.reset();
         reply.write_int32(0);
         reply.write_strong_binder_opt(None);
@@ -83,6 +149,124 @@ impl BinderTransport for NoServices {
     fn is_alive(&self, _id: BinderId) -> bool {
         false
     }
+}
+
+/// Write a Java object's real `writeToParcel` payload as raw bytes.
+///
+/// `DisplayInfo` is a framework parcelable whose `writeToParcel` order does not
+/// resemble a hand-written table (it starts with `layerStack`, `flags`, `type`,
+/// then `displayId`). The invariant ACOS follows is "only the parcelable's own
+/// `writeToParcel` writes its bytes", so build the real object and marshall it.
+fn object_parcel_bytes(vm: &mut Vm, obj: acos_vm::Handle) -> Result<Vec<u8>, String> {
+    let parcel = match vm.call_static("android.os.Parcel", "obtain", "()Landroid/os/Parcel;", &[]) {
+        Ok(JavaValue::Object(h)) => h,
+        Ok(other) => return Err(format!("Parcel.obtain returned {}", other.kind())),
+        Err(e) => return Err(format!("Parcel.obtain: {e}")),
+    };
+    vm.call_method(
+        obj,
+        "writeToParcel",
+        "(Landroid/os/Parcel;I)V",
+        &[JavaValue::Object(parcel), JavaValue::Int(0)],
+    )
+    .map_err(|e| format!("writeToParcel: {e}"))?;
+    let bytes = match vm.call_method(parcel, "marshall", "()[B", &[]) {
+        Ok(JavaValue::Object(h)) => h,
+        Ok(other) => return Err(format!("Parcel.marshall returned {}", other.kind())),
+        Err(e) => return Err(format!("Parcel.marshall: {e}")),
+    };
+    let raw = match vm.heap.get(bytes) {
+        Some(acos_vm::Object::Array(a)) => match &a.data {
+            acos_vm::heap::ArrayData::Byte(v) => v.iter().map(|&b| b as u8).collect(),
+            _ => return Err("Parcel.marshall did not return a byte[]".into()),
+        },
+        _ => return Err("Parcel.marshall returned a dead handle".into()),
+    };
+    let _ = vm.call_method(parcel, "recycle", "()V", &[]);
+    Ok(raw)
+}
+
+/// Answer `IDisplayManager.getDisplayInfo(0)` with a real `DisplayInfo`.
+///
+/// The reference geometry is the same 1080x2400@420dpi display the ACOS
+/// `acos-services` display service serves; the refresh rate is the API-34
+/// reference's 60.000004 Hz. `Choreographer.getRefreshRate()` only reads
+/// `refreshRate`, but the whole object is populated so a future reader cannot
+/// trip over an unset field.
+fn display_info_reply(vm: &mut Vm, reply: &mut Parcel) -> Result<(), String> {
+    let h = vm
+        .new_instance_ctor("android.view.DisplayInfo", "()V", &[])
+        .map_err(|e| format!("DisplayInfo(): {e}"))?;
+    set_int(vm, h, "layerStack", 0)?;
+    set_int(vm, h, "flags", 0)?;
+    set_int(vm, h, "type", 1)?;
+    set_int(vm, h, "displayId", 0)?;
+    set_int(vm, h, "displayGroupId", 0)?;
+    let name = vm.new_string("Built-in Screen").map_err(|e| e.to_string())?;
+    vm.set_field(h, "name", JavaValue::Object(name))
+        .map_err(|e| format!("DisplayInfo.name: {e}"))?;
+    set_int(vm, h, "appWidth", 1080)?;
+    set_int(vm, h, "appHeight", 2209)?;
+    set_int(vm, h, "smallestNominalAppWidth", 1080)?;
+    set_int(vm, h, "smallestNominalAppHeight", 2209)?;
+    set_int(vm, h, "largestNominalAppWidth", 1080)?;
+    set_int(vm, h, "largestNominalAppHeight", 2209)?;
+    set_int(vm, h, "logicalWidth", 1080)?;
+    set_int(vm, h, "logicalHeight", 2400)?;
+    set_int(vm, h, "rotation", 0)?;
+    set_int(vm, h, "modeId", 1)?;
+    vm.set_field(h, "renderFrameRate", JavaValue::Float(60.000_004))
+        .map_err(|e| format!("DisplayInfo.renderFrameRate: {e}"))?;
+    set_int(vm, h, "defaultModeId", 1)?;
+    set_int(vm, h, "colorMode", 0)?;
+    vm.set_field(h, "minimalPostProcessingSupported", JavaValue::Boolean(false))
+        .map_err(|e| format!("DisplayInfo.minimalPostProcessingSupported: {e}"))?;
+    set_int(vm, h, "logicalDensityDpi", 420)?;
+    vm.set_field(h, "physicalXDpi", JavaValue::Float(420.0))
+        .map_err(|e| format!("DisplayInfo.physicalXDpi: {e}"))?;
+    vm.set_field(h, "physicalYDpi", JavaValue::Float(420.0))
+        .map_err(|e| format!("DisplayInfo.physicalYDpi: {e}"))?;
+    set_long(vm, h, "appVsyncOffsetNanos", 0)?;
+    set_long(vm, h, "presentationDeadlineNanos", 0)?;
+    set_int(vm, h, "state", 2)?;
+    set_int(vm, h, "committedState", 2)?;
+    set_int(vm, h, "ownerUid", 1000)?;
+    set_int(vm, h, "removeMode", 0)?;
+    vm.set_field(h, "refreshRateOverride", JavaValue::Float(0.0))
+        .map_err(|e| format!("DisplayInfo.refreshRateOverride: {e}"))?;
+    vm.set_field(h, "brightnessMinimum", JavaValue::Float(0.0))
+        .map_err(|e| format!("DisplayInfo.brightnessMinimum: {e}"))?;
+    vm.set_field(h, "brightnessMaximum", JavaValue::Float(1.0))
+        .map_err(|e| format!("DisplayInfo.brightnessMaximum: {e}"))?;
+    vm.set_field(h, "brightnessDefault", JavaValue::Float(0.5))
+        .map_err(|e| format!("DisplayInfo.brightnessDefault: {e}"))?;
+    set_int(vm, h, "installOrientation", 0)?;
+    // `supportedColorModes` is `{COLOR_MODE_SRGB}` on the reference.
+    let colors = vm.new_array("I", &[JavaValue::Int(0)]).map_err(|e| e.to_string())?;
+    vm.set_field(h, "supportedColorModes", JavaValue::Object(colors))
+        .map_err(|e| format!("DisplayInfo.supportedColorModes: {e}"))?;
+
+    let raw = object_parcel_bytes(vm, h)?;
+    reply.reset();
+    reply.write_int32(0); // no exception
+    reply.write_int32(1); // typed object present
+    let mut tmp = Parcel::new();
+    tmp.unmarshall(&raw);
+    let len = tmp.data_size();
+    reply
+        .append_from(&tmp, 0, len)
+        .map_err(|e| format!("DisplayInfo append: {e}"))?;
+    Ok(())
+}
+
+fn set_int(vm: &mut Vm, obj: acos_vm::Handle, name: &str, v: i32) -> Result<(), String> {
+    vm.set_field(obj, name, JavaValue::Int(v))
+        .map_err(|e| format!("DisplayInfo.{name}: {e}"))
+}
+
+fn set_long(vm: &mut Vm, obj: acos_vm::Handle, name: &str, v: i64) -> Result<(), String> {
+    vm.set_field(obj, name, JavaValue::Long(v))
+        .map_err(|e| format!("DisplayInfo.{name}: {e}"))
 }
 
 fn repo_root() -> PathBuf {

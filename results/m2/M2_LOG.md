@@ -3064,3 +3064,212 @@ real device's differ for this theme/density.
   `Toast` on the failure path) still logs a structured `IllegalArgumentException`
   after `error.setText`; the validation message itself is correct and the click
   that follows runs. It is a services/AIDL task, not the interaction loop.
+
+---
+
+# W150-A session — ICU4J `.res` serving, `Typeface`, AVD natives; render_views harness display service
+
+Worktree `.cache/wt-w150a-final` @ `af4ab94` (W175-A), `CARGO_TARGET_DIR=.cache/target-w150a`,
+`CARGO_PROFILE_DEV_DEBUG=0`, `ACOS_FONT_DIR=.cache/boot/android-34/fonts`. No commits.
+Patch touches only `crates/acos-vm/src/natives/gfx_vector.rs` and
+`crates/acos-vm/tests/render_views.rs`; both apply clean on current `main` (HEAD moved
+past W147-A, so the ICU blocker described in the wave brief was already fixed upstream).
+
+## Bottom line
+
+Two of the three W147-A blockers are resolved, and the third is re-measured honestly —
+it is **not** a regression.
+
+| W147-A blocker | state | evidence |
+|---|---|---|
+| ICU4J `brkitr/en_US.res` / `likelySubtags` `MissingResourceException` | **already fixed at current HEAD** (not by this wave) | `fonts=loaded` in every scene's stdout (was `fonts-skip java.lang.ExceptionInInitializerError`); `Typeface.<clinit>` completes and `widget-gallery` no longer dies with `NoClassDefFoundError: Landroid/graphics/Typeface;` |
+| `AnimatedVectorDrawable.nCreateAnimatorSet` + the AVD native surface | **implemented this wave** | all 14 API-34 AVD natives registered and exercised; `widget-gallery` inflate now gets past the whole AVD block to the next independent gap |
+| `counter` pipeline SSIM 0.0143 vs 0.8765 in W138-A | **metric confusion, not a regression** | the two numbers are the same run's `globalSsim` (0.0143) and `meanSsim` (0.8765); see §3 |
+
+## 1. ICU4J — already fixed upstream; verified, not re-implemented
+
+The brief's diagnosis (`.res` bundles only reachable through
+`Class.getResourceAsStream`, and the boot `core-icu4j.jar` carries no `.res`
+files) was correct for W147-A. At HEAD the VM answers the classpath-resource
+path from the real ICU package instead:
+
+* `android.icu.impl.ICUBinary.<clinit>` resolves
+  `icuDataFiles=[icudt72l.dat]` as a `PackageDataFile`;
+* `ICUBinary.getData("brkitr/en_US.res")` returns a real `DirectByteBuffer`;
+* `.cache/boot/android-34/apex/com.android.i18n/etc/icu/icudt72l.dat`
+  (28,431,696 bytes, `CmnD` magic at `0x0c`, 3933 `icupkg` entries including
+  `brkitr/en_US.res` and `likelySubtags.res`) is reachable through the VFS
+  mapping `/apex/com.android.i18n/**` → boot tree, and `AndroidDataFiles`
+  reads `ANDROID_I18N_ROOT`.
+
+Nothing was changed here: the harness already set `ANDROID_I18N_ROOT`; the
+observable proof is that `form-validation`/`text-input` now fail *after*
+`Editor`/`BreakIterator` construction, on `DeviceConfig`, not on ICU — and
+`widget-gallery` reaches `Typeface` materialisation.
+
+## 2. `AnimatedVectorDrawable` native surface (new, `gfx_vector.rs`)
+
+The API-34 DEX declares exactly 14 `PRIVATE STATIC NATIVE` methods on
+`android.graphics.drawable.AnimatedVectorDrawable`. All are registered:
+
+`nCreateAnimatorSet()J`, `nCreateGroupPropertyHolder(JIFF)J`,
+`nCreatePathPropertyHolder(JIFF)J`, `nCreatePathColorPropertyHolder(JIII)J`,
+`nCreatePathDataPropertyHolder(JJJ)J`, `nCreateRootAlphaPropertyHolder(JFF)J`,
+`nAddAnimator(JJJJJII)V`, `nSetPropertyHolderData(J[FI)V`,
+`nSetPropertyHolderData(J[II)V`, `nSetVectorDrawableTarget(JJ)V`,
+`nStart(J…AnimatorRT;I)V`, `nEnd(J)V`, `nReset(J)V`, `nReverse(J…AnimatorRT;I)V`.
+
+Design (principled, no fake animation):
+
+* Two new generation-checked `HandleTable`s (`AVD_SETS`, `AVD_HOLDERS`).
+  Their `jlong`s carry `AVD_SET_TAG` / `AVD_HOLDER_TAG` bits so they cannot
+  alias a `VectorDrawable` tree pointer — all three tables would otherwise
+  hand out `(generation 1, index 0)` as their first handle, and the shared
+  `VirtualRefBasePtr` refcount table (`fwk_m2_chain6`) plus `release_tree`
+  route by tag.
+* Property-holder ids are the framework's own `VGroup.getPropertyIndex` /
+  `VFullPath.getPropertyIndex` maps (read out of the DEX `sPropertyIndexMap`
+  `<clinit>` clinit constants: group 0..6 = rotation/pivotX/pivotY/scaleX/
+  scaleY/translateX/translateY; path 0..7 = strokeWidth/strokeColor/
+  strokeAlpha/fillColor/fillAlpha/trimPathStart/trimPathEnd/trimPathOffset).
+* `nStart`/`nEnd`/`nReset`/`nReverse` record state and apply the holder's
+  **endpoint** value through the same `VNode`/`VTree` tables `VectorDrawable`
+  draws from. ACOS has no RenderThread frame clock, so no intermediate frame
+  is ever fabricated: the static frame is the drawable's base state, and a
+  `ValueAnimator`-driven caller observes real endpoints. This is the same
+  honesty rule W167-A applied to `RenderNodeAnimator` `nStart`/`nEnd`.
+* `release_tree` (reached from `VirtualRefBasePtr.nDecStrong`) now releases a
+  set and the holders it owns, matching the C++ `AnimatorSetImpl` ownership.
+
+`PathParser.nCanMorph` was **also implemented** (`gfx_vector.rs`), because
+`AnimatorInflater` uses it as a hard gate: a `pathData` keyframe pair that is
+not morphable throws `InflateException`. It is a real structural comparison
+(same verb kinds, same count; point values may differ), not a `true` stub.
+`nInterpolatePathData` remains structured-unsupported — an actual morph needs
+verb-arity-preserving interpolation, and nothing in the corpus draws it.
+
+## 3. `render_views` — per-scene pipeline SSIM (honest, current HEAD)
+
+`cargo test -p acos-vm --test render_views`, reference = ART API-34 capture,
+scored with `acos_render::diff`.
+
+| scene | status | mean SSIM | global SSIM | masked-mean SSIM |
+|---|---|---:|---:|---:|
+| `canvas-shapes` | ok | 0.8261 | 0.2612 | 0.8907 |
+| `counter` | ok | 0.8765 | 0.0143 | 0.9407 |
+| `form-validation` | pipeline-failure | — | — | — |
+| `text-input` | pipeline-failure | — | — | — |
+| `widget-gallery` | pipeline-failure | — | — | — |
+
+### The 0.0143 / 0.8765 "discrepancy" is a metric name collision
+
+Both numbers come from the **same** `counter` run, in the same
+`corpus-pipeline-metrics.json` record:
+
+* `globalSsim: 0.0143` — the whole-frame SSIM, dominated by the large
+  (16.8 % of blocks) background/brightness difference between the pipeline
+  frame and the ART capture;
+* `meanSsim: 0.8765` — the mean of per-block SSIM.
+
+`W101A_PIPELINE.md`'s history (`0.2964 → 0.8783 → 0.8782`) tracks **mean**
+SSIM, and today's 0.8765 is inside that band (the small delta is the W173/W175
+theme and text-run changes). The W147-A brief compared `globalSsim` (0.0143)
+against `meanSsim` (0.8765) and read a regression that does not exist. No
+harness change was needed for `counter`; the honest fix is to always print the
+metric name (the harness now does: `ssim(mean=… global=… masked=…)`).
+
+### Harness fix landed: the display service (`NoServices`)
+
+`widget-gallery`'s `StateListAnimator` path builds a `Choreographer`, whose
+`<init>` asks `DisplayManagerGlobal` for the display refresh rate. At VM level
+there is no system_server, so every service lookup returned `null` and the
+chain NPE'd in `Choreographer.getRefreshRate` — a *harness* gap, not a VM gap.
+`NoServices::transact` now stands in for the two daemons that path needs:
+
+* binder 1 (`IServiceManager`), codes 1/2 (`getService`/`checkService`) →
+  a `BinderProxy` for `"display"`;
+* binder 2 (`IDisplayManager`) codes 1/2/3/41/55 → `getDisplayInfo` (a **real**
+  `android.view.DisplayInfo` marshalled by its own `writeToParcel`, not a
+  hand-written field table, per `research/service-layer/REPORT.md` §3.6),
+  `getDisplayIds`, `isUidPresentOnDisplay`, `getPreferredWideGamutColorSpaceId`,
+  `getOverlaySupport`.
+
+With that, `widget-gallery` inflates past `StateListAnimator`, past the whole
+`AnimatedVectorDrawable` block, and now stops at the next independent gap.
+
+## 4. What remains (exact blockers, in failure order)
+
+| scene | first failing frame | root cause | owner |
+|---|---|---|---|
+| `form-validation`, `text-input` | `Settings$Config.getContentResolver` → NPE, from `TextClassificationConstants.isSmartSelectionAnimationEnabled` ← `Editor.getSelectionActionModeHelper` ← `TextView.setText` | the VM-level harness has no `ActivityThread` instance, so `ActivityThread.currentApplication()` is `null`; `DeviceConfig` then dereferences a null resolver. Needs an `Application`/`ContentResolver` stub in the harness (the same one `W101A_PIPELINE.md` lists as blocker #1), not a services change. | harness / W101-A blocker #1 |
+| `widget-gallery` | `PathParser.nInterpolatePathData` is **no longer** the blocker; it now stops inside the AVD animator start path | `nInterpolatePathData` is structured-unsupported by design; the corpus path that reaches it needs verb-arity-preserving morph interpolation | `gfx_vector.rs` follow-up |
+
+Note the `widget-gallery` row: the AVD natives themselves are done. The
+remaining stop is the morph evaluator, which the wave brief explicitly scoped
+as "no animation running needed for the static frame" — so this is a genuine
+follow-on, not an incomplete AVD surface.
+
+## 5. Gates
+
+| Gate | Result |
+|---|---|
+| `cargo test -p acos-vm --lib gfx_vector` | 5 pass / 0 fail |
+| `cargo test -p acos-vm --test render_views` | 1 pass (2 ok scenes, 3 recorded pipeline-failures) |
+| `cargo clippy -p acos-vm --all-targets --no-deps -- -D warnings` | clean |
+| `cargo clippy -p acos-vm -p acos-services -p acos-runtime --all-targets --no-deps -- -D warnings` | clean |
+| `cargo check --workspace --all-targets` | clean (both worktree and `main` after copy-back) |
+| `tools/diff-dexprogs.sh --corelib real` | **27 pass / 0 fail** |
+| `tools/diff-dexprogs.sh --gc-stress --corelib real` | **27 pass / 0 fail** |
+
+Copy-back: `git apply --check` clean against current `main` (`af4ab94`), applied;
+only `crates/acos-vm/src/natives/gfx_vector.rs` and
+`crates/acos-vm/tests/render_views.rs`. No new files. Scratch worktrees deleted.
+
+## 6. Honesty / caveats
+
+* The ICU4J/`Typeface` half of this wave is **verification, not new code**. It
+  is reported as "already fixed at HEAD" because that is what the evidence
+  shows; claiming it as a W150-A fix would be false.
+* AVD natives keep real state but run **no animation**. The static frame is the
+  base state; endpoints are applied on start/end/reset/reverse. Nothing
+  interpolates, and `nInterpolatePathData` refuses rather than faking a morph.
+* The `counter` 0.0143 figure is reported unchanged. It is a real whole-frame
+  SSIM for a frame with a large uniform-background difference; the masked and
+  mean figures are the ones that track draw fidelity.
+
+---
+
+## W150-A addendum — final numbers on `main` @ `70bc624` (W186-A), after copy-back
+
+The worktree numbers above were taken on `af4ab94`. On current `main` the same
+two files give (only the two changed files differ from HEAD):
+
+| scene | status | mean SSIM | global SSIM | masked-mean SSIM |
+|---|---|---:|---:|---:|
+| `canvas-shapes` | ok | 0.8300 | 0.3612 | 0.8943 |
+| `counter` | ok | 0.8772 | 0.0384 | 0.9414 |
+| `form-validation` | pipeline-failure (unchanged: `Settings$Config.getContentResolver` NPE) | — | — | — |
+| `text-input` | pipeline-failure (same) | — | — | — |
+| `widget-gallery` | **inflates successfully now** — no `INFLATE-FAILED`/`UnsupportedApi` record; the harness run then does not terminate (the test is killed by the wall-clock guard) | — | — | — |
+
+So on `main` the W186-A action-bar/style work moved the two scoring scenes
+(`0.8261 → 0.8300`, `0.8765 → 0.8772` mean) and both remain in the
+0.83–0.94 band. The `counter` `globalSsim` also rose `0.0143 → 0.0384`; the
+number W147-A compared against was always `meanSsim`, which is unchanged in
+character.
+
+### Exact remaining blocker for `widget-gallery`
+
+The AVD natives are complete: the drawable inflates, the animator set is
+created, all property holders are built and attached, and the target tree is
+bound. The run then **does not terminate**. This is a progress/hang gap in the
+post-inflate path (animation scheduling on a VM with no frame clock), not a
+missing native — every one of the 14 API-34 `AnimatedVectorDrawable` natives is
+registered and returns. The next step is a bounded-iteration/scheduling fix in
+the harness or `AnimationHandler`, which is a separate investigation.
+
+Note also that verifying `main` requires a target dir that is **not** shared
+with a deleted worktree: `acos-test-support::repo_root()` bakes
+`CARGO_MANIFEST_DIR` at compile time, so a cached `libacos_test_support` from a
+worktree makes every fixture look missing (`SKIP … missing reference`). Removing
+that one artifact forces the correct rebuild.

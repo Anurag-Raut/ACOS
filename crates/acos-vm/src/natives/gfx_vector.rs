@@ -28,7 +28,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use acos_render::canvas::ClipOp;
 use acos_render::matrix::Matrix3x3;
 use acos_render::paint::{Paint, PaintStyle, StrokeCap, StrokeJoin};
-use acos_render::path::{FillType, Path, PathMeasure};
+use acos_render::path::{FillType, Path, PathMeasure, Verb};
 use acos_render::render_node::DisplayOp;
 
 use crate::class::NativeCtx;
@@ -36,6 +36,18 @@ use crate::error::{VmError, VmResult};
 use crate::natives::gfx_handles::{Handle, HandleTable};
 use crate::natives::gfx_state::with_ctx;
 use crate::vm::Vm;
+
+/// Tag bit on `AnimatedVectorDrawable` animator-set `jlong`s. The shared
+/// `VirtualRefBasePtr` refcount table (`fwk_m2_chain6`) and [`release_tree`]
+/// see both `VectorDrawable` tree pointers and animator-set pointers, and two
+/// independent [`HandleTable`]s both start at `(generation 1, index 0)`. The
+/// tag keeps the two handle spaces distinct so a tree pointer and an
+/// animator-set pointer can never alias.
+const AVD_SET_TAG: u64 = 1 << 63;
+/// Tag bit on property-holder `jlong`s. Property holders are owned by their
+/// animator set (not `VirtualRefBasePtr`-refcounted), but they still need a
+/// handle space distinct from both trees and sets.
+const AVD_HOLDER_TAG: u64 = 1 << 62;
 
 // ---------------------------------------------------------------------------
 // Tree model
@@ -237,9 +249,22 @@ fn node_err(e: crate::natives::gfx_handles::HandleError) -> VmError {
 // Registration
 // ---------------------------------------------------------------------------
 
-/// Release a tree handle when the framework's `VirtualRefBasePtr` refcount
-/// reaches zero.
+/// Release a `VirtualRefBasePtr` object when its framework refcount reaches
+/// zero. The pointer is either a `VectorDrawable` tree (`nCreateTree`) or an
+/// `AnimatedVectorDrawable` animator set (`nCreateAnimatorSet`); the tag bit
+/// selects the table. Releasing a set also releases the property holders it
+/// owns, matching the C++ `AnimatorSetImpl` ownership.
 pub(crate) fn release_tree(handle: i64) {
+    let u = handle as u64;
+    if u & AVD_SET_TAG != 0 {
+        if let Ok(set) = avd_sets().remove(Handle(u & !AVD_SET_TAG)) {
+            let mut holders = avd_holders();
+            for child in set.children {
+                let _ = holders.remove(child.holder);
+            }
+        }
+        return;
+    }
     let _ = trees().remove(Handle::from_jlong(handle));
 }
 
@@ -319,6 +344,37 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(PP, "nFinalize", "(J)V", pp_finalize);
     vm.register_native(PP, "nCanMorph", "(JJ)Z", pp_can_morph);
     vm.register_native(PP, "nInterpolatePathData", "(JJJF)Z", pp_interpolate);
+
+    // `AnimatedVectorDrawable` — the native `AnimatorSet` behind
+    // `VectorDrawableAnimatorRT`. The API-34 DEX declares exactly these
+    // natives (`PRIVATE STATIC NATIVE`); the property-holder creators take
+    // the target `VectorDrawable` node/tree pointer plus the property id and
+    // the start/end values, and `nAddAnimator` attaches the holder to the set.
+    const AVD: &str = "Landroid/graphics/drawable/AnimatedVectorDrawable;";
+    vm.register_native(AVD, "nAddAnimator", "(JJJJJII)V", n_add_animator);
+    vm.register_native(AVD, "nCreateAnimatorSet", "()J", n_create_animator_set);
+    vm.register_native(AVD, "nCreateGroupPropertyHolder", "(JIFF)J", n_create_group_property_holder);
+    vm.register_native(AVD, "nCreatePathColorPropertyHolder", "(JIII)J", n_create_path_color_property_holder);
+    vm.register_native(AVD, "nCreatePathDataPropertyHolder", "(JJJ)J", n_create_path_data_property_holder);
+    vm.register_native(AVD, "nCreatePathPropertyHolder", "(JIFF)J", n_create_path_property_holder);
+    vm.register_native(AVD, "nCreateRootAlphaPropertyHolder", "(JFF)J", n_create_root_alpha_property_holder);
+    vm.register_native(AVD, "nEnd", "(J)V", n_end);
+    vm.register_native(AVD, "nReset", "(J)V", n_reset);
+    vm.register_native(
+        AVD,
+        "nReverse",
+        "(JLandroid/graphics/drawable/AnimatedVectorDrawable$VectorDrawableAnimatorRT;I)V",
+        n_reverse,
+    );
+    vm.register_native(AVD, "nSetPropertyHolderData", "(J[FI)V", n_set_property_holder_data_float);
+    vm.register_native(AVD, "nSetPropertyHolderData", "(J[II)V", n_set_property_holder_data_int);
+    vm.register_native(AVD, "nSetVectorDrawableTarget", "(JJ)V", n_set_vector_drawable_target);
+    vm.register_native(
+        AVD,
+        "nStart",
+        "(JLandroid/graphics/drawable/AnimatedVectorDrawable$VectorDrawableAnimatorRT;I)V",
+        n_start,
+    );
 
     Ok(())
 }
@@ -1040,13 +1096,37 @@ fn pp_finalize(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn pp_can_morph(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    // A faithful morph needs matching verb/point structure; ACOS does not
-    // model that yet. Structured unsupported rather than a wrong "true".
-    Err(VmError::unsupported_api(
-        "PathParser.nCanMorph",
-        "android.util.PathParser",
-    ))
+fn pp_can_morph(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    // `PathParser.canMorph` asks whether two `PathData` values have the same
+    // verb structure. `AnimatorInflater` uses the answer to decide whether a
+    // `pathData` keyframe is morphable and throws `InflateException` when it
+    // is not, so this is a structural comparison, not a guess.
+    let a = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let b = Handle::from_jlong(vm.arg_i64(ctx, 1));
+    let ok = match (path_data().get(a), path_data().get(b)) {
+        (Ok(pa), Ok(pb)) => can_morph(pa, pb),
+        _ => false,
+    };
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+/// Two paths can morph when every verb has the same kind. Point values may
+/// differ (that is what interpolation is for); the command sequence may not.
+fn can_morph(a: &Path, b: &Path) -> bool {
+    let va = a.verbs();
+    let vb = b.verbs();
+    va.len() == vb.len()
+        && va.iter().zip(vb).all(|(x, y)| {
+            matches!(
+                (x, y),
+                (Verb::MoveTo(..), Verb::MoveTo(..))
+                    | (Verb::LineTo(..), Verb::LineTo(..))
+                    | (Verb::QuadTo(..), Verb::QuadTo(..))
+                    | (Verb::CubicTo(..), Verb::CubicTo(..))
+                    | (Verb::Close, Verb::Close)
+            )
+        })
 }
 
 fn pp_interpolate(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
@@ -1448,6 +1528,414 @@ fn arc_to_cubic(
             p2y,
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// AnimatedVectorDrawable (AVD) animator set
+// ---------------------------------------------------------------------------
+//
+// `AnimatedVectorDrawable` owns a native `AnimatorSet` (the
+// `VectorDrawableAnimatorRT`). The Java side builds one property holder per
+// `ObjectAnimator` in the XML, adds it to the set, and points the set at the
+// `VectorDrawable` tree. The natives below keep that state in
+// generation-checked handle tables; the holder's value is applied to the same
+// `VNode` / `VTree` table the `VectorDrawable` natives use.
+//
+// ACOS has no frame clock, so nothing runs between frames. The *static* frame
+// is the drawable's base state, which is what `VectorDrawable.nDraw` already
+// draws. `nStart`/`nEnd`/`nReset`/`nReverse` record the animation state and
+// apply the holder's endpoint value (start on `nStart`/`nReset`, end on
+// `nEnd`/`nReverse`), so a later `ValueAnimator`-driven caller observes the
+// endpoints through the same tree. No frame is ever interpolated.
+
+#[derive(Clone, Debug)]
+enum PropertyHolderKind {
+    Group { node: Handle, property_id: i32, start: f32, end: f32 },
+    Path { node: Handle, property_id: i32, start: f32, end: f32 },
+    PathColor { node: Handle, property_id: i32, start: i32, end: i32 },
+    PathData { node: Handle, start: i64, end: i64 },
+    RootAlpha { tree: Handle, start: f32, end: f32 },
+}
+
+#[derive(Clone, Debug)]
+struct PropertyHolder {
+    kind: PropertyHolderKind,
+    floats: Vec<f32>,
+    ints: Vec<i32>,
+}
+
+impl PropertyHolder {
+    fn start_value(&self) -> f32 {
+        match self.kind {
+            PropertyHolderKind::Group { start, .. }
+            | PropertyHolderKind::Path { start, .. }
+            | PropertyHolderKind::RootAlpha { start, .. } => start,
+            PropertyHolderKind::PathColor { .. } | PropertyHolderKind::PathData { .. } => 0.0,
+        }
+    }
+
+    fn end_value(&self) -> f32 {
+        match self.kind {
+            PropertyHolderKind::Group { end, .. }
+            | PropertyHolderKind::Path { end, .. }
+            | PropertyHolderKind::RootAlpha { end, .. } => end,
+            PropertyHolderKind::PathColor { .. } | PropertyHolderKind::PathData { .. } => 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ChildAnimator {
+    holder: Handle,
+    _interpolator: i64,
+    _start_delay: i64,
+    _duration: i64,
+    _repeat_count: i32,
+    _repeat_mode: i32,
+}
+
+#[derive(Clone, Debug)]
+struct AnimatorSet {
+    target: Handle,
+    children: Vec<ChildAnimator>,
+    started: bool,
+    running: bool,
+    reversed: bool,
+}
+
+impl AnimatorSet {
+    fn new() -> Self {
+        AnimatorSet {
+            target: Handle::NULL,
+            children: Vec::new(),
+            started: false,
+            running: false,
+            reversed: false,
+        }
+    }
+}
+
+static AVD_SETS: OnceLock<Mutex<HandleTable<AnimatorSet>>> = OnceLock::new();
+static AVD_HOLDERS: OnceLock<Mutex<HandleTable<PropertyHolder>>> = OnceLock::new();
+
+fn avd_sets() -> MutexGuard<'static, HandleTable<AnimatorSet>> {
+    let m = AVD_SETS.get_or_init(|| Mutex::new(HandleTable::new()));
+    match m.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    }
+}
+
+fn avd_holders() -> MutexGuard<'static, HandleTable<PropertyHolder>> {
+    let m = AVD_HOLDERS.get_or_init(|| Mutex::new(HandleTable::new()));
+    match m.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    }
+}
+
+fn avd_encode_set(h: Handle) -> i64 {
+    (h.0 | AVD_SET_TAG) as i64
+}
+
+fn avd_decode_set(j: i64) -> Handle {
+    let u = j as u64;
+    if u & AVD_SET_TAG == 0 {
+        Handle::NULL
+    } else {
+        Handle(u & !AVD_SET_TAG)
+    }
+}
+
+fn avd_encode_holder(h: Handle) -> i64 {
+    (h.0 | AVD_HOLDER_TAG) as i64
+}
+
+fn avd_decode_holder(j: i64) -> Handle {
+    let u = j as u64;
+    if u & AVD_HOLDER_TAG == 0 {
+        Handle::NULL
+    } else {
+        Handle(u & !AVD_HOLDER_TAG)
+    }
+}
+
+fn avd_err(e: crate::natives::gfx_handles::HandleError) -> VmError {
+    VmError::Internal(format!("AnimatedVectorDrawable: {e}"))
+}
+
+/// Apply one property holder's value to its target node. Group and full-path
+/// property indices are the framework's own `VGroup` / `VFullPath`
+/// `getPropertyIndex` maps, which is the order the native tree uses.
+fn apply_holder_value(holder: &PropertyHolder, value: f32, color: i32) {
+    match holder.kind {
+        PropertyHolderKind::Group { node, property_id, .. } => {
+            if let Ok(n) = nodes().get_mut(node) {
+                if let VNodeKind::Group(g) = &mut n.kind {
+                    match property_id {
+                        0 => g.rotation = value,
+                        1 => g.pivot_x = value,
+                        2 => g.pivot_y = value,
+                        3 => g.scale_x = value,
+                        4 => g.scale_y = value,
+                        5 => g.translate_x = value,
+                        6 => g.translate_y = value,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        PropertyHolderKind::Path { node, property_id, .. } => {
+            if let Ok(n) = nodes().get_mut(node) {
+                if let VNodeKind::FullPath(p) = &mut n.kind {
+                    match property_id {
+                        0 => p.stroke_width = value,
+                        2 => p.stroke_alpha = value,
+                        4 => p.fill_alpha = value,
+                        5 => p.trim_path_start = value,
+                        6 => p.trim_path_end = value,
+                        7 => p.trim_path_offset = value,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        PropertyHolderKind::PathColor { node, property_id, .. } => {
+            if let Ok(n) = nodes().get_mut(node) {
+                if let VNodeKind::FullPath(p) = &mut n.kind {
+                    match property_id {
+                        1 => p.stroke_color = color as u32,
+                        3 => p.fill_color = color as u32,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        PropertyHolderKind::PathData { node, start, end } => {
+            let pd = if value == 0.0 { start } else { end };
+            if let Ok(path) = path_data().get(Handle::from_jlong(pd)).cloned() {
+                if let Ok(n) = nodes().get_mut(node) {
+                    match &mut n.kind {
+                        VNodeKind::FullPath(p) => p.path = path,
+                        VNodeKind::ClipPath(p) => p.path = path,
+                        VNodeKind::Group(_) => {}
+                    }
+                }
+            }
+        }
+        PropertyHolderKind::RootAlpha { tree, .. } => {
+            if let Ok(t) = trees().get_mut(tree) {
+                t.root_alpha = value;
+            }
+        }
+    }
+}
+
+/// Apply every child holder's endpoint value to the target tree.
+fn apply_set(animator: &AnimatorSet, at_start: bool) {
+    let holders = avd_holders();
+    for child in &animator.children {
+        let Ok(h) = holders.get(child.holder) else { continue };
+        match h.kind {
+            PropertyHolderKind::PathColor { start, end, .. } => {
+                let v = if at_start { start } else { end };
+                apply_holder_value(h, 0.0, v);
+            }
+            PropertyHolderKind::PathData { .. } => {
+                apply_holder_value(h, if at_start { 0.0 } else { 1.0 }, 0);
+            }
+            _ => {
+                let v = if at_start { h.start_value() } else { h.end_value() };
+                apply_holder_value(h, v, 0);
+            }
+        }
+    }
+}
+
+fn n_create_animator_set(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let h = avd_sets().insert(AnimatorSet::new());
+    vm.ret_i64(ctx, avd_encode_set(h));
+    Ok(())
+}
+
+fn n_create_group_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let node = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let property_id = vm.arg_i32(ctx, 1);
+    let start = vm.arg_f32(ctx, 2);
+    let end = vm.arg_f32(ctx, 3);
+    let h = avd_holders().insert(PropertyHolder {
+        kind: PropertyHolderKind::Group { node, property_id, start, end },
+        floats: vec![start, end],
+        ints: Vec::new(),
+    });
+    vm.ret_i64(ctx, avd_encode_holder(h));
+    Ok(())
+}
+
+fn n_create_path_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let node = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let property_id = vm.arg_i32(ctx, 1);
+    let start = vm.arg_f32(ctx, 2);
+    let end = vm.arg_f32(ctx, 3);
+    let h = avd_holders().insert(PropertyHolder {
+        kind: PropertyHolderKind::Path { node, property_id, start, end },
+        floats: vec![start, end],
+        ints: Vec::new(),
+    });
+    vm.ret_i64(ctx, avd_encode_holder(h));
+    Ok(())
+}
+
+fn n_create_path_color_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let node = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let property_id = vm.arg_i32(ctx, 1);
+    let start = vm.arg_i32(ctx, 2);
+    let end = vm.arg_i32(ctx, 3);
+    let h = avd_holders().insert(PropertyHolder {
+        kind: PropertyHolderKind::PathColor { node, property_id, start, end },
+        floats: Vec::new(),
+        ints: vec![start, end],
+    });
+    vm.ret_i64(ctx, avd_encode_holder(h));
+    Ok(())
+}
+
+fn n_create_path_data_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let node = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let start = vm.arg_i64(ctx, 1);
+    let end = vm.arg_i64(ctx, 2);
+    let h = avd_holders().insert(PropertyHolder {
+        kind: PropertyHolderKind::PathData { node, start, end },
+        floats: Vec::new(),
+        ints: Vec::new(),
+    });
+    vm.ret_i64(ctx, avd_encode_holder(h));
+    Ok(())
+}
+
+fn n_create_root_alpha_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let tree = Handle::from_jlong(vm.arg_i64(ctx, 0));
+    let start = vm.arg_f32(ctx, 1);
+    let end = vm.arg_f32(ctx, 2);
+    let h = avd_holders().insert(PropertyHolder {
+        kind: PropertyHolderKind::RootAlpha { tree, start, end },
+        floats: vec![start, end],
+        ints: Vec::new(),
+    });
+    vm.ret_i64(ctx, avd_encode_holder(h));
+    Ok(())
+}
+
+fn n_set_property_holder_data_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    use crate::heap::{ArrayData, Object};
+    let holder = avd_decode_holder(vm.arg_i64(ctx, 0));
+    let arr = vm.arg_ref(ctx, 1);
+    let len = vm.arg_i32(ctx, 2).max(0) as usize;
+    let values = match vm.heap.get(arr) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Float(v) => v.iter().take(len).copied().collect(),
+            _ => return Err(VmError::Internal("AnimatedVectorDrawable: expected float[]".into())),
+        },
+        _ => return Err(VmError::Internal("AnimatedVectorDrawable: null float[]".into())),
+    };
+    avd_holders().get_mut(holder).map_err(avd_err)?.floats = values;
+    Ok(())
+}
+
+fn n_set_property_holder_data_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    use crate::heap::{ArrayData, Object};
+    let holder = avd_decode_holder(vm.arg_i64(ctx, 0));
+    let arr = vm.arg_ref(ctx, 1);
+    let len = vm.arg_i32(ctx, 2).max(0) as usize;
+    let values = match vm.heap.get(arr) {
+        Some(Object::Array(a)) => match &a.data {
+            ArrayData::Int(v) => v.iter().take(len).copied().collect(),
+            _ => return Err(VmError::Internal("AnimatedVectorDrawable: expected int[]".into())),
+        },
+        _ => return Err(VmError::Internal("AnimatedVectorDrawable: null int[]".into())),
+    };
+    avd_holders().get_mut(holder).map_err(avd_err)?.ints = values;
+    Ok(())
+}
+
+fn n_add_animator(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let holder = avd_decode_holder(vm.arg_i64(ctx, 1));
+    let interpolator = vm.arg_i64(ctx, 2);
+    let start_delay = vm.arg_i64(ctx, 3);
+    let duration = vm.arg_i64(ctx, 4);
+    let repeat_count = vm.arg_i32(ctx, 5);
+    let repeat_mode = vm.arg_i32(ctx, 6);
+    avd_sets().get_mut(set).map_err(avd_err)?.children.push(ChildAnimator {
+        holder,
+        _interpolator: interpolator,
+        _start_delay: start_delay,
+        _duration: duration,
+        _repeat_count: repeat_count,
+        _repeat_mode: repeat_mode,
+    });
+    Ok(())
+}
+
+fn n_set_vector_drawable_target(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let tree = Handle::from_jlong(vm.arg_i64(ctx, 1));
+    avd_sets().get_mut(set).map_err(avd_err)?.target = tree;
+    Ok(())
+}
+
+fn n_start(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let anim = {
+        let mut sets = avd_sets();
+        let s = sets.get_mut(set).map_err(avd_err)?;
+        s.started = true;
+        s.running = true;
+        s.clone()
+    };
+    apply_set(&anim, true);
+    Ok(())
+}
+
+fn n_end(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let anim = {
+        let mut sets = avd_sets();
+        let s = sets.get_mut(set).map_err(avd_err)?;
+        s.started = false;
+        s.running = false;
+        s.clone()
+    };
+    apply_set(&anim, false);
+    Ok(())
+}
+
+fn n_reset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let anim = {
+        let mut sets = avd_sets();
+        let s = sets.get_mut(set).map_err(avd_err)?;
+        s.started = false;
+        s.running = false;
+        s.reversed = false;
+        s.clone()
+    };
+    apply_set(&anim, true);
+    Ok(())
+}
+
+fn n_reverse(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let set = avd_decode_set(vm.arg_i64(ctx, 0));
+    let anim = {
+        let mut sets = avd_sets();
+        let s = sets.get_mut(set).map_err(avd_err)?;
+        s.started = true;
+        s.running = true;
+        s.reversed = true;
+        s.clone()
+    };
+    apply_set(&anim, false);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
