@@ -35,6 +35,19 @@ frozen; its old status is kept below under "Rust VM track (frozen)".
   protection; then P1 sessions and benchmarks; P2 efficiency and compatibility
   after measurements (`docs/PLAN_V2.md` §6).
 
+### Milestone 1 reached (2026-11-11, ba2c2d8)
+
+Real `counter.apk` on real ART: `acos verify --engine art scenarios/v2-art-counter.yaml`
+passes live (engine art, 11/11 steps, ~8.8 s): live frame from the Activity (C1 buffer
+capture, labelled not a device capture), live in-guest UI tree, tap Increment 0->1
+(selector resolved from the tree), Reset, clean teardown, structured failure on a missing
+selector. BLAST release contract fixed (832 frames, 2 gralloc allocations). Measured
+N=1/10/20 (debug build): 171 / 155 / 155 MiB per session (cgroup peak + launcher + bwrap),
+Option A window stack +36 MiB cgroup per session vs the +27 MiB estimate, host peak 28.7%
+at N=20, 0 OOM. Report: `results/art-runtime/MILESTONE-1.md`. Open: key/type_text (IME
+EditorInfo codec, W13), 3 legacy cli test failures (W14), sandbox certification before
+untrusted APKs, phone parity, other app types (RN/Compose/Gaten/ARM64), stock-SF cost not measured.
+
 ### Component status (ART, 2026-11-11)
 
 Sources: `results/art-runtime/{P4b,S3,Q1,Q2b,D1,R1,R2,S2,Q3}.md` and the git
