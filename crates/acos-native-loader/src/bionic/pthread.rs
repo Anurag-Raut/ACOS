@@ -22,6 +22,8 @@ use super::Shim;
 
 // Set by the TLS module when a guest thread starts.
 use crate::tls::ensure_thread_tls;
+// W194-A: host-libc surface (see `bionic::host`).
+use crate::bionic::host as libc;
 
 struct ThreadStart {
     start: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
@@ -55,7 +57,63 @@ extern "C" fn thread_trampoline(ptr: *mut c_void) -> *mut c_void {
 type MutexMap = Mutex<HashMap<usize, Box<libc::pthread_mutex_t>>>;
 type CondMap = Mutex<HashMap<usize, Box<libc::pthread_cond_t>>>;
 type RwlockMap = Mutex<HashMap<usize, Box<libc::pthread_rwlock_t>>>;
+// bionic's `pthread_attr_t` embeds a `*mut c_void` (`stack_base`), so the
+// `libc` crate's Android definition is `!Send`. The map itself is only ever
+// reached through a `Mutex`, and the host pthread APIs own the storage the
+// pointer names, so moving the map between threads is sound.
+#[cfg(target_os = "android")]
+#[repr(transparent)]
+struct SendMap<T>(HashMap<usize, Box<T>>);
+
+#[cfg(target_os = "android")]
+// SAFETY: see the `SendMap` comment above.
+unsafe impl<T> Send for SendMap<T> {}
+
+#[cfg(target_os = "android")]
+impl<T> std::ops::Deref for SendMap<T> {
+    type Target = HashMap<usize, Box<T>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(target_os = "android")]
+impl<T> std::ops::DerefMut for SendMap<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[cfg(target_os = "android")]
+impl<T> Default for SendMap<T> {
+    fn default() -> Self {
+        SendMap(HashMap::new())
+    }
+}
+
+#[cfg(target_os = "android")]
+type AttrMap = Mutex<SendMap<libc::pthread_attr_t>>;
+#[cfg(not(target_os = "android"))]
 type AttrMap = Mutex<HashMap<usize, Box<libc::pthread_attr_t>>>;
+
+/// Access the inner `HashMap` of a pthread side table. Implemented for the
+/// plain `HashMap` on x86_64 and for the `Send`-carrying `SendMap` on Android.
+trait BoxMap<T> {
+    fn map_mut(&mut self) -> &mut HashMap<usize, Box<T>>;
+}
+
+impl<T> BoxMap<T> for HashMap<usize, Box<T>> {
+    fn map_mut(&mut self) -> &mut HashMap<usize, Box<T>> {
+        self
+    }
+}
+
+#[cfg(target_os = "android")]
+impl<T> BoxMap<T> for SendMap<T> {
+    fn map_mut(&mut self) -> &mut HashMap<usize, Box<T>> {
+        &mut self.0
+    }
+}
 /// Guest `pthread_mutexattr_t` state.
 ///
 /// bionic's attribute objects are a bare `int` (4 B) and `pthread_mutexattr_*`
@@ -110,7 +168,7 @@ macro_rules! table {
     ($fn_name:ident, $map_ty:ty, $ty:ty) => {
         fn $fn_name() -> &'static $map_ty {
             static T: OnceLock<$map_ty> = OnceLock::new();
-            T.get_or_init(|| Mutex::new(HashMap::new()))
+            T.get_or_init(|| Mutex::new(Default::default()))
         }
     };
 }
@@ -130,12 +188,16 @@ table!(cond_attrs, CondAttrMap, libc::pthread_condattr_t);
 const MAX_TABLE_ENTRIES: usize = 1 << 16;
 
 /// Insert-or-get for a boxed pthread object, bounded by [`MAX_TABLE_ENTRIES`].
-fn bounded_boxed<T>(
-    map: &Mutex<HashMap<usize, Box<T>>>,
+fn bounded_boxed<T, M>(
+    map: &Mutex<M>,
     guest: usize,
     make: impl FnOnce() -> Box<T>,
-) -> *mut T {
-    let mut m = map.lock().unwrap_or_else(|e| e.into_inner());
+) -> *mut T
+where
+    M: BoxMap<T>,
+{
+    let mut guard = map.lock().unwrap_or_else(|e| e.into_inner());
+    let m = guard.map_mut();
     if !m.contains_key(&guest) {
         if m.len() >= MAX_TABLE_ENTRIES {
             if let Some(&old) = m.keys().next() {
@@ -697,7 +759,11 @@ pub unsafe extern "C" fn pthread_once(
     match init {
         Some(f) => {
             let safe: extern "C" fn() = std::mem::transmute::<unsafe extern "C" fn(), extern "C" fn()>(f);
-            libc::pthread_once(once, safe)
+            #[cfg(target_os = "android")]
+            let rc = libc::pthread_once(once, Some(safe));
+            #[cfg(not(target_os = "android"))]
+            let rc = libc::pthread_once(once, safe);
+            rc
         }
         None => -1,
     }

@@ -20,6 +20,8 @@
 use std::os::raw::{c_char, c_int, c_void};
 
 use super::shims::acos_map_stream;
+// W194-A: host-libc surface (see `bionic::host`).
+use crate::bionic::host as libc;
 
 // --- forwarded entries (bionic == glibc ABI on x86_64) ---------------------
 //

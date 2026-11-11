@@ -13,8 +13,12 @@ pub enum LoaderError {
     #[error("ELF is malformed: {0}")]
     ElfMalformed(String),
 
-    /// The ELF is well formed but not x86_64 (e.g. an arm64 library).
-    #[error("unsupported ABI {found}: this loader only executes x86_64 ELF; {detail}")]
+    /// The ELF is well formed but not for the host instruction set (e.g. an
+    /// arm64 library loaded by an x86_64 runtime, or vice versa).
+    #[error(
+        "unsupported ABI {found}: this loader only executes {} ELF; {detail}",
+        crate::elf::HOST_ABI_NAME
+    )]
     WrongAbi { found: String, detail: String },
 
     /// A `DT_NEEDED` dependency could not be resolved.

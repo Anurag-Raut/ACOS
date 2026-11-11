@@ -10,6 +10,65 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use crate::bionic::{self, Category, Shim};
 use crate::dyninfo::{DynInfo, TlsSegment};
 use crate::elf::*;
+
+/// Architecture-neutral names for the dynamic relocation types the loader
+/// implements. The ELF numbers differ per machine; the *semantics* (RELATIVE,
+/// GLOB_DAT, JUMP_SLOT, ABS64, COPY, TLS) are the same, so the apply logic is
+/// shared and only the numbers are `cfg`-selected. x86_64 is byte-for-byte
+/// unchanged on the product host (W194-A).
+mod rt {
+    #[cfg(target_arch = "x86_64")]
+    pub const ABS32: u32 = super::R_X86_64_32;
+    #[cfg(target_arch = "x86_64")]
+    pub const ABS32S: u32 = super::R_X86_64_32S;
+    #[cfg(target_arch = "x86_64")]
+    pub const ABS64: u32 = super::R_X86_64_64;
+    #[cfg(target_arch = "x86_64")]
+    pub const COPY: u32 = super::R_X86_64_COPY;
+    #[cfg(target_arch = "x86_64")]
+    pub const GLOB_DAT: u32 = super::R_X86_64_GLOB_DAT;
+    #[cfg(target_arch = "x86_64")]
+    pub const IRELATIVE: u32 = super::R_X86_64_IRELATIVE;
+    #[cfg(target_arch = "x86_64")]
+    pub const JUMP_SLOT: u32 = super::R_X86_64_JUMP_SLOT;
+    #[cfg(target_arch = "x86_64")]
+    pub const NONE: u32 = super::R_X86_64_NONE;
+    #[cfg(target_arch = "x86_64")]
+    pub const PC32: u32 = super::R_X86_64_PC32;
+    #[cfg(target_arch = "x86_64")]
+    pub const RELATIVE: u32 = super::R_X86_64_RELATIVE;
+    #[cfg(target_arch = "x86_64")]
+    pub const TLS_DTPMOD: u32 = super::R_X86_64_TLS_DTPMOD;
+    #[cfg(target_arch = "x86_64")]
+    pub const TLS_DTPOFF: u32 = super::R_X86_64_TLS_DTPOFF;
+    #[cfg(target_arch = "x86_64")]
+    pub const TLS_TPOFF: u32 = super::R_X86_64_TLS_TPOFF;
+    #[cfg(target_arch = "x86_64")]
+    pub const TLSDESC: u32 = super::R_X86_64_TLSDESC;
+
+    #[cfg(target_arch = "aarch64")]
+    pub const ABS64: u32 = super::R_AARCH64_ABS64;
+    #[cfg(target_arch = "aarch64")]
+    pub const COPY: u32 = super::R_AARCH64_COPY;
+    #[cfg(target_arch = "aarch64")]
+    pub const GLOB_DAT: u32 = super::R_AARCH64_GLOB_DAT;
+    #[cfg(target_arch = "aarch64")]
+    pub const IRELATIVE: u32 = super::R_AARCH64_IRELATIVE;
+    #[cfg(target_arch = "aarch64")]
+    pub const JUMP_SLOT: u32 = super::R_AARCH64_JUMP_SLOT;
+    #[cfg(target_arch = "aarch64")]
+    pub const NONE: u32 = super::R_AARCH64_NONE;
+    #[cfg(target_arch = "aarch64")]
+    pub const RELATIVE: u32 = super::R_AARCH64_RELATIVE;
+    #[cfg(target_arch = "aarch64")]
+    pub const TLS_DTPMOD: u32 = super::R_AARCH64_TLS_DTPMOD64;
+    #[cfg(target_arch = "aarch64")]
+    pub const TLS_DTPOFF: u32 = super::R_AARCH64_TLS_DTPREL64;
+    #[cfg(target_arch = "aarch64")]
+    pub const TLS_TPOFF: u32 = super::R_AARCH64_TLS_TPREL64;
+    #[cfg(target_arch = "aarch64")]
+    pub const TLSDESC: u32 = super::R_AARCH64_TLSDESC;
+}
 use crate::error::{LibraryMissing, LoaderError, Result};
 use crate::report::{LibraryReport, Report, TableReport};
 use crate::{LoaderConfig, MissingPolicy};
@@ -437,7 +496,7 @@ impl Loader {
         name: &str,
     ) -> Result<Arc<NativeLibrary>> {
         let elf = Elf::parse(bytes).map_err(|e| LoaderError::ElfMalformed(e.to_string()))?;
-        if elf.header.e_machine != EM_X86_64 {
+        if elf.header.e_machine != HOST_ELF_MACHINE {
             return Err(LoaderError::WrongAbi {
                 found: abi_name(elf.header.e_machine),
                 detail: format!("e_machine={}", elf.header.e_machine),
@@ -644,7 +703,7 @@ impl Loader {
                 where_ = entry;
                 out.push(Reloc {
                     offset: where_,
-                    r_type: R_X86_64_RELATIVE,
+                    r_type: rt::RELATIVE,
                     sym: 0,
                     addend: 0,
                     addend_in_place: true,
@@ -656,7 +715,7 @@ impl Loader {
                     if bits & (1u64 << b) != 0 {
                         out.push(Reloc {
                             offset: where_.wrapping_add(b * 8),
-                            r_type: R_X86_64_RELATIVE,
+                            r_type: rt::RELATIVE,
                             sym: 0,
                             addend: 0,
                             addend_in_place: true,
@@ -892,23 +951,11 @@ impl Loader {
         let mut seen_missing: HashSet<String> = HashSet::new();
         let mut records: Vec<ImportRecord> = Vec::new();
         for r in &lib.relocs {
-            if r.r_type == R_X86_64_IRELATIVE || r.r_type == R_X86_64_NONE {
+            if r.r_type == rt::IRELATIVE || r.r_type == rt::NONE {
                 continue;
             }
             let name = lib.dyninfo.symbol_name(r.sym as usize).map(|s| s.to_string());
-            let needs_symbol = matches!(
-                r.r_type,
-                R_X86_64_GLOB_DAT
-                    | R_X86_64_JUMP_SLOT
-                    | R_X86_64_64
-                    | R_X86_64_PC32
-                    | R_X86_64_32
-                    | R_X86_64_32S
-                    | R_X86_64_COPY
-                    | R_X86_64_TLS_DTPMOD
-                    | R_X86_64_TLS_DTPOFF
-                    | R_X86_64_TLS_TPOFF
-            );
+            let needs_symbol = Self::reloc_needs_symbol(r.r_type);
             if needs_symbol {
                 let display = name.clone().unwrap_or_else(|| "<null>".into());
                 let req_version = lib.dyninfo.symbol_version(r.sym as usize).map(str::to_string);
@@ -1028,8 +1075,8 @@ impl Loader {
         }
         let target = target_addr as *mut u64;
         match r.r_type {
-            R_X86_64_NONE => {}
-            R_X86_64_RELATIVE => {
+            rt::NONE => {}
+            rt::RELATIVE => {
                 // SAFETY: target is inside a writable data segment.
                 unsafe {
                     if r.addend_in_place {
@@ -1040,7 +1087,7 @@ impl Loader {
                     }
                 }
             }
-            R_X86_64_GLOB_DAT | R_X86_64_JUMP_SLOT => {
+            rt::GLOB_DAT | rt::JUMP_SLOT => {
                 match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Abs(a) => unsafe { *target = a as u64 },
                     ResolvedValue::Tls { modid, value } => unsafe {
@@ -1049,7 +1096,7 @@ impl Loader {
                     ResolvedValue::WeakNull => unsafe { *target = 0 },
                 }
             }
-            R_X86_64_64 => {
+            rt::ABS64 => {
                 let add = r.addend as u64;
                 match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Abs(a) => unsafe { *target = (a as u64).wrapping_add(add) },
@@ -1063,13 +1110,14 @@ impl Loader {
                     ResolvedValue::WeakNull => unsafe { *target = add },
                 }
             }
-            R_X86_64_PC32 | R_X86_64_32 | R_X86_64_32S => {
+            #[cfg(target_arch = "x86_64")]
+            rt::PC32 | rt::ABS32 | rt::ABS32S => {
                 let place = lib.bias.wrapping_add(r.offset as usize) as u64;
                 let s = match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Abs(a) => a as u64,
                     _ => 0,
                 };
-                let value = if r.r_type == R_X86_64_PC32 {
+                let value = if r.r_type == rt::PC32 {
                     s.wrapping_add(r.addend as u64).wrapping_sub(place)
                 } else {
                     s.wrapping_add(r.addend as u64)
@@ -1079,7 +1127,7 @@ impl Loader {
                     *(target as *mut u32) = value as u32;
                 }
             }
-            R_X86_64_COPY => {
+            rt::COPY => {
                 let s = match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Abs(a) => a,
                     _ => return Ok(()),
@@ -1097,14 +1145,14 @@ impl Loader {
                     }
                 }
             }
-            R_X86_64_TLS_DTPMOD => {
+            rt::TLS_DTPMOD => {
                 let modid = match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Tls { modid, .. } => modid,
                     _ => 0,
                 };
                 unsafe { *target = modid as u64 };
             }
-            R_X86_64_TLS_DTPOFF => {
+            rt::TLS_DTPOFF => {
                 let value = match self.resolved_addr(lib, r.sym)? {
                     ResolvedValue::Tls { value, .. } => value,
                     ResolvedValue::Abs(a) => a as u64,
@@ -1112,7 +1160,7 @@ impl Loader {
                 };
                 unsafe { *target = value.wrapping_add(r.addend as u64) };
             }
-            R_X86_64_TLS_TPOFF | R_X86_64_TLSDESC => {
+            rt::TLS_TPOFF | rt::TLSDESC => {
                 return Err(LoaderError::UnsupportedRelocation {
                     kind: r.r_type,
                     library: lib.name.clone(),
@@ -1128,6 +1176,17 @@ impl Loader {
             }
         }
         Ok(())
+    }
+
+    /// Whether satisfying this relocation type requires resolving a symbol.
+    fn reloc_needs_symbol(t: u32) -> bool {
+        match t {
+            rt::GLOB_DAT | rt::JUMP_SLOT | rt::ABS64 | rt::COPY | rt::TLS_DTPMOD
+            | rt::TLS_DTPOFF | rt::TLS_TPOFF => true,
+            #[cfg(target_arch = "x86_64")]
+            rt::PC32 | rt::ABS32 | rt::ABS32S => true,
+            _ => false,
+        }
     }
 
     fn protect_and_irelative(&self) -> Result<()> {
@@ -1167,7 +1226,7 @@ impl Loader {
         // Apply IRELATIVE resolvers now that `.text` is executable.
         for lib in &libs {
             for r in &lib.relocs {
-                if r.r_type != R_X86_64_IRELATIVE {
+                if r.r_type != rt::IRELATIVE {
                     continue;
                 }
                 let resolver = lib.bias.wrapping_add(r.addend as usize);

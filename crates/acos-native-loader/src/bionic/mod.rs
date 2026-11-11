@@ -16,6 +16,11 @@ use std::collections::HashMap;
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
+// Host-libc surface: re-exports the `libc` crate on x86_64 and adds the
+// bionic-only declarations (W194-A) on aarch64-linux-android.
+mod host;
+use host as libc;
+
 pub mod dl;
 pub mod engine_gaps;
 pub mod gles;
@@ -73,6 +78,44 @@ pub fn is_forwarded(s: &Shim) -> bool {
 fn build_table() -> HashMap<&'static str, Shim> {
     let mut m: HashMap<&'static str, Shim> = HashMap::new();
 
+    // glibc `_FORTIFY_SOURCE` entry points absent from bionic. Guests built
+    // against bionic never import them; on Android the addresses in the table
+    // are aborting traps instead of unresolved externs (W194-A).
+    #[cfg(not(target_os = "android"))]
+    extern "C" {
+        fn __printf_chk();
+        fn __fprintf_chk();
+        fn __vprintf_chk();
+        fn __vfprintf_chk();
+    }
+
+    #[cfg(target_os = "android")]
+    mod glibc_fortify_traps {
+        /// A glibc-only symbol: a bionic guest importing it is a hard failure.
+        unsafe fn trap(name: &str) -> ! {
+            eprintln!("ACOS_UNSUPPORTED_NATIVE_SYMBOL: glibc-only fortify entry {name}");
+            std::process::abort()
+        }
+        pub unsafe extern "C" fn __printf_chk() -> ! {
+            // SAFETY: never returns.
+            unsafe { trap("__printf_chk") }
+        }
+        pub unsafe extern "C" fn __fprintf_chk() -> ! {
+            // SAFETY: never returns.
+            unsafe { trap("__fprintf_chk") }
+        }
+        pub unsafe extern "C" fn __vprintf_chk() -> ! {
+            // SAFETY: never returns.
+            unsafe { trap("__vprintf_chk") }
+        }
+        pub unsafe extern "C" fn __vfprintf_chk() -> ! {
+            // SAFETY: never returns.
+            unsafe { trap("__vfprintf_chk") }
+        }
+    }
+    #[cfg(target_os = "android")]
+    use glibc_fortify_traps::*;
+
     // Forth-fortify entry points and C++ runtime entries that glibc exports.
     extern "C" {
         fn __memcpy_chk();
@@ -85,10 +128,6 @@ fn build_table() -> HashMap<&'static str, Shim> {
         fn __sprintf_chk();
         fn __snprintf_chk();
         fn __vsnprintf_chk();
-        fn __printf_chk();
-        fn __fprintf_chk();
-        fn __vprintf_chk();
-        fn __vfprintf_chk();
         fn __stack_chk_fail();
         fn __cxa_atexit();
         fn __cxa_finalize();
@@ -295,7 +334,6 @@ fn build_table() -> HashMap<&'static str, Shim> {
         fn nftw();
         fn lseek64();
         fn __open_2();
-        fn __xpg_strerror_r();
         // libm hyperbolics used by Hermes/ONNX
         fn acosh();
         fn asinh();
@@ -412,7 +450,6 @@ fn build_table() -> HashMap<&'static str, Shim> {
         sched_get_priority_max, sigaltstack, popen, pclose, fileno, dirname, asprintf,
         mkstemp, gethostname, getrusage, utimes, nice, select, flock, ferror, ftell,
         rewind, tmpfile, fscanf, nftw, lseek64, __open_2,
-        __xpg_strerror_r,
         acosh, asinh, atanh, cosh, sinh, tanh, sincos, lround, llroundl,
         __ctype_get_mb_cur_max, __vsprintf_chk, acosf, acoshf, arc4random, asinf, asinhf, atanf, atanhf, btowc, closedir, coshf, erfcf, erff, exp2f, expm1f, fchmodat, fdimf, fdopendir, fgets, fmaf, fputwc, freelocale, frexpf, fseek, fseeko, ftello, getc, getwc, ilogbf, islower, isnanf, isupper, iswalpha_l, iswblank_l, iswcntrl_l, iswdigit_l, iswlower, iswlower_l, iswprint_l, iswpunct_l, iswspace_l, iswupper_l, iswxdigit_l, isxdigit, ldexpf, lgammaf, lgammaf_r, localeconv, log1pf, logbf, mbrlen, mbrtowc, mbsnrtowcs, mbsrtowcs, mbtowc, memalign, modff, newlocale, opendir, pathconf, poll, readdir, realpath, remainderf, remove, remquof, sendfile, setlocale, setpriority, sincosf, sinhf, statvfs, strcoll_l, strftime_l, strlcpy, strtold_l, strtoll_l, strtoull_l, strxfrm_l, tanhf, tgamma, towlower_l, towupper_l, tzset, ungetc, ungetwc, unlinkat, uselocale, utimensat, wcrtomb, wcscoll_l, wcsnrtombs, wcsxfrm_l, wctob, wmemcpy, wmemmove, wmemset,
     );
@@ -443,10 +480,30 @@ fn build_table() -> HashMap<&'static str, Shim> {
     shim!("__tls_get_addr", crate::tls::__tls_get_addr as *const c_void);
     shim!("__tls_get_addr", crate::tls::__tls_get_addr as *const c_void);
 
-    // bionic spells the GNU strerror_r entry `__gnu_strerror_r`; glibc's
-    // exported `__xpg_strerror_r` has the same (int, char*, size_t) -> int ABI.
-    if let Some(xpg) = m.get("__xpg_strerror_r").copied() {
-        m.insert("__gnu_strerror_r", Shim::forwarded("__gnu_strerror_r", xpg.ptr));
+    // The GNU `_r` entry point has two spellings: glibc exports
+    // `__xpg_strerror_r` (and bionic has `__gnu_strerror_r`), while bionic
+    // Android exports `__gnu_strerror_r`. Both have the same
+    // (int, char*, size_t) -> int ABI, so expose the pair on whichever
+    // platform provides one of them (W194-A).
+    #[cfg(not(target_os = "android"))]
+    {
+        extern "C" {
+            fn __xpg_strerror_r();
+        }
+        fwd_extern!(__xpg_strerror_r);
+        if let Some(xpg) = m.get("__xpg_strerror_r").copied() {
+            m.insert("__gnu_strerror_r", Shim::forwarded("__gnu_strerror_r", xpg.ptr));
+        }
+    }
+    #[cfg(target_os = "android")]
+    {
+        extern "C" {
+            fn __gnu_strerror_r();
+        }
+        fwd_extern!(__gnu_strerror_r);
+        if let Some(gnu) = m.get("__gnu_strerror_r").copied() {
+            m.insert("__xpg_strerror_r", Shim::forwarded("__xpg_strerror_r", gnu.ptr));
+        }
     }
 
     // NDK platform surface (libandroid / libjnigraphics / liblog / EGL-GLES).

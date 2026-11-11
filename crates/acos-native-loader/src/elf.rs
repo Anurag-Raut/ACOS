@@ -32,6 +32,40 @@ pub const EV_CURRENT: u8 = 1;
 pub const ET_EXEC: u16 = 2;
 pub const ET_DYN: u16 = 3;
 pub const EM_X86_64: u16 = 62;
+pub const EM_AARCH64: u16 = 183;
+
+// AArch64 dynamic relocation types (`elf.h`). Only the subset the loader
+// implements is named; anything else is a structured UNSUPPORTED_RELOCATION.
+pub const R_AARCH64_NONE: u32 = 0;
+pub const R_AARCH64_ABS64: u32 = 257;
+pub const R_AARCH64_COPY: u32 = 1024;
+pub const R_AARCH64_GLOB_DAT: u32 = 1025;
+pub const R_AARCH64_JUMP_SLOT: u32 = 1026;
+pub const R_AARCH64_RELATIVE: u32 = 1027;
+pub const R_AARCH64_TLS_DTPMOD64: u32 = 1028;
+pub const R_AARCH64_TLS_DTPREL64: u32 = 1029;
+pub const R_AARCH64_TLS_TPREL64: u32 = 1030;
+pub const R_AARCH64_TLSDESC: u32 = 1031;
+pub const R_AARCH64_IRELATIVE: u32 = 1032;
+
+/// The ELF machine this *host runtime* was built for.
+///
+/// The loader maps guest objects into the caller's address space and calls
+/// them with the caller's ABI, so the guest object must match the host
+/// instruction set. On the x86_64 product host this is `x86_64`; the W194-A
+/// aarch64 cross-build accepts the arm64-v8a objects it is meant to load.
+#[cfg(target_arch = "x86_64")]
+pub const HOST_ELF_MACHINE: u16 = EM_X86_64;
+#[cfg(target_arch = "aarch64")]
+pub const HOST_ELF_MACHINE: u16 = EM_AARCH64;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+compile_error!("acos-native-loader: unsupported host architecture");
+
+/// Human-readable name of [`HOST_ELF_MACHINE`] for structured errors.
+#[cfg(target_arch = "x86_64")]
+pub const HOST_ABI_NAME: &str = "x86_64";
+#[cfg(target_arch = "aarch64")]
+pub const HOST_ABI_NAME: &str = "aarch64";
 
 pub const PT_NULL: u32 = 0;
 pub const PT_LOAD: u32 = 1;

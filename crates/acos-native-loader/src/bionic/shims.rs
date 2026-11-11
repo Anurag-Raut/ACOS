@@ -7,6 +7,8 @@ use std::collections::{HashMap, HashSet};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
+// W194-A: host-libc surface (see `bionic::host`).
+use crate::bionic::host as libc;
 
 // --- host libc symbols used by the shims -----------------------------------
 

@@ -56,6 +56,13 @@ fn close_span(first: u32, last: u32) -> Result<(), String> {
     }
     // SAFETY: `close_range` takes three scalar arguments; closing descriptors
     // is idempotent and cannot invalidate memory.
+    //
+    // bionic (aarch64-linux-android, used by the W194-A cross-built runtime)
+    // does not export the `close_range` wrapper, so call the same syscall
+    // directly there. The x86_64 glibc path keeps the wrapper unchanged.
+    #[cfg(target_os = "android")]
+    let rc = unsafe { libc::syscall(libc::SYS_close_range, first, last, 0u32) as libc::c_int };
+    #[cfg(not(target_os = "android"))]
     let rc = unsafe { libc::close_range(first, last, 0) };
     if rc == 0 {
         return Ok(());
@@ -105,40 +112,49 @@ pub fn sanitize_env(pairs: &[(String, String)]) -> Result<String, String> {
 pub fn apply_rlimits(profile: &RlimitProfile) -> Result<String, String> {
     let mut applied = Vec::new();
     if let Some(value) = profile.address_space_bytes {
-        set_limit(libc::RLIMIT_AS, value)?;
+        set_limit(libc::RLIMIT_AS as RlimitResource, value)?;
         applied.push(format!("AS={value}"));
     }
     if let Some(value) = profile.nofile {
-        set_limit(libc::RLIMIT_NOFILE, value)?;
+        set_limit(libc::RLIMIT_NOFILE as RlimitResource, value)?;
         applied.push(format!("NOFILE={value}"));
     }
     if let Some(value) = profile.nproc {
-        set_limit(libc::RLIMIT_NPROC, value)?;
+        set_limit(libc::RLIMIT_NPROC as RlimitResource, value)?;
         applied.push(format!("NPROC={value}"));
     }
     if let Some(value) = profile.cpu_seconds {
-        set_limit(libc::RLIMIT_CPU, value)?;
+        set_limit(libc::RLIMIT_CPU as RlimitResource, value)?;
         applied.push(format!("CPU={value}"));
     }
     if let Some(value) = profile.file_size_bytes {
-        set_limit(libc::RLIMIT_FSIZE, value)?;
+        set_limit(libc::RLIMIT_FSIZE as RlimitResource, value)?;
         applied.push(format!("FSIZE={value}"));
     }
     if let Some(value) = profile.stack_bytes {
-        set_limit(libc::RLIMIT_STACK, value)?;
+        set_limit(libc::RLIMIT_STACK as RlimitResource, value)?;
         applied.push(format!("STACK={value}"));
     }
     if let Some(value) = profile.memlock_bytes {
-        set_limit(libc::RLIMIT_MEMLOCK, value)?;
+        set_limit(libc::RLIMIT_MEMLOCK as RlimitResource, value)?;
         applied.push(format!("MEMLOCK={value}"));
     }
-    set_limit(libc::RLIMIT_CORE, profile.core)?;
+    set_limit(libc::RLIMIT_CORE as RlimitResource, profile.core)?;
     applied.push(format!("CORE={}", profile.core));
     Ok(applied.join(" "))
 }
 
-fn set_limit(resource: u32, value: u64) -> Result<(), String> {
-    let res = resource as libc::__rlimit_resource_t;
+/// The resource-number type `getrlimit`/`setrlimit` expect.
+///
+/// glibc uses `__rlimit_resource_t` (a `u32` on x86_64); bionic uses a plain
+/// `c_int`. Keeping the alias per target makes both call the same syscall.
+#[cfg(target_os = "android")]
+type RlimitResource = libc::c_int;
+#[cfg(not(target_os = "android"))]
+type RlimitResource = libc::__rlimit_resource_t;
+
+fn set_limit(resource: RlimitResource, value: u64) -> Result<(), String> {
+    let res = resource;
     let mut current = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,

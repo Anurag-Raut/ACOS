@@ -45,8 +45,25 @@
 //! The classic-BPF program is assembled with a tiny forward-only label
 //! assembler so the control flow is auditable.
 
-/// `AUDIT_ARCH_X86_64` from `linux/audit.h`; libc does not export it.
-const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
+/// `AUDIT_ARCH_*` from `linux/audit.h`; libc does not export them.
+///
+/// The filter's arch check must name the architecture whose syscall numbers
+/// the deny list uses. On the x86_64 host this is unchanged; on an aarch64
+/// build (W194-A runtime-under-qemu) the numbers are the asm-generic arm64
+/// ones, so the audit arch must follow the target.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+const AUDIT_ARCH: u32 = 0xC000_003E; // AUDIT_ARCH_X86_64 (also 32-bit x86: 0x4000_0003)
+#[cfg(target_arch = "aarch64")]
+const AUDIT_ARCH: u32 = 0xC000_00B7; // AUDIT_ARCH_AARCH64
+#[cfg(target_arch = "riscv64")]
+const AUDIT_ARCH: u32 = 0xC000_00F3; // AUDIT_ARCH_RISCV64
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "x86",
+    target_arch = "aarch64",
+    target_arch = "riscv64"
+)))]
+compile_error!("acos-sandbox: no AUDIT_ARCH for this target_arch");
 
 const SECCOMP_SET_MODE_FILTER: u64 = 1;
 const SECCOMP_FILTER_FLAG_TSYNC: u64 = 1;
@@ -78,6 +95,16 @@ const CLONE_NEW_MASK: u32 = 0x0002_0000
     | 0x1000_0000
     | 0x2000_0000
     | 0x4000_0000;
+
+/// `kexec_file_load` on targets whose libc does not export the constant.
+///
+/// arm64 uses the asm-generic numbering (294) and libc's Android aarch64
+/// module omits the name, so define it explicitly there; x86_64 keeps
+/// `libc::SYS_kexec_file_load`.
+#[cfg(target_arch = "aarch64")]
+const SYS_KEXEC_FILE_LOAD: u32 = 294;
+#[cfg(not(target_arch = "aarch64"))]
+const SYS_KEXEC_FILE_LOAD: u32 = libc::SYS_kexec_file_load as u32;
 
 /// `PER_LINUX`, the only personality a guest may install.
 const PER_LINUX: u32 = 0;
@@ -246,7 +273,7 @@ fn deny_list() -> Vec<u32> {
         libc::SYS_perf_event_open as u32,
         // Modules / kexec / reboot.
         libc::SYS_kexec_load as u32,
-        libc::SYS_kexec_file_load as u32,
+        SYS_KEXEC_FILE_LOAD,
         libc::SYS_init_module as u32,
         libc::SYS_finit_module as u32,
         libc::SYS_delete_module as u32,
@@ -280,10 +307,15 @@ fn deny_list() -> Vec<u32> {
         libc::SYS_swapoff as u32,
         libc::SYS_syslog as u32,
         libc::SYS_acct as u32,
-        libc::SYS_ioperm as u32,
-        libc::SYS_iopl as u32,
-        libc::SYS_modify_ldt as u32,
     ];
+    // x86-only privileged surfaces. They have no arm64/riscv64 syscall
+    // number at all, so the deny entry is x86-only by construction.
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    {
+        list.push(libc::SYS_ioperm as u32);
+        list.push(libc::SYS_iopl as u32);
+        list.push(libc::SYS_modify_ldt as u32);
+    }
     list.sort_unstable();
     list.dedup();
     list
@@ -315,7 +347,7 @@ fn build() -> Vec<SockFilter> {
 
     // Reject a mismatched architecture outright: syscall numbers are per-arch.
     b.ld_abs(OFF_ARCH);
-    b.jeq(AUDIT_ARCH_X86_64, x86_ok, kill_arch);
+    b.jeq(AUDIT_ARCH, x86_ok, kill_arch);
     b.mark(kill_arch);
     b.ret(RET_KILL_PROCESS);
     b.mark(x86_ok);
