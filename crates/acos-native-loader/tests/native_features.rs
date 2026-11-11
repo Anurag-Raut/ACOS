@@ -66,3 +66,65 @@ fn log_lines_are_captured_by_the_sink() {
         "destructor log captured on unload: {lines:?}"
     );
 }
+
+/// Build `tests/native/testjmp.c` with the NDK clang (bionic headers) into the
+/// cargo target dir. Returns `None` (skip loudly) when no NDK is installed.
+fn build_testjmp() -> Option<std::path::PathBuf> {
+    let ndk = std::env::var("ANDROID_NDK_HOME")
+        .unwrap_or_else(|_| "/home/Qui/Android/Sdk/ndk/27.1.12297006".to_string());
+    let cc = std::path::PathBuf::from(&ndk)
+        .join("toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang");
+    let src = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/native/testjmp.c");
+    if !cc.is_file() || !src.is_file() {
+        return None;
+    }
+    let out_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/acos-jmp");
+    std::fs::create_dir_all(&out_dir).ok()?;
+    let so = out_dir.join("libtestjmp.so");
+    let rebuilt = std::process::Command::new(&cc)
+        .args(["-shared", "-fPIC", "-O2", "-o"])
+        .arg(&so)
+        .arg(&src)
+        .args(["-llog"])
+        .status()
+        .ok()?
+        .success();
+    if !rebuilt {
+        return None;
+    }
+    Some(so)
+}
+
+/// bionic `setjmp`/`longjmp`/`_setjmp`/`_longjmp`/`sigsetjmp`/`siglongjmp`
+/// must really return twice at the guest call site, with the callee-saved
+/// frame live and bionic's signal-mask split (`setjmp` saves, `_setjmp` does
+/// not). This runs a real NDK-built bionic library through the loader, so the
+/// shims are exercised exactly as `libhermesvm.so` would call them.
+#[test]
+fn bionic_setjmp_longjmp_roundtrip() {
+    let _g = common::serial();
+    let Some(so) = build_testjmp() else {
+        eprintln!("SKIP bionic_setjmp_longjmp_roundtrip: NDK clang/testjmp.c unavailable");
+        return;
+    };
+    let loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
+    let h = loader.load_file(&so).unwrap();
+    let run: extern "C" fn() -> i32 = unsafe { common::sym(h.symbol("tj_run_all").unwrap()) };
+    let failed = run();
+    loader.unload(&h).unwrap();
+    assert_eq!(
+        failed, 0,
+        "bionic jmp_buf checks failed (bitmask): setjmp_roundtrip={} underscore={} \
+         zero_value={} sigsetjmp_nomask={} setjmp_saves_mask={} underscore_leaves_mask={} \
+         sigsetjmp_saves_mask={}",
+        failed & 1,
+        failed & 2,
+        failed & 4,
+        failed & 8,
+        failed & 16,
+        failed & 32,
+        failed & 64
+    );
+}

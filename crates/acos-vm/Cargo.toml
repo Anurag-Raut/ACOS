@@ -31,7 +31,7 @@ cbc = "0.1"
 ctr = "0.9"
 aes-gcm = "0.10"
 getrandom = "0.2"
-rustix = { version = "1.1", features = ["event", "time", "pipe", "net", "fs"] }
+rustix = { version = "1.1", features = ["event", "time", "pipe", "net", "fs", "process"] }
 flate2 = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 libc = "0.2"

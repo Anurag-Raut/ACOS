@@ -1359,6 +1359,12 @@ fn unix_file_system(vm: &mut Vm) {
         "(Ljava/lang/String;)Ljava/lang/String;",
         ufs_canonicalize0,
     );
+    // Android 14's `UnixFileSystem` declares most of its natives under the
+    // unsuffixed names (`getBooleanAttributes0`, `list`, `getLength`, ...); the
+    // `0`-suffixed spellings below are the legacy libcore names, kept because
+    // the bootstrap class library and older fixtures use them. Both registries
+    // are keyed by the exact (class, name, signature) declared in the DEX, so a
+    // class that declares only one spelling reaches only that implementation.
     vm.register_native(
         c,
         "getBooleanAttributes0",
@@ -1367,7 +1373,20 @@ fn unix_file_system(vm: &mut Vm) {
     );
     vm.register_native(
         c,
+        "getBooleanAttributes0",
+        "(Ljava/io/File;)I",
+        ufs_get_boolean_attributes0_file,
+    );
+    vm.register_native(c, "checkAccess", "(Ljava/io/File;I)Z", ufs_check_access);
+    vm.register_native(
+        c,
         "createDirectory0",
+        "(Ljava/io/File;)Z",
+        ufs_create_directory0,
+    );
+    vm.register_native(
+        c,
+        "createDirectory",
         "(Ljava/io/File;)Z",
         ufs_create_directory0,
     );
@@ -1379,7 +1398,27 @@ fn unix_file_system(vm: &mut Vm) {
     );
     vm.register_native(
         c,
+        "createFileExclusively",
+        "(Ljava/lang/String;)Z",
+        ufs_create_file_exclusively0,
+    );
+    vm.register_native(c, "getLength", "(Ljava/io/File;)J", ufs_get_length);
+    vm.register_native(c, "delete0", "(Ljava/io/File;)Z", ufs_delete0);
+    vm.register_native(
+        c,
+        "rename0",
+        "(Ljava/io/File;Ljava/io/File;)Z",
+        ufs_rename0,
+    );
+    vm.register_native(
+        c,
         "getLastModifiedTime0",
+        "(Ljava/io/File;)J",
+        ufs_get_last_modified_time0,
+    );
+    vm.register_native(
+        c,
+        "getLastModifiedTime",
         "(Ljava/io/File;)J",
         ufs_get_last_modified_time0,
     );
@@ -1389,9 +1428,24 @@ fn unix_file_system(vm: &mut Vm) {
         "(Ljava/io/File;J)Z",
         ufs_set_last_modified_time0,
     );
+    vm.register_native(
+        c,
+        "setLastModifiedTime",
+        "(Ljava/io/File;J)Z",
+        ufs_set_last_modified_time0,
+    );
+    vm.register_native(
+        c,
+        "setPermission",
+        "(Ljava/io/File;IZZ)Z",
+        ufs_set_permission,
+    );
+    vm.register_native(c, "setReadOnly", "(Ljava/io/File;)Z", ufs_set_read_only);
     vm.register_native(c, "getNameMax0", "(Ljava/lang/String;)J", ufs_get_name_max0);
     vm.register_native(c, "getSpace0", "(Ljava/io/File;I)J", ufs_get_space0);
+    vm.register_native(c, "getSpace", "(Ljava/io/File;I)J", ufs_get_space0);
     vm.register_native(c, "list0", "(Ljava/io/File;)[Ljava/lang/String;", ufs_list0);
+    vm.register_native(c, "list", "(Ljava/io/File;)[Ljava/lang/String;", ufs_list0);
 }
 
 /// The `path` field of a `java.io.File` argument.
@@ -1422,9 +1476,9 @@ fn ufs_canonicalize0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     }
 }
 
-fn ufs_get_boolean_attributes0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let path = string_arg(vm, ctx, 0);
-    let bits = match vm.vfs.stat(&path, false) {
+/// `stat(2)`-derived `java.io.File` attribute bits for one guest path.
+fn boolean_attributes(vm: &Vm, path: &str) -> i32 {
+    match vm.vfs.stat(path, false) {
         Ok(st) => {
             let mut bits = BA_EXISTS;
             if st.mode & 0o170000 == 0o100000 {
@@ -1438,8 +1492,157 @@ fn ufs_get_boolean_attributes0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             bits
         }
         Err(_) => 0,
-    };
+    }
+}
+
+fn ufs_get_boolean_attributes0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let path = string_arg(vm, ctx, 0);
+    let bits = boolean_attributes(vm, &path);
     vm.ret_i32(ctx, bits);
+    Ok(())
+}
+
+fn ufs_get_boolean_attributes0_file(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let bits = file_path(vm, file).map_or(0, |p| boolean_attributes(vm, &p));
+    vm.ret_i32(ctx, bits);
+    Ok(())
+}
+
+/// `access(2)` permission-bit evaluation (`java.io.FileSystem.ACCESS_*` are the
+/// `R_OK`/`W_OK`/`X_OK` values).
+///
+/// The VFS runs guest code as the host process, so the ownership class comes
+/// from the host `euid`/`egid` (the same identity the kernel uses for `open` on
+/// the sandbox root); supplementary groups are not modelled, which only
+/// matters for group-owned files outside the sandbox's own tree. Unlike
+/// `libcore.io.Linux.access` (which deliberately keeps reads open on the
+/// sandbox), `File.canRead()` must reflect the mode bits, because real Java
+/// does.
+fn unix_access(st: &Stat, access: i32, euid: u32, egid: u32) -> bool {
+    if access == 0 {
+        return true;
+    }
+    if euid == 0 {
+        // root: R/W always allowed, X only when some execute bit is set.
+        return access & 1 == 0 || st.mode & 0o111 != 0;
+    }
+    let (r, w, x) = if euid == st.uid {
+        (0o400, 0o200, 0o100)
+    } else if egid == st.gid {
+        (0o040, 0o020, 0o010)
+    } else {
+        (0o004, 0o002, 0o001)
+    };
+    (access & 4 == 0 || st.mode & r != 0)
+        && (access & 2 == 0 || st.mode & w != 0)
+        && (access & 1 == 0 || st.mode & x != 0)
+}
+
+fn ufs_check_access(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let access = vm.arg_i32(ctx, 1);
+    let euid = rustix::process::geteuid().as_raw();
+    let egid = rustix::process::getegid().as_raw();
+    let allowed = file_path(vm, file).is_some_and(|p| {
+        vm.vfs
+            .stat(&p, true)
+            .is_ok_and(|st| unix_access(&st, access, euid, egid))
+    });
+    vm.ret_bool(ctx, allowed);
+    Ok(())
+}
+
+fn ufs_get_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let len = file_path(vm, file)
+        .and_then(|p| vm.vfs.stat(&p, true).ok())
+        .map_or(0, |st| st.size as i64);
+    vm.ret_i64(ctx, len);
+    Ok(())
+}
+
+fn ufs_delete0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let ok = file_path(vm, file).is_some_and(|p| vm.vfs.remove(&p).is_ok());
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+fn ufs_rename0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let from = file_path(vm, vm.arg_ref(ctx, 0));
+    let to = file_path(vm, vm.arg_ref(ctx, 1));
+    let ok = match (from, to) {
+        (Some(from), Some(to)) => vm.vfs.rename(&from, &to).is_ok(),
+        _ => false,
+    };
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+/// The permission bit `mask` selects for one `FileSystem.ACCESS_*` bit, owner
+/// or group+other (the AOSP `UnixFileSystem_setPermission0` mapping).
+fn permission_mask(access: i32, owneronly: bool) -> u32 {
+    let owner_bit = match access {
+        4 => 0o400,  // ACCESS_READ
+        2 => 0o200,  // ACCESS_WRITE
+        1 => 0o100,  // ACCESS_EXECUTE
+        _ => return 0,
+    };
+    if owneronly {
+        owner_bit
+    } else {
+        owner_bit | (owner_bit >> 3) | (owner_bit >> 6)
+    }
+}
+
+/// `UnixFileSystem.setPermission(File, int access, boolean enable, boolean
+/// owneronly)`: rewrite the mode of an existing guest path. Returns `false`
+/// (like the AOSP native) on stat/chmod failure, including a read-only boot
+/// file and a synthetic path.
+fn ufs_set_permission(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let access = vm.arg_i32(ctx, 1);
+    let enable = vm.arg_bool(ctx, 2);
+    let owneronly = vm.arg_bool(ctx, 3);
+    let Some(path) = file_path(vm, file) else {
+        vm.ret_bool(ctx, false);
+        return Ok(());
+    };
+    let Ok(st) = vm.vfs.stat(&path, true) else {
+        vm.ret_bool(ctx, false);
+        return Ok(());
+    };
+    let mut mode = st.mode & 0o7777;
+    for bit in [4, 2, 1] {
+        if access & bit == 0 {
+            continue;
+        }
+        let mask = permission_mask(bit, owneronly);
+        if enable {
+            mode |= mask;
+        } else {
+            mode &= !mask;
+        }
+    }
+    let ok = vm.vfs.chmod(&path, mode as i32, None).is_ok();
+    vm.ret_bool(ctx, ok);
+    Ok(())
+}
+
+fn ufs_set_read_only(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    let file = vm.arg_ref(ctx, 0);
+    let Some(path) = file_path(vm, file) else {
+        vm.ret_bool(ctx, false);
+        return Ok(());
+    };
+    let Ok(st) = vm.vfs.stat(&path, true) else {
+        vm.ret_bool(ctx, false);
+        return Ok(());
+    };
+    let mode = (st.mode & 0o7777) & !0o222;
+    let ok = vm.vfs.chmod(&path, mode as i32, None).is_ok();
+    vm.ret_bool(ctx, ok);
     Ok(())
 }
 

@@ -7,11 +7,10 @@
 //! [`crate::bionic::gles`]).  The Glibc ABI for these names on x86_64 is
 //! identical to bionic's, so most are *forwarded*; the few that differ
 //! (fortified `openat`, `FILE*` streams, the bionic 8-byte `sigset_t`) get a
-//! translating shim, and the two dangerous control-flow entries
-//! (`setjmp`/`longjmp`) remain fail-closed structured traps: binding succeeds
-//! so the engine can be loaded, but *calling* them reports the exact symbol
-//! and aborts instead of handing a bionic-sized `jmp_buf` to glibc (which
-//! would smash the guest stack).
+//! translating shim, and the non-local-jump entries (`setjmp`, `_setjmp`,
+//! `sigsetjmp`, `longjmp`, `_longjmp`, `siglongjmp`) are real bionic-ABI
+//! save/restore code: a bionic-sized `jmp_buf` is never handed to the host's
+//! different, pointer-mangled glibc `setjmp`.
 //!
 //! Nothing here silently fakes success. `fork`/`execvp` are fail-closed
 //! *returning* shims (the Android contract for a restricted process is an
@@ -262,13 +261,33 @@ pub unsafe extern "C" fn execvp(_file: *const c_char, _argv: *const *const c_cha
 
 // --- bionic jmp_buf: real setjmp/longjmp -----------------------------------
 //
-// Bionic's x86_64 `jmp_buf` is 11 words (`_JBLEN = 11`, 88 bytes) and its
-// `setjmp` saves the callee-saved GPRs plus `rsp`/`rip`. Glibc's `jmp_buf` is
-// a different, larger, pointer-mangled layout, so forwarding smashes the guest
-// stack. These save/restore only the classic registers into the first 64 bytes,
-// which is self-consistent and leaves the guest's 88-byte buffer untouched past
-// that point. Dart's `LongJump` saves the buffer and later `longjmp`s back to
-// it; it never inspects the layout, so this is the exact contract it needs.
+// Bionic's x86_64 `jmp_buf` is 11 words (`_JBLEN = 11`, 88 bytes) and
+// `sigjmp_buf` is 12. Bionic's `setjmp` *also* saves the signal mask
+// (`<setjmp.h>`: "setjmp is equivalent to sigsetjmp(env, 1)"), `_setjmp` does
+// not. Glibc's `jmp_buf` is a different, larger, pointer-mangled layout, so
+// forwarding either one smashes the guest stack.
+//
+// These entry points are real save/restore code, not traps, and they never
+// route through the host `setjmp` family (whose buffer layout differs). The
+// buffer layout used here is private to this file and self-consistent, which
+// is all the guest can depend on (bionic documents the buffer as opaque and
+// nothing in the corpus inspects it):
+//
+//   words 0..7  rbx, rbp, r12, r13, r14, r15, rsp, rip
+//   word  8     flags: 0x534f4341 ("ACOS") | 1 when the mask word is valid
+//   word  9     bionic 8-byte `sigset_t` saved with `rt_sigprocmask`
+//   word  10    unused (within `jmp_buf`'s 11 words)
+//
+// The save runs at the *shim entry* (there is no Rust wrapper frame between the
+// guest's call and the saved `rsp`/`rip`), so `longjmp` resumes the caller of
+// the shim, i.e. it genuinely returns twice at the guest call site; the
+// intermediate shim frame is dead either way. `sigsetjmp`/`siglongjmp` are
+// tail-jumps, never calls, for the same reason.
+//
+// Signal masks use the kernel's `rt_sigprocmask` with an 8-byte sigset, which
+// is exactly bionic's `sigset_t`; the host glibc 128-byte `sigset_t` is never
+// involved, so no translation layer is needed either.
+
 #[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
     ".globl acos_setjmp",
@@ -285,13 +304,75 @@ core::arch::global_asm!(
     "  mov [rdi + 48], rax",
     "  mov rax, [rsp]",
     "  mov [rdi + 56], rax",
+    "  mov qword ptr [rdi + 64], 0",
     "  xor eax, eax",
     "  ret",
     ".size acos_setjmp, .-acos_setjmp",
+    ".globl acos_setjmp_mask",
+    ".hidden acos_setjmp_mask",
+    ".type acos_setjmp_mask, @function",
+    "acos_setjmp_mask:",
+    "  mov [rdi + 0], rbx",
+    "  mov [rdi + 8], rbp",
+    "  mov [rdi + 16], r12",
+    "  mov [rdi + 24], r13",
+    "  mov [rdi + 32], r14",
+    "  mov [rdi + 40], r15",
+    "  lea rax, [rsp + 8]",
+    "  mov [rdi + 48], rax",
+    "  mov rax, [rsp]",
+    "  mov [rdi + 56], rax",
+    "  mov qword ptr [rdi + 64], 0",
+    // rt_sigprocmask(SIG_SETMASK, NULL, &env[9], 8) -> saves the mask.
+    "  push rdi",
+    "  lea rdx, [rdi + 72]",
+    "  mov eax, 14",
+    "  mov edi, 2",
+    "  xor esi, esi",
+    "  mov r10d, 8",
+    "  syscall",
+    "  pop rdi",
+    "  mov eax, 0x534f4341",
+    "  or rax, 1",
+    "  mov [rdi + 64], rax",
+    "  xor eax, eax",
+    "  ret",
+    ".size acos_setjmp_mask, .-acos_setjmp_mask",
+    // sigsetjmp(env, savemask): tail-jump, no extra frame.
+    ".globl acos_sigsetjmp",
+    ".hidden acos_sigsetjmp",
+    ".type acos_sigsetjmp, @function",
+    "acos_sigsetjmp:",
+    "  test esi, esi",
+    "  jne 1f",
+    "  jmp acos_setjmp",
+    "1:",
+    "  jmp acos_setjmp_mask",
+    ".size acos_sigsetjmp, .-acos_sigsetjmp",
     ".globl acos_longjmp",
     ".hidden acos_longjmp",
     ".type acos_longjmp, @function",
     "acos_longjmp:",
+    // Restore the saved mask first (if this buffer has one), while rdi/rsi are
+    // still live and the current stack is still valid.
+    "  mov rcx, [rdi + 64]",
+    "  mov rdx, 0x534f4341",
+    "  and rcx, rdx",
+    "  cmp rcx, rdx",
+    "  jne 2f",
+    "  test byte ptr [rdi + 64], 1",
+    "  jz 2f",
+    "  push rsi",
+    "  push rdi",
+    "  lea rsi, [rdi + 72]",
+    "  mov eax, 14",
+    "  mov edi, 2",
+    "  xor edx, edx",
+    "  mov r10d, 8",
+    "  syscall",
+    "  pop rdi",
+    "  pop rsi",
+    "2:",
     "  mov rbx, [rdi + 0]",
     "  mov rbp, [rdi + 8]",
     "  mov r12, [rdi + 16]",
@@ -302,9 +383,9 @@ core::arch::global_asm!(
     "  mov rdx, [rdi + 56]",
     "  mov eax, esi",
     "  test eax, eax",
-    "  jne 1f",
+    "  jne 3f",
     "  mov eax, 1",
-    "1:",
+    "3:",
     "  jmp rdx",
     ".size acos_longjmp, .-acos_longjmp",
 );
@@ -312,6 +393,8 @@ core::arch::global_asm!(
 #[cfg(target_arch = "x86_64")]
 extern "C" {
     fn acos_setjmp(env: *mut c_void) -> c_int;
+    fn acos_setjmp_mask(env: *mut c_void) -> c_int;
+    fn acos_sigsetjmp(env: *mut c_void, save: c_int) -> c_int;
     fn acos_longjmp(env: *mut c_void, val: c_int) -> !;
 }
 
@@ -319,7 +402,7 @@ extern "C" {
 #[cfg(not(target_arch = "x86_64"))]
 unsafe fn trap(symbol: &str) -> ! {
     eprintln!(
-        "ACOS UNSUPPORTED_NATIVE_SYMBOL: libflutter.so called unimplemented symbol {symbol:?} \
+        "ACOS_UNSUPPORTED_NATIVE_SYMBOL: libflutter.so called unimplemented symbol {symbol:?} \
          (the bionic jmp_buf ABI differs from the host's; forwarding would smash the guest stack)"
     );
     std::process::abort()
@@ -411,13 +494,23 @@ pub fn table() -> std::collections::HashMap<&'static str, super::Shim> {
     shim("execvp", execvp as *const () as *const c_void);
     #[cfg(target_arch = "x86_64")]
     {
-        shim("setjmp", acos_setjmp as *const () as *const c_void);
+        // bionic: setjmp == sigsetjmp(env, 1), _setjmp saves registers only.
+        // `libhermesvm.so` imports exactly the underscore pair.
+        shim("setjmp", acos_setjmp_mask as *const () as *const c_void);
+        shim("_setjmp", acos_setjmp as *const () as *const c_void);
+        shim("sigsetjmp", acos_sigsetjmp as *const () as *const c_void);
         shim("longjmp", acos_longjmp as *const () as *const c_void);
+        shim("_longjmp", acos_longjmp as *const () as *const c_void);
+        shim("siglongjmp", acos_longjmp as *const () as *const c_void);
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
         shim("setjmp", setjmp_trap as *const () as *const c_void);
+        shim("_setjmp", setjmp_trap as *const () as *const c_void);
+        shim("sigsetjmp", setjmp_trap as *const () as *const c_void);
         shim("longjmp", longjmp_trap as *const () as *const c_void);
+        shim("_longjmp", longjmp_trap as *const () as *const c_void);
+        shim("siglongjmp", longjmp_trap as *const () as *const c_void);
     }
     shim(
         "OPENSSL_memory_alloc",
