@@ -116,6 +116,16 @@ pub trait ServiceObject: Send {
     fn finished(&self) -> bool {
         false
     }
+
+    /// Reverse transactions a `raw_transact` handler queued during the call.
+    ///
+    /// The decoded path returns deliveries in [`CallResult`]; a raw handler
+    /// (the compositor's `ITransactionCompletedListener` callbacks) has no
+    /// `CallResult`, so it parks them here and the dispatcher appends them to
+    /// the host queue that the runtime already turns into frames (C1).
+    fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        Vec::new()
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -677,9 +687,11 @@ impl ServiceHost {
                 .expect("checked above");
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();
+            let mut raw_deliveries = object.drain_raw_deliveries();
             if finished {
                 self.dynamic.remove(&binder.0);
             }
+            self.deliveries.append(&mut raw_deliveries);
             if !handled {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: descriptor,

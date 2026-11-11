@@ -1,0 +1,665 @@
+//! C1 acceptance: the compositor-client surface stock `libgui` talks to.
+//!
+//! Every request is hand-built in the **image's** order and every reply is
+//! decoded in the image's read order with `data_avail() == 0`. The wire facts
+//! and their addresses in `.cache/art/sysroot/system/lib64/libgui.so` are in the
+//! module docs of `acos_services::surface_client`.
+
+use std::os::fd::{AsFd, OwnedFd};
+
+use acos_parcel::{BinderId, Parcel};
+use acos_services::compositor_client::{self, DisplayDescriptor};
+use acos_services::exception::NO_EXCEPTION;
+use acos_services::surface_client::{
+    self, CallbackId, ReleaseCallbackId, SurfaceState,
+};
+use acos_services::{ServiceError, ServiceHost};
+
+const ISURFACE_COMPOSER: &str = "android.gui.ISurfaceComposer";
+const ISURFACE_COMPOSER_LEGACY: &str = "android.ui.ISurfaceComposer";
+const ISURFACE_COMPOSER_CLIENT: &str = "android.gui.ISurfaceComposerClient";
+const ITRANSACTION_LISTENER: &str = "android.gui.ITransactionComposerListener";
+
+const CREATE_CONNECTION: u32 = 3;
+const CREATE_SURFACE: u32 = 1;
+const SET_TRANSACTION_STATE: u32 = 8;
+
+fn transact(
+    host: &mut ServiceHost,
+    binder: BinderId,
+    code: u32,
+    flags: u32,
+    data: &mut Parcel,
+) -> std::result::Result<Parcel, ServiceError> {
+    let mut reply = Parcel::new();
+    host.transact(binder, code, data, &mut reply, flags)?;
+    reply.set_data_position(0);
+    Ok(reply)
+}
+
+fn no_exception(reply: &mut Parcel) {
+    assert_eq!(reply.read_int32().expect("exception header"), NO_EXCEPTION);
+}
+
+fn composer(host: &mut ServiceHost) -> BinderId {
+    host.check_service("SurfaceFlinger")
+        .expect("lookup is infallible")
+        .expect("SurfaceFlinger resolves to the compositor node")
+}
+
+/// `ISurfaceComposer.createConnection()` (AIDL code 3): token only.
+fn create_connection(host: &mut ServiceHost, sf: BinderId) -> BinderId {
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.set_data_position(0);
+    let mut reply = transact(host, sf, CREATE_CONNECTION, 0, &mut data).expect("createConnection");
+    no_exception(&mut reply);
+    let client = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null ISurfaceComposerClient");
+    assert_eq!(reply.data_avail(), 0, "createConnection reply has trailing bytes");
+    client
+}
+
+/// `ISurfaceComposerClient.createSurface(name, flags, parent, metadata)`.
+fn create_surface(host: &mut ServiceHost, client: BinderId, name: &str) -> (BinderId, i32) {
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_CLIENT)
+        .expect("token");
+    data.write_string16(name).expect("name");
+    data.write_int32(0); // flags
+    data.write_strong_binder_opt(None); // parent
+    write_layer_metadata(&mut data);
+    data.set_data_position(0);
+    let mut reply =
+        transact(host, client, CREATE_SURFACE, 0, &mut data).expect("createSurface");
+    no_exception(&mut reply);
+    // `CreateSurfaceResult` AIDL parcelable: marker 1, inline size, then fields.
+    assert_eq!(reply.read_int32().expect("parcelable marker"), 1);
+    let size = reply.read_int32().expect("parcelable size");
+    assert!(size > 0);
+    let handle = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("layer handle");
+    let layer_id = reply.read_int32().expect("layer id");
+    let layer_name = reply.read_string16().expect("name").expect("non-null");
+    let transform_hint = reply.read_int32().expect("transform hint");
+    assert_eq!(layer_name, name);
+    assert_eq!(transform_hint, 0);
+    assert_eq!(reply.data_avail(), 0, "createSurface reply has trailing bytes");
+    (handle, layer_id)
+}
+
+fn write_layer_metadata(data: &mut Parcel) {
+    data.write_int32(1); // non-null Parcelable
+    data.write_int32(0); // empty map
+}
+
+fn write_rect(data: &mut Parcel, r: [i32; 4]) {
+    for v in r {
+        data.write_int32(v);
+    }
+}
+
+fn write_words(data: &mut Parcel, bytes: &[u8]) {
+    for word in bytes.chunks(4) {
+        let mut buf = [0u8; 4];
+        buf[..word.len()].copy_from_slice(word);
+        data.write_int32(i32::from_le_bytes(buf));
+    }
+}
+
+/// The image's `gui::WindowInfo` (empty: just the presence word).
+fn write_window_info(data: &mut Parcel, full: bool) {
+    if !full {
+        data.write_int32(0);
+        return;
+    }
+    data.write_int32(1); // non-empty
+    data.write_strong_binder_opt(None); // token
+    data.write_int64(0); // dispatching timeout
+    data.write_int32(1); // id
+    data.write_string16("Window{test}").expect("name");
+    data.write_int32(0); // layoutParamsFlags
+    data.write_int32(1); // layoutParamsType
+    write_rect(data, [0, 0, 64, 48]); // frame
+    data.write_int32(0); // surfaceInset (the image has no contentSize fields)
+    data.write_float(1.0); // globalScaleFactor
+    data.write_float(1.0); // alpha
+    for _ in 0..6 {
+        data.write_float(0.0); // transform
+    }
+    data.write_int32(0); // touchOcclusionMode
+    data.write_int32(1000); // ownerPid
+    data.write_int32(10000); // ownerUid
+    data.write_string16("com.acos.test").expect("package");
+    data.write_int32(0); // inputConfig
+    data.write_int32(0); // displayId
+    // InputApplicationInfo is written directly (no Parcelable marker): an
+    // inline size word then token/name/timeout.
+    let mut app = Parcel::new();
+    app.write_strong_binder_opt(None);
+    app.write_string16("app").expect("app name");
+    app.write_int64(0);
+    let body = app.marshall();
+    data.write_int32(body.len() as i32);
+    write_words(data, &body);
+    write_light_blob(data, &[0]); // touchableRegion
+    data.write_bool(false); // replaceTouchableRegionWithCrop
+    data.write_strong_binder_opt(None); // touchableRegionCropHandle
+    data.write_strong_binder_opt(None); // windowToken
+    data.write_strong_binder_opt(None); // focusTransferTarget
+}
+
+/// A `LightFlattenable` variable-size body: size word then body words.
+fn write_light_blob(data: &mut Parcel, words: &[i32]) {
+    data.write_int32((words.len() * 4) as i32);
+    for w in words {
+        data.write_int32(*w);
+    }
+}
+
+/// `GraphicBuffer`: 13 header words + 9 shim handle ints + one memfd.
+fn write_graphic_buffer(
+    data: &mut Parcel,
+    fd: &OwnedFd,
+    width: u32,
+    height: u32,
+    stride: u32,
+    format: i32,
+    id: u64,
+) {
+    // header + handle, the exact 88 bytes G1's shim makes `getFlattenedSize()`
+    // report (13 words + 9 ints).
+    data.write_int32(88); // len
+    data.write_int32(1); // fd count
+    data.write_int32(i32::from_le_bytes(*b"GB01"));
+    data.write_int32(width as i32);
+    data.write_int32(height as i32);
+    data.write_int32(stride as i32);
+    data.write_int32(format);
+    data.write_int32(1); // layerCount
+    data.write_int32((id & 0xffff_ffff) as i32); // usage lo (unused here)
+    data.write_int32((id >> 32) as i32); // GraphicBuffer.id hi
+    data.write_int32((id & 0xffff_ffff) as i32); // GraphicBuffer.id lo
+    data.write_int32(0); // generation
+    data.write_int32(1); // handle numFds
+    data.write_int32(9); // handle numInts
+    data.write_int32(0); // usage hi
+    // the nine gralloc-shim handle ints: w,h,stride,format,usage lo,usage hi,
+    // layers,bpp,dataspace
+    data.write_int32(width as i32);
+    data.write_int32(height as i32);
+    data.write_int32(stride as i32);
+    data.write_int32(format);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(1);
+    data.write_int32(4);
+    data.write_int32(0);
+    data.write_file_descriptor(fd.as_fd()).expect("fd");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_buffer_data(
+    data: &mut Parcel,
+    fd: &OwnedFd,
+    width: u32,
+    height: u32,
+    frame_number: u64,
+    buffer_id: u64,
+    listener: BinderId,
+) {
+    data.write_int32(1); // Parcelable BufferData non-null
+    data.write_int32(0x04 | 0x02 | 0x01); // flags: cached/frame/fence changed
+    data.write_bool(true); // has buffer
+    write_graphic_buffer(data, fd, width, height, width, 1, buffer_id);
+    data.write_bool(false); // no acquire fence
+    data.write_uint64(frame_number);
+    data.write_strong_binder(listener); // releaseBufferListener
+    data.write_strong_binder(BinderId(0)); // releaseBufferEndpoint
+    data.write_strong_binder(BinderId(0)); // cached buffer token
+    data.write_uint64(buffer_id);
+    data.write_bool(false); // hasBarrier
+    data.write_uint64(0);
+    data.write_uint32(1); // producerId
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_layer_state(
+    data: &mut Parcel,
+    handle: BinderId,
+    layer_id: i32,
+    what: u64,
+    buffer: Option<(BinderId, u64, u64)>,
+    listeners: &[(BinderId, Vec<CallbackId>)],
+    window_info_full: bool,
+) {
+    data.write_strong_binder(handle);
+    data.write_int32(layer_id);
+    data.write_uint64(what);
+    data.write_float(0.0);
+    data.write_float(0.0);
+    data.write_int32(0);
+    data.write_uint32(0);
+    data.write_uint32(0);
+    data.write_uint32(0);
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    write_rect(data, [0, 0, 0, 0]);
+    data.write_bool(false); // relativeLayerSurfaceControl
+    data.write_bool(false); // parentSurfaceControlForChild
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    write_window_info(data, window_info_full);
+    write_light_blob(data, &[0]); // transparentRegion
+    data.write_uint32(0); // bufferTransform
+    data.write_bool(false); // transformToDisplayInverse
+    data.write_bool(false); // borderEnabled
+    data.write_float(0.0); // borderWidth
+    for _ in 0..4 {
+        data.write_float(0.0); // borderColor
+    }
+    data.write_uint32(0); // dataspace
+    write_light_blob(data, &[0]); // hdrMetadata
+    write_light_blob(data, &[0]); // surfaceDamageRegion
+    data.write_int32(0); // api
+    data.write_bool(false); // no sideband stream
+    for _ in 0..16 {
+        data.write_float(0.0); // colorTransform
+    }
+    data.write_float(0.0); // cornerRadius
+    data.write_uint32(0); // backgroundBlurRadius
+    write_layer_metadata(data);
+    for _ in 0..4 {
+        data.write_float(0.0); // bgColor
+    }
+    data.write_uint32(0); // bgColorDataspace
+    data.write_bool(false); // colorSpaceAgnostic
+
+    data.write_int32(listeners.len() as i32);
+    for (listener, callbacks) in listeners {
+        data.write_strong_binder(*listener);
+        data.write_int32(callbacks.len() as i32);
+        for cb in callbacks {
+            data.write_int32(1); // Parcelable CallbackId
+            data.write_int64(cb.id);
+            data.write_int32(cb.kind);
+        }
+    }
+
+    data.write_float(0.0); // shadowRadius
+    data.write_int32(0); // frameRateSelectionPriority
+    data.write_float(60.0); // frameRate
+    data.write_byte(0); // frameRateCompatibility
+    data.write_byte(0); // changeFrameRateStrategy
+    data.write_byte(0); // defaultFrameRateCompatibility
+    data.write_byte(0); // frameRateCategory
+    data.write_bool(false); // frameRateCategorySmoothSwitchOnly
+    data.write_byte(0); // frameRateSelectionStrategy
+    data.write_uint32(0); // fixedTransformHint
+    data.write_bool(false); // autoRefresh
+    data.write_bool(false); // dimmingEnabled
+
+    data.write_uint32(0); // blurRegions
+    for _ in 0..10 {
+        data.write_float(0.0); // StretchEffect (fixed 40 bytes)
+    }
+    write_rect(data, [0, 0, 0, 0]); // bufferCrop
+    write_rect(data, [0, 0, 0, 0]); // destinationFrame
+    data.write_bool(false); // isTrustedOverlay
+    data.write_uint32(0); // dropInputMode
+
+    if let Some((listener, frame_number, buffer_id)) = buffer {
+        data.write_bool(true);
+        // A File kept alive by the caller; the parcel dups the descriptor.
+        let fd = test_memfd();
+        write_buffer_data(data, &fd, 64, 48, frame_number, buffer_id, listener);
+    } else {
+        data.write_bool(false);
+    }
+    data.write_int32(1); // TrustedPresentationThresholds marker
+    data.write_int32(12); // AIDL size = 3 words
+    data.write_float(-1.0);
+    data.write_float(-1.0);
+    data.write_int32(0);
+    data.write_int32(1); // TrustedPresentationListener marker
+    data.write_strong_binder(BinderId(0));
+    data.write_int32(-1);
+    data.write_float(1.0); // currentHdrSdrRatio
+    data.write_float(1.0); // desiredHdrSdrRatio
+    data.write_int32(0); // cachingHint Enabled
+}
+
+fn test_memfd() -> OwnedFd {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "acos-c1-{}-{}.bin",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    let file = std::fs::File::create(&path).expect("temp buffer");
+    file.set_len(64 * 48 * 4).expect("size");
+    let _ = std::fs::remove_file(&path);
+    file.into()
+}
+
+type ComposerSpec = (
+    BinderId,
+    i32,
+    Option<(BinderId, u64, u64)>,
+    Vec<(BinderId, Vec<CallbackId>)>,
+);
+
+/// One concrete legacy transaction parcel with `count` composers.
+fn transaction_parcel(
+    composers: &[ComposerSpec],
+    frame_timeline: &[i32],
+    listener_callbacks: &[(BinderId, Vec<CallbackId>)],
+    transaction_id: u64,
+) -> Parcel {
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
+    write_light_blob(&mut data, frame_timeline); // FrameTimelineInfo
+    data.write_uint32(composers.len() as u32);
+    for (handle, layer_id, buffer, listeners) in composers {
+        write_layer_state(
+            &mut data,
+            *handle,
+            *layer_id,
+            surface_client::what::BUFFER | surface_client::what::LAYER,
+            *buffer,
+            listeners,
+            false,
+        );
+    }
+    data.write_uint32(0); // displays
+    data.write_uint32(0); // flags
+    data.write_strong_binder_opt(None); // applyToken
+    data.write_int32(0); // InputWindowCommands: focusRequests
+    data.write_int32(0); // InputWindowCommands: windowInfosReportedListeners
+    data.write_int64(0); // desiredPresentTime
+    data.write_bool(true); // isAutoTimestamp
+    data.write_uint32(0); // uncacheBuffers
+    data.write_bool(!listener_callbacks.is_empty());
+    data.write_int32(listener_callbacks.len() as i32);
+    for (listener, callbacks) in listener_callbacks {
+        data.write_strong_binder(*listener);
+        data.write_int32(callbacks.len() as i32);
+        for cb in callbacks {
+            data.write_int32(1);
+            data.write_int64(cb.id);
+            data.write_int32(cb.kind);
+        }
+    }
+    data.write_uint64(transaction_id);
+    data.write_uint32(0); // mergedTransactionIds
+    data.set_data_position(0);
+    data
+}
+
+fn find_release(
+    deliveries: &[acos_services::PendingDelivery],
+    listener: BinderId,
+) -> &acos_services::PendingDelivery {
+    deliveries
+        .iter()
+        .find(|d| d.target == listener && d.code == 2)
+        .expect("onReleaseBuffer delivery")
+}
+
+fn find_completed(
+    deliveries: &[acos_services::PendingDelivery],
+    listener: BinderId,
+) -> &acos_services::PendingDelivery {
+    deliveries
+        .iter()
+        .find(|d| d.target == listener && d.code == 1)
+        .expect("onTransactionCompleted delivery")
+}
+
+fn score_state(state: &std::sync::Arc<std::sync::Mutex<SurfaceState>>) -> std::sync::MutexGuard<'_, SurfaceState> {
+    state.lock().unwrap()
+}
+
+#[test]
+fn create_connection_and_surface_produce_a_routable_layer_handle() {
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    assert_eq!(
+        state.lock().unwrap().client_binder,
+        client,
+        "createConnection must answer the installed client node"
+    );
+
+    let (handle, layer_id) = create_surface(&mut host, client, "Surface(name=test)");
+    assert!(handle.0 != 0);
+    assert_eq!(layer_id, 1);
+    let s = score_state(&state);
+    let layer = s.layer(handle).expect("layer record");
+    assert_eq!(layer.name, "Surface(name=test)");
+    assert_eq!(layer.layer_id, 1);
+}
+
+#[test]
+fn a_hand_built_transaction_decodes_to_the_last_byte() {
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "decode");
+
+    let mut parcel = transaction_parcel(
+        &[(handle, layer_id, None, Vec::new())],
+        &[0, 0, 0, 0, 0, 12],
+        &[],
+        7,
+    );
+    parcel
+        .enforce_interface(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
+    let decoded = surface_client::decode_transaction_state(&mut parcel).expect("decode");
+    assert_eq!(
+        parcel.data_avail(),
+        0,
+        "the decoder did not consume the transaction parcel exactly"
+    );
+    assert_eq!(decoded.transaction_id, 7);
+    assert_eq!(decoded.composers.len(), 1);
+    assert_eq!(decoded.composers[0].surface, Some(handle));
+    assert_eq!(decoded.composers[0].layer_id, layer_id);
+    assert_eq!(decoded.desired_present_time, 0);
+    assert!(decoded.is_auto_timestamp);
+    let _ = state;
+}
+
+#[test]
+fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "blast");
+
+    let listener = host.register_aux(ITRANSACTION_LISTENER);
+    let callback = CallbackId { id: 41, kind: 0 };
+
+    // Frame 1: no previous buffer, so only the completion callback is expected.
+    let mut parcel = transaction_parcel(
+        &[(
+            handle,
+            layer_id,
+            Some((listener, 1, 100)),
+            vec![(listener, vec![callback])],
+        )],
+        &[0, 0, 0, 0, 0, 1],
+        &[(listener, vec![callback])],
+        1,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
+        .expect("first transaction");
+    {
+        let s = score_state(&state);
+        let latest = s.latest_buffer(handle).expect("latest buffer after frame 1");
+        assert_eq!(latest.frame_number, 1);
+        assert_eq!(latest.buffer_id, 100);
+        assert_eq!((latest.width, latest.height), (64, 48));
+    }
+    let first = host.take_deliveries();
+    assert_eq!(first.len(), 1, "frame 1 must only complete, not release");
+    let completed = find_completed(&first, listener);
+    assert_eq!(completed.interface, ITRANSACTION_LISTENER);
+
+    // Frame 2: frame 1 must now be released, and the store must hold frame 2.
+    let mut parcel = transaction_parcel(
+        &[(
+            handle,
+            layer_id,
+            Some((listener, 2, 200)),
+            vec![(listener, vec![callback])],
+        )],
+        &[0, 0, 0, 0, 0, 2],
+        &[(listener, vec![callback])],
+        2,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
+        .expect("second transaction");
+    {
+        let s = score_state(&state);
+        let latest = s.latest_buffer(handle).expect("latest buffer after frame 2");
+        assert_eq!(latest.frame_number, 2);
+        assert_eq!(latest.buffer_id, 200);
+        assert_eq!(s.transactions_decoded, 2);
+    }
+
+    let second = host.take_deliveries();
+    let release = find_release(&second, listener);
+    let mut data = release.data.clone();
+    data.enforce_interface(ITRANSACTION_LISTENER).expect("token");
+    assert_eq!(data.read_int32().expect("marker"), 1);
+    let id = ReleaseCallbackId {
+        buffer_id: data.read_uint64().expect("buffer id"),
+        frame_number: data.read_uint64().expect("frame number"),
+    };
+    assert_eq!(
+        id,
+        ReleaseCallbackId {
+            buffer_id: 100,
+            frame_number: 1
+        },
+        "the release must be for the buffer frame 2 replaced"
+    );
+    // Fence::NO_FENCE then maxAcquired.
+    assert_eq!(data.read_int32().expect("fence len"), 4);
+    assert_eq!(data.read_int32().expect("fence fds"), 0);
+    assert_eq!(data.read_int32().expect("fence body"), 0);
+    assert_eq!(data.read_uint32().expect("maxAcquired"), 2);
+    assert_eq!(data.data_avail(), 0, "release parcel has trailing bytes");
+
+    let completed = find_completed(&second, listener);
+    let mut stats = completed.data.clone();
+    stats.enforce_interface(ITRANSACTION_LISTENER).expect("token");
+    assert_eq!(stats.read_int32().expect("ListenerStats marker"), 1);
+    assert_eq!(stats.read_int32().expect("TransactionStats count"), 1);
+    assert_eq!(stats.read_int32().expect("TransactionStats marker"), 1);
+    assert_eq!(stats.read_int32().expect("CallbackId count"), 1);
+    assert_eq!(stats.read_int32().expect("CallbackId marker"), 1);
+    assert_eq!(stats.read_int64().expect("callback id"), 41);
+    assert_eq!(stats.read_int32().expect("callback type"), 0);
+    let _latch = stats.read_int64().expect("latch time");
+    assert!(!stats.read_bool().expect("present fence"));
+    assert_eq!(stats.read_int32().expect("SurfaceStats count"), 1);
+    assert_eq!(stats.read_int32().expect("SurfaceStats marker"), 1);
+    assert_eq!(
+        stats.read_strong_binder().expect("surface control"),
+        Some(handle)
+    );
+    assert!(!stats.read_bool().expect("acquire fence"));
+    let _acquire_time = stats.read_int64().expect("acquire time");
+    assert!(!stats.read_bool().expect("previous release fence"));
+    assert!(!stats.read_bool().expect("transform hint"));
+    assert_eq!(stats.read_uint32().expect("max acquired"), 2);
+    assert_eq!(stats.read_int32().expect("event stats marker"), 1);
+    assert_eq!(stats.read_uint64().expect("event frame"), 1);
+    assert!(!stats.read_bool().expect("gpu fence"));
+    for _ in 0..5 {
+        let _ = stats.read_int64().expect("compositor timing");
+    }
+    assert_eq!(stats.read_int32().expect("jank count"), 0);
+    assert_eq!(stats.read_int32().expect("previous release marker"), 1);
+    assert_eq!(stats.read_uint64().expect("previous buffer id"), 100);
+    assert_eq!(stats.read_uint64().expect("previous frame"), 1);
+    assert_eq!(stats.data_avail(), 0, "completion stats have trailing bytes");
+}
+
+#[test]
+fn a_legacy_transaction_on_the_aidl_node_dispatches_by_interface_token() {
+    let mut host = ServiceHost::new();
+    let (_pool, _state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY).expect("token");
+    // Only the interface/code dispatch is under test here: a truncated body is
+    // a BadRequest, not a silent success on the AIDL code 8.
+    data.set_data_position(0);
+    let err = transact(&mut host, sf, 8, 0, &mut data).expect_err("truncated body");
+    assert!(matches!(
+        err,
+        ServiceError::Internal(_) | ServiceError::BadRequest { .. }
+    ));
+}
+
+
+#[test]
+fn an_image_shaped_window_info_decodes_to_the_last_byte() {
+    // The image's `gui::WindowInfo` is older than r75: no `contentSize`, no
+    // trailing `canOccludePresentation`, and `InputApplicationInfo` carries an
+    // inline size word with no Parcelable marker. This test builds exactly
+    // that shape; a decoder transcribed from the tag would leave 24 bytes over.
+    let mut host = ServiceHost::new();
+    let (_pool, _state) =
+        compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client = create_connection(&mut host, sf);
+    let (handle, layer_id) = create_surface(&mut host, client, "window-info");
+
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY).expect("token");
+    write_light_blob(&mut data, &[0, 0, 0, 0, 0, 0]); // FrameTimelineInfo
+    data.write_uint32(1); // composers
+    write_layer_state(
+        &mut data,
+        handle,
+        layer_id,
+        surface_client::what::LAYER,
+        None,
+        &[],
+        true,
+    );
+    data.write_uint32(0); // displays
+    data.write_uint32(0); // flags
+    data.write_strong_binder_opt(None); // applyToken
+    data.write_int32(0); // focusRequests
+    data.write_int32(0); // windowInfosReportedListeners
+    data.write_int64(0); // desiredPresentTime
+    data.write_bool(true); // isAutoTimestamp
+    data.write_uint32(0); // uncacheBuffers
+    data.write_bool(false); // hasListenerCallbacks
+    data.write_int32(0); // listenerCallbacks
+    data.write_uint64(9);
+    data.write_uint32(0); // mergedTransactionIds
+    data.set_data_position(0);
+    data.enforce_interface(ISURFACE_COMPOSER_LEGACY).expect("token");
+    let decoded = surface_client::decode_transaction_state(&mut data).expect("decode");
+    assert_eq!(data.data_avail(), 0, "WindowInfo body was not consumed exactly");
+    assert_eq!(decoded.transaction_id, 9);
+    assert_eq!(decoded.composers[0].surface, Some(handle));
+}

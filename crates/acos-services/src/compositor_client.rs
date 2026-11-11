@@ -70,6 +70,7 @@ use crate::display_events::{
 use crate::error::{Result as SResult, ServiceError};
 use crate::exception;
 use crate::host::ServiceObject;
+use crate::surface_client::{self, SurfaceState};
 
 /// The `ISurfaceComposer` transaction codes of the **API-34 image**.
 pub mod codes {
@@ -155,6 +156,9 @@ impl DisplayDescriptor {
 pub struct SurfaceComposerService {
     pool: Arc<Mutex<ConnectionPool>>,
     display: DisplayDescriptor,
+    /// The client-side surface bookkeeping `createConnection` hands out and
+    /// `SET_TRANSACTION_STATE` applies into.
+    surface: Arc<Mutex<SurfaceState>>,
     /// The `IBinder` `getPhysicalDisplayToken` answers, so a caller can pass it
     /// back to `getDisplayStats`/`getDisplayState`.
     display_token: BinderId,
@@ -184,13 +188,21 @@ impl SurfaceComposerService {
         pool: Arc<Mutex<ConnectionPool>>,
         display: DisplayDescriptor,
         display_token: BinderId,
+        surface: Arc<Mutex<SurfaceState>>,
     ) -> Self {
         Self {
             pool,
             display,
             display_token,
+            surface,
             connections: Vec::new(),
         }
+    }
+
+    /// The surface state, for a test/runtime that installs this node directly.
+    #[must_use]
+    pub fn surface_state(&self) -> Arc<Mutex<SurfaceState>> {
+        Arc::clone(&self.surface)
     }
 
     /// The `createDisplayEventConnection` calls seen so far.
@@ -220,6 +232,13 @@ impl ServiceObject for SurfaceComposerService {
         Some(self)
     }
 
+    fn drain_raw_deliveries(&mut self) -> Vec<crate::host::PendingDelivery> {
+        self.surface
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take_deliveries()
+    }
+
     fn raw_transact(
         &mut self,
         interface: &str,
@@ -227,12 +246,39 @@ impl ServiceObject for SurfaceComposerService {
         data: &mut Parcel,
         reply: &mut Parcel,
     ) -> SResult<bool> {
+        // `Transaction::apply` uses the **legacy** interface
+        // (`android.ui.ISurfaceComposer`, `SET_TRANSACTION_STATE` = 8) on the
+        // same `SurfaceFlinger` binder the AIDL calls use. Dispatch on the
+        // token before the code, because code 8 means different methods on the
+        // two interfaces.
+        if interface == surface_client::LEGACY_COMPOSER_DESCRIPTOR {
+            return match code {
+                surface_client::SET_TRANSACTION_STATE => {
+                    surface_client::apply_transaction_state(&self.surface, data, reply)
+                }
+                _ => Err(ServiceError::UnsupportedAndroidApi {
+                    interface: surface_client::LEGACY_COMPOSER_DESCRIPTOR.to_string(),
+                    code,
+                    method: format!("code {code}"),
+                }),
+            };
+        }
         if interface != DESCRIPTOR {
             return Ok(false);
         }
         match code {
             codes::BOOT_FINISHED => {
                 exception::write_no_exception(reply);
+                Ok(true)
+            }
+            codes::CREATE_CONNECTION => {
+                exception::write_no_exception(reply);
+                reply.write_strong_binder_opt(Some(
+                    self.surface
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .client_binder,
+                ));
                 Ok(true)
             }
             codes::CREATE_DISPLAY_EVENT_CONNECTION => {
@@ -356,6 +402,21 @@ pub fn install(
     host: &mut crate::host::ServiceHost,
     display: DisplayDescriptor,
 ) -> Arc<Mutex<ConnectionPool>> {
+    install_full(host, display).0
+}
+
+/// Install both halves and return `(frame-clock pool, surface state)`.
+///
+/// `registry::install` only needs the pool (it is what
+/// `createDisplayEventConnection` allocates from); a test that drives
+/// `createConnection`/`createSurface`/`setTransactionState` needs the surface
+/// state to assert the latest-buffer store and the queued callbacks without a
+/// guest process.
+pub fn install_full(
+    host: &mut crate::host::ServiceHost,
+    display: DisplayDescriptor,
+) -> (Arc<Mutex<ConnectionPool>>, Arc<Mutex<SurfaceState>>) {
+    let surface = surface_client::install(host, display);
     let pool = display_events::install(host, CONNECTION_POOL_SIZE);
     let token = host.register_aux(DISPLAY_TOKEN_DESCRIPTOR);
     // `raw_transact`-served (no `acos-aidl` table for `android.gui`), but named,
@@ -367,12 +428,13 @@ pub fn install(
             Arc::clone(&pool),
             display,
             token,
+            Arc::clone(&surface),
         )),
     );
     // Same node, the name API-34 `libgui` actually asks for (see
     // `AIDL_SERVICE_NAME`).
     host.alias_service_name(AIDL_SERVICE_NAME, DESCRIPTOR);
-    pool
+    (pool, surface)
 }
 
 /// How many `IDisplayEventConnection` nodes are pre-allocated.

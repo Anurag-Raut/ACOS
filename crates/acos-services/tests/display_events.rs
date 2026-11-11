@@ -213,28 +213,25 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
 }
 
 #[test]
-fn the_surface_half_is_a_structured_unsupported_not_a_silent_success() {
-    // `createConnection` (ISurfaceComposerClient / `SurfaceSession`) is W-R T1's
-    // business, not the clock's. It must be *named*, never answered.
+fn create_connection_answers_a_routable_surface_client_node() {
+    // C1 implemented the surface half on the same `SurfaceFlinger` node. The
+    // clock task used to assert this code was a named unsupported; now the
+    // reply is a binder whose descriptor is `ISurfaceComposerClient` (the full
+    // createSurface/transaction coverage lives in tests/surface_client.rs).
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
     let mut data = Parcel::new();
     data.write_interface_token(ISURFACE_COMPOSER).expect("token");
     data.set_data_position(0);
-    let err = transact(&mut host, sf, CREATE_CONNECTION, 0, &mut data)
-        .expect_err("createConnection is not implemented by the clock task");
-    match err {
-        ServiceError::UnsupportedAndroidApi {
-            interface,
-            code,
-            method,
-        } => {
-            assert_eq!(interface, ISURFACE_COMPOSER);
-            assert_eq!(code, CREATE_CONNECTION);
-            assert_eq!(method, "createConnection");
-        }
-        other => panic!("expected UNSUPPORTED_ANDROID_API, got {other:?}"),
-    }
+    let mut reply =
+        transact(&mut host, sf, CREATE_CONNECTION, 0, &mut data).expect("createConnection");
+    no_exception(&mut reply);
+    let client = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null ISurfaceComposerClient");
+    assert!(!client.is_null());
+    assert_eq!(reply.data_avail(), 0);
 }
 
 #[test]
