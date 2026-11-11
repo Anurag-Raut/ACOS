@@ -51,6 +51,10 @@ public final class Main {
         }
         String[] names = {
                 "register_android_util_Log",
+                // `EventLog.writeEvent` is reached from the first framework IPC
+                // in a cold dalvik-cache process; without it `getService()`
+                // throws InvocationTargetException (UnsatisfiedLinkError).
+                "register_android_util_EventLog",
                 "register_android_os_SystemProperties",
                 "register_android_os_SystemClock",
                 "register_android_os_Trace",
@@ -64,7 +68,7 @@ public final class Main {
                 return;
             }
         }
-        System.out.println("PASS substrate: 6 framework natives registered");
+        System.out.println("PASS substrate: 7 framework natives registered");
     }
 
     static IBinder service(String name) throws Exception {
@@ -197,42 +201,70 @@ public final class Main {
                 fail("startBinderLooper -> " + rc);
                 return;
             }
-            Receiver receiver = new Receiver(n);
+            int half = n / 2;
+            Receiver registered = new Receiver(half);
+            Receiver parcelOnly = new Receiver(n - half);
+
             // Exercise IServiceManager.addService for real (the peer registers it).
             Class<?> sm = Class.forName("android.os.ServiceManager");
             Method add = sm.getDeclaredMethod("addService", String.class, IBinder.class);
             add.setAccessible(true);
-            add.invoke(null, "acos.java", receiver);
+            add.invoke(null, "acos.java", registered);
 
             IBinder autofill = service("autofill");
             if (autofill == null) {
                 fail("no autofill service");
                 return;
             }
-            for (int i = 0; i < n; i++) {
+            // Half the deliveries go to the addService-registered binder, half to
+            // a binder that was NEVER registered and only ever travelled inside a
+            // parcel (the P2d SIGSEGV case: an unrooted node).
+            int sent = addClient(autofill, n, registered, parcelOnly);
+            if (sent < 0) {
+                return;
+            }
+            boolean okRegistered = registered.delivered.await(10, TimeUnit.SECONDS);
+            boolean okParcel = parcelOnly.delivered.await(10, TimeUnit.SECONDS);
+            long missRegistered = registered.delivered.getCount();
+            long missParcel = parcelOnly.delivered.getCount();
+            if (okRegistered && okParcel && missRegistered == 0 && missParcel == 0) {
+                System.out.println("PASS " + n + " reverse IResultReceiver.send deliveries ("
+                        + half + " addService-registered, " + (n - half)
+                        + " parcel-only binder), no race failure");
+            } else {
+                fail("reverse deliveries: registered " + (half - missRegistered) + "/" + half
+                        + ", parcel-only " + ((n - half) - missParcel) + "/" + (n - half));
+            }
+        } catch (Throwable t) {
+            fail("reverse deliveries threw " + t);
+        }
+    }
+
+    /** Fire `n` oneway IAutoFillManager.addClient calls; -1 on failure. */
+    static int addClient(IBinder autofill, int n, Receiver registered, Receiver parcelOnly) {
+        int half = n / 2;
+        for (int i = 0; i < n; i++) {
+            // The service answers by delivering to the LAST argument.
+            Receiver target = i < half ? registered : parcelOnly;
+            try {
                 Parcel data = Parcel.obtain();
                 Parcel reply = Parcel.obtain();
                 data.writeInterfaceToken(TOKEN_AUTOFILL);
-                data.writeStrongBinder(receiver);   // IAutoFillManagerClient
-                data.writeTypedObject(null, 0);     // ComponentName
-                data.writeInt(0);                   // userId
-                data.writeStrongBinder(receiver);   // IResultReceiver (delivery target)
+                data.writeStrongBinder(registered);   // IAutoFillManagerClient
+                data.writeTypedObject(null, 0);       // ComponentName
+                data.writeInt(0);                     // userId
+                data.writeStrongBinder(target);       // IResultReceiver (delivery target)
                 // oneway: the service answers by delivering IResultReceiver.send
                 autofill.transact(CODE_AUTOFILL_ADD_CLIENT, data, reply,
                         IBinder.FLAG_ONEWAY);
                 data.recycle();
                 reply.recycle();
+            } catch (Throwable t) {
+                fail("addClient(" + i + ") threw " + t);
+                return -1;
             }
-            boolean ok = receiver.delivered.await(10, TimeUnit.SECONDS);
-            long remaining = receiver.delivered.getCount();
-            if (ok && remaining == 0) {
-                System.out.println("PASS " + n + " reverse IResultReceiver.send deliveries, no race failure");
-            } else {
-                fail("reverse deliveries: " + (n - remaining) + "/" + n + " arrived");
-            }
-        } catch (Throwable t) {
-            fail("reverse deliveries threw " + t);
         }
+        return 0;
     }
 
     static void fail(String what) {

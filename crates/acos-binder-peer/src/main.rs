@@ -50,9 +50,10 @@ fn main() -> ExitCode {
     match rc {
         Ok(()) => {
             eprintln!(
-                "acos-binder-peer: closed (unsupported={} reverse_replies={})",
+                "acos-binder-peer: closed (unsupported={} reverse_replies={} reverse_failed={})",
                 peer.unsupported.len(),
-                peer.reverse_replies
+                peer.reverse_replies,
+                peer.reverse_failed
             );
             if let Some(path) = peer.log_path() {
                 eprintln!("acos-binder-peer: unsupported log {}", path.display());

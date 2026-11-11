@@ -18,19 +18,34 @@ use std::io;
 use std::mem;
 use std::os::fd::RawFd;
 
+/// Driver -> peer: a `BC_TRANSACTION`/`BC_TRANSACTION_SG` request.
 pub const F_REQ: u32 = 1;
+/// Peer -> driver: the reply to the request with the same `seq` (status in
+/// `code`: 0 = ok).
 pub const F_RSP: u32 = 2;
+/// Peer -> driver: a peer-initiated transaction (`BR_TRANSACTION`), delivered to
+/// the node named by `target`.
 pub const F_TXN: u32 = 3;
+/// Driver -> peer: the reply to the peer-initiated transaction with that `seq`.
 pub const F_REP: u32 = 4;
 
+/// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;
+/// Largest parcel data/offset block accepted in one frame.
 pub const MAX_FRAME: usize = 256 * 1024;
+/// Largest number of file descriptors carried by one frame.
 pub const MAX_FDS: usize = 16;
 
 /// `IBinder::PING_TRANSACTION` (`B_PACK_CHARS('_','P','N','G')` on the wire).
 pub const PING_TRANSACTION: u32 = 0x5F50_4E47;
 /// `TF_ONE_WAY` in `binder_transaction_data.flags`.
 pub const TF_ONE_WAY: u32 = 0x01;
+/// `TF_STATUS_CODE` in `binder_transaction_data.flags`: the reply carries a
+/// status word instead of a parcel body. libbinder sets it when the transaction
+/// could not be dispatched at all (e.g. `UNKNOWN_TRANSACTION` from
+/// `attemptIncStrong`) -- i.e. `onTransact` never ran. A reverse delivery that
+/// "produced a reply" with this flag is a failure, not a success.
+pub const TF_STATUS_CODE: u32 = 0x08;
 
 /// One frame, owned.
 #[derive(Debug, Default, Clone)]

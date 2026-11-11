@@ -37,7 +37,9 @@ use acos_parcel::binder::BINDER_TYPE_FD;
 use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
 use acos_services::{codes, exception, registry, ServiceError, ServiceHost};
 
-use crate::protocol::{Frame, F_REP, F_REQ, F_RSP, F_TXN, PING_TRANSACTION, TF_ONE_WAY};
+use crate::protocol::{
+    Frame, F_REP, F_REQ, F_RSP, F_TXN, PING_TRANSACTION, TF_ONE_WAY, TF_STATUS_CODE,
+};
 
 /// Bit 32 marks a driver wire handle (a Java local binder).
 pub const JAVA_TAG: u64 = 1 << 32;
@@ -90,6 +92,11 @@ pub struct Peer {
     /// Reverse replies received from Java (peer-initiated transactions are
     /// two-way here, matching the runtime's `BinderDelivery`).
     pub reverse_replies: u64,
+    /// How many of those replies were `TF_STATUS_CODE` failures, i.e. libbinder
+    /// never dispatched the transaction to `onTransact` (typically
+    /// `UNKNOWN_TRANSACTION` from a node that was not rooted). Counting these
+    /// separately is what stops "20 replies" from being read as "20 deliveries".
+    pub reverse_failed: u64,
 }
 
 impl std::fmt::Debug for Peer {
@@ -99,6 +106,7 @@ impl std::fmt::Debug for Peer {
             .field("java_binders", &self.java_binders)
             .field("unsupported", &self.unsupported.len())
             .field("reverse_replies", &self.reverse_replies)
+            .field("reverse_failed", &self.reverse_failed)
             .finish()
     }
 }
@@ -135,6 +143,7 @@ impl Peer {
             next_txn_seq: 1,
             unsupported: Vec::new(),
             reverse_replies: 0,
+            reverse_failed: 0,
         }
     }
 
@@ -167,7 +176,17 @@ impl Peer {
                     }
                 }
             }
-            F_REP => self.reverse_replies += 1,
+            F_REP => {
+                self.reverse_replies += 1;
+                if frame.flags & TF_STATUS_CODE != 0 {
+                    self.reverse_failed += 1;
+                    eprintln!(
+                        "acos-binder-peer: reverse delivery seq={} was NOT dispatched \
+                         (TF_STATUS_CODE reply: libbinder never reached onTransact)",
+                        frame.seq
+                    );
+                }
+            }
             other => {
                 eprintln!("acos-binder-peer: ignoring frame type {other}");
             }

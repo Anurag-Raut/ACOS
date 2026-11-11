@@ -32,5 +32,5 @@ pub use peer::{
 };
 pub use protocol::{
     accept, listen, read_frame, write_frame, Frame, F_REP, F_REQ, F_RSP, F_TXN, PING_TRANSACTION,
-    TF_ONE_WAY,
+    TF_ONE_WAY, TF_STATUS_CODE,
 };

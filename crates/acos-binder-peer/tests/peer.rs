@@ -156,7 +156,7 @@ fn unknown_code_is_a_structured_error_and_a_json_line() {
         offs: vec![],
         fds: vec![],
     };
-    let (mut reply, _) = read_reply(&mut peer, req);
+    let (reply, _) = read_reply(&mut peer, req);
     // `Parcel.EX_UNSUPPORTED_OPERATION`
     assert_eq!(exception_code(&reply), -7);
     assert_eq!(peer.unsupported.len(), 1);
@@ -189,7 +189,7 @@ fn add_service_registers_a_java_local_binder() {
         ],
         0,
     );
-    let (mut reply, _) = read_reply(&mut peer, req);
+    let (reply, _) = read_reply(&mut peer, req);
     assert_eq!(exception_code(&reply), 0);
     assert_eq!(peer.java_binders().get(&0x77).map(String::as_str), Some("acos.java"));
 }
@@ -229,6 +229,32 @@ fn twenty_reverse_deliveries_reach_the_java_receiver_without_a_race() {
         assert_eq!(transaction_frame_result(txn), 0);
     }
     assert_eq!(peer.unsupported.len(), 0);
+}
+
+#[test]
+fn reverse_reply_status_codes_are_not_counted_as_deliveries() {
+    // A `TF_STATUS_CODE` reply means libbinder failed the transaction before
+    // `onTransact` ran (`UNKNOWN_TRANSACTION` from an unrooted node). P2d read
+    // "reverse_replies=20" as "20 deliveries" while only one callback ran;
+    // this keeps that from being possible again.
+    let mut peer = Peer::new();
+    let ok = Frame {
+        ty: acos_binder_peer::F_REP,
+        seq: 1,
+        flags: 0,
+        ..Default::default()
+    };
+    let failed = Frame {
+        ty: acos_binder_peer::F_REP,
+        seq: 2,
+        flags: acos_binder_peer::TF_STATUS_CODE,
+        ..Default::default()
+    };
+    assert!(peer.handle(ok).is_empty());
+    assert!(peer.handle(failed.clone()).is_empty());
+    assert!(peer.handle(failed).is_empty());
+    assert_eq!(peer.reverse_replies, 3);
+    assert_eq!(peer.reverse_failed, 2);
 }
 
 /// Parse a delivery parcel: interface token, then `IResultReceiver.send`'s

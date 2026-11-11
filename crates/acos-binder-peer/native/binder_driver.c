@@ -57,11 +57,13 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/un.h>
 #include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #include <linux/android/binder.h>
@@ -96,6 +98,10 @@ static int g_dbg = -1;
         dprintf(2, __VA_ARGS__);         \
         dprintf(2, "\n");                \
     } while (0)
+
+// Crash reporter (defined next to the JNI bridge, below): the sandbox has no
+// tombstoned, so a fault inside libbinder otherwise leaves no evidence at all.
+static void* __attribute__((noinline)) crash_install(void);
 
 // --------------------------------------------------------- (4) property table
 // (see E2D §1: Build.VERSION.<clinit> indexes SUPPORTED_ABIS[0]; a failure is
@@ -184,6 +190,7 @@ void __system_property_read_callback(const void* pi,
 }
 
 __attribute__((constructor)) static void e3g_load_runtime(void) {
+    crash_install();
     const char* list = getenv("E3G_LOAD");
     if (list == NULL) list = "libandroid_runtime.so";
     char buf[4096];
@@ -295,6 +302,44 @@ static void pend_append(const void* p, size_t n) {
 
 static void pend_cmd(uint32_t cmd) { pend_append(&cmd, 4); }
 
+// Give the driver a strong+weak reference on a node it just exported, the way
+// the kernel does when a node first becomes visible to another process.
+//
+// libbinder answers BR_INCREFS with `weakref->incWeak(this)` and BR_ACQUIRE
+// with `((RefBase*)cookie)->incStrong(this)` (then acknowledges with
+// BC_INCREFS_DONE / BC_ACQUIRE_DONE, which this driver ignores).  That is the
+// ONLY thing that keeps a Java `Binder` alive while the peer holds a reference:
+// `ibinderForJavaObject()` hands out an `sp<JavaBBinder>` that dies the moment
+// `Parcel::writeStrongBinder()` returns, and `JavaBBinderHolder` only keeps a
+// *weak* pointer.  Without these two commands BR_TRANSACTION.target.ptr /
+// .cookie point at a dead JavaBBinder after the first write, so libbinder's
+// `attemptIncStrong()` either fails (BR_REPLY with TF_STATUS_CODE, i.e.
+// UNKNOWN_TRANSACTION) or, once the freed weakref_impl memory has been reused,
+// succeeds against garbage and `cookie->transact()` faults -- the SIGSEGV seen
+// in P2d.
+static void node_ref_cmds(uint64_t weakref, uint64_t cookie) {
+    // Ablation switch for the record: E3G_NO_NODE_REFS=1 restores the P2d
+    // behaviour (no node rooting) so the crash is reproducible on demand.
+    static int off = -1;
+    if (off < 0) off = getenv("E3G_NO_NODE_REFS") != NULL;
+    if (off) {
+        DBG("node refs DISABLED (E3G_NO_NODE_REFS): %llx/%llx", (unsigned long long)weakref,
+            (unsigned long long)cookie);
+        return;
+    }
+    struct binder_ptr_cookie pc;
+    pc.ptr = (binder_uintptr_t)weakref;
+    pc.cookie = (binder_uintptr_t)cookie;
+    uint32_t cmd = BR_INCREFS;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    cmd = BR_ACQUIRE;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    DBG("node refs: BR_INCREFS+BR_ACQUIRE weakref=%llx cookie=%llx",
+        (unsigned long long)weakref, (unsigned long long)cookie);
+}
+
 // ----------------------------------------------------------- (2) object table
 static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     // libbinder dispatches with `cookie` (the BBinder*), so that is the
@@ -303,7 +348,18 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     // both produced two nodes with the same cookie, and an incoming
     // transaction could then target a stale weakref.
     for (int i = 0; i < g.n_nodes; i++)
-        if (g.nodes[i].cookie == cookie) return g.nodes[i].wire;
+        if (g.nodes[i].cookie == cookie) {
+            // The node is rooted (BR_INCREFS/BR_ACQUIRE, see node_ref_cmds), so
+            // the same BBinder must always report the same weakref.  A mismatch
+            // means the object died and was replaced while our node still
+            // points at the old one: delivering to it would be a use-after-free.
+            if (g.nodes[i].binder != binder)
+                WARN("node wire=%u cookie=%llx: weakref changed %llx -> %llx "
+                     "(object replaced under a live node?)",
+                     g.nodes[i].wire, (unsigned long long)cookie,
+                     (unsigned long long)g.nodes[i].binder, (unsigned long long)binder);
+            return g.nodes[i].wire;
+        }
     if (g.n_nodes >= E3G_MAX_NODE) {
         WARN("node table full");
         return 0;
@@ -314,6 +370,8 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     n->wire = g.next_wire++;
     DBG("node: local binder=%llx cookie=%llx -> wire=%u", (unsigned long long)binder,
         (unsigned long long)cookie, n->wire);
+    // Root the node before anybody can deliver to it (see node_ref_cmds).
+    node_ref_cmds(binder, cookie);
     return n->wire;
 }
 
@@ -1303,6 +1361,132 @@ JNIEXPORT jint JNICALL Java_dev_acos_e3g_Nat_register(JNIEnv* env, jclass klass,
     }
     (*env)->ReleaseStringUTFChars(env, name, plain);
     return rc;
+}
+
+// ------------------------------------------------------- fault diagnostics
+// `E3G_CRASH=1` installs a SIGSEGV/SIGBUS/SIGABRT handler that prints the fault
+// address, the faulting instruction pointer, every stack word that resolves to
+// a loaded module (a poor man's unwind), the /proc/self/maps line covering
+// each, and the driver's node table.  This is the only way to get a native
+// backtrace here: the mini-root has no tombstoned/debuggerd, and running under
+// gdb changes the timing enough to hide the fault.
+static void crash_print_addr(const char* tag, uintptr_t a) {
+    Dl_info di;
+    if (a != 0 && dladdr((void*)a, &di) != 0 && di.dli_fname != NULL) {
+        dprintf(2, "  %s %p %s+0x%lx %s\n", tag, (void*)a, di.dli_fname,
+                (unsigned long)(a - (uintptr_t)di.dli_fbase),
+                di.dli_sname ? di.dli_sname : "?");
+    } else if (a != 0) {
+        dprintf(2, "  %s %p <unmapped/unknown>\n", tag, (void*)a);
+    }
+}
+
+// Print the /proc/self/maps line containing [a] (one open/read, manual parse).
+static void crash_print_map(uintptr_t a) {
+    if (a == 0) return;
+    int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return;
+    static char buf[65536];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return;
+    buf[n] = 0;
+    for (char* line = buf; line < buf + n;) {
+        char* eol = memchr(line, '\n', (size_t)(buf + n - line));
+        if (eol == NULL) eol = buf + n;
+        uintptr_t lo = 0, hi = 0;
+        int field = 0;   // 0 = low half of "lo-hi", 1 = high half
+        for (char* p = line; p < eol && *p != ' '; p++) {
+            char c = *p;
+            if (c == '-') { field = 1; continue; }
+            int v;
+            if (c >= '0' && c <= '9') v = c - '0';
+            else if (c >= 'a' && c <= 'f') v = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') v = c - 'A' + 10;
+            else continue;
+            if (field == 0) lo = (lo << 4) | (uintptr_t)v;
+            else hi = (hi << 4) | (uintptr_t)v;
+        }
+        if (a >= lo && a < hi) {
+            char tmp = *eol;
+            *eol = 0;
+            dprintf(2, "  maps %p: %s\n", (void*)a, line);
+            *eol = tmp;
+        }
+        line = eol + 1;
+    }
+}
+
+static void crash_handler(int sig, siginfo_t* si, void* ucv) {
+    uintptr_t ip = 0, sp = 0, bp = 0, rdi = 0, rsi = 0;
+#if defined(__x86_64__)
+    if (ucv != NULL) {
+        // bionic x86_64: mcontext_t is { gregset_t gregs; ... } indexed by REG_*.
+        struct ucontext* uc = (struct ucontext*)ucv;
+        ip = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
+        sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
+        bp = (uintptr_t)uc->uc_mcontext.gregs[REG_RBP];
+        rdi = (uintptr_t)uc->uc_mcontext.gregs[REG_RDI];
+        rsi = (uintptr_t)uc->uc_mcontext.gregs[REG_RSI];
+    }
+#else
+    (void)ucv;
+#endif
+    dprintf(2, "\n=== ACOS binder driver: fatal signal %d (code=%d) ===\n", sig,
+            si ? si->si_code : -1);
+    dprintf(2, "fault_addr=%p ip=%p rsp=%p rbp=%p rdi=%p rsi=%p\n",
+            si ? si->si_addr : NULL, (void*)ip, (void*)sp, (void*)bp, (void*)rdi, (void*)rsi);
+    crash_print_addr("ip       ", ip);
+    crash_print_map((uintptr_t)(si ? si->si_addr : 0));
+    crash_print_map(ip);
+    crash_print_map(sp);
+    if (bp != 0) crash_print_addr("frame rbp", bp);
+    // Poor man's unwind: locals and arguments of every live frame sit on the
+    // stack, so scan it for words that point into a loaded module.
+    dprintf(2, "stack scan (module + offset, most recent first):\n");
+    int shown = 0;
+    if (sp != 0) {
+        for (uintptr_t p = sp; p < sp + 6144 && shown < 40; p += 8) {
+            uintptr_t w = 0;
+            memcpy(&w, (void*)p, sizeof(w));
+            Dl_info di;
+            if (w != 0 && dladdr((void*)w, &di) != 0 && di.dli_fname != NULL) {
+                dprintf(2, "  [rsp+%3lu] %p %s+0x%lx %s\n", (unsigned long)(p - sp), (void*)w,
+                        di.dli_fname, (unsigned long)(w - (uintptr_t)di.dli_fbase),
+                        di.dli_sname ? di.dli_sname : "?");
+                shown++;
+            }
+        }
+    }
+    dprintf(2, "driver node table (%d):\n", g.n_nodes);
+    for (int i = 0; i < g.n_nodes; i++)
+        dprintf(2, "  wire=%u weakref=%p cookie=%p\n", g.nodes[i].wire,
+                (void*)(uintptr_t)g.nodes[i].binder, (void*)(uintptr_t)g.nodes[i].cookie);
+    dprintf(2, "  this thread: looper=%d have_reply_to=%d reply_to_seq=%u pend=%zu txn_bufs=%d\n",
+            T.is_looper, T.have_reply_to, T.reply_to_seq, T.pend_len, T.n_txn_buf);
+    dprintf(2, "=== end ===\n");
+    _exit(70 + (sig & 15));
+}
+
+static void* __attribute__((noinline)) crash_install(void) {
+    const char* on = getenv("E3G_CRASH");
+    if (on == NULL || *on == 0 || *on == '0') return NULL;
+    static char altstack[64 * 1024];
+    stack_t ss;
+    memset(&ss, 0, sizeof(ss));
+    ss.ss_sp = altstack;
+    ss.ss_size = sizeof(altstack);
+    sigaltstack(&ss, NULL);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = crash_handler;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+    DBG("crash reporter installed");
+    return NULL;
 }
 
 // Attach a native thread to the VM and turn it into a binder looper:
