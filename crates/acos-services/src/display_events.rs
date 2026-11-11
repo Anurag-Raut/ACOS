@@ -710,6 +710,16 @@ impl ServiceObject for DisplayEventConnectionService {
                 // written by the proxy): only the interface token, already
                 // consumed by the dispatcher.
                 exception::write_no_exception(reply);
+                // `out BitTube` is a native parcelable: `Parcel::readData(Parcelable*)`
+                // (`readParcelable`) reads an `int32 present` that must be
+                // `kNonNullParcelableFlag` (1) **before** the parcelable body.
+                // Without it the framework reads the flag out of the first
+                // `flat_binder_object` header, which overlaps the object table
+                // (`PERMISSION_DENIED` from `validateReadData`) and
+                // `stealReceiveChannel` fails with
+                // `Status(-129, …): 'PERMISSION_DENIED: '` (L1 §3).
+                reply
+                    .write_int32(1);
                 let mut slot = self
                     .slot
                     .clock
@@ -825,6 +835,14 @@ pub fn install(host: &mut crate::host::ServiceHost, count: usize) -> Arc<Mutex<C
 /// turns one back into a borrow for as long as the parcel lives. Used by the
 /// tests.
 pub fn read_bit_tube(parcel: &mut Parcel) -> SResult<(std::os::fd::RawFd, std::os::fd::RawFd)> {
+    // Native-parcelable wrapper: `Parcel::readParcelable` reads
+    // `kNonNullParcelableFlag` (1) before `BitTube::readFromParcel` runs.
+    let present = parcel.read_int32().map_err(perr)?;
+    if present != 1 {
+        return Err(ServiceError::Internal(format!(
+            "BitTube: unexpected parcelable present flag {present}"
+        )));
+    }
     let receive = parcel.read_file_descriptor().map_err(perr)?;
     let send = parcel.read_file_descriptor().map_err(perr)?;
     match (receive, send) {

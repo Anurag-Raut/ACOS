@@ -104,6 +104,14 @@ pub const DESCRIPTOR: &str = "android.gui.ISurfaceComposer";
 /// (`ComposerServiceAIDL.cpp`: `getService(String16("SurfaceFlinger"))`).
 pub const SERVICE_NAME: &str = "SurfaceFlinger";
 
+/// The API-34 **AIDL** name. `SurfaceComposerClient.cpp:146`
+/// (`ComposerServiceAIDL::connectLocked`) asks for `SurfaceFlingerAIDL` first;
+/// `SurfaceFlinger` is the pre-AIDL name the same library still falls back to.
+/// The image's `DisplayEventReceiver` therefore never reaches the legacy name
+/// unless this alias exists (observed: `waitForService for
+/// SurfaceFlingerAIDL` failing, L1 §2).
+pub const AIDL_SERVICE_NAME: &str = "SurfaceFlingerAIDL";
+
 /// `ISurfaceComposer.VsyncSource.eVsyncSourceApp`.
 pub const VSYNC_SOURCE_APP: i32 = 0;
 /// `ISurfaceComposer.VsyncSource.eVsyncSourceSurfaceFlinger`.
@@ -361,6 +369,9 @@ pub fn install(
             token,
         )),
     );
+    // Same node, the name API-34 `libgui` actually asks for (see
+    // `AIDL_SERVICE_NAME`).
+    host.alias_service_name(AIDL_SERVICE_NAME, DESCRIPTOR);
     pool
 }
 

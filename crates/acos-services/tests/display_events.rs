@@ -283,7 +283,7 @@ fn steal_receive_channel_carries_two_descriptors_and_nothing_else() {
     no_exception(&mut reply);
     let (receive, send) = display_events::read_bit_tube(&mut reply).expect("two fds");
     assert_ne!(receive, send, "receive and send must be distinct descriptors");
-    assert_eq!(reply.data_avail(), 0, "the reply is exactly status + 2 fds");
+    assert_eq!(reply.data_avail(), 0, "the reply is exactly status + present + 2 fds");
     assert_eq!(reply.owned_file_descriptors().len(), 2);
 
     // `BitTube::readFromParcel` dups both; a second steal has nothing to give
@@ -506,6 +506,7 @@ fn a_clock_writes_only_when_asked_and_stops_on_drop() {
     let clock = ConnectionClock::new(0, PERIOD_NS_60HZ).expect("clock");
     let mut reply = Parcel::new();
     reply.write_int32(NO_EXCEPTION);
+    reply.write_int32(1); // `Parcel::readParcelable`'s non-null flag
     clock.steal_receive_channel(&mut reply).expect("steal");
     reply.set_data_position(4); // past the `binder::Status` header
     let (receive, _send) = display_events::read_bit_tube(&mut reply).expect("two fds");

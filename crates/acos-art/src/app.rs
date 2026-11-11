@@ -322,10 +322,14 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
+    // Software gralloc interposer (built into the sysroot by
+    // `tools/art-sysroot.sh --shim`; G1). Loaded last, so the substrate's
+    // libraries resolve against it.
+    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
     sb.env(
         "LD_PRELOAD",
-        "/data/shim/libartshim.so:/data/app/libacosart.so",
+        "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so",
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so:libhwui.so");
     sb.env("ACOSART_BINDER_FAKE", "1");

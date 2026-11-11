@@ -270,13 +270,14 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&substrate, "/data/app/libacosart.so");
+    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
     sb.rw_bind(&sock, "/data/acos-launch.sock");
     sb.env(
         "LD_PRELOAD",
-        "/data/shim/libartshim.so:/data/app/libacosart.so:/data/lib/libacos_binder_driver.so",
+        "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so:/data/lib/libacos_binder_driver.so",
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");

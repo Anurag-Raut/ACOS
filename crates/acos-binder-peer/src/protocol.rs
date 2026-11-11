@@ -38,6 +38,11 @@ pub const MAX_FDS: usize = 16;
 
 /// `IBinder::PING_TRANSACTION` (`B_PACK_CHARS('_','P','N','G')` on the wire).
 pub const PING_TRANSACTION: u32 = 0x5F50_4E47;
+/// `IBinder::INTERFACE_TRANSACTION` (`B_PACK_CHARS('_','I','N','T')`). The reply
+/// is a single `String16`: the node's AIDL descriptor. `libbinder`'s generated
+/// `asInterface` for the native AIDL backends (`android.gui.*`, which have no
+/// `acos-aidl` table) asks for it before dispatching any interface call.
+pub const INTERFACE_TRANSACTION: u32 = 0x5F49_4E54;
 /// `TF_ONE_WAY` in `binder_transaction_data.flags`.
 pub const TF_ONE_WAY: u32 = 0x01;
 /// `TF_STATUS_CODE` in `binder_transaction_data.flags`: the reply carries a

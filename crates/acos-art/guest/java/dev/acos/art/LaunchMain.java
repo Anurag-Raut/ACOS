@@ -144,6 +144,18 @@ public final class LaunchMain {
         // the real `Application` to exist, then (for activity-resumed) sends the
         // one ClientTransaction AMS would send.
         startWatcher(thread, at, appThread);
+        // Frame-clock probe (L1): post a real `Choreographer` frame callback on
+        // the main thread *before* the looper runs. `Choreographer.getInstance()`
+        // builds the `DisplayEventReceiver` (ISurfaceComposer →
+        // createDisplayEventConnection → stealReceiveChannel → BitTube) and
+        // registers the BitTube's receive fd with the main `Looper`; the callback
+        // can only fire if a 216-byte vsync event actually arrives on that fd from
+        // the Rust clock. This is the same receiver instance `ViewRootImpl`'s
+        // constructor gets (Choreographer is a ThreadLocal). Off by default: the
+        // probe's job is evidence, and the vsync payload still trips an NPE in
+        // `Choreographer$FrameData.update` (L1 §4), which would end the run before
+        // the activity transaction.
+        if (System.getenv("ACOSLAUNCH_FRAME_PROBE") != null) postFrameProbe();
         try {
             Looper.loop();
         } catch (Throwable fatal) {
@@ -469,6 +481,23 @@ public final class LaunchMain {
                 "register_android_content_res_ApkAssets",
                 "register_android_content_res_Configuration",
                 "register_android_view_DisplayEventReceiver",
+                // The real ViewRootImpl path (P4c → W1/V1) reaches
+                // `SurfaceControl.<clinit>` (ViewRootImpl.java:670
+                // `SurfaceControl$Transaction`) and then `SurfaceControl`
+                // itself, so the class's natives must be registered. E4H §3.1
+                // excluded this registration because registration itself ran
+                // the class initialiser while the native was still missing;
+                // the new launch DOES need the class, so the ordering issue is
+                // now observable instead of avoided (L1.md).
+                "register_android_view_SurfaceControl",
+                // `ViewRootImpl.<init>` (line 724 on API 34) constructs a
+                // `SurfaceSession`, whose Java constructor calls
+                // `nativeCreate()` immediately.
+                "register_android_view_SurfaceSession",
+                // `ViewRootImpl.setView` (line 1318 on API 34) touches
+                // `InputChannel`, whose `<clinit>` calls
+                // `nativeGetFinalizer()`.
+                "register_android_view_InputChannel",
                 "register_android_text_AndroidCharacter",
                 "register_android_text_Hyphenator",
                 "register_android_util_CharsetUtils",
@@ -515,6 +544,27 @@ public final class LaunchMain {
         }
         System.out.println("ACOSLAUNCH MARK natives registered"
                 + (missing.length() == 0 ? "" : " missing:" + missing));
+    }
+
+    /** Frame-clock probe: three real vsync callbacks on the main looper. */
+    static void postFrameProbe() {
+        try {
+            final android.view.Choreographer c = android.view.Choreographer.getInstance();
+            c.postFrameCallback(new android.view.Choreographer.FrameCallback() {
+                int seen;
+
+                @Override
+                public void doFrame(long frameTimeNanos) {
+                    seen++;
+                    System.out.println("ACOSLAUNCH MARK vsync-frame count=" + seen
+                            + " frameTimeNanos=" + frameTimeNanos);
+                    if (seen < 3) c.postFrameCallback(this);
+                }
+            });
+            System.out.println("ACOSLAUNCH MARK choreographer-ready");
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK choreographer-failed " + t);
+        }
     }
 
     // ------------------------------------------------- bindApplication bytes

@@ -226,6 +226,15 @@ struct slot {
     uint8_t* offs;
     size_t offs_size;
     uint32_t status;
+    // Descriptors the peer sent with this reply (SCM_RIGHTS). They are owned by
+    // this process until `build_reply` substitutes them into the reply
+    // parcel's `BINDER_TYPE_FD` objects and closes them. Dropping them here
+    // (the state before L1) left every reply-side fd object pointing at the
+    // peer's number in *our* fd space: `dup()` of a random number, so
+    // `stealReceiveChannel` returned PERMISSION_DENIED, and the guest logged
+    // "BINDER_TYPE_FD in incoming parcel but no fd was received".
+    int fds[E3G_MAX_FD];
+    int nfds;
 };
 
 struct inq {
@@ -679,6 +688,7 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
         case F_RSP: {
             struct slot* s = slot_for(h->seq);
             if (!s) {
+                for (int i = 0; i < nfds; i++) close(fds[i]);
                 pthread_mutex_unlock(&g.mu);
                 WARN("reply for unknown seq %u", h->seq);
                 return;
@@ -690,6 +700,13 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             s->data_size = (size_t)h->data_size;
             s->offs_size = (size_t)h->offsets_size;
             s->status = h->code;
+            if (nfds > E3G_MAX_FD) nfds = E3G_MAX_FD;
+            if (nfds > 0) memcpy(s->fds, fds, sizeof(int) * (size_t)nfds);
+            s->nfds = nfds > 0 ? nfds : 0;
+            if (g_dbg)
+                dprintf(2, "E3G: RSP seq=%u data=%llu offs=%llu fds=%d first=%d\n", h->seq,
+                        (unsigned long long)h->data_size, (unsigned long long)h->offsets_size,
+                        s->nfds, s->nfds > 0 ? s->fds[0] : -1);
             s->done = 1;
             pthread_cond_broadcast(&g.cv_rsp);
             break;
@@ -901,13 +918,78 @@ static int deliver_incoming(void) {
     return 0;
 }
 
+// Descriptors a reply handed to the app, keyed by the transaction buffer they
+// are referenced from. libbinder keeps a `BINDER_TYPE_FD` object's fd number
+// alive until the *receiver* frees the transaction buffer (`BC_FREE_BUFFER`, the
+// kernel's `binder_transaction_buffer_release`), because the fd stays in the
+// receiver's fd table for the lifetime of the parcel. Closing them when the
+// reply is built makes every later `dup()` on that number fail with `EBADF`
+// (observed: `stealReceiveChannel` → `-9 (Bad file descriptor)`).
+#define E3G_MAX_FDSETS 128
+struct fdset {
+    void* buf;
+    int fds[E3G_MAX_FD];
+    int n;
+};
+static struct fdset g_fdsets[E3G_MAX_FDSETS];
+
+static void remember_fds(void* buf, const int* fds, int n) {
+    if (n <= 0 || buf == NULL) return;
+    if (n > E3G_MAX_FD) n = E3G_MAX_FD;
+    for (int i = 0; i < E3G_MAX_FDSETS; i++) {
+        if (g_fdsets[i].buf == NULL) {
+            g_fdsets[i].buf = buf;
+            memcpy(g_fdsets[i].fds, fds, sizeof(int) * (size_t)n);
+            g_fdsets[i].n = n;
+            return;
+        }
+    }
+    WARN("reply fd table full, closing %d descriptors early", n);
+    for (int i = 0; i < n; i++) close(fds[i]);
+}
+
+static void release_fds(void* buf) {
+    if (buf == NULL) return;
+    for (int i = 0; i < E3G_MAX_FDSETS; i++) {
+        if (g_fdsets[i].buf == buf) {
+            for (int j = 0; j < g_fdsets[i].n; j++) close(g_fdsets[i].fds[j]);
+            g_fdsets[i].buf = NULL;
+            g_fdsets[i].n = 0;
+            return;
+        }
+    }
+}
+
 static int build_reply(struct slot* s) {
     size_t dsize = s->data_size, osize = s->offs_size;
     int fds[E3G_MAX_FD];
-    int nfds = 0;
+    int nfds = s->nfds;
+    if (nfds > 0) memcpy(fds, s->fds, sizeof(int) * (size_t)nfds);
+    if (g_dbg)
+        dprintf(2, "E3G: build_reply seq=%u fds=%d first=%d\n", s->seq, s->nfds,
+                s->nfds > 0 ? s->fds[0] : -1);
     xform_objects(s->data, dsize, s->offs, osize, 1, fds, &nfds);
+    if (g_dbg) {
+        for (size_t i = 0; i + 8 <= osize; i += 8) {
+            uint64_t off;
+            memcpy(&off, s->offs + i, 8);
+            if (off + sizeof(struct flat_binder_object) > dsize) continue;
+            struct flat_binder_object* o = (struct flat_binder_object*)(s->data + off);
+            dprintf(2, "E3G: build_reply obj@%llu type=0x%x handle=%u binder=%llx\n",
+                    (unsigned long long)off, o->hdr.type, o->handle,
+                    (unsigned long long)o->binder);
+        }
+    }
+    int keep = s->nfds;
+    s->nfds = 0;
     void* buf = mm_alloc(dsize + 8 + osize + 8);
-    if (buf == NULL) return -1;
+    if (buf == NULL) {
+        for (int i = 0; i < keep; i++) close(s->fds[i]);
+        return -1;
+    }
+    // The app now owns the descriptors through the buffer; they are released
+    // when it frees the buffer (see `release_fds`).
+    remember_fds(buf, s->fds, keep);
     memcpy(buf, s->data, dsize);
     void* obuf = (uint8_t*)buf + ((dsize + 7) & ~(size_t)7);
     if (osize) memcpy(obuf, s->offs, osize);
@@ -1031,6 +1113,10 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
                 if (pos + 8 > wsize) return;
                 memcpy(&p, wbuf + pos, 8);
                 pos += 8;
+                // A reply buffer's `BINDER_TYPE_FD` objects keep their
+                // descriptors alive until the receiver frees the buffer, exactly
+                // like the kernel's `binder_transaction_buffer_release`.
+                release_fds((void*)(uintptr_t)p);
                 // Only the receiving thread may free the buffer the driver
                 // handed it with BR_TRANSACTION.  A buffer this thread does
                 // not own is stale (a replayed/already-freed free) and freeing
@@ -1564,8 +1650,26 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_LaunchMain_initAndroidRuntime(
     void* mem = calloc(1, 0x200);
     if (a0 == NULL || mem == NULL) return -4;
     ((ctor_fn)ctor)(mem, a0, strlen(a0));
-    DBG("initAndroidRuntime: AndroidRuntime=%p argv0=%s slot=%p now=%p", mem, a0,
-        (void*)slot, *slot);
+    // Every *native callback* libandroid_runtime makes (`dispatchVsync`,
+    // `NativeDisplayEventReceiver`, `~JNIObject`) goes through
+    // `AndroidRuntime::getJNIEnv()`, and the image's `getJNIEnv` dereferences the
+    // **static data member** `AndroidRuntime::mJavaVM`
+    // (`mov GOT(mJavaVM),%rax; mov (%rax),%rdi; call *0x30(vtable)`), which
+    // `AndroidRuntime::start()` is what normally sets. We construct without
+    // `start()`, so it stays null and the first vsync dispatch dies at
+    // `getJNIEnv+37` (Q3's crash). Publish the real VM into that symbol — not
+    // into object offset 0, which is the vtable pointer the ctor just wrote.
+    JavaVM* vm = NULL;
+    if (mem != NULL && (*env)->GetJavaVM(env, &vm) == 0 && vm != NULL) {
+        void** jvm_slot = (void**)dlsym(h, "_ZN7android14AndroidRuntime7mJavaVME");
+        if (jvm_slot != NULL) {
+            *jvm_slot = vm;
+        } else {
+            WARN("initAndroidRuntime: no AndroidRuntime::mJavaVM symbol");
+        }
+    }
+    DBG("initAndroidRuntime: AndroidRuntime=%p argv0=%s slot=%p now=%p vm=%p", mem, a0,
+        (void*)slot, *slot, (void*)vm);
     return *slot != NULL ? 1 : -5;
 }
 

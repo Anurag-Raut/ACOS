@@ -38,7 +38,8 @@ use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
 use acos_services::{codes, exception, registry, ServiceError, ServiceHost};
 
 use crate::protocol::{
-    Frame, F_REP, F_REQ, F_RSP, F_TXN, PING_TRANSACTION, TF_ONE_WAY, TF_STATUS_CODE,
+    Frame, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION, PING_TRANSACTION, TF_ONE_WAY,
+    TF_STATUS_CODE,
 };
 
 /// Bit 32 marks a driver wire handle (a Java local binder).
@@ -386,6 +387,9 @@ impl Peer {
         }
         if frame.target & NODE_TAG != 0 {
             let host_id = frame.target & !NODE_TAG;
+            if frame.code == INTERFACE_TRANSACTION {
+                return Some(self.interface_transaction(frame, host_id));
+            }
             if host_id == LAUNCH_NODE {
                 return Some(self.launch_push(frame));
             }
@@ -404,6 +408,28 @@ impl Peer {
         Some(self.error_reply(frame, &ServiceError::UnknownBinder {
             handle: frame.target,
         }))
+    }
+
+    /// `IBinder::INTERFACE_TRANSACTION`: answer the node's AIDL descriptor.
+    ///
+    /// A real `BBinder` writes exactly one `String16` (no status word, no
+    /// exception header) and libbinder's generated `asInterface` for the
+    /// untabled native interfaces (`android.gui.*`) reads exactly that. An
+    /// unknown node answers the empty string, which is what a `BBinder` with no
+    /// descriptor set does — never a fabricated descriptor.
+    fn interface_transaction(&mut self, frame: &Frame, host_id: u64) -> Frame {
+        let descriptor = self
+            .host
+            .descriptor_of(BinderId(host_id))
+            .unwrap_or_default();
+        let mut reply = Parcel::new();
+        if let Err(err) = reply.write_string16(descriptor) {
+            return self.error_reply(
+                frame,
+                &ServiceError::Internal(format!("INTERFACE_TRANSACTION reply: {err}")),
+            );
+        }
+        frame_from_parcel(F_RSP, frame, &reply)
     }
 
     fn service_manager(&mut self, frame: &Frame) -> Frame {
@@ -1070,8 +1096,17 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
         offs.extend_from_slice(&(out.len() as u64).to_le_bytes());
         out.extend_from_slice(&obj);
         if add_stability {
-            // Stability::Level::SYSTEM == 0b1100 (E3G §3.3).
-            out.extend_from_slice(&12i32.to_le_bytes());
+            // Stability::Level::SYSTEM == 0b1100 (E3G §3.3) for a real binder,
+            // but a **null** binder is always written with `UNDECLARED` (0):
+            // libbinder's `finishUnflattenBinder` feeds this int to
+            // `Stability::setRepr(nullptr, level, log=true)`, and any level
+            // other than UNDECLARED makes it return `BAD_TYPE`. The whole
+            // reply then fails to parse, which is why a `getService` miss
+            // (a null binder) surfaced as
+            // `Status(-129, EX_TRANSACTION_FAILED): 'BAD_TYPE: '` instead of
+            // `null` (L1 §2).
+            let stability: i32 = if parsed.id == 0 { 0 } else { 12 };
+            out.extend_from_slice(&stability.to_le_bytes());
         }
         cursor = o + 24;
     }

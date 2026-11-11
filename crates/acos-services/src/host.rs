@@ -274,6 +274,17 @@ impl ServiceHost {
         binder
     }
 
+    /// Give a descriptor that is already registered a second
+    /// `ServiceManager` name (an alias).
+    ///
+    /// The API-34 image asks for the AIDL compositor under
+    /// `SurfaceFlingerAIDL` (`SurfaceComposerClient.cpp:146`) while the older
+    /// path uses `SurfaceFlinger`; both must resolve to the same node, and a
+    /// second `register_dynamic_named` would allocate a second binder.
+    pub fn alias_service_name(&mut self, name: &'static str, descriptor: &'static str) {
+        self.names.insert(name, descriptor);
+    }
+
     /// Register an auxiliary binder (a binder returned by another service).
     pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {        let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);

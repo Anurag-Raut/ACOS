@@ -456,12 +456,16 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
+    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     // The session dir is writable to the guest, but only this session's:
     // `/data/session/<id>` is the run root, `/data/session` itself is a plain
     // temp dir with nothing in it.
     sb.rw_bind(&sdir, &format!("/data/session/{session_id}"));
     sb.rw_bind(&sock_dir, "/dev/socket");
-    sb.env("LD_PRELOAD", "/data/shim/libartshim.so:/data/app/libacosart.so");
+    sb.env(
+        "LD_PRELOAD",
+        "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so",
+    );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so:libhwui.so");
     sb.env("ACOSART_BINDER_FAKE", "1");
 
