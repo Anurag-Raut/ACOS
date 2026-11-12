@@ -1301,12 +1301,8 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
         session.set_settle_mode(settle);
         session.begin_input();
-        let bounds = target.bounds;
-        session.tap_in_window(
-            &target.window,
-            (bounds.left() + bounds.right()) / 2,
-            (bounds.top() + bounds.bottom()) / 2,
-        )?;
+        let (x, y) = target.tap_point();
+        session.tap_in_window(&target.window, x, y)?;
         return Ok(input_result(session, "tap", json!({"id": id})));
     }
     if let Some(text) = args.get("text").and_then(Value::as_str) {
@@ -1812,6 +1808,21 @@ fn resolve_selector(
     value: &str,
 ) -> Result<UiNode, BackendError> {
     let tree = session.ensure_bound_tree()?;
+    if let Some(node) = tree.find_one(selector) {
+        return Ok(node.clone());
+    }
+    if let Some(offscreen) = tree.find_invisible(selector) {
+        return Err(BackendError::Failed {
+            code: ErrorCode::ElementOffscreen,
+            detail: format!(
+                "{field}={value:?} matches only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                offscreen.text,
+                offscreen.bounds,
+                offscreen.visible_bounds
+                    .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+            ),
+        });
+    }
     tree.find_one(selector)
         .cloned()
         .ok_or_else(|| BackendError::Failed {
@@ -1886,6 +1897,7 @@ fn node_json(
         "hint": node.hint,
         "content_desc": node.content_desc,
         "bounds": node.bounds.to_string(),
+        "visible_bounds": node.visible_bounds.map(|b| b.to_string()),
         "visible": node.visible,
         "enabled": node.enabled,
         "focused": node.focused,

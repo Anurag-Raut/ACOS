@@ -195,6 +195,7 @@ fn node_from_attrs(body: &str, counter: usize) -> Result<ViewNode, String> {
         text: get("text").unwrap_or_default().to_string(),
         content_desc: get("content-desc").unwrap_or_default().to_string(),
         bounds,
+        visible_bounds: visible.then_some(bounds),
         visible,
         enabled: get("enabled").map(|v| v == "true").unwrap_or(true),
         focused: get("focused").map(|v| v == "true").unwrap_or(false),
@@ -372,6 +373,7 @@ fn view_node_from_device(raw: &Value, counter: usize) -> ViewNode {
             .unwrap_or_default()
             .to_string(),
         bounds: [x, y, x + w, y + h],
+        visible_bounds: Some([x, y, x + w, y + h]),
         visible: raw
             .get("visibleToUser")
             .and_then(Value::as_bool)
@@ -457,6 +459,11 @@ fn acos_node_from_json(raw: &Value, counter: &mut usize) -> ViewNode {
         text: string_field(raw, "text"),
         content_desc: string_field(raw, "content_desc"),
         bounds,
+        visible_bounds: raw
+            .get("visible_bounds")
+            .and_then(Value::as_str)
+            .and_then(|text| text.parse::<Bounds>().ok())
+            .map(|b| b.0),
         visible: raw.get("visible").and_then(Value::as_bool).unwrap_or(true),
         enabled: raw.get("enabled").and_then(Value::as_bool).unwrap_or(true),
         focused: raw.get("focused").and_then(Value::as_bool).unwrap_or(false),
@@ -513,6 +520,7 @@ mod tests {
                 text: "hi".into(),
                 content_desc: String::new(),
                 bounds: [1, 2, 3, 4],
+                visible_bounds: Some([1, 2, 3, 4]),
                 visible: true,
                 enabled: true,
                 focused: false,

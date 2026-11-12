@@ -851,6 +851,62 @@ real failure is a post-first-frame SIGSEGV — MEASURED (partial: one half repro
   guest SIGSEGV handler (faulting address + mapped path) and bisect the app's 23 native libs and the
   gralloc shim; (3) owner decision on the opt-in per-view canvas vs the full `libhwui` shim.
 
+## E13.4 — Tree visibility means *visible to the user*: GR2 W4's false-pass class closed —
+PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a real pass)
+
+- **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/v1`, branch
+  `verify-v1-visibility` (off `main` `2f9bf4a`, GR2 merged). Engine unchanged (ART guest probe +
+  host selector semantics only).
+- **Question / goal:** GR2 W4 proved a false pass: the Gaten pager keeps the Analytics page
+  warm-mounted at `x=1080..2160` and every node there reported `visible: true`, so
+  `wait_for {text: contains "Accuracy"}` passed in 13 ms on content the user cannot see; W3's text
+  selector likewise matched an off-screen/phantom label and the tap landed in the neighbouring tab.
+  Can tree visibility mean what Android means by it, so no selector, assertion or tap can act on
+  content the user cannot see — without dropping off-screen nodes from the tree?
+- **Inputs / method:** AOSP `View.isVisibleToUser()` / `isShown()` / `getGlobalVisibleRect()` /
+  `AccessibilityNodeInfo.isVisibleToUser` (android-14.0.0_r75 in `.cache/aosp`); the in-guest probe
+  (`crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`, `appendViewJson`), the host mapping
+  (`acos-cli` `ui_node_from_json`), `acos-protocol` selectors, `acos-verify` assertions/executor,
+  and the Rust VM walker (`acos-runtime/src/view_tree.rs`). New fixture
+  `fixtures/apps/offscreen-pager` (two display-width pages in a `HorizontalScrollView`, page two
+  warm-mounted off screen with the text "Hidden") + a positive scenario and two negative ones.
+  Re-ran the 7 gates, all `p11-*`, and `gaten-home` on real ART.
+- **Result (measured):** each node now carries `visible` (framework `isVisibleToUser`: attached with
+  a visible window, it and all ancestors VISIBLE with alpha > 0, global visible rect not clipped
+  away) and `visible_bounds` (that rect, translated to display pixels and clipped to the display).
+  The offscreen-pager fixture: pre-scroll `Hidden` at `[1122,317][1239,368]`, `visible:false`,
+  no visible rect; post-"Next" the same node at `[42,317][159,368]`, `visible:true` with
+  `visible_bounds`; `assert_not_visible Hidden` passes with "present in the tree but not visible to
+  the user (bounds …)". Negatives: `assert_visible Hidden` -> `ELEMENT_OFFSCREEN` naming the bounds
+  (rc=1), `wait_for Hidden` -> `TIMEOUT` + `offscreen_match {bounds [1122,317][1239,368]}` (rc=1).
+  Gaten (unchanged APK): `gaten-home` pass 14/14; the Analytics `tap` resolves the only **visible**
+  `content_desc "Analytics"` (tab bar `[516,2151][690,2316]`, tap centre `(603,2233)`), and
+  `wait_for "Accuracy"` matches `Accuracy` at `[58,1758]` with `visible:true` — the capture frame is
+  now the Analytics frame (`4018c190…`), byte-different from Home (`2d0ecc20…`). All 7 gates as
+  required (6 × rc=0, `T03-render-wrong` rc=1); 11/12 `p11-*` pass (see below).
+- **Finding (new, small):** `p11-delay1000` exposed the reverse case the old tree hid — a
+  `TextView` with `layout_width="0dp"`, `visibility="gone"` made VISIBLE after 1 s is a **zero-width**
+  node (`bounds [1059,676][1059,792]`), which a device also reports `isVisibleToUser: false`. The
+  scenario had been passing on a node with no visible area. Fixture fixed
+  (`wrap_content`); `p11-delay1000/200/40` pass.
+- **Fidelity / evidence:** `art-reference`, real ART guest, host-observed pixels.
+  `results/verify/V1.md`; artifacts `.cache/v1/{offscreen,negative-*,gaten-2,gate-*,p11-*}/`
+  (gitignored): trees, step verdicts, frames.
+- **Regression / false pass:** false passes **1 documented before -> 0 after** (every artifact
+  re-run here; the two offscreen negatives are pinned as expected failures, and a pass there is the
+  bug). `cargo test --release -p acos-cli -p acos-art -p acos-services -p acos-verify`: 625 passed /
+  1 failed (`serve_daemon` socket-existence flake, passes standalone under the same guard with and
+  without the change). One **pre-existing** red test left alone: `acos-protocol --test scenarios`
+  requires every scenario to be `1080x2400@420` and GR2 added `gaten-home` at `@400`.
+  `p11-progress-timeout`'s "non_pass produced pass" reproduces identically on the unmodified
+  baseline (pre-existing settle semantics, P12's area).
+- **Conclusion / next:** the W3/W4 class is closed at the root: `visible` is the framework's own
+  answer, selectors default to visible nodes, taps use the visible-rect centre, and an
+  invisible-only match is `ELEMENT_OFFSCREEN` (never a pass). W5 (a tap step may pass with no
+  change) is unchanged and still the other half of that false-pass pair; W6 (intermittent `+1080 px`
+  layout / a launch that never paints) remains the reason a green Gaten run is luck-dependent (1 of
+  2 re-runs here hit the white-paint flake at step 1, as GR2 measured 2/6).
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -878,6 +934,7 @@ merged after that build; re-baseline on merged main.
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | post-H6 (current main) |
 | M8 tap → settled | strict 955 ms (event, animations on); **182 ms p50 with `animations: off`** (P12 counter step incl. ~78 ms capture) / fast 70.9 ms | main P11, P12 | P1, P11, P12 E2.9 | 2026-11-13 | P12 animations:off (current main) |
+| False passes | **0**, class closed at the root: selectors/asserts/taps match user-visible nodes only; off-screen-only match = `ELEMENT_OFFSCREEN` | `verify-v1-visibility` | V1, E13.4 | 2026-11-13 | V1 (current main) |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 

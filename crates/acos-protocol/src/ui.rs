@@ -246,6 +246,18 @@ pub struct Selector {
     /// Zero-based occurrence among otherwise matching nodes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<usize>,
+    /// Also match nodes that are not visible to the user.
+    ///
+    /// Default `false`: a selector matches only nodes the user can see
+    /// (`UiNode::visible`, which follows `View.isVisibleToUser()`: shown, and
+    /// its clipped visible rect non-empty). A warm-mounted page parked off
+    /// screen is present in the tree but is not a selector match, so
+    /// `wait_for`/`assert_text`/`assert_visible`/`tap` can never silently act on
+    /// invisible content. Set it to `true` only for a deliberate check of an
+    /// off-screen/invisible node (`assert_not_visible`, `assert_state
+    /// {visible: false}`, diagnostics).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub include_invisible: bool,
 }
 
 impl Selector {
@@ -274,6 +286,9 @@ impl Selector {
     }
 
     /// True when no matching field is present.
+    ///
+    /// `include_invisible` is a matching *policy*, not a field, so it never
+    /// makes an otherwise empty selector valid.
     pub fn is_empty(&self) -> bool {
         self.id.is_none()
             && self.text.is_none()
@@ -369,6 +384,17 @@ impl Selector {
         }
         true
     }
+
+    /// Whether this selector accepts `node` at all: the structural match plus
+    /// the user-visibility rule (a selector matches only user-visible nodes
+    /// unless it explicitly opts into invisible ones).
+    pub fn accepts_node(&self, node: &UiNode) -> bool {
+        (self.include_invisible || node.visible) && self.matches_node(node)
+    }
+}
+
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// One UI node.
@@ -394,9 +420,18 @@ pub struct UiNode {
     /// Accessibility content description (empty when absent).
     #[serde(default)]
     pub content_desc: String,
-    /// Screen bounds in pixels.
+    /// Screen bounds in pixels (the view's full rect).
     pub bounds: Bounds,
-    /// Whether the node is visible.
+    /// The part of `bounds` the user can actually see: `bounds` clipped by every
+    /// ancestor (scroll/pager clip) and by the window/display bounds, in screen
+    /// pixels. `None` when the engine does not report it (older probes); use
+    /// [`UiNode::visible_rect`] for the rect a tap may use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible_bounds: Option<Bounds>,
+    /// Whether the node is visible *to the user* (Android's `isVisibleToUser`:
+    /// shown — it and all ancestors VISIBLE and attached — and its global
+    /// visible rect, clipped by every ancestor and the window/display, is
+    /// non-empty).
     pub visible: bool,
     /// Whether the node is enabled.
     pub enabled: bool,
@@ -435,6 +470,7 @@ impl UiNode {
             hint: String::new(),
             content_desc: String::new(),
             bounds,
+            visible_bounds: None,
             visible: true,
             enabled: true,
             focused: false,
@@ -476,6 +512,23 @@ impl UiNode {
     pub fn with_children(mut self, children: Vec<UiNode>) -> Self {
         self.children = children;
         self
+    }
+
+    /// Builder: set the clipped (user-visible) rect.
+    pub fn with_visible_bounds(mut self, visible_bounds: Bounds) -> Self {
+        self.visible_bounds = Some(visible_bounds);
+        self
+    }
+
+    /// The rect a tap on this node must use: the clipped visible rect when the
+    /// engine reports one, otherwise the full bounds. Never a point outside it.
+    pub fn visible_rect(&self) -> Bounds {
+        self.visible_bounds.unwrap_or(self.bounds)
+    }
+
+    /// The screen point at the centre of the *visible* rect.
+    pub fn tap_point(&self) -> (i32, i32) {
+        self.visible_rect().center()
     }
 
     /// Depth-first walk including `self`.
@@ -539,7 +592,8 @@ impl UiTree {
 
     /// Find all nodes matching a selector, applying `selector.index` last.
     ///
-    /// An empty selector is invalid and matches nothing.
+    /// An empty selector is invalid and matches nothing. Only user-visible nodes
+    /// match unless the selector sets `include_invisible`.
     pub fn find_all(&self, selector: &Selector) -> Vec<&UiNode> {
         if selector.is_empty() {
             return Vec::new();
@@ -547,7 +601,7 @@ impl UiTree {
         let mut matched: Vec<&UiNode> = self
             .all_nodes()
             .into_iter()
-            .filter(|node| selector.matches_node(node))
+            .filter(|node| selector.accepts_node(node))
             .collect();
         if let Some(index) = selector.index {
             matched = matched.into_iter().nth(index).into_iter().collect();
@@ -556,6 +610,7 @@ impl UiTree {
     }
 
     /// Find the first matching node. An empty selector matches nothing.
+    /// Only user-visible nodes match unless the selector sets `include_invisible`.
     pub fn find_one(&self, selector: &Selector) -> Option<&UiNode> {
         if selector.is_empty() {
             return None;
@@ -564,7 +619,22 @@ impl UiTree {
         no_index.index = None;
         self.all_nodes()
             .into_iter()
-            .find(|node| no_index.matches_node(node))
+            .find(|node| no_index.accepts_node(node))
+    }
+
+    /// The first node that matches the selector's *fields* but is not visible to
+    /// the user. Turns a silent "not found" into an honest `ELEMENT_OFFSCREEN`
+    /// failure that names the off-screen node and its bounds.
+    pub fn find_invisible(&self, selector: &Selector) -> Option<&UiNode> {
+        if selector.is_empty() {
+            return None;
+        }
+        let mut probe = selector.clone();
+        probe.include_invisible = true;
+        probe.index = None;
+        self.all_nodes()
+            .into_iter()
+            .find(|node| !node.visible && probe.matches_node(node))
     }
 
     /// The canonical `observe --text` rendering, one line per node with text or
@@ -684,6 +754,56 @@ mod tests {
         assert_eq!(tree.find_one(&Selector::by_text("Greet")).unwrap().id, "n3");
         assert!(tree.find_all(&Selector::default()).is_empty());
         assert!(!Selector::default().validation_errors().is_empty());
+    }
+
+    #[test]
+    fn selectors_skip_offscreen_nodes_and_tap_the_visible_rect() {
+        let mut hidden =
+            UiNode::new("off", "android.widget.TextView", Bounds::new(1122, 317, 1239, 368))
+                .with_text("Hidden");
+        hidden.visible = false;
+        let shown = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
+            .with_text("Page one")
+            .with_visible_bounds(Bounds::new(52, 320, 186, 365));
+        let frame = frame();
+        let tree = UiTree::new(frame, "dev.acos.fixtures.offscreenpager", vec![hidden, shown]);
+
+        // GR2 W4: present in the tree but not a selector match.
+        assert!(tree.find_one(&Selector::by_text("Hidden")).is_none());
+        assert!(tree.find_invisible(&Selector::by_text("Hidden")).is_some());
+        let mut both = Selector::by_text("Hidden");
+        both.include_invisible = true;
+        assert_eq!(tree.find_all(&both).len(), 1);
+        // "index" counts only the accepted (visible) nodes.
+        assert_eq!(
+            tree.find_all(&Selector {
+                class: Some("android.widget.TextView".into()),
+                index: Some(0),
+                ..Selector::default()
+            })
+            .len(),
+            1
+        );
+        // A tap uses the centre of the clipped visible rect, never the full rect.
+        let node = tree.find_one(&Selector::by_text("Page one")).unwrap();
+        assert_eq!(node.visible_rect(), Bounds::new(52, 320, 186, 365));
+        assert_eq!(node.tap_point(), (119, 342));
+        // Same rect, moved so the full-bounds centre is outside the visible part.
+        let clipped = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
+            .with_visible_bounds(Bounds::new(120, 317, 196, 368));
+        assert_eq!(clipped.tap_point(), (158, 342));
+        assert_ne!(clipped.tap_point(), clipped.bounds.center());
+    }
+
+    #[test]
+    fn include_invisible_is_not_a_matching_field() {
+        // A selector that only sets the policy is still empty/invalid.
+        let policy_only = Selector {
+            include_invisible: true,
+            ..Selector::default()
+        };
+        assert!(policy_only.is_empty());
+        assert!(!policy_only.validation_errors().is_empty());
     }
 
     #[test]

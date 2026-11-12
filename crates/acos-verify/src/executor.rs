@@ -775,6 +775,23 @@ fn execute_step(
                 }
                 let elapsed = started.elapsed();
                 if elapsed >= timeout {
+                    // A selector that matches only a node the user cannot see is
+                    // the GR2 W4 false-pass class: say so by name (bounds and
+                    // visible rect), instead of a bare timeout over "no match".
+                    let offscreen = last
+                        .as_ref()
+                        .and_then(|observation| observation.tree.find_invisible(&wait.selector))
+                        .map(|node| {
+                            serde_json::json!({
+                                "node_id": node.id,
+                                "text": node.text,
+                                "content_desc": node.content_desc,
+                                "class": node.class,
+                                "bounds": node.bounds.to_string(),
+                                "visible_bounds": node.visible_bounds.map(|b| b.to_string()),
+                                "window": node.window,
+                            })
+                        });
                     let mut exec =
                         StepExec::failed(assertions::element_missing("wait_for", &wait.selector, last.as_ref()));
                     exec.status = Status::Timeout;
@@ -782,8 +799,13 @@ fn execute_step(
                         ProtocolError::new(
                             ErrorCode::Timeout,
                             format!(
-                                "wait_for timed out after {} ms: selector {:?} did not satisfy the condition (require_visible={})",
-                                wait.timeout_ms, wait.selector, wait.require_visible
+                                "wait_for timed out after {} ms: selector {:?} did not satisfy the condition (require_visible={}){}",
+                                wait.timeout_ms, wait.selector, wait.require_visible,
+                                offscreen.as_ref().map_or_else(String::new, |node| format!(
+                                    "; it DID match a node that is not visible to the user (bounds {}, visible_bounds {}) — scroll it into view first",
+                                    node.get("bounds").and_then(serde_json::Value::as_str).unwrap_or("?"),
+                                    node.get("visible_bounds").and_then(serde_json::Value::as_str).unwrap_or("<none>"),
+                                ))
                             ),
                         )
                         .with_hint(
@@ -795,6 +817,7 @@ fn execute_step(
                             "polls": polls,
                             "require_visible": wait.require_visible,
                             "selector": wait.selector,
+                            "offscreen_match": offscreen,
                             "last_frame_seq": last.as_ref().map(|observation| observation.frame.frame_seq),
                         })),
                     );

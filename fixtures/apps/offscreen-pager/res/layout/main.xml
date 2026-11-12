@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Two pages side by side inside a horizontal scroller: page two is warm-mounted
+  but parked one display width off screen. This is the GR2 W4/Gaten pager shape
+  reduced to a framework-only fixture: every node of page two is attached and
+  VISIBLE, yet the user cannot see it. ACOS must report it with
+  `visible: false` and an empty `visible_bounds`, and a selector must not match
+  it until the pager is scrolled.
+-->
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pager"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:id="@+id/pages"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/page_one"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/title_one"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/page_one" />
+
+            <Button
+                android:id="@+id/next"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/next" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/page_two"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/hidden"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/hidden" />
+
+            <TextView
+                android:id="@+id/title_two"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/page_two" />
+
+            <Button
+                android:id="@+id/back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/back" />
+        </LinearLayout>
+    </LinearLayout>
+</HorizontalScrollView>

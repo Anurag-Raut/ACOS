@@ -1,0 +1,76 @@
+# v1-offscreen-pager: tree visibility means *visible to the user* (GR2 W4).
+#
+# offscreen-pager.apk is two display-width pages side by side in a
+# HorizontalScrollView. Page two ("Hidden", "Page two", "Back") is warm-mounted
+# at x = +displayWidth with every node attached and View.VISIBLE — the Gaten
+# Analytics page shape that made `wait_for {text: contains "Accuracy"}` pass in
+# 13 ms on content the user could not see.
+#
+# The positive control: before the scroll "Hidden" is present in the tree but
+# not visible to the user, so assert_not_visible holds and no selector matches
+# it; after tapping "Next" the very same node is on screen and assert_visible /
+# wait_for hold. The failure half (assert_visible on the off-screen node must
+# fail with ELEMENT_OFFSCREEN) is scenarios/negative/offscreen-pager-visible.yaml.
+version: 1
+name: v1-offscreen-pager
+description: >-
+  Two-page horizontal pager on real ART. Assert that the off-screen page's text
+  "Hidden" is present but NOT visible to the user, then scroll it into view and
+  assert it IS visible — the GR2 W4 false-pass class, both directions.
+app: fixtures/build/apps/offscreen-pager.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - ui.offscreen
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.offscreenpager/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {text: {exact: Page one}}
+      timeout_ms: 15000
+
+  - assert_visible:
+      selector: {text: {exact: Page one}}
+
+  # The negative half that used to be a false pass: "Hidden" is in the tree
+  # (page two is warm-mounted, View.VISIBLE) but the user cannot see it.
+  - assert_not_visible:
+      selector: {text: {exact: Hidden}}
+
+  # assert_text also refuses the off-screen node (the selector matches only
+  # user-visible nodes), so it can only match page one's text here.
+  - assert_text:
+      selector: {text: {exact: Page one}}
+      text: {exact: Page one}
+
+  # Positive control: scroll page two into view with the app's own button.
+  - tap:
+      selector: {id: next}
+
+  - wait_for:
+      selector: {text: {exact: Hidden}}
+      timeout_ms: 15000
+
+  - assert_visible:
+      selector: {text: {exact: Hidden}}
+
+  - capture:
+      name: offscreen-pager-page-two
+      format: png
+      fresh: true

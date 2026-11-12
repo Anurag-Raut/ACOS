@@ -677,27 +677,43 @@ impl EngineBackend {
             EngineBackend::Session { session, .. } => session.tree()?,
             EngineBackend::Native(_) => unreachable!("native path forwards input"),
         };
-        let node = tree.find_one(selector).ok_or_else(|| {
-            BackendError::Failed {
-                code: if tree.truncated {
-                    ErrorCode::TreeTruncated
-                } else {
-                    ErrorCode::AssertionFailed
-                },
-                detail: if tree.truncated {
-                    format!(
-                        "no node matches selector {selector:?}, but the tree was truncated at the node budget"
-                    )
-                } else {
-                    format!("no node matches selector {selector:?}")
-                },
+        let node = match tree.find_one(selector) {
+            Some(node) => node,
+            None => {
+                // A visible match always wins; only when there is none does the
+                // off-screen match explain the failure (and it is never a pass).
+                if let Some(offscreen) = tree.find_invisible(selector) {
+                    return Err(BackendError::Failed {
+                        code: ErrorCode::ElementOffscreen,
+                        detail: format!(
+                            "selector {selector:?} matched only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                            offscreen.text,
+                            offscreen.bounds,
+                            offscreen.visible_bounds
+                                .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+                        ),
+                    });
+                }
+                return Err(BackendError::Failed {
+                    code: if tree.truncated {
+                        ErrorCode::TreeTruncated
+                    } else {
+                        ErrorCode::AssertionFailed
+                    },
+                    detail: if tree.truncated {
+                        format!(
+                            "no node matches selector {selector:?}, but the tree was truncated at the node budget"
+                        )
+                    } else {
+                        format!("no node matches selector {selector:?}")
+                    },
+                });
             }
-        })?;
-        Ok((
-            node.window.clone(),
-            (node.bounds.left() + node.bounds.right()) / 2,
-            (node.bounds.top() + node.bounds.bottom()) / 2,
-        ))
+        };
+        // A tap lands on the centre of the node's *visible* rect, never on a
+        // point outside what the user can see.
+        let (x, y) = node.tap_point();
+        Ok((node.window.clone(), x, y))
     }
 
     fn tap_node(&mut self, text: &str) -> Result<(), BackendError> {
@@ -1181,6 +1197,19 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
         .get("visibility")
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
+    // User-visible, per the framework's own `isVisibleToUser()` semantics: the
+    // probe computes it (shown + clipped global visible rect non-empty) and the
+    // host copies it verbatim. A probe that predates the field falls back to the
+    // old `visibility == VISIBLE` reading, which never claims more than it knew.
+    let visible = value
+        .get("visible")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(visibility == 0);
+    let visible_bounds = value
+        .get("visible_bounds")
+        .and_then(|v| v.as_str())
+        .and_then(parse_bounds)
+        .filter(|bounds| bounds.is_valid() && bounds.width() > 0 && bounds.height() > 0);
     let resource_id = value
         .get("id")
         .and_then(|v| v.as_str())
@@ -1216,7 +1245,8 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
         .get("clickable")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    node.visible = visibility == 0;
+    node.visible = visible;
+    node.visible_bounds = visible_bounds;
     node.enabled = value
         .get("enabled")
         .and_then(|v| v.as_bool())

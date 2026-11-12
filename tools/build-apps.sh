@@ -15,6 +15,7 @@
 #   fixtures/build/apps/multi-activity.apk
 #   fixtures/build/apps/form-validation.apk
 #   fixtures/build/apps/svg-viewbox.apk
+#   fixtures/build/apps/offscreen-pager.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -192,7 +193,10 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # AlertDialog) and settle-lab (P11: animations, delayed/chained updates,
 # dialogs, Activity transition, ListView scroll, infinite progress,
 # LayoutTransition, rapid taps).
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox; do
+# offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
+# HorizontalScrollView whose second page is warm-mounted one display width off
+# screen, with text that must be reported `visible:false` until you scroll.
+for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
     build_apk "$app"
 done
 

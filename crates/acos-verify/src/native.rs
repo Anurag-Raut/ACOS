@@ -243,6 +243,7 @@ fn ui_node(node: &ViewNode, index: usize, package: &str) -> UiNode {
     ui.text = node.text.clone();
     ui.content_desc = node.content_desc.clone();
     ui.visible = node.visible;
+    ui.visible_bounds = node.visible_bounds.map(Bounds);
     ui.enabled = node.enabled;
     ui.focused = node.focused;
     ui.clickable = node.clickable;
@@ -680,13 +681,33 @@ impl NativeBackend {
         selector: &acos_protocol::Selector,
     ) -> Result<(f32, f32), BackendError> {
         let node = self.find_node(selector)?;
-        if !node.bounds.is_valid() || node.bounds.width() <= 0 || node.bounds.height() <= 0 {
+        if !node.visible {
             return Err(BackendError::Failed {
-                code: ErrorCode::ElementNotFound,
-                detail: format!("matched node {} has empty bounds {}", node.id, node.bounds),
+                code: ErrorCode::ElementOffscreen,
+                detail: format!(
+                    "matched node {} is not visible to the user (bounds {}, visible_bounds {}); \
+                     a tap must land inside the visible rect — scroll it into view first",
+                    node.id,
+                    node.bounds,
+                    node.visible_bounds
+                        .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+                ),
             });
         }
-        let (x, y) = node.bounds.center();
+        let rect = node.visible_rect();
+        if !rect.is_valid() || rect.width() <= 0 || rect.height() <= 0 {
+            return Err(BackendError::Failed {
+                code: ErrorCode::ElementNotFound,
+                detail: format!(
+                    "matched node {} has empty visible bounds {} (bounds {})",
+                    node.id, rect, node.bounds
+                ),
+            });
+        }
+        // The centre of the *visible* rect: never a point outside what the user
+        // can see (GR2 W3 tapped a text node whose full-bounds centre landed in
+        // the neighbouring tab).
+        let (x, y) = rect.center();
         Ok((x as f32, y as f32))
     }
 
@@ -715,6 +736,23 @@ impl NativeBackend {
             true,
         );
         let ui_tree = UiTree::new(frame, package, nodes);
+        if let Some(node) = ui_tree.find_one(selector) {
+            return Ok(node.clone());
+        }
+        if let Some(node) = ui_tree.find_invisible(selector) {
+            return Err(BackendError::Failed {
+                code: ErrorCode::ElementOffscreen,
+                detail: format!(
+                    "selector {selector:?} matched only a node that is not visible to the user \
+                     (id {}, text {:?}, bounds {}, visible_bounds {})",
+                    node.id,
+                    node.text,
+                    node.bounds,
+                    node.visible_bounds
+                        .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+                ),
+            });
+        }
         ui_tree
             .find_one(selector)
             .cloned()
@@ -780,6 +818,7 @@ mod tests {
             text: "Hello ACOS".to_string(),
             content_desc: String::new(),
             bounds: [42, 317, 231, 368],
+            visible_bounds: Some([42, 317, 231, 368]),
             visible: true,
             enabled: true,
             focused: false,
@@ -794,6 +833,7 @@ mod tests {
                 text: "child".to_string(),
                 content_desc: String::new(),
                 bounds: [0, 0, 10, 10],
+                visible_bounds: Some([0, 0, 10, 10]),
                 visible: true,
                 enabled: true,
                 focused: false,
