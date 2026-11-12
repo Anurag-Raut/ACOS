@@ -413,9 +413,21 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
                 }
             }
         }
-        WireOp::List { .. } | WireOp::Array { .. } | WireOp::Map { .. } => {
-            return Err(bad("dynamic list/map replies are not modelled"))
-        }
+        // An empty dynamic list/map is the honest "nothing there" reply for
+        // queries such as `IJobScheduler.getAllPendingJobs` and
+        // `getStartedJobs`: the wire form is only the `-1`/`0` count. A
+        // non-empty body still fails loudly because its element type is not in
+        // the decoded table.
+        WireOp::List { .. } | WireOp::Array { .. } => match value {
+            Value::List(None) => parcel.write_int32(-1),
+            Value::List(Some(items)) if items.is_empty() => parcel.write_int32(0),
+            _ => return Err(bad("dynamic list replies are only modelled empty")),
+        },
+        WireOp::Map { .. } => match value {
+            Value::Map(None) => parcel.write_int32(-1),
+            Value::Map(Some(entries)) if entries.is_empty() => parcel.write_int32(0),
+            _ => return Err(bad("dynamic map replies are only modelled empty")),
+        },
         WireOp::TypedArray { class } | WireOp::TypedList { class } => {
             let Some(values) = expect_list(value)? else {
                 parcel.write_int32(-1);
@@ -426,7 +438,16 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
                 let p = v
                     .as_parcelable()
                     .ok_or_else(|| bad(format!("expected {class} element")))?;
-                parcelable::write_payload(parcel, p)?;
+                // AIDL writes an array/list of parcelables with
+                // `writeTypedArray`/`writeTypedList`: a per-element presence
+                // marker before the payload (the same one the reader expects).
+                match p {
+                    crate::value::Parcelable::Null => parcel.write_int32(0),
+                    _ => {
+                        parcel.write_int32(1);
+                        parcelable::write_payload(parcel, p)?;
+                    }
+                }
             }
         }
         WireOp::Unknown { note } => return Err(bad(format!("undecoded wire op: {note}"))),

@@ -129,6 +129,17 @@ pub const NAMES: &[(&str, &str)] = &[
     // spent ~11.9 s of the launcher's 12 s resume budget (W25 §blocker 2). The
     // minimal stock-shaped server lives in `misc::SensorServer`.
     ("sensorservice", "android.gui.SensorServer"),
+    // K2/R1: services a real Android device always publishes. `getSystemService`
+    // returns a manager object for every one of these, so answering null is an
+    // NPE in app code (the K1 corpus hit JobScheduler, ShortcutManager, storage,
+    // PowerManager and AccountManager this way). The handlers live in
+    // `crate::extras`; they answer the device's real offline state.
+    ("mount", "android.os.storage.IStorageManager"),
+    ("shortcut", "android.content.pm.IShortcutService"),
+    ("jobscheduler", "android.app.job.IJobScheduler"),
+    ("power", "android.os.IPowerManager"),
+    ("account", "android.accounts.IAccountManager"),
+    ("thermalservice", "android.os.IThermalService"),
 ];
 
 /// Descriptor for a `ServiceManager` name.
@@ -251,6 +262,9 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
     let connectivity = Arc::new(Mutex::new(crate::declared::ConnectivityState::new()));
+    let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
+    let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
+    let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));
 
     // ATMS shares one state across the three interfaces.
     let atms_am = Arc::clone(&atms);
@@ -483,6 +497,40 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
                 &connectivity,
             ))) as Box<dyn ServiceObject>
         },
+    );
+    host.register(
+        "mount",
+        "android.os.storage.IStorageManager",
+        move |_w| Box::new(crate::extras::StorageService::new()) as Box<dyn ServiceObject>,
+    );
+    host.register(
+        "shortcut",
+        "android.content.pm.IShortcutService",
+        move |_w| {
+            Box::new(crate::extras::ShortcutService::new(Arc::clone(&shortcuts)))
+                as Box<dyn ServiceObject>
+        },
+    );
+    host.register(
+        "jobscheduler",
+        "android.app.job.IJobScheduler",
+        move |_w| {
+            Box::new(crate::extras::JobSchedulerService::new(Arc::clone(&jobs)))
+                as Box<dyn ServiceObject>
+        },
+    );
+    host.register("power", "android.os.IPowerManager", move |_w| {
+        Box::new(crate::extras::PowerService::new(Arc::clone(&power))) as Box<dyn ServiceObject>
+    });
+    host.register(
+        "account",
+        "android.accounts.IAccountManager",
+        move |_w| Box::new(crate::extras::AccountService::new()) as Box<dyn ServiceObject>,
+    );
+    host.register(
+        "thermalservice",
+        "android.os.IThermalService",
+        move |_w| Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>,
     );
 
     // IActivityClientController and IContentProvider are addressed through the

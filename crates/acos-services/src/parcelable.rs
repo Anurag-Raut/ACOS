@@ -105,6 +105,11 @@ pub enum FieldOp {
     /// label, icon and icon filename this way). The nested list must be empty
     /// for an absent field.
     Cond(&'static [FieldOp]),
+    /// A conditional group with a one-byte presence marker: the API-34
+    /// `NotificationChannel`/`NotificationChannelGroup` write every nullable
+    /// field as `writeByte(0|1)` and only then the payload. Same body rule as
+    /// [`FieldOp::Cond`].
+    ByteCond(&'static [FieldOp]),
     /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
     /// (an int length, `-1` for null, then the `BaseBundle` map).
     PersistableBundle,
@@ -1428,6 +1433,109 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // ---- K2/R2: notification channel + group (API-34 image layout) ----------
+    //
+    // Transcribed from the image's `NotificationChannel(Parcel)` constructor
+    // (`classes.dex`), which is the reader every consumer uses. Every nullable
+    // member is `writeByte(0|1)` + payload, never `writeInt`.
+    ParcelableSpec {
+        class: "android.app.NotificationChannel",
+        fields: &[
+            FieldOp::ByteCond(&[FieldOp::Str16]),  // id
+            FieldOp::ByteCond(&[FieldOp::Str16]),  // name
+            FieldOp::ByteCond(&[FieldOp::Str16]),  // description
+            FieldOp::Int,                          // importance
+            FieldOp::Byte,                         // bypassDnd
+            FieldOp::Int,                          // lockscreenVisibility
+            FieldOp::ByteCond(&[FieldOp::Nested("android.net.Uri")]), // sound
+            FieldOp::Byte,                         // lights
+            FieldOp::LongArray,                    // vibrationPattern
+            FieldOp::Int,                          // userLockedFields
+            FieldOp::Byte,                         // userVisibleTaskShown
+            FieldOp::Byte,                         // vibrationEnabled
+            FieldOp::Byte,                         // showBadge
+            FieldOp::Byte,                         // deleted
+            FieldOp::ByteCond(&[FieldOp::Str16]),  // group
+            FieldOp::Cond(&[FieldOp::Nested("android.media.AudioAttributes")]),
+            FieldOp::Int,                          // lightColor
+            FieldOp::Bool,                         // blockableSystem
+            FieldOp::Int,                          // allowBubbles
+            FieldOp::Int,                          // originalImportance
+            FieldOp::Str16,                        // parentId
+            FieldOp::Str16,                        // conversationId
+            FieldOp::Bool,                         // demoted
+            FieldOp::Bool,                         // importantConvo
+            FieldOp::Long,                         // deletedTime
+            FieldOp::Bool,                         // importanceLockedDefaultApp
+        ],
+        verification: Verification::Prefix,
+    },
+    ParcelableSpec {
+        class: "android.app.NotificationChannelGroup",
+        fields: &[
+            FieldOp::ByteCond(&[FieldOp::Str16]), // id
+            FieldOp::ByteCond(&[FieldOp::Str16]), // name
+            FieldOp::ByteCond(&[FieldOp::Str16]), // description
+            FieldOp::ByteCond(&[FieldOp::Named(
+                "android.content.pm.ParceledListSlice",
+            )]),
+            FieldOp::Bool, // blocked
+            FieldOp::Int,  // userLockedFields
+        ],
+        verification: Verification::Prefix,
+    },
+    // ---- K2/R1: the single-user emulated volume ----------------------------
+    //
+    // `StorageVolume.writeToParcel` (image `classes3.dex`): four string8s, five
+    // booleans-as-int, the max file size long, the owner UserHandle written by
+    // `writeParcelable` (class name + int), the nullable UUID (int presence +
+    // string8), then the fsUuid and state string8s.
+    ParcelableSpec {
+        class: "android.os.storage.StorageVolume",
+        fields: &[
+            FieldOp::Str8,  // id
+            FieldOp::Str8,  // path
+            FieldOp::Str8,  // internalPath
+            FieldOp::Str8,  // description
+            FieldOp::Int,   // primary
+            FieldOp::Int,   // removable
+            FieldOp::Int,   // emulated
+            FieldOp::Int,   // externallyManaged
+            FieldOp::Int,   // allowMassStorage
+            FieldOp::Long,  // maxFileSize
+            FieldOp::Named("android.os.UserHandle"), // owner
+            FieldOp::Cond(&[FieldOp::Str8]), // uuid
+            FieldOp::Str8,  // fsUuid
+            FieldOp::Str8,  // state
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.os.UserHandle",
+        fields: &[FieldOp::Int],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.net.Uri",
+        fields: &[FieldOp::Str8],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.media.AudioAttributes",
+        fields: &[
+            FieldOp::Int,         // content type
+            FieldOp::Int,         // flags
+            FieldOp::Int,         // usage
+            FieldOp::Int,         // capture preset
+            FieldOp::Int,         // ? (image classes2.dex)
+            FieldOp::StringArray, // tags
+            FieldOp::Str16,       // ? 
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Bundle,
+        ],
+        verification: Verification::Prefix,
+    },
 ];
 
 /// Look up a spec by dotted class name.
@@ -1462,6 +1570,9 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     if class == INTENT_CLASS {
         return read_intent(parcel);
     }
+    if class == PARCELED_LIST_SLICE {
+        return read_parceled_list_slice(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
     for field in spec.fields {
@@ -1484,6 +1595,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     };
     if class == INTENT_CLASS {
         return write_intent(parcel, value);
+    }
+    if class == PARCELED_LIST_SLICE {
+        return write_parceled_list_slice(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
@@ -1616,6 +1730,16 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         FieldOp::Dynamic => Value::Dynamic(read_dynamic(parcel)?),
         FieldOp::Cond(fields) => {
             let present = parcel.read_int32()? != 0;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
+        FieldOp::ByteCond(fields) => {
+            let present = parcel.read_byte()? != 0;
             let mut values = Vec::new();
             if present {
                 for field in fields {
@@ -1849,7 +1973,13 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                     i32::try_from(items.len()).map_err(|_| bad("typed array too large"))?,
                 );
                 for item in items {
-                    write_payload(parcel, expect_parcelable(item)?)?;
+                    match expect_parcelable(item)? {
+                        Parcelable::Null => parcel.write_int32(0),
+                        p => {
+                            parcel.write_int32(1);
+                            write_payload(parcel, p)?;
+                        }
+                    }
                 }
             }
             _ => return Err(bad(format!("expected typed array, got {value:?}"))),
@@ -1882,6 +2012,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected parcelable list, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
+        FieldOp::ByteCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected byte conditional, got {value:?}")));
+            };
+            parcel.write_byte(i8::from(*present));
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "byte conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+            return Ok(());
+        }
         FieldOp::Cond(fields) => {
             let Value::Cond { present, values } = value else {
                 return Err(bad(format!("expected conditional, got {value:?}")));
@@ -2169,6 +2318,96 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
 
 /// The codec key for `android.content.Intent`.
 pub const INTENT_CLASS: &str = "android.content.Intent";
+
+/// `ParceledListSlice<T>` has a variable payload (count, element class name,
+/// then each element's `writeTypedObject` presence marker + payload) that no
+/// flat [`ParcelableSpec`] models. It is decoded into one
+/// `Value::List(Some([Value::Parcelable(..)]))` field.
+pub const PARCELED_LIST_SLICE: &str = "android.content.pm.ParceledListSlice";
+
+/// The elements of a decoded [`PARCELED_LIST_SLICE`] payload.
+#[must_use]
+pub fn parceled_list_items(value: &Parcelable) -> Option<&[Value]> {
+    let Parcelable::Ordered { class, values } = value else {
+        return None;
+    };
+    if class != PARCELED_LIST_SLICE {
+        return None;
+    }
+    match values.first() {
+        Some(Value::List(Some(items))) => Some(items),
+        _ => None,
+    }
+}
+
+/// Build a [`PARCELED_LIST_SLICE`] payload from already-decoded elements.
+#[must_use]
+pub fn parceled_list_of(items: Vec<Value>) -> Parcelable {
+    Parcelable::Ordered {
+        class: PARCELED_LIST_SLICE.to_string(),
+        values: vec![Value::List(Some(items))],
+    }
+}
+
+fn read_parceled_list_slice(parcel: &mut Parcel) -> Result<Parcelable> {
+    let n = parcel.read_int32()?;
+    let mut items = Vec::new();
+    if n > 0 {
+        let element_class = parcel.read_string16()?.ok_or_else(|| ServiceError::BadRequest {
+            interface: PARCELED_LIST_SLICE.into(),
+            method: "read".into(),
+            detail: "a non-empty ParceledListSlice has no element class name".into(),
+        })?;
+        let n = n as usize;
+        if n > parcel.remaining() {
+            return Err(ParcelError::BadLength {
+                len: n,
+                max: parcel.remaining(),
+            }
+            .into());
+        }
+        for _ in 0..n {
+            if parcel.read_int32()? == 0 {
+                // The rest of the list is fetched from a binder retriever. ACOS
+                // only models the inline case; a real device would transact on
+                // the retriever, which is not needed for the small channel
+                // lists real apps create on install.
+                return Err(ServiceError::UnsupportedParcelable {
+                    class: format!("{PARCELED_LIST_SLICE} (remote retriever)"),
+                });
+            }
+            items.push(Value::Parcelable(read_payload(&element_class, parcel)?));
+        }
+    }
+    Ok(parceled_list_of(items))
+}
+
+fn write_parceled_list_slice(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let items = parceled_list_items(value).ok_or_else(|| bad("malformed ParceledListSlice"))?;
+    parcel.write_int32(i32::try_from(items.len()).map_err(|_| bad("list too large"))?);
+    if items.is_empty() {
+        return Ok(());
+    }
+    let first = items[0]
+        .as_parcelable()
+        .ok_or_else(|| bad("ParceledListSlice element is not a parcelable"))?;
+    let class = first
+        .class()
+        .ok_or_else(|| bad("ParceledListSlice cannot carry a null first element"))?;
+    parcel.write_string16(class)?;
+    for item in items {
+        let p = expect_parcelable(item)?;
+        match p {
+            Parcelable::Null => parcel.write_int32(0),
+            Parcelable::Ordered { .. } => {
+                parcel.write_int32(1);
+                write_payload(parcel, p)?;
+            }
+            Parcelable::Fd(_) => return Err(bad("ParceledListSlice element is an fd")),
+        }
+    }
+    Ok(())
+}
 /// `android.content.ComponentName` (the *typed-object* shape: two String16s).
 const COMPONENT_CLASS: &str = "android.content.ComponentName";
 /// `android.graphics.Rect` (four ints, used for `Intent.mSourceBounds`).
@@ -3000,6 +3239,7 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // The presence marker is a `writeInt`; the branch body is invisible to a
         // linear scanner, so only the marker can be verified.
         FieldOp::Cond(_) => call == "writeInt",
+        FieldOp::ByteCond(_) => call == "writeByte",
         FieldOp::CountedTyped(_) => call == "writeInt",
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
@@ -3039,6 +3279,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
     match field {
         FieldOp::Cond(inner) => {
             if first != "writeInt" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
+        FieldOp::ByteCond(inner) => {
+            if first != "writeByte" {
                 return 0;
             }
             let mut n = 1;

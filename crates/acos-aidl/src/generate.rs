@@ -289,6 +289,18 @@ pub const DECLARED_INTERFACES: &[&str] = &[
     "com.android.internal.app.IBatteryStats",
     "android.hardware.ISensorPrivacyManager",
     "android.net.IConnectivityManager",
+    // K2/R1: services every Android process is guaranteed to resolve. A null
+    // here is not a capability limit; it is an NPE in app code that assumes
+    // `getSystemService` never returns null (JobScheduler, ShortcutManager,
+    // StorageManager's `mount` binder, PowerManager, AccountManager).
+    "android.app.job.IJobScheduler",
+    "android.content.pm.IShortcutService",
+    "android.os.storage.IStorageManager",
+    "android.os.IPowerManager",
+    "android.accounts.IAccountManager",
+    // `PowerManager`'s constructor fetches `IThermalService`; without it Koin
+    // resolution of `android.os.PowerManager` itself fails (com.fsck.k9).
+    "android.os.IThermalService",
 ];
 
 /// `(interface -> AIDL method names)` referenced by the measured work-lists.

@@ -50,6 +50,7 @@ pub mod display;
 pub mod display_events;
 pub mod error;
 pub mod exception;
+pub mod extras;
 pub mod host;
 pub mod ime;
 pub mod ime_wire;
