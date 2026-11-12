@@ -35,6 +35,7 @@ pub mod art;
 #[cfg(test)]
 pub mod fake;
 pub mod rust_vm;
+pub mod serve;
 
 /// The explicit execution engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

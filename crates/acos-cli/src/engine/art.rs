@@ -471,6 +471,18 @@ impl ArtSession {
         // Own process group: a `close` that does not take must not leave ART or
         // its sandbox behind.
         command.process_group(0);
+        // W50: the guest must not outlive the daemon. `acos serve` can be
+        // SIGKILLed (benchmark cleanup, harness crash); with the parent-death
+        // signal the launcher dies with it, and the launcher's own guest child
+        // carries the same signal (app.rs), so the whole tree goes. This is a
+        // backstop, not the teardown path: `close`/`teardown` still reap the
+        // process group and prove it empty.
+        unsafe {
+            command.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+                Ok(())
+            });
+        }
         let spawned_at = Instant::now();
         let mut child = command.spawn().map_err(|error| BackendError::Unsupported {
             capability: "engine.art".into(),
@@ -652,6 +664,76 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
+    ///
+    /// Cheap (no PNG clone). `None` before the first completed traversal.
+    pub fn frame_info(&self) -> Option<(u64, String, String)> {
+        self.cached
+            .as_ref()
+            .map(|frame| (frame.seq, frame.md5.clone(), frame.captured_at.clone()))
+    }
+
+    /// The bound tree of the most recent completed traversal, without issuing a
+    /// command.
+    #[allow(dead_code)]
+    pub fn bound_tree(&self) -> Option<UiTree> {
+        self.cached.as_ref().map(|frame| frame.tree.clone())
+    }
+
+    /// Ensure a bound tree exists: reuse the last completed traversal, or take
+    /// one now if the session has not completed any. Never invents a frame.
+    pub(crate) fn ensure_bound_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.require_cached_tree()
+    }
+
+    /// The launched package (empty before the ready line).
+    pub fn package(&self) -> &str {
+        &self.package
+    }
+
+    /// The launched Activity, when the guest reported one.
+    pub fn activity(&self) -> Option<&str> {
+        self.activity.as_deref()
+    }
+
+    /// The APK this session runs.
+    pub fn apk_path(&self) -> &Path {
+        &self.apk
+    }
+
+    /// The display width in pixels.
+    pub const fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// The display height in pixels.
+    pub const fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// The display density (dpi).
+    #[allow(dead_code)]
+    pub const fn density(&self) -> u32 {
+        self.density
+    }
+
+    /// Press a raw Android keycode (the protocol takes integers).
+    ///
+    /// `key()` maps symbolic names; a socket caller may send `{"code": 66}`
+    /// directly, so the numeric path must exist too.
+    pub fn key_code_i32(&mut self, code: i32) -> Result<(), BackendError> {
+        if code < 0 {
+            return Err(BackendError::unsupported(
+                "input.key",
+                format!("invalid keycode {code}"),
+            ));
+        }
+        self.input_command(
+            serde_json::json!({"cmd":"key","code":code}),
+            "input.key",
+        )
     }
 
     fn stderr_tail(&self) -> String {

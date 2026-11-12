@@ -13,6 +13,16 @@
 //! `SO_PEERCRED`; the daemon exits when it has held no session and served no
 //! connection for `--idle-timeout`. Native sessions are delegated to the same
 //! confined child the MCP server uses.
+//!
+//! **W50: the product engine is real ART.** `acos_launch` defaults to the ART
+//! session machinery (`crate::engine::serve::ServeEngine`), one
+//! `acos-art launch --interactive` guest per session, so the launch → tree →
+//! tap → type → key → screenshot → assert → logs → reset loop an agent drives
+//! over this socket is the same real-ART loop `acos verify --engine art` runs.
+//! The Rust VM is reachable only through an explicit `engine: "rust-vm"` and
+//! every reply from it is labelled `rust-vm, frozen`; an unknown engine is a
+//! structured `UNSUPPORTED_BACKEND`. `--engine rust-vm` moves the daemon default
+//! (diagnostics only); it is never chosen implicitly.
 
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -26,12 +36,11 @@ use std::time::{Duration, Instant};
 
 use acos_mcp::daemon::{self, DaemonClient};
 use acos_mcp::{BackendConfig, CliBackend, SessionBackend};
-use acos_protocol::{
-    Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
-    ResourceBudget,
-};
+use acos_protocol::ResourceBudget;
 use acos_runtime::session::SessionOptions;
 use serde_json::{json, Value};
+
+use crate::engine::serve::{parse_engine_flag, ServeEngine};
 
 /// Arguments for `acos serve`.
 #[derive(Debug, clap::Args)]
@@ -59,10 +68,28 @@ pub struct ServeArgs {
     /// Emit a JSON startup banner on stdout and do not detach.
     #[arg(long)]
     pub json: bool,
+
+    /// Default execution engine for `acos_launch` when the request names none.
+    ///
+    /// `art` (default) drives real Google ART through one `acos-art launch
+    /// --interactive` guest per session. `rust-vm` is the frozen Rust VM and
+    /// every reply from it is labelled `rust-vm, frozen`. Anything else is
+    /// refused at startup; there is no silent fallback.
+    #[arg(long, default_value = "art", value_name = "art|rust-vm")]
+    pub engine: String,
 }
 
 /// Run `acos serve`.
 pub fn run(args: ServeArgs) -> ExitCode {
+    // W50: the engine is explicit. An unknown value refuses to start instead of
+    // guessing (and never falls back to the Rust VM).
+    let default_engine = match parse_engine_flag(&args.engine) {
+        Ok(engine) => engine,
+        Err(message) => {
+            eprintln!("acos serve: {message}");
+            return ExitCode::from(2);
+        }
+    };
     let socket = args.socket.clone().unwrap_or_else(daemon::socket_path);
     if let Some(parent) = socket.parent() {
         if let Err(e) = prepare_runtime_dir(parent) {
@@ -110,6 +137,17 @@ pub fn run(args: ServeArgs) -> ExitCode {
         )
         .with_native_child_binary(confined_child_binary()),
     );
+    // ART frame mirrors live in the daemon's private runtime directory (0600
+    // socket dir, never /tmp and never the repo root).
+    let artifacts_root = std::env::var_os("ACOS_SERVE_ARTIFACTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| daemon::runtime_dir().join("art-sessions"));
+    let engine = Arc::new(ServeEngine::new(
+        backend,
+        default_engine,
+        args.max_sessions,
+        artifacts_root.clone(),
+    ));
     let shared = Arc::new(SharedState {
         last_activity: Mutex::new(Instant::now()),
         active: AtomicUsize::new(0),
@@ -123,18 +161,20 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 "idle_timeout_secs": args.idle_timeout,
                 "max_sessions": args.max_sessions,
                 "pid": std::process::id(),
+                "engine": default_engine.as_str(),
+                "art_artifacts": artifacts_root.display().to_string(),
             })
         );
     }
     eprintln!(
-        "acos serve: listening on {} (idle={}s, max_sessions={})",
+        "acos serve: listening on {} (engine={}, idle={}s, max_sessions={})",
         socket.display(),
+        default_engine.as_str(),
         args.idle_timeout,
         args.max_sessions
     );
 
     let idle = Duration::from_secs(args.idle_timeout.max(1));
-    let max_sessions = args.max_sessions.max(1);
     loop {
         match listener.accept() {
             Ok((stream, _addr)) => {
@@ -144,10 +184,10 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 }
                 shared.active.fetch_add(1, Ordering::SeqCst);
                 *shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                let backend = Arc::clone(&backend);
+                let engine = Arc::clone(&engine);
                 let shared = Arc::clone(&shared);
                 std::thread::spawn(move || {
-                    handle_connection(stream, &backend, max_sessions);
+                    handle_connection(stream, &engine);
                     shared.active.fetch_sub(1, Ordering::SeqCst);
                     *shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()) =
                         Instant::now();
@@ -181,13 +221,17 @@ pub fn run(args: ServeArgs) -> ExitCode {
             .unwrap_or_else(|e| e.into_inner())
             .elapsed();
         if shared.active.load(Ordering::SeqCst) == 0
-            && backend.session_count() == 0
+            && engine.session_count() == 0
             && idle_elapsed >= idle
         {
             eprintln!("acos serve: idle for {idle:?}; exiting");
             break;
         }
     }
+    // Daemon shutdown: close every ART guest and reap its process group before
+    // the socket disappears. A session that cannot be proven gone is logged; the
+    // `acos_destroy` reply is where a caller sees it as an error.
+    engine.shutdown();
     let _ = std::fs::remove_file(&socket);
     ExitCode::SUCCESS
 }
@@ -197,7 +241,7 @@ struct SharedState {
     active: AtomicUsize,
 }
 
-fn handle_connection(stream: UnixStream, backend: &SessionBackend, max_sessions: usize) {
+fn handle_connection(stream: UnixStream, engine: &ServeEngine) {
     let mut writer = match stream.try_clone() {
         Ok(writer) => writer,
         Err(_) => return,
@@ -215,7 +259,7 @@ fn handle_connection(stream: UnixStream, backend: &SessionBackend, max_sessions:
         if line.trim().is_empty() {
             continue;
         }
-        let response = handle_request(&line, backend, max_sessions);
+        let response = handle_request(&line, engine);
         let mut payload = match serde_json::to_string(&response) {
             Ok(payload) => payload,
             Err(_) => continue,
@@ -228,7 +272,7 @@ fn handle_connection(stream: UnixStream, backend: &SessionBackend, max_sessions:
     }
 }
 
-fn handle_request(line: &str, backend: &SessionBackend, max_sessions: usize) -> Value {
+fn handle_request(line: &str, engine: &ServeEngine) -> Value {
     let request: Value = match serde_json::from_str(line) {
         Ok(request) => request,
         Err(e) => {
@@ -242,68 +286,9 @@ fn handle_request(line: &str, backend: &SessionBackend, max_sessions: usize) -> 
         .cloned()
         .unwrap_or_else(|| json!({}));
 
-    if tool == "acos_launch" && backend.session_count() >= max_sessions {
-        let envelope = Envelope::failure(
-            request_id(&args),
-            ProtocolBackend::AcosNative,
-            Fidelity::NativeRuntime,
-            ProtocolError::new(
-                ErrorCode::ResourceLimit,
-                format!("session cap reached ({max_sessions}); destroy a session first"),
-            )
-            .with_details(json!({"max_sessions": max_sessions})),
-            Metrics::wall_ms(0),
-        );
-        return json!({"id": id, "envelope": envelope});
-    }
-
-    let envelope = dispatch(backend, tool, &args);
+    let ctx = context_for(&args);
+    let envelope = engine.call(tool, &args, &ctx);
     json!({"id": id, "envelope": envelope})
-}
-
-fn dispatch(backend: &SessionBackend, tool: &str, args: &Value) -> Envelope {
-    match tool {
-        daemon::TOOL_PING => Envelope::pass(
-            request_id(args),
-            ProtocolBackend::AcosNative,
-            Fidelity::NativeRuntime,
-            Metrics::wall_ms(0),
-        )
-        .with_value_result(json!({"pong": true, "pid": std::process::id()})),
-        daemon::TOOL_LIST => {
-            let result = backend.list_sessions();
-            Envelope::pass(
-                request_id(args),
-                ProtocolBackend::AcosNative,
-                Fidelity::NativeRuntime,
-                Metrics::wall_ms(0),
-            )
-            .with_value_result(result)
-        }
-        _ => {
-            let ctx = context_for(args);
-            backend.session_call(tool, args, &ctx).unwrap_or_else(|| {
-                Envelope::failure(
-                    request_id(args),
-                    ProtocolBackend::AcosNative,
-                    Fidelity::NativeRuntime,
-                    ProtocolError::new(
-                        ErrorCode::UnsupportedBackend,
-                        format!("unknown session tool `{tool}`"),
-                    )
-                    .with_details(json!({"tool": tool})),
-                    Metrics::wall_ms(0),
-                )
-            })
-        }
-    }
-}
-
-fn request_id(args: &Value) -> String {
-    args.pointer("/base/request_id")
-        .and_then(Value::as_str)
-        .unwrap_or("req_daemon")
-        .to_string()
 }
 
 fn context_for(args: &Value) -> acos_mcp::CallContext {

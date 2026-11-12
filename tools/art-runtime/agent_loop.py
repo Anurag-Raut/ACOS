@@ -483,6 +483,20 @@ def aggregate(rows, cfg):
     return per
 
 
+def probe_daemon_engine(socket_path):
+    """Ask the daemon which engine `acos_launch` drives when none is named."""
+    try:
+        probe = Daemon(socket_path, timeout=10.0)
+        try:
+            ping = probe.call("ping", {})
+        finally:
+            probe.close()
+        result = (ping.get("envelope") or {}).get("result") or {}
+        return result.get("default_engine") or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--socket", required=True)
@@ -505,14 +519,24 @@ def main(argv=None):
     gate = benchlib.host_gate(REPO, check_lock=False)
     binary = Path(os.environ.get("ACOS_BENCH_BINARY",
                                 str(REPO / ".cache/w49-target/release/acos")))
+    # W50: the engine label is read from the daemon, never assumed. The daemon
+    # answers `result.default_engine` (art | rust-vm); a pre-W50 daemon has no
+    # such field and is reported as `unknown`.
+    serve_engine = probe_daemon_engine(args.socket)
+    serve_has_art = serve_engine == "art"
     provenance = benchlib.provenance(
         REPO, [binary], profile="release", gate=gate,
-        engine="acos-native-session",
+        engine=serve_engine,
         extra={"transport": "unix newline JSON (acos_mcp::daemon)",
                "serve_binary": str(binary),
-               "serve_has_art_engine": False,
-               "note": "acos serve has no engine selector; the launch path is "
-                       "SessionBackend/AgentSession (Rust VM), never acos-art"})
+               "serve_has_art_engine": serve_has_art,
+               "serve_default_engine": serve_engine,
+               "note": ("acos serve drives the real-ART session engine by default "
+                        "(one acos-art guest per session); engine: rust-vm is the "
+                        "frozen Rust VM and is labelled in every reply")
+                       if serve_has_art else
+                       ("acos serve reports default_engine=%s; the launch path is "
+                        "not the real-ART session engine" % serve_engine)})
     if not provenance.get("verdict_eligible"):
         msg = ("provenance is not verdict eligible: %s"
                % provenance.get("not_verdict_eligible_reason"))
@@ -722,7 +746,7 @@ def main(argv=None):
         "git": provenance.get("git_head"),
         "dirty_hash": provenance.get("git_status_porcelain_sha256"),
         "profile": "release",
-        "engine": "acos-native-session",
+        "engine": provenance.get("engine"),
         "provenance": provenance,
         "agent_loop": {
             "script": [v for v, _ in SCRIPT],
@@ -813,7 +837,7 @@ def render_table(doc):
 def render_markdown(doc):
     loop = doc["agent_loop"]
     prov = doc["provenance"]
-    lines = ["# W49 - agent-loop benchmark (acos serve)", ""]
+    lines = ["# Agent-loop benchmark (acos serve, engine %s)" % doc.get("engine"), ""]
     lines.append("Run: %s  UTC %s  profile %s  engine %s"
                  % (doc["run_id"], doc["utc"], doc["profile"], doc["engine"]))
     lines.append("Git %s (dirty hash %s), binary %s sha256 %s"

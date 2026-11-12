@@ -1,0 +1,1688 @@
+//! Real-ART sessions behind `acos serve` (W50).
+//!
+//! `acos serve` is the daemon/MCP transport agents actually use. Before W50 it
+//! held only [`acos_mcp::SessionBackend`] sessions (the frozen Rust VM
+//! `AgentSession`), so every launch through the socket died in the Rust VM and
+//! no agent could reach a verdict. This module puts the **same real-ART
+//! machinery** `acos verify --engine art` already uses
+//! ([`super::art::ArtSession`], one `acos-art launch --interactive` guest per
+//! session, the line-JSON tree/tap/frames protocol) behind the socket:
+//!
+//! * the default engine is `art`; the Rust VM stays reachable only through an
+//!   explicit `engine: "rust-vm"`, and every reply from it is labelled
+//!   `engine: "rust-vm, frozen"`;
+//! * an unknown engine is a structured `UNSUPPORTED_BACKEND`, never a silent
+//!   fallback to another engine;
+//! * a verb ART cannot do (`acos_swipe`) returns a structured
+//!   `UNSUPPORTED_BACKEND` naming the missing capability, never a fake success;
+//! * every reply carries `engine`, `trust` and the evidence label
+//!   (`host-pixel` when the reply hands over host-observed pixels,
+//!   `guest-asserted` for the guest's own tree/logs/input acks), matching the
+//!   provenance labels `verify` records (`crates/acos-cli/src/trust.rs`);
+//! * `acos_reset` is the engine's honest reset: the guest process is stopped and
+//!   the same APK is launched again in a fresh process with empty app-data, so
+//!   the frame after a reset is provably newer than the one before it;
+//! * `acos_destroy` closes the guest and reports the teardown check
+//!   (process group empty) — a survivor is a failure, never a quiet success.
+//!
+//! One ART guest per serve session id. The guest is owned by an
+//! `Arc<Mutex<ArtSession>>`, so two connections addressing the same session
+//! serialise instead of racing two input streams into one app.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use acos_mcp::{CallContext, SessionBackend as LegacyBackend};
+use acos_protocol::ui::{Bounds, UiNode, UiTree};
+use acos_protocol::{
+    Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, LogLevel, Metrics, ProtocolError,
+    Selector,
+};
+use acos_verify::BackendError;
+use serde_json::{json, Value};
+
+use crate::trust::Trust;
+
+use super::art::ArtSession;
+use super::{Engine, SessionBackend};
+
+/// The engine label every ART reply carries.
+pub const ENGINE_ART: &str = "art";
+/// The engine label every Rust VM reply carries. It is frozen by policy.
+pub const ENGINE_RUST_VM: &str = "rust-vm, frozen";
+/// The engine label for the confined native child (Flutter/RN/native), which is
+/// real host native code, not the frozen Rust VM.
+pub const ENGINE_NATIVE_CHILD: &str = "native-child";
+
+/// The evidence label for pixels the host captured from the guest surface.
+pub const EVIDENCE_HOST_PIXEL: &str = "host-pixel";
+/// The evidence label for anything only the guest asserts (tree, logs, acks).
+pub const EVIDENCE_GUEST_ASSERTED: &str = "guest-asserted";
+
+/// A socket session held by this daemon.
+struct HeldArtSession {
+    apk: PathBuf,
+    trust: Trust,
+    /// `Mutex` because two connections may address the same session id; the
+    /// guest takes one command at a time.
+    session: Mutex<ArtSession>,
+}
+
+/// Session routing for the daemon: which engine owns a session id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Route {
+    Art,
+    Legacy,
+}
+
+/// The daemon's engine multiplexer.
+pub struct ServeEngine {
+    legacy: Arc<LegacyBackend>,
+    default_engine: Engine,
+    max_sessions: usize,
+    artifacts_root: PathBuf,
+    art: Mutex<HashMap<String, Arc<HeldArtSession>>>,
+    routes: Mutex<HashMap<String, Route>>,
+}
+
+impl ServeEngine {
+    /// Build the multiplexer.
+    ///
+    /// `artifacts_root` is where ART frame mirrors go; the default is
+    /// `$ACOS_RUNTIME_DIR/art-sessions`, inside the daemon's private runtime
+    /// directory (never `/tmp`, never the repo root).
+    pub fn new(
+        legacy: Arc<LegacyBackend>,
+        default_engine: Engine,
+        max_sessions: usize,
+        artifacts_root: PathBuf,
+    ) -> Self {
+        ServeEngine {
+            legacy,
+            default_engine,
+            max_sessions: max_sessions.max(1),
+            artifacts_root,
+            art: Mutex::new(HashMap::new()),
+            routes: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Number of sessions held (ART + legacy). Used by the idle-exit check and
+    /// the `--max-sessions` cap; it never probes a guest.
+    pub fn session_count(&self) -> usize {
+        let art = self.art.lock().unwrap_or_else(|e| e.into_inner()).len();
+        art + self.legacy.session_count()
+    }
+
+    /// Close every held ART guest (daemon shutdown). Returns how many were
+    /// closed. The legacy backend's sessions die with the process as before.
+    pub fn shutdown(&self) -> usize {
+        let held: Vec<(String, Arc<HeldArtSession>)> = {
+            let mut map = self.art.lock().unwrap_or_else(|e| e.into_inner());
+            map.drain().collect()
+        };
+        let count = held.len();
+        for (id, held) in held {
+            let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = session.close();
+            eprintln!("acos serve: closed ART session {id}");
+        }
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        count
+    }
+
+    /// The daemon's session list, ART sessions and legacy sessions merged.
+    pub fn list_sessions(&self) -> Value {
+        let mut merged = self.legacy.list_sessions();
+        let mut sessions = merged
+            .get("sessions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let art = self.art.lock().unwrap_or_else(|e| e.into_inner());
+        for (id, held) in art.iter() {
+            let session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            sessions.push(json!({
+                "session_id": id,
+                "launched": true,
+                "package": session.package(),
+                "apk": held.apk.display().to_string(),
+                "stage_reached": "first_frame",
+                "frame_seq": session.frame_info().map(|f| f.0).unwrap_or(0),
+                "engine": ENGINE_ART,
+                "mode": "live",
+                "native": true,
+                "trust": held.trust.as_str(),
+            }));
+        }
+        let count = sessions.len();
+        merged["sessions"] = Value::Array(sessions);
+        merged["count"] = json!(count);
+        merged["engine"] = json!(self.default_engine.as_str());
+        merged
+    }
+
+    fn route_of(&self, id: &str) -> Option<Route> {
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .copied()
+    }
+
+    fn set_route(&self, id: &str, route: Route) {
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.to_string(), route);
+    }
+
+    fn held(&self, id: &str) -> Option<Arc<HeldArtSession>> {
+        self.art
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()
+    }
+
+    /// Serve one session-tool request.
+    pub fn call(&self, tool: &str, args: &Value, ctx: &CallContext) -> Envelope {
+        let request_id = request_id(args);
+        let id = session_id(args);
+
+        if tool == "ping" {
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_value_result(json!({
+                "pong": true,
+                "pid": std::process::id(),
+                "engine": self.default_engine.as_str(),
+                "default_engine": self.default_engine.as_str(),
+                "trust": Trust::Trusted.as_str(),
+                "evidence": EVIDENCE_NO_GUEST,
+            }));
+        }
+        if tool == "session_list" {
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_value_result(self.list_sessions());
+        }
+
+        // Engine selection: explicit wins; a held ART session wins over an
+        // unspoken default (an agent that launched ART keeps talking to it).
+        let explicit = match parse_engine_arg(args) {
+            Ok(value) => value,
+            Err(message) => {
+                return unsupported_engine(&request_id, &message, self.default_engine);
+            }
+        };
+        let held = self.held(&id);
+        let art_target = match explicit {
+            Some(Engine::RustVm) => None,
+            Some(Engine::Art) => held.clone(),
+            None => match self.route_of(&id) {
+                Some(Route::Legacy) => None,
+                Some(Route::Art) | None => held.clone(),
+            },
+        };
+        if let (Some(Engine::RustVm), Some(_)) = (explicit, held.as_ref()) {
+            if tool != "acos_destroy" {
+                return art_failure(
+                    &request_id,
+                    Some(&id),
+                    Trust::Trusted,
+                    ErrorCode::SessionBusy,
+                    format!(
+                        "session `{id}` is held by the ART engine; `engine: rust-vm` cannot \
+                         address it"
+                    ),
+                    json!({"held_engine": ENGINE_ART, "requested_engine": ENGINE_RUST_VM}),
+                );
+            }
+        }
+
+        match tool {
+            "acos_launch" => self.call_launch(&request_id, &id, args, ctx, explicit),
+            "acos_destroy" => self.call_destroy(&request_id, &id, args, ctx),
+            _ => {
+                if let Some(held) = art_target {
+                    return self.call_art(&request_id, &id, &held, tool, args);
+                }
+                // Decide which engine owns this id without guessing: an
+                // explicit engine wins, otherwise only a session this daemon
+                // routed to the legacy backend may use it. Never silently fall
+                // back to the Rust VM for an ART (or unknown) session.
+                let wants_legacy = match explicit {
+                    Some(Engine::RustVm) => true,
+                    Some(Engine::Art) => false,
+                    None => self.route_of(&id) == Some(Route::Legacy),
+                };
+                if !wants_legacy {
+                    return with_hint(
+                        art_failure(
+                            &request_id,
+                            Some(&id),
+                            Trust::Trusted,
+                            ErrorCode::SessionNotFound,
+                            format!(
+                                "no live ART session `{id}`; {tool} needs a launched session"
+                            ),
+                            json!({
+                                "engine": explicit.unwrap_or(self.default_engine).as_str(),
+                                "tool": tool,
+                            }),
+                        ),
+                        "Call acos_launch with this base.session_id first (the default engine \
+                         is art). Use `engine: \"rust-vm\"` only if you explicitly want the \
+                         frozen Rust VM.",
+                    );
+                }
+                self.call_legacy(&request_id, &id, tool, args, ctx)
+            }
+        }
+    }
+
+    // -- launch ------------------------------------------------------------ //
+
+    fn call_launch(
+        &self,
+        request_id: &str,
+        id: &str,
+        args: &Value,
+        ctx: &CallContext,
+        explicit: Option<Engine>,
+    ) -> Envelope {
+        let Some(apk_arg) = args.get("apk").and_then(Value::as_str) else {
+            return art_failure(
+                request_id,
+                Some(id),
+                Trust::Trusted,
+                ErrorCode::InvalidArgument,
+                "acos_launch needs a string `apk`",
+                json!({"field": "apk"}),
+            );
+        };
+        let native_requested = ["native", "flutter", "rn"]
+            .iter()
+            .any(|key| args.get(*key).and_then(Value::as_bool).unwrap_or(false));
+        if explicit == Some(Engine::Art) && native_requested {
+            // Flutter/RN/native closures are real host native code; driving them
+            // through the ART launcher is not supported in this build. Say so
+            // instead of quietly booting the native-child route the agent did
+            // not ask for.
+            return with_hint(
+                art_failure(
+                    request_id,
+                    Some(id),
+                    Trust::Trusted,
+                    ErrorCode::UnsupportedBackend,
+                    "Flutter/React Native/native APKs cannot be driven by the ART engine in this build",
+                    json!({
+                        "capability": "engine.art.native-closure",
+                        "requested_engine": ENGINE_ART,
+                        "fallback_used": false,
+                    }),
+                ),
+                "Use engine: \"rust-vm\" (confined native child) for a Flutter/RN APK, or run the \
+                 native-closure ART track when it lands.",
+            );
+        }
+        let engine = explicit.unwrap_or(if native_requested {
+            // Flutter/RN/native sessions are real host native code in a
+            // confined child, not the Rust VM; they keep the legacy route and
+            // are labelled `native-child`.
+            Engine::RustVm
+        } else {
+            self.default_engine
+        });
+        if engine == Engine::RustVm {
+            // Explicit Rust VM request (or a native-child APK): the legacy
+            // route is frozen, and every reply is labelled with the engine that
+            // actually ran.
+            return self.call_legacy(request_id, id, "acos_launch", args, ctx);
+        }
+        self.launch_art(request_id, id, apk_arg, args, ctx)
+    }
+
+    fn launch_art(
+        &self,
+        request_id: &str,
+        id: &str,
+        apk_arg: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let trust = trust_arg(args);
+        let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
+            Ok(path) => path,
+            Err(reason) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!("refusing APK path `{apk_arg}`: {reason}"),
+                    json!({"apk": apk_arg}),
+                );
+            }
+        };
+        if let Some(held) = self.held(id) {
+            if held.apk != apk {
+                return with_hint(
+                    art_failure(
+                        request_id,
+                        Some(id),
+                        held.trust,
+                        ErrorCode::InvalidArgument,
+                        format!(
+                            "session `{id}` already runs {}; it cannot switch to {}",
+                            held.apk.display(),
+                            apk.display()
+                        ),
+                        json!({
+                            "held_apk": held.apk.display().to_string(),
+                            "requested_apk": apk.display().to_string(),
+                        }),
+                    ),
+                    "One serve session is one ART guest. Call acos_destroy for this session id, \
+                     then acos_launch the other APK.",
+                );
+            }
+            // Re-launch on the live session = hand back its bound live frame
+            // (the daemon's whole point); never boot a second guest.
+            let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            return match session.ensure_bound_tree() {
+                Ok(tree) => launch_reply(request_id, id, &held, &session, &tree, false),
+                Err(error) => art_error(request_id, Some(id), held.trust, &error),
+            };
+        }
+        if self.session_count() >= self.max_sessions {
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::ResourceLimit,
+                format!(
+                    "session cap reached ({}); destroy a session first",
+                    self.max_sessions
+                ),
+                json!({"max_sessions": self.max_sessions}),
+            );
+        }
+        let artifacts = self.artifacts_root.join(sanitize_session_id(id));
+        match ArtSession::start(&apk, &artifacts) {
+            Ok(mut session) => {
+                let started = match session.ensure_bound_tree() {
+                    Ok(tree) => tree,
+                    Err(error) => {
+                        let _ = session.close();
+                        return art_error(request_id, Some(id), trust, &error);
+                    }
+                };
+                let held = Arc::new(HeldArtSession {
+                    apk: apk.clone(),
+                    trust,
+                    session: Mutex::new(session),
+                });
+                self.art
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id.to_string(), Arc::clone(&held));
+                self.set_route(id, Route::Art);
+                let guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                launch_reply(request_id, id, &held, &guard, &started, true)
+            }
+            Err(error) => {
+                // Structured, and never a silent fallback to the Rust VM.
+                art_error(request_id, Some(id), trust, &error)
+            }
+        }
+    }
+
+    // -- destroy ----------------------------------------------------------- //
+
+    fn call_destroy(&self, request_id: &str, id: &str, args: &Value, ctx: &CallContext) -> Envelope {
+        let held = self
+            .art
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+        if let Some(held) = held {
+            let trust = held.trust;
+            self.routes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(id);
+            let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            let report = session.teardown();
+            let (ok, detail) = match report {
+                Ok(report) => {
+                    let clean = report.is_clean();
+                    (
+                        clean,
+                        json!({
+                            "process_group": report.process_group,
+                            "survivors": report.survivors,
+                            "verified": report.verified,
+                        }),
+                    )
+                }
+                Err(error) => (false, json!({"error": error.to_protocol_error()})),
+            };
+            let mut result = json!({
+                "session_id": id,
+                "destroyed": true,
+                "already_absent": false,
+                "teardown": detail,
+                "engine": ENGINE_ART,
+            });
+            label_meta(&mut result, ENGINE_ART, trust, EVIDENCE_NO_GUEST);
+            if !ok {
+                return with_hint(
+                    art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::Internal,
+                        format!("PROCESS_TREE_DIRTY: session `{id}` teardown is not clean"),
+                        json!({"teardown": result["teardown"].clone()}),
+                    ),
+                    "The guest process group was signalled but processes survive. Inspect /proc \
+                     and systemd-cgls for the session group before starting another session.",
+                );
+            }
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::ArtReference,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.to_string())
+            .with_value_result(result);
+        }
+        let existed = self.routes.lock().unwrap_or_else(|e| e.into_inner()).remove(id).is_some();
+        let env = self.legacy.session_call("acos_destroy", args, ctx);
+        let env = match env {
+            Some(env) => relabel_legacy(env, ENGINE_RUST_VM, Trust::Trusted, true),
+            None => art_failure(
+                request_id,
+                Some(id),
+                Trust::Trusted,
+                ErrorCode::UnsupportedBackend,
+                "the legacy backend has no acos_destroy",
+                json!({"tool": "acos_destroy"}),
+            ),
+        };
+        if !existed {
+            // A destroy of an unknown id is an honest no-op, as before.
+            if let Some(result) = env.result().cloned() {
+                let mut result = result;
+                if let Some(object) = result.as_object_mut() {
+                    object.insert("already_absent".into(), json!(true));
+                }
+                return with_result(env, result);
+            }
+        }
+        env
+    }
+
+    // -- ART verbs --------------------------------------------------------- //
+
+    fn call_art(
+        &self,
+        request_id: &str,
+        id: &str,
+        held: &Arc<HeldArtSession>,
+        tool: &str,
+        args: &Value,
+    ) -> Envelope {
+        let trust = held.trust;
+        if trust == Trust::Untrusted && tool == "acos_assert" {
+            // Fail closed: the tree is guest-asserted and cannot corroborate a
+            // pass on an untrusted run (same rule as verify's TrustGuard).
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::InsufficientHostEvidence,
+                "acos_assert on an untrusted run: the tree is guest-asserted and cannot \
+                 justify a pass",
+                json!({"engine": ENGINE_ART, "verb": tool}),
+            );
+        }
+        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        let outcome = match tool {
+            "acos_observe_tree" => observe_tree(&mut session, args),
+            "acos_observe" => observe(&mut session, args),
+            "acos_tap" => tap(&mut session, args),
+            "acos_text" => type_text(&mut session, args),
+            "acos_key" => key(&mut session, args),
+            "acos_assert" => assert(&mut session, args, trust),
+            "acos_logs" => logs(&mut session),
+            "acos_status" => Ok(status_value(&session)),
+            "acos_reset" => reset(&mut session),
+            "acos_swipe" => Err(BackendError::unsupported(
+                "input.swipe",
+                "the ART session engine has no swipe command (tap/key/type_text only)",
+            )),
+            "acos_action" => action(&mut session, args),
+            other => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::UnsupportedBackend,
+                    format!("unknown session tool `{other}`"),
+                    json!({"tool": other, "engine": ENGINE_ART}),
+                )
+            }
+        };
+        match outcome {
+            Ok(result) => {
+                let mut result = result;
+                result["session_id"] = json!(id);
+                label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
+                label_frame(&mut result, &session);
+                let envelope = Envelope::pass(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::ArtReference,
+                    Metrics::wall_ms(0),
+                )
+                .with_session_id(id.to_string())
+                .with_value_result(result);
+                envelope.with_capabilities(capabilities_for(tool))
+            }
+            Err(error) => art_error(request_id, Some(id), trust, &error),
+        }
+    }
+
+    // -- legacy (frozen Rust VM / confined native child) -------------------- //
+
+    fn call_legacy(
+        &self,
+        request_id: &str,
+        id: &str,
+        tool: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
+        let native_requested = ["native", "flutter", "rn"]
+            .iter()
+            .any(|key| args.get(*key).and_then(Value::as_bool).unwrap_or(false));
+        let label = if native_requested {
+            ENGINE_NATIVE_CHILD
+        } else {
+            ENGINE_RUST_VM
+        };
+        let frozen = label == ENGINE_RUST_VM;
+        let trust = trust_arg(args);
+        let Some(envelope) = self.legacy.session_call(tool, args, ctx) else {
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::UnsupportedBackend,
+                format!("unknown session tool `{tool}`"),
+                json!({"tool": tool, "engine": self.default_engine.as_str()}),
+            );
+        };
+        if tool == "acos_launch" {
+            self.set_route(id, Route::Legacy);
+        } else if tool == "acos_destroy" {
+            self.routes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(id);
+        }
+        relabel_legacy(envelope, label, trust, frozen)
+    }
+
+}
+
+/// The labels of a reply that carries no guest observation (status/destroy).
+const EVIDENCE_NO_GUEST: &str = "none";
+
+fn evidence_for(tool: &str) -> &'static str {
+    match tool {
+        "acos_observe" | "acos_screenshot" => EVIDENCE_HOST_PIXEL,
+        "acos_observe_tree" | "acos_assert" => EVIDENCE_GUEST_ASSERTED,
+        _ => EVIDENCE_HOST_PIXEL,
+    }
+}
+
+fn capabilities_for(tool: &str) -> Vec<&'static str> {
+    match tool {
+        "acos_observe_tree" | "acos_assert" => vec!["ui.tree"],
+        "acos_observe" => vec!["ui.frame", "ui.screenshot"],
+        "acos_tap" | "acos_text" | "acos_key" | "acos_action" => vec!["input"],
+        "acos_logs" => vec!["logs"],
+        "acos_reset" => vec!["reset"],
+        "acos_status" => vec!["lifecycle"],
+        _ => Vec::new(),
+    }
+}
+
+/// Insert `engine`, `trust` and the evidence labels into a reply result.
+fn label_meta(result: &mut Value, engine: &str, trust: Trust, evidence_label: &str) {
+    if !result.is_object() {
+        *result = json!({"value": result.take()});
+    }
+    let object = result.as_object_mut().expect("object");
+    object.insert("engine".into(), json!(engine));
+    object.insert("engine_frozen".into(), json!(engine == ENGINE_RUST_VM));
+    object.insert("trust".into(), json!(trust.as_str()));
+    object.insert("evidence_label".into(), json!(evidence_label));
+    let labels = match engine {
+        ENGINE_ART => json!({
+            "frame": "host-observed",
+            "tree": "guest-asserted",
+            "logs": "guest-asserted",
+            "input_acks": "guest-asserted",
+            "state_change": "host-observed",
+        }),
+        ENGINE_NATIVE_CHILD => json!({
+            "frame": "host-observed",
+            "tree": "guest-asserted",
+            "logs": "guest-asserted",
+        }),
+        _ => json!({
+            "frame": "guest-asserted",
+            "tree": "guest-asserted",
+            "logs": "guest-asserted",
+        }),
+    };
+    object.insert("evidence".into(), labels);
+}
+
+/// Add the bound frame's identity (sequence, hash, capture time) when there is
+/// one. The sequence is what proves a frame is new; it is never invented.
+fn label_frame(result: &mut Value, session: &ArtSession) {
+    let Some((seq, md5, captured_at)) = session.frame_info() else {
+        return;
+    };
+    if let Some(object) = result.as_object_mut() {
+        object.entry("frame".to_string()).or_insert_with(|| {
+            json!({
+                "frame_seq": seq,
+                "md5": md5,
+                "captured_at": captured_at,
+            })
+        });
+        object.insert("last_frame_seq".into(), json!(session.last_frame_seq()));
+    }
+}
+
+// -- verb implementations --------------------------------------------------- //
+
+fn launch_reply(
+    request_id: &str,
+    id: &str,
+    held: &HeldArtSession,
+    session: &ArtSession,
+    tree: &UiTree,
+    fresh_guest: bool,
+) -> Envelope {
+    let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
+    let mut result = json!({
+        "session_id": id,
+        "launched": true,
+        "relaunch": !fresh_guest,
+        "package": session.package(),
+        "activity": session.activity(),
+        "apk": held.apk.display().to_string(),
+        "stage_reached": "first_frame",
+        "isolation": if fresh_guest { "fresh-guest-process" } else { "live-session" },
+        "tree": tree_value,
+        "tree_max_nodes": max_nodes,
+        "tree_node_count": node_count,
+        "tree_truncated": truncated,
+        "events": [],
+        "stages": [
+            {"stage": "process", "ok": true, "status": "ok"},
+            {"stage": "activity_resumed", "ok": true, "status": "ok"},
+            {"stage": "first_frame", "ok": true, "status": "ok"}
+        ],
+    });
+    label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
+    label_frame(&mut result, session);
+    Envelope::pass(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::ArtReference,
+        Metrics::wall_ms(0),
+    )
+    .with_session_id(id.to_string())
+    .with_value_result(result)
+    .with_capabilities(["apk.inspect", "lifecycle", "ui.frame", "ui.tree"])
+}
+
+fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let max_nodes = args
+        .get("max_nodes")
+        .and_then(Value::as_u64)
+        .unwrap_or(2000) as usize;
+    let tree = session.tree()?;
+    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    Ok(json!({
+        "package": session.package(),
+        "stage_reached": "first_frame",
+        "windows": distinct_windows(&tree),
+        "truncated": truncated,
+        "max_nodes": max_nodes,
+        "node_count": node_count,
+        "tree": tree_value,
+    }))
+}
+
+fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
+    let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+    let path = args
+        .get("screenshot")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    if want_tree || want_text {
+        let tree = session.tree()?;
+        let mut result = json!({
+            "package": session.package(),
+            "stage_reached": "first_frame",
+            "frame": {
+                "frame_seq": tree.frame.frame_seq,
+                "width": tree.frame.width,
+                "height": tree.frame.height,
+                "content_hash": tree.frame.content_hash,
+                "meaningful": true,
+            },
+        });
+        if want_tree {
+            let (_, node_count, truncated, tree_value) = tree_json(&tree, 2000);
+            result["tree"] = tree_value;
+            result["truncated"] = json!(truncated);
+            result["node_count"] = json!(node_count);
+        }
+        if want_text {
+            result["text"] = json!(flat_text(&tree));
+        }
+        return Ok(result);
+    }
+    // A frame-only observe is a real, fresh host capture.
+    let frame = session.screenshot()?;
+    let mut result = json!({
+        "package": session.package(),
+        "stage_reached": "first_frame",
+        "frame": {
+            "frame_seq": frame.frame_seq,
+            "previous_seq": frame.previous_seq,
+            "width": session.width(),
+            "height": session.height(),
+            "md5": frame.md5,
+            "captured_at": frame.captured_at,
+            "meaningful": !frame.png.is_empty(),
+            "bytes": frame.png.len(),
+        },
+    });
+    if let Some(path) = path {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| BackendError::Error {
+                code: ErrorCode::RenderIo,
+                detail: format!("cannot create {}: {error}", parent.display()),
+            })?;
+        }
+        std::fs::write(&path, &frame.png).map_err(|error| BackendError::Error {
+            code: ErrorCode::RenderIo,
+            detail: format!("cannot write {}: {error}", path.display()),
+        })?;
+        result["screenshot"] = json!({
+            "path": path.display().to_string(),
+            "bytes": frame.png.len(),
+            "frame_seq": frame.frame_seq,
+        });
+    }
+    Ok(result)
+}
+
+fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    if let Some(id) = args.get("id").and_then(Value::as_str) {
+        let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
+        session.begin_input();
+        let bounds = target.bounds;
+        session.tap_in_window(
+            &target.window,
+            (bounds.left() + bounds.right()) / 2,
+            (bounds.top() + bounds.bottom()) / 2,
+        )?;
+        return Ok(input_result(session, "tap", json!({"id": id})));
+    }
+    if let Some(text) = args.get("text").and_then(Value::as_str) {
+        session.begin_input();
+        session.tap_text(text)?;
+        return Ok(input_result(session, "tap", json!({"text": text})));
+    }
+    let (Some(x), Some(y)) = (
+        args.get("x").and_then(Value::as_i64),
+        args.get("y").and_then(Value::as_i64),
+    ) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_tap needs `id`, `text`, or both `x` and `y`".to_string(),
+        });
+    };
+    session.begin_input();
+    session.tap(x as i32, y as i32)?;
+    Ok(input_result(session, "tap", json!({"x": x, "y": y})))
+}
+
+fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let Some(text) = args.get("text").and_then(Value::as_str) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_text needs a string `text`".to_string(),
+        });
+    };
+    // Typing needs a focused editable target. Without one there is no IME to
+    // commit into, and raw key events would be delivered to whatever view the
+    // window happens to focus next (the counter fixture's Increment button, for
+    // example, which then also reacts to a following ENTER). That is a real
+    // state mutation no agent asked for, so the engine says what is missing
+    // instead of injecting it.
+    let tree = session.ensure_bound_tree()?;
+    if focused_editable(&tree).is_none() {
+        return Err(BackendError::unsupported(
+            "text.input",
+            "no focused editable view in the live ART tree; typing needs an EditText \
+             (tap it first). Raw keys are not injected into a non-editable view.",
+        ));
+    }
+    session.begin_input();
+    session.type_text(text)?;
+    Ok(input_result(session, "text", json!({"text": text})))
+}
+
+/// The focused editable node, if any. A text-typing command needs one.
+fn focused_editable(tree: &UiTree) -> Option<&UiNode> {
+    fn walk(nodes: &[UiNode]) -> Option<&UiNode> {
+        for node in nodes {
+            if node.focused && is_editable_class(&node.class) {
+                return Some(node);
+            }
+            if let Some(found) = walk(&node.children) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    walk(&tree.nodes)
+}
+
+fn is_editable_class(class: &str) -> bool {
+    class.ends_with("EditText")
+        || class.ends_with("AutoCompleteTextView")
+        || class.ends_with("MultiAutoCompleteTextView")
+}
+
+fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let code = args.get("code").cloned().unwrap_or(Value::Null);
+    let value = if let Some(name) = code.as_str() {
+        let name = name.to_ascii_lowercase();
+        session.begin_input();
+        session.key(&name)?;
+        json!({"key": name})
+    } else if let Some(code) = code.as_i64() {
+        session.begin_input();
+        session.key_code_i32(code as i32)?;
+        json!({"code": code})
+    } else {
+        return Err(BackendError::unsupported(
+            "input.key",
+            "acos_key needs `code` as an integer keycode or a symbolic key name \
+             (enter, back, tab, ...)",
+        ));
+    };
+    Ok(input_result(session, "key", value))
+}
+
+fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let action = args.get("action").cloned().unwrap_or(Value::Null);
+    let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
+    match kind {
+        "tap" => tap(session, &action),
+        "key" => key(session, &action),
+        "text" => type_text(session, &action),
+        other => Err(BackendError::unsupported(
+            format!("input.{other}"),
+            "acos_action supports tap, key and text on the ART engine",
+        )),
+    }
+}
+
+/// The server-side assertion over the live tree.
+///
+/// One round trip instead of "observe_tree then compare in the client". It is
+/// a pass only when the node is found **and** its text matches; anything else is
+/// a structured failure (never a quiet `ok: true`).
+fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value, BackendError> {
+    if trust == Trust::Untrusted {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InsufficientHostEvidence,
+            detail: "acos_assert cannot pass on an untrusted run (guest-asserted tree)"
+                .to_string(),
+        });
+    }
+    let mode = args.get("mode").and_then(Value::as_str).unwrap_or("exact");
+    let expect = args
+        .get("expect")
+        .or_else(|| args.get("text"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let tree = session.tree()?;
+    let (selector, describe) = if let Some(id) = args.get("id").and_then(Value::as_str) {
+        (Selector::by_id(id), json!({"id": id}))
+    } else if let Some(text) = args.get("text").and_then(Value::as_str) {
+        (Selector::by_text(text), json!({"text": text}))
+    } else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_assert needs `id` (or `text`) to select the node".to_string(),
+        });
+    };
+    let node = tree.find_one(&selector).ok_or_else(|| BackendError::Failed {
+        code: if tree.truncated {
+            ErrorCode::TreeTruncated
+        } else {
+            ErrorCode::ElementNotFound
+        },
+        detail: format!(
+            "no node matching {} in the live ART tree{}",
+            describe,
+            if tree.truncated {
+                " (the tree was truncated: absence is not proven)"
+            } else {
+                ""
+            }
+        ),
+    })?;
+    let actual = node.text.clone();
+    let matched = match (mode, expect.as_deref()) {
+        ("contains", Some(expect)) => actual.contains(expect),
+        ("regex", Some(expect)) => match regex_lite_matches(expect, &actual) {
+            Ok(matched) => matched,
+            Err(detail) => {
+                return Err(BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    detail,
+                })
+            }
+        },
+        ("exact" | _, Some(expect)) => actual.trim() == expect,
+        (_, None) => true,
+    };
+    if !matched {
+        return Err(BackendError::Failed {
+            code: ErrorCode::AssertionFailed,
+            detail: format!(
+                "assert {} ({}): text {:?} does not match expected {:?}",
+                describe,
+                mode,
+                actual,
+                expect.unwrap_or_default()
+            ),
+        });
+    }
+    Ok(json!({
+        "assert": true,
+        "mode": mode,
+        "selector": describe,
+        "text": actual,
+        "expect": expect,
+        "resource_id": node.resource_id,
+        "bounds": node.bounds.to_string(),
+        "tree_truncated": tree.truncated,
+    }))
+}
+
+/// A tiny, dependency-free exact/contains fallback. `regex` is delegated to
+/// `acos_protocol`'s selector engine by matching a synthetic tree; a missing
+/// regex crate link here is not worth a new dependency.
+fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
+    let tree = UiTree::new(
+        acos_protocol::FrameMeta::new(0, String::new(), "", 0, 0, 0, "", true),
+        "",
+        vec![UiNode::new("n", "", Bounds::new(0, 0, 0, 0)).with_text(text)],
+    );
+    let selector = Selector {
+        text: Some(acos_protocol::ui::TextMatch {
+            regex: Some(pattern.to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    Ok(tree.find_one(&selector).is_some())
+}
+
+fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
+    let records = session.logs_since(0)?;
+    let crash = session.last_crash();
+    let lines: Vec<Value> = records
+        .iter()
+        .map(|record| {
+            let priority = match record.level {
+                LogLevel::Verbose => "V",
+                LogLevel::Debug => "D",
+                LogLevel::Info => "I",
+                LogLevel::Warn => "W",
+                LogLevel::Error => "E",
+            };
+            json!({
+                "seq": record.seq,
+                "priority": priority,
+                "tag": record.tag,
+                "message": record.message,
+                "line": format!("{} {:<8} {}", priority, record.tag, record.message),
+                "repeat_count": 1,
+            })
+        })
+        .collect();
+    Ok(json!({
+        "launched": true,
+        "stage_reached": "first_frame",
+        "total": records.len(),
+        "count": records.len(),
+        "collapsed": 0,
+        "logs": lines,
+        "crash": crash.map(|crash| json!({
+            "exception": crash.exception,
+            "message": crash.message,
+            "fatal": crash.fatal,
+        })),
+        "note": if records.is_empty() {
+            "the guest logd sink is empty; the app reached first_frame, so this is an empty sink, not a missing one"
+        } else {
+            ""
+        },
+    }))
+}
+
+fn status_value(session: &ArtSession) -> Value {
+    json!({
+        "launched": true,
+        "package": session.package(),
+        "activity": session.activity(),
+        "apk": session.apk_path().display().to_string(),
+        "stage_reached": "first_frame",
+        "published_frames": session.frame_info().map(|f| f.0).unwrap_or(0),
+        "live": true,
+        "mode": "live",
+        "capabilities": {
+            "tree": true, "screenshot": true, "tap": true, "tap_text": true,
+            "type_text": true, "key": true, "reset": true, "logs": true,
+            "assert": true, "swipe": false, "environment": false,
+        },
+        "unsupported": ["acos_swipe"],
+    })
+}
+
+fn reset(session: &mut ArtSession) -> Result<Value, BackendError> {
+    let before = session.last_frame_seq();
+    session.reset()?;
+    let tree = session.ensure_bound_tree()?;
+    Ok(json!({
+        "state_reset": true,
+        "data_cleared": true,
+        "scope": "all",
+        "isolation": "fresh-guest-process",
+        "stage_reached": "first_frame",
+        "previous_frame_seq": before,
+        "frame_seq": tree.frame.frame_seq,
+        "package": session.package(),
+        "note": "the guest process was stopped and the same APK relaunched with empty app-data",
+    }))
+}
+
+fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
+    let delivery = session.last_input_delivery();
+    let (delivered, state_changed, acks) = match delivery {
+        Some(delivery) => (
+            delivery.delivered,
+            delivery.visual_change,
+            json!(delivery
+                .acks
+                .iter()
+                .map(|ack| json!({
+                    "seq": ack.seq,
+                    "handled": ack.handled,
+                    "latency_us": ack.latency_us,
+                }))
+                .collect::<Vec<_>>()),
+        ),
+        None => (true, false, json!([])),
+    };
+    json!({
+        "action": kind,
+        "accepted": delivered,
+        "state_changed": state_changed,
+        "acks": acks,
+        "target": target,
+        "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison",
+    })
+}
+
+fn resolve_selector(
+    session: &mut ArtSession,
+    selector: &Selector,
+    field: &str,
+    value: &str,
+) -> Result<UiNode, BackendError> {
+    let tree = session.ensure_bound_tree()?;
+    tree.find_one(selector)
+        .cloned()
+        .ok_or_else(|| BackendError::Failed {
+            code: if tree.truncated {
+                ErrorCode::TreeTruncated
+            } else {
+                ErrorCode::ElementNotFound
+            },
+            detail: format!(
+                "no node with {field}={value:?} in the live ART tree{}",
+                if tree.truncated {
+                    " (the tree was truncated: absence is not proven)"
+                } else {
+                    ""
+                }
+            ),
+        })
+}
+
+// -- tree serialization ----------------------------------------------------- //
+
+/// Serialize a live tree for the agent-facing `acos_observe_tree` result.
+///
+/// `max_nodes` is a hard host-side cap: the walk stops at the cap and the reply
+/// says `truncated: true`, so absence is never claimed from an incomplete tree.
+fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
+    let max_nodes = max_nodes.max(1);
+    let mut budget = max_nodes;
+    let mut count = 0usize;
+    let mut truncated = tree.truncated;
+    let roots: Vec<Value> = tree
+        .nodes
+        .iter()
+        .filter_map(|node| node_json(node, &mut budget, &mut count, &mut truncated))
+        .collect();
+    (
+        max_nodes,
+        count,
+        truncated,
+        json!({
+            "max_nodes": max_nodes,
+            "truncated": truncated,
+            "nodes": roots,
+        }),
+    )
+}
+
+fn node_json(
+    node: &UiNode,
+    budget: &mut usize,
+    count: &mut usize,
+    truncated: &mut bool,
+) -> Option<Value> {
+    if *budget == 0 {
+        *truncated = true;
+        return None;
+    }
+    *budget -= 1;
+    *count += 1;
+    let mut children = Vec::new();
+    for child in &node.children {
+        match node_json(child, budget, count, truncated) {
+            Some(value) => children.push(value),
+            None => break,
+        }
+    }
+    Some(json!({
+        "id": node.id,
+        "class": node.class,
+        "resource_id": node.resource_id,
+        "text": node.text,
+        "hint": node.hint,
+        "content_desc": node.content_desc,
+        "bounds": node.bounds.to_string(),
+        "visible": node.visible,
+        "enabled": node.enabled,
+        "focused": node.focused,
+        "clickable": node.clickable,
+        "scrollable": node.scrollable,
+        "checked": node.checked,
+        "selected": node.selected,
+        "window": node.window,
+        "package": node.package,
+        "children": children,
+    }))
+}
+
+fn distinct_windows(tree: &UiTree) -> usize {
+    fn collect(node: &UiNode, seen: &mut Vec<String>) {
+        if !node.window.is_empty() && !seen.contains(&node.window) {
+            seen.push(node.window.clone());
+        }
+        for child in &node.children {
+            collect(child, seen);
+        }
+    }
+    let mut windows = Vec::new();
+    for node in &tree.nodes {
+        collect(node, &mut windows);
+    }
+    windows.len()
+}
+
+fn flat_text(tree: &UiTree) -> String {
+    fn walk(node: &UiNode, depth: usize, out: &mut String) {
+        let text = if !node.text.is_empty() {
+            format!(" {:?}", node.text)
+        } else if !node.hint.is_empty() {
+            format!(" hint={:?}", node.hint)
+        } else {
+            String::new()
+        };
+        out.push_str(&"  ".repeat(depth));
+        out.push_str(&node.class);
+        if !node.resource_id.is_empty() {
+            out.push('#');
+            out.push_str(&node.resource_id);
+        }
+        out.push_str(&text);
+        if node.clickable {
+            out.push_str(" clickable");
+        }
+        out.push('\n');
+        for child in &node.children {
+            walk(child, depth + 1, out);
+        }
+    }
+    let mut out = String::new();
+    for node in &tree.nodes {
+        walk(node, 0, &mut out);
+    }
+    out
+}
+
+// -- engine selection and error envelopes ----------------------------------- //
+
+/// Parse `args.engine`. `Ok(None)` means "not given" (the daemon default).
+///
+/// No aliases and no guessing: anything but `art` / `rust-vm` is an error.
+pub fn parse_engine_arg(args: &Value) -> Result<Option<Engine>, String> {
+    match args.get("engine") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Engine::parse(value).map(Some).ok_or_else(|| {
+            format!(
+                "unknown engine {value:?}; supported engines are `art` (default, real ART) and \
+                 `rust-vm` (frozen). No silent fallback is performed."
+            )
+        }),
+        Some(other) => Err(format!(
+            "engine must be a string (`art` or `rust-vm`), got {other}"
+        )),
+    }
+}
+
+/// The daemon's `--engine` value; an unknown value is refused at startup.
+pub fn parse_engine_flag(value: &str) -> Result<Engine, String> {
+    Engine::parse(value).ok_or_else(|| {
+        format!("unknown --engine {value:?}; use `art` (default) or `rust-vm` (frozen)")
+    })
+}
+
+fn unsupported_engine(request_id: &str, message: &str, default_engine: Engine) -> Envelope {
+    art_failure(
+        request_id,
+        None,
+        Trust::Trusted,
+        ErrorCode::UnsupportedBackend,
+        message.to_string(),
+        json!({
+            "supported_engines": ["art", "rust-vm"],
+            "default_engine": default_engine.as_str(),
+            "fallback_used": false,
+        }),
+    )
+}
+
+
+/// Rebuild a failure envelope with a situation-specific hint.
+///
+/// `Envelope` has no mutable hint accessor, so the envelope is reconstructed
+/// from its own fields; no status or evidence field is touched.
+fn with_hint(envelope: Envelope, hint: &str) -> Envelope {
+    let Some(error) = envelope.error() else {
+        return envelope;
+    };
+    let error = error.clone().with_hint(hint);
+    let mut rebuilt = Envelope::failure(
+        envelope.request_id().to_string(),
+        ProtocolBackend::AcosNative,
+        envelope.fidelity(),
+        error,
+        envelope.metrics(),
+    );
+    if let Some(id) = envelope.session_id() {
+        rebuilt = rebuilt.with_session_id(id.to_string());
+    }
+    rebuilt
+}
+
+/// An ART failure with the engine/trust/evidence labels attached.
+fn art_failure(
+    request_id: &str,
+    session_id: Option<&str>,
+    trust: Trust,
+    code: ErrorCode,
+    message: impl Into<String>,
+    details: Value,
+) -> Envelope {
+    let mut details = details;
+    if !details.is_object() {
+        details = json!({"value": details});
+    }
+    {
+        let object = details.as_object_mut().expect("object");
+        object.insert("engine".into(), json!(ENGINE_ART));
+        object.insert("engine_frozen".into(), json!(false));
+        object.insert("trust".into(), json!(trust.as_str()));
+        object.insert("evidence_label".into(), json!(EVIDENCE_NO_GUEST));
+    }
+    let error = ProtocolError::new(code, message).with_details(details);
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::ArtReference,
+        error,
+        Metrics::wall_ms(0),
+    );
+    match session_id {
+        Some(id) => envelope.with_session_id(id.to_string()),
+        None => envelope,
+    }
+}
+
+fn art_error(
+    request_id: &str,
+    session_id: Option<&str>,
+    trust: Trust,
+    error: &BackendError,
+) -> Envelope {
+    let protocol = error.to_protocol_error();
+    let mut details = protocol.details.clone().unwrap_or_else(|| json!({}));
+    if !details.is_object() {
+        details = json!({"detail": details});
+    }
+    {
+        let object = details.as_object_mut().expect("object");
+        object.insert("engine".into(), json!(ENGINE_ART));
+        object.insert("engine_frozen".into(), json!(false));
+        object.insert("trust".into(), json!(trust.as_str()));
+        object.insert("evidence_label".into(), json!(EVIDENCE_NO_GUEST));
+    }
+    let is_frame_error = protocol.code == ErrorCode::NoFreshFrame;
+    let mut error = ProtocolError::new(protocol.code, protocol.message.clone())
+        .with_details(details)
+        .with_hint(protocol.hint.clone());
+    if !is_frame_error {
+        error.retryable = protocol.retryable;
+    }
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::ArtReference,
+        error,
+        Metrics::wall_ms(0),
+    );
+    match session_id {
+        Some(id) => envelope.with_session_id(id.to_string()),
+        None => envelope,
+    }
+}
+
+/// Rebuild a legacy envelope with the engine/trust/evidence labels injected.
+fn relabel_legacy(
+    envelope: Envelope,
+    engine: &str,
+    trust: Trust,
+    frozen: bool,
+) -> Envelope {
+    let request_id = envelope.request_id().to_string();
+    let metrics = envelope.metrics();
+    let session_id = envelope.session_id().map(str::to_string);
+    let capabilities = envelope.capabilities_used().to_vec();
+    let frame = envelope.frame().cloned();
+    let mut labeled = if envelope.ok() {
+        let mut result = envelope.result().cloned().unwrap_or_else(|| json!({}));
+        label_meta(&mut result, engine, trust, EVIDENCE_NO_GUEST);
+        if let Some(object) = result.as_object_mut() {
+            object.insert("engine_frozen".into(), json!(frozen));
+            object.insert(
+                "note".into(),
+                json!(if frozen {
+                    "the frozen Rust VM produced this reply; it is not real ART"
+                } else {
+                    "the confined native child produced this reply"
+                }),
+            );
+        }
+        Envelope::pass(
+            request_id,
+            ProtocolBackend::AcosNative,
+            envelope.fidelity(),
+            metrics,
+        )
+        .with_value_result(result)
+    } else {
+        let mut error = envelope
+            .error()
+            .cloned()
+            .unwrap_or_else(|| ProtocolError::new(ErrorCode::Internal, "daemon error"));
+        let mut details = error.details.clone().unwrap_or_else(|| json!({}));
+        if !details.is_object() {
+            details = json!({"detail": details});
+        }
+        {
+            let object = details.as_object_mut().expect("object");
+            object.insert("engine".into(), json!(engine));
+            object.insert("engine_frozen".into(), json!(frozen));
+            object.insert("trust".into(), json!(trust.as_str()));
+            object.insert("evidence_label".into(), json!(EVIDENCE_GUEST_ASSERTED));
+        }
+        error.details = Some(details);
+        Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            envelope.fidelity(),
+            error,
+            metrics,
+        )
+    };
+    if let Some(id) = session_id {
+        labeled = labeled.with_session_id(id);
+    }
+    if let Some(frame) = frame {
+        labeled = labeled.with_frame(frame);
+    }
+    if !capabilities.is_empty() {
+        labeled = labeled.with_capabilities(capabilities);
+    }
+    labeled
+}
+
+fn with_result(envelope: Envelope, result: Value) -> Envelope {
+    let request_id = envelope.request_id().to_string();
+    let metrics = envelope.metrics();
+    let mut rebuilt = Envelope::pass(
+        request_id,
+        ProtocolBackend::AcosNative,
+        envelope.fidelity(),
+        metrics,
+    )
+    .with_value_result(result);
+    if let Some(id) = envelope.session_id() {
+        rebuilt = rebuilt.with_session_id(id.to_string());
+    }
+    if !envelope.capabilities_used().is_empty() {
+        rebuilt = rebuilt.with_capabilities(envelope.capabilities_used().to_vec());
+    }
+    rebuilt
+}
+
+fn trust_arg(args: &Value) -> Trust {
+    match args.get("trust").and_then(Value::as_str) {
+        Some("untrusted") => Trust::Untrusted,
+        _ => Trust::Trusted,
+    }
+}
+
+fn request_id(args: &Value) -> String {
+    args.pointer("/base/request_id")
+        .and_then(Value::as_str)
+        .unwrap_or("req_daemon")
+        .to_string()
+}
+
+fn session_id(args: &Value) -> String {
+    args.pointer("/base/session_id")
+        .and_then(Value::as_str)
+        .unwrap_or(acos_mcp::session_backend::DEFAULT_SESSION)
+        .to_string()
+}
+
+/// Session ids become directory names, so keep them path-safe.
+fn sanitize_session_id(id: &str) -> String {
+    let cleaned: String = id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let cleaned = cleaned.trim_matches('.').to_string();
+    if cleaned.is_empty() {
+        "session".to_string()
+    } else {
+        cleaned
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acos_protocol::ui::Bounds;
+
+    fn node(id: &str, text: &str, children: Vec<UiNode>) -> UiNode {
+        let mut node = UiNode::new("n0", "android.widget.TextView", Bounds::new(0, 0, 10, 10))
+            .with_resource_id(id)
+            .with_text(text);
+        node.children = children;
+        node
+    }
+
+    fn tree(nodes: Vec<UiNode>) -> UiTree {
+        UiTree::new(
+            acos_protocol::FrameMeta::new(1, String::new(), "", 1080, 2400, 420, "", true),
+            "dev.acos.fixtures.counter",
+            nodes,
+        )
+    }
+
+    #[test]
+    fn engine_argument_is_explicit_and_unknown_engines_are_refused() {
+        assert_eq!(parse_engine_arg(&json!({})).unwrap(), None);
+        assert_eq!(
+            parse_engine_arg(&json!({"engine": "art"})).unwrap(),
+            Some(Engine::Art)
+        );
+        assert_eq!(
+            parse_engine_arg(&json!({"engine": "rust-vm"})).unwrap(),
+            Some(Engine::RustVm)
+        );
+        let err = parse_engine_arg(&json!({"engine": "artx"})).unwrap_err();
+        assert!(err.contains("unknown engine"), "{err}");
+        assert!(err.contains("no silent fallback") || err.contains("No silent fallback"));
+        assert!(parse_engine_arg(&json!({"engine": 7})).is_err());
+        assert_eq!(parse_engine_flag("art").unwrap(), Engine::Art);
+        assert_eq!(parse_engine_flag("rust-vm").unwrap(), Engine::RustVm);
+        assert!(parse_engine_flag("native").is_err());
+    }
+
+    #[test]
+    fn tree_json_caps_nodes_and_reports_truncation() {
+        let child = node("count", "1", vec![]);
+        let root = node("", "", vec![child]);
+        let (max, count, truncated, value) = tree_json(&tree(vec![root]), 1);
+        assert_eq!(max, 1);
+        assert_eq!(count, 1, "the cap is a hard node budget");
+        assert!(truncated, "a capped tree must say so");
+        assert_eq!(value["nodes"].as_array().unwrap().len(), 1);
+        let (_, _, truncated, value) = tree_json(&tree(vec![node("inc", "0", vec![])]), 2000);
+        assert!(!truncated);
+        assert_eq!(value["nodes"][0]["resource_id"], json!("inc"));
+        assert_eq!(value["nodes"][0]["bounds"], json!("[0,0][10,10]"));
+        assert!(value["nodes"][0]["children"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn frozen_label_and_default_engine_are_distinct_strings() {
+        // The gate W50 exists for: a caller can tell the frozen Rust VM apart
+        // from real ART in every reply.
+        assert_eq!(ENGINE_ART, "art");
+        assert_eq!(ENGINE_RUST_VM, "rust-vm, frozen");
+        assert_ne!(ENGINE_ART, ENGINE_RUST_VM);
+    }
+
+    #[test]
+    fn session_ids_are_path_safe() {
+        assert_eq!(sanitize_session_id("s_w50_counter"), "s_w50_counter");
+        assert_eq!(sanitize_session_id("../../etc/passwd"), "_.._etc_passwd");
+        assert!(!sanitize_session_id("../../etc/passwd").contains('/'));
+        assert!(!sanitize_session_id("../..").contains('/'));
+        assert_eq!(sanitize_session_id(""), "session");
+    }
+
+    #[test]
+    fn labels_are_written_into_results_and_errors() {
+        let mut result = json!({"ok": true});
+        label_meta(&mut result, ENGINE_RUST_VM, Trust::Untrusted, EVIDENCE_NO_GUEST);
+        assert_eq!(result["engine"], json!(ENGINE_RUST_VM));
+        assert_eq!(result["engine_frozen"], json!(true));
+        assert_eq!(result["trust"], json!("untrusted"));
+        assert_eq!(result["evidence"]["tree"], json!("guest-asserted"));
+
+        let failure = art_failure(
+            "req",
+            Some("s"),
+            Trust::Trusted,
+            ErrorCode::UnsupportedBackend,
+            "no swipe",
+            json!({"verb": "acos_swipe"}),
+        );
+        assert!(!failure.ok());
+        let details = failure.error().unwrap().details.clone().unwrap();
+        assert_eq!(details["engine"], json!(ENGINE_ART));
+        assert_eq!(details["trust"], json!("trusted"));
+        assert_eq!(details["verb"], json!("acos_swipe"));
+    }
+}
