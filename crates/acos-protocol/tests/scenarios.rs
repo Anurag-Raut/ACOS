@@ -124,7 +124,8 @@ fn every_checked_in_scenario_parses_and_validates() {
             || path
                 .file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with("-wrong.yaml"));
+                .is_some_and(|name| name.ends_with("-wrong.yaml"))
+            || scenario.expectation != Expectation::Pass;
         if is_negative {
             negative += 1;
             assert!(
@@ -144,7 +145,17 @@ fn every_checked_in_scenario_parses_and_validates() {
                 path.display()
             );
         }
-        assert_eq!(scenario.display.label(), "1080x2400@420");
+        // GR1 added a checked-in reference-device scenario at 400 dpi; the
+        // rest of the corpus is the API-34 420 dpi profile.
+        assert!(
+            matches!(
+                scenario.display.label().as_str(),
+                "1080x2400@420" | "1080x2400@400"
+            ),
+            "{}: unexpected display {}",
+            path.display(),
+            scenario.display.label()
+        );
     }
     // The fixture matrix grows (W15 added scenarios); the invariant is that
     // every positive scenario expects pass and every negative one does not.
@@ -322,6 +333,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 x: None,
                 y: None,
                 timeout_ms: None,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -334,6 +346,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 x: Some(1),
                 y: Some(2),
                 timeout_ms: None,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -346,6 +359,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 x: None,
                 y: None,
                 timeout_ms: None,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -358,6 +372,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 x: None,
                 y: None,
                 timeout_ms: Some(0),
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -369,6 +384,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: Some(selector()),
                 text: String::new(),
                 clear: false,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -380,6 +396,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: Some(Selector::default()),
                 text: "x".to_string(),
                 clear: false,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -719,10 +736,14 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
     cases.push(step_error(
         "rotate-unknown-is-serde-not-this-test",
         one(Step {
-            key: Some(KeyStep { key: KeyName::Back }),
+            key: Some(KeyStep {
+                key: KeyName::Back,
+                settle_timeout_ms: None,
+            }),
             // A key step is valid; make it invalid by adding a second kind.
             reset: Some(ResetStep {
                 scope: ResetScope::App,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),

@@ -879,6 +879,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         data: None,
         extras: BTreeMap::new(),
         clear_state: true,
+        settle_timeout_ms: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {
@@ -894,6 +895,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             x: None,
             y: None,
             timeout_ms: Some(1000),
+            settle_timeout_ms: None,
         }),
         ..Step::default()
     });
@@ -902,12 +904,14 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             selector: Some(Selector::by_id("input")),
             text: "World".to_string(),
             clear: true,
+            settle_timeout_ms: None,
         }),
         ..Step::default()
     });
     steps.push(Step {
         key: Some(KeyStep {
             key: KeyName::Enter,
+            settle_timeout_ms: None,
         }),
         ..Step::default()
     });
@@ -994,6 +998,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
     steps.push(Step {
         reset: Some(ResetStep {
             scope: ResetScope::App,
+            settle_timeout_ms: None,
         }),
         ..Step::default()
     });

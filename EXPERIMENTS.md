@@ -529,9 +529,17 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
   expected control). Counter tap step **1010 ms p50 / 1031.5 p95 with animations
   on vs 182 ms / 201.6 off** (5.5×). Indeterminate ProgressBar: strict timed out
   at 3098 ms with animations on, **settled in 205 ms with animations off** (the
-  bar stops at animator scale 0). `p11-progress-timeout` re-scoped to the P12b
-  "timeout still returns the latest tree" contract; `p12-progress-anim-off`
-  passes 6/6.
+  bar stops at animator scale 0). Review correction: `verify` fails a
+  timed-out settle step as `TIMEOUT` (agent observe still returns the latest
+  tree); `p11-progress-timeout` is the non-pass negative control and
+  `p12-progress-anim-off` passes 6/6.
+- **Finding (review rebase, `main` 1f21ea7):** with the shipped P11 default
+  (event pixel guard on), **4 of the 7 core gates pass**; `w54`, `w42` and
+  `form-validation` fail as `TIMEOUT` at a tap that changes no pixels (first
+  focus into an EditText with no IME/cursor change). This was latent before
+  because `verify` accepted a settle timeout as a pass. With the off-by-default
+  experiment `ACOS_STRICT_SETTLE_PIXEL_GUARD=off`, all 7 pass. The default is
+  unchanged; the relaxation is an owner-gated decision.
 - **Finding:** with animations off, a 150 ms background-thread UI post and a
   1000 ms `postDelayed` scheduled *after* the fast settle were not observed by
   subsequent `wait_for` polling (tree stayed at the pre-update text, no C1
@@ -543,7 +551,9 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 - **Regression / false pass:** 7 core gates both modes; assertions refuse
   `settled:false`; `T03-render-wrong` still fails. The P11 settle-lab false-pass
   corpus was not re-run with animations off (follow-up: pass `animations:off`
-  through the P11 harness).
+  through the P11 harness). Default gate result is 4/7 green, with the 3 red
+  gates and the guard-off experiment recorded in `results/art-runtime/P12.md`
+  §3.1.
 - **Conclusion / next:** animations:off is the right default for functional
   checks (5.5× on a Button tap) and fixes the forever-animating screen;
   investigate idle main-looper timers, then re-run the P11 corpus with `off`.

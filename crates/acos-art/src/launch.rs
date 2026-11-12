@@ -2895,6 +2895,21 @@ fn wait_for_event_settled(
     publish_epoch_ms: u64,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
+    // P11's default: a strict input must change the pixels from the previous
+    // capture, so a tap that lands on the same final pixels times out instead
+    // of binding a stale-looking frame. P12 review measured that legitimate
+    // no-visual-change taps (focusing an EditText with no IME/cursor change)
+    // then time out too. The relaxation is opt-in only and is not a default:
+    // `ACOS_STRICT_SETTLE_PIXEL_GUARD=off` disables the guard for an experiment.
+    let pixel_guard = !std::env::var("ACOS_STRICT_SETTLE_PIXEL_GUARD")
+        .map(|value| value.eq_ignore_ascii_case("off"))
+        .unwrap_or(false);
+    if !pixel_guard {
+        trace_host(
+            probe_state,
+            "settle: ACOS_STRICT_SETTLE_PIXEL_GUARD=off (experimental; P11 default is on)",
+        );
+    }
     // A tree request has no publish timestamp; it must not serve a sample that
     // was already current before the request, so the floor is the entry sample.
     let entry_floor = if publish_epoch_ms == 0 {
@@ -2952,15 +2967,19 @@ fn wait_for_event_settled(
             }
         }
         if let Some(sample) = valid {
-            let pixels_changed = match previous_fnv {
-                None => true,
-                Some(previous) => {
-                    let current = {
-                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
-                        state.capture_latest().map(|c| c.fnv1a)
-                    };
-                    current != Some(previous) && current.is_some()
+            let pixels_changed = if pixel_guard {
+                match previous_fnv {
+                    None => true,
+                    Some(previous) => {
+                        let current = {
+                            let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                            state.capture_latest().map(|c| c.fnv1a)
+                        };
+                        current != Some(previous) && current.is_some()
+                    }
                 }
+            } else {
+                true
             };
             if !pixels_changed {
                 last_reason = "pixels-unchanged".to_string();
