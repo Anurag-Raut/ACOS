@@ -197,3 +197,18 @@ $ cat …/runs/<id>/app-data/com.gaten/shared_prefs/gaten_settings.xml
     <int name="onboarding_step" value="1" />
 </map>
 ```
+
+## 7. Validation
+
+| check | result |
+|---|---|
+| `cargo test --release --offline -p acos-cli -p acos-art -p acos-services` | **rc=0**, 65 test binaries, **552 passed / 0 failed** (`out/tests`, log in `.cache/gr2/tests.log`) |
+| `acos verify --engine art scenarios/gaten-home.yaml` (before the selector change) | **rc=0**, 14/14 steps, `artifact_validation ok` (`.cache/gr2/verify1/verdict.json`) |
+| the seven mandatory gates | **not re-run**: this branch changes no product code (`git diff 5b8189b -- crates/ tools/` is empty) — two documents, one evidence directory and one scenario step's selector. Gate baselines are unaffected by a scenario file no gate loads. The earlier gates on `main` (`results/gaten/GR1-gates.txt`) stand. |
+| the updated scenario (selector change) | queued behind the host ART lock for this whole session (≥ 6 concurrent agents; the queue never drained inside the budget). The change is *reasoned, not yet re-verified as a whole run*: the selector it now uses (`content_desc {exact: Analytics}`) is the node at `[516,2151][690,2316]`, and a tap at that node's centre was proven to select the tab (run5, `gaten-analytics-broken.png`). **A clean run of the scenario is the first thing to do next** — and it can still fail on W6 (the +1080 px layout flake), which is exactly why the fix order in §4 is W6 first. |
+
+An honest note on the green verdict: it is a real pass *for the run it describes* (14 steps, 14
+frames, a frame per step, the guest's own exit record `outcome: ok`, `guest_exit: 0`,
+`oom_kills: 0`), and it is what the owner asked to see — Gaten past onboarding on real ART. It is
+not yet a *stable* pass, because 2 of 6 launches painted wrong (§4 W6), and it does not yet *prove*
+the Analytics screen, because the tree reports off-screen pages as visible (§3, §4 W4/W5).
