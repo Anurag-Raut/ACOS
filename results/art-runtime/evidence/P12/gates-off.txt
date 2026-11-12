@@ -1,0 +1,22 @@
+animations=off
+scenario                   verdict  pass/fail/total
+v2-art-counter             pass     11/0/11 expect=pass anim=None None
+w22-counter-reset          pass     9/0/9 expect=pass anim=None None
+w54-dialog-pixels          pass     14/0/14 expect=pass anim=None None
+w42-back-frame             pass     17/0/17 expect=pass anim=None None
+w15-dialog-menu            pass     3/0/3 expect=pass anim=None None
+form-validation            pass     28/0/28 expect=pass anim=None None
+T03-render-good            pass     5/0/5 expect=pass anim=None None
+T03-render-wrong           fail     2/1/3 expect=pass anim=None ASSERTION_FAILED
+p11-anim                   pass     4/0/4 expect=pass anim=None None
+p11-delay40                pass     4/0/4 expect=pass anim=None None
+p11-delay200               pass     4/0/4 expect=pass anim=None None
+p11-delay1000              fail     3/1/4 expect=pass anim=None TIMEOUT
+p11-background             fail     3/1/4 expect=pass anim=None ASSERTION_FAILED
+p11-chain                  pass     4/0/4 expect=pass anim=None None
+p11-dialog                 pass     6/0/6 expect=pass anim=None None
+p11-activity               pass     7/0/7 expect=pass anim=None None
+p11-list-smooth            pass     4/0/4 expect=pass anim=None None
+p11-layout-transition      pass     4/0/4 expect=pass anim=None None
+p11-rapid-taps             pass     13/0/13 expect=pass anim=None None
+p11-progress-timeout       fail     3/0/3 expect=pass anim=None INTERNAL

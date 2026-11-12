@@ -458,6 +458,10 @@ pub(crate) fn annotate(
             engine_block["unsupported_steps"].clone(),
         );
         object.insert("evidence".to_string(), engine_block["evidence"].clone());
+        object.insert(
+            "animations".to_string(),
+            engine_block["animations"].clone(),
+        );
         if let Some(summary) = &session_exit_summary {
             object.insert("session_exit".to_string(), summary.clone());
         }

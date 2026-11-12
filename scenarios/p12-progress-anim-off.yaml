@@ -1,0 +1,46 @@
+# P12: the settle-lab indeterminate ProgressBar with animations off.
+#
+# P11's p11-progress-timeout is the negative control with real animations: the
+# ProgressBar never stops drawing, so strict settle honestly times out. With
+# `animations: off` Android's animator scale is 0, the ProgressBar stops, and
+# the same strict rule settles. This scenario asserts that difference.
+version: 1
+name: p12-progress-anim-off
+description: >-
+  Indeterminate ProgressBar with animations off: the animator scale is 0, the
+  bar stops drawing, and strict settle completes instead of timing out.
+app: fixtures/build/apps/settle-lab.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+animations: off
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: progress_start}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: progress_start}
+  - assert_visible:
+      selector: {id: progress_indeterminate}
+  - tap:
+      selector: {id: progress_stop}
+  - assert_not_visible:
+      selector: {id: progress_indeterminate}

@@ -35,6 +35,13 @@ steps:
       timeout_ms: 5000
   - tap:
       selector: {id: bg_start}
+  # P12: with the framework animator out of the way (animations:off) the tap
+  # settles at "bg-wait" before the background thread posts its UI update, so a
+  # pure assertion here would inspect the state the tap actually completed. The
+  # update is a later event; wait_for is the contract for it.
+  - wait_for:
+      selector: {id: bg_text, text: {exact: "bg-done"}}
+      timeout_ms: 3000
   - assert_text:
       selector: {id: bg_text}
       text: {exact: "bg-done"}

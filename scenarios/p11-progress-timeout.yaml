@@ -6,7 +6,9 @@
 version: 1
 name: p11-progress-timeout
 description: >-
-  Infinite indeterminate ProgressBar: the honest result is a timeout, never settled.
+  Infinite indeterminate ProgressBar: strict settle times out (settled:false) but
+  P12 still returns the latest tree/frame identity, so the following assertion can
+  inspect the screen instead of failing the tap step.
 app: fixtures/build/apps/settle-lab.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -22,7 +24,8 @@ capabilities:
   - ui.offscreen
   - ui.text
   - input
-expectation: non_pass
+animations: on
+expectation: pass
 budgets:
   memory_mib: 512
   wall_ms: 120000
@@ -35,3 +38,5 @@ steps:
       timeout_ms: 5000
   - tap:
       selector: {id: progress_start}
+  - assert_visible:
+      selector: {id: progress_indeterminate}

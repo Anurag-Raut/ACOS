@@ -516,3 +516,34 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | H7 | Shrink per-session boot-image private memory (26.3 MiB decompressed per session) without a warm pool | M2 | −10–25 MiB | medium | medium | medium (ASLR/B3) | backlog |
 | H8 | Faster PNG (SIMD deflate) or region/downscaled screenshots for agents | M5 | 24 → 10–15 ms | medium | medium | low | backlog |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
+## E2.9 — event-only strict settle + per-session animation scales — MEASURED
+
+- **Date / commit:** 2026-11-12; P12 branch `perf-p12-event-only-anim`.
+- **Question / goal:** remove the P11 quiet escape hatch (strict = event rule
+  only) and let the agent turn Android's three animation scales off for
+  functional checks, with every reply stating which mode ran.
+- **Method:** real ART, release binary, `results/art-runtime/evidence/P12/`;
+  7 core gates + the 12 `p11-*` scenarios in both modes; counter A/B n=30 taps
+  per mode (`v2-art-counter` steps 4/7/9); settle-lab indeterminate ProgressBar.
+- **Result:** core gates green in both modes (`T03-render-wrong` fails as the
+  expected control). Counter tap step **1010 ms p50 / 1031.5 p95 with animations
+  on vs 182 ms / 201.6 off** (5.5×). Indeterminate ProgressBar: strict timed out
+  at 3098 ms with animations on, **settled in 205 ms with animations off** (the
+  bar stops at animator scale 0). `p11-progress-timeout` re-scoped to the P12b
+  "timeout still returns the latest tree" contract; `p12-progress-anim-off`
+  passes 6/6.
+- **Finding:** with animations off, a 150 ms background-thread UI post and a
+  1000 ms `postDelayed` scheduled *after* the fast settle were not observed by
+  subsequent `wait_for` polling (tree stayed at the pre-update text, no C1
+  store). With animations on the ~0.9 s framework animator kept the settle
+  alive until they landed, which is why P11 did not see it. Suspect main-looper
+  delayed-message dispatch while the guest is idle; H6 should measure it.
+- **Fidelity / evidence:** `art`, live; `results/art-runtime/P12.md`,
+  `results/art-runtime/evidence/P12/{gates-off.txt,gates-and-ab.txt,ab.json}`.
+- **Regression / false pass:** 7 core gates both modes; assertions refuse
+  `settled:false`; `T03-render-wrong` still fails. The P11 settle-lab false-pass
+  corpus was not re-run with animations off (follow-up: pass `animations:off`
+  through the P11 harness).
+- **Conclusion / next:** animations:off is the right default for functional
+  checks (5.5× on a Button tap) and fixes the forever-animating screen;
+  investigate idle main-looper timers, then re-run the P11 corpus with `off`.
