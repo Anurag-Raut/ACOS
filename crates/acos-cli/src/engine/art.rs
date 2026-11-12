@@ -310,10 +310,140 @@ impl SettleStats {
     }
 }
 
+/// First token of a frame-artifact error detail, so an agent can tell "the
+/// pixels could not be proven" from "there is no frame yet".
+const FRAME_ARTIFACT_UNAVAILABLE: &str = "FRAME_ARTIFACT_UNAVAILABLE";
+
+fn frame_artifact_error(detail: String) -> BackendError {
+    BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!("{FRAME_ARTIFACT_UNAVAILABLE}: {detail}"),
+    }
+}
+
+/// One frame's PNG as an immutable on-disk artifact, not as retained bytes.
+///
+/// `acos serve` keeps one bound frame per held session for the session's whole
+/// life. Retaining the encoded bytes cost ~9.5 MiB/session (the 1080x2209 PNG;
+/// D-M2 `daemon retention` and D-M6): this descriptor is what is retained
+/// instead — where the bytes are, the SHA-256 they had when the frame was bound,
+/// their size, the frame sequence they belong to and the display geometry the
+/// frame was captured against (W58 display space).
+///
+/// [`Self::load`] reads the bytes only when a caller actually needs PNG data and
+/// verifies the recorded hash and size first, so a missing or altered file is a
+/// structured error (`FRAME_ARTIFACT_UNAVAILABLE`), never silently stale pixels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FrameArtifact {
+    path: PathBuf,
+    sha256: String,
+    size: u64,
+    /// The engine frame sequence this artifact is bound to.
+    frame_seq: u64,
+    /// Display width in pixels (W58 display space) at capture time.
+    display_width: u32,
+    /// Display height in pixels (W58 display space) at capture time.
+    display_height: u32,
+    /// Display density in dots per inch at capture time.
+    density: u32,
+}
+
+impl FrameArtifact {
+    /// Record a frame's PNG path, size and hash without retaining its bytes.
+    ///
+    /// The hash is taken once, at bind time, so a later load can prove the file
+    /// is exactly the artifact the frame was bound to. The read is streamed:
+    /// a full PNG buffer is never allocated here.
+    fn bind(
+        path: &Path,
+        frame_seq: u64,
+        display_width: u32,
+        display_height: u32,
+        density: u32,
+    ) -> Result<Self, BackendError> {
+        let file = std::fs::File::open(path).map_err(|error| {
+            frame_artifact_error(format!(
+                "cannot open the frame artifact {}: {error}",
+                path.display()
+            ))
+        })?;
+        let size = file
+            .metadata()
+            .map(|meta| meta.len())
+            .map_err(|error| {
+                frame_artifact_error(format!(
+                    "cannot stat the frame artifact {}: {error}",
+                    path.display()
+                ))
+            })?;
+        if size > MAX_PNG_BYTES {
+            return Err(frame_artifact_error(format!(
+                "the frame artifact {} is {size} bytes, over the {MAX_PNG_BYTES} byte ceiling",
+                path.display()
+            )));
+        }
+        let sha256 = acos_render::hash::sha256_reader(file).map_err(|error| {
+            frame_artifact_error(format!(
+                "cannot hash the frame artifact {}: {error}",
+                path.display()
+            ))
+        })?;
+        Ok(FrameArtifact {
+            path: path.to_path_buf(),
+            sha256,
+            size,
+            frame_seq,
+            display_width,
+            display_height,
+            density,
+        })
+    }
+
+    /// Read the bytes now, after proving they are the bound artifact.
+    fn load(&self) -> Result<Vec<u8>, BackendError> {
+        let file = std::fs::File::open(&self.path).map_err(|error| {
+            frame_artifact_error(format!(
+                "the frame artifact {} is gone ({error}); refusing to serve pixels that cannot \
+                 be proven",
+                self.path.display()
+            ))
+        })?;
+        let mut bytes = Vec::with_capacity(self.size.min(MAX_PNG_BYTES) as usize);
+        file.take(MAX_PNG_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| {
+                frame_artifact_error(format!(
+                    "cannot read the frame artifact {}: {error}",
+                    self.path.display()
+                ))
+            })?;
+        if bytes.len() as u64 != self.size {
+            return Err(frame_artifact_error(format!(
+                "the frame artifact {} is {} bytes but was bound at {}; the file changed",
+                self.path.display(),
+                bytes.len(),
+                self.size
+            )));
+        }
+        let sha256 = acos_render::hash::sha256_hex(&bytes);
+        if sha256 != self.sha256 {
+            return Err(frame_artifact_error(format!(
+                "the frame artifact {} hashes to {sha256} but was bound at {}; refusing to serve \
+                 altered pixels as frame {}",
+                self.path.display(),
+                self.sha256,
+                self.frame_seq
+            )));
+        }
+        Ok(bytes)
+    }
+}
+
 struct CachedFrame {
     seq: u64,
     md5: String,
-    png: Vec<u8>,
+    /// The PNG of this traversal as an artifact reference (never its bytes).
+    png: Option<FrameArtifact>,
     tree: UiTree,
     /// Structural signature of `tree` (see [`tree_signature`]).
     signature: u64,
@@ -322,22 +452,38 @@ struct CachedFrame {
 }
 
 impl CachedFrame {
-    fn evidence(&self, previous_seq: u64) -> FrameEvidence {
-        FrameEvidence {
+    /// Load this frame's PNG, verifying that the artifact is the bound one.
+    fn png_bytes(&self) -> Result<Vec<u8>, BackendError> {
+        let artifact = self.png.as_ref().ok_or_else(|| {
+            live_frame_unavailable(
+                "the ART tree reply carried no PNG; refusing to bind a tree to absent pixels",
+            )
+        })?;
+        if artifact.frame_seq != self.seq {
+            return Err(frame_artifact_error(format!(
+                "frame {} is bound to a PNG artifact of frame {}; refusing a mismatched binding",
+                self.seq, artifact.frame_seq
+            )));
+        }
+        artifact.load()
+    }
+
+    fn evidence(&self, previous_seq: u64) -> Result<FrameEvidence, BackendError> {
+        Ok(FrameEvidence {
             frame_seq: self.seq,
             previous_seq,
             captured_at_ms: self.captured_at_ms,
             captured_at: self.captured_at.clone(),
             md5: self.md5.clone(),
-            png: self.png.clone(),
-        }
+            png: self.png_bytes()?,
+        })
     }
 
-    fn observed(&self, previous_seq: u64) -> ObservedFrame {
-        ObservedFrame {
+    fn observed(&self, previous_seq: u64) -> Result<ObservedFrame, BackendError> {
+        Ok(ObservedFrame {
             tree: self.tree.clone(),
-            frame: self.evidence(previous_seq),
-        }
+            frame: self.evidence(previous_seq)?,
+        })
     }
 }
 
@@ -503,6 +649,21 @@ fn now_unix_ms() -> u64 {
 /// RFC 3339 UTC for a host millisecond timestamp.
 fn rfc3339(unix_ms: u64) -> String {
     acos_verify::clock::rfc3339_from_unix_ms(unix_ms as i64)
+}
+
+/// D-M6 (trace-only, env-gated): append one JSON line describing a host-side
+/// stop phase. Off unless `DM6_RESET_TRACE` names a file. Never changes a reply,
+/// an error or a control-flow decision.
+fn dm6_trace(event: serde_json::Value) {
+    if let Some(path) = std::env::var_os("DM6_RESET_TRACE") {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{event}");
+        }
+    }
 }
 
 impl ArtSession {
@@ -791,11 +952,30 @@ impl ArtSession {
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
     ///
-    /// Cheap (no PNG clone). `None` before the first completed traversal.
+    /// Cheap (no PNG read or clone). `None` before the first completed traversal.
     pub fn frame_info(&self) -> Option<(u64, String, String)> {
         self.cached
             .as_ref()
             .map(|frame| (frame.seq, frame.md5.clone(), frame.captured_at.clone()))
+    }
+
+    /// The most recent completed frame, loading its PNG artifact on demand.
+    ///
+    /// Unlike the trait's `last_frame`, this reports a missing or altered
+    /// artifact as a structured `FRAME_ARTIFACT_UNAVAILABLE` error instead of
+    /// folding it into "no frame yet". No command is issued.
+    pub fn bound_frame(&self) -> Result<Option<ObservedFrame>, BackendError> {
+        // W55 invariant: a dead session never serves a cached frame, even one
+        // whose artifact is still on disk. Only metadata (`frame_info`) survives
+        // a close; pixels and tree do not.
+        if self.closed {
+            return Ok(None);
+        }
+        let Some(cached) = self.cached.as_ref() else {
+            return Ok(None);
+        };
+        let previous = self.seen_seq.min(cached.seq.saturating_sub(1));
+        cached.observed(previous).map(Some)
     }
 
     /// The bound tree of the most recent completed traversal, without issuing a
@@ -1317,12 +1497,17 @@ impl ArtSession {
         )
     }
 
-    /// Absorb a reply's frame: sequence, PNG bytes and tree, all or nothing.
+    /// Absorb a reply's frame: sequence, PNG artifact and tree, all or nothing.
     ///
     /// A reply that carries a `frame_seq` also carries that frame's PNG; a tree
     /// reply carries the tree as well. A tree-less reply (a pure `screenshot`)
     /// only advances `seen_seq`; the bound tree keeps the sequence it was
     /// captured with, so a tree can never be bound to newer pixels.
+    ///
+    /// The PNG is recorded as an immutable artifact reference (path, SHA-256,
+    /// size, sequence, W58 display geometry), never as retained bytes: the
+    /// daemon holds one bound frame per session, and a 1080x2209 PNG is ~9.5 MiB
+    /// (D-M2/D-M6).
     fn absorb(&mut self, reply: &serde_json::Value) -> Result<(), BackendError> {
         let raw_seq = reply.get("frame_seq").and_then(|v| v.as_u64());
         // A relaunched guest restarts its own sequence at 1; the engine's
@@ -1337,21 +1522,29 @@ impl ArtSession {
             .unwrap_or("")
             .to_string();
         let png = match reply.get("png").and_then(|v| v.as_str()) {
-            Some(path) => read_png(Path::new(path))?,
-            None => Vec::new(),
+            Some(path) => Some(FrameArtifact::bind(
+                Path::new(path),
+                seq,
+                self.width,
+                self.height,
+                self.density,
+            )?),
+            None => None,
         };
         self.seen_seq = self.seen_seq.max(seq);
         let Some(tree_value) = reply.get("tree") else {
             // No tree in this reply (for example `key` or `screenshot`); keep the
             // cached tree only for the frame it was bound to.
             if let Some(cached) = self.cached.as_mut() {
-                if cached.seq == seq && !png.is_empty() {
-                    cached.png = png;
-                    if !md5.is_empty() {
-                        cached.md5 = md5;
+                if cached.seq == seq {
+                    if let Some(artifact) = png {
+                        cached.png = Some(artifact);
+                        if !md5.is_empty() {
+                            cached.md5 = md5;
+                        }
+                        cached.captured_at_ms = now_unix_ms();
+                        cached.captured_at = rfc3339(cached.captured_at_ms);
                     }
-                    cached.captured_at_ms = now_unix_ms();
-                    cached.captured_at = rfc3339(cached.captured_at_ms);
                 }
             }
             return Ok(());
@@ -1429,15 +1622,18 @@ impl ArtSession {
         self.stdin = None;
     }
 
-    /// Kill any process left in the session's group, even after the leader
-    /// exited: a guest that forked a helper must not outlive its session.
-    fn kill_process_group(&self) {
+    /// Members of the session's process group (empty when it has no group).
+    fn group_survivors(&self) -> Vec<u32> {
+        self.process_group
+            .map(processes_in_group)
+            .unwrap_or_default()
+    }
+
+    /// SIGKILL the session's whole process group (idempotent; `ESRCH` is fine).
+    fn sigkill_group(&self) {
         let Some(group) = self.process_group else {
             return;
         };
-        if processes_in_group(group).is_empty() {
-            return;
-        }
         // SAFETY: `group` was the child's own process group id
         // (`process_group(0)`), so `-group` names that group and no other.
         unsafe {
@@ -1455,32 +1651,33 @@ impl ArtSession {
         }
         self.stdin = None;
         let deadline = Instant::now() + Duration::from_secs(10);
-        let mut exited = false;
-        if let Some(child) = self.child.as_mut() {
-            while Instant::now() < deadline {
-                match child.try_wait() {
-                    Ok(Some(_)) => {
-                        self.child = None;
-                        exited = true;
-                        break;
-                    }
-                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                    Err(_) => break,
-                }
-            }
-        }
-        if !exited {
-            self.kill_group();
-        }
+        let exited = self.wait_for_exit(deadline);
+        let exit_ms = started.elapsed().as_millis() as u64;
         // Teardown guarantee: the whole process group is gone, not just the
         // direct child. A child the guest forked is killed here too; a survivor
-        // that ignores SIGKILL is reported, never silently ignored.
-        self.kill_process_group();
-        let mut report = self.teardown_report();
+        // that ignores SIGKILL is reported, never silently ignored. When the
+        // wait hit its deadline the waiter thread still owns the child and reaps
+        // it once the kernel delivers the signal below.
+        //
+        // One `/proc` scan decides both whether SIGKILL is needed and, when the
+        // group is already empty, that it is gone: the walk costs more than the
+        // guest's own exit (thousands of `/proc/<pid>/stat` reads), so the stop
+        // must not walk it twice.
+        let survivors = self.group_survivors();
+        if !survivors.is_empty() {
+            self.sigkill_group();
+        }
+        let mut report = self.teardown_report_with(survivors);
         if !report.is_clean() {
+            // The group proof must not quantise to a coarse tick either: after
+            // SIGKILL the bwrap/dalvik leaves are usually reaped within a few
+            // milliseconds, so poll adaptively from 1 ms (capped at 10 ms) and
+            // the whole stop stays well under the old 50 ms step.
             let grace = Instant::now() + Duration::from_secs(2);
+            let mut step = Duration::from_millis(1);
             while Instant::now() < grace && !report.survivors.is_empty() {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(step);
+                step = (step * 2).min(Duration::from_millis(10));
                 report = self.teardown_report();
             }
         }
@@ -1505,8 +1702,52 @@ impl ArtSession {
                 })),
             });
         }
+        // D-M6 (trace-only, env-gated): the stop cost this session actually paid
+        // (close write -> child reaped -> group proven empty). `exit_ms` is the
+        // wait alone, so the poll replacement and the /proc proof can be told
+        // apart. Inert unless `DM6_RESET_TRACE` names a file; no reply or
+        // control flow changes.
+        dm6_trace(serde_json::json!({
+            "event": "stop",
+            "process_group": self.process_group,
+            "exit_ms": exit_ms,
+            "stop_ms": started.elapsed().as_millis() as u64,
+            "reaped_before_deadline": exited,
+        }));
         self.write_timing(started.elapsed().as_millis() as u64);
         Ok(())
+    }
+
+    /// Wait for the child to exit, without polling, up to `deadline`.
+    ///
+    /// A blocking `wait()` runs on a short-lived thread and signals a channel, so
+    /// the stop returns the moment the guest exits instead of on the next tick of
+    /// a poll. The previous `try_wait()` loop slept 50 ms between probes, which
+    /// quantised every stop to ~55/105/155 ms and cost 105 ms p50 (D-M6). The
+    /// waiter owns the `Child` (so it still reaps after the SIGKILL below); no
+    /// `try_wait` races it.
+    ///
+    /// Returns true when the child was reaped before `deadline`.
+    fn wait_for_exit(&mut self, deadline: Instant) -> bool {
+        let Some(mut child) = self.child.take() else {
+            return true;
+        };
+        let (tx, rx) = mpsc::sync_channel::<()>(1);
+        std::thread::spawn(move || {
+            let _ = child.wait();
+            let _ = tx.send(());
+        });
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(remaining) {
+            Ok(()) => true,
+            // The waiter ended without signalling (it panicked). Treat the child
+            // as unreaped so the caller SIGKILLs the group and proves it empty.
+            Err(RecvTimeoutError::Disconnected) => false,
+            // Deadline passed: the caller kills the group; the waiter reaps the
+            // child when the kernel delivers the signal, and the teardown proof
+            // below waits for the group to disappear.
+            Err(RecvTimeoutError::Timeout) => false,
+        }
     }
 
     /// Records the session's cost split next to the guest evidence: guest boot
@@ -1539,6 +1780,18 @@ impl ArtSession {
         TeardownReport {
             process_group: Some(group),
             survivors: processes_in_group(group),
+            verified: true,
+        }
+    }
+
+    /// A teardown report from a `/proc` scan already taken by the caller.
+    fn teardown_report_with(&self, survivors: Vec<u32>) -> TeardownReport {
+        let Some(group) = self.process_group else {
+            return TeardownReport::unverified();
+        };
+        TeardownReport {
+            process_group: Some(group),
+            survivors,
             verified: true,
         }
     }
@@ -1585,7 +1838,7 @@ impl SessionBackend for ArtSession {
         let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
         self.absorb(&reply)?;
         let cached = self.require_cached_frame()?;
-        let frame = cached.observed(previous);
+        let frame = cached.observed(previous)?;
         Ok(LaunchOutcome {
             session_id: format!(
                 "s_art_{}",
@@ -1621,22 +1874,34 @@ impl SessionBackend for ArtSession {
 
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
         // `tree` re-traverses and publishes a new frame; its reply carries both
-        // the tree and the PNG of that frame.
+        // the tree and the PNG of that frame. The PNG bytes are loaded from the
+        // artifact now (and hash-verified); the session retains only the
+        // descriptor between calls.
         let previous = self.seen_seq;
         self.request_tree()?;
         let cached = self.require_cached_frame()?;
-        if cached.png.is_empty() {
+        let observed = cached.observed(previous)?;
+        if observed.png().is_empty() {
             return Err(live_frame_unavailable(
                 "the ART tree reply carried no PNG; refusing to bind a tree to absent pixels",
             ));
         }
-        Ok(cached.observed(previous))
+        Ok(observed)
     }
 
     fn last_frame(&self) -> Option<ObservedFrame> {
-        self.cached
-            .as_ref()
-            .map(|frame| frame.observed(self.seen_seq.min(frame.seq.saturating_sub(1))))
+        match self.bound_frame() {
+            Ok(frame) => frame,
+            Err(error) => {
+                // `last_frame` is the trait's infallible "last completed frame"
+                // accessor; an artifact that can no longer be proven must not
+                // masquerade as a frame. Say why on the daemon's stderr and
+                // answer "no frame"; `frame()`/`launch()` return the structured
+                // error to a caller that is asking for pixels.
+                eprintln!("acos serve: ART bound frame unavailable: {error}");
+                None
+            }
+        }
     }
 
     fn last_input_delivery(&self) -> Option<InputDelivery> {
@@ -2644,8 +2909,212 @@ mod tests {
             "the dead session's cached frame is discarded, never served"
         );
         assert!(session.bound_tree().is_none());
+        assert!(
+            session.bound_frame().expect("no artifact error").is_none(),
+            "a failed reset must leave no loadable frame artifact"
+        );
         // Closing it is still clean (idempotent), so the daemon can drop it.
         let _ = session.close();
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Scratch under the worktree `.cache/` (never `/tmp`), per O2.
+    fn o2_scratch_dir(name: &str) -> PathBuf {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/o2-tests");
+        let dir = root.join(format!(
+            "{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// The retained descriptor is a reference (path/hash/size/seq/geometry), and
+    /// loading verifies the hash before handing any pixels back.
+    #[test]
+    fn frame_artifact_loads_lazily_and_verifies_its_hash() {
+        let dir = o2_scratch_dir("artifact-hash");
+        let png = dir.join("frame.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let artifact = FrameArtifact::bind(&png, 7, 1080, 2400, 420).expect("bind");
+        // What is retained: identity, not pixels.
+        assert_eq!(artifact.size, super::super::fake::TINY_PNG.len() as u64);
+        assert_eq!(
+            artifact.sha256,
+            acos_render::hash::sha256_hex(super::super::fake::TINY_PNG)
+        );
+        assert_eq!(artifact.frame_seq, 7);
+        assert_eq!(
+            (
+                artifact.display_width,
+                artifact.display_height,
+                artifact.density
+            ),
+            (1080, 2400, 420)
+        );
+        assert_eq!(
+            artifact.load().expect("verified load"),
+            super::super::fake::TINY_PNG
+        );
+
+        // Same size, different bytes: the recorded hash catches it.
+        let mut altered = super::super::fake::TINY_PNG.to_vec();
+        altered[20] ^= 0xff;
+        std::fs::write(&png, &altered).unwrap();
+        let error = artifact.load().expect_err("altered pixels must not load");
+        assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
+        assert!(
+            format!("{error}").contains("FRAME_ARTIFACT_UNAVAILABLE"),
+            "{error}"
+        );
+        assert!(format!("{error}").contains("hashes to"), "{error}");
+
+        // A truncated file is caught by the recorded size.
+        std::fs::write(&png, &super::super::fake::TINY_PNG[..20]).unwrap();
+        let error = artifact.load().expect_err("truncated pixels must not load");
+        assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
+        assert!(format!("{error}").contains("bytes but was bound at"), "{error}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A missing artifact is a structured error, never an empty/stale frame.
+    #[test]
+    fn frame_artifact_missing_file_is_a_structured_error() {
+        let dir = o2_scratch_dir("artifact-missing");
+        let png = dir.join("frame.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let artifact = FrameArtifact::bind(&png, 3, 1080, 2400, 420).expect("bind");
+        std::fs::remove_file(&png).unwrap();
+        let error = artifact.load().expect_err("a missing artifact cannot load");
+        assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
+        assert!(
+            format!("{error}").contains("FRAME_ARTIFACT_UNAVAILABLE"),
+            "{error}"
+        );
+        assert!(format!("{error}").contains("is gone"), "{error}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A held session keeps only the descriptor: the bytes are read from the
+    /// artifact on demand, so removing the file after the bind makes the bound
+    /// frame unavailable (not silently reused) and restoring it works again.
+    #[test]
+    fn a_held_session_loads_its_bound_frame_from_the_artifact_on_demand() {
+        let dir = o2_scratch_dir("artifact-lazy");
+        let script = fake_art_binary(&dir);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        session.tree().expect("bind a tree");
+        // Binding recorded the artifact but did not keep its bytes: the file is
+        // the only home of the pixels.
+        let png = dir.join("tiny.png");
+        std::fs::remove_file(&png).unwrap();
+        let error = session
+            .bound_frame()
+            .expect_err("the artifact is gone, so the frame cannot be served");
+        assert!(
+            format!("{error}").contains("FRAME_ARTIFACT_UNAVAILABLE"),
+            "{error}"
+        );
+        assert!(
+            session.last_frame().is_none(),
+            "the infallible accessor must answer no frame, never stale pixels"
+        );
+        // The metadata is still retained (cheap identity) while the pixels are not.
+        assert!(session.frame_info().is_some());
+        // Restoring the exact bytes makes the same bound frame load again.
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let frame = session
+            .bound_frame()
+            .expect("the restored artifact loads")
+            .expect("a frame is bound");
+        assert_eq!(frame.png(), super::super::fake::TINY_PNG);
+        session.close().expect("clean close");
+        // W55: a closed session never serves its bound frame.
+        assert!(session.last_frame().is_none());
+        assert!(session.bound_frame().expect("no artifact error").is_none());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A reset rebuilds the bound frame from the replacement guest's artifact:
+    /// the old cache (including its hash) is gone, and the new frame loads.
+    #[test]
+    fn reset_replaces_the_bound_frame_artifact() {
+        let dir = o2_scratch_dir("artifact-reset");
+        let script = fake_art_binary(&dir);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let first = session.frame().expect("first frame");
+        let first_seq = first.frame_seq();
+        assert_eq!(first.png(), super::super::fake::TINY_PNG);
+
+        // A different artifact for the replacement guest (same path, new bytes).
+        let png = dir.join("tiny.png");
+        let replacement = [super::super::fake::TINY_PNG, b"-replacement"].concat();
+        std::fs::write(&png, &replacement).unwrap();
+        session.reset().expect("reset relaunches");
+        let after = session
+            .bound_frame()
+            .expect("the new artifact loads")
+            .expect("reset leaves a bound frame");
+        assert!(after.frame_seq() > first_seq, "{}", after.frame.label());
+        assert_eq!(
+            after.png(),
+            replacement.as_slice(),
+            "the reset must re-bind the replacement guest's artifact, not keep the old bytes"
+        );
+        session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The stop must return when the guest exits, not on the next tick of a
+    /// 50 ms poll (D-M6: 105 ms p50 for a ~5 ms exit), and still prove the
+    /// whole process group empty.
+    #[test]
+    fn stop_returns_promptly_and_leaves_no_survivor() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = o2_scratch_dir("stop-wait");
+        let script = dir.join("fake-acos-art-slow-close.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"width\":1080,\"height\":2400,\"density\":420}'\n\
+             while IFS= read -r line; do\n\
+               case \"$line\" in\n\
+                 *'\"cmd\":\"close\"'*) sleep 0.010; exit 0 ;;\n\
+                 *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n\
+               esac\n\
+             done\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let started = Instant::now();
+        let report = session.teardown().expect("clean stop");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(45),
+            "stop quantised to the old 50 ms poll: {elapsed:?}"
+        );
+        assert!(report.is_clean(), "{report:?}");
+        assert!(report.survivors.is_empty(), "{report:?}");
+        assert!(report.verified, "the group must be proven, not assumed");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
