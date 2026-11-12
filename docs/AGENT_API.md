@@ -456,11 +456,11 @@ optional `settle` argument:
 * **`strict` (default, unchanged)** — the settled-frame rule: the C1 buffer
   generation advanced, an in-guest tree probe saw the state the stored frame
   belongs to, and no new buffer landed for 150 ms. Use it whenever the
-  observation is evidence. The rule is the *quiet* rule unless the host
-  environment selects the P11 event rule (next bullet).
-* **P11 event strict (opt-in, not the default)** — setting
-  `ACOS_STRICT_SETTLE=event` on `acos serve` (the daemon and the guest it
-  spawns) replaces only the 150 ms wait with the guest's framework-signal
+  observation is evidence. Since 2026-11-12 the rule is the P11 *event* rule
+  by default (next bullet); `ACOS_STRICT_SETTLE=quiet` restores the quiet rule.
+* **P11 event strict (default)** — unless `ACOS_STRICT_SETTLE=quiet` is set on
+  `acos serve` (the daemon and the guest it spawns), the event rule replaces
+  only the 150 ms wait with the guest's framework-signal
   verdict. The guest reports on the UI thread that there is no pending
   traversal/layout/dirty draw on any attached `ViewRootImpl`, no pending
   Choreographer `INPUT`/`ANIMATION`/`TRAVERSAL`/insets callback, no running
@@ -473,9 +473,9 @@ optional `settle` argument:
   before the reply. Replies label `settle.bound:"strict-event"` and add
   `strict_rule:"event"`. On timeout the reply is not settled and names the
   guest's reason (`reason`, plus `animating:true` for frame/animator reasons)
-  under `bound:"timeout"`. Unset or `ACOS_STRICT_SETTLE=quiet` is the default
-  and leaves the quiet rule, `acos_assert`, and the fast-rule rejection
-  byte-identical. `acos wait`/`wait_for` remain the contract for updates
+  under `bound:"timeout"`. `ACOS_STRICT_SETTLE=quiet` selects the old 150 ms
+  quiet rule; either way `acos_assert` and the fast-rule rejection are
+  unchanged. `acos wait`/`wait_for` remain the contract for updates
   scheduled beyond the horizon (for example a 1000 ms `postDelayed`): a
   settle reply is only the state rendered at that moment, never a promise
   about a later message.

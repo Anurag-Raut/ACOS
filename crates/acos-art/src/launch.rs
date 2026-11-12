@@ -890,10 +890,14 @@ pub(crate) fn launch_session(
     }
     // P11: the guest owns the framework-signal verdict, so the settle switch and
     // its queue horizon must cross the sandbox boundary (the guest env is
-    // cleared). Unset means quiet, exactly as before.
-    if let Ok(value) = std::env::var("ACOS_STRICT_SETTLE") {
-        sb.env("ACOS_STRICT_SETTLE", &value);
-    }
+    // cleared).
+    // Default is the event rule (owner-approved 2026-11-12 after P11 showed
+    // equivalent correctness); `ACOS_STRICT_SETTLE=quiet` restores the 150 ms
+    // quiet window. The resolved mode is always forwarded so host and guest agree.
+    sb.env(
+        "ACOS_STRICT_SETTLE",
+        if strict_settle_event() { "event" } else { "quiet" },
+    );
     if let Ok(value) = std::env::var("ACOS_STRICT_SETTLE_HORIZON_MS") {
         sb.env("ACOS_STRICT_SETTLE_HORIZON_MS", &value);
     }
@@ -1613,8 +1617,8 @@ fn strict_settle_event() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
         std::env::var("ACOS_STRICT_SETTLE")
-            .map(|v| v.trim().eq_ignore_ascii_case("event"))
-            .unwrap_or(false)
+            .map(|v| !v.trim().eq_ignore_ascii_case("quiet"))
+            .unwrap_or(true)
     })
 }
 

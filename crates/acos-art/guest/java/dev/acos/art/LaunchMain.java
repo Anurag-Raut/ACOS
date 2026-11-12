@@ -590,7 +590,7 @@ public final class LaunchMain {
     //
     // Quiet strict waits 150 ms after the last C1 store. P11 can instead report
     // whether the framework's own UI work is finished, so the host can bind a
-    // settled observation without a fixed delay (switch: ACOS_STRICT_SETTLE=event).
+    // settled observation without a fixed delay (default; the host always forwards ACOS_STRICT_SETTLE=event|quiet).
     // The checks are read-only field reads / getters on the UI thread and are
     // only run when the switch is on, so the quiet probe line stays byte-identical.
     static volatile long sLastDrawMs = 0;
