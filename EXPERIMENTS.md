@@ -851,6 +851,51 @@ real failure is a post-first-frame SIGSEGV — MEASURED (partial: one half repro
   guest SIGSEGV handler (faulting address + mapped path) and bisect the app's 23 native libs and the
   gralloc shim; (3) owner decision on the opt-in per-view canvas vs the full `libhwui` shim.
 
+## E13.4 — Native-crash evidence on the product path: a signal death now names its fault address, `si_code`, thread and library frame — PASS (diagnosability); the Gaten 1/10 SIGSEGV did not recur in 40 launches
+
+- **Date / commit:** 2026-11-13; R3 worktree `fix-r3-gaten-segv` (off `main` `b551dfa`).
+- **Question / goal:** `results/render/R2.md` §2 lost 1 in 10 Gaten launches to `SIGSEGV`
+  (`GUEST_KILLED_BY_SIGNAL`, no OOM) with no stack; `GR2.md` saw the same shape as a white screen.
+  Make a native guest crash diagnosable on the product path (fault address, `si_code`, faulting
+  thread, native backtrace with mapped library + offset, run dir preserved), reproduce at n≥20 with
+  and without H2's early GC, and fix at the ACOS layer — not in Gaten.
+- **Inputs / method:** same read-only APK (`f344272`, sha256 `e04c7ffc…`), phone-matched geometry.
+  Read `art/runtime/runtime_android.cc` + `runtime_common.cc` + `fault_handler.cc`, `bionic/linker`
+  and the image's `ld-android.so`/`libc.so`/`libsigchain.so` in `.cache/aosp` + `.cache/art/sysroot`.
+  Two arms of 20 launches (`launch → tree → screenshot → 5 s → tree`), evidence kept; plus a
+  deterministic fault seam (`ACOSLAUNCH_CRASH_TEST=segv`) and a new real-guest test.
+- **Result:** the failure was **undiagnosable by construction**, three independent reasons, all in
+  ACOS: (1) this image's `ld-android.so` links bionic's debuggerd *stub*, so no in-process crash
+  handler exists at all; (2) ART's own unexpected-signal dumper is installed only when
+  `getenv("ANDROID_ROOT") != "/system"`, and ACOS set exactly `/system`; (3) `RunDir::drop` deleted
+  the run tree and `session-exit.json` carried only the signal number. Fix: export
+  `ANDROID_ROOT=/system/` (path-equivalent, turns the runtime's dumper on; `ACOSART_CRASH_DUMP=0`
+  restores `/system`), add a small async-signal-safe handler appended to ART's *own* sigchain
+  (`AddSpecialSignalHandlerFn`, after the runtime's handlers, never claiming the signal) that prints
+  one `ACOSCRASH {json}` line, and keep `native_crash`/`native-crash.txt` + the run tree on a signal
+  death. Measured crash rate: **before 1/10** (R2, same APK; GR2 2/6 white screens), **after 0/40**
+  (20 default, 20 `ACOS_ART_EARLY_GC=0`), 20/20 trees with `Set up Gaten` in both arms. Early GC is
+  not implicated (0 crashes in either arm).
+- **Finding (proven):** a deterministic post-`activity-resumed` fault now yields
+  `SIGSEGV (11) fault_addr=0x0 in thread 15 "acos-launch-wat": /data/lib/libacos_binder_driver.so
+  (Java_dev_acos_art_Nat_crashTest+39)` plus ART's own `*** *** ***` / `Fatal signal` / registers /
+  `Backtrace` block, in `session-exit.json.native_crash` and on disk. `GUEST_KILLED_BY_SIGNAL` and
+  the failure taxonomy are unchanged (the handler returns "not handled").
+- **Not proven:** the Gaten crash's root cause. It did not recur (0/40; a true 1/10 rate would give
+  zero at n=40 with p≈1.5 %), so "fixed" and "rarer" cannot be separated at this n, and nothing here
+  changed the guest's drawing/threading/native paths. The change makes the next occurrence name its
+  library and thread; it does not prevent it.
+- **Fidelity / evidence:** `art-reference` (real ART guest, host-observed). `results/render/R3.md`
+  §2–§4; loop artefacts `.cache/r3/loop/{on2,egcoff}/run1…20`; crash fixture
+  `.cache/r3/crashtest/root3/{native-crash.txt,native-crash.json,session-exit.json}` (gitignored).
+- **Regression:** `cargo test -p acos-cli -p acos-art -p acos-services -p acos-verify` 629 passed /
+  0 failed; the 8 mandatory gates re-run **under `ANDROID_ROOT=/system/`** (7 pass, T03-render-wrong
+  fails as expected), which is the check that the trailing-slash value is inert for the framework.
+  The pre-existing S6 test that asserted "a signal death cleans up its run tree" was updated to the
+  new contract (tree kept, no surviving process) — the one deliberate behaviour change.
+- **Conclusion / next:** keep the loop at n≥100 to separate rare from fixed; every occurrence now
+  arrives with a library + offset to bisect. `R2b` (`+1080 px`) and `R2c` (per-view canvas) untouched.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -899,6 +944,6 @@ merged after that build; re-baseline on merged main.
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
-| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). Guest SIGSEGV handler dumping fault address + mapped path, then bisect the app's 23 native libs / the gralloc shim | verified-launch stability | 9/10 → 10/10 | high (reproduced) | low | low | **next** (R2 §6) |
+| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.4):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |

@@ -116,6 +116,11 @@ fn session_exit_facts(doc: &Value, artifacts: &Path) -> Value {
         "guest_exit": doc.get("guest_exit").cloned().unwrap_or(Value::Null),
         "guest_signal": doc.get("guest_signal").cloned().unwrap_or(Value::Null),
         "guest_crash": doc.get("guest_crash").cloned().unwrap_or(Value::Null),
+        // R3: a guest killed by a signal carries the fault address, si_code, the
+        // faulting thread and the runtime's native backtrace (mapped library +
+        // offset). Absent when the guest produced no crash record.
+        "native_crash": doc.get("native_crash").cloned().unwrap_or(Value::Null),
+        "native_crash_path": doc.get("native_crash_path").cloned().unwrap_or(Value::Null),
         "cgroup": doc.get("cgroup").cloned().unwrap_or(Value::Null),
         "disk_free_bytes": doc.get("disk_free_bytes").cloned().unwrap_or(Value::Null),
         "panic": doc.get("panic").cloned().unwrap_or(Value::Null),

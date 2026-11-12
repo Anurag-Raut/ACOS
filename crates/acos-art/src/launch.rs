@@ -565,7 +565,7 @@ pub(crate) fn launch_session(
         if disk_full_for_run(free, min) {
             let free = free.unwrap_or(0);
             let result = disk_full_result(opts, &package, free, min);
-            write_session_exit(&out, &result, None);
+            write_session_exit(&out, &result, None, None, None);
             // An interactive caller waits for a *ready line*: refusing without
             // one would look like a dead session (`INTERNAL`) to it. Name the
             // host condition on the protocol instead.
@@ -1056,6 +1056,14 @@ pub(crate) fn launch_session(
     if std::env::var_os("ACOSLAUNCH_GEOM_TRACE").is_some() {
         sb.env("ACOSLAUNCH_GEOM_TRACE", "1");
     }
+    // R3: the deliberate-crash seam (`segv`/`abort`/`thread`) and the crash
+    // dump's off switch. Diagnostic only; nothing else reads either name.
+    if let Ok(mode) = std::env::var("ACOSLAUNCH_CRASH_TEST") {
+        sb.env("ACOSLAUNCH_CRASH_TEST", &mode);
+    }
+    if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
+        sb.env("ACOSART_CRASH_DUMP", &v);
+    }
     // H2: the guest-side post-first-frame release hook (ON by default; the
     // guest treats `ACOS_ART_EARLY_GC=0` as off). Forward only the host value
     // so an unset variable means "default".
@@ -1256,7 +1264,12 @@ pub(crate) fn launch_session(
                 }
             }
         } else {
-            crate::capture::drain_to_tail(out_pipe, cap)
+            // Diagnostic: keep the whole stream on disk (`ACOSLAUNCH_GUEST_STDOUT_FILE`)
+            // as well as the bounded tail, so a large guest dump survives.
+            match out_tee {
+                Some(path) => drain_tee(out_pipe, cap, &path),
+                None => crate::capture::drain_to_tail(out_pipe, cap),
+            }
         };
         let _ = otx2.send((0, buf));
     });
@@ -1640,8 +1653,68 @@ pub(crate) fn launch_session(
         eprintln!("acos-art: {note}");
     }
     note_stage("teardown-evidence");
-    write_session_exit(&out, &result, guest_crash.as_deref());
+    // R3: a guest killed by a signal gets its own crash record (fault address,
+    // si_code, thread, native backtrace) next to the exit record, and the raw
+    // ART dump is kept verbatim. A crash also keeps the per-run tree: the
+    // evidence a debugger needs (`/proc` maps, loaders, sockets) is only in
+    // there, and "the run directory was deleted by teardown" was exactly how
+    // R2 lost its stack.
+    let native_crash = if result.guest_signal.is_some() {
+        crate::crash::analyze(&result.stdout, &result.stderr, &result.logs)
+    } else {
+        None
+    };
+    let crash_path = native_crash
+        .as_ref()
+        .map(|crash| write_native_crash(&out, crash))
+        .transpose()?;
+    write_session_exit(&out, &result, guest_crash.as_deref(), native_crash.as_ref(), crash_path.as_deref());
+    // Only a *signal* death keeps the tree: an ordinary non-zero exit leaves
+    // nothing a debugger needs, and S4's "scratch is scratch" still holds for
+    // every other outcome.
+    let signalled = result.guest_signal.is_some();
+    if signalled {
+        if let Some(crash) = &native_crash {
+            eprintln!(
+                "acos-art: native crash: {} (raw dump: {})",
+                crash.summary(),
+                crash_path
+                    .as_deref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "(not written)".to_string())
+            );
+        }
+        // Keep the per-run tree for a crash (never for a clean end): the
+        // launcher still owns the cleanup for every other outcome.
+        run.keep();
+    }
     Ok(result)
+}
+
+/// Write the native-crash record next to the session exit record.
+///
+/// Two files: `native-crash.json` (the structured fields an agent reads) and
+/// `native-crash.txt` (ART's own dump, verbatim, so a parser gap never destroys
+/// the evidence).
+fn write_native_crash(out: &Path, crash: &crate::crash::NativeCrash) -> Result<PathBuf> {
+    fs::create_dir_all(out)?;
+    let txt = out.join("native-crash.txt");
+    let mut body = String::new();
+    if let Some(shim) = &crash.shim {
+        body.push_str(&format!("{}{}\n", crate::crash::CRASH_MARKER, shim));
+    }
+    if !crash.raw.is_empty() {
+        body.push_str(&crash.raw);
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+    }
+    fs::write(&txt, body)?;
+    fs::write(
+        out.join("native-crash.json"),
+        serde_json::to_vec_pretty(&crash.to_json()).unwrap_or_default(),
+    )?;
+    Ok(txt)
 }
 
 // ------------------------------------------------------------ W10 live session
@@ -1919,7 +1992,13 @@ fn stdout_tail(text: &str, limit: usize) -> Vec<String> {
     lines
 }
 
-fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&str>) {
+fn write_session_exit(
+    out: &Path,
+    result: &LaunchResult,
+    guest_crash: Option<&str>,
+    native_crash: Option<&crate::crash::NativeCrash>,
+    native_crash_path: Option<&Path>,
+) {
     let disk_full = result.code.as_deref() == Some("HOST_DISK_FULL");
     let doc = serde_json::json!({
         "utc_ms": host_ms(),
@@ -1939,6 +2018,12 @@ fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&st
         // keeps `guest_crash` byte-for-byte for existing readers while the
         // structured fields are usable directly by an agent.
         "guest_crash_detail": guest_crash_detail(guest_crash),
+        // R3: a guest killed by a signal carries the fault address, si_code,
+        // faulting thread and the runtime's native backtrace (mapped library +
+        // offset). `None` when the guest died without producing either the
+        // shim line or ART's dump — the plain `guest_signal` stays the evidence.
+        "native_crash": native_crash.map(crate::crash::NativeCrash::to_json),
+        "native_crash_path": native_crash_path.map(|p| p.display().to_string()),
         // R4: a guest that died without printing a crash line (native abort,
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.

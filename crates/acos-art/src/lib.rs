@@ -30,6 +30,7 @@ pub mod app;
 pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
+pub mod crash;
 pub mod host_zygote;
 pub mod launch;
 pub mod session;
@@ -923,10 +924,36 @@ pub struct Sandbox<'a> {
     staging: bool,
 }
 
+/// The guest's `ANDROID_ROOT`.
+///
+/// It is `/system` for every framework lookup (AssetManager, `Environment`,
+/// ART's own root discovery). The trailing slash is deliberate: ART only
+/// installs its **unexpected-signal dumper** when `getenv("ANDROID_ROOT")` is
+/// not exactly `/system` (`art/runtime/runtime_android.cc`,
+/// `Runtime::InitPlatformSignalHandlers` → `HandleUnexpectedSignalAndroid` →
+/// `art::HandleUnexpectedSignalCommon`). That dumper is the runtime's own
+/// native-crash report — `*** *** ***`, `Fatal signal N (SIGSEGV), code …
+/// fault addr …`, `Thread: <tid> "<name>"`, registers and a symbolised
+/// `Backtrace` with mapped library paths — and without it a guest killed by a
+/// signal leaves nothing (R2 lost a Gaten launch to exactly that: no bionic
+/// debuggerd handler in this image, no ART dump, no stack).
+///
+/// `/system/` resolves to the same directory for every path concatenation
+/// (`/system//framework/…`, `/system/fonts`, prefix checks against
+/// `$ANDROID_ROOT/`), so the framework is unaffected; the only behavioural
+/// difference is the one this comment describes. `ACOSART_CRASH_DUMP=0` puts
+/// the exact `/system` back (A/B seam).
+fn android_root_for_guest() -> &'static str {
+    match std::env::var("ACOSART_CRASH_DUMP") {
+        Ok(v) if v.trim() == "0" => "/system",
+        _ => "/system/",
+    }
+}
+
 impl<'a> Sandbox<'a> {
     fn new(root: &'a ArtRoot) -> Self {
         let mut env = vec![
-            ("ANDROID_ROOT".into(), "/system".into()),
+            ("ANDROID_ROOT".into(), android_root_for_guest().to_string()),
             ("ANDROID_RUNTIME_ROOT".into(), "/apex/com.android.runtime".into()),
             ("ANDROID_ART_ROOT".into(), "/apex/com.android.art".into()),
             ("ANDROID_I18N_ROOT".into(), "/apex/com.android.i18n".into()),

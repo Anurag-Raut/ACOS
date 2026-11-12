@@ -906,8 +906,14 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     // Scratch is scratch (H1's leak finding, S4): the per-run tree goes away on
     // every exit path, including a crashed guest — the artefacts the caller
     // asked for are copied to `--out` above, and the janitor is only for a
-    // SIGKILLed launcher. `ACOS_ART_KEEP_SESSION=1` keeps it for diagnosis.
-    if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() {
+    // SIGKILLed launcher. R3: a guest that died of a signal keeps its run tree
+    // too — the crash record is copied to `--out`, but the extracted native
+    // libs, the loaders and the `/proc` leftovers a debugger needs are only in
+    // the run tree. `ACOS_ART_KEEP_SESSION=1` keeps it for any outcome.
+    let signalled = status
+        .map(|st| std::os::unix::process::ExitStatusExt::signal(&st).is_some())
+        .unwrap_or(false);
+    if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() || signalled {
         run.keep();
     }
 

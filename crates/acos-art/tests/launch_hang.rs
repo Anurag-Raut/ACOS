@@ -336,7 +336,39 @@ fn guest_killed_by_signal_returns_signal_and_cleans_up() {
         &[("ACOS_ART_SECCOMP_AUDIT", "kill")],
         Duration::from_secs(20),
     );
-    assert_clean_after(&run, &data);
+    // R3 changed one half of S4's cleanup contract on purpose: a guest that dies
+    // of a *signal* keeps its per-run tree, because that tree is the only place
+    // its `/proc`-adjacent state and extracted libraries survive, and R2 lost a
+    // Gaten crash's stack to exactly that cleanup. Everything else about the
+    // guarantee still holds: the launcher returns, and no process still names
+    // the tree.
+    assert!(
+        !run.timed_out,
+        "launch did not return within its test deadline ({:?})\nstdout:\n{}\nstderr:\n{}",
+        run.elapsed,
+        run.stdout,
+        run.stderr
+    );
+    let kept = run_roots(&data);
+    assert_eq!(
+        kept.len(),
+        1,
+        "a signal death keeps exactly its own run tree (R3): {kept:?}"
+    );
+    assert!(
+        Path::new(&kept[0]).join("out/launch").is_dir()
+            || Path::new(&kept[0]).join("out").is_dir(),
+        "the kept tree must carry the run's own artefacts: {}",
+        kept[0]
+    );
+    let survivors = wait_until_no_processes(&data, Duration::from_secs(3));
+    assert!(
+        survivors.is_empty(),
+        "processes still name the finished run's data tree after 3 s: {survivors:#?}"
+    );
+    if let Some(scratch) = data.parent() {
+        let _ = std::fs::remove_dir_all(scratch);
+    }
     assert_eq!(run.status.and_then(|s| s.code()), Some(1));
     let j = result_json(&run);
     assert_eq!(j["outcome"], "crash", "{j}");
