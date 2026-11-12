@@ -699,6 +699,13 @@
           "type": "string"
         },
         {
+          "description": "A selector matched only nodes that are **not visible to the user** (for example a warm-mounted pager page parked off screen, or a node clipped away by an ancestor). The node exists in the tree but the user cannot see it, so it is never a pass for `wait_for`/`assert_text`/`assert_visible`/ `tap`; the error names the off-screen match and its bounds.",
+          "enum": [
+            "ELEMENT_OFFSCREEN"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A selector matched nothing in a tree the probe reported as truncated (`UiTree::truncated`, any window). The node may exist beyond the sampled prefix, so this is not proof of absence.",
           "enum": [
             "TREE_TRUNCATED"

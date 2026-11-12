@@ -632,6 +632,10 @@
             "null"
           ]
         },
+        "include_invisible": {
+          "description": "Also match nodes that are not visible to the user.\n\nDefault `false`: a selector matches only nodes the user can see (`UiNode::visible`, which follows `View.isVisibleToUser()`: shown, and its clipped visible rect non-empty). A warm-mounted page parked off screen is present in the tree but is not a selector match, so `wait_for`/`assert_text`/`assert_visible`/`tap` can never silently act on invisible content. Set it to `true` only for a deliberate check of an off-screen/invisible node (`assert_not_visible`, `assert_state {visible: false}`, diagnostics).",
+          "type": "boolean"
+        },
         "index": {
           "description": "Zero-based occurrence among otherwise matching nodes.",
           "format": "uint",

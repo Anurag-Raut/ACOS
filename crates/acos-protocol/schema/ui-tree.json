@@ -103,7 +103,7 @@
               "$ref": "#/definitions/Bounds"
             }
           ],
-          "description": "Screen bounds in pixels."
+          "description": "Screen bounds in pixels (the view's full rect)."
         },
         "checked": {
           "description": "Whether the node is checked (checkboxes/switches).",
@@ -172,8 +172,19 @@
           "type": "string"
         },
         "visible": {
-          "description": "Whether the node is visible.",
+          "description": "Whether the node is visible *to the user* (Android's `isVisibleToUser`: shown — it and all ancestors VISIBLE and attached — and its global visible rect, clipped by every ancestor and the window/display, is non-empty).",
           "type": "boolean"
+        },
+        "visible_bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The part of `bounds` the user can actually see: `bounds` clipped by every ancestor (scroll/pager clip) and by the window/display bounds, in screen pixels. `None` when the engine does not report it (older probes); use [`UiNode::visible_rect`] for the rect a tap may use."
         },
         "window": {
           "default": "",
