@@ -165,7 +165,8 @@ def main():
                 if bad:
                     report["failures"].append(f"round {rno}: ready failures {bad}")
                 # per-cycle process facts before the tasks start
-                zpid = C.zygote_pid(plan) if C.MODES[args.arm] == "zygote" else None
+                zpid = (C.find_zygote_host_pid(procs[0].pid)
+                        if C.MODES[args.arm] == "zygote" else None)
                 rec["zygote_before"] = C.proc_stats(zpid) if zpid else None
                 rec["zygote_pid"] = zpid
                 rec["launcher0_before"] = C.proc_stats(procs[0].pid)

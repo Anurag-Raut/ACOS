@@ -337,6 +337,29 @@ def proc_stats(pid):
     return {"fds": fds, "threads": threads, "rss_kib": rss}
 
 
+def find_zygote_host_pid(launcher0_pid):
+    """The HOST pid of the zygote parent.
+
+    `sessions/zygote.pid` is written by the zygote *inside* its PID namespace,
+    so it is not a host pid (the file typically holds `1`). The host process is
+    launcher 0's descendant whose cmdline runs `dev.acos.art.ZygoteApp` and whose
+    /proc/comm is `main` (the dalvik process, before its children rename).
+    """
+    if launcher0_pid is None:
+        return None
+    for pid in z4.subtree(launcher0_pid):
+        if pid == launcher0_pid:
+            continue
+        try:
+            cmd = open(f"/proc/{pid}/cmdline", "rb").read().decode("utf-8", "replace")
+            comm = open(f"/proc/{pid}/comm").read().strip()
+        except OSError:
+            continue
+        if "ZygoteApp" in cmd and comm == "main":
+            return pid
+    return None
+
+
 def zygote_pid(plan):
     try:
         return int(open(os.path.join(plan, "zygote.pid")).read().strip())

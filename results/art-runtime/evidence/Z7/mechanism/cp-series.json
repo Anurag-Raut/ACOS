@@ -1,0 +1,5601 @@
+{
+ "app": "counter",
+ "arm": "cp",
+ "art_bin": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+ "failures": [],
+ "knobs": {
+  "ACOS_ART_GC_AFTER_FIRST_FRAME": "1",
+  "ACOS_ZYGOTE_APP": "/home/Qui/Projects/acos/.cache/z7-build",
+  "ACOS_ZYGOTE_NO_STUB": "1"
+ },
+ "launcher_exit": {
+  "0": {
+   "close_ms": 0.1,
+   "exit": -9,
+   "killed": true,
+   "reply_ok": true
+  },
+  "1": {
+   "close_ms": 0.1,
+   "exit": -9,
+   "killed": true,
+   "reply_ok": true
+  }
+ },
+ "n": 2,
+ "schema": "z7-series/1",
+ "seconds": 8.0,
+ "series": [
+  {
+   "logs": [
+    {
+     "message": "Using CollectorTypeCC GC.",
+     "session": 0
+    },
+    {
+     "message": "Using memfd for future sealing",
+     "session": 0
+    },
+    {
+     "message": "Explicit concurrent copying GC freed 12489(653KB) AllocSpace objects, 4(80KB) LOS objects, 82% free, 326KB/1862KB, paused 495us,3us total 2.561ms",
+     "session": 0
+    },
+    {
+     "message": "Explicit concurrent copying GC freed 132(53KB) AllocSpace objects, 0(0B) LOS objects, 83% free, 304KB/1840KB, paused 10us,1us total 1.523ms",
+     "session": 0
+    },
+    {
+     "message": "Using CollectorTypeCC GC.",
+     "session": 0
+    },
+    {
+     "message": "Using CollectorTypeCC GC.",
+     "session": 0
+    },
+    {
+     "message": "Binder driver /dev/binder is unavailable. Using /dev/binder instead.",
+     "session": 0
+    },
+    {
+     "message": "Binder driver /dev/binder is unavailable. Using /dev/binder instead.",
+     "session": 0
+    }
+   ],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1796,
+        "pss": 4473,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 104,
+        "pss": 104
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2072,
+       "private_clean": 84,
+       "private_dirty": 2072,
+       "pss": 4749,
+       "pss_dirty": 2072,
+       "rss": 11264,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2072,
+      "Pss": 4753,
+      "Pss_Dirty": 2072,
+      "Rss": 11264,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2216,
+      "Pss": 4851,
+      "Pss_Dirty": 2216,
+      "Rss": 11316,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4396,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 525,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 57041,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36292,
+       "private_dirty": 540,
+       "pss": 65214,
+       "pss_dirty": 5746,
+       "rss": 143264,
+       "shared_clean": 69312,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65721,
+      "Pss_Dirty": 6057,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5737,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5736,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5732,
+        "pss": 5877,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33269,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1908,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 48548,
+       "private_clean": 1368,
+       "private_dirty": 14828,
+       "pss": 57460,
+       "pss_dirty": 19384,
+       "rss": 146116,
+       "shared_clean": 96152,
+       "shared_dirty": 33768,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14828,
+      "Pss": 57925,
+      "Pss_Dirty": 19654,
+      "Rss": 146116,
+      "Shared_Dirty": 33768,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5740,
+      "Pss_Dirty": 5738,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5824,
+        "pss": 5993,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33283,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1909,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 48788,
+       "private_clean": 1472,
+       "private_dirty": 14920,
+       "pss": 57654,
+       "pss_dirty": 19500,
+       "rss": 146404,
+       "shared_clean": 96096,
+       "shared_dirty": 33916,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 22588,
+      "Pss": 65788,
+      "Pss_Dirty": 27438,
+      "Rss": 154072,
+      "Shared_Dirty": 33916,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 42492,
+    "pss": 223528,
+    "pss_dirty": 80699,
+    "rss": 628024,
+    "shared_dirty": 255100,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 0.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1876,
+        "pss": 4553,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2152,
+       "private_clean": 84,
+       "private_dirty": 2152,
+       "pss": 4829,
+       "pss_dirty": 2152,
+       "rss": 11344,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2152,
+      "Pss": 4833,
+      "Pss_Dirty": 2152,
+      "Rss": 11344,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2288,
+      "Pss": 4923,
+      "Pss_Dirty": 2288,
+      "Rss": 11388,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4396,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 525,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 57041,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36292,
+       "private_dirty": 540,
+       "pss": 65214,
+       "pss_dirty": 5746,
+       "rss": 143264,
+       "shared_clean": 69312,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65721,
+      "Pss_Dirty": 6057,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5737,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5736,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5732,
+        "pss": 5877,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33269,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1908,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 48548,
+       "private_clean": 1368,
+       "private_dirty": 14828,
+       "pss": 57460,
+       "pss_dirty": 19384,
+       "rss": 146116,
+       "shared_clean": 96152,
+       "shared_dirty": 33768,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14828,
+      "Pss": 57925,
+      "Pss_Dirty": 19654,
+      "Rss": 146116,
+      "Shared_Dirty": 33768,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5740,
+      "Pss_Dirty": 5738,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5824,
+        "pss": 5993,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33283,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1909,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 48788,
+       "private_clean": 1472,
+       "private_dirty": 14920,
+       "pss": 57654,
+       "pss_dirty": 19500,
+       "rss": 146404,
+       "shared_clean": 96096,
+       "shared_dirty": 33916,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14920,
+      "Pss": 58120,
+      "Pss_Dirty": 19770,
+      "Rss": 146404,
+      "Shared_Dirty": 33916,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 34976,
+    "pss": 216012,
+    "pss_dirty": 73183,
+    "rss": 620508,
+    "shared_dirty": 255100,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 1.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1892,
+        "pss": 4567,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 196,
+        "pss": 196
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2168,
+       "private_clean": 84,
+       "private_dirty": 2168,
+       "pss": 4843,
+       "pss_dirty": 2168,
+       "rss": 11360,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2168,
+      "Pss": 4849,
+      "Pss_Dirty": 2168,
+      "Rss": 11360,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2308,
+      "Pss": 4943,
+      "Pss_Dirty": 2308,
+      "Rss": 11408,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4396,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 525,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 57041,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36292,
+       "private_dirty": 540,
+       "pss": 65214,
+       "pss_dirty": 5746,
+       "rss": 143264,
+       "shared_clean": 69312,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65721,
+      "Pss_Dirty": 6057,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5737,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5736,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5732,
+        "pss": 5877,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33269,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1908,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 48548,
+       "private_clean": 1368,
+       "private_dirty": 14828,
+       "pss": 57460,
+       "pss_dirty": 19384,
+       "rss": 146116,
+       "shared_clean": 96152,
+       "shared_dirty": 33768,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14828,
+      "Pss": 57925,
+      "Pss_Dirty": 19654,
+      "Rss": 146116,
+      "Shared_Dirty": 33768,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5740,
+      "Pss_Dirty": 5738,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5824,
+        "pss": 5993,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33283,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1909,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 48788,
+       "private_clean": 1472,
+       "private_dirty": 14920,
+       "pss": 57654,
+       "pss_dirty": 19500,
+       "rss": 146404,
+       "shared_clean": 96096,
+       "shared_dirty": 33916,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14920,
+      "Pss": 58120,
+      "Pss_Dirty": 19770,
+      "Rss": 146404,
+      "Shared_Dirty": 33916,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 35012,
+    "pss": 216048,
+    "pss_dirty": 73219,
+    "rss": 620544,
+    "shared_dirty": 255100,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 2.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1904,
+        "pss": 4579,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 208,
+        "pss": 208
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2180,
+       "private_clean": 84,
+       "private_dirty": 2180,
+       "pss": 4855,
+       "pss_dirty": 2180,
+       "rss": 11372,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2180,
+      "Pss": 4861,
+      "Pss_Dirty": 2180,
+      "Rss": 11372,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2324,
+      "Pss": 4959,
+      "Pss_Dirty": 2324,
+      "Rss": 11424,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4396,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 526,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 57041,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36292,
+       "private_dirty": 540,
+       "pss": 65215,
+       "pss_dirty": 5747,
+       "rss": 143264,
+       "shared_clean": 69312,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65721,
+      "Pss_Dirty": 6057,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6282,
+      "Pss_Dirty": 5737,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5737,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2288,
+        "pss": 6163,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5744,
+        "pss": 5887,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33269,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1908,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 50724,
+       "private_clean": 1368,
+       "private_dirty": 17016,
+       "pss": 59646,
+       "pss_dirty": 21570,
+       "rss": 148292,
+       "shared_clean": 96152,
+       "shared_dirty": 33756,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17016,
+      "Pss": 60111,
+      "Pss_Dirty": 21840,
+      "Rss": 148292,
+      "Shared_Dirty": 33756,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2164,
+        "pss": 6039,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5824,
+        "pss": 5993,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33283,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 6120,
+        "pss": 6120,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1909,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 4608,
+        "pss": 4608
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 48788,
+       "private_clean": 1472,
+       "private_dirty": 14920,
+       "pss": 57654,
+       "pss_dirty": 19500,
+       "rss": 146404,
+       "shared_clean": 96096,
+       "shared_dirty": 33916,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 14920,
+      "Pss": 58120,
+      "Pss_Dirty": 19771,
+      "Rss": 146404,
+      "Shared_Dirty": 33916,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 37228,
+    "pss": 218264,
+    "pss_dirty": 75436,
+    "rss": 622748,
+    "shared_dirty": 255088,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 3.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1920,
+        "pss": 4595,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 224,
+        "pss": 224
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2196,
+       "private_clean": 84,
+       "private_dirty": 2196,
+       "pss": 4871,
+       "pss_dirty": 2196,
+       "rss": 11388,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2196,
+      "Pss": 4877,
+      "Pss_Dirty": 2196,
+      "Rss": 11388,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2344,
+      "Pss": 4979,
+      "Pss_Dirty": 2344,
+      "Rss": 11444,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4396,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 526,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 57041,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36292,
+       "private_dirty": 540,
+       "pss": 65215,
+       "pss_dirty": 5747,
+       "rss": 143264,
+       "shared_clean": 69312,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65722,
+      "Pss_Dirty": 6058,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6282,
+      "Pss_Dirty": 5738,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5742,
+      "Pss_Dirty": 5740,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6281,
+      "Pss_Dirty": 5737,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2288,
+        "pss": 6163,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5744,
+        "pss": 5887,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33269,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1908,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 50724,
+       "private_clean": 1368,
+       "private_dirty": 17016,
+       "pss": 59646,
+       "pss_dirty": 21570,
+       "rss": 148292,
+       "shared_clean": 96152,
+       "shared_dirty": 33756,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17016,
+      "Pss": 60111,
+      "Pss_Dirty": 21840,
+      "Rss": 148292,
+      "Shared_Dirty": 33756,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5741,
+      "Pss_Dirty": 5739,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2288,
+        "pss": 6163,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5836,
+        "pss": 6003,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1578,
+        "private_dirty": 472,
+        "pss": 33283,
+        "size": 3223220,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 32,
+        "private_dirty": 216,
+        "pss": 217,
+        "size": 20956,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1909,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 50964,
+       "private_clean": 1472,
+       "private_dirty": 17108,
+       "pss": 59840,
+       "pss_dirty": 21686,
+       "rss": 148580,
+       "shared_clean": 96096,
+       "shared_dirty": 33904,
+       "size": 12804200,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17108,
+      "Pss": 60306,
+      "Pss_Dirty": 21957,
+      "Rss": 148580,
+      "Shared_Dirty": 33904,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 39452,
+    "pss": 220488,
+    "pss_dirty": 77661,
+    "rss": 624960,
+    "shared_dirty": 255076,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 4.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1944,
+        "pss": 4619,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 248,
+        "pss": 248
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2220,
+       "private_clean": 84,
+       "private_dirty": 2220,
+       "pss": 4895,
+       "pss_dirty": 2220,
+       "rss": 11412,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2220,
+      "Pss": 4901,
+      "Pss_Dirty": 2220,
+      "Rss": 11412,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2364,
+      "Pss": 4999,
+      "Pss_Dirty": 2364,
+      "Rss": 11464,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4397,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 526,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 56948,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36160,
+       "private_dirty": 540,
+       "pss": 65123,
+       "pss_dirty": 5748,
+       "rss": 143264,
+       "shared_clean": 69444,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65631,
+      "Pss_Dirty": 6060,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6284,
+      "Pss_Dirty": 5740,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5742,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6283,
+      "Pss_Dirty": 5739,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2308,
+        "pss": 6180,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5740,
+        "pss": 5883,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33318,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1885,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 50680,
+       "private_clean": 1368,
+       "private_dirty": 17004,
+       "pss": 59676,
+       "pss_dirty": 21555,
+       "rss": 148388,
+       "shared_clean": 96292,
+       "shared_dirty": 33724,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17004,
+      "Pss": 60140,
+      "Pss_Dirty": 21823,
+      "Rss": 148388,
+      "Shared_Dirty": 33724,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5741,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2308,
+        "pss": 6180,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5820,
+        "pss": 5987,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33332,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1886,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 50908,
+       "private_clean": 1472,
+       "private_dirty": 17084,
+       "pss": 59858,
+       "pss_dirty": 21659,
+       "rss": 148664,
+       "shared_clean": 96236,
+       "shared_dirty": 33872,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17084,
+      "Pss": 60324,
+      "Pss_Dirty": 21928,
+      "Rss": 148664,
+      "Shared_Dirty": 33872,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 39460,
+    "pss": 220495,
+    "pss_dirty": 77669,
+    "rss": 625184,
+    "shared_dirty": 255012,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 5.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1960,
+        "pss": 4635,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 264,
+        "pss": 264
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2236,
+       "private_clean": 84,
+       "private_dirty": 2236,
+       "pss": 4911,
+       "pss_dirty": 2236,
+       "rss": 11428,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2236,
+      "Pss": 4917,
+      "Pss_Dirty": 2236,
+      "Rss": 11428,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2380,
+      "Pss": 5015,
+      "Pss_Dirty": 2380,
+      "Rss": 11480,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4397,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 526,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 56948,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36160,
+       "private_dirty": 540,
+       "pss": 65123,
+       "pss_dirty": 5748,
+       "rss": 143264,
+       "shared_clean": 69444,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65631,
+      "Pss_Dirty": 6060,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6284,
+      "Pss_Dirty": 5740,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5742,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6283,
+      "Pss_Dirty": 5739,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2308,
+        "pss": 6180,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5740,
+        "pss": 5883,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33318,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1885,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1571
+       }
+      ],
+      "total": {
+       "anonymous": 50680,
+       "private_clean": 1368,
+       "private_dirty": 17004,
+       "pss": 59676,
+       "pss_dirty": 21555,
+       "rss": 148388,
+       "shared_clean": 96292,
+       "shared_dirty": 33724,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17004,
+      "Pss": 60140,
+      "Pss_Dirty": 21823,
+      "Rss": 148388,
+      "Shared_Dirty": 33724,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5741,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2308,
+        "pss": 6180,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5820,
+        "pss": 5987,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33332,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1886,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 50908,
+       "private_clean": 1472,
+       "private_dirty": 17084,
+       "pss": 59858,
+       "pss_dirty": 21659,
+       "rss": 148664,
+       "shared_clean": 96236,
+       "shared_dirty": 33872,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17084,
+      "Pss": 60324,
+      "Pss_Dirty": 21928,
+      "Rss": 148664,
+      "Shared_Dirty": 33872,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 39492,
+    "pss": 220527,
+    "pss_dirty": 77701,
+    "rss": 625216,
+    "shared_dirty": 255012,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 6.0
+  },
+  {
+   "logs": [],
+   "proc": [
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 1,
+        "private_dirty": 244,
+        "pss": 244,
+        "size": 316,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 77,
+        "private_dirty": 1976,
+        "pss": 4651,
+        "size": 554440,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 1,
+        "private_dirty": 32,
+        "pss": 32,
+        "size": 136,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 0,
+        "private_dirty": 0,
+        "pss": 0,
+        "size": 0,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 79,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 2165
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 1116,
+        "pss": 1116
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 0,
+        "pss": 438
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 280,
+        "pss": 280
+       },
+       {
+        "bucket": "malloc",
+        "name": "[heap]",
+        "private_dirty": 244,
+        "pss": 244
+       },
+       {
+        "bucket": "other",
+        "name": "[anon]",
+        "private_dirty": 180,
+        "pss": 180
+       },
+       {
+        "bucket": "other",
+        "name": "/home/Qui/Projects/acos/.cache/z7-target/release/acos-art",
+        "private_dirty": 140,
+        "pss": 141
+       },
+       {
+        "bucket": "other",
+        "name": "/usr/lib/libstdc++.so.6.0.36",
+        "private_dirty": 68,
+        "pss": 68
+       }
+      ],
+      "total": {
+       "anonymous": 2252,
+       "private_clean": 84,
+       "private_dirty": 2252,
+       "pss": 4927,
+       "pss_dirty": 2252,
+       "rss": 11444,
+       "shared_clean": 9108,
+       "shared_dirty": 0,
+       "size": 554892,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "acos-art",
+     "pid": 2233345,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2252,
+      "Pss": 4933,
+      "Pss_Dirty": 2252,
+      "Rss": 11444,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "sleep",
+     "pid": 2233352,
+     "role": "stub",
+     "rollup": {
+      "Private_Dirty": 112,
+      "Pss": 164,
+      "Pss_Dirty": 112,
+      "Rss": 2600,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "acos-art",
+     "pid": 2233357,
+     "role": "launcher",
+     "rollup": {
+      "Private_Dirty": 2404,
+      "Pss": 5039,
+      "Pss_Dirty": 2404,
+      "Rss": 11504,
+      "Shared_Dirty": 0,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233364,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 48,
+      "Pss": 155,
+      "Pss_Dirty": 96,
+      "Rss": 2348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "bwrap",
+     "pid": 2233366,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 56,
+      "Pss": 128,
+      "Pss_Dirty": 104,
+      "Rss": 1348,
+      "Shared_Dirty": 96,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 107,
+        "private_dirty": 92,
+        "pss": 4397,
+        "size": 189568,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 10,
+        "private_dirty": 8,
+        "pss": 82,
+        "size": 98492,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 2991,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 70,
+        "private_dirty": 228,
+        "pss": 526,
+        "size": 8651580,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1288,
+        "private_dirty": 92,
+        "pss": 56948,
+        "size": 3125248,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 48,
+        "pss": 57,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 12,
+        "private_dirty": 52,
+        "pss": 59,
+        "size": 13468,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 20,
+        "pss": 63,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1563,
+      "top": [
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework-res.apk",
+        "private_dirty": 0,
+        "pss": 4247
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3402
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 3372
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2620
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/telephony-common.jar",
+        "private_dirty": 0,
+        "pss": 2527
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/javalib/core-oj.jar",
+        "private_dirty": 0,
+        "pss": 2486
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 0,
+        "pss": 1928
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1839
+       }
+      ],
+      "total": {
+       "anonymous": 37636,
+       "private_clean": 36160,
+       "private_dirty": 540,
+       "pss": 65123,
+       "pss_dirty": 5748,
+       "rss": 143264,
+       "shared_clean": 69444,
+       "shared_dirty": 37120,
+       "size": 12627804,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "main",
+     "pid": 2233371,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 540,
+      "Pss": 65631,
+      "Pss_Dirty": 6060,
+      "Rss": 143264,
+      "Shared_Dirty": 37120,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233409,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6284,
+      "Pss_Dirty": 5740,
+      "Rss": 40268,
+      "Shared_Dirty": 37496,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233415,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5742,
+      "Rss": 37524,
+      "Shared_Dirty": 37500,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4ns",
+     "pid": 2233416,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 6283,
+      "Pss_Dirty": 5739,
+      "Rss": 40324,
+      "Shared_Dirty": 37552,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2184,
+        "pss": 6056,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5759,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 93,
+        "private_dirty": 5736,
+        "pss": 5879,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33318,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 7892,
+        "pss": 7892,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1885,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 5888,
+        "pss": 5888
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3382
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2493
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2368
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2213
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2047
+       },
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-region space live bitmap]",
+        "private_dirty": 2004,
+        "pss": 2004
+       }
+      ],
+      "total": {
+       "anonymous": 50272,
+       "private_clean": 1368,
+       "private_dirty": 16596,
+       "pss": 59268,
+       "pss_dirty": 21147,
+       "rss": 147980,
+       "shared_clean": 96292,
+       "shared_dirty": 33724,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233422,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 16596,
+      "Pss": 59732,
+      "Pss_Dirty": 21415,
+      "Rss": 147980,
+      "Shared_Dirty": 33724,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": false,
+     "comm": "z4init",
+     "pid": 2233428,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 8,
+      "Pss": 5743,
+      "Pss_Dirty": 5741,
+      "Rss": 37580,
+      "Shared_Dirty": 37556,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    },
+    {
+     "app_child": true,
+     "attr": {
+      "buckets": {
+       "dalvik_other": {
+        "n": 116,
+        "private_dirty": 2308,
+        "pss": 6180,
+        "size": 223096,
+        "swap_pss": 0
+       },
+       "gralloc": {
+        "n": 13,
+        "private_dirty": 48,
+        "pss": 73,
+        "size": 133292,
+        "swap_pss": 0
+       },
+       "image": {
+        "n": 73,
+        "private_dirty": 0,
+        "pss": 5823,
+        "size": 16676,
+        "swap_pss": 0
+       },
+       "malloc": {
+        "n": 94,
+        "private_dirty": 5820,
+        "pss": 5987,
+        "size": 8654188,
+        "swap_pss": 0
+       },
+       "other": {
+        "n": 1563,
+        "private_dirty": 476,
+        "pss": 33332,
+        "size": 3223044,
+        "swap_pss": 0
+       },
+       "region_space": {
+        "n": 2,
+        "private_dirty": 8172,
+        "pss": 8172,
+        "size": 532480,
+        "swap_pss": 0
+       },
+       "stacks": {
+        "n": 24,
+        "private_dirty": 184,
+        "pss": 185,
+        "size": 20636,
+        "swap_pss": 0
+       },
+       "zygote_space": {
+        "n": 1,
+        "private_dirty": 76,
+        "pss": 106,
+        "size": 292,
+        "swap_pss": 0
+       }
+      },
+      "mappings": 1886,
+      "top": [
+       {
+        "bucket": "region_space",
+        "name": "[anon:dalvik-main space (region space)]",
+        "private_dirty": 6656,
+        "pss": 6656
+       },
+       {
+        "bucket": "image",
+        "name": "/system/framework/x86_64/boot-framework.oat",
+        "private_dirty": 0,
+        "pss": 3370
+       },
+       {
+        "bucket": "dalvik_other",
+        "name": "[anon:dalvik-/system/framework/boot-framework.art]",
+        "private_dirty": 944,
+        "pss": 2683
+       },
+       {
+        "bucket": "other",
+        "name": "/system/lib64/libhwui.so",
+        "private_dirty": 0,
+        "pss": 2547
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2396
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2237
+       },
+       {
+        "bucket": "other",
+        "name": "/system/framework/framework.jar",
+        "private_dirty": 0,
+        "pss": 2083
+       },
+       {
+        "bucket": "other",
+        "name": "/apex/com.android.art/lib64/libart.so",
+        "private_dirty": 0,
+        "pss": 1583
+       }
+      ],
+      "total": {
+       "anonymous": 50908,
+       "private_clean": 1472,
+       "private_dirty": 17084,
+       "pss": 59858,
+       "pss_dirty": 21659,
+       "rss": 148664,
+       "shared_clean": 96236,
+       "shared_dirty": 33872,
+       "size": 12803704,
+       "swap": 0,
+       "swap_pss": 0
+      }
+     },
+     "comm": "ixtures.counter",
+     "pid": 2233429,
+     "role": "zygote",
+     "rollup": {
+      "Private_Dirty": 17084,
+      "Pss": 60324,
+      "Pss_Dirty": 21928,
+      "Rss": 148664,
+      "Shared_Dirty": 33872,
+      "Swap": 0,
+      "SwapPss": 0
+     }
+    }
+   ],
+   "sum": {
+    "private_dirty": 39124,
+    "pss": 220159,
+    "pss_dirty": 77333,
+    "rss": 624848,
+    "shared_dirty": 255012,
+    "swap": 0,
+    "swap_pss": 0
+   },
+   "t_s": 7.0
+  }
+ ],
+ "session_ready_s": {
+  "0": 0.2412,
+  "1": 0.2572
+ },
+ "sessions_ready_ms": {
+  "0": 241.2,
+  "1": 257.2
+ },
+ "started_utc": "2026-11-12T17:25:32Z",
+ "verdict": "pass"
+}

@@ -145,7 +145,8 @@ def main():
         report["total_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
     finally:
         report["launcher_exit"] = C.close_cohort(sessions, procs, bound=20.0)
-        zpid = C.zygote_pid(plan)
+        zpid = (C.find_zygote_host_pid(procs[0].pid)
+                if C.MODES[args.arm] == "zygote" else None)
         report["zygote_pid"] = zpid
         report["zygote_alive_after_close"] = (
             bool(zpid) and os.path.exists(f"/proc/{zpid}"))

@@ -96,12 +96,55 @@ def loop_rows():
     return out
 
 
+def cycle_rows():
+    out = {}
+    for f in sorted(glob.glob(f"{RUNS}/cycles/n5-*.json")):
+        arm = os.path.basename(f)[3:-5]
+        d = json.load(open(f))
+        zs = [r for r in d.get("rounds") or [] if r.get("zygote_before")]
+        out[arm] = {
+            "verdict": d.get("verdict"),
+            "rounds": len(d.get("rounds") or []),
+            "verified_tasks": d.get("verified_tasks"),
+            "wall_s": d.get("wall_s"),
+            "tasks_per_gib_min_pss": (d.get("pss_sampler") or {}).get("tasks_per_gib_min"),
+            "exits_clean_rounds": sum(1 for r in d.get("rounds") or []
+                                      if r.get("exits_clean")),
+            "zygote_alive_after_close_rounds": sum(
+                1 for r in zs if r.get("zygote_alive_after_close")),
+            "zygote_fds": ([r["zygote_before"]["fds"] for r in zs] if zs else None),
+            "zygote_threads": ([r["zygote_before"]["threads"] for r in zs] if zs else None),
+            "zygote_rss_kib_range": ([min(r["zygote_before"]["rss_kib"] for r in zs),
+                                      max(r["zygote_before"]["rss_kib"] for r in zs)]
+                                     if zs else None),
+        }
+    return out
+
+
+def form_rows():
+    out = {}
+    for f in sorted(glob.glob(f"{RUNS}/form/n*-*.json")):
+        base = os.path.basename(f)[:-5]
+        n, arm = base[1:].split("-", 1)
+        d = json.load(open(f))
+        tasks = [s.get("task", {}) for s in (d.get("sessions") or {}).values()]
+        out[base] = {
+            "n": int(n), "arm": arm, "verdict": d.get("verdict"),
+            "verified": sum(1 for t in tasks if t.get("verified")),
+            "sessions": len(tasks),
+            "failures": d.get("failures"),
+        }
+    return out
+
+
 def main():
     rows = lifetime_rows()
     sav = savings(rows)
     loops = loop_rows()
+    cycles = cycle_rows()
+    forms = form_rows()
     doc = {"lifetime": {f"n{n}-{arm}": rows[(n, arm)] for n in (5, 10) for arm in ARMS},
-           "savings": sav, "loop_n10": loops}
+           "savings": sav, "loop_n10": loops, "cycles_n5": cycles, "form": forms}
     here = os.path.dirname(os.path.abspath(__file__))
     json.dump(doc, open(os.path.join(here, "summary.json"), "w"), indent=1, sort_keys=True)
     lines = []
@@ -137,6 +180,24 @@ def main():
             f"p50={lat.get('p50')}ms p95={lat.get('p95')}ms "
             f"net={r['tasks_per_gib_min_net']} exits_clean={r['exits_clean_rounds']}/{r['rounds']} "
             f"zygote_alive={r['zygote_alive_after_close_rounds']}/{r['rounds']}")
+    lines.append("")
+    lines.append("CYCLES N=5 (20 fixed launch->verify->reset rounds per arm)")
+    for arm in ARMS:
+        r = cycles.get(arm)
+        if not r:
+            continue
+        lines.append(
+            f"{arm:2s} rounds={r['rounds']} tasks={r['verified_tasks']} wall={r['wall_s']}s "
+            f"tasks/GiB-min(PSS)={r['tasks_per_gib_min_pss']} "
+            f"exits_clean={r['exits_clean_rounds']}/{r['rounds']} "
+            f"zygote_alive_after_close={r['zygote_alive_after_close_rounds']} "
+            f"zygote_fds={r['zygote_fds']} threads={r['zygote_threads']} "
+            f"rss_kib_range={r['zygote_rss_kib_range']}")
+    lines.append("")
+    lines.append("FORM-VALIDATION lifetime/correctness")
+    for name, r in forms.items():
+        lines.append(f"{name}: n={r['n']} arm={r['arm']} verdict={r['verdict']} "
+                     f"verified={r['verified']}/{r['sessions']} failures={len(r['failures'] or [])}")
     text = "\n".join(lines) + "\n"
     open(os.path.join(here, "table.txt"), "w").write(text)
     print(text)
