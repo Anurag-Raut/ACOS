@@ -1,0 +1,43 @@
+W56 concurrent-survival proof (run-exclusive --task W56, one lock window)
+
+== Thu Nov 12 05:56:42 AM UTC 2026 proof start
+bg_wrapper_pid=676182
+bg_guest_before=[676217 15237285 bwrap
+676219 15237286 bwrap
+676223 15237286 ixtures.counter]
+== Thu Nov 12 05:56:42 AM UTC 2026 starting the cleanup suite while the background guest is live
+2880 | fn tail(s: &str, max: usize) -> String {
+768 |     pub fn sandbox(&self) -> Sandbox {
+help: use `'_` for type paths
+768 |     pub fn sandbox(&self) -> Sandbox<'_> {
+96 |     let mut rest: Vec<String> = Vec::new();
+96 |     let mut rest: Vec<String> = Vec::new();
+132 |         let mut next = |i: &mut usize| -> Result<String> {
+     Running tests/cleanup.rs (.cache/w56-target/debug/deps/cleanup-cbfbb1d81029afbb)
+running 8 tests
+test guest_cannot_overwrite_boot_art_or_the_classpath ... ok
+test guest_crash_still_removes_the_run_root ... ok
+test janitor_reaps_stale_runs_and_keeps_live_ones ... ok
+test leak_scan_is_scoped_to_this_tests_own_processes ... ok
+test log_spam_keeps_the_launcher_peak_rss_under_256_mib ... ok
+test r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans ... ok
+test render_app_leaves_no_processes_or_scratch_behind ... ok
+test sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.91s
+suite_rc=0
+== Thu Nov 12 05:56:58 AM UTC 2026 A/B: the OLD host-wide predicate (scan only; kills stay scoped)
+host_wide_rc=101
+cleanup: NOT killing pid=676165 comm=bash — it is not this test's process (a concurrent agent's run survives)
+cleanup: NOT killing pid=676182 comm=bash — it is not this test's process (a concurrent agent's run survives)
+cleanup: NOT killing pid=676191 comm=timeout — it is not this test's process (a concurrent agent's run survives)
+cleanup: NOT killing pid=676196 comm=acos-art — it is not this test's process (a concurrent agent's run survives)
+bg_guest_after=[676217 15237285 bwrap
+676219 15237286 bwrap
+676223 15237286 ixtures.counter]
+SURVIVED=yes (same pid+starttime)
+== Thu Nov 12 05:57:01 AM UTC 2026 suite done
+bg_session_tail:
+  },
+  "marker": "package=dev.acos.fixtures.counter\napplication=android.app.Application\napplication_classloader_is_apk=true\napplication_base=dev.acos.fixtures.counter//data/app/counter.apk\ninstrumentation=android.app.Instrumentation\ninstrum…
+}
+== Thu Nov 12 05:57:06 AM UTC 2026 proof end rc=0

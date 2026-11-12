@@ -17,6 +17,15 @@
 //! behaviour. `tools/art-runtime/leakcheck.sh` is the shell twin of the process
 //! scan and is the tool to run around the whole suite.
 //!
+//! **Ownership (W56).** Every scan, assertion and kill is scoped to the
+//! processes *this test* started — see [`Scope`]. The suite used to compare
+//! host-wide `/proc` snapshots, so on a shared host it counted another agent's
+//! live ART run as a leak (W53 §2.3) and `reap`ed it: 12 benchmark guests of
+//! W52's N=10 round r2 died from signal 9 inside one 3 ms window
+//! (`results/art-runtime/W52.md` §4). Ownership is now derived from ancestry of
+//! the launcher pid this test spawned plus this test's private data root, and
+//! the kill path re-derives it rather than trusting the caller.
+//!
 //! The suite skips (with a reason, exit 0) when the ART sysroot or the cached
 //! guest dex is absent: those are 1 GB+ host artefacts produced by
 //! `tools/art-sysroot.sh` / one warm `acos-art render-app`, not something a
@@ -140,6 +149,10 @@ struct Proc {
     state: char,
     comm: String,
     cmd: String,
+    /// `/proc/<pid>/cwd` (the path as the process's own mount namespace sees
+    /// it). A process of this test's run always names its private root here or
+    /// in `cmd`; a foreign ART run never does.
+    cwd: String,
 }
 
 impl Proc {
@@ -162,6 +175,23 @@ fn read_cmdline(dir: &Path) -> String {
         .unwrap_or_default()
         .trim()
         .to_string()
+}
+
+fn read_cwd(dir: &Path) -> String {
+    std::fs::read_link(dir.join("cwd"))
+        .map(|p| p.display().to_string())
+        .unwrap_or_default()
+}
+
+/// `/proc/<pid>/stat` → (ppid, starttime). `None` once the process is gone.
+fn proc_ppid_start(pid: u32) -> Option<(u32, u64)> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let rest = stat.get(stat.rfind(')')? + 2..)?;
+    let fields: Vec<&str> = rest.split_whitespace().collect();
+    if fields.len() < 20 {
+        return None;
+    }
+    Some((fields[1].parse().ok()?, fields[19].parse().ok()?))
 }
 
 fn scan_procs() -> Vec<Proc> {
@@ -190,15 +220,18 @@ fn scan_procs() -> Vec<Proc> {
         }
         let Ok(start) = fields[19].parse::<u64>() else { continue };
         let cmd = read_cmdline(&dir);
-        // Match the process NAME, not "any command line that mentions it": on a
-        // shared host `cargo build -p acos-art` (and every `bash -c … acos-art`
-        // from another agent) matched the old cmdline test and was reported as a
-        // leaked guest (W53; `guest_crash_still_removes_the_run_root` failed with
-        // another agent's build in the list). A leaked launcher/guest/bwrap always
-        // carries the binary name in `comm`, so the teeth are unchanged. The guest
-        // runs inside bwrap with guest-side paths, so no repo-path test is possible
-        // for it.
-        if !PATTERNS.iter().any(|p| comm.contains(p)) {
+        let cwd = read_cwd(&dir);
+        // Match the process NAME or the command line. W53 narrowed this to
+        // `comm` alone because the scan was host-wide and `cargo build -p
+        // acos-art` (or another agent's `bash -c … acos-art`) matched the old
+        // cmdline test. That narrowing lost a real guest: the `launch`/`app`
+        // route makes ART rename itself to the *package* (`comm` =
+        // `fixtures.counter`) while its `cmd` still names
+        // `/system/apex/com.android.art/bin/dalvikvm64`, so a leaked launch guest
+        // was invisible to the scan. Ownership is now decided per test ([`Scope`]),
+        // so a foreign build command cannot be mistaken for a leak and the
+        // broader match is safe again.
+        if !PATTERNS.iter().any(|p| comm.contains(p) || cmd.contains(p)) {
             continue;
         }
         // Every desktop has flatpak/snap bwrap wrappers coming and going; an ART
@@ -213,22 +246,178 @@ fn scan_procs() -> Vec<Proc> {
             state: fields[0].chars().next().unwrap_or('?'),
             comm,
             cmd,
+            cwd,
         });
     }
     out
 }
 
+/// Host-wide key set, taken **before** a test spawns anything. It is used for
+/// reporting only: "these ART-looking processes appeared while the test ran and
+/// are not ours" is the diagnostic that explains a shared host, and it must
+/// never feed a kill (W52 r2).
 fn snapshot() -> BTreeSet<(u32, u64)> {
     scan_procs().into_iter().map(|p| p.key()).collect()
 }
 
-fn new_procs(before: &BTreeSet<(u32, u64)>) -> Vec<Proc> {
-    let mut v: Vec<Proc> = scan_procs()
-        .into_iter()
-        .filter(|p| !before.contains(&p.key()) && !p.is_zombie())
-        .collect();
-    v.sort_by_key(|p| p.pid);
-    v
+/// Widens [`Scope::procs`] back to the old host-wide predicate. Evidence A/B
+/// only (`ACOS_CLEANUP_OWNERSHIP=host`, W56 §3): the kill path never honours it,
+/// so even a diagnostic run cannot signal another agent's guest.
+fn host_wide_diagnostic() -> bool {
+    std::env::var_os("ACOS_CLEANUP_OWNERSHIP")
+        .map(|v| v == "host")
+        .unwrap_or(false)
+}
+
+/// The processes **this test** started, and nothing else.
+///
+/// Two independent pieces of evidence, because neither alone is sufficient:
+///
+/// * **ancestry** — a process whose `ppid` chain reaches a pid this test
+///   spawned (the launcher). `/proc/<pid>/stat:ppid` is reported in the
+///   *reader's* pid namespace, so bwrap's `--unshare-pid` (the guest is bwrap's
+///   child) and a pid namespace in between do not break the link.
+/// * **markers** — this test's private data root and scratch dir appearing in
+///   `cmdline` or `cwd`. This is what keeps a **real leak** visible: when the
+///   launcher dies, bwrap is reparented and ancestry is gone, but its argv still
+///   binds `<data>/system` and the guest is still bwrap's child, so the leaked
+///   pair stays owned. `launch_hang.rs` already scopes its scan this way.
+///
+/// A process that started before the earliest registered root cannot be its
+/// descendant, which removes pid reuse from the predicate.
+struct Scope {
+    /// `(pid, starttime)` of processes this test spawned directly.
+    roots: Vec<(u32, u64)>,
+    /// Absolute paths only this test's run can name.
+    markers: Vec<String>,
+}
+
+impl Scope {
+    fn new() -> Self {
+        Scope { roots: Vec::new(), markers: Vec::new() }
+    }
+
+    /// Register this test's private run directories (the seeded `/data` copy and
+    /// the scratch dir). Call before spawning: the launcher names them and bwrap
+    /// binds them, so they identify the run from its first millisecond.
+    fn own_run(&mut self, scratch: &Path, data: &Path) {
+        for p in [scratch, data] {
+            let s = p.display().to_string();
+            if !s.is_empty() && !self.markers.contains(&s) {
+                self.markers.push(s);
+            }
+        }
+    }
+
+    /// Register a process this test spawned. Call immediately after `spawn`:
+    /// the identity is `(pid, starttime)`, so a later pid reuse cannot inherit
+    /// this test's ownership.
+    fn add_root(&mut self, pid: u32) {
+        let start = proc_ppid_start(pid).map(|(_, start)| start).unwrap_or(0);
+        self.roots.push((pid, start));
+    }
+
+    /// Live processes this test owns, from a fresh `/proc` scan. `ACOS_CLEANUP_
+    /// OWNERSHIP=host` widens *detection* to the old host-wide set (diagnostics
+    /// only; [`Scope::reap`] stays strict).
+    fn procs(&self) -> Vec<Proc> {
+        if host_wide_diagnostic() {
+            let mut all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+            all.sort_by_key(|p| p.pid);
+            return all;
+        }
+        self.owned()
+    }
+
+    /// The strict ownership closure (never widened by the diagnostic knob).
+    fn owned(&self) -> Vec<Proc> {
+        let all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+        let root_pids: BTreeSet<u32> = self.roots.iter().map(|(pid, _)| *pid).collect();
+        let min_start = self
+            .roots
+            .iter()
+            .map(|(_, s)| *s)
+            .filter(|s| *s > 0)
+            .min()
+            .unwrap_or(0);
+        let mut owned_pids: BTreeSet<u32> = BTreeSet::new();
+        let mut out: Vec<Proc> = Vec::new();
+        // A process can only be classified once its parent is: the scan order is
+        // arbitrary, so iterate to a fixpoint (bounded by the process count).
+        loop {
+            let mut grew = false;
+            for p in &all {
+                if owned_pids.contains(&p.pid) {
+                    continue;
+                }
+                if min_start > 0 && p.start < min_start {
+                    continue;
+                }
+                let by_marker = self
+                    .markers
+                    .iter()
+                    .any(|m| p.cmd.contains(m) || p.cwd.contains(m));
+                if root_pids.contains(&p.pid) || by_marker || owned_pids.contains(&p.ppid) {
+                    owned_pids.insert(p.pid);
+                    out.push(p.clone());
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+        out.sort_by_key(|p| p.pid);
+        out
+    }
+
+    /// ART-looking processes that appeared while the test ran but are **not**
+    /// its own: another agent's concurrent run, or the suite wrapper. Reported,
+    /// never asserted on, never signalled.
+    fn foreign(&self, before: &BTreeSet<(u32, u64)>) -> Vec<Proc> {
+        let mine: BTreeSet<u32> = self.owned().into_iter().map(|p| p.pid).collect();
+        let mut v: Vec<Proc> = scan_procs()
+            .into_iter()
+            .filter(|p| !p.is_zombie() && !before.contains(&p.key()) && !mine.contains(&p.pid))
+            .collect();
+        v.sort_by_key(|p| p.pid);
+        v
+    }
+
+    /// Poll until no process of *this test's* run is alive, or `within` elapses.
+    /// Returns the survivors (empty = clean).
+    fn wait_until_clean(&self, within: Duration) -> Vec<Proc> {
+        let deadline = Instant::now() + within;
+        loop {
+            let survivors = self.procs();
+            if survivors.is_empty() || Instant::now() >= deadline {
+                return survivors;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Best-effort cleanup so a failing assertion cannot itself leak a guest.
+    ///
+    /// Ownership is **re-derived here** instead of trusted from the caller: a
+    /// scan bug cannot reach `kill` for a process that is not this test's. This
+    /// is the second layer that makes the W52 r2 sweep impossible.
+    fn reap(&self, procs: &[Proc]) {
+        let owned: BTreeSet<u32> = self.owned().into_iter().map(|p| p.pid).collect();
+        for p in procs {
+            if !owned.contains(&p.pid) {
+                eprintln!(
+                    "cleanup: NOT killing pid={} comm={} — it is not this test's process \
+                     (a concurrent agent's run survives)",
+                    p.pid, p.comm
+                );
+                continue;
+            }
+            unsafe {
+                libc::kill(p.pid as i32, libc::SIGKILL);
+            }
+        }
+    }
 }
 
 fn describe(procs: &[Proc]) -> String {
@@ -243,28 +432,6 @@ fn describe(procs: &[Proc]) -> String {
         .collect()
 }
 
-/// Poll until no process that appeared after `before` is still alive, or
-/// `within` elapses. Returns the survivors (empty = clean).
-fn wait_until_clean(before: &BTreeSet<(u32, u64)>, within: Duration) -> Vec<Proc> {
-    let deadline = Instant::now() + within;
-    loop {
-        let survivors = new_procs(before);
-        if survivors.is_empty() || Instant::now() >= deadline {
-            return survivors;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-}
-
-/// Best-effort cleanup so a failing assertion cannot itself leak a guest.
-fn reap(procs: &[Proc]) {
-    for p in procs {
-        unsafe {
-            libc::kill(p.pid as i32, libc::SIGKILL);
-        }
-    }
-}
-
 /// `/proc/<pid>/status:<field>` in KiB (e.g. `VmHWM` = peak RSS).
 fn status_kb(pid: u32, field: &str) -> Option<u64> {
     let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
@@ -276,14 +443,20 @@ fn status_kb(pid: u32, field: &str) -> Option<u64> {
 }
 
 /// Kills the child on drop, so a panicking test never leaves a guest behind.
-struct Reaper(Child);
+struct Reaper(Option<Child>);
 
 impl Reaper {
+    fn spawn(cmd: &mut Command, what: &str) -> Reaper {
+        Reaper(Some(cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}"))))
+    }
     fn pid(&self) -> u32 {
-        self.0.id()
+        self.child().id()
+    }
+    fn child(&self) -> &Child {
+        self.0.as_ref().expect("the child was already collected")
     }
     fn try_wait(&mut self) -> Option<std::process::ExitStatus> {
-        self.0.try_wait().ok().flatten()
+        self.0.as_mut()?.try_wait().ok().flatten()
     }
     /// Wait for exit up to `within`, then SIGKILL. Returns whether it exited by
     /// itself.
@@ -295,17 +468,27 @@ impl Reaper {
             }
             std::thread::sleep(Duration::from_millis(25));
         }
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        if let Some(child) = self.0.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
         false
+    }
+    /// Block for exit and collect the pipes (the `Command::output` shape, but
+    /// with the pid available for [`Scope::add_root`]).
+    fn wait_with_output(&mut self) -> std::process::Output {
+        let child = self.0.take().expect("the child was already collected");
+        child.wait_with_output().expect("collect the child's output")
     }
 }
 
 impl Drop for Reaper {
     fn drop(&mut self) {
-        if self.0.try_wait().ok().flatten().is_none() {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
+        if let Some(child) = self.0.as_mut() {
+            if child.try_wait().ok().flatten().is_none() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
         }
     }
 }
@@ -346,30 +529,40 @@ fn render_app_leaves_no_processes_or_scratch_behind() {
     // path with no session at all, so anything under `<data>/session` is a leak.
     let sessions_before = dir_entries(&data.join("session"));
     let before = snapshot();
+    let mut scope = Scope::new();
+    scope.own_run(&scratch, &data);
 
-    let st = launcher("render-app", &data)
-        .arg("--apk")
+    let mut cmd = launcher("render-app", &data);
+    cmd.arg("--apk")
         .arg(apk())
         .arg("--out")
         .arg(&out)
         .arg("--timeout")
         .arg("120")
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .expect("spawn acos-art render-app");
+        .stderr(Stdio::null());
+    let mut child = Reaper::spawn(&mut cmd, "acos-art render-app");
+    scope.add_root(child.pid());
+    assert!(
+        child.wait_or_kill(Duration::from_secs(180)),
+        "render-app did not finish within 180 s"
+    );
+    let st = child.try_wait();
+    let st = st.unwrap_or_else(|| panic!("render-app left no exit status"));
     assert!(st.success(), "render-app failed: {st:?}");
     let frame = out.join("frame.png");
     let meta = std::fs::metadata(&frame)
         .unwrap_or_else(|e| panic!("no first frame at {}: {e}", frame.display()));
     assert!(meta.len() > 1024, "frame.png is only {} bytes", meta.len());
 
-    let leaked = wait_until_clean(&before, Duration::from_secs(3));
+    let leaked = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&leaked);
-    reap(&leaked);
+    let foreign = describe(&scope.foreign(&before));
+    scope.reap(&leaked);
     assert!(
         leaked.is_empty(),
-        "render-app left {} process(es) behind after a successful run:{detail}",
+        "render-app left {} of this run's process(es) behind after a successful run:{detail}\n\
+         (other processes on this host, not this test's, ignored:{foreign})",
         leaked.len()
     );
 
@@ -427,14 +620,18 @@ fn sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it() {
             Ok(())
         });
     }
-    let mut child = Reaper(cmd.spawn().expect("spawn acos-art session"));
+    let mut child = Reaper::spawn(&mut cmd, "acos-art session");
     let launcher_pid = child.pid();
+    let mut scope = Scope::new();
+    scope.own_run(&scratch, &data);
+    scope.add_root(launcher_pid);
 
-    // Wait for the real guest to be up: a *new* dalvikvm64 after our snapshot.
+    // Wait for *this run's* real guest to be up. Ownership, not "a new process":
+    // a concurrent agent's dalvikvm64 is not this test's guest (W52 r2).
     let deadline = Instant::now() + Duration::from_secs(60);
     let mut guests = Vec::new();
     while Instant::now() < deadline {
-        guests = new_procs(&before).into_iter().filter(Proc::is_guest).collect();
+        guests = scope.procs().into_iter().filter(Proc::is_guest).collect();
         if !guests.is_empty() {
             break;
         }
@@ -442,26 +639,30 @@ fn sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it() {
     }
     assert!(
         !guests.is_empty(),
-        "no dalvikvm64 guest appeared within 60 s; session log at {}",
-        scratch.join("session.log").display()
+        "no dalvikvm64 guest of this run appeared within 60 s; session log at {}\n\
+         (other processes on this host, not this test's:{})",
+        scratch.join("session.log").display(),
+        describe(&scope.foreign(&before))
     );
-    // Everything the run created, guest and bwrap alike.
-    let victims = new_procs(&before);
+    // Everything this run created, guest and bwrap alike (never a foreign run's).
+    let victims = scope.procs();
     let victim_detail = describe(&victims);
 
     unsafe {
         libc::kill(launcher_pid as i32, libc::SIGKILL);
     }
-    let _ = child.0.wait();
+    let _ = child.wait_or_kill(Duration::from_secs(10));
 
-    let survivors = wait_until_clean(&before, Duration::from_secs(3));
+    let survivors = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&survivors);
-    reap(&survivors);
+    let foreign = describe(&scope.foreign(&before));
+    scope.reap(&survivors);
     assert!(
         survivors.is_empty(),
-        "SIGKILL of the launcher (pid {launcher_pid}) left {} process(es) alive after 3 s \
-         (S3: --die-with-parent must take the guest with the launcher).\n\
-         Started by the run:{victim_detail}\nSurvivors:{detail}",
+        "SIGKILL of the launcher (pid {launcher_pid}) left {} process(es) of this run alive \
+         after 3 s (S3: --die-with-parent must take the guest with the launcher).\n\
+         Started by the run:{victim_detail}\nSurvivors:{detail}\n\
+         (other processes on this host, not this test's, ignored:{foreign})",
         survivors.len()
     );
 
@@ -707,12 +908,15 @@ fn guest_crash_still_removes_the_run_root() {
         .arg("8")
         .stdout(Stdio::null())
         .stderr(Stdio::from(log));
-    let mut child = Reaper(cmd.spawn().expect("spawn acos-art session"));
+    let mut child = Reaper::spawn(&mut cmd, "acos-art session");
+    let mut scope = Scope::new();
+    scope.own_run(&scratch, &data);
+    scope.add_root(child.pid());
 
     let deadline = Instant::now() + Duration::from_secs(60);
     let mut guests = Vec::new();
     while Instant::now() < deadline {
-        guests = new_procs(&before).into_iter().filter(Proc::is_guest).collect();
+        guests = scope.procs().into_iter().filter(Proc::is_guest).collect();
         if !guests.is_empty() {
             break;
         }
@@ -720,9 +924,13 @@ fn guest_crash_still_removes_the_run_root() {
     }
     assert!(
         !guests.is_empty(),
-        "no dalvikvm64 guest appeared within 60 s; log at {}",
-        scratch.join("session.log").display()
+        "no dalvikvm64 guest of this run appeared within 60 s; log at {}\n\
+         (other processes on this host, not this test's:{})",
+        scratch.join("session.log").display(),
+        describe(&scope.foreign(&before))
     );
+    // Only this run's own guest: the old scan SIGKILLed every *new* dalvikvm64 on
+    // the host, i.e. every concurrent agent's guest too (W52 r2).
     for g in &guests {
         unsafe {
             libc::kill(g.pid as i32, libc::SIGKILL);
@@ -739,9 +947,9 @@ fn guest_crash_still_removes_the_run_root() {
         child.wait_or_kill(Duration::from_secs(25)),
         "the launcher did not exit within 25 s of its guest being SIGKILLed (timeout 8 s)"
     );
-    let survivors = wait_until_clean(&before, Duration::from_secs(3));
+    let survivors = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&survivors);
-    reap(&survivors);
+    scope.reap(&survivors);
     assert!(survivors.is_empty(), "a crashed guest left processes behind:{detail}");
 
     let runs = dir_entries(&data.join("runs"));
@@ -842,22 +1050,29 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
     let scratch = scratch("watchdog");
     let data = seed_data(&scratch);
     let before = snapshot();
+    let mut scope = Scope::new();
+    scope.own_run(&scratch, &data);
 
     // A 1 MiB launcher ceiling: crossed before the guest even exists. The
     // structured RLIMIT_DATA backstop must be off, otherwise the launcher would
     // fail to allocate before the watchdog can report (R1 layer 3 vs layer 2).
-    let out = launcher("run", &data)
-        .env("ACOS_ART_RSS_MAX", "1M")
-        .env("ACOS_ART_RLIMIT_DATA", "0")
-        .arg("--dex")
-        .arg(&dex)
-        .arg("--class")
-        .arg("Main")
-        .arg("--json")
-        .arg("--timeout")
-        .arg("120")
-        .output()
-        .expect("spawn acos-art run");
+    let out = {
+        let mut cmd = launcher("run", &data);
+        cmd.env("ACOS_ART_RSS_MAX", "1M")
+            .env("ACOS_ART_RLIMIT_DATA", "0")
+            .arg("--dex")
+            .arg(&dex)
+            .arg("--class")
+            .arg("Main")
+            .arg("--json")
+            .arg("--timeout")
+            .arg("120")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = Reaper::spawn(&mut cmd, "acos-art run (watchdog)");
+        scope.add_root(child.pid());
+        child.wait_with_output()
+    };
 
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
@@ -877,12 +1092,14 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
         "the watchdog must say so on stderr too: {stderr}"
     );
 
-    let leaked = wait_until_clean(&before, Duration::from_secs(3));
+    let leaked = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&leaked);
-    reap(&leaked);
+    let foreign = describe(&scope.foreign(&before));
+    scope.reap(&leaked);
     assert!(
         leaked.is_empty(),
-        "the watchdog kill left {} process(es) alive after 3 s (the report is not a cleanup):{detail}",
+        "the watchdog kill left {} of this run's process(es) alive after 3 s (the report is not \
+         a cleanup):{detail}\n(other processes on this host, not this test's, ignored:{foreign})",
         leaked.len()
     );
 
@@ -926,8 +1143,11 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
         .arg("180")
         .stdout(Stdio::null())
         .stderr(Stdio::from(log));
-    let mut child = Reaper(cmd.spawn().expect("spawn acos-art session"));
+    let mut child = Reaper::spawn(&mut cmd, "acos-art session");
     let pid = child.pid();
+    let mut scope = Scope::new();
+    scope.own_run(&scratch, &data);
+    scope.add_root(pid);
 
     // The launcher's logd binds a per-session socket; under S4 the session dir
     // is the run's private root (`<data>/runs/<id>/socket/logdw`), so find it by
@@ -1014,9 +1234,10 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     }
     let exited = child.wait_or_kill(Duration::from_secs(10));
 
-    let survivors = wait_until_clean(&before, Duration::from_secs(3));
+    let survivors = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&survivors);
-    reap(&survivors);
+    let foreign = describe(&scope.foreign(&before));
+    scope.reap(&survivors);
 
     assert!(
         sent_mb > 200.0,
@@ -1032,7 +1253,8 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     assert!(exited, "the session did not exit after `close` within 10 s");
     assert!(
         survivors.is_empty(),
-        "log-spam run left {} process(es) behind after close:{detail}",
+        "log-spam run left {} of this run's process(es) behind after close:{detail}\n\
+         (other processes on this host, not this test's, ignored:{foreign})",
         survivors.len()
     );
     eprintln!(
@@ -1041,4 +1263,133 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     );
 
     let _ = std::fs::remove_dir_all(&scratch);
+}
+
+// ---------------------------------------------------------------------------
+// 5. The scan's teeth, without ART: a leaked guest of *this* run is caught, a
+//    concurrent agent's is neither counted nor touched
+// ---------------------------------------------------------------------------
+
+/// Three stand-in "guests" named `dalvikvm64` (a copy of `/bin/sleep`, so the
+/// scan's `comm` filter sees them exactly like a real one):
+///
+/// * `own_marker` — no registered root, only this test's private data/scratch
+///   path in `cwd`. This is the **leaked-guest** case: the launcher is gone, so
+///   ancestry cannot work, and only a marker can still prove ownership.
+/// * `own_root` — registered root, but nothing of this run in `cmd`/`cwd`: the
+///   ancestry case (what a live `bwrap`+guest looks like before it leaks).
+/// * `foreign` — another agent's guest: no root, no marker.
+///
+/// Asserts the scan sees the two that are ours, ignores the foreign one, and
+/// that `reap` — handed the **host-wide** list, as the old code did — signals
+/// only ours. That is the W52 r2 sweep, structurally prevented.
+#[test]
+fn leak_scan_is_scoped_to_this_tests_own_processes() {
+    let ours = scratch("scope-own");
+    let neutral = scratch("scope-neutral");
+    let foreign_dir = scratch("scope-foreign");
+    let bin_dir = scratch("scope-bin");
+    let fake = bin_dir.join("dalvikvm64");
+    let st = Command::new("cp")
+        .arg("-a")
+        .arg("/bin/sleep")
+        .arg(&fake)
+        .status()
+        .expect("cp /bin/sleep");
+    assert!(st.success(), "could not stage the fake guest at {}", fake.display());
+
+    let before = snapshot();
+    let mut scope = Scope::new();
+    scope.own_run(&ours, &ours.join("data"));
+    std::fs::create_dir_all(ours.join("data")).expect("own data dir");
+
+    let spawn_fake = |cwd: &Path| -> Child {
+        let mut c = Command::new(&fake);
+        c.arg("120").current_dir(cwd).stdin(Stdio::null());
+        c.stdout(Stdio::null()).stderr(Stdio::null());
+        c.spawn().expect("spawn the fake guest")
+    };
+    // Leak case: identified by the marker only (no root registered).
+    let mut own_marker = spawn_fake(&ours);
+    // Ancestry case: identified by its root only (neutral cwd, marker-free cmd).
+    let mut own_root = spawn_fake(&neutral);
+    scope.add_root(own_root.id());
+    // A concurrent agent's guest.
+    let mut foreign = spawn_fake(&foreign_dir);
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut owned = Vec::new();
+    while Instant::now() < deadline {
+        owned = scope.owned();
+        if owned.len() >= 2 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let pids: BTreeSet<u32> = owned.iter().map(|p| p.pid).collect();
+    let foreign_desc = describe(&scope.foreign(&before));
+    assert!(
+        pids.contains(&own_marker.id()),
+        "the marker-only leaked guest (pid {}) is not owned by the scan — the teeth are gone. \
+         owned={:?}; ignored:{foreign_desc}",
+        own_marker.id(),
+        pids
+    );
+    assert!(
+        pids.contains(&own_root.id()),
+        "the root-identified guest (pid {}) is not owned by the scan. owned={:?}; ignored:{foreign_desc}",
+        own_root.id(),
+        pids
+    );
+    assert!(
+        !pids.contains(&foreign.id()),
+        "the scan claimed another run's guest (pid {}) as this test's: owned={:?}",
+        foreign.id(),
+        pids
+    );
+    let foreign_named = scope.foreign(&before).iter().any(|p| p.pid == foreign.id());
+    assert!(foreign_named, "the foreign guest must be *reported* (never killed):{foreign_desc}");
+
+    // The survivor check still fires for our own leak...
+    let survivors = scope.wait_until_clean(Duration::from_secs(1));
+    assert_eq!(
+        survivors.iter().map(|p| p.pid).collect::<BTreeSet<_>>(),
+        [own_marker.id(), own_root.id()].into_iter().collect::<BTreeSet<_>>(),
+        "the clean-check did not report exactly this run's two stand-in guests"
+    );
+
+    // ...and `reap`, handed the host-wide list (the old code's input), kills only
+    // ours: the foreign guest is still alive afterwards.
+    let host_wide = scan_procs();
+    assert!(
+        host_wide.iter().any(|p| p.pid == foreign.id()),
+        "the host-wide scan must contain the foreign guest, otherwise this check proves nothing"
+    );
+    scope.reap(&host_wide);
+
+    let alive = |child: &mut Child| -> bool { child.try_wait().ok().flatten().is_none() };
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut own_gone = false;
+    while Instant::now() < deadline {
+        if !alive(&mut own_marker) && !alive(&mut own_root) {
+            own_gone = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(own_gone, "reap did not clear this test's own (stand-in) leaked guests");
+    assert!(
+        alive(&mut foreign),
+        "reap killed another run's guest (pid {}) — the W52 r2 sweep is back",
+        foreign.id()
+    );
+
+    // Tidy up what the test itself started (nothing of it is left behind).
+    let _ = foreign.kill();
+    let _ = foreign.wait();
+    let _ = own_marker.wait();
+    let _ = own_root.wait();
+    for d in [&ours, &neutral, &foreign_dir, &bin_dir] {
+        let _ = std::fs::remove_dir_all(d);
+    }
 }
