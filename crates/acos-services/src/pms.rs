@@ -1232,15 +1232,31 @@ impl ServiceObject for PmsService {
             package: state.package.clone(),
         });
         let reply = match method.name.as_str() {
+            // K3b: an unknown package is **not** an error on the wire. The
+            // image's `IPackageManager` replies with a null `ApplicationInfo`/
+            // `PackageInfo` and the client (`ApplicationPackageManager`,
+            // `getApplicationInfoAsUser`/`getPackageInfoAsUser`) raises
+            // `PackageManager.NameNotFoundException` itself. Sending a parcel
+            // exception here made the app see `IllegalArgumentException`
+            // instead of the exception it catches, which is what stopped vlc on
+            // `getPackageInfo("com.google.android.gsf")` (K2 §6).
             "getApplicationInfo" => {
                 let package = args.first().and_then(Value::as_str);
-                let info = Self::lookup(&state, package).map(|p| p.application.clone())?;
-                vec![Value::TypedObject(info.to_parcelable())]
+                let info = match Self::lookup(&state, package) {
+                    Ok(p) => p.application.to_parcelable(),
+                    Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
+                    Err(e) => return Err(e),
+                };
+                vec![Value::TypedObject(info)]
             }
             "getPackageInfo" => {
                 let package = args.first().and_then(Value::as_str);
-                let info = Self::lookup(&state, package)?.clone();
-                vec![Value::TypedObject(info.to_parcelable())]
+                let info = match Self::lookup(&state, package) {
+                    Ok(p) => p.to_parcelable(),
+                    Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
+                    Err(e) => return Err(e),
+                };
+                vec![Value::TypedObject(info)]
             }
             "getActivityInfo" => {
                 let component = args.first().and_then(Value::as_parcelable);
