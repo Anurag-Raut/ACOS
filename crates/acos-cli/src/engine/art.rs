@@ -63,6 +63,29 @@ const MAX_LINE_BYTES: usize = 16 * 1024 * 1024;
 /// Largest PNG accepted from one reply.
 const MAX_PNG_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Guest-side input settle window (`ACOSLAUNCH_FRAME_WAIT_SECS`), in seconds.
+///
+/// The guest's own settle test needs a new C1 buffer generation **and** a new
+/// probe sample **and** changed pixels. A focus-only tap changes no pixels, so
+/// the guest can only answer `NO_FRESH_FRAME` — and it answers after this whole
+/// window. Measured (W34, baseline): every such tap cost 16 s (15 s guest +
+/// 1 s recovery capture) while the same tap costs nothing the app can observe.
+/// The engine therefore shortens the guest window and finishes the wait itself
+/// in [`ArtSession::settle_after_input`], on bound frames it can prove. 3 s
+/// keeps every tap that the guest *can* settle (measured max 2.01 s) on the
+/// guest's stronger path, so no currently-fast tap regresses.
+const DEFAULT_FRAME_WAIT_SECS: u64 = 3;
+/// How long [`ArtSession::settle_after_input`] may keep polling after the guest
+/// refused the frame, measured from the refusal. This is the engine's coverage
+/// for a slow UI update; matches the guest window it replaces (15 s).
+const DEFAULT_SETTLE_BUDGET_MS: u64 = 15_000;
+/// Consecutive identical captures that prove "delivered, no visual change".
+/// Each poll is a full traversal whose own settle window is 1.5 s, so two polls
+/// already cover ~3 s of no change.
+const DEFAULT_SETTLE_NOCHANGE_POLLS: u32 = 2;
+/// Pause between settle polls (a poll already costs ~1 s of guest work).
+const SETTLE_POLL_GAP_MS: u64 = 250;
+
 /// One ART session.
 pub struct ArtSession {
     child: Option<Child>,
@@ -106,7 +129,63 @@ pub struct ArtSession {
     /// minus `bounds` (normally the status-bar inset). The engine resolves tap
     /// points from screen bounds; `inject_tap` takes window-local points.
     input_offset: (i32, i32),
+    /// Guest boot time: `acos-art` spawn to its ready line. Charged to the
+    /// session, not to the `launch` step (the executor's clock starts later).
+    session_start_ms: u64,
+    /// Guest-side input settle window the engine asked for (seconds).
+    frame_wait_secs: u64,
+    /// Engine settle budget after a refused input frame.
+    settle_budget: Duration,
+    /// Identical captures that prove a refused input changed nothing.
+    settle_polls: u32,
+    /// The frame the executor will compare an input against (snapshotted in
+    /// [`SessionBackend::begin_input`], before the traversal a selector tap
+    /// needs to resolve its point): its content hash and its tree signature.
+    input_baseline: Option<(String, u64)>,
+    /// Input settle accounting, written next to the guest evidence.
+    settle: SettleStats,
     closed: bool,
+}
+
+/// How the input steps of one session reached their bound frame.
+///
+/// Written to `<artifacts>/art-frames/session-timing.json` at every shutdown so
+/// a run's cost breakdown can name the settle path instead of inferring it.
+#[derive(Debug, Default, Clone)]
+struct SettleStats {
+    /// Replies the guest itself settled (the strong path).
+    guest: u64,
+    /// Refused replies the engine settled from its own bound captures.
+    recovered: u64,
+    /// Captures issued by the engine's recovery loop.
+    recovery_polls: u64,
+    /// Total wall spent in the recovery loop.
+    recovery_ms: u64,
+    /// Recovered inputs that did change the screen.
+    recovered_changed: u64,
+    /// Recovered inputs that changed nothing (focus-only taps).
+    recovered_no_change: u64,
+    /// Recoveries that hit the budget without a stable state.
+    recovery_budget_hit: u64,
+}
+
+impl SettleStats {
+    fn to_json(&self, session_start_ms: u64, shutdown_ms: u64, frame_wait_secs: u64) -> serde_json::Value {
+        serde_json::json!({
+            "session_start_ms": session_start_ms,
+            "shutdown_ms": shutdown_ms,
+            "guest_frame_wait_secs": frame_wait_secs,
+            "input_settles": {
+                "guest": self.guest,
+                "recovered": self.recovered,
+                "recovered_changed": self.recovered_changed,
+                "recovered_no_change": self.recovered_no_change,
+                "recovery_budget_hit": self.recovery_budget_hit,
+                "recovery_polls": self.recovery_polls,
+                "recovery_ms": self.recovery_ms,
+            },
+        })
+    }
 }
 
 struct CachedFrame {
@@ -114,6 +193,8 @@ struct CachedFrame {
     md5: String,
     png: Vec<u8>,
     tree: UiTree,
+    /// Structural signature of `tree` (see [`tree_signature`]).
+    signature: u64,
     captured_at_ms: u64,
     captured_at: String,
 }
@@ -167,22 +248,9 @@ fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
         .or_else(|| walk(tree))
 }
 
-/// Build a host-observed delivery record from a session reply.
-///
-/// `previous_md5` is the content hash of the frame before the action. A normal
-/// reply whose `md5` is unchanged is a delivered input with no visual change;
-/// a recovery reply is always `visual_change: false`. The acks are copied
-/// verbatim and remain guest-asserted.
-fn input_delivery(
-    reply: &serde_json::Value,
-    previous_md5: Option<&str>,
-    changed_if_unknown: bool,
-) -> InputDelivery {
-    let visual_change = match (reply.get("md5").and_then(|v| v.as_str()), previous_md5) {
-        (Some(current), Some(previous)) => current != previous,
-        _ => changed_if_unknown,
-    };
-    let acks = reply
+/// Import acks from a reply's `gesture` record (guest-asserted).
+fn acks_from_reply(reply: &serde_json::Value) -> Vec<InputAck> {
+    reply
         .pointer("/gesture/acks")
         .and_then(|value| value.as_array())
         .map(|acks| {
@@ -197,11 +265,54 @@ fn input_delivery(
                 })
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// Build a host-observed delivery record from a session reply.
+///
+/// `visual_change` is the engine's measured comparison of the post-action UI
+/// tree with the pre-action one (see [`tree_signature`]). The acks are copied
+/// verbatim and remain guest-asserted.
+fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
     InputDelivery {
         delivered: true,
         visual_change,
-        acks,
+        acks: acks_from_reply(reply),
+    }
+}
+
+/// Structural signature of a UI tree: its nodes and their attributes, with no
+/// dependence on pixels, frame numbers or timestamps.
+fn tree_signature(tree: &UiTree) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    if let Ok(json) = serde_json::to_string(&tree.nodes) {
+        json.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Did an input change the state, measured so that the answer can never
+/// disagree with the executor's `state_change` assertion?
+///
+/// Two independent signals are required, because each one alone is noisy in a
+/// different direction:
+///
+/// * the **content hash** (SHA-256 of the encoded pixels) also changes when the
+///   text cursor blinks between two captures of an unchanged screen;
+/// * the **tree signature** also changes for attributes that paint nothing
+///   (T07's submit tap flips a view attribute and leaves the pixels identical).
+///
+/// A change is claimed only when both moved: a blinking cursor or an unpainted
+/// attribute is then "delivered, no visual change" (never a false claim), and a
+/// real change satisfies the executor's own tree+screenshot requirement.
+fn state_changed(baseline: Option<&(String, u64)>, current: Option<&CachedFrame>) -> bool {
+    match (baseline, current) {
+        (Some((md5, signature)), Some(frame)) => {
+            frame.md5 != *md5 && frame.signature != *signature
+        }
+        // No baseline: never claim that nothing changed.
+        _ => true,
     }
 }
 
@@ -255,6 +366,24 @@ impl ArtSession {
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(120),
         );
+        // Cost knobs (engine-owned): see DEFAULT_FRAME_WAIT_SECS. The guest
+        // variable is only overridden when the caller has not set it, so a
+        // diagnostic run can still ask for the stock 15 s window.
+        let frame_wait_secs = std::env::var("ACOS_ART_FRAME_WAIT_SECS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(DEFAULT_FRAME_WAIT_SECS);
+        let settle_budget = Duration::from_millis(
+            std::env::var("ACOS_ART_SETTLE_MS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(DEFAULT_SETTLE_BUDGET_MS),
+        );
+        let settle_polls = std::env::var("ACOS_ART_SETTLE_NOCHANGE_POLLS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(DEFAULT_SETTLE_NOCHANGE_POLLS)
+            .max(1);
 
         let mut command = Command::new(&binary);
         command
@@ -275,9 +404,13 @@ impl ArtSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if std::env::var_os("ACOSLAUNCH_FRAME_WAIT_SECS").is_none() {
+            command.env("ACOSLAUNCH_FRAME_WAIT_SECS", frame_wait_secs.to_string());
+        }
         // Own process group: a `close` that does not take must not leave ART or
         // its sandbox behind.
         command.process_group(0);
+        let spawned_at = Instant::now();
         let mut child = command.spawn().map_err(|error| BackendError::Unsupported {
             capability: "engine.art".into(),
             detail: format!(
@@ -365,6 +498,12 @@ impl ArtSession {
             process_group: Some(_pid as i32),
             last_input: None,
             input_offset: (0, 0),
+            session_start_ms: 0,
+            frame_wait_secs,
+            settle_budget,
+            settle_polls,
+            input_baseline: None,
+            settle: SettleStats::default(),
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -418,7 +557,17 @@ impl ArtSession {
         if let Some(activity) = ready.get("activity").and_then(|v| v.as_str()) {
             session.activity = Some(activity.to_string());
         }
+        // `acos verify` starts the guest before its own step clock, so this is
+        // the boot cost the verdict never showed.
+        session.session_start_ms = spawned_at.elapsed().as_millis() as u64;
         Ok(session)
+    }
+
+    /// Guest boot time in milliseconds: `acos-art` spawn to its ready line.
+    /// `verify` reports it separately because it happens before the executor's
+    /// step clock starts, so no step could be charged with it.
+    pub const fn session_start_ms(&self) -> u64 {
+        self.session_start_ms
     }
 
     fn stderr_tail(&self) -> String {
@@ -512,48 +661,163 @@ impl ArtSession {
     }
 
     /// Send one input command. A guest reply that refuses the frame but carries
-    /// a `gesture` record means the host-injected input was delivered and simply
-    /// changed no pixels (focus-only tap, consumed key). That is **not** a stale
-    /// frame: the engine re-binds a fresh tree/capture and records
-    /// `visual_change: false` so no state change is claimed. Every other
-    /// `NO_FRESH_FRAME` (or a missing new frame after the recovery capture) stays
-    /// a hard failure.
+    /// a `gesture` record means the host-injected input was delivered and the
+    /// guest could not settle an observation for it. That is **not** a stale
+    /// frame: the engine settles it from its own bound captures in
+    /// [`Self::settle_after_input`] and records the measured `visual_change` so
+    /// no state change is claimed that the frames do not show. Every other
+    /// `NO_FRESH_FRAME` stays a hard failure.
     fn input_command(
         &mut self,
         request: serde_json::Value,
         context: &str,
     ) -> Result<(), BackendError> {
-        let previous_md5 = self.cached.as_ref().map(|frame| frame.md5.clone());
         match self.command_raw(request) {
             Ok(reply) => {
-                self.last_input = Some(input_delivery(&reply, previous_md5.as_deref(), true));
-                self.absorb(&reply)
-            }
-            Err((ErrorCode::NoFreshFrame, reply, message)) if reply.get("gesture").is_some() => {
-                let _ = message;
-                // The guest session injected the input and then found no
-                // changed pixels. Capture the current state as the action's
-                // frame; the executor sees a fresh sequence and a delivery
-                // record with no visual change.
-                let previous = self.seen_seq;
-                self.request_tree()?;
-                if let Some(cached) = self.cached.as_ref() {
-                    if cached.seq <= previous {
-                        return Err(stale_frame(
-                            previous,
-                            cached.seq,
-                            &format!("{context} (no-pixel-change delivery)"),
-                        ));
-                    }
-                }
-                self.last_input = Some(input_delivery(&reply, None, false));
+                self.settle.guest += 1;
+                let baseline = self.input_baseline.clone();
+                self.absorb(&reply)?;
+                // Compare exactly the pair the executor's `changed_from` will
+                // compare: this action's frame against the frame it was handed
+                // at the previous step (snapshotted by `begin_input` before the
+                // point-resolution traversal). Both verdicts then agree by
+                // construction: equal hashes are "delivered, no visual change",
+                // different hashes are a state change the executor also sees.
+                let visual_change = state_changed(baseline.as_ref(), self.cached.as_ref());
+                self.last_input = Some(delivery(&reply, visual_change));
                 Ok(())
+            }
+            Err((ErrorCode::NoFreshFrame, reply, _message)) if reply.get("gesture").is_some() => {
+                if std::env::var_os("ACOS_ART_SETTLE_MODE").as_deref() == Some("guest-only".as_ref())
+                {
+                    // Diagnostic: the pre-W34 behaviour (one recovery capture,
+                    // `visual_change: false`), for A/B cost runs.
+                    let previous = self.seen_seq;
+                    self.request_tree()?;
+                    if let Some(cached) = self.cached.as_ref() {
+                        if cached.seq <= previous {
+                            return Err(stale_frame(
+                                previous,
+                                cached.seq,
+                                &format!("{context} (no-pixel-change delivery)"),
+                            ));
+                        }
+                    }
+                    self.settle.recovered += 1;
+                    self.settle.recovery_polls += 1;
+                    self.settle.recovered_no_change += 1;
+                    self.last_input = Some(delivery(&reply, false));
+                    return Ok(());
+                }
+                self.settle_after_input(&reply, context)
             }
             Err((code, _, message)) => Err(BackendError::Error {
                 code,
                 detail: format!("acos-art: {code}: {message}"),
             }),
         }
+    }
+
+    /// Finish an input the guest could not settle, using bound captures.
+    ///
+    /// The guest refuses when its settle test (new buffer generation + new probe
+    /// sample + changed pixels within its window) does not hold. Two causes are
+    /// indistinguishable to the guest and both were charged the full window:
+    /// a focus-only tap (no pixel change is the *correct* outcome) and a slow UI
+    /// update. Both are decided here on what the frames actually show:
+    ///
+    /// * a recovery capture whose content hash differs from the pre-action frame
+    ///   proves the action changed the screen, and a `tree` reply is itself a
+    ///   traversal the guest settles (1.5 s internal window), so that capture is
+    ///   the bound observation the following assertions need;
+    /// * otherwise the input is a delivered, no-visual-change action once
+    ///   `settle_polls` consecutive captures show that same content again.
+    ///
+    /// The comparison pair matters more than the signal: it is exactly the pair
+    /// the executor's `SessionObservation::changed_from` compares (this action's
+    /// frame vs the observation it handed back at the previous step). Comparing
+    /// against the traversal a selector tap issued to resolve its point instead
+    /// made T07's submit tap non-deterministic (frame 10 vs resolution frame 9
+    /// differed by a cursor-blink phase while frame 10 vs the real baseline
+    /// frame 8 were byte-identical), so the same tap was reported as a state
+    /// change on some runs and as a no-op on others.
+    ///
+    /// The recovery never invents a frame: it keeps the sequence advancing, keeps
+    /// the guest's acks, and reports the measured `visual_change`.
+    fn settle_after_input(
+        &mut self,
+        reply: &serde_json::Value,
+        context: &str,
+    ) -> Result<(), BackendError> {
+        let started = Instant::now();
+        let previous_seq = self.seen_seq;
+        // The baseline is the exact observation the executor compares against:
+        // the one it handed back at the previous step (snapshotted before the
+        // traversal a selector tap needs to resolve its point), falling back to
+        // the current cache when the caller drives the session directly.
+        let baseline = self
+            .input_baseline
+            .clone()
+            .or_else(|| self.cached.as_ref().map(|frame| (frame.md5.clone(), frame.signature)));
+        let mut polls = 0u64;
+        let mut last_hash = baseline.clone();
+        let mut visual_change = false;
+        let mut budget_hit = false;
+        loop {
+            polls += 1;
+            self.request_tree()?;
+            let (seq, hash) = {
+                let cached = self.require_cached_frame()?;
+                (cached.seq, (cached.md5.clone(), cached.signature))
+            };
+            if seq <= previous_seq {
+                return Err(stale_frame(
+                    previous_seq,
+                    seq,
+                    &format!("{context} (recovery after refused frame)"),
+                ));
+            }
+            if state_changed(baseline.as_ref(), self.cached.as_ref()) {
+                visual_change = true;
+            }
+            let repeated = last_hash.as_ref() == Some(&hash);
+            last_hash = Some(hash);
+            if visual_change {
+                // A traversal whose tree differs from the pre-action state is the
+                // post-action state; `tree` already waited for the guest to settle
+                // it, so this is the bound frame the next assertion reads.
+                break;
+            }
+            if repeated && polls >= u64::from(self.settle_polls) {
+                break;
+            }
+            let elapsed = started.elapsed();
+            if elapsed >= self.settle_budget {
+                budget_hit = true;
+                break;
+            }
+            std::thread::sleep(
+                Duration::from_millis(SETTLE_POLL_GAP_MS)
+                    .min(self.settle_budget.saturating_sub(elapsed)),
+            );
+        }
+        self.settle.recovered += 1;
+        self.settle.recovery_polls += polls;
+        self.settle.recovery_ms += started.elapsed().as_millis() as u64;
+        if visual_change {
+            self.settle.recovered_changed += 1;
+        } else {
+            self.settle.recovered_no_change += 1;
+        }
+        if budget_hit {
+            self.settle.recovery_budget_hit += 1;
+        }
+        self.last_input = Some(InputDelivery {
+            delivered: true,
+            visual_change,
+            acks: acks_from_reply(reply),
+        });
+        Ok(())
     }
 
     fn frame_meta(&self, seq: u64, md5: &str) -> FrameMeta {
@@ -617,12 +881,14 @@ impl ArtSession {
             self.input_offset = offset;
         }
         let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
+        let signature = tree_signature(&tree);
         let captured_at_ms = now_unix_ms();
         self.cached = Some(CachedFrame {
             seq,
             md5,
             png,
             tree,
+            signature,
             captured_at_ms,
             captured_at: rfc3339(captured_at_ms),
         });
@@ -690,6 +956,7 @@ impl ArtSession {
     /// Stop the guest and prove its whole process group is gone. Shared by
     /// `close` and `reset` (the latter relaunches in a fresh process).
     fn shutdown(&mut self) -> Result<(), BackendError> {
+        let started = Instant::now();
         if let Some(stdin) = self.stdin.as_mut() {
             let _ = writeln!(stdin, "{}", serde_json::json!({"cmd":"close"}));
             let _ = stdin.flush();
@@ -736,7 +1003,26 @@ impl ArtSession {
                 ),
             });
         }
+        self.write_timing(started.elapsed().as_millis() as u64);
         Ok(())
+    }
+
+    /// Records the session's cost split next to the guest evidence: guest boot
+    /// (`session_start_ms`, charged to no step), quiet shutdown (`shutdown_ms`,
+    /// outside the verdict clock) and how each input step reached its bound
+    /// frame. Best effort: a write error never fails a run.
+    fn write_timing(&self, shutdown_ms: u64) {
+        let dir = self.artifacts.join("art-frames");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        let body = self
+            .settle
+            .to_json(self.session_start_ms, shutdown_ms, self.frame_wait_secs);
+        let _ = std::fs::write(
+            dir.join("session-timing.json"),
+            serde_json::to_string_pretty(&body).unwrap_or_default(),
+        );
     }
 
     /// Processes still alive in the session's process group.
@@ -933,6 +1219,13 @@ impl SessionBackend for ArtSession {
         })
     }
 
+    fn begin_input(&mut self) {
+        self.input_baseline = self
+            .cached
+            .as_ref()
+            .map(|frame| (frame.md5.clone(), frame.signature));
+    }
+
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
         // The engine's tap coordinates are display/screen coordinates (resolved
         // from the probe's `bounds_on_screen`). The interactive input channel's
@@ -993,6 +1286,8 @@ impl SessionBackend for ArtSession {
         let log_offset = self.log_offset.saturating_add(self.logs_total_raw);
         let apk = self.apk.clone();
         let artifacts = self.artifacts.clone();
+        let settle = self.settle.clone();
+        let boot_ms = self.session_start_ms;
         // Same teardown rule as `close`: the old guest's whole process group
         // must be gone before the replacement starts (one ART guest at a time).
         self.closed = true;
@@ -1000,6 +1295,9 @@ impl SessionBackend for ArtSession {
         let mut fresh = ArtSession::start(&apk, &artifacts)?;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
+        // Session-level cost accounting spans the relaunch.
+        fresh.settle = settle;
+        fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
         // Leave a live frame bound: the step after `reset` may be a pure
         // assertion (`assert_text`), which reads the last completed frame.
         let reply = fresh.command(serde_json::json!({"cmd":"tree"}))?;
@@ -1389,6 +1687,136 @@ mod tests {
 
         session.close().expect("clean close");
         std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A fake `acos-art` whose inputs are always refused on the guest side
+    /// (the shape of a focus-only tap: generation and probe advance, the guest
+    /// cannot settle a changed frame) and whose tree content changes only after
+    /// `change_after` traversals. Records how many `tree` commands it served.
+    fn refusing_art_binary(dir: &Path, change_after: u32) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let png = dir.join("tiny.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let script = dir.join("fake-acos-art-refusing.sh");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str(
+            "echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\
+             \"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\
+             \"density\":420}'\n",
+        );
+        body.push_str("trees=0\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str("      trees=$((trees+1))\n");
+        for (condition, text) in [("le", "before"), ("gt", "after")] {
+            body.push_str(&format!(
+                "      if [ \"$trees\" -{condition} {change_after} ]; then\n"
+            ));
+            body.push_str(&format!(
+                "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":'\"$trees\"',\"md5\":\"m-{text}\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"{text}\",\"bounds\":\"[0,0][10,10]\"}}]}}}}'\n",
+                png.display()
+            ));
+            body.push_str("      fi\n");
+        }
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"tap\"'*)\n");
+        body.push_str(
+            "      echo '{\"ok\":false,\"cmd\":\"tap\",\"code\":\"NO_FRESH_FRAME\",\
+             \"error\":\"no settled observation\",\"gesture\":{\"seqs\":[9],\
+             \"acks\":[{\"seq\":9,\"handled\":true,\"latency_us\":1200}]}}'\n",
+        );
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"logs\"'*)\n");
+        body.push_str(
+            "      echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":0,\"kept\":0,\
+             \"dropped\":0,\"entries\":[]}'\n",
+        );
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str(
+            "      echo '{\"ok\":false,\"code\":\"UNSUPPORTED_ANDROID_API\",\"error\":\"unsupported\"}'\n",
+        );
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    /// A refused input must be settled from the engine's own bound captures:
+    /// the tap succeeds, the frame sequence advances, and `visual_change` is
+    /// the *measured* comparison of the post-action tree with the pre-action
+    /// tree — never the blind `false` the recovery used to record.
+    #[test]
+    fn refused_input_is_settled_from_bound_captures() {
+        let dir = scratch_dir("settle");
+        // The first traversal is `before`; the recovery traversal is `after`,
+        // so the tap must be reported as a visual change.
+        let script = refusing_art_binary(&dir, 1);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        std::env::set_var("ACOS_ART_SETTLE_MS", "3000");
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let before = session.frame().expect("pre-action frame");
+        let before_hash = before.tree.frame.content_hash.clone();
+        session
+            .tap(1, 1)
+            .expect("a refused input is settled, not failed");
+        let after = session.last_frame().expect("post-action frame");
+        assert!(after.frame_seq() > before.frame_seq());
+        assert_ne!(
+            after.tree.frame.content_hash, before_hash,
+            "the recovery must hand back the post-action traversal"
+        );
+        let delivery = session.last_input_delivery().expect("delivery record");
+        assert!(delivery.delivered);
+        assert!(
+            delivery.visual_change,
+            "the tree changed, so the change is claimed"
+        );
+        assert_eq!(delivery.acks.len(), 1, "guest acks survive the recovery");
+        session.close().expect("clean close");
+        // Cost accounting really is written (it is what the W34 table reads).
+        let timing: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join("art-frames/session-timing.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(timing["input_settles"]["recovered"], 1);
+        assert_eq!(timing["input_settles"]["recovered_changed"], 1);
+        assert_eq!(timing["guest_frame_wait_secs"], 3);
+
+        // Negative case: an unchanged tree must NOT claim a visual change, and
+        // the recovery must stop after two identical traversals.
+        std::env::set_var("ACOS_ART_BIN", &refusing_art_binary(&dir, u32::MAX));
+        let mut session = ArtSession::start(&apk, &dir).expect("second fake session starts");
+        let _ = session.frame().expect("pre-action frame");
+        session.tap(1, 1).expect("a no-change delivery still settles");
+        let delivery = session.last_input_delivery().expect("delivery record");
+        assert!(delivery.delivered);
+        assert!(
+            !delivery.visual_change,
+            "no tree change means no claimed change"
+        );
+        assert_eq!(session.settle.recovered_no_change, 1);
+        assert_eq!(session.settle.recovered_changed, 0);
+        assert_eq!(
+            session.settle.recovery_polls, 2,
+            "two identical polls stop it"
+        );
+        session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        std::env::remove_var("ACOS_ART_SETTLE_MS");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

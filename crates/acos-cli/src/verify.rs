@@ -233,6 +233,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         }
     }
 
+    // Guest boot to its ready line happens before the executor's clock starts,
+    // so it is recorded here and charged separately from the `launch` step.
+    let mut session_boot_ms: Option<u64> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -259,7 +262,10 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 }
             };
             match crate::engine::art::ArtSession::start(&apk, &artifacts) {
-                Ok(session) => EngineBackend::session(Box::new(session)),
+                Ok(session) => {
+                    session_boot_ms = Some(session.session_start_ms());
+                    EngineBackend::session(Box::new(session))
+                }
                 Err(error) => {
                     let envelope = Envelope::failure(
                         request_id,
@@ -286,6 +292,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_caps.as_ref(),
         trust,
         &artifacts,
+        session_boot_ms,
     );
     finish(&envelope, &args, &artifacts)
 }
@@ -300,6 +307,7 @@ pub(crate) fn annotate(
     caps: Option<&crate::engine::SessionCapabilities>,
     trust: crate::trust::Trust,
     artifacts: &Path,
+    session_boot_ms: Option<u64>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     let Some(result) = envelope.result().cloned() else {
@@ -338,13 +346,14 @@ pub(crate) fn annotate(
         "engine_report": artifacts.join("engine.json").display().to_string(),
     });
     let provenance = crate::provenance::run_evidence(trust);
-    let engine_block = serde_json::json!({
+    let timing = step_timing(&verdict, session_boot_ms);    let engine_block = serde_json::json!({
         "engine": engine.as_str(),
         "mode": mode.as_str(),
         "trust": trust.as_str(),
         "evidence_provenance": provenance["evidence_provenance"].clone(),
         "unsupported_steps": unsupported_steps,
         "evidence": evidence,
+        "timing": timing,
         "commands": caps.map(|caps| serde_json::json!({
             "supported": caps.names(),
             "missing": caps.missing(),
@@ -400,6 +409,52 @@ pub(crate) fn annotate(
     } else {
         *envelope = envelope.clone().with_value_result(annotated_result);
     }
+}
+
+/// Per-step cost accounting for the engine report.
+///
+/// The verdict already carries `steps[].duration_ms` for every executed step.
+/// What it cannot carry is the cost that happens outside a step: the guest boot
+/// before the executor's clock starts (`session_start_ms`) and the part of the
+/// verdict's own wall time that no step was charged with (the `assert_log`
+/// wait-for-log poll, which runs before the step timer starts, and evidence
+/// writes). Both are named here so a cost table has no unexplained residual.
+fn step_timing(verdict: &serde_json::Value, session_boot_ms: Option<u64>) -> serde_json::Value {
+    let steps: Vec<serde_json::Value> = verdict
+        .get("steps")
+        .and_then(|steps| steps.as_array())
+        .map(|steps| {
+            steps
+                .iter()
+                .map(|step| {
+                    serde_json::json!({
+                        "index": step.get("index"),
+                        "step": step.get("step"),
+                        "status": step.get("status"),
+                        "wall_ms": step.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let attributed: u64 = steps
+        .iter()
+        .map(|step| step.get("wall_ms").and_then(|v| v.as_u64()).unwrap_or(0))
+        .sum();
+    let wall_ms = verdict
+        .pointer("/resources/wall_ms")
+        .and_then(|v| v.as_u64());
+    serde_json::json!({
+        "unit": "ms",
+        "steps": steps,
+        "attributed_ms": attributed,
+        "verdict_wall_ms": wall_ms,
+        "unattributed_ms": wall_ms.map(|wall| wall.saturating_sub(attributed)),
+        "session_start_ms": session_boot_ms,
+        "note": "session_start_ms is the guest boot before the executor clock; \
+                 unattributed_ms is verdict wall that no step timer covered \
+                 (wait-for-log polling before a step starts, evidence writes)",
+    })
 }
 
 fn finish(envelope: &Envelope, args: &VerifyArgs, artifacts: &Path) -> ExitCode {

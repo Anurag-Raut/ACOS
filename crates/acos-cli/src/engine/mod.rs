@@ -381,6 +381,17 @@ pub trait SessionBackend {
     }
 
     /// Tap a screen point.
+    /// Mark the start of one input action, before any traversal the action
+    /// needs to resolve its target.
+    ///
+    /// A selector tap resolves its point from a *fresh* traversal; that
+    /// traversal is not the action's frame, and it must not become the baseline
+    /// an engine compares the post-action frame against. The executor compares
+    /// the action's frame with the observation it handed back at the previous
+    /// step, so an engine that measures "did this input change anything" must
+    /// snapshot the same frame here.
+    fn begin_input(&mut self) {}
+
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError>;
 
     /// Tap the first node whose text equals `text` (host-side selector).
@@ -749,6 +760,11 @@ impl Backend for EngineBackend {
                     EngineBackend::Session { session, .. } => session.capabilities(),
                     EngineBackend::Native(_) => unreachable!(),
                 };
+                // The action starts here: snapshot the frame the executor will
+                // compare against, before any target-resolution traversal.
+                if let EngineBackend::Session { session, .. } = self {
+                    session.begin_input();
+                }
                 // Resolve the target first: a selector traversal is not the
                 // action's frame and must not count as the action's progress.
                 enum Target {
@@ -1391,6 +1407,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -1440,6 +1457,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
         );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);

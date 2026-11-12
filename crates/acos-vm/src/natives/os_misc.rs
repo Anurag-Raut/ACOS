@@ -123,6 +123,21 @@ pub(crate) fn install(vm: &mut Vm) {
     event_log(vm);
     graphics_environment(vm);
     os_bridge(vm);
+    // `Activity.getDlWarning()` (native, `android_app_Activity.cpp`): the
+    // dynamic linker's accumulated warnings. Stock `performStart` calls it only
+    // for debuggable apps (W31 made `FLAG_DEBUGGABLE` truthful). The frozen VM
+    // has no bionic linker, so there are no warnings: stock returns null then.
+    vm.register_native(
+        "Landroid/app/Activity;",
+        "getDlWarning",
+        "()Ljava/lang/String;",
+        activity_dl_warning,
+    );
+}
+
+fn activity_dl_warning(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
+    vm.ret_ref(ctx, crate::heap::NULL);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
