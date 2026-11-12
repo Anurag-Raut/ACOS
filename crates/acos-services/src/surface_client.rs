@@ -67,6 +67,7 @@ use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
 use acos_parcel::{BinderId, Parcel};
+use acos_sfgeom::{Display, LayerIn, Snapshot};
 
 use crate::compositor_client::DisplayDescriptor;
 use crate::display_events::now_ns;
@@ -182,6 +183,18 @@ pub mod what {
     pub const BUFFER: u64 = 0x0020_0000;
     /// `eDataspaceChanged`.
     pub const DATASPACE: u64 = 0x0080_0000;
+    /// `eMatrixChanged`.
+    pub const MATRIX: u64 = 0x0000_0010;
+    /// `eBufferCropChanged`.
+    pub const BUFFER_CROP: u64 = 0x0000_2000;
+    /// `eBufferTransformChanged`.
+    pub const BUFFER_TRANSFORM: u64 = 0x0004_0000;
+    /// `eTransformToDisplayInverseChanged`.
+    pub const TRANSFORM_TO_DISPLAY_INVERSE: u64 = 0x0008_0000;
+    /// `eCropChanged`.
+    pub const CROP: u64 = 0x0010_0000;
+    /// `eDestinationFrameChanged` (bit 32; `what` is a `uint64_t`).
+    pub const DESTINATION_FRAME: u64 = 0x0000_0001_0000_0000;
 }
 
 /// `layer_state_t::eLayerHidden` (the bit in `flags` when `eFlagsChanged` is
@@ -200,6 +213,20 @@ pub struct Rect {
     pub right: i32,
     /// Bottom edge.
     pub bottom: i32,
+}
+
+fn rect_is_empty(rect: Rect) -> bool {
+    rect.right <= rect.left || rect.bottom <= rect.top
+}
+
+/// `Some(rect)` when the wire rect has area; an empty `ui::Rect` is "unset"
+/// (`RequestedLayerState.cpp:363` tests `destinationFrame.isEmpty()`).
+fn rect_option(rect: Rect) -> Option<Rect> {
+    (!rect_is_empty(rect)).then_some(rect)
+}
+
+fn rect_array(rect: Rect) -> [i32; 4] {
+    [rect.left, rect.top, rect.right, rect.bottom]
 }
 
 /// One host-side copy of the newest C1 buffer, read from the guest's memfd.
@@ -402,7 +429,6 @@ impl std::fmt::Display for CompositeError {
     }
 }
 
-
 /// `BufferData::generateReleaseCallbackId()`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReleaseCallbackId {
@@ -428,6 +454,16 @@ pub struct CallbackId {
     pub id: i64,
     /// 0 = `ON_COMPLETE`, 1 = `ON_COMMIT`.
     pub kind: i32,
+}
+
+/// One layer as the B1b geometry kernel sees it: the record, the buffer whose
+/// size feeds `getBufferSize`, and the input row handed to `acos_sfgeom`.
+struct KernelRow<'a> {
+    record: &'a LayerRecord,
+    buffer: Option<&'a LatestBuffer>,
+    /// Window-manager dim for this layer (inherited from its window surface).
+    dim_amount: f32,
+    input: LayerIn,
 }
 
 /// The compositor's per-layer record.
@@ -468,6 +504,23 @@ pub struct LayerRecord {
     pub alpha: f32,
     /// The window manager's placement, when this layer is a window surface.
     pub placement: Option<LayerPlacement>,
+    /// `layer_state_t.destinationFrame` (BLAST's `Rect(mSize)`, the buffer's
+    /// display size). Empty means "no destination frame", i.e. the
+    /// position/matrix path (`RequestedLayerState.cpp:363`).
+    pub destination_frame: Option<Rect>,
+    /// `layer_state_t.crop`: the window crop, distinct from `bufferCrop`.
+    pub crop: Option<Rect>,
+    /// `layer_state_t.bufferCrop`: the crop inside the buffer, distinct from
+    /// `crop`. A `BufferData.crop` on a newer buffer supersedes it for that
+    /// buffer (kept in [`LatestBuffer::crop`]).
+    pub buffer_crop: Option<Rect>,
+    /// `layer_state_t.bufferTransform` (`ui::Transform::RotationFlags`).
+    pub buffer_transform: u32,
+    /// `layer_state_t.transformToDisplayInverse`.
+    pub transform_to_display_inverse: bool,
+    /// `layer_state_t.matrix` in wire order `(dsdx, dtdx, dtdy, dsdy)`.
+    /// Identity unless the transaction carried `eMatrixChanged`.
+    pub matrix: [f32; 4],
     /// `layer_state_t.flags & eLayerHidden`: the client hid the layer.
     ///
     /// A hidden layer is not drawn at all (stock: `Layer::setFlags` → not in
@@ -624,7 +677,11 @@ impl SurfaceState {
     #[must_use]
     pub fn open_buffer_fds(&self) -> usize {
         self.retained_buffers()
-            + self.buffer_cache.values().filter(|c| c.fd.is_some()).count()
+            + self
+                .buffer_cache
+                .values()
+                .filter(|c| c.fd.is_some())
+                .count()
     }
 
     /// Destroy a layer and every layer below it, dropping their retained
@@ -740,22 +797,21 @@ impl SurfaceState {
         );
     }
 
-    /// The placement a composite draws `layer` with.
+    /// The nearest `z` and dim amount on this layer's ancestor chain.
     ///
-    /// A window's *window surface* is the layer `IWindowSession.relayout`
-    /// creates and the window manager places; the buffers an app draws arrive on
-    /// the **BLAST child** the client creates under it (`bbq-wrapper`, W5), whose
-    /// own transactions carry no frame and no z. So the placement is inherited
-    /// from the nearest ancestor that has one (bounded depth, no cycles).
-    /// Without an ancestor placement the client's own `layer_state_t.x/y/z` (and
-    /// `gui::WindowInfo.alpha`) is the honest answer.
+    /// B1b feeds the kernel one flat layer list, while stock gets stacking from
+    /// the layer hierarchy (`LayerHierarchy::traverseInZOrder`). A BLAST child
+    /// has no `layer_state_t.z` of its own; its window surface does, and the
+    /// window manager owns it. So the child takes the nearest ancestor's
+    /// placement z (the old `placement_of` did the same, for x/y too). The dim
+    /// layer is the window manager's, not a kernel input, so it stays here.
     #[must_use]
-    fn placement_of(&self, layer: &LayerRecord) -> LayerPlacement {
+    fn inherited_stacking(&self, layer: &LayerRecord) -> (i32, f32) {
         const MAX_DEPTH: usize = 8;
         let mut current = layer;
         for _ in 0..MAX_DEPTH {
             if let Some(placement) = current.placement {
-                return placement;
+                return (placement.z, placement.dim_amount);
             }
             let Some(parent) = current.parent else {
                 break;
@@ -768,13 +824,74 @@ impl SurfaceState {
             }
             current = next;
         }
-        LayerPlacement {
-            x: layer.geometry.x,
-            y: layer.geometry.y,
-            z: layer.geometry.z,
-            alpha: layer.alpha,
-            dim_amount: 0.0,
+        (layer.geometry.z, 0.0)
         }
+
+    /// Build the kernel's geometry input for every layer in the registry.
+    ///
+    /// Values come from what the transaction applier stored:
+    /// * `x`/`y`/`z`/`alpha` — the window manager's [`LayerPlacement`] when the
+    ///   layer has one, otherwise the guest's `layer_state_t`/`WindowInfo`;
+    /// * `destinationFrame`, `crop`, `bufferCrop`, `bufferTransform`,
+    ///   `transformToDisplayInverse`, `matrix` — the decoded transaction;
+    /// * buffer `(w, h)` — the newest stored `LatestBuffer`;
+    /// * `hidden` — `eLayerHidden` (`LayerRecord::hidden`).
+    ///
+    /// `eIgnoreDestinationFrame` is always false: C1 does not decode that flag
+    /// (it is not on the wire for the app windows ACOS runs), so the kernel
+    /// takes the destination-frame path whenever one is set, as stock does by
+    /// default (`RequestedLayerState.cpp:363`).
+    fn kernel_rows(&self) -> Vec<KernelRow<'_>> {
+        let id_by_handle: HashMap<u64, i32> = self
+            .layers
+            .iter()
+            .map(|(handle, record)| (*handle, record.layer_id))
+            .collect();
+        let mut rows = Vec::with_capacity(self.layers.len());
+        for record in self.layers.values() {
+            let parent = record
+                .parent
+                .and_then(|handle| id_by_handle.get(&handle.0).copied());
+            let (z, dim_amount) = self.inherited_stacking(record);
+            let (x, y, alpha) = match record.placement {
+                Some(placement) => (placement.x as f32, placement.y as f32, placement.alpha),
+                None => (
+                    record.geometry.x as f32,
+                    record.geometry.y as f32,
+                    record.alpha,
+                ),
+            };
+            // `BufferData.crop` is the newest buffer's own crop; otherwise the
+            // layer's `bufferCrop` applies (stock: `getBufferCrop`, RLS:481).
+            let buffer_crop = record
+                .latest
+                .as_ref()
+                .and_then(|buffer| buffer.crop)
+                .filter(|rect| !rect_is_empty(*rect))
+                .or(record.buffer_crop);
+            rows.push(KernelRow {
+                record,
+                buffer: record.latest.as_ref(),
+                dim_amount,
+                input: LayerIn {
+                    id: record.layer_id,
+                    parent,
+                    z,
+                    x,
+                    y,
+                    matrix: record.matrix,
+                    destination_frame: record.destination_frame.map(rect_array),
+                    crop: record.crop.map(rect_array),
+                    buffer_crop: buffer_crop.map(rect_array),
+                    buffer_size: record.latest.as_ref().map(|b| (b.width, b.height)),
+                    buffer_transform: record.buffer_transform,
+                    transform_to_display_inverse: record.transform_to_display_inverse,
+                    alpha,
+                    hidden: record.hidden,
+                },
+            });
+        }
+        rows
     }
 
     /// C1's monotonic buffer store counter (0 = no frame has landed yet).
@@ -849,52 +966,93 @@ impl SurfaceState {
     /// [`MAX_BUFFER_BYTES`] ceilings); a refusal is a structured
     /// [`CompositeError`], never a blank or partial frame.
     pub fn capture_composite(&self) -> Result<FrameCapture, CompositeError> {
-        let mut layers: Vec<(&LayerRecord, &LatestBuffer, LayerPlacement)> = self
-            .layers
-            .values()
-            .filter_map(|layer| {
-                // A hidden layer is not in the visible set (stock
-                // `Layer::setFlags`), so it contributes no pixels.
-                if layer.hidden {
-                    return None;
+        // B1b: where pixels go is decided by the vendored Android 14 SurfaceFlinger
+        // geometry (`acos_sfgeom`), not by `placement_of`/`drawn_region`/a local
+        // canvas sort. C1 still decodes the wire, owns the buffers, and supplies
+        // the window manager's placement (x/y/z/alpha/dim) as kernel *inputs*.
+        //
+        // One unrotated display: ACOS drives a single internal display and no
+        // live surface sets a display rotation, so `rotation_flags` is 0
+        // (`transformToDisplayInverse` therefore has no display swap), and the
+        // display viewport is `self.display` (the app area, W58).
+        let rows = self.kernel_rows();
+        let inputs: Vec<LayerIn> = rows.iter().map(|row| row.input).collect();
+        let snapshots = acos_sfgeom::compute(
+            &inputs,
+            Display {
+                width: self.display.width.max(0).unsigned_abs(),
+                height: self.display.height.max(0).unsigned_abs(),
+                rotation_flags: 0,
+            },
+        );
+
+        let mut placed: Vec<Placed<'_>> = Vec::new();
+        for (row, snapshot) in rows.iter().zip(snapshots) {
+            let Some(buffer) = row.buffer else {
+                // No pixels (a window surface or a destroyed layer): its geometry
+                // still matters to its children, which the kernel already used.
+                continue;
+            };
+            // `hidden_by_policy` is the kernel's inherited hidden bit (stock
+            // LayerSnapshotBuilder.cpp:717-719): own hidden, an ancestor's
+            // hidden, or an ancestor's invalid transform.
+            if snapshot.hidden_by_policy || snapshot.alpha <= 0.0 {
+                continue;
                 }
-                let buffer = layer.latest.as_ref()?;
-                let placement = self.placement_of(layer);
-                (placement.alpha > 0.0).then_some((layer, buffer, placement))
-            })
-            .collect();
-        if layers.is_empty() {
+            if snapshot.invalid_transform {
+                // No old-path fallback: a singular transform is not drawn and the
+                // reason is a structured trace line (stock resets it and hides
+                // the layer, LayerSnapshotBuilder.cpp:950-976).
+                if std::env::var_os("ACOSC1_TRACE").is_some() {
+                    eprintln!(
+                        "ACOSC1 snapshot-skip layer={} invalidTransform=1 geom={:?} name={:?}",
+                        row.record.layer_id, snapshot.geom_transform, row.record.name
+                    );
+                }
+                continue;
+            }
+            let source = source_crop(&snapshot, buffer);
+            let dest = placed_rect_from_kernel(&snapshot, source);
+            placed.push(Placed {
+                row,
+                snapshot,
+                source,
+                dest,
+            });
+        }
+        if placed.is_empty() {
             return Err(CompositeError::NoFrame);
         }
-        if layers.len() > MAX_COMPOSITE_LAYERS {
+        if placed.len() > MAX_COMPOSITE_LAYERS {
             return Err(CompositeError::TooManyLayers {
-                layers: layers.len(),
+                layers: placed.len(),
                 max: MAX_COMPOSITE_LAYERS,
             });
         }
-        // Bottom-to-top. The tie-break on layer id keeps a frame reproducible
-        // even when two layers share a z.
-        layers.sort_by_key(|(layer, _, p)| (p.z, layer.layer_id));
+        // Bottom-to-top: the kernel's ascending (z, id) draw order. The id is the
+        // C1 layer id, which is the same stable tie-break the old path used.
+        placed.sort_by_key(|p| (p.snapshot.draw_order, p.row.record.layer_id));
 
         let mut min_x = i64::MAX;
         let mut min_y = i64::MAX;
         let mut max_x = i64::MIN;
         let mut max_y = i64::MIN;
         let mut input_bytes = 0u64;
-        for (_, buffer, p) in &layers {
-            let Some((clipped_x0, clipped_y0, clipped_x1, clipped_y1)) =
-                placed_rect(drawn_region(buffer), p, self.display)
-            else {
-                continue;
-            };
-            min_x = min_x.min(clipped_x0);
-            min_y = min_y.min(clipped_y0);
-            max_x = max_x.max(clipped_x1);
-            max_y = max_y.max(clipped_y1);
-            let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)
+        for p in &placed {
+            if let Some(clipped) = clip_to_display(p.dest, self.display) {
+                min_x = min_x.min(clipped.0);
+                min_y = min_y.min(clipped.1);
+                max_x = max_x.max(clipped.2);
+                max_y = max_y.max(clipped.3);
+            }
+            let bytes = checked_buffer_bytes(
+                p.row.buffer.expect("placed has a buffer").width,
+                p.row.buffer.expect("placed has a buffer").height,
+                p.row.buffer.expect("placed has a buffer").stride,
+            )
                 .ok_or(CompositeError::CanvasTooLarge {
-                    width: i64::from(buffer.width),
-                    height: i64::from(buffer.height),
+                width: i64::from(p.row.buffer.expect("placed has a buffer").width),
+                height: i64::from(p.row.buffer.expect("placed has a buffer").height),
                 })?;
             input_bytes = input_bytes.saturating_add(bytes);
         }
@@ -905,18 +1063,18 @@ impl SurfaceState {
         let canvas_width = max_x - min_x;
         let canvas_height = max_y - min_y;
         if canvas_width <= 0 || canvas_height <= 0 {
-            // Every visible layer is an empty crop: there is nothing to show.
             return Err(CompositeError::NoFrame);
         }
-        if canvas_width > i64::from(MAX_BUFFER_DIMENSION) || canvas_height > i64::from(MAX_BUFFER_DIMENSION)
+        if canvas_width > i64::from(MAX_BUFFER_DIMENSION)
+            || canvas_height > i64::from(MAX_BUFFER_DIMENSION)
         {
             return Err(CompositeError::CanvasTooLarge {
                 width: canvas_width,
                 height: canvas_height,
             });
         }
-        let row = (canvas_width as u64).saturating_mul(4);
-        let bytes = row.saturating_mul(canvas_height as u64);
+        let row_bytes = (canvas_width as u64).saturating_mul(4);
+        let bytes = row_bytes.saturating_mul(canvas_height as u64);
         if bytes > MAX_BUFFER_BYTES {
             return Err(CompositeError::BytesTooLarge {
                 bytes,
@@ -930,58 +1088,61 @@ impl SurfaceState {
             });
         }
 
-        // One layer, at the origin, whole buffer, opaque: the W10–W32
-        // pass-through (the buffer's own stride is preserved).
-        if let [(layer, buffer, p)] = layers[..] {
-            let (crop_left, crop_top, width, height) = drawn_region(buffer);
-            if p.x == 0
-                && p.y == 0
-                && p.dim_amount <= 0.0
-                && p.alpha >= 1.0
-                && crop_left == 0
-                && crop_top == 0
-                && width == buffer.width
-                && height == buffer.height
+        // One layer, at the origin, whole buffer, opaque: the W10-W32
+        // pass-through (the buffer's own stride is preserved). The kernel's
+        // dest rect is exactly the buffer rect and no crop/dim applies.
+        if placed.len() == 1 {
+            let p = &placed[0];
+            let buffer = p.row.buffer.expect("placed has a buffer");
+            let full_buffer = p.source == (0, 0, buffer.width, buffer.height);
+            if p.dest == (0, 0, i64::from(buffer.width), i64::from(buffer.height))
+                && full_buffer
+                && p.row.dim_amount <= 0.0
+                && p.snapshot.alpha >= 1.0
             {
-                return Self::capture_layer(layer, buffer)
-                    .ok_or(CompositeError::Unreadable { layer_id: layer.layer_id });
+                return Self::capture_layer(p.row.record, buffer).ok_or(
+                    CompositeError::Unreadable {
+                        layer_id: p.row.record.layer_id,
+                    },
+                );
             }
         }
 
         let width = canvas_width as u32;
         let height = canvas_height as u32;
         let row = width as usize * 4;
-        // One line per composited frame under `ACOSC1_TRACE=1` (the same
-        // env-gated instrument style as `ACOS_WMS_TRACE`): the layer ids, the
-        // placements the composite drew with and the canvas origin. This is
-        // what makes "the dialog is in the frame, at its window's frame" a
-        // measurable statement instead of a guess.
+        // One line per composited frame under `ACOSC1_TRACE=1`: the kernel's
+        // snapshot for every layer that draws (the B1b replacement for the old
+        // placement/crop line).
         if std::env::var_os("ACOSC1_TRACE").is_some() {
-            let list: Vec<String> = layers
+            let list: Vec<String> = placed
                 .iter()
-                .map(|(layer, buffer, p)| {
-                    let (cl, ct, cw, ch) = drawn_region(buffer);
+                .map(|p| {
+                    let buffer = p.row.buffer.expect("placed has a buffer");
                     format!(
-                        "layer{}(buf={}x{} crop={:?} drawn=[{},{}+{}x{}] z={} at {},{}{} \
-                         parent={:?} name={:?})",
-                        layer.layer_id,
+                        "layer{}(buf={}x{} geom={:?} transformed={:?} cropped={:?} \
+                         bufferCrop={:?} alpha={:.3} draw={} dest=[{},{}+{}x{}]{} parent={:?} \
+                         name={:?})",
+                        p.row.record.layer_id,
                         buffer.width,
                         buffer.height,
-                        buffer.crop,
-                        cl,
-                        ct,
-                        cw,
-                        ch,
-                        p.z,
-                        p.x,
-                        p.y,
-                        if p.dim_amount > 0.0 {
-                            format!(" dim={}", p.dim_amount)
+                        p.snapshot.geom_transform,
+                        p.snapshot.transformed_bounds,
+                        p.snapshot.cropped_buffer_size,
+                        p.snapshot.buffer_crop,
+                        p.snapshot.alpha,
+                        p.snapshot.draw_order,
+                        p.dest.0,
+                        p.dest.1,
+                        p.dest.2 - p.dest.0,
+                        p.dest.3 - p.dest.1,
+                        if p.row.dim_amount > 0.0 {
+                            format!(" dim={}", p.row.dim_amount)
                         } else {
                             String::new()
                         },
-                        layer.parent.map(|h| h.0),
-                        layer.name
+                        p.row.record.parent.map(|h| h.0),
+                        p.row.record.name
                     )
                 })
                 .collect();
@@ -996,27 +1157,44 @@ impl SurfaceState {
         }
         let mut canvas = vec![0u8; row * height as usize];
         let (top_layer, top_buffer) = {
-            let (layer, buffer, _) = layers[layers.len() - 1];
-            (layer.layer_id, buffer)
+            let last = placed.last().expect("non-empty");
+            (
+                last.row.record.layer_id,
+                last.row.buffer.expect("placed has a buffer"),
+            )
         };
         let mut drawn = 0u32;
-        for (layer, buffer, p) in layers {
+        for p in placed {
+            let buffer = p.row.buffer.expect("placed has a buffer");
             if buffer.format != 1 {
                 return Err(CompositeError::UnsupportedFormat {
                     format: buffer.format,
                 });
             }
-            if p.dim_amount > 0.0 && drawn > 0 {
-                dim_canvas(&mut canvas, p.dim_amount.clamp(0.0, 1.0));
+            if p.row.dim_amount > 0.0 && drawn > 0 {
+                dim_canvas(&mut canvas, p.row.dim_amount.clamp(0.0, 1.0));
             }
-            let pixels = read_buffer_pixels(buffer)
-                .ok_or(CompositeError::Unreadable { layer_id: layer.layer_id })?;
-            let (crop_left, crop_top, crop_width, crop_height) = drawn_region(buffer);
+            let pixels = read_buffer_pixels(buffer).ok_or(CompositeError::Unreadable {
+                layer_id: p.row.record.layer_id,
+            })?;
+            if p.row.record.buffer_transform & 4 != 0 && std::env::var_os("ACOSC1_TRACE").is_some()
+            {
+                // Known B1b gap: a 90-degree buffer rotation is carried by the
+                // kernel's size/bounds, but the blit below does not rotate pixel
+                // data. No live ACOS surface sets it; logged, never silent.
+                eprintln!(
+                    "ACOSC1 snapshot-buffer-transform layer={} flags={} (pixel rotation not \
+                     implemented; drawn unrotated)",
+                    p.row.record.layer_id, p.row.record.buffer_transform
+                );
+            }
             let spec = DrawSpec {
-                crop: (crop_left, crop_top, crop_width, crop_height),
-                dst_x: i64::from(p.x) + i64::from(crop_left) - min_x,
-                dst_y: i64::from(p.y) + i64::from(crop_top) - min_y,
-                alpha: (p.alpha.clamp(0.0, 1.0) * 255.0).round() as u32,
+                crop: p.source,
+                dst_x: p.dest.0 - min_x,
+                dst_y: p.dest.1 - min_y,
+                dst_w: (p.dest.2 - p.dest.0).max(0) as u32,
+                dst_h: (p.dest.3 - p.dest.1).max(0) as u32,
+                alpha: (p.snapshot.alpha.clamp(0.0, 1.0) * 255.0).round() as u32,
             };
             blend_layer(&mut canvas, row, width, height, &pixels, buffer, &spec);
             drawn += 1;
@@ -1154,6 +1332,12 @@ impl SurfaceState {
             geometry: LayerGeometry::default(),
             alpha: 1.0,
             placement: None,
+            destination_frame: None,
+            crop: None,
+            buffer_crop: None,
+            buffer_transform: 0,
+            transform_to_display_inverse: false,
+            matrix: [1.0, 0.0, 0.0, 1.0],
             hidden: false,
         };
         self.layers.insert(handle.0, record);
@@ -1270,14 +1454,15 @@ impl ServiceObject for SurfaceClientService {
                 Err(ServiceError::UnsupportedAndroidApi {
                     interface: CLIENT_DESCRIPTOR.to_string(),
                     code,
-                    method: method_name(code).unwrap_or("mirror/getSchedulingPolicy").into(),
+                    method: method_name(code)
+                        .unwrap_or("mirror/getSchedulingPolicy")
+                        .into(),
                 })
             }
             _ => Err(ServiceError::UnsupportedAndroidApi {
                 interface: CLIENT_DESCRIPTOR.to_string(),
                 code,
-                method: method_name(code)
-                    .map_or_else(|| format!("code {code}"), str::to_string),
+                method: method_name(code).map_or_else(|| format!("code {code}"), str::to_string),
             }),
         }
     }
@@ -1671,7 +1856,11 @@ fn apply_layer_state(
             layer.crop,
             layer.buffer_crop,
             layer.destination_frame,
-            layer.buffer.as_ref().and_then(|b| b.buffer.as_ref()).map(|b| (b.width, b.height)),
+            layer
+                .buffer
+                .as_ref()
+                .and_then(|b| b.buffer.as_ref())
+                .map(|b| (b.width, b.height)),
             layer.corner_radius
         );
         eprintln!(
@@ -1708,6 +1897,12 @@ fn apply_layer_state(
         geometry: LayerGeometry::default(),
         alpha: 1.0,
         placement: None,
+        destination_frame: None,
+        crop: None,
+        buffer_crop: None,
+        buffer_transform: 0,
+        transform_to_display_inverse: false,
+        matrix: [1.0, 0.0, 0.0, 1.0],
         hidden: false,
     });
 
@@ -1754,6 +1949,30 @@ fn apply_layer_state(
             };
         }
     }
+    // B1b: the geometry inputs the AOSP kernel needs that C1 used to decode and
+    // drop. Each field is latched only on its own change flag, exactly like
+    // `RequestedLayerState::merge` (RequestedLayerState.cpp:311-317, 2420-2450
+    // analogues); an unchanged field keeps its previous value.
+    if let Some(record) = state.layers.get_mut(&handle.0) {
+        if layer.what & what::DESTINATION_FRAME != 0 {
+            record.destination_frame = rect_option(layer.destination_frame);
+        }
+        if layer.what & what::CROP != 0 {
+            record.crop = rect_option(layer.crop);
+        }
+        if layer.what & what::BUFFER_CROP != 0 {
+            record.buffer_crop = rect_option(layer.buffer_crop);
+        }
+        if layer.what & what::BUFFER_TRANSFORM != 0 {
+            record.buffer_transform = layer.buffer_transform;
+        }
+        if layer.what & what::TRANSFORM_TO_DISPLAY_INVERSE != 0 {
+            record.transform_to_display_inverse = layer.transform_to_display_inverse;
+        }
+        if layer.what & what::MATRIX != 0 {
+            record.matrix = layer.matrix;
+        }
+    }
     if let Some(info) = &layer.window_info {
         if let Some(record) = state.layers.get_mut(&handle.0) {
             record.alpha = info.alpha.clamp(0.0, 1.0);
@@ -1767,10 +1986,7 @@ fn apply_layer_state(
     // synchronous transaction would fire the same callback twice.
     let mut callbacks: Vec<ListenerCallbacks> = Vec::new();
     for group in layer.listeners.iter().chain(top_level_listeners.iter()) {
-        if let Some(existing) = callbacks
-            .iter_mut()
-            .find(|c| c.listener == group.listener)
-        {
+        if let Some(existing) = callbacks.iter_mut().find(|c| c.listener == group.listener) {
             for cb in &group.callback_ids {
                 if !existing.callback_ids.contains(cb) {
                     existing.callback_ids.push(*cb);
@@ -1898,9 +2114,7 @@ fn apply_layer_state(
             }
             let stats = state.stats.entry(handle.0).or_default();
             stats.posted.push(buffer.frame_number as i64);
-            stats
-                .frame_ready
-                .push(buffer.frame_number as i64);
+            stats.frame_ready.push(buffer.frame_number as i64);
             if stats.posted.len() > 32 {
                 stats.posted.remove(0);
                 stats.frame_ready.remove(0);
@@ -1961,9 +2175,11 @@ fn apply_layer_state(
             );
         }
         if !stats_carry_the_release {
-            state
-                .deliveries
-                .push(on_release_buffer_delivery(target, id, state.max_acquired_buffers));
+            state.deliveries.push(on_release_buffer_delivery(
+                target,
+                id,
+                state.max_acquired_buffers,
+            ));
         }
     }
     // One `onTransactionCompleted` per listener that registered callback ids.
@@ -1975,7 +2191,11 @@ fn apply_layer_state(
             eprintln!(
                 "ACOSDBG COMPLETED target={:#x} ids={:?} layer={:#x}",
                 listener.listener.0,
-                listener.callback_ids.iter().map(|c| c.id).collect::<Vec<_>>(),
+                listener
+                    .callback_ids
+                    .iter()
+                    .map(|c| c.id)
+                    .collect::<Vec<_>>(),
                 handle.0
             );
         }
@@ -1999,9 +2219,9 @@ fn try_clone(meta: &GraphicBufferMeta) -> Option<OwnedFd> {
 
 /// The display-space rectangle a layer draws into (**W54**).
 ///
-/// `crop` is the buffer region the layer shows ([`drawn_region`]), `p` its
-/// placement (a window layer's placement is `frame − surfaceInsets`, pushed by
-/// the window manager). The result is clipped to the display viewport, which is
+/// `crop` is the buffer region the layer shows, `p` its placement (a window
+/// layer's placement is `frame − surfaceInsets`, pushed by the window
+/// manager). The result is clipped to the display viewport, which is
 /// what SurfaceFlinger does for every layer
 /// (`Layer::setGeometry`/`composeSurfaces` intersect with the display clip); a
 /// window surface is `frame + surfaceInsets` so it deliberately overhangs the
@@ -2023,24 +2243,89 @@ pub fn placed_rect(
         .then_some((clipped_x0, clipped_y0, clipped_x1, clipped_y1))
 }
 
-/// `stride * 4 * height`, checked, and `None` when the geometry is outside the
-/// S7 bounds (dimension/stride ceilings, byte ceiling, or arithmetic overflow).
-/// The part of `buffer` a composite draws: its crop when the transaction
-/// carried a non-empty one (clamped to the buffer), else the whole buffer.
-fn drawn_region(buffer: &LatestBuffer) -> (u32, u32, u32, u32) {
-    let mut left = 0u32;
-    let mut top = 0u32;
-    let mut right = buffer.width;
-    let mut bottom = buffer.height;
-    if let Some(crop) = buffer.crop {
-        if crop.right > crop.left && crop.bottom > crop.top {
-            left = left.max(crop.left.max(0).unsigned_abs()).min(right);
-            top = top.max(crop.top.max(0).unsigned_abs()).min(bottom);
-            right = right.min(crop.right.max(0).unsigned_abs()).max(left);
-            bottom = bottom.min(crop.bottom.max(0).unsigned_abs()).max(top);
-        }
+/// The buffer region a kernel snapshot draws: stock `getBufferCrop()`
+/// (`RequestedLayerState.cpp:481-494`), which is already intersected with the
+/// buffer bounds. `(left, top, width, height)`.
+fn source_crop(snapshot: &Snapshot, buffer: &LatestBuffer) -> (u32, u32, u32, u32) {
+    let [left, top, right, bottom] = snapshot.buffer_crop;
+    let left = left.max(0).unsigned_abs().min(buffer.width);
+    let top = top.max(0).unsigned_abs().min(buffer.height);
+    let right = right.max(0).unsigned_abs().clamp(left, buffer.width);
+    let bottom = bottom.max(0).unsigned_abs().clamp(top, buffer.height);
+    if right <= left || bottom <= top {
+        (0, 0, buffer.width, buffer.height)
+    } else {
+        (left, top, right - left, bottom - top)
     }
-    (left, top, right - left, bottom - top)
+}
+
+/// Transform a rectangle with the kernel's composed transform, min/max of the
+/// four corners exactly like `ui::Transform::transform(const FloatRect&)`
+/// (`Transform.cpp:281-303`).
+fn transform_rect(transform: &[f32; 9], rect: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+    let (left, top, right, bottom) = rect;
+    let corners = [(left, top), (right, top), (left, bottom), (right, bottom)];
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for (x, y) in corners {
+        // `Transform::transform(const vec2&)` (Transform.cpp:229-236); geom is
+        // column-major, so geom[0]=dsdx, geom[3]=dtdx, geom[6]=tx.
+        let tx = transform[0] * x + transform[3] * y + transform[6];
+        let ty = transform[1] * x + transform[4] * y + transform[7];
+        min_x = min_x.min(tx);
+        min_y = min_y.min(ty);
+        max_x = max_x.max(tx);
+        max_y = max_y.max(ty);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
+/// The kernel's display-space rectangle for one layer, clipped to the layer's
+/// `transformedBounds` but **not** to the display: the blit clips per pixel, so
+/// `x0` may be negative (a surface-inset window overhangs the display, W54).
+/// Keeping the unclipped rectangle is what makes the source:destination scale
+/// correct; clipping first would squeeze the buffer into the visible part.
+fn placed_rect_from_kernel(
+    snapshot: &Snapshot,
+    source: (u32, u32, u32, u32),
+) -> (i64, i64, i64, i64) {
+    let (left, top, width, height) = source;
+    let dest = transform_rect(
+        &snapshot.geom_transform,
+        (
+            left as f32,
+            top as f32,
+            (left + width) as f32,
+            (top + height) as f32,
+        ),
+    );
+    let bounds = snapshot.transformed_bounds;
+    // `ui::Transform::transform(const Rect&)` rounds to nearest
+    // (`Transform.cpp:258-276`); finding the same ints for 1:1 placement keeps
+    // W10-W54 frames byte-identical.
+    let round = |v: f32| (v + 0.5).floor() as i64;
+    let x0 = round(dest.0.max(bounds[0]));
+    let y0 = round(dest.1.max(bounds[1]));
+    let x1 = round(dest.2.min(bounds[2]));
+    let y1 = round(dest.3.min(bounds[3]));
+    (x0, y0, x1, y1)
+}
+
+/// Clip a display-space rectangle to the display viewport (W54: the canvas is
+/// never larger than the display). `None` means the layer draws nothing.
+fn clip_to_display(
+    rect: (i64, i64, i64, i64),
+    display: DisplayDescriptor,
+) -> Option<(i64, i64, i64, i64)> {
+    let clipped = (
+        rect.0.max(0),
+        rect.1.max(0),
+        rect.2.min(i64::from(display.width.max(0))),
+        rect.3.min(i64::from(display.height.max(0))),
+    );
+    (clipped.2 > clipped.0 && clipped.3 > clipped.1).then_some(clipped)
 }
 
 /// Copy one layer's stored buffer out of its memfd.
@@ -2096,6 +2381,16 @@ fn dim_canvas(canvas: &mut [u8], amount: f32) {
     }
 }
 
+/// One layer the composite will draw, with the kernel snapshot that decided it.
+struct Placed<'a> {
+    row: &'a KernelRow<'a>,
+    snapshot: Snapshot,
+    /// Source region in raw buffer pixels.
+    source: (u32, u32, u32, u32),
+    /// Display-space destination `(x0, y0, x1, y1)`, already clipped.
+    dest: (i64, i64, i64, i64),
+}
+
 /// Where one layer's pixels go on the canvas.
 struct DrawSpec {
     /// Source region in buffer pixels `(left, top, width, height)`.
@@ -2104,11 +2399,19 @@ struct DrawSpec {
     dst_x: i64,
     /// Canvas row of the source region's top edge.
     dst_y: i64,
+    /// Destination width in canvas pixels (`== crop.2` on the 1:1 path).
+    dst_w: u32,
+    /// Destination height in canvas pixels (`== crop.3` on the 1:1 path).
+    dst_h: u32,
     /// Layer alpha, `0..=255`.
     alpha: u32,
 }
 
 /// Blend one layer's pixels into the canvas, source-over, alpha-weighted.
+///
+/// A destination that is not the source size is sampled **nearest-neighbour**
+/// (deterministic, no extra state; B1b's `destinationFrame` scale path). The
+/// 1:1 path below is the pre-B1b loop byte for byte.
 fn blend_layer(
     canvas: &mut [u8],
     row: usize,
@@ -2120,26 +2423,39 @@ fn blend_layer(
 ) {
     let (crop_left, crop_top, crop_width, crop_height) = spec.crop;
     let stride = buffer.stride as usize;
-    for sy in 0..crop_height as usize {
-        let dy = spec.dst_y + sy as i64;
-        if dy < 0 || dy >= i64::from(canvas_height) {
+    let one_to_one = spec.dst_w == crop_width && spec.dst_h == crop_height;
+    for dy in 0..spec.dst_h as usize {
+        let y = spec.dst_y + dy as i64;
+        if y < 0 || y >= i64::from(canvas_height) {
             continue;
         }
-        let src_row = (crop_top as usize + sy) * stride * 4;
-        let dst_row = dy as usize * row;
-        for sx in 0..crop_width as usize {
-            let dx = spec.dst_x + sx as i64;
-            if dx < 0 || dx >= i64::from(canvas_width) {
+        let src_y = if one_to_one {
+            crop_top as usize + dy
+        } else {
+            crop_top as usize
+                + (dy as u64 * u64::from(crop_height) / u64::from(spec.dst_h.max(1))) as usize
+        };
+        let src_row = src_y * stride * 4;
+        let dst_row = y as usize * row;
+        for dx in 0..spec.dst_w as usize {
+            let x = spec.dst_x + dx as i64;
+            if x < 0 || x >= i64::from(canvas_width) {
                 continue;
             }
-            let src = src_row + (crop_left as usize + sx) * 4;
+            let src_x = if one_to_one {
+                crop_left as usize + dx
+            } else {
+                crop_left as usize
+                    + (dx as u64 * u64::from(crop_width) / u64::from(spec.dst_w.max(1))) as usize
+            };
+            let src = src_row + src_x * 4;
             let Some(src_px) = pixels.get(src..src + 4) else {
                 return;
             };
             // The layer's own alpha times the pixel's alpha, per the image's
             // premultiplied-free RGBA_8888 layout.
             let a = spec.alpha * u32::from(src_px[3]) / 255;
-            let dst = dst_row + dx as usize * 4;
+            let dst = dst_row + x as usize * 4;
             let dst_px = &mut canvas[dst..dst + 4];
             if a >= 255 {
                 dst_px.copy_from_slice(src_px);
@@ -2156,6 +2472,8 @@ fn blend_layer(
     }
 }
 
+/// `stride * 4 * height`, checked, and `None` when the geometry is outside the
+/// S7 bounds (dimension/stride ceilings, byte ceiling, or arithmetic overflow).
 fn checked_buffer_bytes(width: u32, height: u32, stride: u32) -> Option<u64> {
     if width > MAX_BUFFER_DIMENSION
         || height > MAX_BUFFER_DIMENSION
@@ -2249,7 +2567,8 @@ fn on_release_buffer_delivery(
     max_acquired: u32,
 ) -> PendingDelivery {
     let mut data = Parcel::new();
-    data.write_interface_token(TRANSACTION_LISTENER_DESCRIPTOR).ok();
+    data.write_interface_token(TRANSACTION_LISTENER_DESCRIPTOR)
+        .ok();
     // Parcelable `ReleaseCallbackId`: marker then two uint64s.
     data.write_int32(1);
     data.write_uint64(id.buffer_id);
@@ -2284,7 +2603,8 @@ fn on_transaction_completed_delivery(
     max_acquired: u32,
 ) -> PendingDelivery {
     let mut data = Parcel::new();
-    data.write_interface_token(TRANSACTION_LISTENER_DESCRIPTOR).ok();
+    data.write_interface_token(TRANSACTION_LISTENER_DESCRIPTOR)
+        .ok();
     // Parcelable `ListenerStats`: marker, int32 count of TransactionStats.
     data.write_int32(1);
     data.write_int32(1);
@@ -2427,15 +2747,23 @@ fn read_transaction_state_body(
     }
 
     let dbg = std::env::var_os("ACOS_W5_TAIL").is_some();
-    if dbg { eprintln!("ACOSDBG tail displays at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail displays at {}", data.data_position());
+    }
     let flags = data.read_uint32().map_err(perr)?;
     let apply_token = data.read_strong_binder().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG tail iwc at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail iwc at {}", data.data_position());
+    }
     read_input_window_commands(data)?;
-    if dbg { eprintln!("ACOSDBG tail desired at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail desired at {}", data.data_position());
+    }
     let desired_present_time = data.read_int64().map_err(perr)?;
     let is_auto_timestamp = data.read_bool().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG tail uncache at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail uncache at {}", data.data_position());
+    }
 
     let uncache_count = data.read_uint32().map_err(perr)?;
     if uncache_count > MAX_UNCACHE_BUFFERS {
@@ -2449,7 +2777,9 @@ fn read_transaction_state_body(
         let _id = data.read_uint64().map_err(perr)?;
     }
 
-    if dbg { eprintln!("ACOSDBG tail listeners at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail listeners at {}", data.data_position());
+    }
     let has_listener_callbacks = data.read_bool().map_err(perr)?;
     let listener_count = data.read_int32().map_err(perr)?;
     if listener_count > MAX_LISTENERS {
@@ -2459,7 +2789,10 @@ fn read_transaction_state_body(
     }
     let mut listener_callbacks = Vec::new();
     for _ in 0..listener_count.max(0) {
-        let listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
+        let listener = data
+            .read_strong_binder()
+            .map_err(perr)?
+            .unwrap_or(BinderId(0));
         let callback_ids = read_callback_id_vector(data)?;
         listener_callbacks.push(ListenerCallbacks {
             listener,
@@ -2467,7 +2800,9 @@ fn read_transaction_state_body(
         });
     }
 
-    if dbg { eprintln!("ACOSDBG tail txnid at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG tail txnid at {}", data.data_position());
+    }
     let transaction_id = data.read_uint64().map_err(perr)?;
     let merged_count = data.read_uint32().map_err(perr)? as usize;
     let mut merged_transaction_ids = Vec::with_capacity(merged_count.min(64));
@@ -2502,7 +2837,10 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
                 Err(_) => break,
             }
         }
-        eprintln!("ACOSDBG layer_state size={} at {start}: {bytes:02x?}", data.data_size());
+        eprintln!(
+            "ACOSDBG layer_state size={} at {start}: {bytes:02x?}",
+            data.data_size()
+        );
     }
     let surface = data.read_strong_binder().map_err(perr)?;
     let layer_id = data.read_int32().map_err(perr)?;
@@ -2530,18 +2868,26 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let parent_handle = read_nullable_surface_control(data)?;
     let reparent = (what & what::REPARENT != 0).then_some(parent_handle);
     let dbg = std::env::var_os("ACOS_W5_LS").is_some();
-    if dbg { eprintln!("ACOSDBG ls nsc at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls nsc at {}", data.data_position());
+    }
 
     for _ in 0..4 {
         let _ = data.read_float().map_err(perr)?;
     }
-    if dbg { eprintln!("ACOSDBG ls color at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls color at {}", data.data_position());
+    }
     let window_info = read_window_info(data)?;
-    if dbg { eprintln!("ACOSDBG ls windowinfo at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls windowinfo at {}", data.data_position());
+    }
 
     let transparent_region_size = data.read_int32().map_err(perr)?;
     skip_bytes(data, transparent_region_size)?;
-    if dbg { eprintln!("ACOSDBG ls region at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls region at {}", data.data_position());
+    }
     let buffer_transform = data.read_uint32().map_err(perr)?;
     let transform_to_display_inverse = data.read_bool().map_err(perr)?;
     let _border_enabled = data.read_bool().map_err(perr)?;
@@ -2582,7 +2928,9 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let background_blur_radius = data.read_uint32().map_err(perr)?;
 
     read_layer_metadata(data)?;
-    if dbg { eprintln!("ACOSDBG ls metadata at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls metadata at {}", data.data_position());
+    }
 
     for _ in 0..4 {
         let _ = data.read_float().map_err(perr)?;
@@ -2598,7 +2946,10 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     }
     let mut listeners = Vec::new();
     for _ in 0..listener_count.max(0) {
-        let listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
+        let listener = data
+            .read_strong_binder()
+            .map_err(perr)?
+            .unwrap_or(BinderId(0));
         let callback_ids = read_callback_id_vector(data)?;
         listeners.push(ListenerCallbacks {
             listener,
@@ -2606,7 +2957,9 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         });
     }
 
-    if dbg { eprintln!("ACOSDBG ls listeners at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls listeners at {}", data.data_position());
+    }
     let _shadow_radius = data.read_float().map_err(perr)?;
     let _frame_rate_selection_priority = data.read_int32().map_err(perr)?;
     let _frame_rate = data.read_float().map_err(perr)?;
@@ -2634,7 +2987,9 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         }
     }
 
-    if dbg { eprintln!("ACOSDBG ls blur at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls blur at {}", data.data_position());
+    }
     // `StretchEffect` is fixed-size (6 floats + 4-float bounds = 40 bytes).
     for _ in 0..10 {
         let _ = data.read_float().map_err(perr)?;
@@ -2643,20 +2998,31 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let destination_frame = read_rect(data)?;
     let _is_trusted_overlay = data.read_bool().map_err(perr)?;
     let drop_input_mode = data.read_uint32().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG ls trusted at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls trusted at {}", data.data_position());
+    }
 
     let has_buffer_data = data.read_bool().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG ls hasbuf={has_buffer_data} at {}", data.data_position()); }
+    if dbg {
+        eprintln!(
+            "ACOSDBG ls hasbuf={has_buffer_data} at {}",
+            data.data_position()
+        );
+    }
     let buffer = if has_buffer_data {
         Some(read_buffer_data(data, buffer_crop)?)
     } else {
         None
     };
-    if dbg { eprintln!("ACOSDBG ls buffer at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls buffer at {}", data.data_position());
+    }
 
     // Parcelable TrustedPresentationThresholds (AIDL: marker + size + payload).
     read_aidl_parcelable(data)?;
-    if dbg { eprintln!("ACOSDBG ls tpt at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls tpt at {}", data.data_position());
+    }
     // Parcelable TrustedPresentationListener (C++: marker + binder + int32).
     //
     // The binder is **null** in the real BLAST transactions, and libbinder
@@ -2671,9 +3037,13 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     let _present = data.read_int32().map_err(perr)?;
     let _listener = data.read_strong_binder().map_err(perr)?;
     let _id = data.read_int32().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG ls tpl2 at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls tpl2 at {}", data.data_position());
+    }
 
-    if dbg { eprintln!("ACOSDBG ls tpl at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG ls tpl at {}", data.data_position());
+    }
     let _current_hdr_sdr_ratio = data.read_float().map_err(perr)?;
     let _desired_hdr_sdr_ratio = data.read_float().map_err(perr)?;
     let _caching_hint = data.read_int32().map_err(perr)?;
@@ -2747,33 +3117,66 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
     let dbg = std::env::var_os("ACOS_W5_BD").is_some();
     let flags = data.read_int32().map_err(perr)?;
     let has_buf = data.read_bool().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG bd flags at {} hasbuf={has_buf}", data.data_position()); }
+    if dbg {
+        eprintln!(
+            "ACOSDBG bd flags at {} hasbuf={has_buf}",
+            data.data_position()
+        );
+    }
     let buffer = if has_buf {
         Some(read_graphic_buffer(data)?)
     } else {
         None
     };
-    if dbg { eprintln!("ACOSDBG bd gb at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG bd gb at {}", data.data_position());
+    }
     let has_fence = data.read_bool().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG bd fenceflag={has_fence} at {}", data.data_position()); }
+    if dbg {
+        eprintln!(
+            "ACOSDBG bd fenceflag={has_fence} at {}",
+            data.data_position()
+        );
+    }
     if has_fence {
         // An acquire fence: `Parcel::write(Fence)`.
         read_fence(data)?;
-        if dbg { eprintln!("ACOSDBG bd fence at {}", data.data_position()); }
+        if dbg {
+            eprintln!("ACOSDBG bd fence at {}", data.data_position());
+        }
     }
     let frame_number = data.read_uint64().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG bd frame={frame_number} at {}", data.data_position()); }
-    let release_buffer_listener = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
-    if dbg { eprintln!("ACOSDBG bd listener at {}", data.data_position()); }
-    let release_buffer_endpoint = data.read_strong_binder().map_err(perr)?.unwrap_or(BinderId(0));
-    if dbg { eprintln!("ACOSDBG bd endpoint at {}", data.data_position()); }
+    if dbg {
+        eprintln!(
+            "ACOSDBG bd frame={frame_number} at {}",
+            data.data_position()
+        );
+    }
+    let release_buffer_listener = data
+        .read_strong_binder()
+        .map_err(perr)?
+        .unwrap_or(BinderId(0));
+    if dbg {
+        eprintln!("ACOSDBG bd listener at {}", data.data_position());
+    }
+    let release_buffer_endpoint = data
+        .read_strong_binder()
+        .map_err(perr)?
+        .unwrap_or(BinderId(0));
+    if dbg {
+        eprintln!("ACOSDBG bd endpoint at {}", data.data_position());
+    }
     let _cached_token = data.read_strong_binder().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG bd cachedtok at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG bd cachedtok at {}", data.data_position());
+    }
     let cached_buffer_id = data.read_uint64().map_err(perr)?;
     let has_barrier = data.read_bool().map_err(perr)?;
     let barrier_frame_number = data.read_uint64().map_err(perr)?;
     let producer_id = data.read_uint32().map_err(perr)?;
-    if dbg { eprintln!("ACOSDBG bd producer at {}", data.data_position()); }
+    if dbg {
+        eprintln!("ACOSDBG bd producer at {}", data.data_position());
+    }
     Ok(BufferData {
         flags,
         buffer,
@@ -2810,7 +3213,10 @@ fn read_graphic_buffer(data: &mut Parcel) -> SResult<GraphicBufferMeta> {
     let len = data.read_int32().map_err(perr)?;
     let fd_count = data.read_int32().map_err(perr)?;
     if std::env::var_os("ACOS_W5_BD").is_some() {
-        eprintln!("ACOSDBG gb header len={len} fdc={fd_count} at {}", data.data_position());
+        eprintln!(
+            "ACOSDBG gb header len={len} fdc={fd_count} at {}",
+            data.data_position()
+        );
     }
     if len < 13 * 4 || fd_count < 0 {
         return Err(ServiceError::BadRequest {
