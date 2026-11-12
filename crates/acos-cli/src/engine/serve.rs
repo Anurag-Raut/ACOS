@@ -329,32 +329,39 @@ impl ServeEngine {
         let native_requested = ["native", "flutter", "rn"]
             .iter()
             .any(|key| args.get(*key).and_then(Value::as_bool).unwrap_or(false));
-        if explicit == Some(Engine::Art) && native_requested {
-            // Flutter/RN/native closures are real host native code; driving them
-            // through the ART launcher is not supported in this build. Say so
-            // instead of quietly booting the native-child route the agent did
-            // not ask for.
+        // The Rust loader (`native: true`) is a different execution path from
+        // ART and cannot be combined with it. The `rn`/`flutter` flags are
+        // *product-path hints* for the legacy native-child route, not a claim
+        // that ART cannot run the APK: ART boots the app's own launcher Activity
+        // and loads its `lib/<abi>/` closure, so an explicit `engine: "art"`
+        // wins and those hints are ignored rather than refused (G1 rank 5: a
+        // Gaten `--engine art` launch used to die in the frozen VM).
+        let rust_loader = args
+            .get("native")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if explicit == Some(Engine::Art) && rust_loader {
             return with_hint(
                 art_failure(
                     request_id,
                     Some(id),
                     Trust::Trusted,
                     ErrorCode::UnsupportedBackend,
-                    "Flutter/React Native/native APKs cannot be driven by the ART engine in this build",
+                    "`native: true` (the Rust loader) cannot be combined with engine: \"art\"",
                     json!({
-                        "capability": "engine.art.native-closure",
+                        "capability": "engine.art.native-loader",
                         "requested_engine": ENGINE_ART,
                         "fallback_used": false,
                     }),
                 ),
-                "Use engine: \"rust-vm\" (confined native child) for a Flutter/RN APK, or run the \
-                 native-closure ART track when it lands.",
+                "ART has its own process and loads the APK's libraries itself: drop `native` and \
+                 launch with engine: \"art\", or ask for engine: \"rust-vm\" to use the Rust loader.",
             );
         }
         let engine = explicit.unwrap_or(if native_requested {
-            // Flutter/RN/native sessions are real host native code in a
-            // confined child, not the Rust VM; they keep the legacy route and
-            // are labelled `native-child`.
+            // Flutter/RN/native sessions on the *default* route are real host
+            // native code in a confined child, not the Rust VM; they keep the
+            // legacy route and are labelled `native-child`.
             Engine::RustVm
         } else {
             self.default_engine

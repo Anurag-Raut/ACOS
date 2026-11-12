@@ -21,6 +21,7 @@ use acos_runtime::session::{
 };
 use serde_json::{json, Value};
 
+use crate::engine::Engine;
 use crate::new_request_id;
 
 /// Arguments for `acos launch`.
@@ -56,6 +57,15 @@ pub struct LaunchArgs {
     /// omitted.
     #[arg(long)]
     pub rn: bool,
+
+    /// Execution engine. `art` runs the APK's **own** launcher Activity on
+    /// Google ART — the same path a plain Android app takes, including the
+    /// APK's `lib/<abi>/` native libraries — so a React Native / Flutter APK
+    /// boots its own `MainApplication`/`ReactHost`/Hermes instead of the frozen
+    /// Rust VM's hand-written drivers. Omitted keeps today's routing: the
+    /// daemon default, with RN/Flutter APKs on the native-child route.
+    #[arg(long)]
+    pub engine: Option<String>,
 
     /// Keep the session alive in the `acos serve` daemon after launching, so
     /// separate `acos observe/tap/logs` invocations see the same live session.
@@ -129,22 +139,39 @@ pub fn run(args: LaunchArgs) -> ExitCode {
         Some(o) => std::env::set_var("ACOS_DISPLAY_OVERRIDE", o.spec()),
         None => std::env::remove_var("ACOS_DISPLAY_OVERRIDE"),
     }
+    // The engine is explicit and never inferred from the engine the last
+    // command used. `art` means: run the APK's own launcher Activity on Google
+    // ART, exactly like a plain Android app (the APK's `lib/<abi>/` native
+    // closure included). That is a *different* launch from the frozen Rust VM's
+    // RN/Flutter drivers, so the RN/Flutter product-path flags do not apply.
+    let engine = match args.engine.as_deref() {
+        None => None,
+        Some(value) => match Engine::parse(value) {
+            Some(engine) => Some(engine),
+            None => return reject_engine(&request_id, &args, value),
+        },
+    };
+    let art = engine == Some(Engine::Art);
+    if art && crate::native_launch::native_requested(args.native) {
+        return reject_engine_conflict(&request_id, &args);
+    }
     // A Flutter APK can only be driven by the confined child, so it always
     // routes through the daemon even without `--keep`: the session must outlive
-    // this process for `acos observe`/`tap` to address it.
-    let flutter = args.flutter || detect_flutter(&args.apk);
-    let rn = args.rn || detect_react_native(&args.apk);
-    if args.keep || flutter || rn {
+    // this process for `acos observe`/`tap` to address it. `--engine art` also
+    // needs the daemon: the ART guest is its own process, not this one.
+    let flutter = !art && (args.flutter || detect_flutter(&args.apk));
+    let rn = !art && (args.rn || detect_react_native(&args.apk));
+    if args.keep || flutter || rn || art {
         // The ABI gate (UNSUPPORTED_ABI, ADR-0018 W59-A) must run here too: the
         // daemon route's own backends report an ABI miss as WRONG_ABI. Only the
         // parse-and-check runs in this process; confinement is never entered
         // here, so the daemon spawn is still the first execution.
-        if crate::native_launch::native_requested(args.native) {
+        if !art && crate::native_launch::native_requested(args.native) {
             if let Err(err) = crate::native_launch::check_apk(&args.apk) {
                 return reject_native_gate(&request_id, &args, &err);
             }
         }
-        return run_keep(&args, &request_id, flutter, rn);
+        return run_keep(&args, &request_id, flutter, rn, engine);
     }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
@@ -184,7 +211,13 @@ pub fn run(args: LaunchArgs) -> ExitCode {
 }
 
 /// Launch through the `acos serve` daemon and leave the session running.
-fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> ExitCode {
+fn run_keep(
+    args: &LaunchArgs,
+    request_id: &str,
+    flutter: bool,
+    rn: bool,
+    engine: Option<Engine>,
+) -> ExitCode {
     let display = display_override_from_args(args);
     let native = crate::native_launch::native_requested(args.native) || flutter || rn;
     let mut client = match crate::serve::ensure_daemon() {
@@ -196,7 +229,7 @@ fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> Exi
     };
     // The daemon's path check rejects `..`, so send a canonical absolute path.
     let apk = std::fs::canonicalize(&args.apk).unwrap_or_else(|_| args.apk.clone());
-    let daemon_args = json!({
+    let mut daemon_args = json!({
         "base": {"request_id": request_id, "session_id": "s_cli"},
         "apk": apk.display().to_string(),
         "native": native,
@@ -205,10 +238,56 @@ fn run_keep(args: &LaunchArgs, request_id: &str, flutter: bool, rn: bool) -> Exi
         "display": display.map(|o| o.spec()),
         "timeout_ms": args.timeout.saturating_mul(1000),
     });
+    // The engine is forwarded verbatim: the daemon must answer with the engine
+    // that actually ran and must never fall back to another one.
+    if let Some(engine) = engine {
+        daemon_args["engine"] = json!(engine.as_str());
+    }
     let envelope = match client.call("acos_launch", &daemon_args) {
         Ok(envelope) => envelope,
         Err(e) => daemon_failure(request_id, format!("session daemon: {e}")),
     };
+    finish_daemon(&envelope, args.json)
+}
+
+/// Reject an `--engine` value this build does not have (no aliases, no guesses).
+fn reject_engine(request_id: &str, args: &LaunchArgs, value: &str) -> ExitCode {
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(
+            ErrorCode::InvalidArgument,
+            format!("unknown --engine value {value:?}"),
+        )
+        .with_hint(
+            "Use `--engine art` (the APK's own Activity on Google ART) or `--engine rust-vm` \
+             (the frozen Rust VM). There is no silent fallback between engines.",
+        )
+        .with_details(json!({"field": "engine", "value": value})),
+        Metrics::wall_ms(0),
+    );
+    finish_daemon(&envelope, args.json)
+}
+
+/// `--engine art` runs the APK's own process; it cannot be combined with the
+/// Rust loader's `--native` selection.
+fn reject_engine_conflict(request_id: &str, args: &LaunchArgs) -> ExitCode {
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(
+            ErrorCode::InvalidArgument,
+            "--engine art cannot be combined with --native",
+        )
+        .with_hint(
+            "`--native` selects the Rust loader inside the ACOS runtime; ART has its own process \
+             and loads the APK's libraries itself. Run them separately.",
+        )
+        .with_details(json!({"field": "engine", "value": "art"})),
+        Metrics::wall_ms(0),
+    );
     finish_daemon(&envelope, args.json)
 }
 
