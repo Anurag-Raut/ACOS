@@ -194,11 +194,65 @@ fn resolve_shared_boot_image(raw: Option<std::ffi::OsString>) -> Result<Option<P
     }
 }
 
+/// The session-independent paths built once by the ZM2 host template.
+///
+/// With `ACOS_HOST_ZYGOTE_PLAN` unset these are local values, so the production
+/// path is unchanged; the struct only exists to hand the same paths to fork
+/// children of [`crate::host_zygote`].
+pub struct SessionShims {
+    pub substrate: PathBuf,
+    pub art_shim: PathBuf,
+    pub driver: PathBuf,
+}
+
+/// A service graph built before the fork (ZM2 prototype C).
+pub type PrebuiltHost = (
+    acos_services::ServiceHost,
+    acos_services::registry::LiveHandles,
+);
+
+/// ZM2: opt-in glibc controls for the launcher's frame-sized capture buffers.
+///
+/// * `ACOS_ART_MALLOC_ARENA_MAX=N` -> `mallopt(M_ARENA_MAX, N)` (1 = every
+///   thread allocates from the main arena, so `malloc_trim` can reach it).
+/// * `ACOS_ART_MALLOC_MMAP_THRESHOLD_KB=N` -> `mallopt(M_MMAP_THRESHOLD, N*1024)`
+///   (128 = frame buffers are mmap'd and returned on free).
+/// * `ACOS_ART_MALLOC_TRIM_THRESHOLD_KB=N` -> `mallopt(M_TRIM_THRESHOLD, N*1024)`.
+///
+/// `ACOS_ART_TRIM_AFTER_CAPTURE=1` (in `capture_c1`) calls `malloc_trim(0)`.
+/// Nothing here runs unless one of the variables is set.
+fn apply_malloc_controls() {
+    #[cfg(target_env = "gnu")]
+    unsafe {
+        let int_env = |name: &str| -> Option<i32> {
+            std::env::var(name)
+                .ok()
+                .and_then(|v| v.trim().parse::<i32>().ok())
+                .filter(|v| *v >= 0)
+        };
+        if let Some(n) = int_env("ACOS_ART_MALLOC_ARENA_MAX") {
+            libc::mallopt(libc::M_ARENA_MAX, n);
+        }
+        if let Some(kb) = int_env("ACOS_ART_MALLOC_MMAP_THRESHOLD_KB") {
+            libc::mallopt(libc::M_MMAP_THRESHOLD, kb.saturating_mul(1024));
+        }
+        if let Some(kb) = int_env("ACOS_ART_MALLOC_TRIM_THRESHOLD_KB") {
+            libc::mallopt(libc::M_TRIM_THRESHOLD, kb.saturating_mul(1024));
+        }
+    }
+}
+
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
     // the exec -> activity-resumed wall. Inert unless ACOS_ART_STAGE_TIMING=1.
     crate::stage("launch-entry");
+    // ZM2 quick-win knobs (all unset by default; unset => no allocator call at
+    // all, so the launch path is byte-identical). The launcher's frame-sized
+    // capture buffers are allocated per screenshot; glibc keeps freed
+    // large chunks resident (including in the PNG encoder thread's arena).
+    // See results/art-runtime/ZM2.md §4.1.
+    apply_malloc_controls();
     // W16: the synthetic `IInputManager` devices carry the image's native
     // `KeyCharacterMap` payload built from the stock `/system/usr/keychars/*.kcm`
     // files. `acos-services` resolves them from `ACOS_KEYCHARS_DIR`; publish the
@@ -222,11 +276,6 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("linkerconfig");
     root.ensure_classpath_env(false)?;
     crate::stage("classpath");
-    // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
-    // launcher a *foreign-guest* session of a shared zygote. Unset => production.
-    let session_dir: Option<PathBuf> =
-        std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
-
     // Guest dex (contains AppMain, LaunchMain and LaunchMain$Instr), the
     // substrate JNI shim and the mini-root shim.
     let _guest = build_launch_guest(root)?;
@@ -237,6 +286,34 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("art-shim");
     let driver = build_driver(root)?;
     crate::stage("binder-driver");
+    let shims = SessionShims {
+        substrate,
+        art_shim,
+        driver,
+    };
+    // ZM2 prototype C (research seam, off by default): with a plan, this
+    // process is the warm host template that forks one launcher per session.
+    // Unset => the exact production path below.
+    if let Some(plan) = std::env::var_os(crate::host_zygote::ENV_PLAN) {
+        return crate::host_zygote::run_template(root, Path::new(&plan), shims);
+    }
+    launch_session(root, opts, None, &shims)
+}
+
+/// The per-session half of [`launch`].
+///
+/// `prebuilt` is `Some` only in a child of the ZM2 host template: the child
+/// installs its own APK into its private CoW copy of that empty service graph.
+pub(crate) fn launch_session(
+    root: &ArtRoot,
+    opts: &LaunchOpts,
+    prebuilt: Option<PrebuiltHost>,
+    shims: &SessionShims,
+) -> Result<LaunchResult> {
+    // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
+    // launcher a *foreign-guest* session of a shared zygote. Unset => production.
+    let session_dir: Option<PathBuf> =
+        std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
     let run = match &session_dir {
@@ -395,8 +472,17 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
     let live_handles = {
-        let mut host = acos_services::ServiceHost::new();
-        let handles = acos_services::registry::install_with_handles(&mut host);
+        // ZM2 prototype C: a host-template child starts from the template's
+        // empty (fully installed) service graph, which is CoW-shared until the
+        // child writes it. The APK install below is per session either way.
+        let (mut host, handles) = match prebuilt {
+            Some(pair) => pair,
+            None => {
+                let mut host = acos_services::ServiceHost::new();
+                let handles = acos_services::registry::install_with_handles(&mut host);
+                (host, handles)
+            }
+        };
         if let Err(e) = host.install_package_from_apk(&apk_for_peer) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
         }
@@ -684,18 +770,18 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // order). The production path keeps the preload-at-start ordering.
     sb.seccomp_guest(session_dir.is_none());
     sb.with_shim(false);
-    sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
+    sb.ro_bind(&shims.art_shim, "/data/shim/libartshim.so");
     // The per-run extracted native libraries (installd's `nativeLibraryDir`).
     sb.ro_bind(
         &native_lib_root,
         acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
     );
-    sb.ro_bind(&substrate, "/data/app/libacosart.so");
+    sb.ro_bind(&shims.substrate, "/data/app/libacosart.so");
     sb.ro_bind(
         &root.sysroot.join("shim/libacoshw.so"),
         "/data/libacoshw.so",
     );
-    sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
+    sb.ro_bind(&shims.driver, "/data/lib/libacos_binder_driver.so");
     if let Some(dir) = &zygote_app {
         // Z3 research guest dex + the raw-syscall fork shim (Z1/Z2). bwrap
         // creates no mount point inside the read-only /data tree, so the
@@ -2028,6 +2114,17 @@ fn capture_c1(
             "in_process=1",
         );
         p3_trace("art", "art.capture_total", t_capture, t_end, "");
+    }
+    // ZM2 quick-win knob (off by default): a capture allocates ~3 frame-sized
+    // buffers (read, composite canvas, filtered rows) and glibc keeps the
+    // freed large chunks resident (its dynamic mmap threshold grows). Trimming
+    // after the capture returns them to the OS; with the variable unset the
+    // capture path is byte-identical to before.
+    if std::env::var_os("ACOS_ART_TRIM_AFTER_CAPTURE").is_some() {
+        #[cfg(target_env = "gnu")]
+        unsafe {
+            libc::malloc_trim(0);
+        }
     }
     Ok(Some(Capture {
         seq: *seq,
