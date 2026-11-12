@@ -377,6 +377,15 @@ impl ServeEngine {
         ctx: &CallContext,
     ) -> Envelope {
         let trust = trust_arg(args);
+        let verb_started = std::time::Instant::now();
+        // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
+        // default and unchanged; `fast` binds the first traversal's probe sample
+        // instead of waiting out the 150 ms quiet window. The reply says which
+        // mode produced it, and a fast reply is never assertion evidence.
+        let (settle, pixels) = match launch_bind(args) {
+            Ok(bind) => bind,
+            Err(error) => return art_error(request_id, Some(id), trust, &error),
+        };
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -446,9 +455,18 @@ impl ServeEngine {
                     // frame (the daemon's whole point); never boot a second
                     // guest.
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
-                    return match session.ensure_bound_tree() {
+                    return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => {
-                            launch_reply(request_id, id, &held, &session, &tree, false, None)
+                            launch_reply(
+                                request_id,
+                                id,
+                                &held,
+                                &session,
+                                &tree,
+                                false,
+                                None,
+                                verb_started,
+                            )
                         }
                         Err(error) => art_error(request_id, Some(id), held.trust, &error),
                     };
@@ -482,7 +500,7 @@ impl ServeEngine {
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
         match ArtSession::start(&apk, &artifacts) {
             Ok(mut session) => {
-                let started = match session.ensure_bound_tree() {
+                let started = match session.ensure_launch_tree(settle, pixels) {
                     Ok(tree) => tree,
                     Err(error) => {
                         let _ = session.close();
@@ -501,7 +519,16 @@ impl ServeEngine {
                     .insert(id.to_string(), Arc::clone(&held));
                 self.set_route(id, Route::Art);
                 let guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
-                launch_reply(request_id, id, &held, &guard, &started, true, replaced_guest)
+                launch_reply(
+                    request_id,
+                    id,
+                    &held,
+                    &guard,
+                    &started,
+                    true,
+                    replaced_guest,
+                    verb_started,
+                )
             }
             Err(error) => {
                 // Structured, and never a silent fallback to the Rust VM.
@@ -645,7 +672,7 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session),
             "acos_status" => Ok(status_value(&session)),
-            "acos_reset" => reset(&mut session),
+            "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
                 "the ART session engine has no swipe command (tap/key/type_text only)",
@@ -939,7 +966,7 @@ fn label_frame(result: &mut Value, session: &ArtSession) {
         .unwrap_or((seq, None, None));
     if let Some(object) = result.as_object_mut() {
         object.entry("frame".to_string()).or_insert_with(|| {
-            json!({
+            let mut frame = json!({
                 "frame_seq": seq,
                 "md5": md5,
                 "captured_at": captured_at,
@@ -947,7 +974,16 @@ fn label_frame(result: &mut Value, session: &ArtSession) {
                 // C1 store counter/producer frame number, never a copied buffer.
                 "buffer_generation": buffer_generation,
                 "frame_number": frame_number,
-            })
+            });
+            if md5.is_empty() {
+                // P9: this reply bound the tree to C1 **metadata**, not pixels.
+                // Say so instead of implying a capture the caller never asked
+                // for; a later screenshot is still checkable against
+                // `buffer_generation`/`frame_number`.
+                frame["pixels"] = json!(false);
+                frame["identity"] = json!("C1 buffer metadata (no pixel copy)");
+            }
+            frame
         });
         object.insert("last_frame_seq".into(), json!(session.last_frame_seq()));
     }
@@ -1020,6 +1056,7 @@ fn launch_reply(
     tree: &UiTree,
     fresh_guest: bool,
     replaced_guest: Option<Value>,
+    started: std::time::Instant,
 ) -> Envelope {
     let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
     let mut result = json!({
@@ -1044,6 +1081,11 @@ fn launch_reply(
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     label_frame(&mut result, session);
+    // P9: the same `settle` object the tree verbs return, so a launch says how
+    // its tree was bound (`strict-quiet` after 150 ms of quiet, or
+    // `probe-fresh` from the first traversal with no quiet window).
+    result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
+    label_timing(&mut result, session, "acos_launch", started);
     Envelope::pass(
         request_id,
         ProtocolBackend::AcosNative,
@@ -1496,10 +1538,20 @@ fn status_value(session: &ArtSession) -> Value {
     })
 }
 
-fn reset(session: &mut ArtSession) -> Result<Value, BackendError> {
+fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    // P9: reset consumes the same settle vocabulary as launch. `strict` is the
+    // default and unchanged (150 ms quiet window + capture); `fast` binds the
+    // relaunched guest's first traversal from a fresh probe sample, with no
+    // quiet window and no PNG.
+    let (settle, pixels) = launch_bind(args)?;
     let before = session.last_frame_seq();
+    session.set_reset_bind(settle, pixels);
     session.reset()?;
     let tree = session.ensure_bound_tree()?;
+    // P9: the reset reply carries the relaunched app's bound tree, so "reset ->
+    // first correct screen" is one round trip (the tree was already bound by
+    // reset; serializing it costs ~1 ms). Same shape as the launch reply.
+    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
     Ok(json!({
         "state_reset": true,
         "data_cleared": true,
@@ -1509,6 +1561,11 @@ fn reset(session: &mut ArtSession) -> Result<Value, BackendError> {
         "previous_frame_seq": before,
         "frame_seq": tree.frame.frame_seq,
         "package": session.package(),
+        "tree": tree_value,
+        "tree_max_nodes": max_nodes,
+        "tree_node_count": node_count,
+        "tree_truncated": truncated,
+        "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
     }))
 }
@@ -1564,6 +1621,39 @@ fn attach_observation(
         );
     }
     Ok(())
+}
+
+/// P9: the settle mode and pixel capture a launch / reset reply binds with.
+///
+/// `settle` reuses P1's vocabulary (`strict` default, `fast` opt-in). `pixels`
+/// defaults to **false**: a launch reply needs the bound frame's *identity*
+/// (P3b's C1 metadata: `buffer_generation`, `frame_number`), not a 9.5 MiB PNG
+/// nobody asked for. `pixels:true` keeps the old capture reply, and is refused
+/// together with `settle:"fast"` because a fast frame may be mid-animation and
+/// must never back a pixel claim.
+fn launch_bind(args: &Value) -> Result<(&'static str, bool), BackendError> {
+    let settle = requested_settle(args)?;
+    let pixels = match args.get("pixels") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(want)) => *want,
+        Some(_) => {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "`pixels` must be a boolean (default false: the reply carries C1 frame \
+                         identity, not a PNG)"
+                    .to_string(),
+            })
+        }
+    };
+    if settle == "fast" && pixels {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "settle:fast is a tree-only mode; a fast frame may be mid-animation and \
+                     cannot back a PNG capture (pass pixels:false, or settle:strict)"
+                .to_string(),
+        });
+    }
+    Ok((settle, pixels))
 }
 
 fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
@@ -2114,5 +2204,34 @@ mod tests {
         assert_eq!(details["engine"], json!(ENGINE_ART));
         assert_eq!(details["trust"], json!("trusted"));
         assert_eq!(details["verb"], json!("acos_swipe"));
+    }
+
+    /// P9: launch/reset bind with P1's vocabulary, are pixel-free by default,
+    /// and refuse the one combination that would let a mid-animation frame back
+    /// a pixel claim.
+    #[test]
+    fn launch_bind_defaults_to_strict_pixel_free_and_refuses_fast_pixels() {
+        assert_eq!(launch_bind(&json!({})).unwrap(), ("strict", false));
+        assert_eq!(
+            launch_bind(&json!({"settle": "strict", "pixels": true})).unwrap(),
+            ("strict", true)
+        );
+        assert_eq!(
+            launch_bind(&json!({"settle": "fast"})).unwrap(),
+            ("fast", false)
+        );
+        // Unknown settle values are refused, never coerced to fast.
+        let err = launch_bind(&json!({"settle": "quick"})).unwrap_err();
+        assert!(err.to_string().contains("settle must be"), "{err}");
+        // A non-boolean `pixels` is a typed argument error.
+        let err = launch_bind(&json!({"pixels": "yes"})).unwrap_err();
+        assert!(err.to_string().contains("`pixels` must be a boolean"), "{err}");
+        // fast + pixels would be a pixel claim from a possibly mid-animation
+        // frame; the launcher refuses it and so does serve.
+        let err = launch_bind(&json!({"settle": "fast", "pixels": true})).unwrap_err();
+        assert!(
+            err.to_string().contains("tree-only mode"),
+            "fast+pixels must be refused, got {err}"
+        );
     }
 }

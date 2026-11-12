@@ -1,0 +1,15 @@
+{
+  "count_text": "0",
+  "launch_wall_ms": 667.6646289997734,
+  "md5": "39d1e4e3633d98d76b992edb4b250a78",
+  "nodes": 12,
+  "settle": {
+    "bound": "strict-quiet",
+    "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 6,
+    "settled": true,
+    "tree_age_ms": 8
+  },
+  "utc": "2026-11-12T11:42:33.594+00:00"
+}

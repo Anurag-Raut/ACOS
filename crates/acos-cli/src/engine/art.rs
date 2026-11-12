@@ -172,6 +172,12 @@ pub struct ArtSession {
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
     last_tree_settle: Option<serde_json::Value>,
+    /// P9: the settle mode the **next** `reset` binds its fresh tree with
+    /// (`strict` by default). Serve sets it per `acos_reset` call; the reset
+    /// body reads it before it replaces the session.
+    reset_settle: &'static str,
+    /// P9: whether that reset's tree request also captures a PNG.
+    reset_pixels: bool,
     closed: bool,
 }
 
@@ -1019,6 +1025,8 @@ impl ArtSession {
             last_input_settle: None,
             settle_mode: "strict",
             last_tree_settle: None,
+            reset_settle: "strict",
+            reset_pixels: true,
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -2184,6 +2192,40 @@ impl ArtSession {
         self.request_tree_only(settle)?;
         self.require_cached_tree()
     }
+
+    /// P9: the tree a **launch** reply binds.
+    ///
+    /// A live session already has a bound tree, and a relaunch of the same
+    /// guest must hand that tree back (it is the newest traversal this guest
+    /// made; re-traversing would only add latency). A fresh guest has none, so
+    /// one traversal is taken with the caller's `settle`:
+    ///
+    /// * `strict` (default) — the unchanged settled-frame rule (150 ms quiet
+    ///   window), and `pixels:true` keeps P7's launch reply, whose `frame.md5`
+    ///   is the captured PNG's hash.
+    /// * `fast` — P3b's fast tree: a probe sample bound to a C1 generation at
+    ///   least as new as the store current at request entry, no quiet window.
+    ///   `pixels` is always `false` here (the launcher refuses fast + capture),
+    ///   so the reply's frame identity is C1 metadata only.
+    pub(crate) fn ensure_launch_tree(
+        &mut self,
+        settle: &'static str,
+        pixels: bool,
+    ) -> Result<UiTree, BackendError> {
+        if self.cached.is_some() {
+            return self.require_cached_tree();
+        }
+        let settle = if settle == "fast" { "fast" } else { "strict" };
+        self.request_tree_with(settle, pixels)?;
+        self.require_cached_tree()
+    }
+
+    /// P9: choose the settle mode and pixel capture the next `reset` binds its
+    /// relaunched guest's tree with (serve's `acos_reset` arguments).
+    pub(crate) fn set_reset_bind(&mut self, settle: &'static str, pixels: bool) {
+        self.reset_settle = if settle == "fast" { "fast" } else { "strict" };
+        self.reset_pixels = pixels;
+    }
 }
 
 impl SessionBackend for ArtSession {
@@ -2472,10 +2514,17 @@ impl SessionBackend for ArtSession {
         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
         // Leave a live frame bound: the step after `reset` may be a pure
         // assertion (`assert_text`), which reads the last completed frame.
+        //
+        // P9: the bind uses the mode/pixels the caller chose before the reset
+        // (`set_reset_bind`). `fast` is P3b's probe-fresh tree: the relaunched
+        // guest's own first traversal, bound to a C1 generation at least as new
+        // as the store current at request entry, with no 150 ms quiet window and
+        // no PNG; `strict` (default) is the unchanged 150 ms settled rule.
+        let (bind_settle, bind_pixels) = (self.reset_settle, self.reset_pixels);
         let bind_started = Instant::now();
         let bound = fresh
-            .command(serde_json::json!({"cmd":"tree"}))
-            .and_then(|reply| fresh.absorb(&reply));
+            .request_tree_with(bind_settle, bind_pixels)
+            .and_then(|()| fresh.require_cached_tree());
         if let Err(error) = bound {
             let _ = fresh.close();
             self.invalidate_frame();
@@ -2944,7 +2993,14 @@ mod tests {
         body.push_str("#!/bin/sh\n");
         body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
         body.push_str("seq=0\n");
+        // P9: every command the engine sends is appended here, so a test can
+        // assert the *request* shape (`settle`, `pixels`), not just the reply.
+        body.push_str(&format!(
+            "requests='{}/requests.log'\n",
+            dir.display()
+        ));
         body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  printf '%s\\n' \"$line\" >> \"$requests\"\n");
         body.push_str("  case \"$line\" in\n");
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str("      seq=$((seq+1))\n");
@@ -2983,6 +3039,57 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// P9: `settle:"fast"` on launch/reset must reach acos-art as a **tree-only
+    /// fast request** (`settle:fast`, `pixels:false`) and `strict` must keep the
+    /// unchanged request shape (strict, capture by launcher default).
+    #[test]
+    fn launch_and_reset_bind_forward_the_settle_mode_and_pixel_choice() {
+        let dir = scratch_dir("launch-bind");
+        let script = fake_art_binary(&dir);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let requests = dir.join("requests.log");
+
+        // A fresh session has no bound tree: fast binds one from the probe.
+        session.ensure_launch_tree("fast", false).expect("fast bind");
+        let first = std::fs::read_to_string(&requests).unwrap();
+        assert!(
+            first.contains("\"settle\":\"fast\""),
+            "fast launch must ask for the fast tree: {first}"
+        );
+        assert!(
+            first.contains("\"pixels\":false"),
+            "fast launch must be pixel-free: {first}"
+        );
+        let _ = std::fs::remove_file(&requests);
+
+        session.set_reset_bind("strict", true);
+        session.reset().expect("strict reset");
+        let strict = std::fs::read_to_string(&requests).unwrap();
+        assert!(
+            strict.contains("\"settle\":\"strict\""),
+            "the default reset bind stays strict: {strict}"
+        );
+        assert!(
+            !strict.contains("\"pixels\":false"),
+            "the strict default still captures pixels (launcher default): {strict}"
+        );
+        let _ = std::fs::remove_file(&requests);
+
+        session.set_reset_bind("fast", false);
+        session.reset().expect("fast reset");
+        let fast = std::fs::read_to_string(&requests).unwrap();
+        assert!(
+            fast.contains("\"settle\":\"fast\"") && fast.contains("\"pixels\":false"),
+            "a fast reset binds a tree-only fast tree: {fast}"
+        );
+        let _ = session.close();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

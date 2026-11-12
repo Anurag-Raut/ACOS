@@ -561,6 +561,70 @@ Both modes add a `settle` block to the result:
 requested as `acos_observe`'s `settle`; the same labelling applies. The default
 for every tree verb remains `strict`, so existing callers see no change.
 
+### 8.6.3 `settle` on `launch` and `reset` (P9)
+
+`acos_launch` and `acos_reset` accept the same `settle` vocabulary, plus a
+`pixels` switch:
+
+```json
+{"base": {"request_id": "req_1", "session_id": "s_views"},
+ "apk": "fixtures/build/apps/counter.apk", "settle": "fast"}
+```
+
+* **`strict` (default, unchanged)** — the launch/reset reply binds its tree with
+  the settled-frame rule: C1 advanced, a probe sample was taken after the last
+  store, and no new store landed for 150 ms. This is the mode every assertion
+  and pixel check runs on.
+* **`fast`** — the reply binds the app's **first traversal** from a probe sample
+  whose C1 generation is at least the generation current when the request began
+  (P3b's freshness rule). No quiet window, no second probe period. A fast launch
+  reply may therefore be mid-animation and is **never** assertion evidence: use
+  `acos_observe_tree`/`acos_assert` (strict by default) before concluding anything
+  from it.
+
+Fast readiness is: the Activity is resumed, the first traversal was drawn, C1
+has stored a buffer for it, **and** the probe sample the reply binds is bound to
+that store generation. Nothing is inferred from a timer.
+
+`pixels` selects the reply's frame evidence:
+
+| `pixels` | reply `frame` | cost |
+|---|---|---|
+| **`false` (default)** | `frame_seq`, `buffer_generation`, `frame_number`, `pixels:false`, `identity:"C1 buffer metadata (no pixel copy)"`; `md5` is empty | no clone, no PNG encode/write/md5 |
+| `true` | the same identity **plus** `md5` of the captured PNG (P7's launch reply) | ~25 ms |
+
+`settle:"fast"` together with `pixels:true` is refused with `INVALID_ARGUMENT`:
+a mid-animation frame can never back a pixel claim. A later
+`acos_observe {png:true}` is still a real capture and can be checked against the
+`buffer_generation`/`frame_number` the launch reply named.
+
+Both verbs return the same `settle` object the tree verbs return, at the top
+level of the result:
+
+```json
+"settle": {"mode": "fast", "settled": true, "probe_seq": 1,
+           "tree_age_ms": 0, "bound": "probe-fresh"}
+```
+
+| field | meaning |
+|---|---|
+| `mode` | `fast` or `strict` |
+| `settled` | `true` when the returned tree satisfied that mode's rule |
+| `probe_seq` | the guest probe sequence of the returned sample |
+| `tree_age_ms` | host receipt of the probe → reply |
+| `bound` | `probe-fresh` (fast), `strict-quiet` (strict), or `timeout` |
+
+`reset` also returns `tree` (plus `tree_node_count`, `tree_max_nodes`,
+`tree_truncated`), the relaunched app's bound tree, so "reset → first correct
+screen" is one round trip; a `pixels:false` reset carries the C1 metadata
+identity instead of a PNG in exactly the same way.
+
+The default for both verbs is `strict` **and** `pixels:false`, so a launch reply
+no longer copies a PNG nobody asked for; pass `pixels:true` to get P7's
+pixel-identical launch reply back. Assertions, `acos verify`, scenario
+assertions and `assert_screenshot` never pass a settle option: no check is
+weakened by any of this.
+
 ### 8.7 `assert`
 
 Evaluate one assertion.
@@ -631,6 +695,10 @@ Pass `next_seq` as `since_seq` on the next call. Common errors:
 ```json
 {"session_id": "s_views", "scope": "app", "state_reset": true, "data_cleared": true, "isolation": "sandbox"}
 ```
+
+`settle` (`strict` default / `fast`) and `pixels` (default `false`) work as on
+`acos_launch` — see §8.6.3. The reply also carries the relaunched app's `tree`
+and the `settle` object.
 
 Common errors: `SESSION_NOT_FOUND`, `ISOLATION_UNSATISFIED` (asked to clear data
 on a shared task).
