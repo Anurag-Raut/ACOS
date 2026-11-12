@@ -863,6 +863,33 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "display_origin": {
+          "description": "Display-space coordinates of this frame's pixel `(0,0)`.\n\nAbsent means the frame covers the whole display and `(0,0)` is display `(0,0)` (the AOSP `screencap` case). A present value is authoritative: an agent must add it to convert a frame pixel into display coordinates, and subtract it for the reverse.",
+          "items": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "display_size": {
+          "description": "Full display size in pixels — the space `display_origin` and every UI tree bound are expressed in.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "frame_seq": {
           "description": "Monotonic per-session frame sequence number.",
           "format": "uint64",

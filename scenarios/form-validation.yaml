@@ -149,19 +149,21 @@ steps:
       fresh: true
 
   # W54: the tree above is right, so the pixels must be too. The card is drawn
-  # at its window frame (screen `[70,1018][1010,1447]` = frame `[70,890]..`),
-  # not at the pre-fix surfaceInset-shifted `(154, 974)` with a buffer-edge cut.
+  # at its window frame (display `[70,1018][1010,1447]`), not at the pre-fix
+  # surfaceInset-shifted `(154, 974)` with a buffer-edge cut.
+  # W58: assert_region takes display pixels; the executor applies the frame's
+  # display_origin ([0,128]) itself, so the hash covers PNG y − 128.
   # A: card background inside the top band (pre-fix: dim).
   - assert_region:
       x: 200
-      y: 910
+      y: 1038
       w: 200
       h: 40
       hash: "e753006d4f666db1697d1562fda113a024aa37c5dc76e492514832ff346ae79c"
   # B: card background inside the left band, left of the pre-fix x=154 edge.
   - assert_region:
       x: 90
-      y: 1000
+      y: 1128
       w: 40
       h: 100
       hash: "a72e051873a520049475589e02061ef34a2445a43be991d44228bb3a2cc9be29"

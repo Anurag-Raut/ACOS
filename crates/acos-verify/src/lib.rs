@@ -36,6 +36,7 @@ pub mod artifacts;
 pub mod assertions;
 pub mod backend;
 pub mod clock;
+pub mod display;
 pub mod error;
 pub mod executor;
 pub mod manifest;
@@ -49,6 +50,7 @@ pub use backend::{
     LaunchOutcome, LaunchRequest, LogRecord, ManifestInfo, SessionObservation, StateChange,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
+pub use display::{frame_display_geometry, FrameDisplayGeometry};
 pub use error::VerifyError;
 pub use executor::{run_scenario, RunOptions, RunOutcome};
 pub use native::NativeBackend;

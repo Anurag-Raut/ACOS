@@ -7,6 +7,10 @@ use serde_json::Value;
 use crate::ui::{Bounds, Selector, TextMatch};
 
 /// A rectangle excluded from screenshot comparison (clock, status bar, ...).
+///
+/// Bounds are **display pixels**, like every other rectangle in the scenario
+/// format; the executor maps them onto the frame with the frame's
+/// `display_origin`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RegionMask {
     /// Screen region to mask out.
@@ -30,18 +34,23 @@ pub struct ScreenshotAssertion {
 
 /// A host-side pixel/region assertion over one freshly captured frame.
 ///
-/// The region is expressed in frame pixels. At least one criterion must be
-/// present; `text_ocr` is recognised but has no implementation in this build
-/// (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the
-/// lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8
-/// bytes (row-major). `equals_png` names a PNG relative to the scenario file;
-/// it must be the same size as the region, or the same size as the frame (in
-/// which case the same region is cropped from it).
+/// **Coordinates are display pixels** (the same space as UI-tree bounds and
+/// tap `x`/`y`), not PNG pixels. The executor converts them with the frame's
+/// [`acos_protocol::FrameMeta::display_origin`]; a region the frame does not
+/// cover (the status bar or navigation band above/below the ART app-area
+/// capture) fails loudly instead of cropping a shifted region.
+///
+/// At least one criterion must be present; `text_ocr` is recognised but has no
+/// implementation in this build (the executor returns `UNSUPPORTED_ASSERTION`,
+/// never a pass). `hash` is the lowercase/uppercase hex SHA-256 of the cropped
+/// region's tightly packed RGBA8 bytes (row-major). `equals_png` names a PNG
+/// relative to the scenario file; it must be the same size as the region, or the
+/// same size as the frame (in which case the same region is cropped from it).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RegionAssertion {
-    /// Region left edge in frame pixels.
+    /// Region left edge in display pixels.
     pub x: i32,
-    /// Region top edge in frame pixels.
+    /// Region top edge in display pixels.
     pub y: i32,
     /// Region width in pixels (must be > 0).
     pub w: u32,

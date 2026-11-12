@@ -37,11 +37,51 @@ pub struct ImageDiff {
     pub masked_regions: usize,
 }
 
+/// Convert display-space region masks into the frame's pixel space (W58).
+///
+/// Masks are **subtractive**: a mask the frame does not cover at all (the status
+/// bar band) excludes nothing and is dropped, and a mask that straddles the
+/// frame edge is clipped to the frame instead of failing the comparison. Only
+/// pixels that exist in the frame can be excluded from a comparison over it.
+#[must_use]
+pub fn masks_in_frame_space(
+    frame: &acos_protocol::FrameMeta,
+    masks: &[RegionMask],
+) -> Vec<RegionMask> {
+    let covered = frame.display_rect();
+    let origin = frame.display_origin_px();
+    masks
+        .iter()
+        .filter_map(|mask| {
+            let b = mask.bounds;
+            let left = b.left().max(covered.left());
+            let top = b.top().max(covered.top());
+            let right = b.right().min(covered.right());
+            let bottom = b.bottom().min(covered.bottom());
+            if left >= right || top >= bottom {
+                return None;
+            }
+            Some(RegionMask {
+                bounds: acos_protocol::ui::Bounds::new(
+                    left - origin[0],
+                    top - origin[1],
+                    right - origin[0],
+                    bottom - origin[1],
+                ),
+                reason: mask.reason.clone(),
+            })
+        })
+        .collect()
+}
+
 /// Per-channel difference above which a pixel counts as changed. Small enough
 /// to catch a moved glyph, large enough to ignore deterministic rounding.
 const CHANNEL_THRESHOLD: i32 = 2;
 
 /// Compare a baseline PNG with the actual encoded frame.
+///
+/// `masks` are in **frame** pixels here: callers convert scenario masks from
+/// display space with [`masks_in_frame_space`] first (W58).
 ///
 /// Returns a structured error string when either image is not a supported PNG;
 /// that is a harness/artifact problem, not a failed assertion.
@@ -191,6 +231,63 @@ mod tests {
         assert!(diff.passed);
         assert_eq!(diff.compared_pixels, 1);
         assert_eq!(diff.changed_pixels, 0);
+    }
+
+    fn app_area_frame() -> acos_protocol::FrameMeta {
+        acos_protocol::FrameMeta::new(1, "t", "c", 8, 16, 420, "h", true)
+            .with_display_geometry([0, 4], [8, 20])
+    }
+
+    #[test]
+    fn display_space_masks_are_shifted_onto_the_frame() {
+        // A mask at display [2,7][4,9] excludes frame [2,3][4,5].
+        let masks = masks_in_frame_space(
+            &app_area_frame(),
+            &[RegionMask {
+                bounds: Bounds::new(2, 7, 4, 9),
+                reason: Some("test".to_string()),
+            }],
+        );
+        assert_eq!(masks.len(), 1);
+        assert_eq!(masks[0].bounds, Bounds::new(2, 3, 4, 5));
+        assert_eq!(masks[0].reason.as_deref(), Some("test"));
+    }
+
+    #[test]
+    fn a_mask_outside_the_frame_excludes_nothing_and_a_straddling_one_is_clipped() {
+        let masks = masks_in_frame_space(
+            &app_area_frame(),
+            &[
+                // Entirely in the status bar: no frame pixels, dropped.
+                RegionMask {
+                    bounds: Bounds::new(0, 0, 8, 4),
+                    reason: None,
+                },
+                // Straddles the frame top: clipped to frame row 0.
+                RegionMask {
+                    bounds: Bounds::new(0, 0, 8, 6),
+                    reason: None,
+                },
+            ],
+        );
+        assert_eq!(masks.len(), 1, "the empty mask must be dropped: {masks:?}");
+        assert_eq!(masks[0].bounds, Bounds::new(0, 0, 8, 2));
+
+        // And the masked comparison still works with a shifted mask: the only
+        // changed pixel is inside the mask, so a zero tolerance passes.
+        let actual = encode(2, 1, &[[255, 0, 0, 255], [0, 0, 0, 255]]);
+        let baseline = encode(2, 1, &[[0, 0, 0, 255], [0, 0, 0, 255]]);
+        let shifted = masks_in_frame_space(
+            &acos_protocol::FrameMeta::new(1, "t", "c", 2, 1, 420, "h", true)
+                .with_display_geometry([0, 128], [2, 129]),
+            &[RegionMask {
+                bounds: Bounds::new(0, 128, 1, 129),
+                reason: None,
+            }],
+        );
+        let diff = compare_png(&baseline, &actual, 0.0, &shifted).unwrap();
+        assert!(diff.passed);
+        assert_eq!(diff.compared_pixels, 1);
     }
 
     #[test]

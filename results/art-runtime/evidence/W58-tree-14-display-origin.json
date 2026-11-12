@@ -1,0 +1,49 @@
+{
+ "frame": {
+  "frame_seq": 14,
+  "produced_at": "2026-11-12T06:13:30.274Z",
+  "cause_id": "art",
+  "width": 1080,
+  "height": 2209,
+  "density": 420,
+  "content_hash": "bcfbb01a8a83ef07eb812dbb961f0b76",
+  "meaningful": true,
+  "display_origin": [
+   0,
+   128
+  ],
+  "display_size": [
+   1080,
+   2400
+  ]
+ },
+ "package": "dev.acos.fixtures.formvalidation",
+ "roots": [
+  {
+   "class": "com.android.internal.policy.DecorView",
+   "bounds": [
+    0,
+    128,
+    1080,
+    2337
+   ],
+   "resource_id": ""
+  },
+  {
+   "class": "com.android.internal.policy.DecorView",
+   "bounds": [
+    28,
+    976,
+    1052,
+    1489
+   ],
+   "resource_id": ""
+  }
+ ],
+ "frame_png": {
+  "path": "frames/14.png",
+  "bytes": 9545882,
+  "sha256": "d53dbe834b49e7ea5c4753d5a78e0b987ac8d35fe0bc3c1955235e06f208fda0",
+  "note": "1080x2209 app-area capture; display_origin [0,128] maps it onto display [0,128][1080,2337]"
+ }
+}

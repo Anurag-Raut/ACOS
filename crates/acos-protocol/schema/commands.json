@@ -1334,7 +1334,7 @@
       "type": "object"
     },
     "RegionMask": {
-      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).",
+      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).\n\nBounds are **display pixels**, like every other rectangle in the scenario format; the executor maps them onto the frame with the frame's `display_origin`.",
       "properties": {
         "bounds": {
           "allOf": [

@@ -116,6 +116,10 @@ pub struct Step {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_screenshot: Option<ScreenshotAssertion>,
     /// Assert a rectangular region of a fresh host-observed frame.
+    ///
+    /// The region is in **display pixels** (tree bounds, tap points and this
+    /// region share one space); the executor converts it to frame pixels with
+    /// the frame's `display_origin`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_region: Option<RegionAssertion>,
     /// Capture a frame into the artifacts directory.
@@ -1070,6 +1074,23 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 }
                 if assertion.x < 0 || assertion.y < 0 {
                     v.push(&path, "assert_region x/y must be >= 0");
+                }
+                // x/y are display pixels: the region must fit the display the
+                // scenario declares. A region outside it can never be checked and
+                // is a scenario bug, not an app bug.
+                if let DisplaySpec::Offscreen { width, height, .. } = scenario.display {
+                    if assertion.x.saturating_add(assertion.w as i32) > width as i32
+                        || assertion.y.saturating_add(assertion.h as i32) > height as i32
+                    {
+                        v.push(
+                            &path,
+                            format!(
+                                "assert_region is in display pixels (origin [0,0], display {width}x{height}): \
+                                 region [{},{},{},{}] does not fit the display",
+                                assertion.x, assertion.y, assertion.w, assertion.h
+                            ),
+                        );
+                    }
                 }
                 let has_criterion = assertion.equals_png.is_some()
                     || assertion.hash.is_some()

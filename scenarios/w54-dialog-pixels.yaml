@@ -9,10 +9,12 @@
 # translated by 84+42 px and clipped by the buffer edge. The tree was right and
 # the pixels were wrong: exactly the false pass this scenario closes.
 #
-# Coordinates are **frame** pixels (the C1 composite: display width 1080, the app
-# area 2209 px tall starting at screen y=128, so frame y = screen y − 128). The
-# card (`android:id/parentPanel`) is at screen `[70,1018][1010,1447]`, i.e. frame
-# `[70,890][1010,1319]`; the dialog window frame adds the 42 px shadow inset.
+# Coordinates are **display** pixels, the same space the UI tree reports and
+# taps use (W58; docs/AGENT_API.md §9.4). The card (`android:id/parentPanel`) is
+# at display `[70,1018][1010,1447]`; the dialog window frame adds the 42 px
+# shadow inset. The executor converts each region to the PNG with the frame's
+# `display_origin` ([0,128] here: the ART frame is the display application area
+# `[0,128][1080,2337]` = 1080x2209 px), so `png_y = display_y − 128`.
 #
 # Each region below is a single flat colour in a correct render:
 #   A  inside the card's top band           -> (240,240,243) card
@@ -91,7 +93,7 @@ steps:
   #    Correct (240,240,243,255) everywhere; pre-fix dim (96,96,97,255).
   - assert_region:
       x: 200
-      y: 910
+      y: 1038
       w: 200
       h: 40
       hash: "e753006d4f666db1697d1562fda113a024aa37c5dc76e492514832ff346ae79c"
@@ -100,7 +102,7 @@ steps:
   #    Correct (240,240,243,255); pre-fix dim.
   - assert_region:
       x: 90
-      y: 1000
+      y: 1128
       w: 40
       h: 100
       hash: "a72e051873a520049475589e02061ef34a2445a43be991d44228bb3a2cc9be29"
@@ -110,7 +112,7 @@ steps:
   #    the buffer edge, which is why the right/bottom corners were missing).
   - assert_region:
       x: 990
-      y: 1306
+      y: 1434
       w: 20
       h: 10
       hash: "e90ad15ecb29b5d9e3d7c8d1ef89a2b4ce5d0dfb7ba26dcfba11ffdd8ebf3f94"

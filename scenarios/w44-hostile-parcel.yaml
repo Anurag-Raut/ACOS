@@ -34,7 +34,7 @@ steps:
       clear_state: true
   - assert_region:
       x: 100
-      y: 400
+      y: 528
       w: 100
       h: 100
       min_distinct_colors: 2

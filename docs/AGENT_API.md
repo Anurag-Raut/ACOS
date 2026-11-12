@@ -640,7 +640,8 @@ A step is a **one-key map**. Valid keys:
 | `assert_state` | `selector` + at least one of `visible/enabled/focused/clickable/scrollable/checked` |
 | `assert_log` | `tag`, `patterns` (regex list), `ordered`, `since_previous_step`, `timeout_ms`, `min_matches` |
 | `assert_no_crash` | optional `since_seq` |
-| `assert_screenshot` | `baseline`, `tolerance` (0..1), `region_masks` |
+| `assert_screenshot` | `baseline`, `tolerance` (0..1), `region_masks` (display pixels) |
+| `assert_region` | `x`, `y`, `w`, `h` (**display pixels**), plus `equals_png` / `hash` / `min_distinct_colors` / `max_distinct_colors` |
 | `capture` | `name`, `format: png\|raw`, `fresh` |
 | `reset` | `scope: task\|app\|data\|all` |
 | `set_network` | `offline`, `rules[]` (`method`,`url`,`status`,`headers`,`body`,`delay_ms`,`times`) |
@@ -690,7 +691,56 @@ Parse failures are also `INVALID_SCENARIO` at `$`. Warnings (for example an
 optional `call_activity_method`, or a headless display with UI steps) do not
 invalidate the scenario.
 
-### 9.3 Expectations and false-pass prevention
+### 9.3 Coordinate systems (W58)
+
+ACOS has **two** pixel spaces and every coordinate in the product belongs to
+exactly one of them. Both are absolute; there is no window-local space in the
+agent API.
+
+| space | origin | used by |
+|---|---|---|
+| **display** | the logical display's top-left, `[0,0]`; `display: {width, height}` in the scenario is its size (1080x2400 on the API-34 reference) | UI-tree bounds (`assert_text.bounds`, selectors with `bounds`), `tap` `x`/`y`, `assert_region` `x`/`y`/`w`/`h`, `assert_screenshot.region_masks` |
+| **frame** | the captured frame's pixel `(0,0)`; the PNG is `width` x `height` | the PNG bytes themselves, region `hash`es, `equals_png` baselines, `screenshot` comparison |
+
+Display space is Android's `View.getLocationOnScreen` / `uiautomator dump` /
+`adb shell input tap` space: an agent that reads a tree bound can tap it and
+assert it without any arithmetic.
+
+A frame is **not necessarily the whole display**. The ART runtime composites
+the display's application area (`[0,128][1080,2337]` on the reference), so the
+PNG excludes the status bar and the navigation bar. Every frame's metadata says
+where it sits:
+
+```json
+"frame": {"frame_seq": 34, "width": 1080, "height": 2209,
+          "display_origin": [0, 128], "display_size": [1080, 2400]}
+```
+
+`display_origin` is the display coordinate of the PNG's pixel `(0,0)`, so
+`png_y = display_y - display_origin[1]` (128 px here). A frame that covers the
+whole display omits `display_origin`, which means the identity mapping (the
+AOSP `screencap` case: the reference replay backend serves full-display frames).
+`display_size` is the space tree bounds are in.
+
+Rules the runner enforces:
+
+* `assert_region` takes **display** pixels and converts internally with
+  `display_origin`. Writing a PNG pixel there is off by the status-bar inset and
+  the assertion **fails** (loudly, with both rectangles in the diff), so the
+  mistake can never become a false pass.
+* A region the frame does not cover — the status bar band above it or the
+  navigation bar band below it — fails with the frame geometry in the detail.
+  A frame cannot prove pixels it does not contain.
+* `region_masks` are display pixels too; a mask outside the frame excludes
+  nothing (it is dropped) and one that straddles the frame edge is clipped.
+* A passing `verify` run repeats this mapping in `verdict.notes`, naming the
+  concrete `display_origin` for the run.
+
+`acos serve` replies carry the same fields on the `frame` object of
+`launch`/`observe`/`observe_tree`/`capture` (the patch is recorded in
+`results/art-runtime/W58.md` §7; the daemon is W55's file).
+
+### 9.4 Expectations and false-pass prevention
 
 `expectation` is how a negative test proves the runner is honest:
 

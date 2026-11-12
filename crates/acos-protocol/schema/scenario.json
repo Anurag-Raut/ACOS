@@ -698,7 +698,7 @@
       ]
     },
     "RegionAssertion": {
-      "description": "A host-side pixel/region assertion over one freshly captured frame.\n\nThe region is expressed in frame pixels. At least one criterion must be present; `text_ocr` is recognised but has no implementation in this build (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8 bytes (row-major). `equals_png` names a PNG relative to the scenario file; it must be the same size as the region, or the same size as the frame (in which case the same region is cropped from it).",
+      "description": "A host-side pixel/region assertion over one freshly captured frame.\n\n**Coordinates are display pixels** (the same space as UI-tree bounds and tap `x`/`y`), not PNG pixels. The executor converts them with the frame's [`acos_protocol::FrameMeta::display_origin`]; a region the frame does not cover (the status bar or navigation band above/below the ART app-area capture) fails loudly instead of cropping a shifted region.\n\nAt least one criterion must be present; `text_ocr` is recognised but has no implementation in this build (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8 bytes (row-major). `equals_png` names a PNG relative to the scenario file; it must be the same size as the region, or the same size as the frame (in which case the same region is cropped from it).",
       "properties": {
         "equals_png": {
           "description": "Exact RGBA reference image for the region.",
@@ -752,12 +752,12 @@
           "type": "integer"
         },
         "x": {
-          "description": "Region left edge in frame pixels.",
+          "description": "Region left edge in display pixels.",
           "format": "int32",
           "type": "integer"
         },
         "y": {
-          "description": "Region top edge in frame pixels.",
+          "description": "Region top edge in display pixels.",
           "format": "int32",
           "type": "integer"
         }
@@ -771,7 +771,7 @@
       "type": "object"
     },
     "RegionMask": {
-      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).",
+      "description": "A rectangle excluded from screenshot comparison (clock, status bar, ...).\n\nBounds are **display pixels**, like every other rectangle in the scenario format; the executor maps them onto the frame with the frame's `display_origin`.",
       "properties": {
         "bounds": {
           "allOf": [
@@ -1114,7 +1114,7 @@
               "type": "null"
             }
           ],
-          "description": "Assert a rectangular region of a fresh host-observed frame."
+          "description": "Assert a rectangular region of a fresh host-observed frame.\n\nThe region is in **display pixels** (tree bounds, tap points and this region share one space); the executor converts it to frame pixels with the frame's `display_origin`."
         },
         "assert_screenshot": {
           "anyOf": [

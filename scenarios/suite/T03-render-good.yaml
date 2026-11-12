@@ -20,4 +20,4 @@ steps:
   - wait_for: {selector: {id: result}, timeout_ms: 5000}
   - assert_text: {selector: {id: title}, text: {exact: "Hello ACOS"}}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
-  - assert_region: {x: 0, y: 0, w: 1080, h: 700, equals_png: baselines/T03-hello-views-top.png}
+  - assert_region: {x: 0, y: 128, w: 1080, h: 700, equals_png: baselines/T03-hello-views-top.png}

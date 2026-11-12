@@ -282,7 +282,10 @@ host-observed, acks/tree guest-asserted; `capture`/`assert_screenshot`/
 | `assert_region.text_ocr` | `UNSUPPORTED_ASSERTION` (no OCR engine in this build), never a pass |
 
 `assert_region` is a scenario step: `{x, y, w, h, equals_png?, hash?,
-min_distinct_colors?, max_distinct_colors?, text_ocr?}`. It always captures a
+min_distinct_colors?, max_distinct_colors?, text_ocr?}`. `x`/`y`/`w`/`h` are
+**display** pixels (tree bounds and taps use the same space); the executor maps
+them onto the frame with the frame's `display_origin` and fails when the frame
+does not cover the region (`docs/AGENT_API.md` §9.3). It always captures a
 **fresh** frame. `hash` is SHA-256 of the region's tightly packed RGBA8 bytes;
 `equals_png` is an exact reference (region-sized, or frame-sized and cropped to
 the same region); colour statistics count distinct RGBA values. "Pixels

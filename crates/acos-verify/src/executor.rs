@@ -18,6 +18,7 @@ use acos_protocol::assertion::{
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
 use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef};
+use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
     StepResult, Verdict,
@@ -322,6 +323,18 @@ pub fn run_scenario(
         );
         let duration_ms = clock.now_unix_ms().saturating_sub(step_started);
 
+        // ---- W58: complete the frame evidence at the verifier's boundary ----
+        // The frame is the display's application area; say where it sits on the
+        // display even when the backend did not. Everything downstream (the
+        // tree artifact, step results, the coordinate note) then carries the
+        // same geometry an agent needs to map a tree bound onto a PNG pixel.
+        let mut exec = exec;
+        if let Some(observation) = &mut exec.observation {
+            let signed = crate::display::signed_frame(&observation.frame);
+            observation.frame = signed.clone();
+            observation.tree.frame = signed;
+        }
+
         if session_id.is_none() {
             session_id = exec
                 .session
@@ -458,6 +471,29 @@ pub fn run_scenario(
                 });
             }
         }
+    }
+
+    // ---- coordinate contract note (W58) -----------------------------------
+    // Say, in the verdict itself, which space every coordinate in this run is
+    // in and where the PNG starts. Without this an agent that reads a tree bound
+    // and crops the PNG is off by the status-bar inset (128 px) silently.
+    if let Some(frame) = produced_frames.iter().find(|frame| frame.display_origin.is_some()) {
+        let origin = frame.display_origin_px();
+        let display = frame
+            .display_size
+            .map(|[w, h]| format!("{w}x{h}"))
+            .unwrap_or_else(|| "unknown".to_string());
+        notes.push(format!(
+            "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display \
+             pixels (display {display}, origin [0,0]); frames/<seq>.png is the display area starting at \
+             display_origin [{},{}], so png_y = display_y - {} (frame {} is display {}). Do not compare a tree \
+             bound with a PNG pixel without that offset.",
+            origin[0],
+            origin[1],
+            origin[1],
+            frame.frame_seq,
+            frame.display_rect()
+        ));
     }
 
     // ---- assemble verdict -------------------------------------------------
@@ -1458,12 +1494,11 @@ fn eval_screenshot(
             );
         }
     };
-    match screenshot::compare_png(
-        &baseline,
-        actual,
-        assertion.tolerance,
-        &assertion.region_masks,
-    ) {
+    // ---- coordinate boundary: display -> frame (W58) ----------------------
+    // Scenario masks are display pixels; the image comparison is frame pixels.
+    let signed_frame = crate::display::signed_frame(&observation.frame);
+    let masks = screenshot::masks_in_frame_space(&signed_frame, &assertion.region_masks);
+    match screenshot::compare_png(&baseline, actual, assertion.tolerance, &masks) {
         Ok(diff) => {
             let detail = format!(
                 "{:.4}% of {} compared pixels changed (tolerance {:.4}%)",
@@ -1520,9 +1555,15 @@ fn eval_screenshot(
 
 /// Evaluate a host-side pixel/region assertion against one fresh frame.
 ///
-/// The region is cropped from the **host-observed** PNG. A match is exact where
-/// the scenario asks for exactness; colour statistics are reported alongside so
-/// a failure says what was actually drawn. OCR is not implemented: asking for it
+/// The region is given in **display pixels** (the same space as UI-tree bounds
+/// and tap points) and converted to PNG pixels with the frame's
+/// `display_origin` — never with a hand-written offset. A region the frame does
+/// not cover (the status bar band above the ART app-area capture) fails with the
+/// geometry in the detail instead of cropping 128 px away from the request.
+///
+/// The crop is taken from the **host-observed** PNG. A match is exact where the
+/// scenario asks for exactness; colour statistics are reported alongside so a
+/// failure says what was actually drawn. OCR is not implemented: asking for it
 /// returns `UNSUPPORTED_ASSERTION`, never a pass.
 fn eval_region(
     assertion: &RegionAssertion,
@@ -1581,20 +1622,62 @@ fn eval_region(
             );
         }
     };
-    let x = assertion.x as u64;
-    let y = assertion.y as u64;
     let w = assertion.w as u64;
     let h = assertion.h as u64;
+    // ---- coordinate boundary: display -> frame (W58) ----------------------
+    let frame_meta = crate::display::signed_frame(&observation.frame);
+    let display_region = Bounds::new(
+        assertion.x,
+        assertion.y,
+        assertion.x.saturating_add(assertion.w as i32),
+        assertion.y.saturating_add(assertion.h as i32),
+    );
+    let frame_region = match frame_meta.frame_rect_for_display(display_region) {
+        Ok(region) => region,
+        Err(detail) => {
+            return Evaluated::fail(
+                "region",
+                Vec::new(),
+                AssertionDiff {
+                    expected: serde_json::json!({
+                        "display_region": [assertion.x, assertion.y, assertion.w, assertion.h],
+                        "display_origin": frame_meta.display_origin,
+                        "display_size": frame_meta.display_size,
+                    }),
+                    actual: serde_json::json!({
+                        "frame": [frame_meta.width, frame_meta.height],
+                    }),
+                    path: None,
+                    detail: Some(detail.clone()),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::AssertionFailed,
+                    detail,
+                },
+            );
+        }
+    };
+    let x = frame_region.left().max(0) as u64;
+    let y = frame_region.top().max(0) as u64;
     if x + w > u64::from(frame_w) || y + h > u64::from(frame_h) {
         let detail = format!(
-            "region [{},{},{},{}] is outside the {}x{} frame",
-            assertion.x, assertion.y, assertion.w, assertion.h, frame_w, frame_h
+            "display region [{},{},{},{}] maps to frame [{},{},{},{}], outside the {}x{} frame",
+            assertion.x,
+            assertion.y,
+            assertion.w,
+            assertion.h,
+            frame_region.left(),
+            frame_region.top(),
+            frame_region.right(),
+            frame_region.bottom(),
+            frame_w,
+            frame_h
         );
         return Evaluated::fail(
             "region",
             Vec::new(),
             AssertionDiff {
-                expected: serde_json::json!({"region": [assertion.x, assertion.y, assertion.w, assertion.h]}),
+                expected: serde_json::json!({"display_region": [assertion.x, assertion.y, assertion.w, assertion.h]}),
                 actual: serde_json::json!({"width": frame_w, "height": frame_h}),
                 path: None,
                 detail: Some(detail.clone()),
@@ -1703,7 +1786,9 @@ fn eval_region(
     }
     let actual_value = serde_json::json!({
         "frame_seq": observation.frame.frame_seq,
-        "region": [assertion.x, assertion.y, assertion.w, assertion.h],
+        "display_region": [assertion.x, assertion.y, assertion.w, assertion.h],
+        "display_origin": frame_meta.display_origin,
+        "frame_region": [frame_region.left(), frame_region.top(), frame_region.left() + assertion.w as i32, frame_region.top() + assertion.h as i32],
         "hash": actual_hash,
         "distinct_colors": distinct_count,
     });
@@ -1712,11 +1797,13 @@ fn eval_region(
             "region",
             Vec::new(),
             Some(format!(
-                "region [{},{},{},{}] matched ({})",
+                "display region [{},{},{},{}] (frame [{},{}]) matched ({})",
                 assertion.x,
                 assertion.y,
                 assertion.w,
                 assertion.h,
+                frame_region.left(),
+                frame_region.top(),
                 checks.join(", ")
             )),
         );
@@ -2008,6 +2095,124 @@ mod region_tests {
             evaluated.error.unwrap().code(),
             ErrorCode::UnsupportedAssertion
         );
+    }
+
+    /// W58: a frame of the ART application area: the PNG is 8x16 but the
+    /// display is 8x20 and the frame starts at display y=4 (a status bar).
+    fn app_area_observation(pixels: &[[u8; 4]], width: u32, frame_height: u32) -> SessionObservation {
+        let frame = FrameMeta::new(
+            7,
+            "2026-11-11T21:00:00.000Z",
+            "req:test",
+            width,
+            frame_height,
+            420,
+            "hash",
+            true,
+        )
+        .with_display_geometry([0, 4], [width, 20]);
+        let tree = UiTree::new(frame.clone(), "test.pkg", Vec::new());
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "test.pkg".to_string(),
+            frame,
+            tree,
+            screenshot_png: Some(png(width, frame_height, pixels)),
+            crashed: None,
+            input: None,
+        }
+    }
+
+    /// A frame whose display crop is a solid block at frame (2,3)..(4,5), i.e.
+    /// display (2,7)..(4,9). Everything else is black.
+    fn block_frame() -> SessionObservation {
+        let mut pixels = vec![[0u8, 0, 0, 255]; 8 * 16];
+        for row in 3..5 {
+            for col in 2..4 {
+                pixels[row * 8 + col] = [255, 0, 0, 255];
+            }
+        }
+        app_area_observation(&pixels, 8, 16)
+    }
+
+    /// The contract: `assert_region` takes **display** pixels and the executor
+    /// converts them with `display_origin`. The tree bound of a 2x2 node at
+    /// display (2,7) must crop the same pixels as frame (2,3).
+    #[test]
+    fn assert_region_takes_display_coordinates_and_finds_the_tree_crop() {
+        let tree_bound = acos_protocol::ui::Bounds::new(2, 7, 4, 9);
+        let expected = hex_sha256(&[
+            255, 0, 0, 255, // 2,3
+            255, 0, 0, 255, // 3,3
+            255, 0, 0, 255, // 2,4
+            255, 0, 0, 255, // 3,4
+        ]);
+        let assertion = RegionAssertion {
+            x: tree_bound.left(),
+            y: tree_bound.top(),
+            w: 2,
+            h: 2,
+            equals_png: None,
+            hash: Some(expected),
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        };
+        let evaluated = eval_region(&assertion, &block_frame(), Path::new("unused.yaml"));
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        let message = evaluated.result.message.clone().unwrap_or_default();
+        assert!(message.contains("display region [2,7,2,2]"), "{message}");
+        assert!(message.contains("frame [2,3]"), "{message}");
+
+        // Negative test: the OLD interpretation (y is already a PNG pixel) reads
+        // display rows 3..5, i.e. other pixels, so the same hash must fail. This
+        // is the bug the contract closes — and it fails loudly, never silently.
+        let old_interpretation = RegionAssertion {
+            x: 2,
+            y: 3,
+            w: 2,
+            h: 2,
+            equals_png: None,
+            hash: Some(hex_sha256(&[
+                255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+            ])),
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        };
+        let evaluated = eval_region(&old_interpretation, &block_frame(), Path::new("unused.yaml"));
+        assert!(
+            !evaluated.result.passed,
+            "frame-space y must not be accepted as display-space y"
+        );
+        assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+    }
+
+    /// The display area the frame does not contain has no pixels: asking for it
+    /// fails with the geometry spelled out, instead of cropping 4 px away.
+    #[test]
+    fn a_status_bar_region_fails_and_names_the_geometry() {
+        let assertion = RegionAssertion {
+            x: 0,
+            y: 0,
+            w: 4,
+            h: 4,
+            equals_png: None,
+            hash: Some(hex_sha256(&[0, 0, 0, 255])),
+            min_distinct_colors: None,
+            max_distinct_colors: None,
+            text_ocr: None,
+        };
+        let evaluated = eval_region(&assertion, &block_frame(), Path::new("unused.yaml"));
+        assert!(!evaluated.result.passed);
+        let detail = evaluated
+            .result
+            .diff
+            .and_then(|d| d.detail)
+            .unwrap_or_default();
+        assert!(detail.contains("display region [0,0][4,4]"), "{detail}");
+        assert!(detail.contains("display origin [0,4]"), "{detail}");
+        assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
     }
 
     #[test]

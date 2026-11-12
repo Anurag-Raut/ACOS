@@ -197,8 +197,13 @@ fn display_density(display: DisplaySpec) -> u32 {
 }
 
 /// Frame metadata for one published frame.
+///
+/// W58: the ART frame is the display's application area, so the metadata carries
+/// where that area sits on the display. Without it, an agent reading a tree
+/// bound and cropping the PNG is off by the status-bar inset (128 px on the
+/// reference) with nothing in the evidence saying so.
 fn frame_meta(frame: &FrameInfo, display: DisplaySpec) -> FrameMeta {
-    FrameMeta::new(
+    let meta = FrameMeta::new(
         frame.frame_id,
         now_rfc3339(),
         frame.cause_id.to_string(),
@@ -207,7 +212,11 @@ fn frame_meta(frame: &FrameInfo, display: DisplaySpec) -> FrameMeta {
         display_density(display),
         frame.content_hash.clone(),
         frame_is_meaningful(&frame.pixels),
-    )
+    );
+    match crate::display::frame_display_geometry(frame.width, frame.height) {
+        Some(geometry) => geometry.apply(meta),
+        None => meta,
+    }
 }
 
 /// A frame is meaningful only when it carries rendered content: at least one
