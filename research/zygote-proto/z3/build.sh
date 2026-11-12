@@ -16,7 +16,7 @@ SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
 AJAR="$SDK/platforms/android-34/android.jar"
 D8="$(ls -d "$SDK"/build-tools/*/d8 2>/dev/null | sort | tail -1)"
 GUEST="$HERE/../../.."
-OUT="$CACHE/z3-build"
+OUT="$CACHE/${ZBUILD:-z3-build}"
 rm -rf "$OUT/classes" "$OUT/dex"
 mkdir -p "$OUT/classes" "$OUT/dex" "$OUT/lib"
 
@@ -39,4 +39,11 @@ javac -nowarn -source 11 -target 11 -cp "$AJAR" -d "$OUT/classes" "${SRC[@]}"
 clang -nostdlib -ffreestanding -fno-builtin -fno-stack-protector -fPIC -shared -O2 -Wall \
     -o "$OUT/lib/libz2fork.so" "$PROTO/shim/z2fork.c"
 
-echo "built $OUT/dex/classes.dex and $OUT/lib/libz2fork.so"
+# Z4: the production guest guard, rebuilt from the same source with
+# -fno-stack-protector because a dlopen from a classloader namespace cannot
+# resolve bionic's hidden `__stack_chk_fail` (the blob and the Landlock plan it
+# reads are still the production artefacts). Only the Z4 path binds this copy.
+clang -nostdlib -ffreestanding -fno-builtin -fno-stack-protector -fPIC -shared -O2 -Wall \
+    -o "$OUT/lib/libacos_seccomp_guest.so" "$GUEST/crates/acos-art/src/seccomp_guest.c"
+
+echo "built $OUT/dex/classes.dex, $OUT/lib/libz2fork.so, $OUT/lib/libacos_seccomp_guest.so"

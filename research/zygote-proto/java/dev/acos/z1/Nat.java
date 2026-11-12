@@ -50,6 +50,13 @@ public final class Nat {
      */
     public static native int spawnSandboxed(int tag);
 
+    /**
+     * Z4: Z2's sandbox topology for a session of a shared zygote.  The child
+     * bind-mounts `/sessions/<tag>/binds` (one `src<TAB>dst` per line) in its
+     * private mount namespace.  Returns 0 only in the app process (C).
+     */
+    public static native int spawnSession(int tag);
+
     /** Post-sandbox probes: each returns -errno, or a pid for fork(). */
     public static native int ptraceSelf();
 

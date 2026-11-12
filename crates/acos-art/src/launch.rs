@@ -222,6 +222,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("linkerconfig");
     root.ensure_classpath_env(false)?;
     crate::stage("classpath");
+    // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
+    // launcher a *foreign-guest* session of a shared zygote. Unset => production.
+    let session_dir: Option<PathBuf> =
+        std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
 
     // Guest dex (contains AppMain, LaunchMain and LaunchMain$Instr), the
     // substrate JNI shim and the mini-root shim.
@@ -235,7 +239,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("binder-driver");
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
-    let run = root.new_run_dir("launch")?;
+    let run = match &session_dir {
+        Some(d) => root.run_dir_at(&d.join("run"), "launch")?,
+        None => root.new_run_dir("launch")?,
+    };
     crate::stage("run-dir");
 
     let app_dir = root.data.join("app");
@@ -353,7 +360,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::Props::for_launch()?.write(&root.data.join(crate::props::PROPS_FILE))?;
     // W43: sockets live in a short runtime dir, never under the caller's data
     // path (a long `--data`/task name must not turn into a bind() failure).
-    let sockets = ShortSocketDir::new().map_err(Error::Io)?;
+    let sockets = match &session_dir {
+        Some(d) => ShortSocketDir::at(&d.join("sock"))?,
+        None => ShortSocketDir::new().map_err(Error::Io)?,
+    };
     let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
     crate::stage("props-logd");
 
@@ -632,6 +642,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         app_flags.to_string(),
         app_flags_source.to_string(),
     ]);
+    // Z4: the app half of the argv, i.e. what `LaunchMain.main` receives. The
+    // zygote child gets exactly these in its per-session contract.
+    let guest_args: Vec<String> = argv.iter().skip(image_prefix + 3).cloned().collect();
     let argv: Vec<String> = match &zygote_app {
         None => argv,
         Some(dir) => {
@@ -649,17 +662,27 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             ]);
             // Drop the production `-cp <dex> <class>` triple; the guest argv
             // (`apk package out until activity …`) is passed through verbatim.
-            v.extend(argv.iter().skip(image_prefix + 3).cloned());
+            v.extend(guest_args.iter().cloned());
             v
         }
     };
+    // Z4 research seam: publish this session's contract for the zygote. The
+    // directory already exists (the driver prepared it); the guest argv is one
+    // argument per line (the 15 production arguments).
+    if let Some(dir) = &session_dir {
+        write_zygote_session(dir, &run, &sockets.0, &sock, &staging, &out, &package, &guest_args)?;
+    }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     if let Some(dir) = &shared_boot_image {
         sb.with_image(Some(dir.clone()));
     }
     sb.run_root(run.path());
-    sb.seccomp_guest(true);
+    // Z4: a foreign-guest session does not spawn ART itself, so the guest
+    // seccomp/Landlock guard is applied per forked child (the child loads the
+    // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
+    // order). The production path keeps the preload-at-start ordering.
+    sb.seccomp_guest(session_dir.is_none());
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     // The per-run extracted native libraries (installd's `nativeLibraryDir`).
@@ -683,10 +706,38 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         fs::copy(dir.join("lib/libz2fork.so"), root.data.join("shim/libz2fork.so"))?;
         sb.ro_bind(&dir.join("dex"), "/data/app/z3");
         sb.ro_bind(&dir.join("lib/libz2fork.so"), "/data/shim/libz2fork.so");
+
     }
     sb.rw_bind(&sockets.0, "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
     sb.rw_bind(&sock, "/data/acos-launch.sock");
+    // Z4: the plan directory (one subdirectory per session) must be visible to
+    // the zygote so its children can bind each session's run root and sockets.
+    if let Some(plan) = std::env::var_os("ACOS_ZYGOTE_PLAN_DIR") {
+        sb.rw_bind(PathBuf::from(plan), "/sessions");
+        // Z4: the zygote reads the per-session contracts from `/sessions`.
+        sb.env("ACOS_ZYGOTE_SESSIONS", "/sessions");
+        if let Ok(n) = std::env::var("ACOS_ZYGOTE_N") {
+            sb.env("ACOS_ZYGOTE_N", &n);
+        }
+    }
+    if session_dir.is_some() {
+        // ZS/Z4: forward the research security-probe switch into the child.
+        if std::env::var_os("ACOS_ZYGOTE_PROBE").is_some() {
+            sb.env("ACOS_ZYGOTE_PROBE", "1");
+        }
+        // The child loads the production guard itself; it must see the blob.
+        sb.ro_bind(&root.data.join("seccomp"), "/data/seccomp");
+        if let Some(dir) = &zygote_app {
+            // Z4: same source, same blob, but loadable via System.load from a
+            // classloader namespace (no __stack_chk_fail reference). Pushed
+            // after the directory bind so it wins.
+            sb.ro_bind(
+                &dir.join("lib/libacos_seccomp_guest.so"),
+                "/data/seccomp/libacos_seccomp_guest.so",
+            );
+        }
+    }
     sb.env(
         "LD_PRELOAD",
         "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so:/data/lib/libacos_binder_driver.so",
@@ -735,8 +786,27 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         sb.env("ACOSART_HW_VERBOSE", "1");
     }
     crate::watchdog::note_guest_priority_gap("launch");
+    // Z4 (research seam): each forked guest writes its stdout/stderr to its own
+    // session FIFO, so the per-session probe parser sees only that child's
+    // lines (`ACOSPROBE`, markers) — the zygote's stdout is launcher 0's.
+    let guest_fifo = session_dir.as_ref().map(|d| d.join("guest.fifo"));
+    if let Some(fifo) = &guest_fifo {
+        let _ = fs::remove_file(fifo);
+        let c = std::ffi::CString::new(fifo.to_string_lossy().to_string())
+            .map_err(|e| Error::Layout(e.to_string()))?;
+        if unsafe { libc::mkfifo(c.as_ptr(), 0o600) } != 0 {
+            return Err(Error::Io(std::io::Error::last_os_error()));
+        }
+    }
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
-    let cmd = sb.command(dalvik, &argv)?;
+    // Z4 (research seam): a foreign-guest session starts a tombstone process
+    // inside its own cgroup/namespaces and waits for the zygote child that
+    // connects to its sockets. `/system/bin/sleep` is the sysroot's own toybox
+    // applet, so nothing is downloaded or fabricated.
+    let cmd = match (&session_dir, &zygote_app) {
+        (Some(_), None) => sb.command("/system/bin/sleep", &["1800".to_string()])?,
+        _ => sb.command(dalvik, &argv)?,
+    };
     crate::stage("guest-exec");
     let started = Instant::now();
     // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
@@ -804,11 +874,30 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             }
         }
     }
-    let out_pipe = child.stdout.take().expect("piped stdout");
+    // Z4: launcher 0's spawned process is the zygote; its own stdout (the
+    // pre-fork log) is not the guest's channel any more, so drain it to a file
+    // and parse probes from the session FIFO instead.
+    if guest_fifo.is_some() && zygote_app.is_some() {
+        if let Some(mut pipe) = child.stdout.take() {
+            std::thread::spawn(move || {
+                let _ = crate::capture::drain_to_tail(&mut pipe, 1 << 20);
+            });
+        }
+    }
+    let out_tee = std::env::var_os("ACOSLAUNCH_GUEST_STDOUT_FILE").map(PathBuf::from);
+    let out_pipe: Box<dyn std::io::Read + Send> = match &guest_fifo {
+        Some(fifo) => Box::new(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(fifo)
+                .map_err(Error::Io)?,
+        ),
+        None => Box::new(child.stdout.take().expect("piped stdout")),
+    };
     let otx2 = otx.clone();
     let probe_for_out = Arc::clone(&probe_state);
     let compositor_for_probe = Arc::clone(&live.compositor);
-    let out_tee = std::env::var_os("ACOSLAUNCH_GUEST_STDOUT_FILE").map(PathBuf::from);
     let out_thread = std::thread::spawn(move || {
         let buf = if interactive {
             match out_tee {
@@ -1501,12 +1590,63 @@ impl ShortSocketDir {
             std::io::Error::new(std::io::ErrorKind::NotFound, "no short socket dir available")
         }))
     }
+
+    /// Z4 (research seam): use an explicit directory, and leave it in place on
+    /// drop (the session directory is the shared plan's, not this process's).
+    fn at(dir: &Path) -> std::io::Result<Self> {
+        fs::create_dir_all(dir)?;
+        Ok(Self(dir.to_path_buf()))
+    }
 }
 
 impl Drop for ShortSocketDir {
     fn drop(&mut self) {
+        // Z4: a foreign-guest session directory is owned by the driver.
+        if std::env::var_os("ACOS_ZYGOTE_SESSION").is_some() {
+            return;
+        }
         let _ = fs::remove_dir_all(&self.0);
     }
+}
+
+/// Z4 (research seam, off by default): publish this session's contract so the
+/// shared zygote can fork a child that binds exactly this session's writable
+/// root, sockets and importer socket. Written last, atomically: a zygote that
+/// sees `argv` knows every other file it needs is already there.
+#[allow(clippy::too_many_arguments)]
+fn write_zygote_session(
+    dir: &Path,
+    run: &crate::RunDir,
+    sockets: &Path,
+    peer_sock: &Path,
+    staging: &Path,
+    out: &Path,
+    package: &str,
+    guest_args: &[String],
+) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let doc = serde_json::json!({
+        "package": package,
+        "pid": std::process::id(),
+        "run_root": run.path().display().to_string(),
+        "sockets": sockets.display().to_string(),
+        "peer_sock": peer_sock.display().to_string(),
+        "staging": staging.display().to_string(),
+        "out": out.display().to_string(),
+        "guest_args": guest_args,
+    });
+    let tmp = dir.join("session.json.tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(|e| Error::Layout(e.to_string()))?)?;
+    fs::rename(&tmp, dir.join("session.json"))?;
+    let mut argv = String::new();
+    for a in guest_args {
+        argv.push_str(a);
+        argv.push('\n');
+    }
+    let tmp = dir.join("argv.tmp");
+    fs::write(&tmp, argv)?;
+    fs::rename(&tmp, dir.join("argv"))?;
+    Ok(())
 }
 
 /// The structured refusal for a scratch disk that cannot hold this run's frames.

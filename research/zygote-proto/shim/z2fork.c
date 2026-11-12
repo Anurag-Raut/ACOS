@@ -72,6 +72,7 @@ struct ts {
 #define CLONE_NEWUSER 0x10000000
 #define MS_REC 16384
 #define MS_PRIVATE (1 << 18)
+#define MS_BIND 4096
 #define MS_NOSUID 2
 #define MS_NODEV 4
 #define MS_NOEXEC 8
@@ -196,6 +197,88 @@ static int z2_strlen(const char *s) {
   int n = 0;
   while (s[n]) n++;
   return n;
+}
+
+/* -------------------------------------------------- Z4 per-session sandbox */
+
+static char *z2_append(char *p, const char *s);
+
+/* Z4: read `/sessions/<tag>/binds` (one `src<TAB>dst` per line, written by the
+ * driver from the launcher's own session contract) and bind-mount every pair in
+ * the child's private mount namespace.  Raw syscalls only; a bind from a mount
+ * owned by the parent user namespace is allowed and produces a locked mount
+ * (measured: `unshare -Urm` inside bwrap --cap-drop ALL, Z4 §2). */
+static char *z4_append_int(char *p, int v) {
+  char tmp[16];
+  int n = 0;
+  do {
+    tmp[n++] = (char)('0' + (v % 10));
+    v /= 10;
+  } while (v);
+  while (n) *p++ = tmp[--n];
+  return p;
+}
+
+static long z4_read_binds(int tag, char *buf, int cap) {
+  char path[64];
+  char *p = z2_append(path, "/sessions/");
+  p = z4_append_int(p, tag);
+  p = z2_append(p, "/binds");
+  *p = 0;
+  long fd = z2_sys4(SYS_openat, AT_FDCWD, (long)path, 0 /* O_RDONLY */, 0);
+  if (fd < 0) return fd;
+  long n = z2_sys3(SYS_read, fd, (long)buf, cap - 1);
+  z2_sys1(SYS_close, fd);
+  if (n < 0) return n;
+  buf[n] = 0;
+  return n;
+}
+
+static long z4_apply_binds(int tag, int *applied) {
+  static char buf[4096];
+  static char src[256];
+  static char dst[256];
+  long n = -1;
+  /* The zygote may fork as soon as `argv` exists; the driver writes `binds`
+   * right after. Wait for it (30 s), then fail closed. */
+  for (int i = 0; i < 3000; i++) {
+    n = z4_read_binds(tag, buf, (int)sizeof(buf));
+    if (n > 0) break;
+    struct ts ts;
+    ts.sec = 0;
+    ts.nsec = 10000000L;
+    z2_sys2(SYS_clock_gettime, 1, (long)&ts);
+    z2_sys2(35 /* SYS_nanosleep */, (long)&ts, 0);
+  }
+  if (n <= 0) return n < 0 ? n : -1;
+  *applied = 0;
+  long rc = 0;
+  char *line = buf;
+  while (*line) {
+    char *nl = line;
+    while (*nl && *nl != '\n') nl++;
+    char had_nl = *nl;
+    *nl = 0;
+    if (*line) {
+      char *tab = line;
+      while (*tab && *tab != '\t') tab++;
+      if (*tab == '\t') {
+        *tab = 0;
+        char *sp = src;
+        char *dp = dst;
+        for (char *q = line; *q; q++) *sp++ = *q;
+        *sp = 0;
+        for (char *q = tab + 1; *q; q++) *dp++ = *q;
+        *dp = 0;
+        long r = z2_sys5(SYS_mount, (long)src, (long)dst, 0, MS_BIND | MS_REC, 0);
+        if (r < 0 && rc == 0) rc = r;
+        (*applied)++;
+      }
+    }
+    if (!had_nl) break;
+    line = nl + 1;
+  }
+  return rc;
 }
 
 static char *z2_append(char *p, const char *s) {
@@ -505,6 +588,100 @@ EXPORT jint Java_dev_acos_z1_Nat_spawnSandboxed(void *env, void *cls, jint tag) 
 /* ----------------------------------------------------------- test probes */
 
 /* All of these are called by Java *after* the sandbox is installed. */
+/* Called in the zygote's forked child for Z4: Z2's sandbox topology, but the
+ * per-child bind mounts come from the session contract instead of a tmpfs
+ * `/data/data`.  Returns 0 only in the sandboxed app process (C); the two
+ * intermediate processes (`A` status forwarder, `B` PID-namespace init) exit.
+ *
+ * Slots: 0 userns, 1 mntns, 2 pidns, 3 mount_private, 4 binds_rc, 5 binds_n,
+ *        6 proc, 7 app_pid_in_ns, 8 reaper_pid, 13 uid_before, 14 gid_before. */
+EXPORT jint Java_dev_acos_z1_Nat_spawnSession(void *env, void *cls, jint tag) {
+  int uid = 0, gid = 0;
+  z2_rc[13] = uid;
+  z2_rc[14] = gid;
+  z2_prctl_name("z4ns");
+
+  z2_rc[0] = z2_setup_user_ns(&uid, &gid);
+  z2_rc[13] = uid;
+  z2_rc[14] = gid;
+  if (z2_rc[0] == 0) {
+    z2_rc[1] = z2_sys1(SYS_unshare, CLONE_NEWNS);
+    z2_rc[2] = z2_sys1(SYS_unshare, CLONE_NEWPID);
+  }
+
+  int pfd[2] = {-1, -1};
+  if (z2_sys2(SYS_pipe2, (long)pfd, O_CLOEXEC) < 0) return -30;
+
+  long b = z2_sys0(SYS_fork);
+  if (b < 0) return (jint)b;
+  if (b > 0) {
+    /* ---- A: status forwarder (still in the zygote's PID namespace) ---- */
+    int st = 0;
+    int cst = 0;
+    long n;
+    z2_rc[8] = b;
+    z2_sys1(SYS_close, pfd[1]);
+    z2_sys4(SYS_wait4, b, (long)&st, 0, 0);
+    n = z2_sys3(SYS_read, pfd[0], (long)&cst, 4);
+    z2_sys1(SYS_close, pfd[0]);
+    if (n != 4) cst = st;
+    if ((cst & 0x7f) != 0) {
+      int sig = cst & 0x7f;
+      sigaction_set(sig, (void *)SIG_DFL);
+      z2_sys2(SYS_kill, z2_sys0(SYS_getpid), sig);
+    }
+    z2_sys1(SYS_exit_group, (cst >> 8) & 0xff);
+    for (;;) {
+    }
+  }
+
+  /* ---- B: init of the private PID namespace ---- */
+  z2_sys1(SYS_close, pfd[0]);
+  z2_prctl_name("z4init");
+  if (z2_rc[0] == 0 && z2_rc[1] == 0) {
+    int applied = 0;
+    z2_rc[3] = z2_sys4(SYS_mount, 0, (long)"/", 0, MS_REC | MS_PRIVATE);
+    z2_rc[4] = z4_apply_binds(tag, &applied);
+    z2_rc[5] = applied;
+    z2_rc[6] = z2_sys5(SYS_mount, (long)"proc", (long)"/proc", (long)"proc",
+                       MS_NOSUID | MS_NODEV | MS_NOEXEC, 0);
+  }
+
+  long c = z2_sys0(SYS_fork);
+  if (c == 0) {
+    /* ---- C: the ART app process.  seccomp/Landlock are applied by the JVM
+     * after this returns (the production guard .so, AOSP order). ---- */
+    z2_sys1(SYS_close, pfd[1]);
+    /* Z4: this session's stdout/stderr go to its own FIFO, so its launcher's
+     * probe parser sees only this child's ACOSPROBE lines. */
+    char fpath[64];
+    char *fp = z2_append(fpath, "/sessions/");
+    fp = z4_append_int(fp, tag);
+    fp = z2_append(fp, "/guest.fifo");
+    *fp = 0;
+    long ffd = z2_sys4(SYS_openat, AT_FDCWD, (long)fpath, 1 /* O_WRONLY */, 0);
+    if (ffd >= 0) {
+      z2_sys2(33 /* SYS_dup2 */, ffd, 1);
+      z2_sys2(33 /* SYS_dup2 */, ffd, 2);
+      z2_sys1(SYS_close, ffd);
+    }
+    z2_rc[7] = z2_sys0(SYS_getpid);
+    z2_prctl_name("z4app");
+    return 0;
+  }
+  if (c < 0) {
+    z2_sys1(SYS_close, pfd[1]);
+    return (jint)c;
+  }
+  int st = 0;
+  z2_sys4(SYS_wait4, c, (long)&st, 0, 0);
+  z2_sys3(SYS_write, pfd[1], (long)&st, 4);
+  z2_sys1(SYS_close, pfd[1]);
+  z2_sys1(SYS_exit_group, (st >> 8) & 0xff);
+  for (;;) {
+  }
+}
+
 EXPORT jint Java_dev_acos_z1_Nat_ptraceSelf(void) {
   return (jint)z2_sys4(SYS_ptrace, 0 /* PTRACE_TRACEME */, 0, 0, 0);
 }
