@@ -1,4 +1,36 @@
-# Compositor direction: advisor brief (status as of 2026-11-12 05:18 UTC)
+# Compositor direction: advisor brief (status as of 2026-11-12 05:18 UTC; Spike A update 05:55)
+
+> **UPDATE 05:55 UTC: Spike A is DONE** (`c3cd99c`, `results/art-runtime/SPIKE-A.md`). §5's
+> "Spike A" section below describes the plan; these are the results.
+> - The stock `surfaceflinger` **boots headless and stays alive** with the ACOS binder
+>   driver + peer, the ACOS memfd gralloc shim and a **226-line fake EGL/GLES**
+>   (150 symbols). It stops only at composer3 discovery.
+> - Measured: Pss **20.6 MiB = 4.43 MiB private + 16.1 MiB shared file**; 5 threads;
+>   < 5 ms to the stable state.
+> - Mandatory in Android 14: the composer3 AIDL service, a **primary physical display
+>   hotplug** (a virtual display alone is impossible), and vsync from the composer.
+>   There is **no CPU RenderEngine** (GL or VK only), and RenderEngine is created
+>   before the composer.
+> - A fake GL is enough to initialise but can never draw. Client composition, blur,
+>   HDR and SurfaceFlinger screenshots would be wrong; screenshots must keep coming
+>   from C1.
+> - Composer stub: ~40 of 97 `AidlComposer` methods sit on the boot + first-frame path.
+>   It is decode-only, **750–1120 LOC with no AIDL codegen**. SurfaceFlinger batches
+>   all per-frame geometry into `executeCommands`, and that batch is exactly C1's
+>   missing geometry.
+> - Remaining custom work: servicemanager `addService` for native processes
+>   (100–200 LOC) and wiring (100–200 LOC). **Total ~1,100–1,550 LOC.** C1 still
+>   blits the pixels.
+> - Memory per session: **6–9 MiB private (estimated from the 4.43 measured floor),
+>   plus 16 MiB shared once**. That is inside the owner's 10–20 MiB "preferred" band.
+>   N=10 is ~60–90 MiB and N=20 ~120–180 MiB, plus 16 MiB shared, per-session
+>   instances (estimate).
+> - Proving experiment designed, ~11 h in five steps with kill points: composer boot
+>   set, one DEVICE layer, dialog geometry == [28,976][1052,1489], C1 blit parity,
+>   N=10 measurement.
+> - Spike A's own verdict: memory does not reject stock SurfaceFlinger; effort and
+>   correctness decide. It recommends Spike B's path now and reopening
+>   SurfaceFlinger only if a composer3 service is funded.
 
 ## 1. What ACOS is (relevant parts)
 - An agent-first Android APK execution and verification environment. Real ART runs
