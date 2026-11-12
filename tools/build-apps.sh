@@ -196,14 +196,19 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
 done
 
 # --- optional device smoke test ---------------------------------------------
-if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | awk 'NR>1 && $2=="device"' | grep -q .; then
-    echo "build-apps: device detected, installing smoke test"
+# Opt-in only (2026-11-12): a physical phone may be attached (the owner's own
+# device). Never install anything unless the caller names the target explicitly:
+#   ACOS_DEVICE_SMOKE=1 ANDROID_SERIAL=<emulator-serial> tools/build-apps.sh
+if [[ "${ACOS_DEVICE_SMOKE:-0}" == "1" && -n "${ANDROID_SERIAL:-}" ]] \
+    && command -v adb >/dev/null 2>&1 \
+    && adb -s "$ANDROID_SERIAL" get-state 2>/dev/null | grep -q device; then
+    echo "build-apps: ACOS_DEVICE_SMOKE=1, installing smoke test on $ANDROID_SERIAL"
     for apk in hello-views hello-jni counter todo-list multi-activity form-validation; do
-        adb install -r -g "$BUILD_DIR/$apk.apk"
+        adb -s "$ANDROID_SERIAL" install -r -g "$BUILD_DIR/$apk.apk"
     done
     echo "build-apps: device-verified (installed)"
 else
-    echo "build-apps: not device-verified (no attached device/emulator)"
+    echo "build-apps: not device-verified (device smoke is opt-in: ACOS_DEVICE_SMOKE=1 ANDROID_SERIAL=...)"
 fi
 
 echo "build-apps: done -> $BUILD_DIR/*.apk"
