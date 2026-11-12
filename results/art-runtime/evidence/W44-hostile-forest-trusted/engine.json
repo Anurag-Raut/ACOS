@@ -1,0 +1,69 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W44-hostile-forest-trusted",
+      "engine_report": "results/art-runtime/evidence/W44-hostile-forest-trusted/engine.json",
+      "verdict": "results/art-runtime/evidence/W44-hostile-forest-trusted/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "timing": {
+      "attributed_ms": 1943,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 338,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1941
+        },
+        {
+          "index": 1,
+          "status": "fail",
+          "step": "assert_text",
+          "wall_ms": 2
+        }
+      ],
+      "unattributed_ms": 2,
+      "unit": "ms",
+      "verdict_wall_ms": 1945
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_3ce551_18e72fb0496a90a5",
+  "verdict_status": "fail"
+}

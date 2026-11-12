@@ -1,7 +1,7 @@
 {
   "acos_version": "0.1.0",
   "apk_path": "fixtures/build/apps/hostile-probe.apk",
-  "apk_sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6",
+  "apk_sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a",
   "scenario_path": "scenarios/s8-hostile-untrusted.yaml",
   "scenario_sha256": "e7955f59c1f87e6d192bbb0904f1efd82a7f71ed11862f5aaf08c8d264b0f2d0",
   "flags": [],

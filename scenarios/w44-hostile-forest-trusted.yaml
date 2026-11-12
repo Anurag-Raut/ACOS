@@ -1,0 +1,33 @@
+# W44 hostile fixture, TRUSTED control: the same forged forest declares
+# truncated:false but omits the requested node. A trusted run may use the
+# guest-asserted tree, and the honest result is ELEMENT_NOT_FOUND (not
+# TREE_TRUNCATED): the flag is reported, not invented.
+version: 1
+name: w44-hostile-forest-trusted
+description: >-
+  Trusted control for the forged forest: the node is absent from a tree the
+  guest says is not truncated, so the result is ELEMENT_NOT_FOUND.
+app: fixtures/build/apps/hostile-forest.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: fail
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.ForestActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: ghost}
+      text: {exact: "FORGED FOREST"}

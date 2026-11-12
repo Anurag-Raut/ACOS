@@ -2,7 +2,7 @@
   "app": {
     "package": "dev.acos.fixtures.hostileprobe",
     "path": "fixtures/build/apps/hostile-probe.apk",
-    "sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6"
+    "sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a"
   },
   "backend": "acos-native",
   "engine": "art",
@@ -35,7 +35,7 @@
     "summary": "step 1 (assert_text) fail"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-11T22:10:27.656Z",
+  "finished_at": "2026-11-12T03:57:45.403Z",
   "isolation": "process",
   "mode": "live",
   "notes": [
@@ -46,7 +46,7 @@
   "reproducer": {
     "acos_version": "0.1.0",
     "apk_path": "fixtures/build/apps/hostile-probe.apk",
-    "apk_sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6",
+    "apk_sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -60,15 +60,15 @@
     "scenario_path": "scenarios/s8-hostile-untrusted.yaml",
     "scenario_sha256": "e7955f59c1f87e6d192bbb0904f1efd82a7f71ed11862f5aaf08c8d264b0f2d0"
   },
-  "request_id": "req_2ddd74_18e71d25a1c6b959",
+  "request_id": "req_3db42f_18e730199f191bd4",
   "resources": {
     "events": 1,
     "frames_captured": 1,
-    "memory_mib": 53,
-    "peak_rss_bytes": 56160256,
+    "memory_mib": 56,
+    "peak_rss_bytes": 59060224,
     "sessions": 1,
     "steps": 2,
-    "wall_ms": 1914
+    "wall_ms": 1930
   },
   "scenario": {
     "name": "s8-hostile-untrusted",
@@ -77,11 +77,11 @@
   },
   "schema_version": 1,
   "session_id": "s_art_hostile-probe",
-  "started_at": "2026-11-11T22:10:25.742Z",
+  "started_at": "2026-11-12T03:57:43.473Z",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 1914,
+      "duration_ms": 1930,
       "evidence": [
         {
           "kind": "step",

@@ -18,5 +18,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".ForestActivity" android:exported="true" />
+        <activity android:name=".SpamActivity" android:exported="true" />
+        <activity android:name=".ParcelActivity" android:exported="true" />
     </application>
 </manifest>

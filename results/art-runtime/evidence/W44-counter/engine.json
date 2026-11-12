@@ -1,0 +1,123 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W44-counter",
+      "engine_report": "results/art-runtime/evidence/W44-counter/engine.json",
+      "verdict": "results/art-runtime/evidence/W44-counter/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "timing": {
+      "attributed_ms": 7506,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 390,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 576
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 2
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 2123
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 569
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 2110
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 2119
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        }
+      ],
+      "unattributed_ms": 31,
+      "unit": "ms",
+      "verdict_wall_ms": 7537
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_3da721_18e7301545640580",
+  "verdict_status": "pass"
+}

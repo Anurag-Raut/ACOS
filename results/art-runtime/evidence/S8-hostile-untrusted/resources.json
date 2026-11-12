@@ -1,7 +1,7 @@
 {
-  "wall_ms": 1914,
-  "peak_rss_bytes": 56160256,
-  "memory_mib": 53,
+  "wall_ms": 1930,
+  "peak_rss_bytes": 59060224,
+  "memory_mib": 56,
   "frames_captured": 1,
   "events": 1,
   "sessions": 1,

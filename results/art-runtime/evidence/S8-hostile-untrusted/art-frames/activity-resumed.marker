@@ -4,4 +4,5 @@ lifecycle=onCreate,onStart,onResume
 resumed=true
 called=true
 stopped=false
-window=com.android.internal.policy.PhoneWindow@9940923
+window=com.android.internal.policy.PhoneWindow@7ed1e4
+timeout_ms=12000

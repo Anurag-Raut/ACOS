@@ -2,10 +2,7 @@
   "engine": {
     "commands": {
       "missing": [
-        "reset",
-        "logs",
-        "environment",
-        "crash_reports"
+        "environment"
       ],
       "supported": [
         "launch",
@@ -15,7 +12,10 @@
         "tap_text",
         "type_text",
         "key",
-        "close"
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
       ]
     },
     "engine": "art",
@@ -38,10 +38,32 @@
     },
     "explicit": true,
     "mode": "live",
+    "timing": {
+      "attributed_ms": 1938,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 339,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1937
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        }
+      ],
+      "unattributed_ms": 3,
+      "unit": "ms",
+      "verdict_wall_ms": 1941
+    },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_2de21f_18e71d2e10888e41",
+  "request_id": "req_3db3ee_18e73018fc8f9b96",
   "verdict_status": "pass"
 }

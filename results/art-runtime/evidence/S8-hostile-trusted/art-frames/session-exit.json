@@ -1,0 +1,19 @@
+{
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=66MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4043768-i8211829.scope)",
+  "code": null,
+  "disk_free_bytes": 181031317504,
+  "guest_crash": "ACOSLAUNCH {\"outcome\":\"ok\",\"activity\":\"dev.acos.fixtures.hostileprobe.MainActivity\",\"application_created\":true,\"activity_resumed\":true,\"marker\":\"activity-resumed\"}",
+  "guest_exit": 0,
+  "guest_signal": null,
+  "logd": "logd: 34 entries",
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail_last": "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4ea8fd7} dev.acos.art.LaunchMain$1$1@428b4af",
+  "utc_ms": 1794455862701,
+  "wall_ms": 2257
+}

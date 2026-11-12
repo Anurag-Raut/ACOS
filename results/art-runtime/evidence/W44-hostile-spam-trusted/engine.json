@@ -1,0 +1,69 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W44-hostile-spam-trusted",
+      "engine_report": "results/art-runtime/evidence/W44-hostile-spam-trusted/engine.json",
+      "verdict": "results/art-runtime/evidence/W44-hostile-spam-trusted/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "timing": {
+      "attributed_ms": 1938,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 408,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1937
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        }
+      ],
+      "unattributed_ms": 3,
+      "unit": "ms",
+      "verdict_wall_ms": 1941
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_3d1aa8_18e72fc6298f331f",
+  "verdict_status": "pass"
+}

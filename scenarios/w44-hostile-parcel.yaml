@@ -1,0 +1,40 @@
+# W44 hostile fixture, UNTRUSTED containment run: the guest sends hostile
+# setTransactionState layer-count/geometry parcels and a sizeCompatScale bomb
+# on the real window session. The host must refuse each with a structured
+# error; nothing here may become host-observed evidence of a pass.
+# Run only with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1.
+version: 1
+name: w44-hostile-parcel
+description: >-
+  Real binder hostility from our own hostile APK: 257 composer states, a
+  GraphicBuffer with 0xffffffff/0xffffffff/0xffffffff geometry, and an
+  addToDisplayWithoutInputChannel out-float[] length of i32::MAX. The guest
+  draws solid red; the host must stay up and refuse/label every claim.
+trust: untrusted
+app: fixtures/build/apps/hostile-parcel.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.ParcelActivity
+      clear_state: true
+  - assert_region:
+      x: 100
+      y: 400
+      w: 100
+      h: 100
+      min_distinct_colors: 2

@@ -2,10 +2,7 @@
   "engine": {
     "commands": {
       "missing": [
-        "reset",
-        "logs",
-        "environment",
-        "crash_reports"
+        "environment"
       ],
       "supported": [
         "launch",
@@ -15,7 +12,10 @@
         "tap_text",
         "type_text",
         "key",
-        "close"
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
       ]
     },
     "engine": "art",
@@ -38,10 +38,32 @@
     },
     "explicit": true,
     "mode": "live",
+    "timing": {
+      "attributed_ms": 3872,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 340,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1931
+        },
+        {
+          "index": 1,
+          "status": "fail",
+          "step": "assert_region",
+          "wall_ms": 1941
+        }
+      ],
+      "unattributed_ms": 2,
+      "unit": "ms",
+      "verdict_wall_ms": 3874
+    },
     "trust": "untrusted",
     "unsupported_steps": []
   },
   "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
-  "request_id": "req_2dde7a_18e71d279df7534e",
+  "request_id": "req_3db4e1_18e7301a3dcc7b33",
   "verdict_status": "fail"
 }

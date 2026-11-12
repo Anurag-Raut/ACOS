@@ -1,0 +1,34 @@
+# W44 hostile fixture, TRUSTED control for the probe-line cap: the guest emits
+# one >8 MiB line then a burst of valid forged lines. The host must drop the
+# oversized line (and keep reading) and the trusted tree may use the last
+# valid forged sample; this is the control that shows the cap did not freeze
+# the parser. Untrusted runs still fail closed (w44-hostile-probe-spam).
+version: 1
+name: w44-hostile-probe-spam-trusted
+description: >-
+  Trusted control: the >8 MiB probe line is dropped and the last valid forged
+  sample (id=probe-spam) is still parsed.
+app: fixtures/build/apps/hostile-spam.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.SpamActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: probe-spam}
+      text: {exact: "HOSTILE PASS"}

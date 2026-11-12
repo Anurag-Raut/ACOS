@@ -1,0 +1,34 @@
+# W44 hostile fixture, UNTRUSTED: the guest emits one probe line larger than
+# the host's 8 MiB cap (drained and counted) and a burst of valid forged lines
+# whose highest seq wins. The tree-only assertion must still fail closed.
+# Run only with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1.
+version: 1
+name: w44-hostile-probe-spam
+description: >-
+  Probe-line cap + forged sample spam. On an untrusted run the forged tree is
+  guest-asserted and cannot justify a pass.
+trust: untrusted
+app: fixtures/build/apps/hostile-spam.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.SpamActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: probe-spam}
+      text: {exact: "HOSTILE PASS"}

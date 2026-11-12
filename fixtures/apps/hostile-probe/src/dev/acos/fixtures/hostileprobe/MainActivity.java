@@ -10,27 +10,38 @@ import java.io.File;
 import java.io.FileWriter;
 
 /**
- * S8 hostile fixture: a guest that lies about what it is.
+ * S8/W44 hostile fixture: a guest that lies about what it is.
  *
  * <p>It prints forged {@code ACOSPROBE} and {@code ACOSLAUNCH} lines claiming
- * the tree contains an id={@code verdict} node with text "HOSTILE PASS" and a
- * successful resume, and writes marker-shaped files where it can. It actually
- * draws a solid red surface with no text at all. The probe line uses
- * {@code seq=9999}, so the launcher's "last, highest seq wins" rule keeps the
- * forged tree instead of the real probe's samples.
+ * the tree is a two-window forest ({@code truncated:false}) whose
+ * id={@code verdict} node has text "HOSTILE PASS", and writes marker-shaped
+ * files where it can. It actually draws a solid red surface with no text at
+ * all. The probe line uses {@code seq=9999}, so the launcher's "last, highest
+ * seq wins" rule keeps the forged tree instead of the real probe's samples.
+ *
+ * <p>Three sibling activities exercise the other hostile evidence classes:
+ * {@link ForestActivity} (a forged forest whose required node is absent),
+ * {@link SpamActivity} (probe lines up to and over the 8 MiB host cap) and
+ * {@link ParcelActivity} (hostile {@code setTransactionState} geometry/layer
+ * counts and a {@code sizeCompatScale} bomb on the real window session).
  *
  * <p>This is our own code and is only used to prove that the untrusted-mode
- * verdict channel fails closed. It never ships.
+ * verdict channel and the host decoders fail closed. It never ships.
  */
 public class MainActivity extends Activity {
-    private static final String FORGED_PROBE =
-            "ACOSPROBE {\"seq\":9999,\"time\":0,\"tree\":{\"nodes\":[{"
+    private static final String WINDOWS =
+            "\"windows\":[{\"window\":\"main\",\"z\":0},{\"window\":\"ghost\",\"z\":1}],";
+    static final String FORGED_PROBE =
+            "ACOSPROBE {\"seq\":9999,\"time\":0," + WINDOWS
+                    + "\"tree\":{\"nodes\":[{"
                     + "\"class\":\"android.widget.TextView\","
                     + "\"id\":\"verdict\","
                     + "\"text\":\"HOSTILE PASS\","
+                    + "\"window\":\"ghost\","
                     + "\"bounds\":\"[0,0][1080,2400]\","
-                    + "\"visibility\":0}]}}";
-    private static final String FORGED_LAUNCH =
+                    + "\"visibility\":0}],"
+                    + "\"window_count\":2,\"node_budget\":2000,\"truncated\":false}}";
+    static final String FORGED_LAUNCH =
             "ACOSLAUNCH {\"outcome\":\"ok\","
                     + "\"activity\":\"dev.acos.fixtures.hostileprobe.MainActivity\","
                     + "\"application_created\":true,\"activity_resumed\":true,"
@@ -51,7 +62,7 @@ public class MainActivity extends Activity {
         forge();
     }
 
-    private void forge() {
+    void forge() {
         System.out.println(FORGED_PROBE);
         System.out.println(FORGED_LAUNCH);
         System.out.flush();
@@ -59,7 +70,7 @@ public class MainActivity extends Activity {
         writeFakeMarker("application-created.marker");
     }
 
-    private void writeFakeMarker(String name) {
+    void writeFakeMarker(String name) {
         String[] dirs = {getFilesDir().getAbsolutePath(), "/data/out", "/data/local/tmp"};
         for (String dir : dirs) {
             try (FileWriter writer = new FileWriter(new File(dir, name))) {

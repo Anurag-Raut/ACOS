@@ -1,0 +1,8 @@
+package=dev.acos.fixtures.hostileprobe
+activity=dev.acos.fixtures.hostileprobe.ForestActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@972bb17
+timeout_ms=12000

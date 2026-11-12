@@ -2,7 +2,7 @@
   "app": {
     "package": "dev.acos.fixtures.hostileprobe",
     "path": "fixtures/build/apps/hostile-probe.apk",
-    "sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6"
+    "sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a"
   },
   "backend": "acos-native",
   "engine": "art",
@@ -35,7 +35,7 @@
     "summary": "step 1 (assert_region) fail"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-11T22:10:38.020Z",
+  "finished_at": "2026-11-12T03:57:50.010Z",
   "isolation": "process",
   "mode": "live",
   "notes": [
@@ -46,7 +46,7 @@
   "reproducer": {
     "acos_version": "0.1.0",
     "apk_path": "fixtures/build/apps/hostile-probe.apk",
-    "apk_sha256": "aab56a34e6010ec0f3690042bada2b14997da1bd6090448400dd561cfff335a6",
+    "apk_sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -60,15 +60,15 @@
     "scenario_path": "scenarios/s8-hostile-region.yaml",
     "scenario_sha256": "e752dfacee08a6551353b5dbbd5bd67063e434a481fb9fde4263b2889985d3ae"
   },
-  "request_id": "req_2dde7a_18e71d279df7534e",
+  "request_id": "req_3db4e1_18e7301a3dcc7b33",
   "resources": {
     "events": 2,
     "frames_captured": 2,
-    "memory_mib": 73,
-    "peak_rss_bytes": 77328384,
+    "memory_mib": 74,
+    "peak_rss_bytes": 78569472,
     "sessions": 1,
     "steps": 2,
-    "wall_ms": 3799
+    "wall_ms": 3874
   },
   "scenario": {
     "name": "s8-hostile-region",
@@ -77,11 +77,11 @@
   },
   "schema_version": 1,
   "session_id": "s_art_hostile-probe",
-  "started_at": "2026-11-11T22:10:34.221Z",
+  "started_at": "2026-11-12T03:57:46.136Z",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 1888,
+      "duration_ms": 1931,
       "evidence": [
         {
           "kind": "step",
@@ -125,7 +125,7 @@
           "passed": false
         }
       ],
-      "duration_ms": 1907,
+      "duration_ms": 1941,
       "error": {
         "code": "ASSERTION_FAILED",
         "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",

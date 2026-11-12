@@ -1,0 +1,69 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/art-runtime/evidence/W44-hostile-parcel",
+      "engine_report": "results/art-runtime/evidence/W44-hostile-parcel/engine.json",
+      "verdict": "results/art-runtime/evidence/W44-hostile-parcel/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "timing": {
+      "attributed_ms": 3913,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 340,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1949
+        },
+        {
+          "index": 1,
+          "status": "fail",
+          "step": "assert_region",
+          "wall_ms": 1964
+        }
+      ],
+      "unattributed_ms": 4,
+      "unit": "ms",
+      "verdict_wall_ms": 3917
+    },
+    "trust": "untrusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
+  "request_id": "req_3ce0e6_18e72fa1744a7672",
+  "verdict_status": "fail"
+}

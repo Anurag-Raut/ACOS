@@ -1,12 +1,12 @@
 {
   "frame": {
     "frame_seq": 2,
-    "produced_at": "2026-11-11T22:10:38.004Z",
+    "produced_at": "2026-11-12T03:57:49.996Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2209,
     "density": 420,
-    "content_hash": "2503a012e1399a38c7d9377517a3dcf4",
+    "content_hash": "d18ecd43258871d10170c68b1506f451",
     "meaningful": true
   },
   "package": "dev.acos.fixtures.hostileprobe",
@@ -16,6 +16,7 @@
       "class": "android.widget.TextView",
       "resource_id": "verdict",
       "text": "HOSTILE PASS",
+      "hint": "",
       "content_desc": "",
       "bounds": [
         0,
@@ -29,8 +30,10 @@
       "clickable": false,
       "scrollable": false,
       "checked": false,
+      "selected": false,
       "children": [],
-      "package": ""
+      "package": "",
+      "window": "ghost"
     }
   ],
   "truncated": false,

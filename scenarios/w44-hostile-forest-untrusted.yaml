@@ -1,0 +1,35 @@
+# W44 hostile fixture, UNTRUSTED: a forged two-window forest says
+# truncated:false and omits the node the scenario asks for. The tree is
+# guest-asserted, so the step must fail closed with INSUFFICIENT_HOST_EVIDENCE;
+# it must never become TREE_TRUNCATED or a pass.
+# Run only with ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1.
+version: 1
+name: w44-hostile-forest-untrusted
+description: >-
+  Forged multi-window forest with truncated:false and a missing node. On an
+  untrusted run the forged tree cannot justify a pass.
+trust: untrusted
+app: fixtures/build/apps/hostile-forest.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.hostileprobe/.ForestActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: ghost}
+      text: {exact: "FORGED FOREST"}
