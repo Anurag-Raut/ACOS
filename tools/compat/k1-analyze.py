@@ -19,7 +19,20 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-STAGES = ["inspect", "process_start", "application_on_create", "first_frame", "tree", "screenshot", "tap"]
+# Honest rungs. "Application.onCreate" is split into entered/completed because
+# a real-world app can be instantiated and then throw inside onCreate: the
+# guest's marker is written when the framework hands the Application object to
+# the app's code, not when onCreate returns.
+STAGES = [
+    "inspect",
+    "process_start",
+    "oncreate_entered",
+    "oncreate_completed",
+    "first_frame",
+    "tree",
+    "screenshot",
+    "tap",
+]
 
 # First-failure attribution. Keyed by an `error.code` (or a substring of the
 # code/message). `component` names the ACOS side that owns the wall; `fix` is
@@ -72,15 +85,64 @@ def classify(code, message):
     return "unclassified", "read the envelope"
 
 
+def read_session_exit(run_root, pkg):
+    """The ART guest's own exit record (written by acos-art, not by the harness).
+
+    `acos serve` names the session itself, so the artefacts directory is found
+    by globbing `art-sessions/*/art-frames`.
+    """
+    import glob as _glob
+
+    for d in sorted(_glob.glob(os.path.join(run_root, pkg, "art-sessions", "*", "art-frames"))):
+        p = os.path.join(d, "session-exit.json")
+        if os.path.isfile(p):
+            try:
+                with open(p) as f:
+                    rec = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            up = os.path.join(d, "unsupported.jsonl")
+            rec["unsupported"] = []
+            if os.path.isfile(up):
+                with open(up, errors="replace") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                rec["unsupported"].append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+            return rec
+    return None
+
+
+UNSUPPORTED_RE = re.compile(
+    r"unsupported Android API: ([\w.$]+) code (\d+) \(([\w$<>]+)\)")
+CRASH_MSG_RE = re.compile(r'"message":"((?:[^"\\]|\\.)*)"')
+
+
+def crash_summary(rec):
+    """Pull the app-level exception out of the guest's ACOSLAUNCH crash line."""
+    if not rec:
+        return None, None, None
+    raw = rec.get("guest_crash") or ""
+    m = UNSUPPORTED_RE.search(raw)
+    api = f"{m.group(1)}.{m.group(3)} (code {m.group(2)})" if m else None
+    cm = CRASH_MSG_RE.search(raw)
+    msg = cm.group(1) if cm else (raw[:300] or None)
+    return api, msg, raw[:600] or None
+
+
 def load(run_root, manifest):
     apps = {a["package"]: a for a in manifest.get("apps", [])}
-    reports = {}
+    reports, exits = {}, {}
     for pkg in sorted(apps):
         p = os.path.join(run_root, pkg, "report.json")
         if os.path.isfile(p):
             with open(p) as f:
                 reports[pkg] = json.load(f)
-    return apps, reports
+            exits[pkg] = read_session_exit(run_root, pkg)
+    return apps, reports, exits
 
 
 def first_error(rep):
@@ -121,7 +183,7 @@ def main():
 
     with open(os.path.join(args.corpus, "manifest.json")) as f:
         manifest = json.load(f)
-    apps, reports = load(args.run, manifest)
+    apps, reports, exits = load(args.run, manifest)
 
     rows = []
     for pkg, meta in apps.items():
@@ -132,8 +194,36 @@ def main():
             }})
             continue
         fe = first_error(rep)
+        rec = exits.get(pkg)
+        api, crash_msg, crash_raw = crash_summary(rec)
         stage = stage_of(rep, (fe or {}).get("step"))
-        comp, fix = classify(fe.get("code"), fe.get("message")) if fe else (None, None)
+        if rec:
+            if rec.get("application_created") and not rep.get("stages", {}).get("process_start", {}).get("ok"):
+                rep.setdefault("stages", {})["process_start"] = {"ok": True, "rung": "application_on_create"}
+                rep["stages"]["application_on_create"] = {"ok": True, "rung": "application_on_create"}
+            if rec.get("activity_resumed"):
+                rep["stages"]["activity_resumed"] = {"ok": True}
+            stage = stage_of(rep, (fe or {}).get("step"))
+        # The guest's own crash line names the exact framework call; it is a
+        # better wall key than the transport code (GUEST_EXITED).
+        comp, fix = classify(fe.get("code") if fe else None,
+                             (api or "") + " " + (crash_msg or "")) if (fe or api) else (None, None)
+        if api:
+            comp, fix = classify("UNSUPPORTED_JAVA_API", api)
+        launch_ok = bool(((rep.get("stages") or {}).get("first_frame") or {}).get("ok"))
+        facts = {
+            "inspect": bool(((rep.get("stages") or {}).get("inspect") or {}).get("ok")),
+            # The guest record is written only after the ART guest process ran.
+            "process_start": bool(rec or launch_ok or (rep.get("peak_rss_mib") or 0) > 20),
+            "oncreate_entered": bool((rec or {}).get("application_created") or launch_ok),
+            "oncreate_completed": bool((rec or {}).get("activity_resumed") or launch_ok),
+            "first_frame": launch_ok,
+            "tree": bool(((rep.get("stages") or {}).get("tree") or {}).get("ok")),
+            "screenshot": bool(((rep.get("stages") or {}).get("screenshot") or {}).get("ok")),
+            "tap": bool(((rep.get("stages") or {}).get("tap") or {}).get("ok")),
+        }
+        reached = [x for x in STAGES if facts[x]]
+        stage = reached[-1] if reached else "inspect"
         rows.append({
             "package": pkg,
             "status": "ok" if rep.get("ok") else ("fail" if rep.get("stages", {}).get("first_frame", {}).get("ok") else "blocked"),
@@ -152,12 +242,20 @@ def main():
             "crash_class": rep.get("crash_class"),
             "error_code": (fe or {}).get("code"),
             "error_message": norm_msg((fe or {}).get("message")),
+            "unsupported_api": api,
+            "crash_message": norm_msg(crash_msg),
+            "crash_raw": crash_raw,
+            "application_created": (rec or {}).get("application_created"),
+            "activity_resumed": (rec or {}).get("activity_resumed"),
+            "guest_signal": (rec or {}).get("guest_signal"),
+            "engine_stage_exit": (rec or {}).get("stage"),
+            "unsupported_calls": (rec or {}).get("unsupported") or [],
             "error_stage": (fe or {}).get("stage"),
             "wall_component": comp,
             "wall_fix": fix,
             "engine_stage": ((rep.get("stages") or {}).get("engine_stage")),
             "markers_present": rep.get("markers_present"),
-            "stages": {s: bool((rep.get("stages") or {}).get(s, {}).get("ok")) for s in STAGES},
+            "stages": facts,
         })
 
     ran = [r for r in rows if r["status"] != "not-run"]
@@ -174,11 +272,15 @@ def main():
 
     walls = defaultdict(lambda: {"apps": [], "codes": Counter(), "components": Counter()})
     for r in ran:
-        if r["stage"] == "tap" and r["status"] == "ok":
+        if r["status"] == "ok":
             continue
         key = r["error_code"] or "unknown"
         msg = r["error_message"] or ""
-        if r["error_code"] in ("UNSUPPORTED_JAVA_API", "UNSUPPORTED_ANDROID_API") and msg:
+        if r.get("unsupported_api"):
+            key = r["unsupported_api"]
+        elif r.get("crash_message"):
+            key = f"{r.get('error_code')}: {r['crash_message'][:120]}"
+        elif r["error_code"] in ("UNSUPPORTED_JAVA_API", "UNSUPPORTED_ANDROID_API") and msg:
             key = f"{r['error_code']}: {msg}"
         w = walls[key]
         w["apps"].append(r["package"])

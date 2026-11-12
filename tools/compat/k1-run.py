@@ -385,6 +385,7 @@ def main():
             }
             report["crash_class"] = "timeout"
 
+        collect_art_evidence(report, out)
         if env_launch and env_launch.get("ok"):
             lres = env_launch.get("result") or {}
             report["time_to_first_frame_ms"] = wall
@@ -586,24 +587,6 @@ def main():
             pass
 
     # ---- ART stage markers / stage log ----------------------------------
-    frames_dir = os.path.join(artifacts, "k1", "art-frames")
-    for name in (
-        "application-created.marker",
-        "activity-resumed.marker",
-        "activity-not-resumed.marker",
-        "launch.json",
-    ):
-        p = os.path.join(frames_dir, name)
-        if os.path.isfile(p):
-            try:
-                with open(p, errors="replace") as f:
-                    report["markers"][name] = f.read()[:4000]
-            except OSError:
-                pass
-    up = os.path.join(frames_dir, "unsupported.jsonl")
-    if os.path.isfile(up):
-        with open(up, errors="replace") as f:
-            report["markers"]["unsupported.jsonl"] = f.read()[:8000]
     report["stages_log"] = stage_lines(os.path.join(out, "serve.log"))
     if report.get("crash_class") is None:
         report["crash_class"] = crash_class_from(report)
@@ -634,20 +617,82 @@ def stage_lines(path):
     return out[-80:]
 
 
+def collect_art_evidence(report, out):
+    """Read the ART session's own exit record, markers and unsupported calls.
+
+    The daemon names the session itself (`s_mcp`), so the artefacts directory
+    is found by globbing rather than assumed.
+    """
+    import glob as _glob
+
+    frames = sorted(_glob.glob(os.path.join(out, "art-sessions", "*", "art-frames")))
+    report["art_frames_dir"] = frames[-1] if frames else None
+    if not frames:
+        return
+    for d in frames:
+        exit_path = os.path.join(d, "session-exit.json")
+        if os.path.isfile(exit_path):
+            try:
+                with open(exit_path) as f:
+                    report["session_exit"] = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                pass
+            break
+    d = frames[-1]
+    for name in (
+        "application-created.marker",
+        "activity-resumed.marker",
+        "activity-not-resumed.marker",
+        "launch.json",
+    ):
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            try:
+                with open(p, errors="replace") as f:
+                    report["markers"][name] = f.read()[:4000]
+            except OSError:
+                pass
+    up = os.path.join(d, "unsupported.jsonl")
+    if os.path.isfile(up):
+        records = []
+        with open(up, errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    records.append({"raw": line[:400]})
+        report["markers"]["unsupported.jsonl"] = records[:20]
+    exit_rec = report.get("session_exit") or {}
+    if exit_rec.get("guest_crash"):
+        report["crash_class"] = "guest-crash"
+        for e in report["errors"]:
+            if e.get("step") == "launch":
+                e.setdefault("guest_crash", exit_rec.get("guest_crash"))
+                e["stage"] = e.get("stage") or exit_rec.get("stage")
+    report["lifecycle"] = {
+        "application_created": exit_rec.get("application_created"),
+        "activity_resumed": exit_rec.get("activity_resumed"),
+    }
+
+
 def classify_failure(report, err, out):
     """Fill the ladder rungs from evidence: markers, structured error, stage log."""
     code = (err or {}).get("code")
-    markers = [n for n in ("application-created.marker", "activity-resumed.marker")
-               if os.path.isfile(os.path.join(out, "art-sessions", "k1", "art-frames", n))]
+    lifecycle = report.get("lifecycle") or {}
     rung = "process_start"
-    if "application-created.marker" in markers:
+    if lifecycle.get("application_created") or "application-created.marker" in (
+            report.get("markers") or {}):
         rung = "application_on_create"
-    if "activity-resumed.marker" in markers:
+    if lifecycle.get("activity_resumed") or "activity-resumed.marker" in (
+            report.get("markers") or {}):
         rung = "activity_resumed"
     stage = (err or {}).get("stage")
     if stage:
         report["stages"]["engine_stage"] = stage
-    report["markers_present"] = markers
+    report["markers_present"] = sorted((report.get("markers") or {}).keys())
     report["stages"]["process_start"] = {
         "ok": rung != "process_start",
         "rung": rung,

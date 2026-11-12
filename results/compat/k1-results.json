@@ -1,0 +1,810 @@
+{
+ "corpus": {
+  "manifest_apps": 42,
+  "ran": 4,
+  "not_run": 38,
+  "fetch_failures": [],
+  "index_sha256": "a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72",
+  "framework_api": 34
+ },
+ "funnel": {
+  "inspect": 4,
+  "process_start": 4,
+  "oncreate_entered": 4,
+  "oncreate_completed": 1,
+  "first_frame": 1,
+  "tree": 1,
+  "screenshot": 1,
+  "tap": 1
+ },
+ "funnel_at_least": {
+  "inspect": 4,
+  "process_start": 4,
+  "oncreate_entered": 4,
+  "oncreate_completed": 1,
+  "first_frame": 1,
+  "tree": 1,
+  "screenshot": 1,
+  "tap": 1
+ },
+ "rates": {
+  "inspect": 1.0,
+  "process_start": 1.0,
+  "oncreate_entered": 1.0,
+  "oncreate_completed": 0.25,
+  "first_frame": 0.25,
+  "tree": 0.25,
+  "screenshot": 0.25,
+  "tap": 0.25
+ },
+ "time_to_first_frame_ms": {
+  "n": 1,
+  "p50": 539.7,
+  "p90": 539.7,
+  "max": 539.7
+ },
+ "peak_rss_mib": {
+  "p50": 439.0,
+  "max": 609.0
+ },
+ "walls": {
+  "android.app.IActivityManager.getMemoryInfo (code 77)": {
+   "apps": [
+    "chat.fluffy.fluffychat"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "android.content.pm.IPackageManager.getPackageInstaller (code 133)": {
+   "apps": [
+    "com.aurora.store"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "GUEST_EXITED: java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Att": {
+   "apps": [
+    "com.dot.gallery"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  }
+ },
+ "apps": [
+  {
+   "package": "chat.fluffy.fluffychat",
+   "status": "blocked",
+   "version": "2.11.5",
+   "ui_toolkit": "flutter",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 609.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.IActivityManager.getMemoryInfo (code 77)",
+   "crash_message": "java.lang.RuntimeException: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityManager code N (getMemoryInfo)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityManager code 77 (getMemoryInfo)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 77,
+     "descriptor": "android.app.IActivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityManager code 77 (getMemoryInfo)",
+     "method": "getMemoryInfo"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
+  },
+  {
+   "package": "com.aurora.store",
+   "status": "blocked",
+   "version": "4.8.4",
+   "ui_toolkit": "material",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 217.1,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.content.pm.IPackageManager.getPackageInstaller (code 133)",
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.aurora.store.AuroraApp: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageMa",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.aurora.store.AuroraApp: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageManager code 133 (getPackageInstaller)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 133,
+     "descriptor": "android.content.pm.IPackageManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.content.pm.IPackageManager code 133 (getPackageInstaller)",
+     "method": "getPackageInstaller"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
+  },
+  {
+   "package": "com.beemdevelopment.aegis",
+   "status": "ok",
+   "version": "3.4.3",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ],
+   "stage": "tap",
+   "stage_reached": "first_frame",
+   "time_to_first_frame_ms": 539.7,
+   "tree_nodes": 78,
+   "tap": {
+    "x": 941,
+    "y": 2225,
+    "bounds": "[856,2140][1027,2311]",
+    "class": "com.google.android.material.button.MaterialButton",
+    "resource_id": "com.beemdevelopment.aegis:id/btnNext",
+    "text": "",
+    "accepted": true,
+    "state_changed": true,
+    "settle": {
+     "ack_ms": 5,
+     "bound": "strict-event",
+     "first_change_ms": 132,
+     "frame_ms": 935,
+     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+     "mode": "strict",
+     "settled": true,
+     "state_changed": null,
+     "strict_rule": "event"
+    }
+   },
+   "screenshot_bytes": 9545882,
+   "peak_rss_mib": 277.6,
+   "crash_class": null,
+   "error_code": null,
+   "error_message": "",
+   "unsupported_api": null,
+   "crash_message": "",
+   "crash_raw": null,
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 6,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.IActivityClientController::activityStopped: arg 1 (TypedObject(android.os.Bundle, nullable=true)): bad request for bundle::readValue: unmodelled Parcel.VAL_* tag 12",
+     "method": "activityStopped"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": null,
+   "wall_fix": null,
+   "engine_stage": null,
+   "markers_present": null,
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": true,
+    "tree": true,
+    "screenshot": true,
+    "tap": true
+   }
+  },
+  {
+   "package": "com.dot.gallery",
+   "status": "blocked",
+   "version": "5.1.3",
+   "ui_toolkit": "compose",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "x86_64"
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 439.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Obj",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
+  },
+  {
+   "package": "com.fsck.k9",
+   "status": "not-run",
+   "version": "24.0",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.github.gotify",
+   "status": "not-run",
+   "version": "2.10.1",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": false,
+   "abis": []
+  },
+  {
+   "package": "com.github.muellerma.coffee",
+   "status": "not-run",
+   "version": "2.27",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 34,
+   "has_native": false,
+   "abis": []
+  },
+  {
+   "package": "com.ichi2.anki",
+   "status": "not-run",
+   "version": "2.25.3",
+   "ui_toolkit": "webview-native",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.ismartcoding.plain",
+   "status": "not-run",
+   "version": "3.3.25",
+   "ui_toolkit": "compose",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.keylesspalace.tusky",
+   "status": "not-run",
+   "version": "33.1",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.libreweatherrn",
+   "status": "not-run",
+   "version": "v1.0.3",
+   "ui_toolkit": "react-native",
+   "target_sdk": 30,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.money.manager.ex",
+   "status": "not-run",
+   "version": "5.5.15-release",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.nextcloud.client",
+   "status": "not-run",
+   "version": "35.1.0 RC1",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.nononsenseapps.feeder",
+   "status": "not-run",
+   "version": "2.25.0",
+   "ui_toolkit": "compose",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.perflyst.twire",
+   "status": "not-run",
+   "version": "2.12.3",
+   "ui_toolkit": "material-webview",
+   "target_sdk": 35,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.sadellie.unitto",
+   "status": "not-run",
+   "version": "Titanium yellow",
+   "ui_toolkit": "compose",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.shatteredpixel.shatteredpixeldungeon",
+   "status": "not-run",
+   "version": "4.0.2",
+   "ui_toolkit": "game-canvas",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.tailscale.ipn",
+   "status": "not-run",
+   "version": "1.104.5-t788384763-gd8673104f",
+   "ui_toolkit": "native-vpn",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.termux",
+   "status": "not-run",
+   "version": "0.119.0-beta.3",
+   "ui_toolkit": "native-terminal",
+   "target_sdk": 28,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "com.unciv.app",
+   "status": "not-run",
+   "version": "4.22.18-patch1",
+   "ui_toolkit": "game-gles",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "de.danoeh.antennapod",
+   "status": "not-run",
+   "version": "3.12.3",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "de.tutao.calendar",
+   "status": "not-run",
+   "version": "366.261105.0",
+   "ui_toolkit": "react-native",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi",
+    "armeabi-v7a",
+    "mips",
+    "mips64",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "de.westnordost.streetcomplete",
+   "status": "not-run",
+   "version": "64.1",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "io.anuke.mindustry",
+   "status": "not-run",
+   "version": "8-fdroid-160.7",
+   "ui_toolkit": "game-gles",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "io.element.android.x",
+   "status": "not-run",
+   "version": "26.09.1",
+   "ui_toolkit": "compose",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "x86_64"
+   ]
+  },
+  {
+   "package": "io.github.muntashirakon.AppManager",
+   "status": "not-run",
+   "version": "4.1.1",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "it.niedermann.owncloud.notes",
+   "status": "not-run",
+   "version": "35.0.0",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "me.zhanghai.android.files",
+   "status": "not-run",
+   "version": "1.7.4",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 34,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "net.cozic.joplin",
+   "status": "not-run",
+   "version": "3.7.8",
+   "ui_toolkit": "react-native",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "net.gsantner.markor",
+   "status": "not-run",
+   "version": "2026.10.0",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 35,
+   "has_native": false,
+   "abis": []
+  },
+  {
+   "package": "net.mullvad.mullvadvpn",
+   "status": "not-run",
+   "version": "2026.12",
+   "ui_toolkit": "compose-native",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.billthefarmer.editor",
+   "status": "not-run",
+   "version": "1.96",
+   "ui_toolkit": "views-plain",
+   "target_sdk": 28,
+   "has_native": false,
+   "abis": []
+  },
+  {
+   "package": "org.breezyweather",
+   "status": "not-run",
+   "version": "6.2.2_freenet",
+   "ui_toolkit": "compose",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.fdroid.basic",
+   "status": "not-run",
+   "version": "2.0.3",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.fdroid.fdroid",
+   "status": "not-run",
+   "version": "1.23.2",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 30,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.jellyfin.mobile",
+   "status": "not-run",
+   "version": "2.7.3",
+   "ui_toolkit": "react-native",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.kde.kdeconnect_tp",
+   "status": "not-run",
+   "version": "1.37.2",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.quantumbadger.redreader",
+   "status": "not-run",
+   "version": "1.27",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.secuso.privacyfriendlynotes",
+   "status": "not-run",
+   "version": "2.2.2",
+   "ui_toolkit": "views-appcompat",
+   "target_sdk": 34,
+   "has_native": false,
+   "abis": []
+  },
+  {
+   "package": "org.supertuxkart.stk",
+   "status": "not-run",
+   "version": "1.4",
+   "ui_toolkit": "game-gles",
+   "target_sdk": 30,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.videolan.vlc",
+   "status": "not-run",
+   "version": "3.7.2",
+   "ui_toolkit": "native-media",
+   "target_sdk": 36,
+   "has_native": true,
+   "abis": [
+    "x86_64"
+   ]
+  },
+  {
+   "package": "org.wikipedia",
+   "status": "not-run",
+   "version": "r/50616-r-2026-11-03",
+   "ui_toolkit": "webview",
+   "target_sdk": 37,
+   "has_native": true,
+   "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+   ]
+  }
+ ]
+}
