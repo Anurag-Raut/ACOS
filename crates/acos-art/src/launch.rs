@@ -2596,6 +2596,20 @@ fn interactive_serve(
 // deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
 
 fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
+    encode_png_rgba_with(width, height, stride, rgba, crc32, adler32)
+}
+
+/// The encoder body, parameterised by its two checksums so the `#[cfg(test)]`
+/// oracle (the original bit-serial CRC32 and the `%`-per-byte Adler-32) can
+/// produce the exact bytes this function is required to preserve.
+fn encode_png_rgba_with(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    crc32: fn(&[u8]) -> u32,
+    adler32: fn(&[u8]) -> u32,
+) -> Vec<u8> {
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
@@ -2618,7 +2632,7 @@ fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8>
     ihdr.extend_from_slice(&width.to_be_bytes());
     ihdr.extend_from_slice(&height.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
-    png_chunk(&mut out, b"IHDR", &ihdr);
+    png_chunk(&mut out, b"IHDR", &ihdr, crc32);
 
     let mut zlib = Vec::with_capacity(filtered.len() + 16);
     zlib.extend_from_slice(&[0x78, 0x01]);
@@ -2637,15 +2651,15 @@ fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8>
     zlib.extend_from_slice(&adler32(&filtered).to_be_bytes());
     let t_adler = m5_now_us();
     m5_trace("art.encode_adler32", t_stored, t_adler, "");
-    png_chunk(&mut out, b"IDAT", &zlib);
+    png_chunk(&mut out, b"IDAT", &zlib, crc32);
     let t_idat = m5_now_us();
     m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
-    png_chunk(&mut out, b"IEND", &[]);
+    png_chunk(&mut out, b"IEND", &[], crc32);
     m5_trace("art.encode_total", t0, m5_now_us(), "");
     out
 }
 
-fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8]) {
+fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
     out.extend_from_slice(&(body.len() as u32).to_be_bytes());
     out.extend_from_slice(kind);
     out.extend_from_slice(body);
@@ -2664,24 +2678,80 @@ fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8]) {
     out.extend_from_slice(&crc.to_be_bytes());
 }
 
+/// IEEE CRC-32 (the one PNG chunks use), slice-by-8. The eight 256-entry
+/// tables are built at compile time; the previous bit-serial loop cost 43 ms of
+/// one warm screenshot's 80 ms (`results/art-runtime/D-M5.md`).
+const CRC32_TABLES: [[u32; 256]; 8] = crc32_make_tables();
+
+const fn crc32_make_tables() -> [[u32; 256]; 8] {
+    let mut tables = [[0u32; 256]; 8];
+    let mut i = 0usize;
+    while i < 256 {
+        let mut crc = i as u32;
+        let mut bit = 0;
+        while bit < 8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+            bit += 1;
+        }
+        tables[0][i] = crc;
+        i += 1;
+    }
+    let mut k = 1usize;
+    while k < 8 {
+        let mut i = 0usize;
+        while i < 256 {
+            let prev = tables[k - 1][i];
+            tables[k][i] = (prev >> 8) ^ tables[0][(prev & 0xff) as usize];
+            i += 1;
+        }
+        k += 1;
+    }
+    tables
+}
+
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xffff_ffffu32;
-    for &byte in data {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            let mask = (crc & 1).wrapping_neg();
-            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
-        }
+    let mut chunks = data.chunks_exact(8);
+    for c in &mut chunks {
+        let low = u32::from_le_bytes([c[0], c[1], c[2], c[3]]) ^ crc;
+        crc = CRC32_TABLES[7][(low & 0xff) as usize]
+            ^ CRC32_TABLES[6][((low >> 8) & 0xff) as usize]
+            ^ CRC32_TABLES[5][((low >> 16) & 0xff) as usize]
+            ^ CRC32_TABLES[4][(low >> 24) as usize]
+            ^ CRC32_TABLES[3][c[4] as usize]
+            ^ CRC32_TABLES[2][c[5] as usize]
+            ^ CRC32_TABLES[1][c[6] as usize]
+            ^ CRC32_TABLES[0][c[7] as usize];
+    }
+    for &byte in chunks.remainder() {
+        crc = (crc >> 8) ^ CRC32_TABLES[0][((crc ^ u32::from(byte)) & 0xff) as usize];
     }
     !crc
 }
 
+/// zlib's Adler-32 with the deferred modulo: `NMAX` bytes are summed in `u32`
+/// and reduced once per block, instead of `%` on every byte. `NMAX = 5552` is
+/// the largest block for which `b` cannot overflow a `u32` from a reduced state.
+const ADLER_NMAX: usize = 5552;
+
 fn adler32(data: &[u8]) -> u32 {
     let mut a = 1u32;
     let mut b = 0u32;
-    for &byte in data {
-        a = (a + u32::from(byte)) % 65_521;
-        b = (b + a) % 65_521;
+    let mut rest = data;
+    while !rest.is_empty() {
+        let n = rest.len().min(ADLER_NMAX);
+        let (block, tail) = rest.split_at(n);
+        for &byte in block {
+            a += u32::from(byte);
+            b += a;
+        }
+        a %= 65_521;
+        b %= 65_521;
+        rest = tail;
     }
     (b << 16) | a
 }
@@ -3158,3 +3228,7 @@ mod probe_line_tests {
         assert_eq!(next, b"next\n");
     }
 }
+
+#[cfg(test)]
+#[path = "png_checksum_tests.rs"]
+mod png_checksum_tests;
