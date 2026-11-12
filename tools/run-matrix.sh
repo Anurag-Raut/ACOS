@@ -1,0 +1,610 @@
+#!/usr/bin/env bash
+#
+# run-matrix.sh -- the ACOS scenario matrix on ONE result schema (W29).
+#
+#   tools/run-matrix.sh [options]
+#
+# Options
+#   --scenario FILE        scenario to run (repeatable). Default: the ART counter
+#                          scenario plus EVERY scenarios/negative/*.yaml.
+#   --scenarios "A B"      space-separated scenario list (same as repeated --scenario)
+#   --modes good|neg|all   default all (the explicit --scenario list wins)
+#   --apk APK              override the scenario app (passed as --apk)
+#   --reps N               reps per scenario (default 1); each rep is a separate row
+#   --engine art|none|auto auto (default): pass --engine art when the binary
+#                          supports it, else record engine "default" honestly
+#   --profile P            release (default) | debug. A debug run without
+#                          --allow-debug is refused; with it every row is
+#                          NOT_VERDICT_ELIGIBLE.
+#   --target-dir DIR       cargo target dir (default $CARGO_TARGET_DIR or target)
+#   --allow-debug          permit a debug build, labelled
+#   --no-build             reuse existing binaries
+#   --sample-ms MS         cgroup/PSS sampling period (default 100)
+#   --settle-s S           seconds after first frame at which the legacy-comparable
+#                          cgroup anon+shmem value is read (default 0 = not read;
+#                          legacy comparison is then NOT_COMPARABLE). The legacy
+#                          reference requires 60.
+#   --timeout-s S          per-run timeout (default 300)
+#   --artifacts DIR        base artifacts dir (default .cache/bench-matrix/<stamp>)
+#   --out FILE             default results/bench/matrix-<stamp>.json
+#   --list                 print the selected scenarios and exit (no build, no ART)
+#
+# What each row carries: wall ms, cgroup memory.current peak + GiB-min integral
+# (sampled every 100 ms in the run's own systemd scope), PSS (secondary), the
+# cgroup anon+shmem value at --settle-s, the structured error {code,class,
+# retryable,hint}, and the negative-scenarios column (variant/expected/
+# false_pass). Schema: results/bench/schema/matrix.schema.json.
+#
+# Gates (tools/benchlib.py validate_matrix): false_pass must be 0 and
+# unclassified errors must be 0, or the run exits 1 and writes
+# <out>.invalid.json instead of pretending the matrix is valid.
+#
+# Safety: builds through tools/guarded.sh; the measurement runs through
+# tools/art-runtime/run-exclusive.sh --task W29-matrix -- tools/guarded.sh
+# --mem 8G --time 900 -- python3 ...  (one ART guest at a time host-wide).
+# Scratch lives under .cache/ (never /tmp).
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+usage() { sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+PROFILE="${ACOS_BENCH_PROFILE:-release}"
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+ALLOW_DEBUG=0
+NO_BUILD=0
+ENGINE="auto"
+REPS=1
+SAMPLE_MS=100
+SETTLE_S=0
+TIMEOUT_S=300
+APK_OVERRIDE=""
+ARTIFACTS=""
+OUT="results/bench/matrix-${STAMP}.json"
+LIST=0
+SCENARIOS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --scenario)     SCENARIOS+=("$2"); shift 2 ;;
+        --scenarios)    read -r -a _more <<<"$2"; SCENARIOS+=("${_more[@]}"); shift 2 ;;
+        --modes)        case "$2" in all|good|neg) ;; *) echo "run-matrix: --modes must be all|good|neg" >&2; exit 2 ;; esac
+                        MODES="$2"; shift 2 ;;
+        --apk)          APK_OVERRIDE="$2"; shift 2 ;;
+        --reps)         REPS="$2"; shift 2 ;;
+        --engine)       ENGINE="$2"; shift 2 ;;
+        --profile)      PROFILE="$2"; shift 2 ;;
+        --target-dir)   TARGET_DIR="$2"; shift 2 ;;
+        --allow-debug)  ALLOW_DEBUG=1; shift ;;
+        --no-build)     NO_BUILD=1; shift ;;
+        --sample-ms)    SAMPLE_MS="$2"; shift 2 ;;
+        --settle-s)     SETTLE_S="$2"; shift 2 ;;
+        --timeout-s)    TIMEOUT_S="$2"; shift 2 ;;
+        --artifacts)    ARTIFACTS="$2"; shift 2 ;;
+        --out)          OUT="$2"; shift 2 ;;
+        --list)         LIST=1; shift ;;
+        -h|--help)      usage; exit 0 ;;
+        *) echo "run-matrix: unknown argument: $1" >&2; exit 2 ;;
+    esac
+done
+MODES="${MODES:-all}"
+
+case "$PROFILE" in release|debug) ;; *) echo "run-matrix: --profile must be release|debug" >&2; exit 2 ;; esac
+case "$ENGINE" in auto|art|none) ;; *) echo "run-matrix: --engine must be auto|art|none" >&2; exit 2 ;; esac
+case "$REPS$SAMPLE_MS$SETTLE_S$TIMEOUT_S" in *[!0-9]*) echo "run-matrix: numeric options must be integers" >&2; exit 2 ;; esac
+[ "$REPS" -ge 1 ] || { echo "run-matrix: --reps must be >= 1" >&2; exit 2; }
+
+case "$TARGET_DIR" in /*) BIN_ROOT="$TARGET_DIR" ;; *) BIN_ROOT="$ROOT/$TARGET_DIR" ;; esac
+ACOS="$BIN_ROOT/$PROFILE/acos"
+ACOS_ART="$BIN_ROOT/$PROFILE/acos-art"
+
+# ---- default scenario set: the ART counter path + every negative twin ----
+if [ "${#SCENARIOS[@]}" -eq 0 ]; then
+    case "$MODES" in
+        neg)  SCENARIOS=()
+              while IFS= read -r f; do SCENARIOS+=("$f"); done < <(ls scenarios/negative/*.yaml 2>/dev/null | sort) ;;
+        good) SCENARIOS=("scenarios/v2-art-counter.yaml") ;;
+        all)  SCENARIOS=("scenarios/v2-art-counter.yaml")
+              while IFS= read -r f; do SCENARIOS+=("$f"); done < <(ls scenarios/negative/*.yaml 2>/dev/null | sort) ;;
+    esac
+fi
+[ "${#SCENARIOS[@]}" -gt 0 ] || { echo "run-matrix: no scenarios selected" >&2; exit 2; }
+for s in "${SCENARIOS[@]}"; do
+    [ -f "$s" ] || { echo "run-matrix: scenario not found: $s" >&2; exit 2; }
+done
+
+if [ "$LIST" -eq 1 ]; then
+    printf '%s\n' "${SCENARIOS[@]}"
+    exit 0
+fi
+
+if [ "$PROFILE" != "release" ] && [ "$ALLOW_DEBUG" -eq 0 ]; then
+    echo "run-matrix: refusing a $PROFILE build (verdicts are release-only)." >&2
+    echo "run-matrix: use --profile release, or --allow-debug to label rows NOT_VERDICT_ELIGIBLE." >&2
+    exit 5
+fi
+[ -n "$ARTIFACTS" ] || ARTIFACTS="$ROOT/.cache/bench-matrix/$STAMP"
+mkdir -p "$ARTIFACTS" "$(dirname "$OUT")"
+
+# ---- host gate before the build (loadavg1 <= 4.0, MemAvailable >= 30 GiB) ----
+if ! python3 -I - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import benchlib
+g = benchlib.host_gate(sys.argv[1], check_lock=False)
+print("run-matrix: host gate %s (loadavg1 %s, MemAvailable %s GiB)"
+      % ("ok" if g["ok"] else "REFUSED", g["loadavg1"], g["mem_available_gib"]),
+      file=sys.stderr)
+if not g["ok"]:
+    for r in g["reasons"]:
+        print("run-matrix:   " + r, file=sys.stderr)
+    sys.exit(1)
+PY
+then
+    exit 4
+fi
+
+# ---- build (guarded, release unless --profile debug) ----
+BUILD_ARGS=(-p acos-cli -p acos-art)
+[ "$PROFILE" = release ] && BUILD_ARGS=(--release "${BUILD_ARGS[@]}")
+if [ "$NO_BUILD" -eq 0 ]; then
+    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guarded.sh" --mem 8G --time 900 -- \
+            cargo build "${BUILD_ARGS[@]}"; then
+        echo "run-matrix: build failed; no run" >&2
+        exit 3
+    fi
+fi
+for b in "$ACOS" "$ACOS_ART"; do
+    [ -x "$b" ] || { echo "run-matrix: $b missing" >&2; exit 3; }
+done
+
+# ---- one ART run at a time: hold the host-wide lock for the whole matrix ----
+# The driver is written to the artifacts dir (not piped), because the lock and
+# guard wrappers must not have to preserve a heredoc on stdin.
+cat >"$ARTIFACTS/driver.py" <<'PY'
+import datetime
+import glob
+import json
+import os
+import re
+import statistics
+import subprocess
+import sys
+import time
+import uuid
+
+(ROOT, OUT, PROFILE, ACOS, ACOS_ART, ENGINE, REPS, SAMPLE_MS, SETTLE_S,
+ TIMEOUT_S, ARTIFACTS, APK_OVERRIDE) = sys.argv[1:13]
+SCENARIOS = sys.argv[13:]
+REPS, SAMPLE_MS, SETTLE_S, TIMEOUT_S = int(REPS), int(SAMPLE_MS), int(SETTLE_S), int(TIMEOUT_S)
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import benchlib  # noqa: E402
+
+VERDICT_ELIGIBLE = PROFILE == "release"
+MIB = 1024.0 * 1024.0
+GIB = 1024.0 ** 3
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+
+def sha256(path):
+    return benchlib.sha256_file(os.path.join(ROOT, path)) if path and not os.path.isabs(path) \
+        else benchlib.sha256_file(path)
+
+
+def read_scenario(path):
+    """Minimal first-level YAML field reader (no PyYAML dependency)."""
+    with open(os.path.join(ROOT, path), errors="replace") as f:
+        text = f.read()
+    def field(name):
+        m = re.search(r"(?m)^%s:\s*(.+?)\s*$" % name, text)
+        return m.group(1).strip().strip('"\'') if m else None
+    expectation = (field("expectation") or "pass").lower()
+    name = field("name") or os.path.splitext(os.path.basename(path))[0]
+    app = field("app")
+    norm = path.replace(os.sep, "/")
+    if "/negative/" in norm:
+        variant = "negative"
+    elif expectation == "fail":
+        variant = "wrong"
+    else:
+        variant = "good"
+    return {"name": name, "app": app, "expectation": expectation,
+            "expected": "pass" if expectation == "pass" else "fail",
+            "variant": variant, "sha256": sha256(path)}
+
+
+def detect_engine_flag():
+    try:
+        help_text = subprocess.run([ACOS, "verify", "--help"], capture_output=True,
+                                   text=True, timeout=60).stdout
+    except Exception:
+        help_text = ""
+    return "--engine" in help_text
+
+
+ENGINE_FLAG = detect_engine_flag() if ENGINE in ("auto", "art") else False
+if ENGINE == "art" and not ENGINE_FLAG:
+    print("run-matrix: REFUSING: --engine art requested but this binary has no "
+          "--engine flag (build a release binary with the ART engine)", file=sys.stderr)
+    sys.exit(6)
+ENGINE_LABEL = ("art" if (ENGINE_FLAG and ENGINE in ("auto", "art")) else "default")
+
+
+def cg_read(path, name):
+    try:
+        with open(os.path.join(path, name)) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def cg_read_map(path, name, keys):
+    raw = cg_read(path, name)
+    out = {}
+    if not raw:
+        return out
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] in keys:
+            try:
+                out[parts[0]] = int(parts[1])
+            except ValueError:
+                pass
+    return out
+
+
+def find_scope(unit, deadline):
+    patterns = [
+        "/sys/fs/cgroup/user.slice/user-*/user@*/app.slice/%s.scope" % unit,
+        "/sys/fs/cgroup/user.slice/user-*.slice/%s.scope" % unit,
+        "/sys/fs/cgroup/system.slice/%s.scope" % unit,
+    ]
+    while time.time() < deadline:
+        for pat in patterns:
+            hits = glob.glob(pat)
+            if hits:
+                return hits[0]
+        time.sleep(0.02)
+    return None
+
+
+def pss_mib_of(cg_path):
+    """Secondary account: sum PSS over every pid in the run's own cgroup."""
+    procs = cg_read(cg_path, "cgroup.procs")
+    if not procs:
+        return None
+    total_kib = 0
+    for pid in procs.split():
+        try:
+            with open("/proc/%s/smaps_rollup" % pid) as f:
+                for line in f:
+                    if line.startswith("Pss:"):
+                        total_kib += int(line.split()[1])
+                        break
+        except (OSError, ValueError):
+            continue
+    return total_kib / 1024.0
+
+
+def meminfo_mib():
+    try:
+        return benchlib.read_meminfo()["mem_available_mib"]
+    except OSError:
+        return None
+
+
+def loadavg1():
+    try:
+        return benchlib.read_loadavg()["loadavg1"]
+    except OSError:
+        return None
+
+
+def stop_scope(unit):
+    for cmd in (["systemctl", "--user", "kill", "--signal=KILL", unit + ".scope"],
+                ["systemctl", "--user", "reset-failed", unit + ".scope"]):
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except Exception:
+            pass
+
+
+def first_frame_from_steps(steps):
+    """Cumulative step ms through the first step that produced a frame."""
+    total = 0.0
+    for st in steps or []:
+        d = st.get("duration_ms")
+        total += float(d) if d is not None else 0.0
+        if st.get("frame_seq") is not None or st.get("step") == "capture":
+            return round(total, 2)
+    return None
+
+
+def run_one(scenario, rep, index):
+    meta = read_scenario(scenario)
+    rid = "%02d-%s-r%d" % (index, meta["name"].replace("/", "-"), rep)
+    unit = "acos-bench-%s" % uuid.uuid4().hex[:12]
+    adir = os.path.join(ARTIFACTS, rid)
+    os.makedirs(adir, exist_ok=True)
+    stdout_path = os.path.join(adir, "stdout.json")
+    stderr_path = os.path.join(adir, "stderr.txt")
+    cmd = [ACOS, "verify", scenario, "--json", "--artifacts", adir]
+    if APK_OVERRIDE:
+        cmd += ["--apk", APK_OVERRIDE]
+    if ENGINE_FLAG:
+        cmd += ["--engine", "art"]
+    wrapped = ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+               "--unit", unit, "--property=MemoryMax=6G"] + cmd
+
+    host_start = {"loadavg1": loadavg1(), "mem_available_mib": meminfo_mib()}
+    samples = []
+    cg_path = None
+    cg_source = "unit-scope"
+    t0 = time.perf_counter()
+    deadline_scope = time.time() + 15
+    timed_out = False
+    with open(stdout_path, "w") as out_f, open(stderr_path, "w") as err_f:
+        proc = subprocess.Popen(wrapped, stdout=out_f, stderr=err_f,
+                                start_new_session=True)
+        while proc.poll() is None:
+            now = time.time()
+            if cg_path is None:
+                cg_path = find_scope(unit, deadline_scope)
+            if cg_path:
+                cur = cg_read(cg_path, "memory.current")
+                stat = cg_read_map(cg_path, "memory.stat", ("anon", "shmem"))
+                samples.append({
+                    "t": now,
+                    "bytes": int(cur) if cur and cur.isdigit() else None,
+                    "anon_shmem_bytes": (stat.get("anon", 0) + stat.get("shmem", 0))
+                                        if stat else None,
+                    "pss_mib": pss_mib_of(cg_path),
+                })
+            if time.perf_counter() - t0 > TIMEOUT_S:
+                timed_out = True
+                proc.terminate()
+                break
+            time.sleep(SAMPLE_MS / 1000.0)
+        try:
+            rc = proc.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            rc = proc.wait()
+    wall_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+    if timed_out:
+        rc = 124
+    stop_scope(unit)
+    host_end = {"loadavg1": loadavg1(), "mem_available_mib": meminfo_mib()}
+
+    doc = {}
+    try:
+        with open(stdout_path) as f:
+            doc = json.load(f)
+    except Exception:
+        doc = {}
+    verdict_obj = ((doc.get("result") or {}).get("verdict") or {})
+    steps = verdict_obj.get("steps") or []
+    status = doc.get("status") or verdict_obj.get("verdict")
+    if rc == 124:
+        verdict = "error"
+        err = benchlib.classify_error("TIMEOUT", message="exceeded --timeout-s %d" % TIMEOUT_S)
+    elif not doc:
+        verdict = "error"
+        tail = ""
+        try:
+            with open(stderr_path, errors="replace") as f:
+                tail = f.read()[-500:]
+        except OSError:
+            pass
+        err = benchlib.classify_error("INTERNAL",
+                                      message="no JSON envelope (rc=%s): %s" % (rc, tail))
+    elif status == "pass":
+        verdict = "pass"
+        err = None
+    elif status == "fail":
+        verdict = "fail"
+        e = doc.get("error") or (verdict_obj.get("failure") or {}).get("error") or {}
+        failure = verdict_obj.get("failure") or {}
+        err = benchlib.classify_error(e.get("code") or failure.get("code"),
+                                      message=e.get("message"),
+                                      hint=e.get("hint"))
+        err["step_index"] = failure.get("step_index")
+    else:
+        verdict = "error"
+        e = doc.get("error") or {}
+        err = benchlib.classify_error(e.get("code") or "INTERNAL",
+                                      message=e.get("message"), hint=e.get("hint"))
+
+    false_pass = bool(meta["expected"] == "fail" and verdict == "pass")
+    false_fail = bool(meta["expected"] == "pass" and verdict != "pass"
+                      and err and err["class"] in ("harness", "infra_timeout", "host_guard"))
+    cur_samples = [s for s in samples if s.get("bytes") is not None]
+    cg_peak = (max(s["bytes"] for s in cur_samples) / MIB) if cur_samples else None
+    cg_gib_min = benchlib.sample_integral(cur_samples) if cur_samples else None
+    pss_vals = [s["pss_mib"] for s in samples if s.get("pss_mib") is not None]
+    pss_peak = max(pss_vals) if pss_vals else None
+    first_frame_ms = first_frame_from_steps(steps)
+    anon_settled = None
+    if SETTLE_S > 0 and first_frame_ms is not None and samples:
+        target = samples[0]["t"] + (first_frame_ms / 1000.0) + SETTLE_S
+        if samples[-1]["t"] >= target:
+            best = min((s for s in samples if s.get("anon_shmem_bytes") is not None),
+                       key=lambda s: abs(s["t"] - target), default=None)
+            if best is not None:
+                anon_settled = best["anon_shmem_bytes"] / MIB
+    acos_mem = {"value_mib": anon_settled, "metric_type": "CGROUP_ANON_SHMEM",
+                "state": "cold-process", "settle_s": SETTLE_S if anon_settled is not None else None}
+    legacy_cmp = benchlib.compare_memory(acos_mem, benchlib.legacy_memory_reference())
+    return {
+        "run_id": rid,
+        "utc": utc(),
+        "git": benchlib._git(ROOT, "rev-parse", "HEAD"),
+        "dirty_hash": benchlib.repo_dirty_hash(ROOT)[0],
+        "profile": PROFILE,
+        "verdict_eligible": VERDICT_ELIGIBLE,
+        "engine": ENGINE_LABEL,
+        "scenario": scenario,
+        "scenario_sha256": meta["sha256"],
+        "apk_sha256": (verdict_obj.get("app") or {}).get("sha256") or sha256(meta["app"]),
+        "variant": meta["variant"],
+        "expected": meta["expected"],
+        "verdict": verdict,
+        "false_pass": false_pass,
+        "false_fail": false_fail,
+        "negative": meta["variant"] == "negative",
+        "error": err,
+        "state": "cold-process" if ENGINE_LABEL == "art" else "unknown",
+        "n_concurrent": 1,
+        "wall_ms": wall_ms,
+        "guest_wall_ms": (doc.get("metrics") or {}).get("wall_ms"),
+        "first_frame_ms": first_frame_ms,
+        "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+        "steps": [{"kind": st.get("step"), "ms": st.get("duration_ms"),
+                   "status": st.get("status")} for st in steps],
+        "mem": {
+            "cgroup_peak_mib": round(cg_peak, 2) if cg_peak is not None else None,
+            "cgroup_gib_min": round(cg_gib_min, 6) if cg_gib_min is not None else None,
+            "anon_shmem_settled_mib": round(anon_settled, 2) if anon_settled is not None else None,
+            "pss_mib": round(pss_peak, 2) if pss_peak is not None else None,
+            "settle_s": acos_mem["settle_s"],
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "peak_type": "CGROUP_MEMORY_CURRENT",
+            "pss_type": "PSS",
+            "legacy_comparison": legacy_cmp,
+            "sample_count": len(samples),
+            "cgroup_source": cg_source if cg_path else "unavailable",
+        },
+        "host": {
+            "loadavg1": host_start["loadavg1"],
+            "loadavg5": None,
+            "mem_available_mib": host_start["mem_available_mib"],
+            "mem_available_end_mib": host_end["mem_available_mib"],
+            "contaminated": bool((host_start["loadavg1"] or 0) > 4.0),
+        },
+        "artifacts": os.path.relpath(adir, ROOT),
+        "art_engine_flag": ENGINE_FLAG,
+        "rc": rc,
+    }
+
+
+def tsv(rows):
+    cols = ["run_id", "scenario", "variant", "expected", "verdict", "false_pass",
+            "error.class", "error.code", "wall_ms", "first_frame_ms",
+            "mem.cgroup_peak_mib", "mem.cgroup_gib_min", "mem.pss_mib",
+            "mem.anon_shmem_settled_mib", "host.loadavg1",
+            "host.mem_available_mib"]
+    lines = ["\t".join(cols)]
+    for r in rows:
+        e = r.get("error") or {}
+        vals = [r["run_id"], r["scenario"], r["variant"], r["expected"], r["verdict"],
+                str(r["false_pass"]).lower(), e.get("class", ""), e.get("code", ""),
+                str(r["wall_ms"]), str(r.get("first_frame_ms")), str(r["mem"]["cgroup_peak_mib"]),
+                str(r["mem"]["cgroup_gib_min"]), str(r["mem"]["pss_mib"]),
+                str(r["mem"]["anon_shmem_settled_mib"]), str(r["host"]["loadavg1"]),
+                str(r["host"]["mem_available_mib"])]
+        lines.append("\t".join(vals))
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    stamp = os.path.splitext(os.path.basename(OUT))[0]
+    rows = []
+    idx = 0
+    for scenario in SCENARIOS:
+        for rep in range(1, REPS + 1):
+            idx += 1
+            print("run-matrix: [%d] %s rep %d/%d" % (idx, scenario, rep, REPS),
+                  file=sys.stderr)
+            row = run_one(scenario, rep, idx)
+            print("run-matrix: [%d] verdict=%s class=%s wall=%.0f ms cg_peak=%s MiB"
+                  % (idx, row["verdict"], (row["error"] or {}).get("class", "-"),
+                     row["wall_ms"], row["mem"]["cgroup_peak_mib"]), file=sys.stderr)
+            rows.append(row)
+
+    classes = {}
+    for r in rows:
+        c = (r["error"] or {}).get("class", "pass" if r["verdict"] == "pass" else "unknown")
+        classes[c] = classes.get(c, 0) + 1
+    false_pass = sum(1 for r in rows if r["false_pass"])
+    false_fail = sum(1 for r in rows if r["false_fail"])
+    negative = [r for r in rows if r["negative"]]
+    unclassified = sum(1 for r in rows if (r["error"] or {}).get("class") == "unknown")
+    harness = classes.get("harness", 0) + classes.get("infra_timeout", 0)
+    summary = {
+        "total_runs": len(rows),
+        "passed": sum(1 for r in rows if r["verdict"] == "pass"),
+        "failed": sum(1 for r in rows if r["verdict"] == "fail"),
+        "errors": sum(1 for r in rows if r["verdict"] == "error"),
+        "false_pass": false_pass,
+        "false_fail": false_fail,
+        "negative_runs": len(negative),
+        "negative_correct": sum(1 for r in negative if r["verdict"] == "fail"),
+        "unclassified": unclassified,
+        "harness_or_timeout": harness,
+        "classes": classes,
+        "verdict_eligible": VERDICT_ELIGIBLE,
+        "gates": {
+            "false_pass_zero": false_pass == 0,
+            "unclassified_zero": unclassified == 0,
+            "harness_timeout_within_2pct": harness <= max(1, int(0.02 * len(rows) + 0.999)),
+            "negative_all_correct": len(negative) == sum(1 for r in negative
+                                                         if r["verdict"] == "fail"),
+        },
+    }
+    result = {
+        "schema": benchlib.MATRIX_SCHEMA,
+        "utc": utc(),
+        "provenance": benchlib.provenance(
+            ROOT, [ACOS, ACOS_ART], profile=PROFILE,
+            gate=benchlib.host_gate(ROOT, check_lock=False),
+            engine=ENGINE_LABEL,
+            extra={"artifacts_dir": os.path.relpath(ARTIFACTS, ROOT),
+                   "sample_ms": SAMPLE_MS, "settle_s": SETTLE_S,
+                   "engine_flag": ENGINE_FLAG}),
+        "legacy_reference": benchlib.legacy_memory_reference(),
+        "runs": rows,
+        "summary": summary,
+    }
+    tsv_path = os.path.splitext(OUT)[0] + ".tsv"
+    with open(tsv_path, "w") as f:
+        f.write(tsv(rows))
+    errors = benchlib.validate_matrix(result)
+    if errors:
+        bad = OUT + ".invalid.json"
+        benchlib.write_json(bad, result)
+        print("run-matrix: result INVALID (%d schema/gate errors); wrote %s"
+              % (len(errors), bad), file=sys.stderr)
+        for e in errors:
+            print("run-matrix:   " + e, file=sys.stderr)
+        return 1
+    benchlib.write_json(OUT, result)
+    print("run-matrix: summary %s" % json.dumps(summary, sort_keys=True))
+    print("run-matrix: rows %s" % OUT)
+    print("run-matrix: tsv  %s" % tsv_path)
+    print("run-matrix: verdict_eligible=%s profile=%s engine=%s"
+          % (VERDICT_ELIGIBLE, PROFILE, ENGINE_LABEL))
+    print("")
+    print("| run | scenario | variant | expected | verdict | false_pass | error class | wall ms | cg peak MiB | GiB-min | PSS MiB |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
+    for r in rows:
+        e = r["error"] or {}
+        print("| %s | %s | %s | %s | %s | %s | %s | %.0f | %s | %s | %s |" % (
+            r["run_id"], os.path.basename(r["scenario"]), r["variant"], r["expected"],
+            r["verdict"], r["false_pass"], e.get("class", "-"), r["wall_ms"],
+            r["mem"]["cgroup_peak_mib"], r["mem"]["cgroup_gib_min"], r["mem"]["pss_mib"]))
+    return 0 if not false_pass and unclassified == 0 else 1
+
+
+sys.exit(main())
+PY
+
+exec "$ROOT/tools/art-runtime/run-exclusive.sh" --task "W29-matrix" -- \
+    "$ROOT/tools/guarded.sh" --mem 8G --time 900 -- \
+    python3 -I "$ARTIFACTS/driver.py" "$ROOT" "$OUT" "$PROFILE" "$ACOS" "$ACOS_ART" \
+    "$ENGINE" "$REPS" "$SAMPLE_MS" "$SETTLE_S" "$TIMEOUT_S" "$ARTIFACTS" \
+    "$APK_OVERRIDE" "${SCENARIOS[@]}"

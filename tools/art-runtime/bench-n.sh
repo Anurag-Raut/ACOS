@@ -238,8 +238,15 @@ PY
     touch "$dir/stop"
     wait "$sampler_pid"
 
-    python3 -I - "$dir" "$N" "$t0" "$t1" "$ENGINE" <<'PY'
+    python3 -I - "$dir" "$N" "$t0" "$t1" "$ENGINE" "$ROOT" <<'PY'
 import json, os, statistics, sys
+sys.path.insert(0, os.path.join(sys.argv[6], "tools"))
+import benchlib
+# W29: every result row carries the build profile + full binary sha256.
+profile = "release"
+binaries = [os.path.join(sys.argv[6], "target/release/acos-art"),
+            os.path.join(sys.argv[6], "target/release/acos")]
+bin_stamp = [benchlib.binary_provenance(b, profile) for b in binaries]
 d, n, t0, t1, engine = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4]), sys.argv[5]
 t0, t1 = float(t0), float(t1)
 samples = []
@@ -280,6 +287,8 @@ for i in range(1, n + 1):
 succ = sum(ok)
 summary = {
     "engine": engine, "n": n, "cohort_wall_s": round(t1 - t0, 3),
+    "profile": profile, "verdict_eligible": all(b["verdict_eligible"] for b in bin_stamp),
+    "binaries": bin_stamp,
     "agent_wall_s_mean": round(statistics.mean(walls), 3) if walls else None,
     "agent_wall_s_max": round(max(walls), 3) if walls else None,
     "render_wall_s_mean": round(statistics.mean(render_walls), 3) if render_walls else None,
@@ -302,9 +311,11 @@ for k in $(seq 1 "$REPS"); do
     reps_json+=("$OUT/rep-$k/summary.json")
 done
 
-python3 -I - "$OUT" "${reps_json[@]}" <<'PY'
+python3 -I - "$OUT" "$ROOT" "${reps_json[@]}" <<'PY'
 import json, os, statistics, sys
-out, paths = sys.argv[1], sys.argv[2:]
+out, root, paths = sys.argv[1], sys.argv[2], sys.argv[3:]
+sys.path.insert(0, os.path.join(root, "tools"))
+import benchlib
 reps = []
 for p in paths:
     with open(p) as f:
@@ -316,6 +327,13 @@ summary = {
     "engine": reps[0]["engine"] if reps else None,
     "n": reps[0]["n"] if reps else None,
     "reps": len(reps),
+    "provenance": benchlib.provenance(
+        root,
+        [os.path.join(root, "target/release/acos"),
+         os.path.join(root, "target/release/acos-art")],
+        profile="release",
+        gate=benchlib.host_gate(root, check_lock=False),
+        engine=reps[0]["engine"] if reps else None),
     "median": {k: med(k) for k in ["cohort_wall_s", "agent_wall_s_mean", "render_wall_s_mean", "successes",
                                     "peak_pss_mib", "peak_rss_mib", "gib_minutes",
                                     "tasks_per_gib_min"]},

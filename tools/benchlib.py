@@ -1,0 +1,1048 @@
+#!/usr/bin/env python3
+"""benchlib -- the one place ACOS benchmark statistics, noise rules, host gates,
+memory-type comparison, provenance and result validation live (W29, 2026-11-12).
+
+Pure standard library. Importable with ``python3 -I`` (callers add the repo's
+``tools/`` directory to ``sys.path`` explicitly). Nothing in this module starts
+an ART guest, builds anything or touches the network.
+
+The rules encoded here are the decided ones in
+``results/art-runtime/ADVISOR-benchmarks-top10.md`` (global decisions table) and
+BENCHMARKS.md section 11:
+
+* **spread** = ``(p95 - p5) / p50``; a row with spread > 15 % is ``noisy`` and
+  can never PASS.
+* **noise** = ``max(spread(acos), spread(legacy), 5 %)``.
+* **PASS** iff the two rows are the same metric type *and* state, both have
+  enough samples, neither is noisy, and ``acos_p50 <= legacy_p50 * (1 - noise)``.
+  A **TIE** (within noise) is **not a pass**. Worse than ``legacy * (1 + noise)``
+  is FAIL. Missing data is NOT_MEASURED. A metric-type/state mismatch is
+  NOT_COMPARABLE. None of NON-PASS verdicts may be rendered as a win.
+* **A/B** is interleaved ABBA, at least 3 pairs, in one host window.
+* **host gate**: ``loadavg1 <= 4.0``, ``MemAvailable >= 30 GiB``, and no other
+  holder of the host-wide ``art.lock``.
+* **memory**: cgroup ``memory.current`` sampled every 100 ms gives the peak and
+  the GiB-minute integral; PSS is a secondary, share-aware account; a settle
+  time is part of a row's identity. Never add cgroup and PSS. Rows whose types
+  or states differ are NOT_COMPARABLE (``compare_memory``).
+
+CLI (convenience only; the test suite is ``tools/tests/test-benchlib.py``):
+
+    python3 tools/benchlib.py stats 1.0 2.0 3.0 ...
+    python3 tools/benchlib.py host-gate
+    python3 tools/benchlib.py provenance --profile release target/release/acos
+"""
+
+from __future__ import annotations
+
+import datetime
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# --------------------------------------------------------------------------- #
+# Decided constants (do not tune per run; override only with a recorded reason)
+# --------------------------------------------------------------------------- #
+
+MAX_SPREAD = 0.15          # spread above this => noisy => cannot PASS
+MIN_NOISE = 0.05           # noise floor is never smaller than 5 %
+MIN_LATENCY_SAMPLES = 20   # BENCHMARKS.md section 2 rule 2
+MIN_MEMORY_REPS = 5        # ADVISOR global decisions: memory reps
+MIN_AB_PAIRS = 3           # ADVISOR global decisions: ABBA pairs
+BOOTSTRAP_RESAMPLES = 2000
+BOOTSTRAP_SEED = 20261112
+DEFAULT_LOADAVG1_MAX = 4.0
+DEFAULT_MIN_AVAIL_GIB = 30.0
+MEMORY_SAMPLE_MS = 100
+LEGACY_ANON_SHMEM_SETTLE_S = 60
+
+# Metric types that are allowed to be compared with each other. The string is
+# the canonical name; aliases are accepted on input so old JSON keeps working.
+METRIC_TYPES = {
+    "pss": "PSS",
+    "uss": "USS",
+    "rss": "RSS",
+    "cgroup_anon_shmem": "CGROUP_ANON_SHMEM",
+    "cgroup-memory.stat-anon+shmem": "CGROUP_ANON_SHMEM",
+    "anon_shmem": "CGROUP_ANON_SHMEM",
+    "cgroup_memory_current": "CGROUP_MEMORY_CURRENT",
+    "cgroup_peak": "CGROUP_MEMORY_CURRENT",
+    "host_memavailable_delta": "HOST_MEMAVAILABLE_DELTA",
+    "zram": "ZRAM",
+    "swap": "SWAP",
+}
+
+STATES = {"first-run", "cold-process", "cold", "warm", "unknown"}
+
+
+def canonical_metric_type(value):
+    """Normalise a metric-type string; unknown values are upper-cased verbatim."""
+    if value is None:
+        return None
+    key = str(value).strip().lower().replace(" ", "")
+    return METRIC_TYPES.get(key, str(value).strip().upper())
+
+
+def canonical_state(value):
+    if value is None:
+        return None
+    key = str(value).strip().lower().replace("_", "-")
+    if key in ("firstrun", "first-run"):
+        return "first-run"
+    if key in ("coldprocess", "cold-process"):
+        return "cold-process"
+    return key
+
+
+# --------------------------------------------------------------------------- #
+# Statistics
+# --------------------------------------------------------------------------- #
+
+def percentile(values, q):
+    """Linear-interpolated percentile (same convention as numpy's default).
+
+    ``q`` is 0..100. Returns None for an empty sample. A single sample returns
+    itself for every q (the caller must still treat n<2 as "no spread info").
+    """
+    xs = sorted(float(v) for v in values)
+    if not xs:
+        return None
+    if len(xs) == 1:
+        return xs[0]
+    if q <= 0:
+        return xs[0]
+    if q >= 100:
+        return xs[-1]
+    pos = (len(xs) - 1) * (q / 100.0)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return xs[lo]
+    frac = pos - lo
+    return xs[lo] * (1.0 - frac) + xs[hi] * frac
+
+
+def _clean(values):
+    out = []
+    for v in values:
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isnan(f) or math.isinf(f):
+            continue
+        out.append(f)
+    return out
+
+
+def stats(values, resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED, ci=0.95):
+    """Distribution summary used by every ACOS benchmark row.
+
+    Keys: ``n, min, max, mean, median (== p50), p5, p50, p95, spread, spread_pct,
+    stdev, cv, ci95_low, ci95_high, resamples, method``.
+
+    ``spread`` is ``(p95 - p5) / p50`` as a fraction. It is None when n < 2 or
+    p50 == 0: with one sample there is no measured spread, and the verdict code
+    then refuses to call the row stable. ``ci95`` is a percentile bootstrap of
+    the median (2000 resamples, fixed seed => reproducible).
+    """
+    xs = _clean(values)
+    n = len(xs)
+    base = {
+        "n": n,
+        "min": None, "max": None, "mean": None, "median": None,
+        "p5": None, "p50": None, "p95": None,
+        "spread": None, "spread_pct": None,
+        "stdev": None, "cv": None,
+        "ci95_low": None, "ci95_high": None,
+        "resamples": 0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; "
+                  "bootstrap 95% CI of the median",
+    }
+    if n == 0:
+        return base
+    base["min"] = min(xs)
+    base["max"] = max(xs)
+    base["mean"] = sum(xs) / n
+    base["p5"] = percentile(xs, 5)
+    base["p50"] = base["median"] = percentile(xs, 50)
+    base["p95"] = percentile(xs, 95)
+    if n >= 2:
+        var = sum((x - base["mean"]) ** 2 for x in xs) / (n - 1)
+        base["stdev"] = math.sqrt(var)
+        if base["mean"]:
+            base["cv"] = base["stdev"] / base["mean"]
+        if base["p50"]:
+            base["spread"] = (base["p95"] - base["p5"]) / base["p50"]
+            base["spread_pct"] = 100.0 * base["spread"]
+    if n >= 2 and resamples > 0:
+        rng = random.Random(seed)
+        meds = []
+        for _ in range(int(resamples)):
+            sample = [xs[rng.randrange(n)] for _ in range(n)]
+            sample.sort()
+            meds.append(percentile(sample, 50))
+        meds.sort()
+        tail = (1.0 - ci) / 2.0
+        base["ci95_low"] = percentile(meds, 100.0 * tail)
+        base["ci95_high"] = percentile(meds, 100.0 * (1.0 - tail))
+        base["resamples"] = int(resamples)
+    return base
+
+
+def is_noisy(st, max_spread=MAX_SPREAD):
+    """True when the row's spread exceeds the gate (or is unmeasurable)."""
+    if not st or st.get("n", 0) < 2:
+        return True
+    spread = st.get("spread")
+    if spread is None:
+        return True
+    return spread > max_spread
+
+
+def noise_floor(st_a, st_b, min_noise=MIN_NOISE):
+    """``max(spread_a, spread_b, min_noise)`` plus the components for the record."""
+    spreads = []
+    for st in (st_a, st_b):
+        if st and st.get("spread") is not None:
+            spreads.append(float(st["spread"]))
+    return {
+        "noise": max(spreads + [float(min_noise)]),
+        "min_noise": float(min_noise),
+        "spread_a": spreads[0] if len(spreads) > 0 else None,
+        "spread_b": spreads[1] if len(spreads) > 1 else None,
+    }
+
+
+def _as_stats(value):
+    if isinstance(value, dict):
+        if "p50" in value or "median" in value:
+            st = dict(value)
+            if st.get("p50") is None:
+                st["p50"] = st.get("median")
+            if st.get("median") is None:
+                st["median"] = st.get("p50")
+            if "spread" not in st:
+                p5, p95, p50 = st.get("p5"), st.get("p95"), st.get("p50")
+                st["spread"] = ((p95 - p5) / p50) if None not in (p5, p95) and p50 else None
+            st.setdefault("n", 0)
+            return st
+        raise ValueError("stats dict has no p50/median")
+    return stats(value)
+
+
+def verdict(acos, legacy, *, metric_type=None, legacy_type=None, state=None,
+            legacy_state=None, max_spread=MAX_SPREAD, min_noise=MIN_NOISE,
+            min_samples=3, lower_is_better=True):
+    """The decided D2 row rule: beat legacy by more than noise, a tie is not a pass.
+
+    ``acos`` and ``legacy`` are either stats dicts (from :func:`stats`) or raw
+    sample sequences. Returns a dict with ``verdict`` one of
+    ``PASS | TIE | FAIL | NOISY | NOT_COMPARABLE | NOT_MEASURED | INSUFFICIENT``,
+    a boolean ``pass`` (True only for PASS), ``ratio`` (acos/legacy), the noise
+    used, the threshold and human-readable ``reasons``.
+
+    Order of checks matters and is deliberate: missing data first, then
+    comparability, then sample sufficiency, then noise, then the ratio.
+    """
+    reasons = []
+    a = _as_stats(acos) if acos not in (None, [], ()) else None
+    b = _as_stats(legacy) if legacy not in (None, [], ()) else None
+    out = {
+        "verdict": "NOT_MEASURED",
+        "pass": False,
+        "ratio": None,
+        "noise": None,
+        "threshold": None,
+        "acos_p50": None,
+        "legacy_p50": None,
+        "reasons": reasons,
+        "metric_type": canonical_metric_type(metric_type),
+        "legacy_type": canonical_metric_type(legacy_type if legacy_type is not None else metric_type),
+        "state": canonical_state(state),
+        "legacy_state": canonical_state(legacy_state if legacy_state is not None else state),
+    }
+    if a is None or a.get("p50") is None:
+        reasons.append("ACOS row missing (NOT_MEASURED = not pass)")
+    if b is None or b.get("p50") is None:
+        reasons.append("legacy row missing (NOT_MEASURED = not pass)")
+    if a is not None:
+        out["acos_p50"] = a.get("p50")
+    if b is not None:
+        out["legacy_p50"] = b.get("p50")
+    if a is None or b is None or a.get("p50") is None or b.get("p50") is None:
+        return out
+
+    if out["metric_type"] != out["legacy_type"]:
+        out["verdict"] = "NOT_COMPARABLE"
+        reasons.append("metric type mismatch: %s vs %s"
+                       % (out["metric_type"], out["legacy_type"]))
+        return out
+    if out["state"] != out["legacy_state"]:
+        out["verdict"] = "NOT_COMPARABLE"
+        reasons.append("state mismatch: %s vs %s" % (out["state"], out["legacy_state"]))
+        return out
+    if a.get("n", 0) < min_samples or b.get("n", 0) < min_samples:
+        out["verdict"] = "INSUFFICIENT"
+        reasons.append("samples below %d (acos n=%s, legacy n=%s); not a pass"
+                       % (min_samples, a.get("n"), b.get("n")))
+        return out
+
+    nf = noise_floor(a, b, min_noise)
+    noise = float(nf["noise"])
+    out["noise"] = noise
+    out["noise_components"] = nf
+    if is_noisy(a, max_spread):
+        out["verdict"] = "NOISY"
+        reasons.append("ACOS row noisy: spread %s > %.0f%% gate"
+                       % (_fmt_pct(a.get("spread")), 100 * max_spread))
+        return out
+    if is_noisy(b, max_spread):
+        out["verdict"] = "NOISY"
+        reasons.append("legacy row noisy: spread %s > %.0f%% gate"
+                       % (_fmt_pct(b.get("spread")), 100 * max_spread))
+        return out
+
+    p50a, p50b = float(a["p50"]), float(b["p50"])
+    if p50b == 0:
+        out["verdict"] = "NOT_COMPARABLE"
+        reasons.append("legacy p50 is zero")
+        return out
+    out["ratio"] = p50a / p50b
+    if lower_is_better:
+        pass_line = p50b * (1.0 - noise)
+        tie_hi = p50b * (1.0 + noise)
+        out["threshold"] = pass_line
+        if p50a <= pass_line:
+            out["verdict"] = "PASS"
+            out["pass"] = True
+            reasons.append("acos p50 %.6g <= legacy %.6g * (1 - noise %.3f) = %.6g"
+                           % (p50a, p50b, noise, pass_line))
+        elif p50a <= tie_hi:
+            out["verdict"] = "TIE"
+            reasons.append("acos p50 %.6g is within noise of legacy %.6g (tie = not pass)"
+                           % (p50a, p50b))
+        else:
+            out["verdict"] = "FAIL"
+            reasons.append("acos p50 %.6g > legacy %.6g * (1 + noise %.3f) = %.6g"
+                           % (p50a, p50b, noise, tie_hi))
+    else:  # higher-is-better (throughput)
+        pass_line = p50b * (1.0 + noise)
+        tie_lo = p50b * (1.0 - noise)
+        out["threshold"] = pass_line
+        if p50a >= pass_line:
+            out["verdict"] = "PASS"
+            out["pass"] = True
+            reasons.append("acos %.6g >= legacy %.6g * (1 + noise %.3f) = %.6g"
+                           % (p50a, p50b, noise, pass_line))
+        elif p50a >= tie_lo:
+            out["verdict"] = "TIE"
+            reasons.append("acos %.6g is within noise of legacy %.6g (tie = not pass)"
+                           % (p50a, p50b))
+        else:
+            out["verdict"] = "FAIL"
+            reasons.append("acos %.6g < legacy %.6g * (1 - noise %.3f) = %.6g"
+                           % (p50a, p50b, noise, tie_lo))
+    return out
+
+
+def _fmt_pct(value):
+    return "n/a" if value is None else "%.1f%%" % (100.0 * float(value))
+
+
+# --------------------------------------------------------------------------- #
+# Interleaved A/B (ABBA)
+# --------------------------------------------------------------------------- #
+
+def abba(fn_a, fn_b, pairs=MIN_AB_PAIRS, timer=None, alternate_pairs=False):
+    """Run an interleaved A/B experiment: ``A B B A`` per pair.
+
+    Each callable returns its sample (a number, ms by convention) or ``None`` to
+    have the helper time the call itself with ``timer`` (default
+    ``time.perf_counter``). Returns ``{"rows": [...], "a": stats, "b": stats,
+    "pairs": n, "pairs_ok": bool, "order": [...]}``.
+
+    ``pairs < 3`` is allowed for tooling smoke tests but is flagged
+    ``pairs_ok: False`` and must not be cited as a verdict.
+    With ``alternate_pairs=True`` even pairs run ``B A A B`` so slow drift does
+    not favour arm A. The decided default is plain ABBA.
+    """
+    timer = timer or time.perf_counter
+    rows = []
+    order = []
+    for p in range(1, int(pairs) + 1):
+        seq = ["A", "B", "B", "A"]
+        if alternate_pairs and p % 2 == 0:
+            seq = ["B", "A", "A", "B"]
+        order.append("".join(seq))
+        for arm in seq:
+            fn = fn_a if arm == "A" else fn_b
+            t0 = timer()
+            value = fn()
+            dt = timer() - t0
+            if value is None:
+                value = dt
+            rows.append({"pair": p, "arm": arm, "value": float(value)})
+    a_vals = [r["value"] for r in rows if r["arm"] == "A"]
+    b_vals = [r["value"] for r in rows if r["arm"] == "B"]
+    return {
+        "pairs": int(pairs),
+        "pairs_ok": int(pairs) >= MIN_AB_PAIRS,
+        "order": order,
+        "rows": rows,
+        "a": stats(a_vals),
+        "b": stats(b_vals),
+        "note": "ABBA interleaved in one host window; >=3 pairs is required for a verdict",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Host gate
+# --------------------------------------------------------------------------- #
+
+def read_loadavg(path="/proc/loadavg"):
+    with open(path) as f:
+        parts = f.read().split()
+    return {"loadavg1": float(parts[0]), "loadavg5": float(parts[1]),
+            "loadavg15": float(parts[2]),
+            "runnable": parts[3] if len(parts) > 3 else None}
+
+
+def read_meminfo(path="/proc/meminfo"):
+    info = {}
+    with open(path) as f:
+        for line in f:
+            key, _, rest = line.partition(":")
+            fields = rest.split()
+            if fields:
+                info[key] = float(fields[0])  # kB
+    total = info.get("MemTotal", 0.0) / 1024.0 / 1024.0
+    avail = info.get("MemAvailable", 0.0) / 1024.0 / 1024.0
+    used = total - avail
+    return {
+        "mem_total_mib": round(total * 1024.0, 1),
+        "mem_available_mib": round(avail * 1024.0, 1),
+        "mem_total_gib": round(total, 2),
+        "mem_available_gib": round(avail, 2),
+        "used_mib": round(used * 1024.0, 1),
+        "used_pct": round(100.0 * used / total, 2) if total else None,
+    }
+
+
+def art_lock_held(lock_path):
+    """Best-effort true/false: can we take ``art.lock`` non-blocking right now?
+
+    Uses ``fcntl.flock(LOCK_EX | LOCK_NB)`` on the same file ``run-exclusive.sh``
+    flocks. Returns None when the lock file or ``fcntl`` is unavailable (the gate
+    then records "unknown" instead of pretending the host is free).
+    """
+    if not lock_path:
+        return None
+    path = Path(lock_path)
+    if not path.exists():
+        return None
+    try:
+        import fcntl
+    except ImportError:  # non-POSIX host
+        return None
+    try:
+        with open(path, "a") as f:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return True
+            else:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                return False
+    except OSError:
+        return None
+
+
+def host_gate(repo_root=None, *, loadavg1_max=DEFAULT_LOADAVG1_MAX,
+              min_avail_gib=DEFAULT_MIN_AVAIL_GIB, meminfo_path="/proc/meminfo",
+              loadavg_path="/proc/loadavg", lock_path=None, check_lock=True):
+    """Pre-flight host conditions. Refuses (``ok: False``) on load, RAM or lock.
+
+    The lock check only *probes* the host-wide ``art.lock``; a benchmark that
+    wraps itself in ``run-exclusive.sh`` already owns it, so callers inside the
+    lock pass ``check_lock=False`` (and then the probe would report "held" by
+    itself). Returns the measured values either way so a contaminated run can be
+    labelled rather than silently discarded.
+    """
+    reasons = []
+    load = {}
+    mem = {}
+    try:
+        load = read_loadavg(loadavg_path)
+    except OSError as exc:
+        reasons.append("loadavg unreadable: %s" % exc)
+    try:
+        mem = read_meminfo(meminfo_path)
+    except OSError as exc:
+        reasons.append("meminfo unreadable: %s" % exc)
+    if load and load["loadavg1"] > float(loadavg1_max):
+        reasons.append("loadavg1 %.2f > %.2f" % (load["loadavg1"], loadavg1_max))
+    if mem and mem["mem_available_gib"] < float(min_avail_gib):
+        reasons.append("MemAvailable %.1f GiB < %.1f GiB"
+                       % (mem["mem_available_gib"], min_avail_gib))
+    lock = None
+    last_run = None
+    if repo_root:
+        candidate = Path(repo_root) / ".cache/art-locks/art.lock"
+        if lock_path is None:
+            lock_path = str(candidate)
+        log = Path(repo_root) / ".cache/art-locks/runs.log"
+        if log.exists():
+            try:
+                last_run = log.read_text(errors="replace").strip().splitlines()[-1]
+            except OSError:
+                last_run = None
+    if check_lock and lock_path:
+        lock = art_lock_held(lock_path)
+        if lock:
+            reasons.append("another process holds %s" % lock_path)
+    return {
+        "ok": not reasons,
+        "reasons": reasons,
+        "loadavg1": load.get("loadavg1"),
+        "loadavg5": load.get("loadavg5"),
+        "loadavg15": load.get("loadavg15"),
+        "mem_available_gib": mem.get("mem_available_gib"),
+        "mem_total_gib": mem.get("mem_total_gib"),
+        "mem_available_mib": mem.get("mem_available_mib"),
+        "art_lock_held": lock,
+        "art_lock_checked": bool(check_lock and lock_path),
+        "last_art_run": last_run,
+        "limits": {"loadavg1_max": float(loadavg1_max),
+                   "min_avail_gib": float(min_avail_gib)},
+        "utc": utc_now(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Provenance (build profile, sha256, dirty tree, host)
+# --------------------------------------------------------------------------- #
+
+def utc_now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+
+def sha256_file(path, chunk=1 << 20):
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(chunk), b""):
+                h.update(block)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def detect_profile(binary_path):
+    """Declared build profile from the cargo target directory.
+
+    Cargo writes release artefacts under ``target/release`` and debug artefacts
+    under ``target/debug`` (custom ``CARGO_TARGET_DIR`` keeps the leaf). The ELF
+    debug-info sections are deliberately *not* used: this workspace sets
+    ``[profile.release] debug = 1``, so a release binary containing
+    ``.debug_info`` is normal and is not evidence of a debug build.
+    """
+    if not binary_path:
+        return "unknown"
+    parts = Path(str(binary_path)).parts
+    if "release" in parts:
+        return "release"
+    if "debug" in parts:
+        return "debug"
+    env = os.environ.get("ACOS_BENCH_PROFILE")
+    if env:
+        return env.strip().lower()
+    return "unknown"
+
+
+def binary_provenance(path, profile=None):
+    """One binary's identity and whether rows measured with it are gateable."""
+    p = str(path)
+    prof = (profile or detect_profile(p) or "unknown").strip().lower()
+    digest = sha256_file(p)
+    eligible = prof == "release"
+    if prof == "debug":
+        why = "debug build: NOT_VERDICT_ELIGIBLE (debug inflates wall time and anon memory)"
+    elif prof == "release":
+        why = None
+    else:
+        why = "unknown build profile: NOT_VERDICT_ELIGIBLE"
+    return {
+        "path": p,
+        "exists": os.path.exists(p),
+        "profile": prof,
+        "sha256": digest,
+        "sha256_16": digest[:16] if digest else None,
+        "size_bytes": os.path.getsize(p) if os.path.exists(p) else None,
+        "mtime_utc": (datetime.datetime.fromtimestamp(
+            os.path.getmtime(p), datetime.timezone.utc).isoformat(timespec="seconds")
+            if os.path.exists(p) else None),
+        "verdict_eligible": eligible,
+        "not_eligible_reason": why,
+        "profile_source": "explicit" if profile else "path heuristic (%s)" % prof,
+    }
+
+
+def _git(repo_root, *args):
+    try:
+        r = subprocess.run(["git", *args], cwd=str(repo_root), capture_output=True,
+                           text=True, timeout=30)
+        return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def repo_dirty_hash(repo_root):
+    """sha256 of ``git status --porcelain`` -- a stable dirty-tree fingerprint."""
+    porcelain = _git(repo_root, "status", "--porcelain")
+    return hashlib.sha256(porcelain.encode()).hexdigest(), porcelain
+
+
+def rustc_version():
+    try:
+        r = subprocess.run(["rustc", "-V"], capture_output=True, text=True, timeout=15)
+        return r.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def provenance(repo_root, binaries=(), profile=None, *, gate=None, engine=None,
+               extra=None):
+    """The provenance block stamped into every result JSON.
+
+    ``profile`` is the build profile the run *claims*; each binary's own
+    :func:`binary_provenance` records its detected profile and
+    ``verdict_eligible``. If any binary is not release, the whole stamp is
+    ``verdict_eligible: false`` and carries a reason (rows are still written, but
+    labelled NOT_VERDICT_ELIGIBLE instead of refused, so a smoke test on debug
+    binaries stays possible).
+    """
+    repo_root = Path(repo_root)
+    dirty_hash, porcelain = repo_dirty_hash(repo_root)
+    bins = [binary_provenance(b, profile=None) for b in binaries]
+    if profile is not None:
+        for b in bins:
+            if b["profile"] == "unknown":
+                b["profile"] = str(profile).lower()
+                b["verdict_eligible"] = b["profile"] == "release"
+                b["not_eligible_reason"] = (None if b["verdict_eligible"]
+                                            else "profile %s is not release" % b["profile"])
+                b["profile_source"] = "run argument"
+    declared = (str(profile).lower() if profile else
+                (bins[0]["profile"] if bins else "unknown"))
+    blockers = [b for b in bins if not b["verdict_eligible"]]
+    if declared != "release":
+        eligible = False
+        reason = "declared build profile is %s, not release" % declared
+    elif blockers:
+        eligible = False
+        reason = "binary not release: " + ", ".join(b["path"] for b in blockers)
+    else:
+        eligible = True
+        reason = None
+    out = {
+        "schema": "acos-bench-provenance/1",
+        "utc": utc_now(),
+        "host": {**read_meminfo(), **read_loadavg(), "nproc": os.cpu_count()},
+        "git_head": _git(repo_root, "rev-parse", "HEAD"),
+        "git_head_subject": _git(repo_root, "log", "-1", "--format=%s"),
+        "git_status_porcelain_sha256": dirty_hash,
+        "git_dirty": bool(porcelain.strip()),
+        "git_dirty_files": len([l for l in porcelain.splitlines() if l.strip()]),
+        "rustc": rustc_version(),
+        "profile": declared,
+        "verdict_eligible": eligible,
+        "not_verdict_eligible_reason": reason,
+        "binaries": bins,
+        "engine": engine,
+        "host_gate": gate,
+        "method": "BENCHMARKS.md section 11 (benchlib.py)",
+    }
+    if extra:
+        out.update(extra)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Memory: cgroup samples, integrals, same-type comparison
+# --------------------------------------------------------------------------- #
+
+def sample_integral(samples, value_key="bytes"):
+    """Trapezoid integral of a sampled quantity, in GiB-minutes.
+
+    ``samples`` is a list of dicts with ``t`` (epoch seconds) and ``value_key``
+    (bytes by default). Non-monotonic timestamps are ignored rather than
+    producing a negative integral.
+    """
+    rows = []
+    for s in samples or []:
+        t = s.get("t")
+        v = s.get(value_key)
+        if t is None or v is None:
+            continue
+        rows.append((float(t), float(v)))
+    rows.sort(key=lambda r: r[0])
+    gib_min = 0.0
+    for (t0, v0), (t1, v1) in zip(rows, rows[1:]):
+        dt = t1 - t0
+        if dt <= 0:
+            continue
+        gib_min += ((v0 + v1) / 2.0) / (1024.0 ** 3) * (dt / 60.0)
+    return gib_min
+
+
+def sample_peak(samples, value_key="bytes"):
+    vals = [float(s[value_key]) for s in samples or []
+            if s.get(value_key) is not None]
+    return max(vals) if vals else None
+
+
+def memory_row(row):
+    """Extract the canonical fields of one memory measurement row."""
+    row = row or {}
+    return {
+        "value_mib": row.get("value_mib", row.get("mib")),
+        "metric_type": canonical_metric_type(row.get("metric_type", row.get("type"))),
+        "state": canonical_state(row.get("state")),
+        "settle_s": row.get("settle_s"),
+        "source": row.get("source"),
+        "n": row.get("n"),
+    }
+
+
+def compare_memory(acos_row, legacy_row):
+    """Same-type memory comparison; a mismatch is NOT_COMPARABLE, never a pass.
+
+    Rules (ADVISOR global decisions, item 6): the only column compared with the
+    legacy ACVM section 3 values is per-session cgroup ``memory.stat`` anon+shmem
+    settled 60 s after first frame. cgroup peak, PSS and GiB-min are separate
+    columns and are never compared across types. A row whose ``metric_type`` or
+    ``state`` differs renders NOT_COMPARABLE (not-pass).
+    """
+    a = memory_row(acos_row)
+    b = memory_row(legacy_row)
+    reasons = []
+    comparable = True
+    if a["value_mib"] is None or b["value_mib"] is None:
+        comparable = False
+        reasons.append("value missing")
+    if a["metric_type"] != b["metric_type"]:
+        comparable = False
+        reasons.append("metric type %s != %s" % (a["metric_type"], b["metric_type"]))
+    if a["state"] != b["state"]:
+        comparable = False
+        reasons.append("state %s != %s" % (a["state"], b["state"]))
+    if (a["metric_type"] == "CGROUP_ANON_SHMEM"
+            and (a["settle_s"] != b["settle_s"])):
+        comparable = False
+        reasons.append("settle time %s s != %s s" % (a["settle_s"], b["settle_s"]))
+    ratio = (float(a["value_mib"]) / float(b["value_mib"])
+             if comparable and float(b["value_mib"]) else None)
+    return {
+        "verdict": "COMPARABLE" if comparable else "NOT_COMPARABLE",
+        "comparable": comparable,
+        "ratio": ratio,
+        "acos": a,
+        "legacy": b,
+        "reasons": reasons,
+        "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+    }
+
+
+def legacy_memory_reference(mib=130.3):
+    """The frozen legacy ACVM per-session reference (BENCHMARKS.md section 3)."""
+    return {"value_mib": mib, "metric_type": "CGROUP_ANON_SHMEM",
+            "state": "warm", "settle_s": LEGACY_ANON_SHMEM_SETTLE_S,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only"}
+
+
+# --------------------------------------------------------------------------- #
+# Failure taxonomy (item 10 groundwork; matrix rows carry class/retryable/hint)
+# --------------------------------------------------------------------------- #
+
+_CLASS_BY_CODE = {
+    # app / assertion behaviour
+    "ASSERTION_FAILED": "assertion",
+    "ELEMENT_NOT_FOUND": "assertion",
+    "STALE_REF": "assertion",
+    "WRONG_TEXT": "assertion",
+    "WRONG_BOUNDS": "assertion",
+    "APP_CRASHED": "app_crash",
+    "APP_NOT_RESPONDING": "app_crash",
+    "JAVA_EXCEPTION": "app_crash",
+    "INSUFFICIENT_HOST_EVIDENCE": "assertion",
+    # capability gaps (never a pass)
+    "UNSUPPORTED_ASSERTION": "unsupported",
+    "UNSUPPORTED_BACKEND": "unsupported",
+    "UNSUPPORTED_ANDROID_API": "unsupported",
+    "UNSUPPORTED_JAVA_API": "unsupported",
+    "UNSUPPORTED_BYTECODE": "unsupported",
+    "UNSUPPORTED_NATIVE_SYMBOL": "unsupported",
+    "UNSUPPORTED_ABI": "unsupported",
+    "UNSUPPORTED_RELOCATION": "unsupported",
+    "UNSUPPORTED_RN": "unsupported",
+    "UNSUPPORTED_RN_SETUP": "unsupported",
+    "UNSUPPORTED_RN_DRIVER": "unsupported",
+    "UNSUPPORTED_RN_NO_RENDERER": "unsupported",
+    "UNSUPPORTED_RN_KEY": "unsupported",
+    "UNSUPPORTED_RN_TEXT": "unsupported",
+    "UNSUPPORTED_RN_NO_TARGET": "unsupported",
+    "NO_DISPLAY": "unsupported",
+    "NO_TEXT": "unsupported",
+    "NEEDS_REAL_DEVICE": "unsupported",
+    "REQUIRES_GMS": "unsupported",
+    "WRONG_ABI": "unsupported",
+    "UNSUPPORTED_ASSERTION_KIND": "unsupported",
+    # timeouts / resources
+    "TIMEOUT": "infra_timeout",
+    "RESOURCE_LIMIT": "infra_timeout",
+    "RAM_GUARD": "host_guard",
+    "RAM_ABORT": "host_guard",
+    "CONFINEMENT_UNAVAILABLE": "host_guard",
+    "LANDLOCK_UNAVAILABLE": "host_guard",
+    # harness (ACOS bug or bad request/scenario/artifact)
+    "INTERNAL": "harness",
+    "VM_INTERNAL": "harness",
+    "INVALID_SCENARIO": "harness",
+    "INVALID_ARGUMENT": "harness",
+    "UNSAFE_PATH": "harness",
+    "ZIP_SLIP": "harness",
+    "ARTIFACTS_INVALID": "harness",
+    "UNVERIFIED_FIDELITY": "harness",
+    "NO_FRESH_FRAME": "harness",
+    "SESSION_NOT_FOUND": "harness",
+    "SESSION_BUSY": "harness",
+    "ISOLATION_UNAVAILABLE": "harness",
+    "ISOLATION_UNSATISFIED": "harness",
+    "UNTRUSTED_APK_NOT_CERTIFIED": "harness",
+}
+
+_RETRYABLE = {"infra_timeout", "host_guard"}
+
+
+def classify_error(code, message=None, retryable=None, hint=None):
+    """Map an ``acos_protocol::ErrorCode`` string to the matrix failure taxonomy.
+
+    Returns ``{code, class, retryable, hint}`` with ``class`` one of
+    ``assertion | app_crash | unsupported | harness | infra_timeout |
+    host_guard`` and ``unknown`` when the code is not in the table (the matrix
+    gate requires ``unclassified == 0``).
+    """
+    c = (code or "UNKNOWN").strip().upper()
+    cls = _CLASS_BY_CODE.get(c, "unknown")
+    if retryable is None:
+        retryable = cls in _RETRYABLE
+    if hint is None:
+        hint = _default_hint(c, cls)
+    return {"code": c, "class": cls, "retryable": bool(retryable),
+            "hint": hint, "message": message}
+
+
+def _default_hint(code, cls):
+    if cls == "assertion":
+        return ("The app ran but the asserted state differs; re-observe the tree and fix "
+                "the expectation or the app. Not retryable.")
+    if cls == "app_crash":
+        return ("The app crashed; capture the guest stderr tail and the frame/tree at "
+                "failure. Not retryable without an app fix.")
+    if cls == "unsupported":
+        return ("The engine lacks this capability; report it as unsupported, never as a "
+                "pass. Not retryable on this engine.")
+    if cls == "infra_timeout":
+        return "A deadline/resource budget was hit; retry once and record the retry cost."
+    if cls == "host_guard":
+        return "The host guard fired (RAM/confinement); free memory and retry."
+    if cls == "harness":
+        return ("Harness/ACOS-side failure; keep the evidence bundle and report it as a "
+                "harness item (counts against the <=2% harness gate).")
+    return ("Unclassified error code %s: add it to tools/benchlib.py classify_error; the "
+            "matrix gate requires unclassified == 0." % code)
+
+
+# --------------------------------------------------------------------------- #
+# Result-schema validation (results/bench/schema/matrix.schema.json)
+# --------------------------------------------------------------------------- #
+
+MATRIX_SCHEMA = "acos-bench-matrix/1"
+
+_REQUIRED_RUN_FIELDS = {
+    "run_id": str,
+    "utc": str,
+    "scenario": str,
+    "variant": str,
+    "expected": str,
+    "verdict": str,
+    "false_pass": bool,
+    "state": str,
+    "n_concurrent": int,
+    "wall_ms": (int, float),
+    "mem": dict,
+    "host": dict,
+    "profile": str,
+    "engine": str,
+    "verdict_eligible": bool,
+    "error": (dict, type(None)),
+}
+
+
+def validate_matrix(obj):
+    """Validate a matrix result object against the section-11 schema.
+
+    Returns a list of human-readable errors (empty == valid). Deliberately a
+    small hand-written validator: no third-party dependency, and it can be
+    called by the runner before it writes the file. The JSON Schema in
+    ``results/bench/schema/matrix.schema.json`` is the documentation twin.
+    """
+    errors = []
+    if not isinstance(obj, dict):
+        return ["result is not a JSON object"]
+    if obj.get("schema") != MATRIX_SCHEMA:
+        errors.append("schema must be %r (got %r)" % (MATRIX_SCHEMA, obj.get("schema")))
+    prov = obj.get("provenance")
+    if not isinstance(prov, dict):
+        errors.append("provenance missing")
+    else:
+        for key in ("utc", "git_head", "profile", "verdict_eligible", "binaries"):
+            if key not in prov:
+                errors.append("provenance.%s missing" % key)
+    rows = obj.get("runs")
+    if not isinstance(rows, list) or not rows:
+        errors.append("runs must be a non-empty list")
+        return errors
+    seen = set()
+    for i, row in enumerate(rows):
+        where = "runs[%d]" % i
+        if not isinstance(row, dict):
+            errors.append("%s is not an object" % where)
+            continue
+        for key, typ in _REQUIRED_RUN_FIELDS.items():
+            if key not in row:
+                errors.append("%s.%s missing" % (where, key))
+                continue
+            if not isinstance(row[key], typ):
+                errors.append("%s.%s has type %s (want %s)"
+                              % (where, key, type(row[key]).__name__, typ))
+        if row.get("run_id") in seen:
+            errors.append("%s.run_id duplicated: %s" % (where, row.get("run_id")))
+        seen.add(row.get("run_id"))
+        if row.get("variant") not in ("good", "wrong", "negative"):
+            errors.append("%s.variant must be good|wrong|negative" % where)
+        if row.get("expected") not in ("pass", "fail"):
+            errors.append("%s.expected must be pass|fail" % where)
+        if row.get("verdict") not in ("pass", "fail", "error"):
+            errors.append("%s.verdict must be pass|fail|error" % where)
+        if row.get("state") not in STATES:
+            errors.append("%s.state not one of %s" % (where, sorted(STATES)))
+        mem = row.get("mem")
+        if isinstance(mem, dict):
+            for key in ("cgroup_peak_mib", "cgroup_gib_min", "pss_mib",
+                        "anon_shmem_settled_mib"):
+                if key not in mem:
+                    errors.append("%s.mem.%s missing" % (where, key))
+            if mem.get("metric_type") is None:
+                errors.append("%s.mem.metric_type missing" % where)
+        host = row.get("host")
+        if isinstance(host, dict):
+            for key in ("loadavg1", "mem_available_mib"):
+                if key not in host:
+                    errors.append("%s.host.%s missing" % (where, key))
+        err = row.get("error")
+        if isinstance(err, dict):
+            for key in ("code", "class", "retryable", "hint"):
+                if key not in err:
+                    errors.append("%s.error.%s missing" % (where, key))
+            if err.get("class") not in ("assertion", "app_crash", "unsupported",
+                                        "harness", "infra_timeout", "host_guard",
+                                        "unknown"):
+                errors.append("%s.error.class invalid: %r" % (where, err.get("class")))
+        # negative-scenario column must be present on every row
+        if "negative" not in row:
+            errors.append("%s.negative missing (negative-scenario column)" % where)
+    summary = obj.get("summary")
+    if not isinstance(summary, dict):
+        errors.append("summary missing")
+    else:
+        for key in ("total_runs", "passed", "failed", "false_pass",
+                    "negative_runs", "unclassified"):
+            if key not in summary:
+                errors.append("summary.%s missing" % key)
+        if isinstance(summary.get("unclassified"), int) and summary["unclassified"] != 0:
+            errors.append("summary.unclassified=%d (gate requires 0)"
+                          % summary["unclassified"])
+        if isinstance(summary.get("false_pass"), int) and summary["false_pass"] > 0:
+            errors.append("summary.false_pass=%d (gate requires 0)"
+                          % summary["false_pass"])
+    return errors
+
+
+def write_json(path, obj, indent=2):
+    """Write JSON via a temporary file then rename (no half-written results)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=indent, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+    return str(path)
+
+
+# --------------------------------------------------------------------------- #
+# CLI
+# --------------------------------------------------------------------------- #
+
+def _cli(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    cmd = argv[0]
+    if cmd == "stats":
+        st = stats([float(x) for x in argv[1:]])
+        print(json.dumps(st, indent=2, sort_keys=True))
+        return 0
+    if cmd == "host-gate":
+        repo = None
+        args = [a for a in argv[1:] if not a.startswith("--")]
+        if args:
+            repo = args[0]
+        print(json.dumps(host_gate(repo), indent=2, sort_keys=True))
+        return 0
+    if cmd == "provenance":
+        args = argv[1:]
+        profile = None
+        rest = []
+        i = 0
+        while i < len(args):
+            if args[i] == "--profile":
+                profile = args[i + 1]
+                i += 2
+            else:
+                rest.append(args[i])
+                i += 1
+        root = os.environ.get("ACOS_REPO_ROOT", ".")
+        print(json.dumps(provenance(root, rest, profile), indent=2, sort_keys=True))
+        return 0
+    if cmd == "classify":
+        print(json.dumps([classify_error(c) for c in argv[1:]], indent=2))
+        return 0
+    print("benchlib: unknown command %r" % cmd, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv[1:]))

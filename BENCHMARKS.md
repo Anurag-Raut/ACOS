@@ -1696,3 +1696,139 @@ PNG page cache; debug binaries; one-shot `launch`/`render` rows are 100 ms-sampl
 `render-app` is a memory comparator, never verification evidence. `acos-art session` (the
 older headless route used by `bench-n.sh`) exits rc=1 after `activity-resumed` at this commit
 and could not be used as the comparator — recorded in `W12.md` §8.
+
+---
+
+## 11. Benchmark methodology (decided 2026-11-12)
+
+**Status:** this section is the method that binds every future ACOS benchmark row. It is
+implemented in `tools/benchlib.py` (with unit tests in `tools/tests/test-benchlib.py`),
+`tools/art-runtime/bench-release.sh`, `tools/art-runtime/bench-session.sh`,
+`tools/art-runtime/bench-n.sh`, `tools/run-matrix.sh` and
+`results/bench/schema/matrix.schema.json`. (`tools/art-runtime/bench.sh` already builds and
+runs release but is not yet stamped; it is outside the W29 file ownership.) It supersedes nothing numerically: **the
+ART-vs-legacy comparison is not yet measured. §9.8 is the Rust VM reference** (`fidelity:
+native-runtime ... NOT ART-verified`), and the numbers in §9.x are retained as Rust-VM
+history only. Until an ART D2 table exists, no row in this document is an ART verdict.
+
+### 11.1 Release-only builds and provenance
+
+* Benchmarks that can feed a verdict are built **release only**:
+  `cargo build --release -p acos-cli -p acos-art` via
+  `tools/art-runtime/bench-release.sh` (it builds, stamps, and then runs a harness).
+* Every result JSON written by the W29 harnesses stamps: `profile`, **full SHA-256 of each binary**, the
+  `git status --porcelain` SHA-256 (dirty-tree fingerprint), `git rev-parse HEAD`, `rustc -V`,
+  and the host gate block. `bench-session.sh` and `run-matrix.sh` refuse a debug build unless
+  `--allow-debug` is given; an allowed debug run is written with
+  `verdict_eligible: false` and the reason `debug build: NOT_VERDICT_ELIGIBLE`. A debug row is
+  **never** a pass, a win, or a baseline: it is labelled non-eligible at row and file level.
+* Profile is taken from the cargo target directory (`target/release` vs `target/debug`, also
+  for a custom `CARGO_TARGET_DIR`). ELF debug sections are **not** a profile signal: this
+  workspace sets `[profile.release] debug = 1`, so release binaries legitimately contain
+  `.debug_info`.
+
+### 11.2 Statistics, noise, spread gate and the pass rule
+
+`stats(values)` reports `n, min, max, mean, p50 (median), p5, p95, spread, stdev, cv,
+ci95_low, ci95_high` (percentile bootstrap of the median, 2000 resamples, fixed seed
+20261112, so a re-analysis reproduces the same interval).
+
+```
+spread = (p95 - p5) / p50                      # fraction; > 0.15 => noisy
+noise  = max(spread(acos), spread(legacy), 0.05)
+PASS   iff same metric type AND same state
+          AND acos n >= 3 and legacy n >= 3
+          AND neither row noisy (spread <= 0.15)
+          AND acos_p50 <= legacy_p50 * (1 - noise)      # lower is better
+TIE    iff legacy_p50*(1-noise) < acos_p50 <= legacy_p50*(1+noise)   # NOT a pass
+FAIL   iff acos_p50 > legacy_p50*(1+noise)
+```
+
+* A row with `spread > 15 %` is `NOISY` and **cannot pass**, whatever the p50 says (the M5
+  PASS→FAIL flip at a 22 % spread is the motivating case). A single rep has no measured
+  spread and is therefore `NOISY`/unmeasurable for verdict purposes.
+* A **TIE is not a pass**; missing data is `NOT_MEASURED` (not a pass); insufficient samples
+  are `INSUFFICIENT` (not a pass). Higher-is-better metrics (throughput) use the mirrored
+  rule: `acos >= legacy * (1 + noise)`.
+* Latency rows still require **≥20 samples** for p50/p95 per §2 rule 2; memory rows require
+  **≥5 fresh-process reps**. The verdict function refuses fewer than 3 samples outright.
+
+### 11.3 Interleaved A/B (ABBA)
+
+`benchlib.abba(a, b, pairs=3)` runs `A B B A` per pair in one host window and returns both
+arms' `stats()`. Fewer than 3 pairs is flagged `pairs_ok: false` and cannot be cited as a
+verdict. Each callable may return its own sample (ms) or `None` to be wall-timed.
+
+### 11.4 Host gate and contamination
+
+Before a run and at each result stamp, `host_gate()` requires:
+
+* `loadavg1 <= 4.0`,
+* `MemAvailable >= 30 GiB`,
+* no other holder of the host-wide `art.lock` (probed with a non-blocking `flock`).
+
+A gate failure refuses the run (exit 4) or, if it happens mid-run, marks the row/result
+`contaminated` and excludes it from verdicts. ART work stays serialized through
+`tools/art-runtime/run-exclusive.sh --task <name> -- tools/guarded.sh --mem ... --`.
+Host limits from `docs/OPERATING_DIRECTIVES.md` §5 still bind.
+
+### 11.5 One result schema for the scenario matrix
+
+The matrix runner is `tools/run-matrix.sh`; it writes
+`results/bench/matrix-<UTC>.json` (validated before writing) plus a `.tsv` view. The schema is
+`results/bench/schema/matrix.schema.json` and its validator is
+`benchlib.validate_matrix()`. Each **row is one scenario run**, so a correctness run is also
+a cost sample:
+
+* identity: `run_id, utc, git, dirty_hash, profile, verdict_eligible, engine`;
+* scenario: `scenario, scenario_sha256, apk_sha256, variant (good|wrong|negative), expected
+  (pass|fail), verdict (pass|fail|error), false_pass, false_fail, negative`;
+* failure: `error {code, class, retryable, hint, message, step_index}` with
+  `class ∈ {assertion, app_crash, unsupported, harness, infra_timeout, host_guard}`;
+  `unclassified` must be 0;
+* cost: `wall_ms, guest_wall_ms, first_frame_ms, steps[{kind,ms,status}]`;
+* memory: `mem {cgroup_peak_mib, cgroup_gib_min, anon_shmem_settled_mib, pss_mib, settle_s,
+  metric_type, peak_type, pss_type, sample_count}`;
+* host: `host {loadavg1, loadavg5, mem_available_mib, mem_available_end_mib, contaminated}`.
+
+All `scenarios/negative/*.yaml` are included with `expected: fail`; `false_pass` is printed
+first and a non-zero count exits 1. The file is invalid (written as `*.invalid.json`, exit 1)
+if `false_pass > 0`, `unclassified > 0`, or a required field is missing.
+
+### 11.6 Memory columns and the same-type rule
+
+Every memory row states its type, state and settle time. The columns are reported side by
+side and **never summed across types**:
+
+1. **cgroup `memory.current`**, sampled every 100 ms inside the run's own systemd scope:
+   **peak MiB** and **integral GiB·min** (trapezoid over the job window, `Σ bytes/2^30 ×
+   Δt/60`).
+2. **PSS** summed over the run's cgroup processes (secondary, share-aware account).
+3. **cgroup `memory.stat` anon+shmem**, settled **60 s after first frame** — the **only**
+   column comparable with the legacy ACVM §3 per-session value (130.3 MiB, warm, N=1).
+
+`benchlib.compare_memory()` returns `NOT_COMPARABLE` (not-pass) when `metric_type`, `state`
+or (for anon+shmem) `settle_s` differ. This is why MILESTONE-1's “171.4 / 155 vs 130.3” line
+is not a comparison: it put cgroup peak + launcher + bwrap against legacy anon+shmem. Rows
+that cannot reach the 60 s settle are reported with `anon_shmem_settled_mib: null` and render
+`NOT_COMPARABLE`, never a ratio.
+
+### 11.7 Cold/warm states and what is measured today
+
+Three states are named in the schema: `first-run` (empty `ACOS_CACHE_DIR`), `cold-process`
+(no ACOS process alive, caches warm) and `warm` (session/pool already up). Today's `acos
+verify --engine art` path is **cold-process per task**; it exits before a 60 s settle, so the
+legacy-comparable anon+shmem column is NOT_MEASURED for it and the legacy comparison is
+NOT_COMPARABLE by construction. This is a limitation of the current session lifetime, not a
+missing measurement to be guessed at.
+
+### 11.8 Evidence of the method itself (smoke, not a verdict)
+
+On 2026-11-12T01:07:23Z the pipeline ran end to end on a release build of the working tree
+(profile `release`, `verdict_eligible: true`, binary sha256 recorded in the JSON):
+`results/bench/matrix-20261112T010723Z.json` — two N=1 runs, `v2-art-counter` pass and
+`scenarios/negative/missing-element.yaml` fail with `ELEMENT_NOT_FOUND` classified
+`assertion`, `false_pass: 0`, `unclassified: 0`, schema-valid. It is a **pipeline smoke test,
+not a performance result**; one run per row, no repetitions, no legacy comparison. Detail:
+`results/art-runtime/W29.md`.
+

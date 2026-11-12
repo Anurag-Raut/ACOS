@@ -1,0 +1,339 @@
+{
+  "legacy_reference": {
+    "metric_type": "CGROUP_ANON_SHMEM",
+    "settle_s": 60,
+    "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+    "state": "warm",
+    "value_mib": 130.3
+  },
+  "provenance": {
+    "artifacts_dir": ".cache/w29-smoke",
+    "binaries": [
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-12T00:59:54+00:00",
+        "not_eligible_reason": null,
+        "path": "/home/Qui/Projects/acos/.cache/w29-target/release/acos",
+        "profile": "release",
+        "profile_source": "path heuristic (release)",
+        "sha256": "34b3b1672683456b891864df6692399dd12853397943a5d36144f0ac15ecc39e",
+        "sha256_16": "34b3b1672683456b",
+        "size_bytes": 156944472,
+        "verdict_eligible": true
+      },
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-12T00:59:52+00:00",
+        "not_eligible_reason": null,
+        "path": "/home/Qui/Projects/acos/.cache/w29-target/release/acos-art",
+        "profile": "release",
+        "profile_source": "path heuristic (release)",
+        "sha256": "61c034a410f2a6bbc41e6e6e876cf50dc03cb0b39219766668e39a9cc598490a",
+        "sha256_16": "61c034a410f2a6bb",
+        "size_bytes": 55456912,
+        "verdict_eligible": true
+      }
+    ],
+    "engine": "art",
+    "engine_flag": true,
+    "git_dirty": true,
+    "git_dirty_files": 53,
+    "git_head": "e1175a75a8d235021738d3c5076253f1b4ab59e9",
+    "git_head_subject": "W27: MAIN/LAUNCHER resolution incl. activity-alias (Gaten debug starts), ACOSLAUNCH_RESUME_MS + timeout_ms, startActivity -> UNSUPPORTED_ANDROID_API (no exit), multi-window tree probe (dialog attach still blocks); advisor reports",
+    "git_status_porcelain_sha256": "9a471d870baee423de5c9f7046c95863b3125a61a7326d5f461229c4260d25da",
+    "host": {
+      "loadavg1": 0.5,
+      "loadavg15": 0.87,
+      "loadavg5": 0.74,
+      "mem_available_gib": 43.84,
+      "mem_available_mib": 44892.3,
+      "mem_total_gib": 60.46,
+      "mem_total_mib": 61908.7,
+      "nproc": 32,
+      "runnable": "1/2650",
+      "used_mib": 17016.4,
+      "used_pct": 27.49
+    },
+    "host_gate": {
+      "art_lock_checked": false,
+      "art_lock_held": null,
+      "last_art_run": "task=W29-matrix started_utc=2026-11-12T01:07:12Z finished_utc=2026-11-12T01:07:14Z elapsed_s=2 queue_wait_s=0 rc=0 cmd=/home/Qui/Projects/acos/tools/guarded.sh --mem 8G --time 900 -- python3 -I .cache/matrix-offline-test/art/driver.py /home/Qui/Projects/acos .cache/matrix-offline-test/matrix.json release /home/Qui/Projects/acos/.cache/fake-target/release/acos /home/Qui/Projects/acos/.cache/fake-target/release/acos-art none 1 100 0 300 .cache/matrix-offline-test/art  scenarios/v2-art-counter.yaml scenarios/negative/missing-element.yaml",
+      "limits": {
+        "loadavg1_max": 4.0,
+        "min_avail_gib": 30.0
+      },
+      "loadavg1": 0.5,
+      "loadavg15": 0.87,
+      "loadavg5": 0.74,
+      "mem_available_gib": 43.84,
+      "mem_available_mib": 44894.8,
+      "mem_total_gib": 60.46,
+      "ok": true,
+      "reasons": [],
+      "utc": "2026-11-12T01:07:31+00:00"
+    },
+    "method": "BENCHMARKS.md section 11 (benchlib.py)",
+    "not_verdict_eligible_reason": null,
+    "profile": "release",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "sample_ms": 100,
+    "schema": "acos-bench-provenance/1",
+    "settle_s": 0,
+    "utc": "2026-11-12T01:07:31+00:00",
+    "verdict_eligible": true
+  },
+  "runs": [
+    {
+      "apk_sha256": "e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366",
+      "art_engine_flag": true,
+      "artifacts": ".cache/w29-smoke/01-v2-art-counter-r1",
+      "dirty_hash": "9a471d870baee423de5c9f7046c95863b3125a61a7326d5f461229c4260d25da",
+      "engine": "art",
+      "error": null,
+      "expected": "pass",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 232.0,
+      "git": "e1175a75a8d235021738d3c5076253f1b4ab59e9",
+      "guest_wall_ms": 4614,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 0.55,
+        "loadavg5": null,
+        "mem_available_end_mib": 44914.3,
+        "mem_available_mib": 45015.8
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.012141,
+        "cgroup_peak_mib": 302.23,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 322.62,
+        "pss_type": "PSS",
+        "sample_count": 66,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": false,
+      "profile": "release",
+      "rc": 0,
+      "run_id": "01-v2-art-counter-r1",
+      "scenario": "scenarios/v2-art-counter.yaml",
+      "scenario_sha256": "cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 231,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 1,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 2,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 1352,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "pass"
+        },
+        {
+          "kind": "capture",
+          "ms": 252,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 1375,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 1374,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "pass"
+        }
+      ],
+      "utc": "2026-11-12T01:07:30+00:00",
+      "variant": "good",
+      "verdict": "pass",
+      "verdict_eligible": true,
+      "wall_ms": 6666.5
+    },
+    {
+      "apk_sha256": "3c00f4cacca563351f43b797b8fe855c3413593a1c81aeb6ec0f3cc155a5e429",
+      "art_engine_flag": true,
+      "artifacts": ".cache/w29-smoke/02-negative-missing-element-r1",
+      "dirty_hash": "9a471d870baee423de5c9f7046c95863b3125a61a7326d5f461229c4260d25da",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector Selector { id: Some(\"does_not_exist\"), text: None, hint: None, content_desc: None, class: None, bounds: None, index: None } matched no node",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 251.0,
+      "git": "e1175a75a8d235021738d3c5076253f1b4ab59e9",
+      "guest_wall_ms": 257,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 0.5,
+        "loadavg5": null,
+        "mem_available_end_mib": 44896.2,
+        "mem_available_mib": 44913.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.000206,
+        "cgroup_peak_mib": 51.81,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 59.5,
+        "pss_type": "PSS",
+        "sample_count": 8,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "02-negative-missing-element-r1",
+      "scenario": "scenarios/negative/missing-element.yaml",
+      "scenario_sha256": "13453ca571752c5379c2c8d27dc4dc646c04c4396b43bc86c7c846881a770221",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 250,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 1,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_visible",
+          "ms": 1,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-12T01:07:31+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 824.3
+    }
+  ],
+  "schema": "acos-bench-matrix/1",
+  "summary": {
+    "classes": {
+      "assertion": 1,
+      "pass": 1
+    },
+    "errors": 0,
+    "failed": 1,
+    "false_fail": 0,
+    "false_pass": 0,
+    "gates": {
+      "false_pass_zero": true,
+      "harness_timeout_within_2pct": true,
+      "negative_all_correct": true,
+      "unclassified_zero": true
+    },
+    "harness_or_timeout": 0,
+    "negative_correct": 1,
+    "negative_runs": 1,
+    "passed": 1,
+    "total_runs": 2,
+    "unclassified": 0,
+    "verdict_eligible": true
+  },
+  "utc": "2026-11-12T01:07:31+00:00"
+}

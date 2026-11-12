@@ -8,6 +8,18 @@
 #                                      [--reps 1] [--sample-ms 100] [--out DIR]
 #                                      [--min-avail-gib 9] [--max-used 75]
 #                                      [--keep-frames] [--no-build]
+#                                      [--profile release|debug] [--target-dir DIR]
+#                                      [--allow-debug] [--analyze DIR]
+#
+# Build profile (W29): RELEASE ONLY for verdicts. The binaries are read from
+#   ${CARGO_TARGET_DIR:-target}/<profile>/{acos,acos-art}  (override: --target-dir,
+#   --profile). A debug run is refused unless --allow-debug is passed; an allowed
+#   debug run is written with provenance.verdict_eligible=false and the reason
+#   "debug build: NOT_VERDICT_ELIGIBLE", so its numbers can never be cited as
+#   a D2 verdict. tools/art-runtime/bench-release.sh builds release then runs.
+#   Every result JSON stamps profile, full binary sha256 per binary, the
+#   git-status porcelain hash, rustc, and the host gate
+#   (tools/benchlib.py; BENCHMARKS.md section 11).
 #
 # Modes
 #   full      N concurrent `acos verify --engine art --scenario
@@ -94,6 +106,9 @@ KEEP_FRAMES=0
 NO_BUILD=0
 ANALYZE=""
 GUARD_MEM=""
+PROFILE="${ACOS_BENCH_PROFILE:-release}"
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+ALLOW_DEBUG=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --n)             NS="$2"; shift 2 ;;
@@ -107,6 +122,9 @@ while [ $# -gt 0 ]; do
         --analyze)       ANALYZE="$2"; shift 2 ;;
         --no-build)      NO_BUILD=1; shift ;;
         --mem)           GUARD_MEM="$2"; shift 2 ;;
+        --profile)       PROFILE="$2"; shift 2 ;;
+        --target-dir)    TARGET_DIR="$2"; shift 2 ;;
+        --allow-debug)   ALLOW_DEBUG=1; shift ;;
         -h|--help)       usage; exit 0 ;;
         *) echo "bench-session: unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -121,18 +139,54 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 [ -n "$OUT" ] || OUT="$ROOT/.cache/bench-session/$STAMP"
 mkdir -p "$OUT"
 
+case "$PROFILE" in
+    release|debug) ;;
+    *) echo "bench-session: --profile must be release or debug (got '$PROFILE')" >&2; exit 2 ;;
+esac
+case "$TARGET_DIR" in
+    /*) BIN_ROOT="$TARGET_DIR" ;;
+    *)  BIN_ROOT="$ROOT/$TARGET_DIR" ;;
+esac
+if [ "$PROFILE" != "release" ] && [ "$ALLOW_DEBUG" -eq 0 ]; then
+    echo "bench-session: refusing a $PROFILE build (verdicts are release-only)." >&2
+    echo "bench-session: rebuild with tools/art-runtime/bench-release.sh, or pass" >&2
+    echo "bench-session: --allow-debug to record explicitly NOT_VERDICT_ELIGIBLE rows." >&2
+    exit 5
+fi
+
 APK="fixtures/build/apps/counter.apk"
 SCENARIO="scenarios/v2-art-counter.yaml"
-ACOS="$ROOT/target/debug/acos"
-ACOS_ART="$ROOT/target/debug/acos-art"
+ACOS="$BIN_ROOT/$PROFILE/acos"
+ACOS_ART="$BIN_ROOT/$PROFILE/acos-art"
+
+# Host gate (loadavg1 <= 4.0, MemAvailable >= 30 GiB). The ART lock is taken by
+# run-exclusive.sh at the end of this script, so the probe here skips the lock.
+if ! python3 -I - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import benchlib
+g = benchlib.host_gate(sys.argv[1], check_lock=False)
+print("bench-session: host gate %s (loadavg1 %s, MemAvailable %s GiB)"
+      % ("ok" if g["ok"] else "REFUSED", g["loadavg1"], g["mem_available_gib"]),
+      file=sys.stderr)
+if not g["ok"]:
+    for r in g["reasons"]:
+        print("bench-session:   " + r, file=sys.stderr)
+    sys.exit(1)
+PY
+then
+    exit 4
+fi
 
 if [ ! -f "$APK" ]; then echo "bench-session: $APK missing (run tools/build-apps.sh)" >&2; exit 2; fi
 if [ ! -f "$SCENARIO" ]; then echo "bench-session: $SCENARIO missing" >&2; exit 2; fi
 
-# ---- build (guarded); --no-build reuses the existing debug binaries ----
+# ---- build (guarded); --no-build reuses existing binaries of this profile ----
+BUILD_ARGS=(-p acos-cli -p acos-art)
+[ "$PROFILE" = release ] && BUILD_ARGS=(--release "${BUILD_ARGS[@]}")
 if [ "$NO_BUILD" -eq 0 ]; then
-    if ! "$ROOT/tools/guarded.sh" --mem 12G --time 900 -- \
-            cargo build -p acos-cli -p acos-art >"$OUT/build.log" 2>&1; then
+    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guarded.sh" --mem 12G --time 900 -- \
+            cargo build "${BUILD_ARGS[@]}" >"$OUT/build.log" 2>&1; then
         echo "bench-session: build failed; see $OUT/build.log" >&2
         exit 3
     fi
@@ -190,9 +244,10 @@ if _ARGV and _ARGV[0] == "--analyze":
     NS_ARG = MODES_ARG = ""
     REPS_ARG, SAMPLE_MS_ARG, MIN_AVAIL_ARG, MAX_USED_ARG = "1", "100", "9", "75"
     KEEP_FRAMES_ARG = "0"
+    PROFILE_ARG, ACOS_ARG, ACOS_ART_ARG = "unknown", "", ""
 else:
     (ROOT, OUT, NS_ARG, MODES_ARG, REPS_ARG, SAMPLE_MS_ARG, MIN_AVAIL_ARG,
-     MAX_USED_ARG, KEEP_FRAMES_ARG) = _ARGV[:9]
+     MAX_USED_ARG, KEEP_FRAMES_ARG, PROFILE_ARG, ACOS_ARG, ACOS_ART_ARG) = _ARGV[:12]
 NS = [int(x) for x in NS_ARG.split()]
 MODES = MODES_ARG.split()
 REPS = int(REPS_ARG)
@@ -200,10 +255,24 @@ SAMPLE_MS = int(SAMPLE_MS_ARG)
 MIN_AVAIL_GIB = float(MIN_AVAIL_ARG)
 MAX_USED = float(MAX_USED_ARG)
 KEEP_FRAMES = KEEP_FRAMES_ARG == "1"
+PROFILE = PROFILE_ARG
+VERDICT_ELIGIBLE = PROFILE == "release"
+
+# Shared statistics/noise/provenance library (W29). Re-analysis mode does not
+# import it: it must never need a binary or a measurement to re-render a table.
+benchlib = None
+_lib_root = ROOT or os.getcwd()
+if os.path.isdir(os.path.join(_lib_root, "tools")):
+    sys.path.insert(0, os.path.join(_lib_root, "tools"))
+    try:
+        import benchlib  # noqa: E402
+    except Exception as _exc:  # pragma: no cover - defensive
+        print("bench-session: benchlib import failed: %s" % _exc, file=sys.stderr)
+        raise
 APK = os.path.join(ROOT, "fixtures/build/apps/counter.apk")
 SCENARIO = os.path.join(ROOT, "scenarios/v2-art-counter.yaml")
-ACOS = os.path.join(ROOT, "target/debug/acos")
-ACOS_ART = os.path.join(ROOT, "target/debug/acos-art")
+ACOS = ACOS_ARG or os.path.join(ROOT, "target/release/acos")
+ACOS_ART = ACOS_ART_ARG or os.path.join(ROOT, "target/release/acos-art")
 COUNT_SUFFIX = ":id/count"
 
 ROLES = {  # comm -> component label (first match wins)
@@ -783,6 +852,11 @@ def run_cohort(mode, n, repdir, idle_baseline):
         steady = (statistics.median([without_cli(r) for r in use]) / 1024.0) if use else 0.0
         n_alloc, alloc_mib = gralloc_log(getattr(s, "guest_log", "") or "")
         cg = [r.get("cgroup") for r in use if r.get("cgroup")]
+        cg_series = [{"t": r["t"], "bytes": r["sessions"][s.label]["cgroup"]["current_bytes"]}
+                     for r in rows if s.label in r["sessions"]
+                     and r["sessions"][s.label].get("cgroup")
+                     and r["sessions"][s.label]["cgroup"].get("current_bytes") is not None]
+        cg_gib_min = (benchlib.sample_integral(cg_series) if benchlib is not None else None)
         cg_peak_current = max((c["current_bytes"] for c in cg), default=0) / (1024.0 * 1024.0)
         cg_kernel_peak = max((c["peak_bytes"] for c in cg), default=0) / (1024.0 * 1024.0)
         cg_max = max((c["max_bytes"] for c in cg), default=0) / (1024.0 * 1024.0)
@@ -830,11 +904,15 @@ def run_cohort(mode, n, repdir, idle_baseline):
             "comms": sorted({c for r in use for c in r.get("comms", [])}),
             "roles": role_peak,
             "cgroup": {"peak_current_mib": round(cg_peak_current, 2),
+                       "gib_min": round(cg_gib_min, 6) if cg_gib_min is not None else None,
                        "kernel_peak_mib": round(cg_kernel_peak, 2),
                        "max_mib": round(cg_max, 2),
                        "stat_anon_mib": round(cg_stat.get("anon", 0) / (1024.0 * 1024.0), 2),
                        "stat_file_mib": round(cg_stat.get("file", 0) / (1024.0 * 1024.0), 2),
                        "stat_shmem_mib": round(cg_stat.get("shmem", 0) / (1024.0 * 1024.0), 2),
+                       "stat_anon_shmem_mib": round((cg_stat.get("anon", 0)
+                                                     + cg_stat.get("shmem", 0))
+                                                    / (1024.0 * 1024.0), 2),
                        "oom_kills": oom},
             "gralloc_open_fds_peak": max((r["gralloc_fds"] for r in use), default=0),
             "gralloc_alloc_count": n_alloc,
@@ -872,6 +950,8 @@ def run_cohort(mode, n, repdir, idle_baseline):
             "sum_cli_peak_pss_mib": round(sum(p["cli_peak_pss_mib"] for p in per.values()), 2),
             "sum_gralloc_alloc_mib": round(sum(p["gralloc_alloc_mib"] for p in per.values()), 2),
             "sum_cgroup_peak_current_mib": round(sum(p["cgroup"]["peak_current_mib"] for p in per.values()), 2),
+            "sum_cgroup_gib_min": round(sum((p["cgroup"].get("gib_min") or 0.0)
+                                            for p in per.values()), 6),
             "sum_cpu_s": round(sum(p["cpu_s"] for p in per.values()), 2),
         },
         "correctness": {
@@ -929,13 +1009,48 @@ def git(*args):
 
 
 def provenance():
+    """Provenance block. W29: benchlib stamps profile + full binary sha256 +
+    git-status hash + rustc + host gate; a non-release profile is recorded as
+    NOT_VERDICT_ELIGIBLE (the shell refuses debug unless --allow-debug)."""
+    gate = None
+    lib = None
+    if benchlib is not None:
+        gate = benchlib.host_gate(ROOT, check_lock=False)
+        lib = {
+            "schema": "acos-bench-provenance/1",
+            "profile": PROFILE,
+            "verdict_eligible": VERDICT_ELIGIBLE,
+            "not_verdict_eligible_reason": (None if VERDICT_ELIGIBLE else
+                                            "%s build: NOT_VERDICT_ELIGIBLE "
+                                            "(verdicts require a release build)" % PROFILE),
+            "binaries": [benchlib.binary_provenance(ACOS, PROFILE),
+                         benchlib.binary_provenance(ACOS_ART, PROFILE)],
+            "git": {
+                "head": git("rev-parse", "HEAD"),
+                "head_subject": git("log", "-1", "--format=%s"),
+                "status_porcelain_sha256": benchlib.repo_dirty_hash(ROOT)[0],
+                "dirty_files": len([l for l in git("status", "--porcelain").splitlines() if l.strip()]),
+            },
+            "rustc": benchlib.rustc_version(),
+            "host_gate": gate,
+            "method": "BENCHMARKS.md section 11 (tools/benchlib.py)",
+        }
     return {
         "utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "git_head": git("rev-parse", "HEAD"),
         "git_head_subject": git("log", "-1", "--format=%s"),
+        "git_status_porcelain_sha256": (benchlib.repo_dirty_hash(ROOT)[0]
+                                        if benchlib is not None else None),
         "crates_dirty_files": len([l for l in git("status", "--porcelain", "crates").splitlines() if l.strip()]),
-        "acos_binary": "target/debug/acos",
+        "profile": PROFILE,
+        "verdict_eligible": VERDICT_ELIGIBLE,
+        "not_verdict_eligible_reason": (None if VERDICT_ELIGIBLE else
+                                        "%s build: NOT_VERDICT_ELIGIBLE" % PROFILE),
+        "acos_binary": os.path.relpath(ACOS, ROOT) if ACOS else None,
+        "acos_sha256": (benchlib.sha256_file(ACOS) if benchlib is not None else sha256_16(ACOS)),
         "acos_sha256_16": sha256_16(ACOS),
+        "acos_art_binary": os.path.relpath(ACOS_ART, ROOT) if ACOS_ART else None,
+        "acos_art_sha256": (benchlib.sha256_file(ACOS_ART) if benchlib is not None else sha256_16(ACOS_ART)),
         "acos_art_sha256_16": sha256_16(ACOS_ART),
         "apk": "fixtures/build/apps/counter.apk",
         "apk_sha256_16": sha256_16(APK),
@@ -954,6 +1069,7 @@ def provenance():
                         "memory.peak of the guest's own scope; host used = MemTotal-MemAvailable; "
                         "host PSS = sum of Pss over every host process. Never summed across types.",
         "host": {**meminfo(), "nproc": os.cpu_count(), "loadavg": open("/proc/loadavg").read().split()[:3]},
+        "shared_lib": lib,
     }
 
 
@@ -962,9 +1078,53 @@ def _med(vals):
     return round(statistics.median(vals), 2) if vals else None
 
 
+def memory_columns(cohort):
+    """W29 same-type memory columns (BENCHMARKS.md section 11, item 6).
+
+    Columns, never summed across types:
+      * cgroup memory.current peak per session (sampled every SAMPLE_MS)
+      * cgroup GiB-min integral (per job window, trapezoid over memory.current)
+      * PSS per session (secondary, share-aware)
+      * cgroup memory.stat anon+shmem -- THE legacy-comparable type -- only at
+        a 60 s settle after first frame. bench-session's `acos verify` sessions
+        exit before 60 s, so that column is reported as NOT_MEASURED here and
+        the legacy comparison renders NOT_COMPARABLE (never a win).
+    """
+    sessions = cohort["sessions"]
+    gib_min = [v.get("cgroup", {}).get("gib_min") for v in sessions.values()]
+    gib_min = [g for g in gib_min if g is not None]
+    pss = [v.get("peak_pss_mib") for v in sessions.values()]
+    at_exit = [v.get("cgroup", {}).get("stat_anon_shmem_mib") for v in sessions.values()]
+    at_exit = [a for a in at_exit if a is not None]
+    cols = {
+        "cgroup_peak_mib_per_session": _med([v["cgroup"]["peak_current_mib"]
+                                             for v in sessions.values()]),
+        "cgroup_gib_min_total": round(sum(gib_min), 6) if gib_min else None,
+        "pss_mib_per_session_secondary": _med(pss),
+        "anon_shmem_at_exit_mib_per_session": _med(at_exit),
+        "anon_shmem_settled_mib_per_session": None,
+        "settle_s": None,
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "state": "cold-process",
+        "note": "only anon+shmem settled 60 s after first frame is comparable with the legacy "
+                "ACVM section 3 value; the verify session exits before 60 s, so the comparable "
+                "column is NOT_MEASURED and any legacy ratio is NOT_COMPARABLE. cgroup peak, "
+                "GiB-min and PSS are separate columns and are never added to anon+shmem.",
+    }
+    if benchlib is not None:
+        acos_row = {"value_mib": cols["anon_shmem_settled_mib_per_session"],
+                    "metric_type": "CGROUP_ANON_SHMEM", "state": "cold-process",
+                    "settle_s": None, "n": len(sessions)}
+        cols["legacy_comparison"] = benchlib.compare_memory(
+            acos_row, benchlib.legacy_memory_reference())
+    return cols
+
+
 def derive(run):
-    """Per-session totals, marginals and the Option A / interactive deltas."""
+    """Per-session totals, marginals, the Option A / interactive deltas and the
+    W29 same-type memory columns / repeated-rep statistics."""
     cohorts = run["cohorts"]
+    prov = run.get("provenance") or {}
     for c in cohorts:
         s = c["sessions"]
         per_total = [v["cgroup"]["peak_current_mib"] + v["roles"]["launcher"]["pss_mib"]
@@ -985,9 +1145,24 @@ def derive(run):
             "tap_ms_max": round(max(taps), 1) if taps else None,
             "first_frame_ms_median": _med(launch_ms),
             "session_wall_s_median": _med(walls),
+            "memory_columns": memory_columns(c),
+            "profile": prov.get("profile"),
+            "verdict_eligible": prov.get("verdict_eligible"),
             "note": "per-session total = guest cgroup memory.peak + launcher PSS + bwrap PSS "
                     "(cgroup counts shared sysroot file pages once per cgroup, so it is an upper "
                     "bound when sessions share them; the PSS columns divide shared pages instead).",
+        }
+        c["derived"]["memory"] = {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "state": "cold-process",
+            "settle_s": None,
+            "cgroup_peak_mib": c["derived"]["memory_columns"]["cgroup_peak_mib_per_session"],
+            "cgroup_gib_min": c["derived"]["memory_columns"]["cgroup_gib_min_total"],
+            "pss_mib": c["derived"]["memory_columns"]["pss_mib_per_session_secondary"],
+            "anon_shmem_settled_mib": None,
+            "anon_shmem_at_exit_mib": c["derived"]["memory_columns"][
+                "anon_shmem_at_exit_mib_per_session"],
+            "legacy_comparison": c["derived"]["memory_columns"].get("legacy_comparison"),
         }
     # marginal per session from the cohort sums
     for mode in sorted({c["mode"] for c in cohorts}):
@@ -1004,6 +1179,33 @@ def derive(run):
                 / (cur["n"] - prev["n"]), 2)
             cur["derived"]["marginal_from_mode_n"] = "%s N=%d" % (mode, prev["n"])
     by = {(c["mode"], c["n"]): c for c in cohorts}
+    # W29: repeated-rep statistics per (mode, N, metric). One rep has no spread;
+    # benchlib.is_noisy() then reports the row as unmeasurable, so a single rep
+    # can never produce a PASS. These blocks are the raw material for the
+    # benchlib.verdict() call once a legacy row of the same type/state exists.
+    for mode in sorted({c["mode"] for c in cohorts}):
+        for n in sorted({c["n"] for c in cohorts if c["mode"] == mode}):
+            reps = [c for c in cohorts if c["mode"] == mode and c["n"] == n]
+            if len(reps) < 1 or benchlib is None:
+                continue
+            metrics = {}
+            for key, getter in (
+                ("cgroup_peak_mib_per_session",
+                 lambda c: c["derived"]["memory_columns"]["cgroup_peak_mib_per_session"]),
+                ("pss_mib_per_session",
+                 lambda c: c["derived"]["memory_columns"]["pss_mib_per_session_secondary"]),
+                ("cgroup_gib_min_total",
+                 lambda c: c["derived"]["memory_columns"]["cgroup_gib_min_total"]),
+                ("tap_ms_median", lambda c: c["derived"]["tap_ms_median"]),
+                ("first_frame_ms_median", lambda c: c["derived"]["first_frame_ms_median"]),
+                ("session_wall_s_median", lambda c: c["derived"]["session_wall_s_median"]),
+            ):
+                vals = [getter(c) for c in reps]
+                st = benchlib.stats([v for v in vals if v is not None])
+                st["noisy"] = benchlib.is_noisy(st)
+                st["reps"] = len(reps)
+                metrics[key] = st
+            reps[-1]["derived"]["rep_stats"] = metrics
     comp = []
     for n in sorted({c["n"] for c in cohorts}):
         full, launch, render = by.get(("full", n)), by.get(("launch", n)), by.get(("render", n))
@@ -1112,6 +1314,43 @@ def render_table(run):
                        fmt(ie.get("gralloc_alloc_count_launch_median"), 0),
                        fmt(ie.get("gralloc_alloc_count_full_median"), 0)))
     out.append("")
+    out.append("")
+    out.append("## W29 memory columns (same-type comparison only; BENCHMARKS.md section 11)")
+    out.append("")
+    out.append("| cohort | cgroup peak MiB/session | cgroup GiB-min total | PSS MiB/session (secondary) "
+               "| anon+shmem at exit MiB | anon+shmem settled-60s MiB | legacy ACVM 130.3 MiB "
+               "(anon+shmem, warm, 60 s) |")
+    out.append("|---|---|---|---|---|---|---|")
+    for c in run["cohorts"]:
+        mc = (c["derived"].get("memory_columns") or {})
+        lc = (mc.get("legacy_comparison") or {})
+        verdict = lc.get("verdict") or "NOT_MEASURED"
+        why = "; ".join(lc.get("reasons") or [])
+        out.append("| %s N=%d | %s | %s | %s | %s | %s | **%s**%s |" % (
+            c["mode"], c["n"], fmt(mc.get("cgroup_peak_mib_per_session")),
+            fmt(mc.get("cgroup_gib_min_total"), 4),
+            fmt(mc.get("pss_mib_per_session_secondary")),
+            fmt(mc.get("anon_shmem_at_exit_mib_per_session")),
+            fmt(mc.get("anon_shmem_settled_mib_per_session")), verdict,
+            (" (" + why + ")") if why else ""))
+    out.append("")
+    out.append("A row whose metric type or state differs from the legacy row is "
+               "NOT_COMPARABLE, and a comparison over a single rep has no measured "
+               "spread so it can never PASS (tools/benchlib.py).")
+    out.append("")
+    out.append("")
+    out.append("## W29 repeated-rep statistics (last rep per cohort; one rep = no spread = not passable)")
+    out.append("")
+    out.append("| cohort | metric | n | p50 | p95 | spread % | 95% CI of p50 | noisy |")
+    out.append("|---|---|---|---|---|---|---|---|")
+    for c in run["cohorts"]:
+        for key, st in (c["derived"].get("rep_stats") or {}).items():
+            out.append("| %s N=%d | %s | %s | %s | %s | %s | %s..%s | %s |" % (
+                c["mode"], c["n"], key, st.get("n"), fmt(st.get("p50"), 3),
+                fmt(st.get("p95"), 3), fmt(st.get("spread_pct")),
+                fmt(st.get("ci95_low"), 3), fmt(st.get("ci95_high"), 3),
+                "yes" if st.get("noisy") else "no"))
+    out.append("")
     out.append("Guest gralloc allocations (`ACOSART_HW_VERBOSE` `allocate:` lines, virtual bytes) "
                "per session: " + ", ".join("%s/%s=%dx%s MiB" % (c["mode"], l, v["gralloc_alloc_count"],
                                                                  fmt(v["gralloc_alloc_mib"]))
@@ -1127,6 +1366,10 @@ def main():
             "avail_mib": round(idle_host["avail_mib"], 1),
             "pss_mib": round(host_pss_mib(), 1)}
     run = {"schema": "acos-bench-session/1",
+           "profile": PROFILE,
+           "verdict_eligible": VERDICT_ELIGIBLE,
+           "not_verdict_eligible_reason": (None if VERDICT_ELIGIBLE else
+                                           "%s build: NOT_VERDICT_ELIGIBLE" % PROFILE),
            "provenance": provenance(),
            "idle_baseline": idle,
            "cohorts": [],
@@ -1148,6 +1391,8 @@ def main():
                 repdir = os.path.join(OUT, "session-%s-N%d" % (mode, n), "rep-%d" % k)
                 summ = run_cohort(mode, n, repdir, idle)
                 summ["rep"] = k
+                summ["profile"] = PROFILE
+                summ["verdict_eligible"] = VERDICT_ELIGIBLE
                 run["cohorts"].append(summ)
                 print("bench-session: %s N=%d rep=%d pass %d/%d peak_host %.1f%%"
                       % (mode, n, k, summ["correctness"]["passed"], n,
@@ -1205,4 +1450,4 @@ fi
 exec "$ROOT/tools/art-runtime/run-exclusive.sh" --task "W12-bench" -- \
     "$ROOT/tools/guarded.sh" --mem "$MEM" --time 1800 -- \
     python3 -I "$OUT/driver.py" "$ROOT" "$OUT" "$NS" "$MODES" "$REPS" "$SAMPLE_MS" \
-    "$MIN_AVAIL_GIB" "$MAX_USED" "$KEEP_FRAMES"
+    "$MIN_AVAIL_GIB" "$MAX_USED" "$KEEP_FRAMES" "$PROFILE" "$ACOS" "$ACOS_ART"

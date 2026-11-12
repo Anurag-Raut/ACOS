@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "acos-bench-matrix/1",
+  "title": "ACOS scenario matrix result (one row per scenario run)",
+  "description": "The single result schema for the ACOS scenario matrix (BENCHMARKS.md section 11, W29). Written by tools/run-matrix.sh to results/bench/matrix-<UTC>.json. Each row is one scenario run and carries its cost (wall ms, cgroup peak + GiB-min, PSS) and its structured failure class, so a correctness run is also a cost sample. Negative scenarios are first-class rows with variant=negative and expected=fail; any false pass or unclassified error makes the file invalid.",
+  "type": "object",
+  "required": ["schema", "provenance", "runs", "summary"],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {"const": "acos-bench-matrix/1"},
+    "provenance": {
+      "type": "object",
+      "required": ["utc", "git_head", "profile", "verdict_eligible", "binaries"],
+      "properties": {
+        "schema": {"const": "acos-bench-provenance/1"},
+        "utc": {"type": "string", "description": "ISO-8601 UTC start time"},
+        "git_head": {"type": "string"},
+        "git_status_porcelain_sha256": {"type": ["string", "null"]},
+        "git_dirty": {"type": "boolean"},
+        "rustc": {"type": ["string", "null"]},
+        "profile": {"enum": ["release", "debug", "unknown"]},
+        "verdict_eligible": {"type": "boolean", "description": "true only for a release build; debug rows are NOT_VERDICT_ELIGIBLE"},
+        "not_verdict_eligible_reason": {"type": ["string", "null"]},
+        "engine": {"type": ["string", "null"]},
+        "binaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "profile", "sha256", "verdict_eligible"],
+            "properties": {
+              "path": {"type": "string"},
+              "profile": {"enum": ["release", "debug", "unknown"]},
+              "sha256": {"type": ["string", "null"], "description": "full 64-hex sha256"},
+              "verdict_eligible": {"type": "boolean"},
+              "not_eligible_reason": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "host_gate": {"type": ["object", "null"]}
+      }
+    },
+    "legacy_reference": {
+      "type": "object",
+      "description": "Frozen legacy ACVM reference (BENCHMARKS.md section 3). Only a same-type/same-state row may be compared with it.",
+      "properties": {
+        "value_mib": {"type": "number"},
+        "metric_type": {"const": "CGROUP_ANON_SHMEM"},
+        "state": {"const": "warm"},
+        "settle_s": {"const": 60},
+        "source": {"type": "string"}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["run_id", "utc", "scenario", "variant", "expected", "verdict",
+                     "false_pass", "state", "n_concurrent", "wall_ms", "mem", "host",
+                     "profile", "engine", "verdict_eligible", "error", "negative"],
+        "properties": {
+          "run_id": {"type": "string"},
+          "utc": {"type": "string"},
+          "git": {"type": ["string", "null"]},
+          "dirty_hash": {"type": ["string", "null"]},
+          "profile": {"enum": ["release", "debug", "unknown"]},
+          "verdict_eligible": {"type": "boolean"},
+          "engine": {"type": "string"},
+          "scenario": {"type": "string", "description": "repo-relative scenario path"},
+          "scenario_sha256": {"type": ["string", "null"]},
+          "apk_sha256": {"type": ["string", "null"]},
+          "variant": {"enum": ["good", "wrong", "negative"]},
+          "expected": {"enum": ["pass", "fail"]},
+          "verdict": {"enum": ["pass", "fail", "error"]},
+          "false_pass": {"type": "boolean", "description": "must be false for every row"},
+          "false_fail": {"type": "boolean"},
+          "negative": {"type": "boolean", "description": "the negative-scenarios column"},
+          "error": {
+            "type": ["object", "null"],
+            "description": "null when the run passed; otherwise the structured failure",
+            "required": ["code", "class", "retryable", "hint"],
+            "properties": {
+              "code": {"type": "string"},
+              "class": {"enum": ["assertion", "app_crash", "unsupported", "harness",
+                                 "infra_timeout", "host_guard", "unknown"]},
+              "retryable": {"type": "boolean"},
+              "hint": {"type": "string"},
+              "message": {"type": ["string", "null"]},
+              "step_index": {"type": ["integer", "null"]}
+            }
+          },
+          "state": {"enum": ["first-run", "cold-process", "cold", "warm", "unknown"]},
+          "n_concurrent": {"type": "integer", "minimum": 1},
+          "wall_ms": {"type": "number", "description": "host-measured wall of the whole run"},
+          "guest_wall_ms": {"type": ["number", "null"]},
+          "first_frame_ms": {"type": ["number", "null"]},
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {"type": "string"},
+                "ms": {"type": ["number", "null"]},
+                "status": {"type": "string"}
+              }
+            }
+          },
+          "mem": {
+            "type": "object",
+            "required": ["cgroup_peak_mib", "cgroup_gib_min", "anon_shmem_settled_mib",
+                         "pss_mib", "metric_type", "settle_s"],
+            "description": "cgroup memory.current sampled every 100 ms (peak + trapezoid integral in GiB-min); PSS is secondary and never summed with cgroup; the legacy-comparable column is cgroup memory.stat anon+shmem at the stated settle time",
+            "properties": {
+              "cgroup_peak_mib": {"type": ["number", "null"]},
+              "cgroup_gib_min": {"type": ["number", "null"]},
+              "anon_shmem_settled_mib": {"type": ["number", "null"]},
+              "pss_mib": {"type": ["number", "null"]},
+              "settle_s": {"type": ["number", "null"]},
+              "metric_type": {"const": "CGROUP_ANON_SHMEM"},
+              "peak_type": {"const": "CGROUP_MEMORY_CURRENT"},
+              "pss_type": {"const": "PSS"},
+              "legacy_comparison": {"type": ["object", "null"]},
+              "sample_count": {"type": ["integer", "null"]},
+              "cgroup_source": {"type": ["string", "null"]}
+            }
+          },
+          "host": {
+            "type": "object",
+            "required": ["loadavg1", "mem_available_mib"],
+            "properties": {
+              "loadavg1": {"type": ["number", "null"]},
+              "loadavg5": {"type": ["number", "null"]},
+              "mem_available_mib": {"type": ["number", "null"]},
+              "mem_available_end_mib": {"type": ["number", "null"]},
+              "contaminated": {"type": "boolean"}
+            }
+          },
+          "artifacts": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_runs", "passed", "failed", "false_pass", "negative_runs",
+                   "unclassified"],
+      "properties": {
+        "total_runs": {"type": "integer"},
+        "passed": {"type": "integer"},
+        "failed": {"type": "integer"},
+        "errors": {"type": "integer"},
+        "false_pass": {"type": "integer", "description": "gate: must be 0"},
+        "false_fail": {"type": "integer"},
+        "negative_runs": {"type": "integer", "description": "the negative-scenarios column"},
+        "negative_correct": {"type": "integer"},
+        "unclassified": {"type": "integer", "description": "gate: must be 0"},
+        "harness_or_timeout": {"type": "integer", "description": "gate: <= 2% of runs"},
+        "classes": {"type": "object"},
+        "verdict_eligible": {"type": "boolean"},
+        "gates": {"type": "object"}
+      }
+    }
+  }
+}
