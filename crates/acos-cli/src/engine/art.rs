@@ -2653,6 +2653,7 @@ mod tests {
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
         // `resolve_binary` is the only reader of this variable in this crate, and
         // only this test starts a session.
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         assert!(session.capabilities().reset);
@@ -2771,6 +2772,7 @@ mod tests {
         let script = refusing_art_binary(&dir, 1);
         let apk = dir.join("fake.apk");
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         std::env::set_var("ACOS_ART_SETTLE_MS", "3000");
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
@@ -2924,6 +2926,7 @@ mod tests {
         std::fs::set_permissions(&script, perms).unwrap();
         let apk = dir.join("fake.apk");
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("ready line arrives first");
         // The child is already gone: the write fails with EPIPE or the read sees
@@ -2990,6 +2993,7 @@ mod tests {
         let stale = dir.join("art-frames/session-exit.json");
         std::fs::create_dir_all(dir.join("art-frames")).unwrap();
         std::fs::write(&stale, br#"{"outcome":"crash","code":"GUEST_EXITED","stage":"stale"}"#).unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         assert!(!stale.exists(), "a stale session-exit.json must be removed at start");
@@ -3017,6 +3021,13 @@ mod tests {
     }
 
     /// Scratch under the worktree `.cache/` (never `/tmp`), per O2.
+    /// Serialises tests that point `ACOS_ART_BIN` at a fake launcher: the
+    /// variable is process-global, so parallel tests would race on it.
+    fn art_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn o2_scratch_dir(name: &str) -> PathBuf {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/o2-tests");
         let dir = root.join(format!(
@@ -3106,6 +3117,7 @@ mod tests {
         let script = fake_art_binary(&dir);
         let apk = dir.join("fake.apk");
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         session.tree().expect("bind a tree");
@@ -3149,6 +3161,7 @@ mod tests {
         let script = fake_art_binary(&dir);
         let apk = dir.join("fake.apk");
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         let first = session.frame().expect("first frame");
@@ -3200,6 +3213,7 @@ mod tests {
         std::fs::set_permissions(&script, perms).unwrap();
         let apk = dir.join("fake.apk");
         std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         let started = Instant::now();
