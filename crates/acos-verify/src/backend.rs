@@ -365,6 +365,9 @@ pub struct InputDelivery {
     pub visual_change: bool,
     /// Guest acknowledgments, in delivery order.
     pub acks: Vec<InputAck>,
+    /// The settle block the action's reply carried (P12). Includes
+    /// `pixels_changed`; this is evidence, not a pass/fail rule.
+    pub settle: Option<serde_json::Value>,
 }
 
 /// The session state after an observation or an action.
@@ -721,6 +724,12 @@ pub trait Backend {
             "this backend cannot capture frames",
         ))
     }
+
+    /// P12b: the per-step settle deadline (`settle_timeout_ms`). Backends that
+    /// bind observations through a settle rule apply it to the next observation;
+    /// the default is a no-op (a backend with no settle rule has nothing to
+    /// bound). A timeout is still an observation, never a pass for an assertion.
+    fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
 }
 
 #[cfg(test)]

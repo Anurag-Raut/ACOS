@@ -45,6 +45,51 @@ use std::time::{Duration, Instant};
 /// The guest class that performs the framework startup.
 pub const GUEST_CLASS: &str = "dev.acos.art.LaunchMain";
 
+/// P12: the agent's choice for framework animation scales (launch-time).
+///
+/// `On` is the default and keeps real Android behaviour. `Off` installs the
+/// standard CI setting (the three global animation scales at `0`), which makes
+/// `ValueAnimator`/`ObjectAnimator`/`StateListAnimator`, the native
+/// `RenderNodeAnimator` (ripple) and the framework's press/elevation animators
+/// finish without their duration. It is for functional checks, never for
+/// animation/transition testing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Animations {
+    /// Real framework animation behaviour (scale 1.0).
+    #[default]
+    On,
+    /// All animation scales 0 (standard CI setting).
+    Off,
+}
+
+impl Animations {
+    /// Parse `on`/`off` (case-insensitive).
+    pub fn parse(value: &str) -> std::result::Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "on" => Ok(Self::On),
+            "off" => Ok(Self::Off),
+            other => Err(format!(
+                "animations must be \"on\" or \"off\" (got {other:?})"
+            )),
+        }
+    }
+
+    /// The stable wire/label string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::On => "on",
+            Self::Off => "off",
+        }
+    }
+
+    /// `true` when real animation durations are requested.
+    #[must_use]
+    pub const fn is_on(self) -> bool {
+        matches!(self, Self::On)
+    }
+}
+
 /// Everything `launch` needs.
 #[derive(Debug, Clone)]
 pub struct LaunchOpts {
@@ -66,6 +111,8 @@ pub struct LaunchOpts {
     pub status_inset: u32,
     /// Navigation-bar bottom inset in pixels.
     pub nav_inset: u32,
+    /// P12: per-session framework animation scales.
+    pub animations: Animations,
 }
 
 impl Default for LaunchOpts {
@@ -80,6 +127,7 @@ impl Default for LaunchOpts {
             density_dpi: 420,
             status_inset: 128,
             nav_inset: 63,
+            animations: Animations::On,
         }
     }
 }
@@ -415,8 +463,7 @@ pub(crate) fn launch_session(
 ) -> Result<LaunchResult> {
     // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
     // launcher a *foreign-guest* session of a shared zygote. Unset => production.
-    let session_dir: Option<PathBuf> =
-        std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
+    let session_dir: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
     let run = match &session_dir {
@@ -759,10 +806,15 @@ pub(crate) fn launch_session(
     // it (`crates/acos-apk::manifest::Manifest::application_flags` is unit
     // tested on counter + Gaten). It never invents bits: the value is logged
     // and recorded in `application-created.marker` as `app_flags=…`.
-    let mut app_flags_source = if installed.is_some() { "manifest" } else { "default" };
+    let mut app_flags_source = if installed.is_some() {
+        "manifest"
+    } else {
+        "default"
+    };
     if let Ok(raw) = std::env::var("ACOSLAUNCH_APP_FLAGS") {
         let text = raw.trim();
-        let parsed = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+        let parsed = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
+        {
             i64::from_str_radix(hex, 16).ok()
         } else {
             text.parse::<i64>().ok()
@@ -868,7 +920,16 @@ pub(crate) fn launch_session(
     // directory already exists (the driver prepared it); the guest argv is one
     // argument per line (the 15 production arguments).
     if let Some(dir) = &session_dir {
-        write_zygote_session(dir, &run, &sockets.0, &sock, &staging, &out, &package, &guest_args)?;
+        write_zygote_session(
+            dir,
+            &run,
+            &sockets.0,
+            &sock,
+            &staging,
+            &out,
+            &package,
+            &guest_args,
+        )?;
     }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
@@ -901,10 +962,12 @@ pub(crate) fn launch_session(
         // `app/launch-guest` above) and the built dex is bound over it.
         fs::create_dir_all(root.data.join("app/z3"))?;
         fs::create_dir_all(root.data.join("shim"))?;
-        fs::copy(dir.join("lib/libz2fork.so"), root.data.join("shim/libz2fork.so"))?;
+        fs::copy(
+            dir.join("lib/libz2fork.so"),
+            root.data.join("shim/libz2fork.so"),
+        )?;
         sb.ro_bind(&dir.join("dex"), "/data/app/z3");
         sb.ro_bind(&dir.join("lib/libz2fork.so"), "/data/shim/libz2fork.so");
-
     }
     sb.rw_bind(&sockets.0, "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
@@ -1020,19 +1083,30 @@ pub(crate) fn launch_session(
     if std::env::var_os("ACOSART_HW_VERBOSE").is_some() {
         sb.env("ACOSART_HW_VERBOSE", "1");
     }
-    // P11: the guest owns the framework-signal verdict, so the settle switch and
-    // its queue horizon must cross the sandbox boundary (the guest env is
-    // cleared).
-    // Default is the event rule (owner-approved 2026-11-12 after P11 showed
-    // equivalent correctness); `ACOS_STRICT_SETTLE=quiet` restores the 150 ms
-    // quiet window. The resolved mode is always forwarded so host and guest agree.
-    sb.env(
-        "ACOS_STRICT_SETTLE",
-        if strict_settle_event() { "event" } else { "quiet" },
-    );
+    // P12 (owner decision 2026-11-12): strict settle is **event-only**. The
+    // P11 `ACOS_STRICT_SETTLE=quiet` escape hatch is deleted, so the variable is
+    // not forwarded and has no effect; a caller that still sets it is told once.
+    if std::env::var_os("ACOS_STRICT_SETTLE").is_some() {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| {
+            eprintln!(
+                "acos-art: ACOS_STRICT_SETTLE is ignored: strict settle is event-only since P12"
+            );
+        });
+    }
     if let Ok(value) = std::env::var("ACOS_STRICT_SETTLE_HORIZON_MS") {
         sb.env("ACOS_STRICT_SETTLE_HORIZON_MS", &value);
     }
+    // P12: the per-session animation choice is a launch-time property. The
+    // guest applies it with `ValueAnimator.setDurationScale` and the host WMS
+    // reports the same value from `getCurrentAnimatorScale`; both are the real
+    // framework's own two delivery points for `animator_duration_scale`.
+    // `transition_animation_scale`/`window_animation_scale` are WMS-side on a
+    // device; ACOS's WMS runs no transition animations, so there is nothing to
+    // scale beyond the app-side animator scale.
+    sb.env("ACOS_ANIMATIONS", opts.animations.as_str());
+    acos_services::animation::set_enabled(opts.animations.is_on());
+    set_animations_state(opts.animations.is_on());
     crate::watchdog::note_guest_priority_gap("launch");
     // Z4 (research seam): each forked guest writes its stdout/stderr to its own
     // session FIFO, so the per-session probe parser sees only that child's
@@ -1171,12 +1245,9 @@ pub(crate) fn launch_session(
                     probe_for_out,
                     Some(compositor_for_probe),
                 ),
-                None => drain_stdout_lines(
-                    out_pipe,
-                    cap,
-                    probe_for_out,
-                    Some(compositor_for_probe),
-                ),
+                None => {
+                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe))
+                }
             }
         } else {
             crate::capture::drain_to_tail(out_pipe, cap)
@@ -1616,6 +1687,8 @@ struct ProbeSample {
     /// P11: the guest's framework-signal verdict for this sample.
     settled: bool,
     pending: Vec<String>,
+    /// P12: the guest's applied animation state (`None` if it did not report).
+    animations_on: Option<bool>,
 }
 
 /// P9: the launcher's event-driven wake channel for the startup loop.
@@ -1742,17 +1815,15 @@ fn env_u64(name: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-/// P11: is the strict rule the event-driven one? Unset/`quiet` (the default)
-/// keeps P10's 150 ms quiet rule byte-identical; `event` opts into the guest's
-/// framework-signal verdict. The default is deliberately `quiet`: adoption is
-/// a separate decision after P11's correctness evidence is reviewed.
-fn strict_settle_event() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| {
-        std::env::var("ACOS_STRICT_SETTLE")
-            .map(|v| !v.trim().eq_ignore_ascii_case("quiet"))
-            .unwrap_or(true)
-    })
+/// P12b: the per-request settle deadline (`settle_timeout_ms`), clamped to a
+/// sane range. `None` keeps the verb's documented default, so existing callers
+/// are unchanged. A deadline only bounds the wait: on expiry the reply still
+/// carries the latest tree and frame identity with `settled:false`.
+fn request_settle_timeout(request: &serde_json::Value, default: Duration) -> Duration {
+    match request.get("settle_timeout_ms").and_then(|v| v.as_u64()) {
+        Some(ms) => Duration::from_millis(ms.clamp(1, 600_000)),
+        None => default,
+    }
 }
 
 // ---------------------------------------------------------------- W43: exit evidence
@@ -1937,7 +2008,11 @@ impl ShortSocketDir {
     fn new() -> std::io::Result<Self> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
-        let id = format!("{}-{}", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed));
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        );
         let uid = unsafe { libc::getuid() };
         let runtime = PathBuf::from(format!("/run/user/{uid}"));
         let mut candidates = Vec::new();
@@ -1956,7 +2031,10 @@ impl ShortSocketDir {
             }
         }
         Err(last.unwrap_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::NotFound, "no short socket dir available")
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no short socket dir available",
+            )
         }))
     }
 
@@ -2005,7 +2083,10 @@ fn write_zygote_session(
         "guest_args": guest_args,
     });
     let tmp = dir.join("session.json.tmp");
-    fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(|e| Error::Layout(e.to_string()))?)?;
+    fs::write(
+        &tmp,
+        serde_json::to_vec_pretty(&doc).map_err(|e| Error::Layout(e.to_string()))?,
+    )?;
     fs::rename(&tmp, dir.join("session.json"))?;
     let mut argv = String::new();
     for a in guest_args {
@@ -2123,10 +2204,7 @@ fn drain_stdout_lines<R: std::io::Read>(
 ///
 /// `None` = EOF before any byte; `Some(Some(line))` = a complete line (the
 /// newline is kept); `Some(None)` = the line exceeded `cap` and was drained.
-fn read_capped_line<R: std::io::BufRead>(
-    reader: &mut R,
-    cap: usize,
-) -> Option<Option<Vec<u8>>> {
+fn read_capped_line<R: std::io::BufRead>(reader: &mut R, cap: usize) -> Option<Option<Vec<u8>>> {
     use std::io::BufRead;
     let mut line = Vec::new();
     loop {
@@ -2143,9 +2221,7 @@ fn read_capped_line<R: std::io::BufRead>(
             // Drain the rest of this line without keeping it.
             loop {
                 let mut sink = Vec::new();
-                match std::io::Read::take(&mut *reader, 64 * 1024)
-                    .read_until(b'\n', &mut sink)
-                {
+                match std::io::Read::take(&mut *reader, 64 * 1024).read_until(b'\n', &mut sink) {
                     Ok(0) => break,
                     Ok(_) if sink.ends_with(b"\n") => break,
                     Ok(_) => {}
@@ -2291,6 +2367,14 @@ fn drain_tee_lines<R: std::io::Read>(
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+                    // P12: the guest is the authority on what it applied.
+                    let animations_on = value
+                        .get("animations")
+                        .and_then(|v| v.get("on"))
+                        .and_then(|v| v.as_bool());
+                    if let Some(on) = animations_on {
+                        set_animations_state(on);
+                    }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                     if newer {
@@ -2303,6 +2387,7 @@ fn drain_tee_lines<R: std::io::Read>(
                             draw_seq,
                             settled,
                             pending,
+                            animations_on,
                         });
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
@@ -2401,13 +2486,8 @@ fn capture_c1(
     // caller's thread while a second thread encodes it (the encode is ~7 ms and
     // the write+MD5 over 9.5 MB is ~11 ms, so they overlap). `content_hash` is
     // still the MD5 of exactly the bytes in this file.
-    let (bytes, md5, encode_us, write_us, hash_us) = encode_write_and_hash(
-        frame.width,
-        frame.height,
-        frame.stride,
-        &frame.rgba,
-        &path,
-    )?;
+    let (bytes, md5, encode_us, write_us, hash_us) =
+        encode_write_and_hash(frame.width, frame.height, frame.stride, &frame.rgba, &path)?;
     let t_end = m5_now_us();
     m5_trace(
         "art.png_encode",
@@ -2608,14 +2688,15 @@ fn p3_trace(proc_name: &str, event: &str, t0: u128, t1: u128, extra: &str) {
     static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
         std::sync::OnceLock::new();
     let sink = SINK.get_or_init(|| {
-        std::env::var_os("P3_TRACE").and_then(|path| {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .ok()
-        })
-        .map(std::sync::Mutex::new)
+        std::env::var_os("P3_TRACE")
+            .and_then(|path| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .ok()
+            })
+            .map(std::sync::Mutex::new)
     });
     if let Some(file) = sink {
         if let Ok(mut file) = file.lock() {
@@ -2637,8 +2718,32 @@ fn p3_mark(proc_name: &str, event: &str, extra: &str) {
     p3_trace(proc_name, event, t, t, extra);
 }
 
+/// P12: the session's effective animation state (`0` unknown, `1` on, `2` off).
+/// Set from the launch option and then corrected by the guest's own probe
+/// report, so a reply never claims `animations:off` the guest did not apply.
+static ANIMATIONS_STATE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn set_animations_state(on: bool) {
+    ANIMATIONS_STATE.store(if on { 1 } else { 2 }, Ordering::Release);
+}
+
+fn animations_state() -> Option<&'static str> {
+    match ANIMATIONS_STATE.load(Ordering::Acquire) {
+        1 => Some("on"),
+        2 => Some("off"),
+        _ => None,
+    }
+}
+
 fn protocol_write(value: &serde_json::Value) {
     use std::io::Write;
+    // P12: every reply for this session states the animation scales it ran
+    // with. `animations:"off"` is evidence the functional result is not an
+    // animation; `"on"` is the default real behaviour.
+    let mut value = value.clone();
+    if let (Some(state), Some(object)) = (animations_state(), value.as_object_mut()) {
+        object.insert("animations".into(), serde_json::json!(state));
+    }
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
@@ -2727,21 +2832,14 @@ struct SettleTiming {
     rule: Option<&'static str>,
     /// P11: why the event rule timed out (e.g. `anim`, `queue`, `traversal`).
     reason: Option<String>,
+    /// P12b/guard: did the newest C1 capture differ from the pre-action one?
+    /// Always reported for a strict input; `None` for fast/tree where there is
+    /// no pre-action capture to compare with. Never a failure when the guard is
+    /// off (the default since the owner decision).
+    pixels_changed: Option<bool>,
 }
 
 impl SettleTiming {
-    fn strict() -> Self {
-        Self {
-            mode: SettleMode::Strict,
-            first_change_ms: None,
-            frame_ms: None,
-            state_changed: None,
-            bound: "strict-quiet",
-            rule: None,
-            reason: None,
-        }
-    }
-
     fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
         let mut value = serde_json::json!({
             "mode": self.mode.as_str(),
@@ -2750,6 +2848,7 @@ impl SettleTiming {
             "first_change_ms": self.first_change_ms,
             "frame_ms": self.frame_ms,
             "state_changed": self.state_changed,
+            "pixels_changed": self.pixels_changed,
             "bound": self.bound,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         });
@@ -2758,9 +2857,10 @@ impl SettleTiming {
                 map.insert("strict_rule".into(), serde_json::json!(rule));
                 if let Some(reason) = self.reason.as_deref() {
                     map.insert("reason".into(), serde_json::json!(reason));
-                    map.insert("animating".into(), serde_json::json!(
-                        reason.contains("anim") || reason.contains("frame")
-                    ));
+                    map.insert(
+                        "animating".into(),
+                        serde_json::json!(reason.contains("anim") || reason.contains("frame")),
+                    );
                 }
             }
         }
@@ -2845,6 +2945,22 @@ fn wait_for_event_settled(
     publish_epoch_ms: u64,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
+    // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
+    // A strict settle already proves the frame is after the action: a probe
+    // newer than the action floor, no pending framework work, a draw at/after
+    // the action publish, and the 24 ms confirmation. Requiring the pixels to
+    // differ only produced false timeouts for taps that change focus without an
+    // IME/cursor. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` restores P11's guard for
+    // experiments; `pixels_changed` is still reported either way.
+    let pixel_guard = std::env::var("ACOS_STRICT_SETTLE_PIXEL_GUARD")
+        .map(|value| value.eq_ignore_ascii_case("on"))
+        .unwrap_or(false);
+    if pixel_guard {
+        trace_host(
+            probe_state,
+            "settle: ACOS_STRICT_SETTLE_PIXEL_GUARD=on (P11 experiment; default is off)",
+        );
+    }
     // A tree request has no publish timestamp; it must not serve a sample that
     // was already current before the request, so the floor is the entry sample.
     let entry_floor = if publish_epoch_ms == 0 {
@@ -2861,6 +2977,7 @@ fn wait_for_event_settled(
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
+    let mut last_pixels_changed: Option<bool> = None;
     request_guest_probe(guest_stdin);
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
@@ -2903,6 +3020,9 @@ fn wait_for_event_settled(
         }
         if let Some(sample) = valid {
             let pixels_changed = match previous_fnv {
+                // No pre-action capture to compare with (e.g. tree request or
+                // the first action): report the conservative `true`; no pixel
+                // claim is made.
                 None => true,
                 Some(previous) => {
                     let current = {
@@ -2912,20 +3032,22 @@ fn wait_for_event_settled(
                     current != Some(previous) && current.is_some()
                 }
             };
-            if !pixels_changed {
+            last_pixels_changed = Some(pixels_changed);
+            if pixel_guard && !pixels_changed {
                 last_reason = "pixels-unchanged".to_string();
                 candidate = None;
             } else {
                 let restart = match &candidate {
                     None => true,
-                    Some(current) => sample.draw_seq != current.draw_seq || sample.seq < current.seq,
+                    Some(current) => {
+                        sample.draw_seq != current.draw_seq || sample.seq < current.seq
+                    }
                 };
                 if restart {
                     candidate = Some(sample.clone());
                     candidate_since = Instant::now();
                     if first_change_ms.is_none() && publish_epoch_ms != 0 {
-                        first_change_ms =
-                            Some(host_ms().saturating_sub(publish_epoch_ms));
+                        first_change_ms = Some(host_ms().saturating_sub(publish_epoch_ms));
                     }
                 }
                 if candidate
@@ -2947,6 +3069,7 @@ fn wait_for_event_settled(
                         bound: "strict-event",
                         rule: Some("event"),
                         reason: None,
+                        pixels_changed: last_pixels_changed,
                     };
                     trace_host(
                         probe_state,
@@ -2982,6 +3105,20 @@ fn wait_for_event_settled(
             last_wake = Instant::now();
         }
         if Instant::now() >= deadline {
+            // A timeout must still state the pixel fact (true|false), even when
+            // no candidate sample was valid. Recompute against the pre-action
+            // capture; a tree request has no pre-action capture and reports
+            // `true` (no pixel claim).
+            let pixels_changed = last_pixels_changed.unwrap_or_else(|| match previous_fnv {
+                None => true,
+                Some(previous) => {
+                    let current = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|c| c.fnv1a)
+                    };
+                    current != Some(previous) && current.is_some()
+                }
+            });
             trace_host(
                 probe_state,
                 &format!("settle event timeout reason={last_reason} gen={generation}"),
@@ -2997,6 +3134,7 @@ fn wait_for_event_settled(
                     bound: "timeout",
                     rule: Some("event"),
                     reason: Some(last_reason),
+                    pixels_changed: Some(pixels_changed),
                 },
             };
         }
@@ -3005,6 +3143,10 @@ fn wait_for_event_settled(
     }
 }
 
+/// P12: strict settle is the P11 event rule, with no alternative. `fast` keeps
+/// its own P1 rule and its documented quiet fallback (`quiet-fallback`) when no
+/// tree change is observed inside `ACOSLAUNCH_FAST_WINDOW_MS`; that fallback is
+/// part of `fast` and is not a strict mode.
 #[allow(clippy::too_many_arguments)]
 fn wait_for_settled_observation(
     child: &mut std::process::Child,
@@ -3020,7 +3162,7 @@ fn wait_for_settled_observation(
     baseline_probe: Option<ProbeSample>,
     publish_epoch_ms: u64,
 ) -> SettleEnd {
-    if mode == SettleMode::Strict && strict_settle_event() {
+    if mode == SettleMode::Strict {
         return wait_for_event_settled(
             child,
             cgroup,
@@ -3034,6 +3176,9 @@ fn wait_for_settled_observation(
             publish_epoch_ms,
         );
     }
+    // ---- fast (P1): first probe tree that differs from the pre-action baseline.
+    // Its 150 ms fallback below only runs when the fast window expired with no
+    // observed change; it is labelled `quiet-fallback`, never `strict-quiet`.
     let quiet = Duration::from_millis(150);
     let fast_window = Duration::from_millis(env_u64("ACOSLAUNCH_FAST_WINDOW_MS", 100));
     let fast_deadline = Instant::now() + fast_window;
@@ -3043,14 +3188,6 @@ fn wait_for_settled_observation(
     let mut last_change_ms = host_ms();
     let mut first_change_probe: Option<ProbeSample> = None;
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
-    // P10: one immediate sample at strict entry, so the 150 ms quiet window
-    // never waits on the slow fallback poll on an idle screen. Fast mode keeps
-    // its pre-action baseline: it must not take an extra sample at entry (that
-    // sample can already be the post-input state) and relies on the dirty
-    // probe, exactly as the fast rule intends.
-    if mode == SettleMode::Strict {
-        request_guest_probe(guest_stdin);
-    }
     let mut last_wake = Instant::now();
     loop {
         // A structured guest marker is more informative than the generic
@@ -3084,7 +3221,9 @@ fn wait_for_settled_observation(
         // one sample now instead of waiting for the fallback poll; this keeps
         // the strict invariant "a probe sample after the last store" at the
         // same cost it had with the 50 ms poll.
-        if !probe_after && last_change.elapsed() >= quiet && last_wake.elapsed() >= Duration::from_millis(20)
+        if !probe_after
+            && last_change.elapsed() >= quiet
+            && last_wake.elapsed() >= Duration::from_millis(20)
         {
             request_guest_probe(guest_stdin);
             last_wake = Instant::now();
@@ -3124,6 +3263,7 @@ fn wait_for_settled_observation(
                 bound: "state-commit",
                 rule: None,
                 reason: None,
+                pixels_changed: None,
             };
             trace_host(
                 probe_state,
@@ -3140,9 +3280,8 @@ fn wait_for_settled_observation(
                 timing,
             });
         }
-        let in_fast_window = mode == SettleMode::Fast
-            && !fast_fell_back
-            && Instant::now() < fast_deadline;
+        let in_fast_window =
+            mode == SettleMode::Fast && !fast_fell_back && Instant::now() < fast_deadline;
         if !in_fast_window {
             if mode == SettleMode::Fast && !fast_fell_back {
                 fast_fell_back = true;
@@ -3173,19 +3312,15 @@ fn wait_for_settled_observation(
                     }
                 };
                 if pixels_changed {
-                    let (state_changed, bound) = if mode == SettleMode::Fast {
-                        (Some(false), "quiet-fallback")
-                    } else {
-                        (None, "strict-quiet")
-                    };
                     let timing = SettleTiming {
-                        mode,
+                        mode: SettleMode::Fast,
                         first_change_ms,
                         frame_ms: frame_ms(last_change_ms),
-                        state_changed,
-                        bound,
+                        state_changed: Some(false),
+                        bound: "quiet-fallback",
                         rule: None,
                         reason: None,
+                        pixels_changed: None,
                     };
                     trace_host(
                         probe_state,
@@ -3214,14 +3349,11 @@ fn wait_for_settled_observation(
                     mode,
                     first_change_ms,
                     frame_ms: None,
-                    state_changed: if mode == SettleMode::Fast {
-                        Some(false)
-                    } else {
-                        None
-                    },
+                    state_changed: Some(false),
                     bound: "timeout",
                     rule: None,
                     reason: None,
+                    pixels_changed: None,
                 },
             };
         }
@@ -3311,10 +3443,7 @@ fn wait_for_fast_tree(
         if !requested {
             requested = true;
             request_guest_probe(guest_stdin);
-            trace_host(
-                probe_state,
-                "fast-tree requested an immediate guest probe",
-            );
+            trace_host(probe_state, "fast-tree requested an immediate guest probe");
         }
         if Instant::now() >= deadline {
             return FastTreeEnd::Timeout {
@@ -3354,12 +3483,7 @@ fn interactive_serve(
     // P9: the drain thread signals this on every parsed probe sample, so the
     // loop below is woken by the guest instead of polling on a fixed 10 ms
     // sleep. `wake_seen` is the tick this loop has already consumed.
-    let wake = Arc::clone(
-        &probe_state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .wake,
-    );
+    let wake = Arc::clone(&probe_state.lock().unwrap_or_else(|e| e.into_inner()).wake);
     let mut wake_seen = 0u64;
     // Startup: the real Activity is resumed, the guest probe has produced a
     // sample, and C1 has stored at least one buffer. Ready means all three.
@@ -3594,8 +3718,10 @@ fn interactive_serve(
                     evidence.push(reply);
                     continue;
                 }
+                let mut tree_timeout: Option<SettleTiming> = None;
                 let probe = if mode == SettleMode::Fast {
-                    let deadline = Instant::now() + Duration::from_millis(750);
+                    let deadline = Instant::now()
+                        + request_settle_timeout(&request, Duration::from_millis(750));
                     match wait_for_fast_tree(
                         child,
                         cgroup,
@@ -3647,15 +3773,17 @@ fn interactive_serve(
                         }
                     }
                 } else {
-                    // Strict (default) and unchanged: bind the tree and the pixels
-                    // to the same settled state.
+                    // Strict (default): bind the tree and the pixels to the same
+                    // settled state. P12b: `settle_timeout_ms` bounds the wait;
+                    // a timeout still returns the latest tree (settled:false).
                     let settled = wait_for_settled_observation(
                         child,
                         cgroup,
                         live,
                         probe_state,
                         &mut guest_stdin,
-                        Instant::now() + Duration::from_millis(1500),
+                        Instant::now()
+                            + request_settle_timeout(&request, Duration::from_millis(1500)),
                         0,
                         0,
                         None,
@@ -3665,7 +3793,8 @@ fn interactive_serve(
                     );
                     match settled {
                         SettleEnd::Settled(settled) => settled.probe,
-                        SettleEnd::Timeout { .. } | SettleEnd::Unsupported(_) => {
+                        SettleEnd::Timeout { timing, .. } => {
+                            tree_timeout = Some(timing);
                             match latest_probe(probe_state) {
                                 Some(probe) => probe,
                                 None => {
@@ -3679,6 +3808,18 @@ fn interactive_serve(
                                 }
                             }
                         }
+                        SettleEnd::Unsupported(_) => match latest_probe(probe_state) {
+                            Some(probe) => probe,
+                            None => {
+                                let reply = serde_json::json!({
+                                    "ok": false, "cmd": "tree", "code": "NO_TEXT",
+                                    "error": "the in-guest tree probe has produced no sample",
+                                });
+                                protocol_write(&reply);
+                                evidence.push(reply);
+                                continue;
+                            }
+                        },
                         SettleEnd::GuestExited(status) => {
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
@@ -3696,26 +3837,43 @@ fn interactive_serve(
                 };
                 let p3_t_settled = p3_now_us();
                 let tree_age_ms = host_ms().saturating_sub(probe.at_ms);
-                let strict_event = mode == SettleMode::Strict && strict_settle_event();
-                let mut settle_json = serde_json::json!({
-                    "mode": mode.as_str(),
-                    "settled": true,
-                    "probe_seq": probe.seq,
-                    "tree_age_ms": tree_age_ms,
-                    "bound": if mode == SettleMode::Fast {
-                        "probe-fresh"
-                    } else if strict_event {
-                        "strict-event"
-                    } else {
-                        "strict-quiet"
-                    },
-                    "meaning": if strict_event {
-                        "mode=strict with ACOS_STRICT_SETTLE=event: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
-                    } else {
-                        "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply"
-                    },
-                });
-                if strict_event {
+                let strict_event = mode == SettleMode::Strict;
+                let mut settle_json = match &tree_timeout {
+                    Some(timing) => serde_json::json!({
+                        "mode": "strict",
+                        "settled": false,
+                        "probe_seq": probe.seq,
+                        "tree_age_ms": tree_age_ms,
+                        "bound": "timeout",
+                        "strict_rule": "event",
+                        "reason": timing.reason.clone(),
+                        "animating": timing
+                            .reason
+                            .as_deref()
+                            .map(|r| r.contains("anim") || r.contains("frame"))
+                            .unwrap_or(false),
+                        "warning": "strict settle timed out: the tree and frame identity are the \
+                                    latest observed state, not a settled one; this is not assertion \
+                                    evidence",
+                    }),
+                    None => serde_json::json!({
+                        "mode": mode.as_str(),
+                        "settled": true,
+                        "probe_seq": probe.seq,
+                        "tree_age_ms": tree_age_ms,
+                        "bound": if mode == SettleMode::Fast {
+                            "probe-fresh"
+                        } else {
+                            "strict-event"
+                        },
+                        "meaning": if strict_event {
+                            "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
+                        } else {
+                            "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; tree_age_ms is host receipt -> reply"
+                        },
+                    }),
+                };
+                if strict_event && tree_timeout.is_none() {
                     if let Some(map) = settle_json.as_object_mut() {
                         map.insert("strict_rule".into(), serde_json::json!("event"));
                     }
@@ -3753,7 +3911,10 @@ fn interactive_serve(
                     });
                     if let Some(meta) = meta {
                         let map = reply.as_object_mut().expect("tree reply is an object");
-                        map.insert("buffer_generation".into(), serde_json::json!(meta.generation));
+                        map.insert(
+                            "buffer_generation".into(),
+                            serde_json::json!(meta.generation),
+                        );
                         map.insert("frame_number".into(), serde_json::json!(meta.frame_number));
                         map.insert("buffer_id".into(), serde_json::json!(meta.buffer_id));
                         map.insert("producer_id".into(), serde_json::json!(meta.producer_id));
@@ -4018,13 +4179,16 @@ fn interactive_serve(
                     .max()
                     .unwrap_or(0);
                 let (u_baseline, _) = latest_unsupported(probe_state);
+                // P12b: per-request strict/fast deadline, default = the engine's
+                // long-standing frame wait.
+                let settle_timeout = request_settle_timeout(&request, frame_wait);
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
                     live,
                     probe_state,
                     &mut guest_stdin,
-                    Instant::now() + frame_wait,
+                    Instant::now() + settle_timeout,
                     g0,
                     p0,
                     last_capture_fnv,
@@ -4103,23 +4267,91 @@ fn interactive_serve(
                     ),
                 );
                 if settled_probe.is_none() {
-                    let reply = serde_json::json!({
-                        "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
-                        "error": format!(
-                            "{cmd} at ({x},{y}) completed no new settled observation within {}s: \
-                             c1_generation {g0} -> {g1}, probe_seq {p0} -> {p1}, and the pixels \
-                             did not change from the previous capture",
-                            frame_wait.as_secs()
-                        ),
-                        "gesture": {
+                    // P12b: a settle timeout is still an observation. Return the
+                    // latest tree and C1 frame identity with `settled:false` so
+                    // an agent can use what is on screen; `acos_assert`/verify
+                    // refuse it as evidence. When there is no probe at all there
+                    // is nothing honest to return, so that stays NO_FRESH_FRAME.
+                    let Some(latest) = latest_probe(probe_state) else {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
+                            "error": format!(
+                                "{cmd} at ({x},{y}) completed no settled observation within {} ms \
+                                 (c1_generation {g0} -> {g1}, probe_seq {p0} -> {p1}) and the \
+                                 in-guest probe has produced no sample",
+                                settle_timeout.as_millis()
+                            ),
+                            "gesture": {
+                                "seqs": injected.seqs,
+                                "acks": injected.acks.iter().map(|a| serde_json::json!({
+                                    "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
+                                })).collect::<Vec<_>>(),
+                                "token": format!("{:#x}", injected.token.0),
+                            },
+                            "settle": settle_timing.to_json(false, ack_ms),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    };
+                    let capture = match capture_c1(live, frames_dir, &mut captures) {
+                        Ok(capture) => capture,
+                        Err(error) => {
+                            let code = if is_disk_full(&error) {
+                                "HOST_DISK_FULL"
+                            } else {
+                                "INTERNAL"
+                            };
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": code,
+                                "retryable": is_disk_full(&error),
+                                "error": format!("cannot write the C1 capture: {error}"),
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    };
+                    let mut reply = match &capture {
+                        Some(capture) => {
+                            last_capture_fnv = Some(capture.fnv1a);
+                            capture.fields()
+                        }
+                        None => serde_json::json!({
+                            "frame_seq": captures,
+                            "capture_source": CAPTURE_SOURCE,
+                            "frame_identity": "no C1 buffer has been stored yet",
+                        }),
+                    };
+                    let map = reply.as_object_mut().expect("timeout reply is an object");
+                    map.insert("ok".into(), serde_json::json!(true));
+                    map.insert("cmd".into(), serde_json::json!(cmd));
+                    map.insert("settled".into(), serde_json::json!(false));
+                    map.insert("bound".into(), serde_json::json!("timeout"));
+                    map.insert("tree".into(), latest.tree.clone());
+                    map.insert("probe_seq".into(), serde_json::json!(latest.seq));
+                    map.insert("probe_at_ms".into(), serde_json::json!(latest.at_ms));
+                    map.insert(
+                        "gesture".into(),
+                        serde_json::json!({
                             "seqs": injected.seqs,
                             "acks": injected.acks.iter().map(|a| serde_json::json!({
                                 "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                             })).collect::<Vec<_>>(),
                             "token": format!("{:#x}", injected.token.0),
-                        },
-                        "settle": settle_timing.to_json(false, ack_ms),
-                    });
+                        }),
+                    );
+                    map.insert("settle".into(), settle_timing.to_json(false, ack_ms));
+                    map.insert(
+                        "warning".into(),
+                        serde_json::json!(format!(
+                            "strict settle timed out after {} ms (reason: {}); the tree and frame \
+                             identity are the latest observed state, not a settled one, and this is \
+                             not assertion evidence",
+                            settle_timeout.as_millis(),
+                            settle_timing.reason.as_deref().unwrap_or("timeout"),
+                        )),
+                    );
                     protocol_write(&reply);
                     evidence.push(reply);
                     continue;
@@ -4138,7 +4370,11 @@ fn interactive_serve(
                     Err(error) => {
                         // W43: a full disk is a host condition, not an app or
                         // engine bug: name it and mark it retryable.
-                        let code = if is_disk_full(&error) { "HOST_DISK_FULL" } else { "INTERNAL" };
+                        let code = if is_disk_full(&error) {
+                            "HOST_DISK_FULL"
+                        } else {
+                            "INTERNAL"
+                        };
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": code,
                             "retryable": is_disk_full(&error),
@@ -4305,9 +4541,7 @@ fn encode_png_rgba_into(
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
-    let filtered_len = row
-        .saturating_add(1)
-        .saturating_mul(height as usize);
+    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
     let t_filter = m5_now_us();
     m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
     sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -4444,12 +4678,7 @@ fn emit_checked(sink: &mut dyn FnMut(&[u8]), crc: &mut Crc32Stream, bytes: &[u8]
     crc.update(bytes);
 }
 
-fn png_chunk(
-    sink: &mut dyn FnMut(&[u8]),
-    kind: &[u8; 4],
-    body: &[u8],
-    crc32: fn(&[u8]) -> u32,
-) {
+fn png_chunk(sink: &mut dyn FnMut(&[u8]), kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
     sink(&(body.len() as u32).to_be_bytes());
     sink(kind);
     sink(body);
@@ -5052,7 +5281,10 @@ mod probe_line_tests {
         assert_eq!(error["phase"], "window");
         assert_eq!(error["window"], "w2#1");
         assert!(
-            error["error"].as_str().unwrap().contains("NullPointerException"),
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("NullPointerException"),
             "the exception text must survive"
         );
     }
@@ -5076,6 +5308,7 @@ mod probe_line_tests {
             draw_seq: 0,
             settled: false,
             pending: Vec::new(),
+            animations_on: None,
         }
     }
 
@@ -5138,10 +5371,8 @@ mod shared_boot_image_tests {
     /// A typo must fail the launch, not silently measure the compressed image.
     #[test]
     fn a_directory_without_the_main_image_is_an_error() {
-        let dir = std::env::temp_dir().join(format!(
-            "acos-b3-no-shared-image-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("acos-b3-no-shared-image-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let err = resolve_shared_boot_image(Some(dir.clone().into_os_string()))
             .expect_err("a missing x86_64/boot.art must be refused");

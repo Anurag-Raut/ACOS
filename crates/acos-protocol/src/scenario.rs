@@ -401,6 +401,9 @@ pub struct LaunchStep {
     /// Clear app data before launching.
     #[serde(default)]
     pub clear_state: bool,
+    /// P12b: strict/fast settle deadline for the first tree (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `wait_for`.
@@ -431,6 +434,9 @@ pub struct TapStep {
     /// Event-driven timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// P12b: strict/fast settle deadline for this tap (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `type`.
@@ -444,6 +450,9 @@ pub struct TypeStep {
     /// Clear the field first.
     #[serde(default)]
     pub clear: bool,
+    /// P12b: strict/fast settle deadline for this type action (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `key`.
@@ -451,6 +460,9 @@ pub struct TypeStep {
 pub struct KeyStep {
     /// Symbolic key.
     pub key: KeyName,
+    /// P12b: strict/fast settle deadline for this key action (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `rotate`.
@@ -478,6 +490,9 @@ pub struct CaptureStep {
 pub struct ResetStep {
     /// Reset scope.
     pub scope: ResetScope,
+    /// P12b: strict/fast settle deadline for the relaunched tree (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// One mocked HTTP response.
@@ -673,6 +688,12 @@ pub struct Scenario {
     /// Artifact options.
     #[serde(default)]
     pub output: OutputOptions,
+    /// P12: per-session framework animation scales (`on`/`off`, default `on`).
+    ///
+    /// `off` sets Android's three animation scales to 0 for functional checks;
+    /// it is never for animation/transition testing. Launch-time only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animations: Option<String>,
 }
 
 impl Scenario {
@@ -893,6 +914,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     if let Some(api) = scenario.api_level {
         if !(1..=100).contains(&api) {
             v.push("$.api_level", "api_level must be in 1..=100");
+        }
+    }
+    if let Some(animations) = &scenario.animations {
+        if !animations.eq_ignore_ascii_case("on") && !animations.eq_ignore_ascii_case("off") {
+            v.push("$.animations", "animations must be `on` or `off`");
         }
     }
     match scenario.display {

@@ -460,9 +460,13 @@ impl WmsState {
     }
 
     /// `IWindowManager.getCurrentAnimatorScale`.
+    ///
+    /// P12: the per-session animation scale installed by the launcher (the
+    /// real-Android path is the `animator_duration_scale` setting observed by
+    /// the system process, which then calls `IWindowSessionCallback`).
     #[must_use]
-    pub const fn current_animator_scale(&self) -> f32 {
-        1.0
+    pub fn current_animator_scale(&self) -> f32 {
+        crate::animation::scale()
     }
 
     /// `IWindowManager.hasNavigationBar`.

@@ -288,9 +288,7 @@ impl ServeEngine {
                             Some(&id),
                             Trust::Trusted,
                             ErrorCode::SessionNotFound,
-                            format!(
-                                "no live ART session `{id}`; {tool} needs a launched session"
-                            ),
+                            format!("no live ART session `{id}`; {tool} needs a launched session"),
                             json!({
                                 "engine": explicit.unwrap_or(self.default_engine).as_str(),
                                 "tool": tool,
@@ -393,6 +391,26 @@ impl ServeEngine {
             Ok(bind) => bind,
             Err(error) => return art_error(request_id, Some(id), trust, &error),
         };
+        // P12: `animations:"on"|"off"` is a launch-time choice (default on).
+        // Every reply for the session states it.
+        let animations: &'static str = match args.get("animations").and_then(Value::as_str) {
+            None => "on",
+            Some(value) => match value.trim().to_ascii_lowercase().as_str() {
+                "on" => "on",
+                "off" => "off",
+                other => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        format!("animations must be \"on\" or \"off\" (got {other:?})"),
+                        json!({"field": "animations"}),
+                    )
+                }
+            },
+        };
+        let settle_timeout_ms = settle_timeout_arg(args);
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -433,13 +451,37 @@ impl ServeEngine {
             }
             let dead = {
                 let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                // P12: animations are launch-time. A relaunch of a live session
+                // cannot silently change them.
+                if args.get("animations").is_some() && session.animations() != animations {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` runs with animations:{} and a live session cannot \
+                                 change it",
+                                session.animations()
+                            ),
+                            json!({
+                                "held_animations": session.animations(),
+                                "requested_animations": animations,
+                            }),
+                        ),
+                        "animations is launch-time: call acos_destroy for this session id, then \
+                         acos_launch with the new choice.",
+                    );
+                }
+                session.set_settle_timeout(settle_timeout_ms);
                 session.liveness().map(|exit| {
                     let discarded = session.invalidate_frame();
-                    let classified =
-                        crate::failure::classify_session_exit(&held.artifacts).or_else(|| {
-                            exit.exit_code
-                                .or(exit.signal)
-                                .and_then(|_| crate::failure::classify_child_exit(exit_status(&exit)))
+                    let classified = crate::failure::classify_session_exit(&held.artifacts)
+                        .or_else(|| {
+                            exit.exit_code.or(exit.signal).and_then(|_| {
+                                crate::failure::classify_child_exit(exit_status(&exit))
+                            })
                         });
                     json!({
                         "guest_exit": exit.to_json(),
@@ -463,18 +505,16 @@ impl ServeEngine {
                     // guest.
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     return match session.ensure_launch_tree(settle, pixels) {
-                        Ok(tree) => {
-                            launch_reply(
-                                request_id,
-                                id,
-                                &held,
-                                &session,
-                                &tree,
-                                false,
-                                None,
-                                verb_started,
-                            )
-                        }
+                        Ok(tree) => launch_reply(
+                            request_id,
+                            id,
+                            &held,
+                            &session,
+                            &tree,
+                            false,
+                            None,
+                            verb_started,
+                        ),
                         Err(error) => art_error(request_id, Some(id), held.trust, &error),
                     };
                 }
@@ -505,8 +545,9 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start(&apk, &artifacts) {
+        match ArtSession::start_with_animations(&apk, &artifacts, animations) {
             Ok(mut session) => {
+                session.set_settle_timeout(settle_timeout_ms);
                 let started = match session.ensure_launch_tree(settle, pixels) {
                     Ok(tree) => tree,
                     Err(error) => {
@@ -546,7 +587,13 @@ impl ServeEngine {
 
     // -- destroy ----------------------------------------------------------- //
 
-    fn call_destroy(&self, request_id: &str, id: &str, args: &Value, ctx: &CallContext) -> Envelope {
+    fn call_destroy(
+        &self,
+        request_id: &str,
+        id: &str,
+        args: &Value,
+        ctx: &CallContext,
+    ) -> Envelope {
         let held = self
             .art
             .lock()
@@ -619,7 +666,12 @@ impl ServeEngine {
             .with_session_id(id.to_string())
             .with_value_result(result);
         }
-        let existed = self.routes.lock().unwrap_or_else(|e| e.into_inner()).remove(id).is_some();
+        let existed = self
+            .routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id)
+            .is_some();
         let env = self.legacy.session_call("acos_destroy", args, ctx);
         let env = match env {
             Some(env) => relabel_legacy(env, ENGINE_RUST_VM, Trust::Trusted, true),
@@ -684,6 +736,9 @@ impl ServeEngine {
         // still allowed: navigation only, never a pass.
         let started = std::time::Instant::now();
         let p3_t_call = m5_now_us();
+        // P12b: one per-request settle deadline for whichever verb runs next;
+        // the guest still answers a timeout with the latest tree/frame identity.
+        session.set_settle_timeout(settle_timeout_arg(args));
         let outcome = match tool {
             "acos_observe_tree" => observe_tree(&mut session, args),
             "acos_observe" => observe(&mut session, args),
@@ -715,15 +770,15 @@ impl ServeEngine {
                 let p3_t_outcome = m5_now_us();
                 let mut result = result;
                 result["session_id"] = json!(id);
-                if matches!(
-                    tool,
-                    "acos_tap" | "acos_text" | "acos_key" | "acos_action"
-                ) {
+                if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
                     if let Err(error) = attach_observation(&mut session, &mut result, args) {
                         return art_error(request_id, Some(id), trust, &error);
                     }
                 }
                 label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
+                if let Some(object) = result.as_object_mut() {
+                    object.insert("animations".into(), json!(session.animations()));
+                }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
                 let envelope = Envelope::pass(
@@ -741,7 +796,10 @@ impl ServeEngine {
                         "serve.call_art",
                         p3_t_call,
                         m5_now_us(),
-                        &format!("tool={tool} outcome_us={}", p3_t_outcome.saturating_sub(p3_t_call)),
+                        &format!(
+                            "tool={tool} outcome_us={}",
+                            p3_t_outcome.saturating_sub(p3_t_call)
+                        ),
                     );
                 }
                 envelope
@@ -790,7 +848,6 @@ impl ServeEngine {
         }
         relabel_legacy(envelope, label, trust, frozen)
     }
-
 }
 
 /// The trust rules serve applies to an untrusted session, mirroring
@@ -887,14 +944,7 @@ fn guest_exit_envelope(
         "launch_hint": "call acos_launch with this session id to start a fresh guest",
     });
     with_hint(
-        art_failure(
-            request_id,
-            Some(id),
-            held.trust,
-            code,
-            detail,
-            details,
-        ),
+        art_failure(request_id, Some(id), held.trust, code, detail, details),
         "The guest process ended. `acos_launch` on this session id relaunches a fresh guest \
          (it never returns the dead session's frame). Read details.session_exit / \
          details.guest_exit and the session's logcat before retrying the same app.",
@@ -982,9 +1032,8 @@ fn label_frame(result: &mut Value, session: &ArtSession) {
     let Some((seq, md5, captured_at)) = session.frame_info() else {
         return;
     };
-    let (_, buffer_generation, frame_number) = session
-        .frame_identity_meta()
-        .unwrap_or((seq, None, None));
+    let (_, buffer_generation, frame_number) =
+        session.frame_identity_meta().unwrap_or((seq, None, None));
     if let Some(object) = result.as_object_mut() {
         object.entry("frame".to_string()).or_insert_with(|| {
             let mut frame = json!({
@@ -1101,9 +1150,10 @@ fn launch_reply(
         ],
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
+    result["animations"] = json!(session.animations());
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
-    // its tree was bound (`strict-quiet` after 150 ms of quiet, or
+    // its tree was bound (`strict-event` on the P12 event rule, or
     // `probe-fresh` from the first traversal with no quiet window).
     result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
     label_timing(&mut result, session, "acos_launch", started);
@@ -1143,7 +1193,9 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
                 t_tree.saturating_sub(t_begin),
                 t_end.saturating_sub(t_tree),
                 node_count,
-                serde_json::to_vec(&tree_value).map(|v| v.len()).unwrap_or(0)
+                serde_json::to_vec(&tree_value)
+                    .map(|v| v.len())
+                    .unwrap_or(0)
             ),
         );
     }
@@ -1355,9 +1407,7 @@ fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let mut action = args.get("action").cloned().unwrap_or(Value::Null);
     // A top-level `settle` applies to the inner input verb as well.
-    if let (Some(settle), Some(object)) =
-        (args.get("settle"), action.as_object_mut())
-    {
+    if let (Some(settle), Some(object)) = (args.get("settle"), action.as_object_mut()) {
         object.entry("settle").or_insert_with(|| settle.clone());
     }
     let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
@@ -1402,8 +1452,7 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
     if trust == Trust::Untrusted {
         return Err(BackendError::Failed {
             code: ErrorCode::InsufficientHostEvidence,
-            detail: "acos_assert cannot pass on an untrusted run (guest-asserted tree)"
-                .to_string(),
+            detail: "acos_assert cannot pass on an untrusted run (guest-asserted tree)".to_string(),
         });
     }
     let mode = args.get("mode").and_then(Value::as_str).unwrap_or("exact");
@@ -1413,6 +1462,28 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
         .and_then(Value::as_str)
         .map(str::to_string);
     let tree = session.tree()?;
+    // P12b: a settle timeout is an observation, not evidence. Assertions stay
+    // strict: the tree may be mid-animation, so it can never justify a pass.
+    if let Some(settle) = session.last_tree_settle() {
+        if settle.get("settled").and_then(Value::as_bool) == Some(false) {
+            return Err(BackendError::Failed {
+                code: ErrorCode::Timeout,
+                detail: format!(
+                    "acos_assert uses strict settle and the strict observation timed out \
+                     (bound:{}, reason:{}); a timeout is never a pass. Use acos_observe_tree \
+                     with settle:\"fast\" or settle_timeout_ms to inspect the screen instead.",
+                    settle
+                        .get("bound")
+                        .and_then(Value::as_str)
+                        .unwrap_or("timeout"),
+                    settle
+                        .get("reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown"),
+                ),
+            });
+        }
+    }
     let (selector, describe) = if let Some(id) = args.get("id").and_then(Value::as_str) {
         (Selector::by_id(id), json!({"id": id}))
     } else if let Some(text) = args.get("text").and_then(Value::as_str) {
@@ -1423,22 +1494,24 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
             detail: "acos_assert needs `id` (or `text`) to select the node".to_string(),
         });
     };
-    let node = tree.find_one(&selector).ok_or_else(|| BackendError::Failed {
-        code: if tree.truncated {
-            ErrorCode::TreeTruncated
-        } else {
-            ErrorCode::ElementNotFound
-        },
-        detail: format!(
-            "no node matching {} in the live ART tree{}",
-            describe,
-            if tree.truncated {
-                " (the tree was truncated: absence is not proven)"
+    let node = tree
+        .find_one(&selector)
+        .ok_or_else(|| BackendError::Failed {
+            code: if tree.truncated {
+                ErrorCode::TreeTruncated
             } else {
-                ""
-            }
-        ),
-    })?;
+                ErrorCode::ElementNotFound
+            },
+            detail: format!(
+                "no node matching {} in the live ART tree{}",
+                describe,
+                if tree.truncated {
+                    " (the tree was truncated: absence is not proven)"
+                } else {
+                    ""
+                }
+            ),
+        })?;
     let actual = node.text.clone();
     let matched = match (mode, expect.as_deref()) {
         ("contains", Some(expect)) => actual.contains(expect),
@@ -1550,6 +1623,7 @@ fn status_value(session: &ArtSession) -> Value {
         "published_frames": session.frame_info().map(|f| f.0).unwrap_or(0),
         "live": true,
         "mode": "live",
+        "animations": session.animations(),
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,
@@ -1566,7 +1640,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // quiet window and no PNG.
     let (settle, pixels) = launch_bind(args)?;
     let before = session.last_frame_seq();
-    session.set_reset_bind(settle, pixels);
+    session.set_reset_bind(settle, pixels, settle_timeout_arg(args));
     session.reset()?;
     let tree = session.ensure_bound_tree()?;
     // P9: the reset reply carries the relaunched app's bound tree, so "reset ->
@@ -1612,7 +1686,10 @@ fn attach_observation(
                 .to_string(),
         });
     };
-    let want_tree = observe.get("tree").and_then(Value::as_bool).unwrap_or(false);
+    let want_tree = observe
+        .get("tree")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let want_png = observe.get("png").and_then(Value::as_bool).unwrap_or(false);
     if want_png {
         return Err(BackendError::Failed {
@@ -1683,11 +1760,19 @@ fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
         Some("fast") => Ok("fast"),
         Some(other) => Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!(
-                "settle must be \"fast\" or \"strict\" (got {other:?})"
-            ),
+            detail: format!("settle must be \"fast\" or \"strict\" (got {other:?})"),
         }),
     }
+}
+
+/// P12b: `settle_timeout_ms` (integer, 1..=600000). `None` keeps the engine's
+/// documented default. On timeout the guest still answers with the latest tree
+/// and frame identity and `settled:false`, so the agent can use what is on
+/// screen; assertions and `verify` never count that as a pass.
+fn settle_timeout_arg(args: &Value) -> Option<u64> {
+    args.get("settle_timeout_ms")
+        .and_then(Value::as_u64)
+        .map(|ms| ms.clamp(1, 600_000))
 }
 
 fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
@@ -1903,7 +1988,6 @@ fn unsupported_engine(request_id: &str, message: &str, default_engine: Engine) -
     )
 }
 
-
 /// Rebuild a failure envelope with a situation-specific hint.
 ///
 /// `Envelope` has no mutable hint accessor, so the envelope is reconstructed
@@ -1999,12 +2083,7 @@ fn art_error(
 }
 
 /// Rebuild a legacy envelope with the engine/trust/evidence labels injected.
-fn relabel_legacy(
-    envelope: Envelope,
-    engine: &str,
-    trust: Trust,
-    frozen: bool,
-) -> Envelope {
+fn relabel_legacy(envelope: Envelope, engine: &str, trust: Trust, frozen: bool) -> Envelope {
     let request_id = envelope.request_id().to_string();
     let metrics = envelope.metrics();
     let session_id = envelope.session_id().map(str::to_string);
@@ -2206,7 +2285,12 @@ mod tests {
     #[test]
     fn labels_are_written_into_results_and_errors() {
         let mut result = json!({"ok": true});
-        label_meta(&mut result, ENGINE_RUST_VM, Trust::Untrusted, EVIDENCE_NO_GUEST);
+        label_meta(
+            &mut result,
+            ENGINE_RUST_VM,
+            Trust::Untrusted,
+            EVIDENCE_NO_GUEST,
+        );
         assert_eq!(result["engine"], json!(ENGINE_RUST_VM));
         assert_eq!(result["engine_frozen"], json!(true));
         assert_eq!(result["trust"], json!("untrusted"));
@@ -2246,7 +2330,10 @@ mod tests {
         assert!(err.to_string().contains("settle must be"), "{err}");
         // A non-boolean `pixels` is a typed argument error.
         let err = launch_bind(&json!({"pixels": "yes"})).unwrap_err();
-        assert!(err.to_string().contains("`pixels` must be a boolean"), "{err}");
+        assert!(
+            err.to_string().contains("`pixels` must be a boolean"),
+            "{err}"
+        );
         // fast + pixels would be a pixel claim from a possibly mid-animation
         // frame; the launcher refuses it and so does serve.
         let err = launch_bind(&json!({"settle": "fast", "pixels": true})).unwrap_err();

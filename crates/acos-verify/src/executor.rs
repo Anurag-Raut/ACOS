@@ -350,6 +350,13 @@ pub fn run_scenario(
         let mut step_result = StepResult::new(index, step.kind(), exec.status, duration_ms);
         step_result.assertions = exec.assertions.clone();
         step_result.error = exec.error.clone();
+        // P12: a tap/type/key reply's settle block (including pixels_changed)
+        // is step evidence. It is never the pass/fail rule by itself.
+        step_result.settle = exec
+            .observation
+            .as_ref()
+            .and_then(|observation| observation.input.as_ref())
+            .and_then(|delivery| delivery.settle.clone());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -683,6 +690,7 @@ fn execute_step(
                 .activity
                 .clone()
                 .or_else(|| manifest.launcher_activity.clone());
+            backend.set_settle_timeout(launch.settle_timeout_ms);
             let request = LaunchRequest {
                 apk: apk.to_path_buf(),
                 activity,
@@ -806,6 +814,7 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver tap");
             }
+            backend.set_settle_timeout(tap.settle_timeout_ms);
             let action = InputAction::Tap {
                 selector: tap.selector.clone(),
                 x: tap.x,
@@ -818,6 +827,7 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver type");
             }
+            backend.set_settle_timeout(ty.settle_timeout_ms);
             let action = InputAction::Type {
                 selector: ty.selector.clone(),
                 text: ty.text.clone(),
@@ -830,6 +840,7 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver key");
             }
+            backend.set_settle_timeout(key.settle_timeout_ms);
             input_step(
                 backend,
                 &InputAction::Key(key.key),
@@ -1067,11 +1078,12 @@ fn execute_step(
                 Err(error) => StepExec::backend_error(&error, backend.id(), "capture"),
             }
         }
-        StepRef::Reset(_) => {
+        StepRef::Reset(reset_step) => {
             capabilities_used.insert(Capability::Reset.as_str().to_string());
             if !caps.reset {
                 return StepExec::unsupported(Capability::Reset, "the backend cannot reset state");
             }
+            backend.set_settle_timeout(reset_step.settle_timeout_ms);
             match backend.reset(ResetScope::App) {
                 Ok(()) => {
                     // A reset leaves the app in its initial state, i.e. a new
@@ -2223,6 +2235,7 @@ mod region_tests {
             delivered: true,
             visual_change: false,
             acks: Vec::new(),
+            settle: None,
         });
         let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
         assert!(evaluated.result.passed);

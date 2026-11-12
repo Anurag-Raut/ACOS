@@ -334,6 +334,10 @@ impl Backend for TrustGuard {
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         self.inner.capture()
     }
+
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        self.inner.set_settle_timeout(timeout_ms);
+    }
 }
 
 #[cfg(test)]

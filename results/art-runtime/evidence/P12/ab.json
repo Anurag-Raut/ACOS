@@ -1,0 +1,28 @@
+{
+  "counter_tap_step": {
+    "on": {
+      "n": 30,
+      "p50_ms": 1010.0,
+      "p95_ms": 1031.5,
+      "min": 994,
+      "max": 1032
+    },
+    "off": {
+      "n": 30,
+      "p50_ms": 182.0,
+      "p95_ms": 201.6,
+      "min": 170,
+      "max": 205
+    }
+  },
+  "progress_tap_step": {
+    "on": {
+      "tap_ms": 3098,
+      "status": "pass"
+    },
+    "off": {
+      "tap_ms": 205,
+      "status": "pass"
+    }
+  }
+}

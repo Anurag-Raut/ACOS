@@ -178,6 +178,16 @@ pub struct ArtSession {
     reset_settle: &'static str,
     /// P9: whether that reset's tree request also captures a PNG.
     reset_pixels: bool,
+    /// P12: `"on"`/`"off"`, the session's launch-time animation scales. Every
+    /// reply states it so a functional result is never mistaken for animation
+    /// evidence.
+    animations: &'static str,
+    /// P12b: per-request strict/fast settle deadline (`settle_timeout_ms`).
+    /// `None` keeps the engine's documented default; on timeout the guest still
+    /// returns the latest tree and frame identity with `settled:false`.
+    settle_timeout_ms: Option<u64>,
+    /// P12b: deadline for the tree the next `reset` binds.
+    reset_settle_timeout_ms: Option<u64>,
     closed: bool,
     /// GL1: how the last explicit destruction of this session ended
     /// (orderly activity lifecycle vs. killed after the bounded grace) and how
@@ -345,7 +355,12 @@ struct SettleStats {
 }
 
 impl SettleStats {
-    fn to_json(&self, session_start_ms: u64, shutdown_ms: u64, frame_wait_secs: u64) -> serde_json::Value {
+    fn to_json(
+        &self,
+        session_start_ms: u64,
+        shutdown_ms: u64,
+        frame_wait_secs: u64,
+    ) -> serde_json::Value {
         serde_json::json!({
             "session_start_ms": session_start_ms,
             "shutdown_ms": shutdown_ms,
@@ -680,10 +695,7 @@ fn node_input_offset(node: &serde_json::Value) -> Option<(i32, i32)> {
     if screen.width() <= 0 || screen.height() <= 0 {
         return None;
     }
-    Some((
-        screen.left() - window.left(),
-        screen.top() - window.top(),
-    ))
+    Some((screen.left() - window.left(), screen.top() - window.top()))
 }
 
 /// Per-window display-to-window offsets from one probe tree.
@@ -779,6 +791,7 @@ fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
         delivered: true,
         visual_change,
         acks: acks_from_reply(reply),
+        settle: reply.get("settle").cloned(),
     }
 }
 
@@ -819,9 +832,7 @@ fn tree_signature(tree: &UiTree) -> u64 {
 /// real change satisfies the executor's own tree+screenshot requirement.
 fn state_changed(baseline: Option<&(String, u64)>, current: Option<&CachedFrame>) -> bool {
     match (baseline, current) {
-        (Some((md5, signature)), Some(frame)) => {
-            frame.md5 != *md5 && frame.signature != *signature
-        }
+        (Some((md5, signature)), Some(frame)) => frame.md5 != *md5 && frame.signature != *signature,
         // No baseline: never claim that nothing changed.
         _ => true,
     }
@@ -936,6 +947,28 @@ impl ArtSession {
     /// `$ACOS_ART_BIN`, else `acos-art` on `PATH`, else `target/{debug,release}/
     /// acos-art` next to the running `acos` binary.
     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+        Self::start_with_animations(apk, artifacts, "on")
+    }
+
+    /// P12: start a session with an explicit animation choice (`"on"` = real
+    /// framework behaviour, `"off"` = the three Android animation scales at 0).
+    /// The choice is launch-time: it is installed before the guest's first
+    /// traversal and is stated in every reply as `animations`.
+    pub fn start_with_animations(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+    ) -> Result<ArtSession, BackendError> {
+        let animations: &'static str = match animations.trim().to_ascii_lowercase().as_str() {
+            "on" => "on",
+            "off" => "off",
+            other => {
+                return Err(BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!("animations must be \"on\" or \"off\" (got {other:?})"),
+                })
+            }
+        };
         if !apk.is_file() {
             return Err(BackendError::Failed {
                 code: acos_protocol::ErrorCode::ApkIo,
@@ -990,6 +1023,8 @@ impl ArtSession {
             .arg("activity-resumed")
             .arg("--out")
             .arg(&out)
+            .arg("--animations")
+            .arg(animations)
             // The launcher reads this seam (no `acos-art` CLI flag change): a
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
@@ -1049,7 +1084,13 @@ impl ArtSession {
         // disconnected.
         unsafe {
             command.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+                libc::prctl(
+                    libc::PR_SET_PDEATHSIG,
+                    libc::SIGKILL as libc::c_ulong,
+                    0,
+                    0,
+                    0,
+                );
                 Ok(())
             });
         }
@@ -1158,6 +1199,9 @@ impl ArtSession {
             last_tree_settle: None,
             reset_settle: "strict",
             reset_pixels: true,
+            animations,
+            settle_timeout_ms: None,
+            reset_settle_timeout_ms: None,
             closed: false,
             last_teardown: None,
         };
@@ -1198,7 +1242,10 @@ impl ArtSession {
         let ready: serde_json::Value =
             serde_json::from_str(&ready).map_err(|error| BackendError::Error {
                 code: acos_protocol::ErrorCode::Internal,
-                detail: format!("acos-art ready line is not JSON: {error}; stderr tail: {}", session.stderr_tail()),
+                detail: format!(
+                    "acos-art ready line is not JSON: {error}; stderr tail: {}",
+                    session.stderr_tail()
+                ),
             })?;
         if ready.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let code = ready
@@ -1331,6 +1378,18 @@ impl ArtSession {
         self.settle_mode = if mode == "fast" { "fast" } else { "strict" };
     }
 
+    /// P12b: the per-request settle deadline (`settle_timeout_ms`). `None` keeps
+    /// the engine default. A timeout is still an observation: the guest returns
+    /// the latest tree and frame identity with `settled:false`.
+    pub fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        self.settle_timeout_ms = timeout_ms;
+    }
+
+    /// P12: the animation choice this session was launched with (`"on"`/`"off"`).
+    pub fn animations(&self) -> &'static str {
+        self.animations
+    }
+
     /// P1: the guest's settle block for the most recent input, verbatim.
     pub fn last_input_settle(&self) -> Option<&serde_json::Value> {
         self.last_input_settle.as_ref()
@@ -1419,10 +1478,7 @@ impl ArtSession {
                 format!("invalid keycode {code}"),
             ));
         }
-        self.input_command(
-            serde_json::json!({"cmd":"key","code":code}),
-            "input.key",
-        )
+        self.input_command(serde_json::json!({"cmd":"key","code":code}), "input.key")
     }
 
     fn stderr_tail(&self) -> String {
@@ -1519,7 +1575,11 @@ impl ArtSession {
         }
         let stdin = self.stdin.as_mut().expect("checked above");
         let line = request.to_string();
-        let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+        let cmd = request
+            .get("cmd")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?")
+            .to_string();
         let t_write = m5_now_us();
         if p3_enabled() && cmd == "tree" {
             p3_mark("cli", "cli.cmd_request", &format!("bytes={}", line.len()));
@@ -1561,7 +1621,12 @@ impl ArtSession {
             .read_line(timeout, "command")
             .map_err(|error| error.to_protocol_error())?;
         let t_reply = m5_now_us();
-        m5_trace("cli.art_cmd_wait", t_written, t_reply, &format!("cmd={cmd}"));
+        m5_trace(
+            "cli.art_cmd_wait",
+            t_written,
+            t_reply,
+            &format!("cmd={cmd}"),
+        );
         m5_trace(
             "cli.art_cmd_roundtrip",
             t_write,
@@ -1635,6 +1700,9 @@ impl ArtSession {
         let mut request = request;
         if let Some(object) = request.as_object_mut() {
             object.insert("settle".into(), serde_json::json!(self.settle_mode));
+            if let Some(timeout) = self.settle_timeout_ms {
+                object.insert("settle_timeout_ms".into(), serde_json::json!(timeout));
+            }
         }
         self.last_input_settle = None;
         let started = Instant::now();
@@ -1649,17 +1717,17 @@ impl ArtSession {
         // reply's phase evidence.
         timing.ack_ms = if outcome.is_ok() {
             self.last_input
-            .as_ref()
-            .map(|delivery| {
-                delivery
-                    .acks
-                    .iter()
-                    .filter_map(|ack| ack.latency_us)
-                    .map(|us| us / 1000)
-                    .max()
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0)
+                .as_ref()
+                .map(|delivery| {
+                    delivery
+                        .acks
+                        .iter()
+                        .filter_map(|ack| ack.latency_us)
+                        .map(|us| us / 1000)
+                        .max()
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0)
         } else {
             0
         };
@@ -1714,7 +1782,8 @@ impl ArtSession {
                 }
                 let recovery_started = Instant::now();
                 let polls_before = self.settle.recovery_polls;
-                if std::env::var_os("ACOS_ART_SETTLE_MODE").as_deref() == Some("guest-only".as_ref())
+                if std::env::var_os("ACOS_ART_SETTLE_MODE").as_deref()
+                    == Some("guest-only".as_ref())
                 {
                     // Diagnostic: the pre-W34 behaviour (one recovery capture,
                     // `visual_change: false`), for A/B cost runs.
@@ -1723,8 +1792,7 @@ impl ArtSession {
                     timing.recovery_polls = 1;
                     if let Some(cached) = self.cached.as_ref() {
                         if cached.seq <= previous {
-                            timing.host_recovery_ms =
-                                recovery_started.elapsed().as_millis() as u64;
+                            timing.host_recovery_ms = recovery_started.elapsed().as_millis() as u64;
                             return Err(stale_frame(
                                 previous,
                                 cached.seq,
@@ -1785,10 +1853,11 @@ impl ArtSession {
         // the one it handed back at the previous step (snapshotted before the
         // traversal a selector tap needs to resolve its point), falling back to
         // the current cache when the caller drives the session directly.
-        let baseline = self
-            .input_baseline
-            .clone()
-            .or_else(|| self.cached.as_ref().map(|frame| (frame.md5.clone(), frame.signature)));
+        let baseline = self.input_baseline.clone().or_else(|| {
+            self.cached
+                .as_ref()
+                .map(|frame| (frame.md5.clone(), frame.signature))
+        });
         let mut polls = 0u64;
         let mut last_hash = baseline.clone();
         let mut visual_change = false;
@@ -1849,6 +1918,7 @@ impl ArtSession {
             delivered: true,
             visual_change,
             acks: acks_from_reply(reply),
+            settle: reply.get("settle").cloned(),
         });
         Ok(())
     }
@@ -1908,13 +1978,9 @@ impl ArtSession {
                     self.density,
                     &claimed,
                 ),
-                None => FrameArtifact::bind(
-                    Path::new(path),
-                    seq,
-                    self.width,
-                    self.height,
-                    self.density,
-                ),
+                None => {
+                    FrameArtifact::bind(Path::new(path), seq, self.width, self.height, self.density)
+                }
             }?),
             None => None,
         };
@@ -2061,6 +2127,9 @@ impl ArtSession {
         let started = Instant::now();
         let t0 = m5_now_us();
         let mut request = serde_json::json!({"cmd":"tree", "settle": settle});
+        if let Some(timeout) = self.settle_timeout_ms {
+            request["settle_timeout_ms"] = serde_json::json!(timeout);
+        }
         if !pixels {
             request["pixels"] = serde_json::json!(false);
         }
@@ -2392,9 +2461,15 @@ impl ArtSession {
 
     /// P9: choose the settle mode and pixel capture the next `reset` binds its
     /// relaunched guest's tree with (serve's `acos_reset` arguments).
-    pub(crate) fn set_reset_bind(&mut self, settle: &'static str, pixels: bool) {
+    pub(crate) fn set_reset_bind(
+        &mut self,
+        settle: &'static str,
+        pixels: bool,
+        timeout_ms: Option<u64>,
+    ) {
         self.reset_settle = if settle == "fast" { "fast" } else { "strict" };
         self.reset_pixels = pixels;
+        self.reset_settle_timeout_ms = timeout_ms;
     }
 }
 
@@ -2669,13 +2744,14 @@ impl SessionBackend for ArtSession {
         }
         let stop_ms = phase_started.elapsed().as_millis() as u64;
         let relaunch_started = Instant::now();
-        let mut fresh = match ArtSession::start(&apk, &artifacts) {
+        let mut fresh = match ArtSession::start_with_animations(&apk, &artifacts, self.animations) {
             Ok(fresh) => fresh,
             Err(error) => {
                 self.invalidate_frame();
                 return Err(error);
             }
         };
+        fresh.settle_timeout_ms = self.reset_settle_timeout_ms;
         let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
@@ -2729,7 +2805,30 @@ impl SessionBackend for ArtSession {
         self.close()?;
         Ok(self.teardown_report())
     }
+
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        timed_out_settle(self.last_input_settle.as_ref())
+    }
+
+    fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        timed_out_settle(self.last_tree_settle.as_ref())
+    }
 }
+/// P12b: did this reply's settle block time out?
+///
+/// Only the structured timeout shape counts (`settled:false` with
+/// `bound:"timeout"`); an old or absent block is not a timeout.
+fn timed_out_settle(settle: Option<&serde_json::Value>) -> Option<serde_json::Value> {
+    let settle = settle?;
+    if settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false)
+        && settle.get("bound").and_then(serde_json::Value::as_str) == Some("timeout")
+    {
+        Some(settle.clone())
+    } else {
+        None
+    }
+}
+
 impl Drop for ArtSession {
     fn drop(&mut self) {
         let _ = self.close();
@@ -2766,8 +2865,7 @@ fn fatal_log(reply: &serde_json::Value) -> Option<CrashRecord> {
             || message.contains("Check failed")
             || message.contains("CHECK failed")
             || (tag == "AndroidRuntime"
-                && (message.starts_with("FATAL EXCEPTION")
-                    || message.contains("FATAL EXCEPTION")));
+                && (message.starts_with("FATAL EXCEPTION") || message.contains("FATAL EXCEPTION")));
         if fatal {
             return Some(CrashRecord {
                 exception: if tag.is_empty() {
@@ -2856,14 +2954,15 @@ pub(crate) fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
     static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
         std::sync::OnceLock::new();
     let sink = SINK.get_or_init(|| {
-        std::env::var_os("DM5_TRACE").and_then(|path| {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .ok()
-        })
-        .map(std::sync::Mutex::new)
+        std::env::var_os("DM5_TRACE")
+            .and_then(|path| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .ok()
+            })
+            .map(std::sync::Mutex::new)
     });
     if let Some(file) = sink {
         if let Ok(mut file) = file.lock() {
@@ -2890,14 +2989,15 @@ pub(crate) fn p3_trace(proc_name: &str, event: &str, t0: u128, t1: u128, extra: 
     static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
         std::sync::OnceLock::new();
     let sink = SINK.get_or_init(|| {
-        std::env::var_os("P3_TRACE").and_then(|path| {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .ok()
-        })
-        .map(std::sync::Mutex::new)
+        std::env::var_os("P3_TRACE")
+            .and_then(|path| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .ok()
+            })
+            .map(std::sync::Mutex::new)
     });
     if let Some(file) = sink {
         if let Ok(mut file) = file.lock() {
@@ -3228,10 +3328,7 @@ mod tests {
         body.push_str("seq=0\n");
         // P9: every command the engine sends is appended here, so a test can
         // assert the *request* shape (`settle`, `pixels`), not just the reply.
-        body.push_str(&format!(
-            "requests='{}/requests.log'\n",
-            dir.display()
-        ));
+        body.push_str(&format!("requests='{}/requests.log'\n", dir.display()));
         body.push_str("while IFS= read -r line; do\n");
         body.push_str("  printf '%s\\n' \"$line\" >> \"$requests\"\n");
         body.push_str("  case \"$line\" in\n");
@@ -3289,7 +3386,9 @@ mod tests {
         let requests = dir.join("requests.log");
 
         // A fresh session has no bound tree: fast binds one from the probe.
-        session.ensure_launch_tree("fast", false).expect("fast bind");
+        session
+            .ensure_launch_tree("fast", false)
+            .expect("fast bind");
         let first = std::fs::read_to_string(&requests).unwrap();
         assert!(
             first.contains("\"settle\":\"fast\""),
@@ -3301,7 +3400,7 @@ mod tests {
         );
         let _ = std::fs::remove_file(&requests);
 
-        session.set_reset_bind("strict", true);
+        session.set_reset_bind("strict", true, None);
         session.reset().expect("strict reset");
         let strict = std::fs::read_to_string(&requests).unwrap();
         assert!(
@@ -3314,7 +3413,7 @@ mod tests {
         );
         let _ = std::fs::remove_file(&requests);
 
-        session.set_reset_bind("fast", false);
+        session.set_reset_bind("fast", false, None);
         session.reset().expect("fast reset");
         let fast = std::fs::read_to_string(&requests).unwrap();
         assert!(
@@ -3489,7 +3588,9 @@ mod tests {
         std::env::set_var("ACOS_ART_BIN", &refusing_art_binary(&dir, u32::MAX));
         let mut session = ArtSession::start(&apk, &dir).expect("second fake session starts");
         let _ = session.frame().expect("pre-action frame");
-        session.tap(1, 1).expect("a no-change delivery still settles");
+        session
+            .tap(1, 1)
+            .expect("a no-change delivery still settles");
         let delivery = session.last_input_delivery().expect("delivery record");
         assert!(delivery.delivered);
         assert!(
@@ -3716,7 +3817,10 @@ mod tests {
             serde_json::json!("acos-art child exit status (no session-exit.json)"),
             "{details}"
         );
-        assert_eq!(details["session_exit"]["guest_signal"], serde_json::json!(9));
+        assert_eq!(
+            details["session_exit"]["guest_signal"],
+            serde_json::json!(9)
+        );
         assert!(session.liveness().is_some(), "liveness agrees");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3749,7 +3853,9 @@ mod tests {
         ));
         body.push_str("    *'\"cmd\":\"logs\"'*) echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":0,\"kept\":0,\"dropped\":0,\"entries\":[]}' ;;\n");
         body.push_str("    *'\"cmd\":\"close\"'*) exit 0 ;;\n");
-        body.push_str("    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n");
+        body.push_str(
+            "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n",
+        );
         body.push_str("  esac\n");
         body.push_str("done\n");
         std::fs::write(&script, body).unwrap();
@@ -3762,11 +3868,18 @@ mod tests {
         // survive into this session.
         let stale = dir.join("art-frames/session-exit.json");
         std::fs::create_dir_all(dir.join("art-frames")).unwrap();
-        std::fs::write(&stale, br#"{"outcome":"crash","code":"GUEST_EXITED","stage":"stale"}"#).unwrap();
+        std::fs::write(
+            &stale,
+            br#"{"outcome":"crash","code":"GUEST_EXITED","stage":"stale"}"#,
+        )
+        .unwrap();
         let _art_bin_guard = art_bin_env_lock();
         std::env::set_var("ACOS_ART_BIN", &script);
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
-        assert!(!stale.exists(), "a stale session-exit.json must be removed at start");
+        assert!(
+            !stale.exists(),
+            "a stale session-exit.json must be removed at start"
+        );
         let before = session.frame().expect("first frame");
         assert!(before.frame_seq() >= 1);
         let error = session.reset().expect_err("the replacement guest dies");
@@ -3856,7 +3969,10 @@ mod tests {
         std::fs::write(&png, &super::super::fake::TINY_PNG[..20]).unwrap();
         let error = artifact.load().expect_err("truncated pixels must not load");
         assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
-        assert!(format!("{error}").contains("bytes but was bound at"), "{error}");
+        assert!(
+            format!("{error}").contains("bytes but was bound at"),
+            "{error}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

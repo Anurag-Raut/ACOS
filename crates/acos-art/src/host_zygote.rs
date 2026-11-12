@@ -192,11 +192,7 @@ fn close_plan_fds(plan: &HostPlan) {
 /// Never returns on success: the template `_exit`s with a code derived from the
 /// children's statuses. `Err` is only for a template-side setup failure before
 /// any child exists (so the driver sees a structured launcher error).
-pub fn run_template(
-    root: &ArtRoot,
-    plan_dir: &Path,
-    shims: SessionShims,
-) -> Result<LaunchResult> {
+pub fn run_template(root: &ArtRoot, plan_dir: &Path, shims: SessionShims) -> Result<LaunchResult> {
     if std::env::var_os("ACOS_ZYGOTE_SESSION").is_some()
         || std::env::var_os("ACOS_ZYGOTE_APP").is_some()
     {
@@ -247,6 +243,10 @@ pub fn run_template(
                 density_dpi: geometry("ACOSLAUNCH_DENSITY", 420),
                 status_inset: geometry("ACOSLAUNCH_STATUS_INSET", 128),
                 nav_inset: geometry("ACOSLAUNCH_NAV_INSET", 63),
+                animations: std::env::var("ACOS_ANIMATIONS")
+                    .ok()
+                    .and_then(|value| crate::launch::Animations::parse(&value).ok())
+                    .unwrap_or_default(),
             };
             let host = prebuilt.take();
             let code = match crate::launch::launch_session(root, &child_opts, host, &shims) {

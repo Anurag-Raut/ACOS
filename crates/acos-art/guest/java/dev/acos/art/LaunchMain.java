@@ -102,6 +102,9 @@ public final class LaunchMain {
     static int sAppFlags = -1;
     /** W31: where `sAppFlags` came from (`manifest`, `env`, or `default`). */
     static String sAppFlagsSource = "default";
+    /** P12: the agent's animation choice for this session (`ACOS_ANIMATIONS`). */
+    static boolean sAnimationsRequested = true;
+    static String sAnimationsRequestSource = "default";
     /**
      * Frame-probe progress: `-1` = probe disabled, otherwise the number of
      * completed `doFrame` callbacks. The watcher waits for this before sending
@@ -171,6 +174,26 @@ public final class LaunchMain {
                 long ms = Long.parseLong(ready.trim());
                 // A readiness bound of zero or "infinite" is not a bound.
                 if (ms >= 100L && ms <= 60000L) sResumeReadyMs = ms;
+            }
+        } catch (Throwable ignored) {
+        }
+        // P12: per-session animation scales. The host forwards `ACOS_ANIMATIONS`
+        // (default `on`: real framework animation behaviour).
+        try {
+            String anim = System.getenv("ACOS_ANIMATIONS");
+            if (anim != null && anim.trim().length() > 0) {
+                String v = anim.trim();
+                if ("off".equalsIgnoreCase(v)) {
+                    sAnimationsRequested = false;
+                    sAnimationsRequestSource = "env:off";
+                } else if ("on".equalsIgnoreCase(v)) {
+                    sAnimationsRequested = true;
+                    sAnimationsRequestSource = "env:on";
+                } else {
+                    System.out.println("ACOSLAUNCH WARN ACOS_ANIMATIONS=" + v
+                            + " is not on|off; keeping animations on");
+                    sAnimationsRequestSource = "env:invalid";
+                }
             }
         } catch (Throwable ignored) {
         }
@@ -286,6 +309,9 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
+        // P12: install the session animation scale before any framework animator
+        // can start (before Activity attach and the app's first traversal).
+        applyAnimations(sAnimationsRequested, sAnimationsRequestSource);
         // W24: the device's static RROs, before any framework `Resources` exists.
         applySystemOverlays();
         int looper = Nat.startBinderLooper();
@@ -587,33 +613,58 @@ public final class LaunchMain {
     static final java.util.IdentityHashMap<View, Boolean> sWatchedRoots =
             new java.util.IdentityHashMap<View, Boolean>();
 
+    // --------------------------------------------- P12: agent animations flag
+    //
+    // Real Android's `animator_duration_scale` reaches the framework as
+    // `ValueAnimator.setDurationScale` (WMS `getCurrentAnimatorScale` at
+    // `WindowManagerGlobal` init, then `IWindowSessionCallback` on changes).
+    // ACOS has no SettingsProvider, so the launcher (the WMS host) reports the
+    // same scale and the guest installs it at the same framework point. This
+    // is the scale every ValueAnimator/ObjectAnimator/StateListAnimator and the
+    // native RenderNodeAnimator read; transition/window chrome on a device is
+    // WMS-side and ACOS's WMS runs no transition animations.
+    static volatile boolean sAnimationsOn = true;
+    static volatile float sAnimationsScale = 1.0f;
+    static volatile boolean sAnimationsApplied = false;
+    static volatile String sAnimationsSource = "default";
+
+    static void applyAnimations(boolean on, String source) {
+        float scale = on ? 1.0f : 0.0f;
+        boolean applied = false;
+        try {
+            Class<?> va = Class.forName("android.animation.ValueAnimator");
+            Method set = va.getMethod("setDurationScale", float.class);
+            set.invoke(null, scale);
+            try {
+                Object read = va.getMethod("getDurationScale").invoke(null);
+                if (read instanceof Number) scale = ((Number) read).floatValue();
+            } catch (Throwable ignored) {
+            }
+            applied = true;
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN animations apply failed: "
+                    + unwrap(t));
+        }
+        sAnimationsOn = on;
+        sAnimationsScale = scale;
+        sAnimationsApplied = applied;
+        sAnimationsSource = source;
+        System.out.println("ACOSLAUNCH MARK animations on=" + on + " scale=" + scale
+                + " applied=" + applied + " source=" + source);
+        System.out.flush();
+    }
+
     // ------------------------------------------------ P11: event-strict settle
     //
-    // Quiet strict waits 150 ms after the last C1 store. P11 can instead report
-    // whether the framework's own UI work is finished, so the host can bind a
-    // settled observation without a fixed delay (default; the host always forwards ACOS_STRICT_SETTLE=event|quiet).
-    // The checks are read-only field reads / getters on the UI thread and are
-    // only run when the switch is on, so the quiet probe line stays byte-identical.
+    // Strict settle is event-only (P12, owner decision 2026-11-12). The guest
+    // reports whether the framework's own UI work is finished, so the host can
+    // bind a settled observation without a fixed delay.
+    // The checks are read-only field reads / getters on the UI thread.
     static volatile long sLastDrawMs = 0;
     static volatile long sDrawSeq = 0;
     static volatile String sWindowSignature = "";
     static volatile long sWindowSignatureAtMs = 0;
-    static boolean sSettleEventCached = false;
-    static boolean sSettleEventOn = false;
     static long sSettleHorizonMs = -1;
-
-    static boolean settleEventEnabled() {
-        if (!sSettleEventCached) {
-            String v = null;
-            try {
-                v = System.getenv("ACOS_STRICT_SETTLE");
-            } catch (Throwable ignored) {
-            }
-            sSettleEventOn = "event".equalsIgnoreCase(v == null ? "" : v.trim());
-            sSettleEventCached = true;
-        }
-        return sSettleEventOn;
-    }
 
     static long settleHorizonMs() {
         if (sSettleHorizonMs < 0) {
@@ -1300,9 +1351,8 @@ public final class LaunchMain {
         // P10: a new window root (dialog/menu/popup) is registered for dirty
         // events here, on the main thread and outside any draw dispatch.
         watchProbeRoots((View) decor);
-        // P11: only when the event switch is on. A quiet-mode probe line is
-        // byte-identical to P10's (no new fields, no extra framework reads).
-        SettleSignals settle = settleEventEnabled() ? checkSettle(roots, (View) decor) : null;
+        // P11/P12: strict settle is always the event rule.
+        SettleSignals settle = checkSettle(roots, (View) decor);
         StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
@@ -1331,6 +1381,12 @@ public final class LaunchMain {
                     .append(",\"view_generation\":").append(sViewGeneration)
                     .append('}');
         }
+        // P12: the effective animation state travels with every sample, so a
+        // reply never claims `animations:off` without the guest confirming it.
+        j.append(",\"animations\":{\"on\":").append(sAnimationsOn)
+                .append(",\"scale\":").append(sAnimationsScale)
+                .append(",\"applied\":").append(sAnimationsApplied)
+                .append(",\"source\":\"").append(jesc(sAnimationsSource)).append("\"}");
         j.append('}');
         System.out.println(j);
         System.out.flush();

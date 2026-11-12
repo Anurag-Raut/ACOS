@@ -389,6 +389,15 @@
             }
           ],
           "description": "Symbolic key."
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for this key action (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -429,6 +438,15 @@
           "description": "Intent action.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for the first tree (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
             "null"
           ]
         }
@@ -837,6 +855,15 @@
             }
           ],
           "description": "Reset scope."
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for the relaunched tree (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1353,6 +1380,15 @@
           ],
           "description": "Target selector."
         },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for this tap (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "timeout_ms": {
           "description": "Event-driven timeout.",
           "format": "uint64",
@@ -1536,6 +1572,15 @@
           ],
           "description": "Target selector (absent = current focus)."
         },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for this type action (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "text": {
           "description": "Text to enter.",
           "type": "string"
@@ -1615,6 +1660,13 @@
   },
   "description": "A complete scenario.",
   "properties": {
+    "animations": {
+      "description": "P12: per-session framework animation scales (`on`/`off`, default `on`).\n\n`off` sets Android's three animation scales to 0 for functional checks; it is never for animation/transition testing. Launch-time only.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "api_level": {
       "description": "Android API level required, when the scenario pins one.",
       "format": "uint32",

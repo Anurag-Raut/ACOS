@@ -1,0 +1,13 @@
+PASS p11-activity (expected pass)
+PASS p11-anim (expected pass)
+PASS p11-background (expected pass)
+PASS p11-chain (expected pass)
+PASS p11-delay1000 (expected pass)
+PASS p11-delay200 (expected pass)
+PASS p11-delay40 (expected pass)
+PASS p11-dialog (expected pass)
+PASS p11-layout-transition (expected pass)
+PASS p11-list-smooth (expected pass)
+PASS p11-progress-timeout (expected non-pass, got timeout)
+PASS p11-rapid-taps (expected pass)
+false_passes=0 unexpected_failures=0

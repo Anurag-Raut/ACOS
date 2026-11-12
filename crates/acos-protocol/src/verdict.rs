@@ -53,6 +53,10 @@ pub struct StepResult {
     /// Assertion results (empty for non-assertion steps).
     #[serde(default)]
     pub assertions: Vec<AssertionResult>,
+    /// Settle evidence for an input step (P12): `mode`, `settled`, `bound`,
+    /// `pixels_changed`, `reason`, ... `None` for steps with no settle reply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<serde_json::Value>,
     /// Evidence backing this step. A passing step must have at least one entry.
     #[serde(default)]
     pub evidence: Vec<ArtifactRef>,
@@ -71,6 +75,7 @@ impl StepResult {
             duration_ms,
             frame_seq: None,
             assertions: Vec::new(),
+            settle: None,
             evidence: Vec::new(),
             error: None,
         }

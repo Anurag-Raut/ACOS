@@ -1,0 +1,10 @@
+PASS counter (anim=on)
+PASS w22 (anim=on)
+FAIL w54 anim=on rc=1 verdict=timeout code=TIMEOUT
+FAIL w42 anim=on rc=1 verdict=timeout code=TIMEOUT
+PASS w15 (anim=on)
+FAIL form anim=on rc=1 verdict=timeout code=TIMEOUT
+PASS T03good (anim=on)
+PASS T03wrong (expected assertion failure)
+PASS progress-off (anim=off)
+PASS progress-timeout (expected non-pass: timeout/TIMEOUT)

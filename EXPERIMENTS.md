@@ -699,6 +699,51 @@ screen — MEASURED (false pass found; one layout wall open)
   inert). Next: H9 (input hang under load), then the same A/B on a heavier app under P12's settle
   work.
 
+## E2.9 — event-only strict settle + per-session animation scales — MEASURED
+
+- **Date / commit:** 2026-11-12; P12 branch `perf-p12-event-only-anim`.
+- **Question / goal:** remove the P11 quiet escape hatch (strict = event rule
+  only) and let the agent turn Android's three animation scales off for
+  functional checks, with every reply stating which mode ran.
+- **Method:** real ART, release binary, `results/art-runtime/evidence/P12/`;
+  7 core gates + the 12 `p11-*` scenarios in both modes; counter A/B n=30 taps
+  per mode (`v2-art-counter` steps 4/7/9); settle-lab indeterminate ProgressBar.
+- **Result:** core gates green in both modes (`T03-render-wrong` fails as the
+  expected control). Counter tap step **1010 ms p50 / 1031.5 p95 with animations
+  on vs 182 ms / 201.6 off** (5.5×). Indeterminate ProgressBar: strict timed out
+  at 3098 ms with animations on, **settled in 205 ms with animations off** (the
+  bar stops at animator scale 0). Review correction: `verify` fails a
+  timed-out settle step as `TIMEOUT` (agent observe still returns the latest
+  tree); `p11-progress-timeout` is the non-pass negative control and
+  `p12-progress-anim-off` passes 6/6.
+- **Finding (review rebase, `main` 1f21ea7):** with P11's event pixel guard on,
+  only **4 of the 7 core gates pass**; `w54`, `w42` and `form-validation` fail
+  as `TIMEOUT` at a tap that changes no pixels (first focus into an EditText
+  with no IME/cursor change). This was latent because `verify` used to accept a
+  settle timeout as a pass. Owner decision (2026-11-12): **default the guard
+  off** — the four event conditions already prove the draw is after the action;
+  requiring different pixels only adds false timeouts. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on`
+  restores P11 for experiments. Every strict input reply and verify step now
+  reports `pixels_changed:true|false`; a tap with no draw after the action still
+  times out. With the adopted default: **7/7 gates green, p12-progress-anim-off
+  pass, p11-progress-timeout non-pass TIMEOUT, P11 corpus 0/12 false passes.**
+- **Finding:** with animations off, a 150 ms background-thread UI post and a
+  1000 ms `postDelayed` scheduled *after* the fast settle were not observed by
+  subsequent `wait_for` polling (tree stayed at the pre-update text, no C1
+  store). With animations on the ~0.9 s framework animator kept the settle
+  alive until they landed, which is why P11 did not see it. Suspect main-looper
+  delayed-message dispatch while the guest is idle; H6 should measure it.
+- **Fidelity / evidence:** `art`, live; `results/art-runtime/P12.md`,
+  `results/art-runtime/evidence/P12/{gates-off.txt,gates-and-ab.txt,ab.json}`.
+- **Regression / false pass:** 7 core gates both modes; assertions refuse
+  `settled:false`; `T03-render-wrong` still fails. The P11 settle-lab false-pass
+  corpus with animations off was not re-run (follow-up: pass `animations:off`
+  through the P11 harness). The animations-on corpus is 0/12 false passes under
+  the adopted default.
+- **Conclusion / next:** animations:off is the right default for functional
+  checks (5.5× on a Button tap) and fixes the forever-animating screen;
+  investigate idle main-looper timers, then re-run the P11 corpus with `off`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -710,7 +755,7 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | M5 screenshot | 24.4 ms | main P2/W1 | P2 | 2026-11-12 |
 | M6 reset | strict 463 ms / fast 195 ms | main P9 | P9 | 2026-11-12 |
 | M7 UI tree | strict 151 ms (pre-event) / fast 0.2 ms | main P3d/P10 | P3d, P10 | 2026-11-12 |
-| M8 tap → settled | strict 955 ms (event) / fast 70.9 ms | main P11 | P1, P11 | 2026-11-12 |
+| M8 tap → settled | strict 955 ms (event, animations on); **182 ms p50 with `animations: off`** (P12 counter step incl. ~78 ms capture) / fast 70.9 ms | main P11, P12 | P1, P11, P12 E2.9 | 2026-11-13 |
 | Memory / extra session | 100.9 MiB cgroup (pre-W1); zygote research 22.2 MiB Pss | O2; Z6 | O2, Z6 | 2026-11-12 |
 | Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 |
