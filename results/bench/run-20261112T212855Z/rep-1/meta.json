@@ -1,0 +1,37 @@
+{
+ "rep": 1,
+ "started_utc": "2026-11-12T21:28:55Z",
+ "groups": {
+  "a1": {
+   "name": "a1",
+   "phases": [
+    "latency",
+    "cold"
+   ],
+   "wall_s": 158,
+   "queue_wait_s": 0,
+   "rc": 0
+  },
+  "a2": {
+   "name": "a2",
+   "phases": [
+    "loop1",
+    "loop5",
+    "p11",
+    "scenarios"
+   ],
+   "wall_s": 225,
+   "queue_wait_s": 64,
+   "rc": 0
+  },
+  "mem": {
+   "name": "mem",
+   "phases": [
+    "memory"
+   ],
+   "wall_s": 248,
+   "queue_wait_s": 28,
+   "rc": 0
+  }
+ }
+}

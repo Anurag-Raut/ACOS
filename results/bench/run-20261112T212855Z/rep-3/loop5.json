@@ -1,0 +1,421 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/b2/target/release/acos",
+  "binary_sha256": "c824013b2b043a0659bfffd6deb3ba4c0c8da300b0f048ba3319cb6e6d57647a",
+  "bundle_wall_s": 9.745,
+  "env": {
+    "animations": "on",
+    "loops": 6
+  },
+  "errors": [],
+  "failures": [],
+  "host_after": {
+    "loadavg1": 5.48,
+    "loadavg15": 3.53,
+    "loadavg5": 3.42,
+    "mem_available_gib": 46.67,
+    "mem_available_mib": 47792.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "1/2689",
+    "used_mib": 14116.1,
+    "used_pct": 22.8,
+    "utc": "2026-11-12T21:57:47+00:00"
+  },
+  "host_before": {
+    "loadavg1": 5.48,
+    "loadavg15": 3.53,
+    "loadavg5": 3.42,
+    "mem_available_gib": 46.67,
+    "mem_available_mib": 47792.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "1/2689",
+    "used_mib": 14116.1,
+    "used_pct": 22.8,
+    "utc": "2026-11-12T21:57:47+00:00"
+  },
+  "ok": true,
+  "p5": {
+    "failed_tasks": [],
+    "false_pass": 0,
+    "loop": {
+      "assert": {
+        "ci95_high": 40.951,
+        "ci95_low": 40.873999999999995,
+        "cv": 0.004132535661884351,
+        "max": 41.436,
+        "mean": 40.97804,
+        "median": 40.922,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.796,
+        "n": 25,
+        "p5": 40.8138,
+        "p50": 40.922,
+        "p95": 41.3152,
+        "resamples": 2000,
+        "spread": 0.012252578075362806,
+        "spread_pct": 1.2252578075362806,
+        "stdev": 0.1693432116541234
+      },
+      "inspect": {
+        "ci95_high": 41.071,
+        "ci95_low": 40.944,
+        "cv": 0.0031386160020210573,
+        "max": 41.302,
+        "mean": 41.009440000000005,
+        "median": 41.025,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.781,
+        "n": 25,
+        "p5": 40.81,
+        "p50": 41.025,
+        "p95": 41.1802,
+        "resamples": 2000,
+        "spread": 0.00902376599634362,
+        "spread_pct": 0.902376599634362,
+        "stdev": 0.12871288461792244
+      },
+      "launch": {
+        "ci95_high": 0.317,
+        "ci95_low": 0.224,
+        "cv": 0.30902365775494184,
+        "max": 0.462,
+        "mean": 0.28532,
+        "median": 0.241,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.188,
+        "n": 25,
+        "p5": 0.195,
+        "p50": 0.241,
+        "p95": 0.4525999999999999,
+        "resamples": 2000,
+        "spread": 1.068879668049792,
+        "spread_pct": 106.8879668049792,
+        "stdev": 0.08817063003064002
+      },
+      "observe_png": {
+        "ci95_high": 30.226,
+        "ci95_low": 27.439,
+        "cv": 0.07704674371853708,
+        "max": 34.143,
+        "mean": 28.922800000000002,
+        "median": 28.82,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 25.79,
+        "n": 25,
+        "p5": 25.999000000000002,
+        "p50": 28.82,
+        "p95": 32.4552,
+        "resamples": 2000,
+        "spread": 0.22401804302567646,
+        "spread_pct": 22.401804302567648,
+        "stdev": 2.2284075592225046
+      },
+      "observe_tree": {
+        "ci95_high": 41.163,
+        "ci95_low": 40.978,
+        "cv": 0.004158491838986666,
+        "max": 41.491,
+        "mean": 41.0814,
+        "median": 41.103,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.785,
+        "n": 25,
+        "p5": 40.8322,
+        "p50": 41.103,
+        "p95": 41.2902,
+        "resamples": 2000,
+        "spread": 0.011142738972824329,
+        "spread_pct": 1.1142738972824329,
+        "stdev": 0.17083666663414684
+      },
+      "reset": {
+        "ci95_high": 338.652,
+        "ci95_low": 324.273,
+        "cv": 0.034082736768149484,
+        "max": 352.456,
+        "mean": 331.961,
+        "median": 332.319,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 311.893,
+        "n": 25,
+        "p5": 314.6578,
+        "p50": 332.319,
+        "p95": 350.0254,
+        "resamples": 2000,
+        "spread": 0.106426656315167,
+        "spread_pct": 10.6426656315167,
+        "stdev": 11.314139380291671
+      },
+      "tap": {
+        "ci95_high": 947.411,
+        "ci95_low": 943.626,
+        "cv": 0.005638191962187175,
+        "max": 949.421,
+        "mean": 944.16744,
+        "median": 945.28,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 926.522,
+        "n": 25,
+        "p5": 932.7139999999999,
+        "p50": 945.28,
+        "p95": 948.5942,
+        "resamples": 2000,
+        "spread": 0.016799466824644612,
+        "spread_pct": 1.679946682464461,
+        "stdev": 5.323397271166843
+      }
+    },
+    "loop_total": {
+      "ci95_high": 1439.2310000000002,
+      "ci95_low": 1419.223,
+      "cv": 0.009579713566181878,
+      "max": 1451.632,
+      "mean": 1428.40544,
+      "median": 1428.133,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1401.978,
+      "n": 25,
+      "p5": 1404.3524,
+      "p50": 1428.133,
+      "p95": 1446.306,
+      "resamples": 2000,
+      "spread": 0.02937653565879372,
+      "spread_pct": 2.937653565879372,
+      "stdev": 13.683714971575993
+    },
+    "loop_wall_total": {
+      "ci95_high": 1456.075,
+      "ci95_low": 1433.706,
+      "cv": 0.01265294685271629,
+      "max": 1479.129,
+      "mean": 1444.5739999999998,
+      "median": 1443.095,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1411.157,
+      "n": 25,
+      "p5": 1413.9664000000002,
+      "p50": 1443.095,
+      "p95": 1477.0926,
+      "resamples": 2000,
+      "spread": 0.04374362048236582,
+      "spread_pct": 4.3743620482365815,
+      "stdev": 18.27811804681578
+    },
+    "measured_tasks": 25,
+    "memory": {
+      "cgroup_gib_min": 0.03744962604093014,
+      "cgroup_memory_current_peak_mib": 421.887,
+      "interval_s": 0.1,
+      "last": {
+        "extra_cgroups": {
+          "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3054767-i11494364.scope": 61.379,
+          "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3054784-i11422647.scope": 58.387
+        },
+        "job_anon_shmem_mib": 37.414,
+        "job_memory_current_mib": 421.887,
+        "net_anon_shmem_mib": 136.348,
+        "sampler_mib": 20.832,
+        "t": 1794520666.7057319,
+        "utc": "2026-11-12T21:57:46+00:00"
+      },
+      "net_anon_shmem_gib_min": 0.02814281952340389,
+      "net_anon_shmem_peak_mib": 366.794,
+      "samples": 94
+    },
+    "throughput": {
+      "cohort_wall_s": 9.357,
+      "verified_tasks": 25,
+      "verified_tasks_per_gib_min": 667.5634,
+      "verified_tasks_per_gib_min_net": 888.3261,
+      "verified_tasks_per_s": 2.6719
+    },
+    "verified": 25
+  },
+  "phase": "loop5",
+  "samples": {
+    "loop_n5_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "false_pass": 0,
+          "measured": 25,
+          "n": 25,
+          "p95": 1446.306,
+          "verified": 25
+        }
+      ],
+      "median": 1428.133,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1428.133,
+        "mean": 1428.133,
+        "median": 1428.133,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1428.133,
+        "n": 1,
+        "p5": 1428.133,
+        "p50": 1428.133,
+        "p95": 1428.133,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms/task",
+      "values": [
+        1428.133
+      ]
+    },
+    "loop_n5_tasks_per_gib_min": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 9.357,
+          "verified_tasks": 25,
+          "verified_tasks_per_gib_min": 667.5634,
+          "verified_tasks_per_gib_min_net": 888.3261,
+          "verified_tasks_per_s": 2.6719
+        }
+      ],
+      "median": 667.563,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 667.563,
+        "mean": 667.563,
+        "median": 667.563,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 667.563,
+        "n": 1,
+        "p5": 667.563,
+        "p50": 667.563,
+        "p95": 667.563,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/GiB-min",
+      "values": [
+        667.563
+      ]
+    },
+    "loop_n5_tasks_per_s": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 9.357,
+          "verified_tasks": 25,
+          "verified_tasks_per_gib_min": 667.5634,
+          "verified_tasks_per_gib_min_net": 888.3261,
+          "verified_tasks_per_s": 2.6719
+        }
+      ],
+      "median": 2.672,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 2.672,
+        "mean": 2.672,
+        "median": 2.672,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 2.672,
+        "n": 1,
+        "p5": 2.672,
+        "p50": 2.672,
+        "p95": 2.672,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/s",
+      "values": [
+        2.672
+      ]
+    },
+    "loop_n5_verified_rate": {
+      "bad": 0,
+      "extra": [
+        {
+          "measured": 25,
+          "verified": 25
+        }
+      ],
+      "median": 1.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1.0,
+        "n": 1,
+        "p5": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "fraction",
+      "values": [
+        1.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T21:57:46+00:00"
+}

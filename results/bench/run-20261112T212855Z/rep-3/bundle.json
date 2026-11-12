@@ -1,0 +1,80 @@
+{
+  "host_after": {
+    "loadavg1": 0.47,
+    "loadavg15": 2.63,
+    "loadavg5": 1.47,
+    "mem_available_gib": 46.77,
+    "mem_available_mib": 47893.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && python3 - <<'EOF'\np='crates/acos-binder-peer/native/binder_driver.c'\ns=open(p).read()\ns=s.replace(''' ",
+        "comm": "bash",
+        "pid": 3065427
+      }
+    ],
+    "runnable": "2/2673",
+    "used_mib": 14014.8,
+    "used_pct": 22.64,
+    "utc": "2026-11-12T22:04:03+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.97,
+    "loadavg15": 3.26,
+    "loadavg5": 2.73,
+    "mem_available_gib": 46.61,
+    "mem_available_mib": 47723.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "1/2696",
+    "used_mib": 14185.0,
+    "used_pct": 22.91,
+    "utc": "2026-11-12T22:00:24+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 219.288
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-12T22:00:24+00:00",
+  "wall_s": 219.288
+}

@@ -1,0 +1,418 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/b2/target/release/acos",
+  "binary_sha256": "c824013b2b043a0659bfffd6deb3ba4c0c8da300b0f048ba3319cb6e6d57647a",
+  "bundle_wall_s": 32.747,
+  "env": {
+    "animations": "on",
+    "loops": 22
+  },
+  "errors": [],
+  "failures": [],
+  "host_after": {
+    "loadavg1": 6.02,
+    "loadavg15": 3.55,
+    "loadavg5": 3.45,
+    "mem_available_gib": 46.67,
+    "mem_available_mib": 47795.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "1/2675",
+    "used_mib": 14113.7,
+    "used_pct": 22.8,
+    "utc": "2026-11-12T21:57:37+00:00"
+  },
+  "host_before": {
+    "loadavg1": 6.02,
+    "loadavg15": 3.55,
+    "loadavg5": 3.45,
+    "mem_available_gib": 46.67,
+    "mem_available_mib": 47795.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "1/2675",
+    "used_mib": 14113.7,
+    "used_pct": 22.8,
+    "utc": "2026-11-12T21:57:37+00:00"
+  },
+  "ok": true,
+  "p5": {
+    "failed_tasks": [],
+    "false_pass": 0,
+    "loop": {
+      "assert": {
+        "ci95_high": 41.195,
+        "ci95_low": 41.109,
+        "cv": 0.00616660914028766,
+        "max": 42.18,
+        "mean": 41.20776190476191,
+        "median": 41.14,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.966,
+        "n": 21,
+        "p5": 40.988,
+        "p50": 41.14,
+        "p95": 41.533,
+        "resamples": 2000,
+        "spread": 0.01324744773942639,
+        "spread_pct": 1.324744773942639,
+        "stdev": 0.2541121612127024
+      },
+      "inspect": {
+        "ci95_high": 41.243,
+        "ci95_low": 41.085,
+        "cv": 0.008639714876703132,
+        "max": 42.646,
+        "mean": 41.25080952380953,
+        "median": 41.17,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.947,
+        "n": 21,
+        "p5": 40.971,
+        "p50": 41.17,
+        "p95": 41.507,
+        "resamples": 2000,
+        "spread": 0.01301918872965755,
+        "spread_pct": 1.3019188729657551,
+        "stdev": 0.35639523271890444
+      },
+      "launch": {
+        "ci95_high": 0.375,
+        "ci95_low": 0.354,
+        "cv": 0.1646571408918547,
+        "max": 0.426,
+        "mean": 0.35014285714285714,
+        "median": 0.362,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.208,
+        "n": 21,
+        "p5": 0.244,
+        "p50": 0.362,
+        "p95": 0.416,
+        "resamples": 2000,
+        "spread": 0.4751381215469613,
+        "spread_pct": 47.513812154696126,
+        "stdev": 0.05765352176084798
+      },
+      "observe_png": {
+        "ci95_high": 31.755,
+        "ci95_low": 28.585,
+        "cv": 0.177989036819452,
+        "max": 52.343,
+        "mean": 31.04942857142857,
+        "median": 29.988,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 25.466,
+        "n": 21,
+        "p5": 27.07,
+        "p50": 29.988,
+        "p95": 35.531,
+        "resamples": 2000,
+        "spread": 0.2821461918100573,
+        "spread_pct": 28.21461918100573,
+        "stdev": 5.5264578852229445
+      },
+      "observe_tree": {
+        "ci95_high": 41.193,
+        "ci95_low": 40.986,
+        "cv": 0.009848001799996963,
+        "max": 42.833,
+        "mean": 41.18033333333333,
+        "median": 41.071,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.906,
+        "n": 21,
+        "p5": 40.946,
+        "p50": 41.071,
+        "p95": 41.438,
+        "resamples": 2000,
+        "spread": 0.011979255435709003,
+        "spread_pct": 1.1979255435709002,
+        "stdev": 0.40554399679114156
+      },
+      "reset": {
+        "ci95_high": 341.788,
+        "ci95_low": 330.123,
+        "cv": 0.20107508471444707,
+        "max": 654.319,
+        "mean": 351.8522380952381,
+        "median": 336.904,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 311.024,
+        "n": 21,
+        "p5": 318.837,
+        "p50": 336.904,
+        "p95": 377.518,
+        "resamples": 2000,
+        "spread": 0.17417721368698497,
+        "spread_pct": 17.417721368698498,
+        "stdev": 70.7487185819678
+      },
+      "tap": {
+        "ci95_high": 946.215,
+        "ci95_low": 929.109,
+        "cv": 0.014956196875193936,
+        "max": 978.292,
+        "mean": 940.9526666666667,
+        "median": 940.627,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 923.951,
+        "n": 21,
+        "p5": 925.412,
+        "p50": 940.627,
+        "p95": 965.983,
+        "resamples": 2000,
+        "spread": 0.043131868423934155,
+        "spread_pct": 4.313186842393415,
+        "stdev": 14.073073332905402
+      }
+    },
+    "loop_total": {
+      "ci95_high": 1437.847,
+      "ci95_low": 1419.646,
+      "cv": 0.05921628852639944,
+      "max": 1811.871,
+      "mean": 1447.8433809523808,
+      "median": 1423.874,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1402.681,
+      "n": 21,
+      "p5": 1407.972,
+      "p50": 1423.874,
+      "p95": 1476.882,
+      "resamples": 2000,
+      "spread": 0.04839613617497059,
+      "spread_pct": 4.83961361749706,
+      "stdev": 85.73591138751384
+    },
+    "loop_wall_total": {
+      "ci95_high": 1442.911,
+      "ci95_low": 1424.135,
+      "cv": 0.059398475550826786,
+      "max": 1818.444,
+      "mean": 1452.3883333333333,
+      "median": 1427.947,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1406.971,
+      "n": 21,
+      "p5": 1411.422,
+      "p50": 1427.947,
+      "p95": 1481.866,
+      "resamples": 2000,
+      "spread": 0.04933236317594418,
+      "spread_pct": 4.933236317594418,
+      "stdev": 86.26965290780606
+    },
+    "measured_tasks": 21,
+    "memory": {
+      "cgroup_gib_min": 0.07120349067472859,
+      "cgroup_memory_current_peak_mib": 212.605,
+      "interval_s": 0.1,
+      "last": {
+        "extra_cgroups": {},
+        "job_anon_shmem_mib": 21.008,
+        "job_memory_current_mib": 211.055,
+        "net_anon_shmem_mib": 4.637,
+        "sampler_mib": 16.371,
+        "t": 1794520656.9864407,
+        "utc": "2026-11-12T21:57:36+00:00"
+      },
+      "net_anon_shmem_gib_min": 0.02200835701716909,
+      "net_anon_shmem_peak_mib": 79.578,
+      "samples": 324
+    },
+    "throughput": {
+      "cohort_wall_s": 32.417,
+      "verified_tasks": 21,
+      "verified_tasks_per_gib_min": 294.9294,
+      "verified_tasks_per_gib_min_net": 954.183,
+      "verified_tasks_per_s": 0.6478
+    },
+    "verified": 21
+  },
+  "phase": "loop1",
+  "samples": {
+    "loop_n1_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "false_pass": 0,
+          "measured": 21,
+          "n": 21,
+          "p95": 1476.882,
+          "verified": 21
+        }
+      ],
+      "median": 1423.874,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1423.874,
+        "mean": 1423.874,
+        "median": 1423.874,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1423.874,
+        "n": 1,
+        "p5": 1423.874,
+        "p50": 1423.874,
+        "p95": 1423.874,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms/task",
+      "values": [
+        1423.874
+      ]
+    },
+    "loop_n1_tasks_per_gib_min": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 32.417,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 294.9294,
+          "verified_tasks_per_gib_min_net": 954.183,
+          "verified_tasks_per_s": 0.6478
+        }
+      ],
+      "median": 294.929,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 294.929,
+        "mean": 294.929,
+        "median": 294.929,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 294.929,
+        "n": 1,
+        "p5": 294.929,
+        "p50": 294.929,
+        "p95": 294.929,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/GiB-min",
+      "values": [
+        294.929
+      ]
+    },
+    "loop_n1_tasks_per_s": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 32.417,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 294.9294,
+          "verified_tasks_per_gib_min_net": 954.183,
+          "verified_tasks_per_s": 0.6478
+        }
+      ],
+      "median": 0.648,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.648,
+        "mean": 0.648,
+        "median": 0.648,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.648,
+        "n": 1,
+        "p5": 0.648,
+        "p50": 0.648,
+        "p95": 0.648,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/s",
+      "values": [
+        0.648
+      ]
+    },
+    "loop_n1_verified_rate": {
+      "bad": 0,
+      "extra": [
+        {
+          "measured": 21,
+          "verified": 21
+        }
+      ],
+      "median": 1.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1.0,
+        "n": 1,
+        "p5": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "fraction",
+      "values": [
+        1.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T21:57:37+00:00"
+}
