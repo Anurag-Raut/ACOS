@@ -1,0 +1,21 @@
+{
+  "apk": "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk",
+  "bin": "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/target/release/acos",
+  "finished": "2026-11-12T11:12:17.152+00:00",
+  "host": {
+    "loadavg1": 0.88,
+    "loadavg15": 1.49,
+    "loadavg5": 1.17,
+    "mem_available_gib": 37.68,
+    "mem_available_mib": 38584.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "runnable": "2/3385",
+    "used_mib": 23324.5,
+    "used_pct": 37.68
+  },
+  "m3": 12,
+  "m4": 12,
+  "sha256": "90c833eb696f6096d4627ec4e2b7240f563005a17d0afa4a4facb25a92278448",
+  "started": "2026-11-12T11:11:36.409+00:00"
+}

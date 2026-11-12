@@ -107,6 +107,19 @@ The result is the ACOS envelope as text (plus `structuredContent` on protocol
 > `ACOS_SESSION_IDLE_SECS` / `ACOS_RUNTIME_DIR` / `ACOS_SESSION_SOCKET` to
 > tune it. Native sessions run in the same confined child the MCP server uses
 > (`acos --confined-child`).
+>
+> **Startup prewarm (P8).** When `acos serve` is the ART engine it reads the
+> launch working set — boot image, ART runtime libraries, boot-classpath jars,
+> the guest dex/shims and the default fonts — into the host page cache on a
+> **background thread**, after the socket is already listening. P7 measured
+> that a first launch after those pages were evicted costs +198 ms
+> (660.9 vs 462.7 ms p50); the prewarm removes that. It is bounded (default
+> 64 MiB, `ACOS_PREWARM_MAX_MB`), never locks memory (`mlock`), never writes,
+> and is off the launch/observation/verification path, so it cannot change a
+> verdict. One summary line is logged per daemon start:
+> `acos serve: prewarm: warmed 46 files, 46.1 MiB in 34 ms (...)`. Set
+> `ACOS_NO_PREWARM=1` to disable it and `ACOS_PREWARM_VERBOSE=1` to log every
+> file. It does not apply to `--engine rust-vm`.
 
 ---
 

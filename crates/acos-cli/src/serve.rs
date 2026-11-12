@@ -175,6 +175,13 @@ pub fn run(args: ServeArgs) -> ExitCode {
         args.max_sessions
     );
 
+    // P8: the socket is bound and listening, so the daemon is ready exactly as
+    // fast as before; the ART launch working set (boot image, ART libs,
+    // classpath jars, guest dex, fonts) is read into the page cache on a
+    // background thread, bounded and reclaimable, so the first launch after an
+    // eviction does not pay P7's +198 ms. Never on the verification path.
+    crate::prewarm::spawn_if_enabled(default_engine);
+
     let idle = Duration::from_secs(args.idle_timeout.max(1));
     loop {
         match listener.accept() {
