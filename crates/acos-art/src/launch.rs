@@ -626,9 +626,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let out_pipe = child.stdout.take().expect("piped stdout");
     let otx2 = otx.clone();
     let probe_for_out = Arc::clone(&probe_state);
+    let out_tee = std::env::var_os("ACOSLAUNCH_GUEST_STDOUT_FILE").map(PathBuf::from);
     let out_thread = std::thread::spawn(move || {
         let buf = if interactive {
-            drain_stdout_lines(out_pipe, cap, probe_for_out)
+            match out_tee {
+                Some(path) => drain_tee_lines(out_pipe, cap, &path, probe_for_out),
+                None => drain_stdout_lines(out_pipe, cap, probe_for_out),
+            }
         } else {
             crate::capture::drain_to_tail(out_pipe, cap)
         };
@@ -1014,7 +1018,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
 const LIVE_PROBE_PREFIX: &str = "ACOSPROBE ";
 /// W27 item 3: the guest's guest-side `startActivity` guard marker.
 const UNSUPPORTED_PREFIX: &str = "ACOSUNSUPPORTED ";
-const LIVE_PROBE_LINE_CAP: usize = 128 * 1024;
+/// Largest live-probe line accepted (a whole window forest fits: two 2000-node
+/// windows are ≈ 1-2 MiB; W27's 128 KiB cap silently froze the tree at the
+/// first dialog window).
+const LIVE_PROBE_LINE_CAP: usize = 8 * 1024 * 1024;
+/// W36: the guest probe reports a swallowed exception as this marker.
+const PROBE_ERROR_PREFIX: &str = "ACOSPROBE-ERROR ";
 const CAPTURE_SOURCE: &str = "acos-c1-buffer";
 
 #[derive(Clone)]
@@ -1032,6 +1041,14 @@ struct ProbeState {
     /// Monotonic marker count, so a stale marker is not attributed to a later
     /// gesture.
     unsupported_seq: u64,
+    /// W36: the newest guest `ACOSPROBE-ERROR` (a probe throw is never swallowed)
+    /// and its ordinal, plus lines dropped for exceeding the line cap.
+    probe_error: Option<serde_json::Value>,
+    probe_errors: u64,
+    oversized_lines: u64,
+    /// Probe lines that were not valid JSON; counted, never silent (W36 found
+    /// the two-root separator bug this way).
+    bad_probe_lines: u64,
 }
 
 fn host_ms() -> u64 {
@@ -1091,60 +1108,157 @@ fn drain_tee<R: std::io::Read>(mut reader: R, cap: usize, path: &Path) -> TailBu
 }
 
 /// Drain the guest's stdout into the bounded tail buffer **and** parse the live
-/// probe lines as they arrive. A partial line is never parsed (a truncated
-/// 128 KiB read can split a JSON object; parse only lines that ended with '\n').
+/// probe lines as they arrive.
+///
+/// W36: a probe line is one JSON object and a full window forest can be large
+/// (two 2000-node windows ≈ 1 MiB). W27-W32 used a 128 KiB line cap and silently
+/// stopped parsing every line at/above it, so the tree froze at the last small
+/// sample exactly when a dialog window appeared (W32 misread this as the guest
+/// probe throwing). Lines are now read whole up to [`LIVE_PROBE_LINE_CAP`], and
+/// an oversized line is counted and named on stderr instead of vanishing.
 fn drain_stdout_lines<R: std::io::Read>(
     reader: R,
     cap: usize,
     state: Arc<std::sync::Mutex<ProbeState>>,
 ) -> TailBuffer {
-    use std::io::{BufRead, Read};
+    drain_tee_lines(reader, cap, &PathBuf::new(), state)
+}
+
+/// Read one `\n`-terminated line, bounding the bytes held in memory.
+///
+/// `None` = EOF before any byte; `Some(Some(line))` = a complete line (the
+/// newline is kept); `Some(None)` = the line exceeded `cap` and was drained.
+fn read_capped_line<R: std::io::BufRead>(
+    reader: &mut R,
+    cap: usize,
+) -> Option<Option<Vec<u8>>> {
+    use std::io::BufRead;
+    let mut line = Vec::new();
+    loop {
+        let mut part = Vec::new();
+        let remaining = (cap + 1).saturating_sub(line.len());
+        let n = std::io::Read::take(&mut *reader, remaining as u64)
+            .read_until(b'\n', &mut part)
+            .ok()?;
+        if n == 0 {
+            return if line.is_empty() { None } else { Some(None) };
+        }
+        let ended = part.ends_with(b"\n");
+        if !ended && line.len() + part.len() > cap {
+            // Drain the rest of this line without keeping it.
+            loop {
+                let mut sink = Vec::new();
+                match std::io::Read::take(&mut *reader, 64 * 1024)
+                    .read_until(b'\n', &mut sink)
+                {
+                    Ok(0) => break,
+                    Ok(_) if sink.ends_with(b"\n") => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+            return Some(None);
+        }
+        line.extend_from_slice(&part);
+        if ended {
+            return Some(Some(line));
+        }
+    }
+}
+
+/// Same parser as [`drain_stdout_lines`], plus an optional diagnostic tee of the
+/// guest's stdout (`ACOSLAUNCH_GUEST_STDOUT_FILE`), so probe errors and the
+/// root-window marker survive the launcher's bounded tail.
+fn drain_tee_lines<R: std::io::Read>(
+    reader: R,
+    cap: usize,
+    tee: &Path,
+    state: Arc<std::sync::Mutex<ProbeState>>,
+) -> TailBuffer {
+    use std::io::Write;
+    let mut tee_file = if tee.as_os_str().is_empty() {
+        None
+    } else {
+        fs::File::create(tee).ok()
+    };
+    let mut tee_written = 0usize;
     let mut tail = TailBuffer::with_cap(cap);
     let mut reader = std::io::BufReader::new(reader);
-    let mut at_line_start = true;
-    loop {
-        let mut line = Vec::new();
-        match reader
-            .by_ref()
-            .take(LIVE_PROBE_LINE_CAP as u64)
-            .read_until(b'\n', &mut line)
-        {
-            Ok(0) => break,
-            Ok(_) => {
-                tail.push(&line);
-                let ended = line.ends_with(b"\n");
-                if at_line_start {
-                    if let Ok(text) = std::str::from_utf8(&line) {
-                        let trimmed = text.trim_end();
-                        if let Some(json) = trimmed.strip_prefix(LIVE_PROBE_PREFIX) {
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
-                                let seq = value.get("seq").and_then(|v| v.as_u64());
-                                let tree = value.get("tree");
-                                if let (Some(seq), Some(tree)) = (seq, tree) {
-                                    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                                    let newer =
-                                        state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
-                                    if newer {
-                                        state.latest = Some(ProbeSample {
-                                            seq,
-                                            tree: tree.clone(),
-                                            at_ms: host_ms(),
-                                        });
-                                    }
-                                }
-                            }
-                        } else if let Some(json) = trimmed.strip_prefix(UNSUPPORTED_PREFIX) {
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
-                                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                                state.unsupported = Some(value);
-                                state.unsupported_seq += 1;
-                            }
+    while let Some(line) = read_capped_line(&mut reader, LIVE_PROBE_LINE_CAP) {
+        let Some(line) = line else {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.oversized_lines += 1;
+            if state.oversized_lines == 1 {
+                eprintln!(
+                    "acos-art: live probe line exceeds {} bytes; sample dropped (never silently)",
+                    LIVE_PROBE_LINE_CAP
+                );
+            }
+            continue;
+        };
+        tail.push(&line);
+        if let Some(f) = tee_file.as_mut() {
+            if tee_written < 32 * 1024 * 1024 {
+                let take = line.len().min(32 * 1024 * 1024 - tee_written);
+                let _ = f.write_all(&line[..take]);
+                tee_written += take;
+            }
+        }
+        let Ok(text) = std::str::from_utf8(&line) else {
+            continue;
+        };
+        let trimmed = text.trim_end();
+        if let Some(json) = trimmed.strip_prefix(LIVE_PROBE_PREFIX) {
+            let parsed = serde_json::from_str::<serde_json::Value>(json);
+            if let Err(e) = &parsed {
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.bad_probe_lines += 1;
+                if state.bad_probe_lines == 1 {
+                    eprintln!(
+                        "acos-art: live probe line is not valid JSON ({e}); sample dropped, first 160 bytes: {:.160}",
+                        &json
+                    );
+                }
+            }
+            if let Ok(value) = parsed {
+                let seq = value.get("seq").and_then(|v| v.as_u64());
+                let tree = value.get("tree");
+                if let (Some(seq), Some(tree)) = (seq, tree) {
+                    // The root list (`windows`) belongs to the sample; carry it
+                    // inside the tree so evidence and step replies can show the
+                    // z-order without a second protocol field.
+                    let mut tree = tree.clone();
+                    if let Some(windows) = value.get("windows") {
+                        if let Some(object) = tree.as_object_mut() {
+                            object.insert("windows".into(), windows.clone());
                         }
                     }
+                    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                    let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                    if newer {
+                        state.latest = Some(ProbeSample {
+                            seq,
+                            tree,
+                            at_ms: host_ms(),
+                        });
+                    }
                 }
-                at_line_start = ended;
             }
-            Err(_) => break,
+        } else if let Some(json) = trimmed.strip_prefix(PROBE_ERROR_PREFIX) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.probe_errors += 1;
+                if state.probe_errors == 1 {
+                    eprintln!("acos-art: guest probe error {value}");
+                }
+                state.probe_error = Some(value);
+            }
+        } else if let Some(json) = trimmed.strip_prefix(UNSUPPORTED_PREFIX) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.unsupported = Some(value);
+                state.unsupported_seq += 1;
+            }
         }
     }
     tail
@@ -2203,6 +2317,21 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
     }
     fs::write(&src, SOURCE)?;
     let clang = ndk_clang()?;
+    // W37 (flagged call-site edit in the W36-owned launch.rs): compile once into
+    // the shared content-addressed cache; a cold cohort serialises on the build
+    // lock and every later launch only installs the verified `.so`.
+    let cache_key = crate::build_cache::digest(&[
+        b"acos-art/binder-driver/v2",
+        SOURCE.as_bytes(),
+        crate::build_cache::file_id(&clang).as_bytes(),
+    ]);
+    let _build_lock = crate::build_cache::lock(&cache_key)?;
+    if let Some(hit) =
+        crate::build_cache::reuse_to(&cache_key, &["libacos_binder_driver.so"], &dir)?
+    {
+        fs::write(&stamp, format!("{hash}\n"))?;
+        return Ok(hit[0].clone());
+    }
     let st = Command::new(&clang)
         .args([
             "-O2",
@@ -2224,6 +2353,7 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
         )));
     }
     fs::write(&stamp, format!("{hash}\n"))?;
+    crate::build_cache::publish_locked(&cache_key, &dir, &["libacos_binder_driver.so"])?;
     Ok(out)
 }
 
@@ -2261,10 +2391,32 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     let sdk = android_sdk()?;
     let android_jar = sdk.join("platforms/android-34/android.jar");
     let d8 = find_tool(&sdk, "d8")?;
+    let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
+    // W37 (flagged call-site edit in the W36-owned launch.rs): the launch guest
+    // DEX is a pure function of these sources and the toolchain. Build it once
+    // under the shared cache lock; subsequent launches (and the other N-1
+    // sessions of a cold cohort) install the verified `classes.dex` instead.
+    let cache_key = {
+        let mut parts: Vec<Vec<u8>> = vec![b"acos-art/launch-guest/v2".to_vec()];
+        for p in &sources {
+            parts.push(p.to_string_lossy().as_bytes().to_vec());
+            parts.push(fs::read(p)?);
+        }
+        for tool in [&android_jar, &d8, &javac] {
+            parts.push(crate::build_cache::file_id(tool).into_bytes());
+        }
+        parts.push(b"--min-api 34".to_vec());
+        crate::build_cache::digest_owned(&parts)
+    };
+    let _build_lock = crate::build_cache::lock(&cache_key)?;
+    if let Some(hit) = crate::build_cache::reuse_to(&cache_key, &["classes.dex"], &out_dir)? {
+        fs::write(&stamp, format!("{hash}\n"))?;
+        return Ok(hit[0].clone());
+    }
     let classes = out_dir.join("classes");
     let _ = fs::remove_dir_all(&classes);
     fs::create_dir_all(&classes)?;
-    let out = Command::new(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()))
+    let out = Command::new(&javac)
         .args(["-nowarn", "-source", "11", "-target", "11"])
         .arg("-cp")
         .arg(&android_jar)
@@ -2297,6 +2449,7 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
         )));
     }
     fs::write(&stamp, format!("{hash}\n"))?;
+    crate::build_cache::publish_locked(&cache_key, &out_dir, &["classes.dex"])?;
     let _ = fs::remove_dir_all(&classes);
     Ok(dex)
 }
@@ -2417,4 +2570,89 @@ fn tail(s: &str, max: usize) -> String {
 #[allow(dead_code)]
 fn is_file(p: &Path) -> bool {
     p.is_file()
+}
+
+#[cfg(test)]
+mod probe_line_tests {
+    use super::*;
+
+    fn drain(lines: &str) -> ProbeState {
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+        drain_stdout_lines(
+            std::io::Cursor::new(lines.as_bytes().to_vec()),
+            4096,
+            Arc::clone(&state),
+        );
+        let out = state.lock().unwrap().clone_for_test();
+        out
+    }
+
+    impl ProbeState {
+        fn clone_for_test(&self) -> ProbeState {
+            ProbeState {
+                latest: self.latest.clone(),
+                unsupported: self.unsupported.clone(),
+                unsupported_seq: self.unsupported_seq,
+                probe_error: self.probe_error.clone(),
+                probe_errors: self.probe_errors,
+                oversized_lines: self.oversized_lines,
+                bad_probe_lines: self.bad_probe_lines,
+            }
+        }
+    }
+
+    /// Teeth for the W32 misinterpretation: a two-window sample is larger than
+    /// the old 128 KiB line cap. It must still be parsed (and its `windows`
+    /// carried into the tree), or the tree silently freezes at the last
+    /// single-window sample exactly when a dialog opens.
+    #[test]
+    fn a_probe_line_above_the_old_128k_cap_is_parsed() {
+        let pad = "a".repeat(200 * 1024);
+        let line = format!(
+            "ACOSPROBE {{\"seq\":7,\"windows\":[{{\"z\":0,\"window\":\"main\"}},{{\"z\":1,\"window\":\"w2#1\"}}],\"tree\":{{\"nodes\":[],\"window_count\":2,\"node_budget\":2000,\"truncated\":false,\"pad\":\"{pad}\"}}}}\n"
+        );
+        assert!(line.len() > 128 * 1024);
+        let state = drain(&line);
+        let sample = state.latest.expect("the large sample must be published");
+        assert_eq!(sample.seq, 7);
+        assert_eq!(sample.tree["window_count"], 2);
+        assert_eq!(sample.tree["windows"][1]["window"], "w2#1");
+        assert_eq!(state.bad_probe_lines, 0);
+        assert_eq!(state.oversized_lines, 0);
+    }
+
+    /// A guest probe throw must reach the host with its payload, never be
+    /// swallowed (W32's only visible symptom was a frozen `seq`).
+    #[test]
+    fn a_thrown_probe_surfaces_acosprobe_error() {
+        let line = "ACOSPROBE-ERROR {\"seq\":12,\"phase\":\"window\",\"window\":\"w2#1\",\"error\":\"java.lang.NullPointerException: boom\",\"stack\":[\"at x.y\"]}\n";
+        let state = drain(line);
+        assert_eq!(state.probe_errors, 1);
+        let error = state.probe_error.expect("the error must be retained");
+        assert_eq!(error["phase"], "window");
+        assert_eq!(error["window"], "w2#1");
+        assert!(
+            error["error"].as_str().unwrap().contains("NullPointerException"),
+            "the exception text must survive"
+        );
+    }
+
+    /// Invalid JSON (the real W27/W32 two-root separator bug) is counted and
+    /// named, not silently dropped.
+    #[test]
+    fn an_invalid_probe_line_is_counted() {
+        let state = drain("ACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}{\"seq\":2}\n");
+        assert!(state.latest.is_none());
+        assert_eq!(state.bad_probe_lines, 1);
+    }
+
+    /// Oversized input is drained whole and counted, so a following sample is
+    /// still parsed.
+    #[test]
+    fn an_oversized_line_is_drained_and_counted() {
+        let mut cursor = std::io::Cursor::new(b"0123456789ABCDEF\nnext\n".to_vec());
+        assert!(read_capped_line(&mut cursor, 8).unwrap().is_none());
+        let next = read_capped_line(&mut cursor, 8).unwrap().unwrap();
+        assert_eq!(next, b"next\n");
+    }
 }

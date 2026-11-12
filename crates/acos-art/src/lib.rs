@@ -25,6 +25,9 @@
 //! choice (see `docs/DECISION_ART_RUNTIME.md`).
 
 pub mod app;
+// W37: integrator-owned mod line — additive declaration for the shared
+// content-addressed build cache (see src/build_cache.rs).
+pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
 pub mod launch;
@@ -1315,41 +1318,44 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
     Ok(out)
 }
 
-/// Compile the freestanding shim with clang (cached by source hash).
+/// Compile the freestanding shim with clang **once** into the shared
+/// content-addressed build cache (`build_cache`), then install it into
+/// `dest_dir`. Every launch reuses the cached `.so`; the key covers the source
+/// bytes and the compiler identity, so a toolchain change invalidates it.
 pub fn build_shim(dest_dir: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(dest_dir)?;
-    let out = dest_dir.join("libartshim.so");
-    let src = dest_dir.join("artshim.c");
-    let hash = simple_hash(SHIM_SOURCE);
-    let stamp = dest_dir.join("artshim.hash");
-    let up_to_date = fs::read_to_string(&stamp)
-        .map(|s| s.trim() == hash.to_string())
-        .unwrap_or(false)
-        && out.is_file();
-    if up_to_date {
-        return Ok(out);
-    }
-    fs::write(&src, SHIM_SOURCE)?;
     let clang = std::env::var("CC").unwrap_or_else(|_| "clang".to_string());
-    let st = Command::new(&clang)
-        .args([
-            "-nostdlib",
-            "-ffreestanding",
-            "-fno-builtin",
-            "-fPIC",
-            "-shared",
-            "-O2",
-            "-Wall",
-            "-o",
-        ])
-        .arg(&out)
-        .arg(&src)
-        .status()?;
-    if !st.success() {
-        return Err(Error::Tool(format!("{clang} failed to build {}", src.display())));
-    }
-    fs::write(&stamp, format!("{hash}\n"))?;
-    Ok(out)
+    let key = crate::build_cache::digest(&[
+        b"acos-art/shim/v2",
+        SHIM_SOURCE.as_bytes(),
+        crate::build_cache::file_id(Path::new(&clang)).as_bytes(),
+    ]);
+    let built = crate::build_cache::ensure(&key, &["libartshim.so"], |stage| {
+        let src = stage.join("artshim.c");
+        fs::write(&src, SHIM_SOURCE)?;
+        let out = stage.join("libartshim.so");
+        let st = Command::new(&clang)
+            .args([
+                "-nostdlib",
+                "-ffreestanding",
+                "-fno-builtin",
+                "-fPIC",
+                "-shared",
+                "-O2",
+                "-Wall",
+                "-o",
+            ])
+            .arg(&out)
+            .arg(&src)
+            .status()
+            .map_err(|e| Error::Tool(format!("running {clang}: {e}")))?;
+        if !st.success() {
+            return Err(Error::Tool(format!("{clang} failed to build {}", src.display())));
+        }
+        fs::remove_file(&src)?;
+        Ok(())
+    })?;
+    let installed = crate::build_cache::install(&built, &["libartshim.so"], dest_dir)?;
+    Ok(installed[0].clone())
 }
 
 pub(crate) fn simple_hash(s: &str) -> u64 {

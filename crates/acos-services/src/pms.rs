@@ -174,55 +174,16 @@ impl AppInfo {
         let theme = manifest.application.theme.unwrap_or(0) as i32;
         let label_res = manifest.application.label_ref.unwrap_or(0) as i32;
         let target_sdk = manifest.target_sdk.unwrap_or(34) as i32;
-        // AOSP `ParsingPackageUtils.parseBaseApplication`:
-        //   sa.getBoolean(AndroidManifestApplication_hardwareAccelerated,
-        //                 owner.getTargetSdkVersion() >= ICE_CREAM_SANDWICH)
-        // where ICE_CREAM_SANDWICH == 14; the result sets
-        // `ApplicationInfo.FLAG_HARDWARE_ACCELERATED` (0x2000_0000). This is the
-        // real device truth for targets >= 14 when the attribute is absent —
-        // verified against the Android 14 `framework.jar` bytecode in
-        // `results/perf/PMS_FLAGS_W151A.md` and the fixture manifest
-        // (`targetSdkVersion=34`, no `android:hardwareAccelerated`).
-        const ICE_CREAM_SANDWICH: i32 = 14;
-        const FLAG_HARDWARE_ACCELERATED: i32 = 0x2000_0000;
-        // AOSP `ParsingPackageUtils.parseBaseApplication`:
-        //   sa.getBoolean(AndroidManifestApplication_hasCode, true)
-        //   -> `ai.flags |= ApplicationInfo.FLAG_HAS_CODE`
-        // The manifest model has no explicit `android:hasCode` field yet, so
-        // the AOSP default (`true`) applies. Without it `LoadedApk.mIncludeCode`
-        // is false, `getClassLoaderDexPaths()` returns an empty list and the
-        // framework's `PathClassLoader` cannot load the app's own classes
-        // (`ClassNotFoundException` on the manifest `android:name`) even though
-        // `sourceDir` points at the staged APK.
-        //
-        // The value is AOSP's: `ApplicationInfo.FLAG_SYSTEM = 1 << 0` (0x1),
-        // `FLAG_DEBUGGABLE = 1 << 1` (0x2), `FLAG_HAS_CODE = 1 << 2` (0x4).
-        // `ActivityThread.getPackageInfo` derives `LoadedApk.mIncludeCode`
-        // from `includeCode && (ai.flags & FLAG_HAS_CODE)`, which the framework
-        // dex compiles as `and-int/lit8 ..., #int 4` (W174-A, disassembled from
-        // `.cache/boot/android-34/dex/framework/classes.dex`). Using 0x1 here
-        // set FLAG_SYSTEM and left `mIncludeCode` false, so the real
-        // `PathClassLoader` was built with an empty dex path (`DexPathList[[]]`)
-        // while the native-library path was populated.
-        const FLAG_HAS_CODE: i32 = 0x0000_0004;
-        // AOSP `ParsingPackageUtils.parseBaseApplication`:
-        //   sa.getBoolean(AndroidManifestApplication_extractNativeLibs, true)
-        //   -> `ai.flags |= ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS` (1 << 28)
-        // The fixture manifest does not set `android:extractNativeLibs`, the
-        // default is `true`, and the fixture APK stores its `lib/` entries
-        // compressed, so the native libraries are unpacked into
-        // `nativeLibraryDir` rather than `dlopen`ed straight from the APK.
-        // `SoLoader` reads this flag to choose `ApplicationSoSource` instead of
-        // the APK-direct source.
-        const FLAG_EXTRACT_NATIVE_LIBS: i32 = 0x1000_0000;
-        let hardware_accelerated = manifest
-            .application
-            .hardware_accelerated
-            .unwrap_or(target_sdk >= ICE_CREAM_SANDWICH);
-        let mut flags = FLAG_HAS_CODE | FLAG_EXTRACT_NATIVE_LIBS;
-        if hardware_accelerated {
-            flags |= FLAG_HARDWARE_ACCELERATED;
-        }
+        // W36 (W31 R1): the flag derivation lives in `acos-apk`, transcribed
+        // from the image's `PackageParser.parseBaseApplication`
+        // (android-14.0.0_r75): hasCode/extractNativeLibs/allowBackup/
+        // supportsRtl/usesCleartextTraffic (targetSdk default)/largeHeap/
+        // debuggable/vmSafeMode/isGame/testOnly, plus hardwareAccelerated
+        // (targetSdk >= 14). Before this the default path received four
+        // hand-computed bits (`0x10800004`: no debuggable, no backup, no RTL,
+        // and — the measured wall — no cleartext), so a manifest-correct app
+        // behaved differently from its own declaration.
+        let flags = manifest.application_flags();
         Self {
             package_name: package.clone(),
             name: String::new(),

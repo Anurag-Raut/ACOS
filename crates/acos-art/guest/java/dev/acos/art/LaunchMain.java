@@ -600,9 +600,13 @@ public final class LaunchMain {
                             public void run() {
                                 try {
                                     emitProbe(activity, n);
-                                } catch (Throwable ignored) {
-                                    // A probe must never disturb the app: a
-                                    // failed walk is simply not published.
+                                } catch (Throwable t) {
+                                    // A probe must never disturb the app, but it
+                                    // must not hide its own failure either
+                                    // (W36): publish one structured error line
+                                    // so a missing window is never a silent
+                                    // "probe froze" mystery.
+                                    probeError("sample", n, null, t);
                                 } finally {
                                     pending.set(false);
                                 }
@@ -639,7 +643,43 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * W36: one structured line for a probe failure, on stdout **and** stderr.
+     *
+     * <p>W32 proved the dialog window attaches host-side and that the probe
+     * throws on the second root; the throw was swallowed by
+     * {@code catch (Throwable ignored)}, so the only visible symptom was a
+     * frozen {@code seq}. Never swallow silently again: every probe failure is
+     * named here (phase, window, first cause, bounded stack) and the launcher
+     * host can carry it into a step result.
+     */
+    static void probeError(String phase, long seq, String window, Throwable t) {
+        StringBuilder b = new StringBuilder(512);
+        b.append("ACOSPROBE-ERROR {\"seq\":").append(seq)
+                .append(",\"phase\":\"").append(jesc(phase)).append('"');
+        if (window != null) b.append(",\"window\":\"").append(jesc(window)).append('"');
+        b.append(",\"error\":\"").append(jesc(String.valueOf(t))).append('"')
+                .append(",\"stack\":[");
+        try {
+            StackTraceElement[] frames = t.getStackTrace();
+            int n = 0;
+            for (StackTraceElement f : frames) {
+                if (n++ >= 24) break;
+                if (n > 1) b.append(',');
+                b.append('"').append(jesc(f.toString())).append('"');
+            }
+        } catch (Throwable ignored) {
+        }
+        b.append("]}");
+        String line = b.toString();
+        System.out.println(line);
+        System.err.println(line);
+        System.out.flush();
+        System.err.flush();
+    }
+
     static void emitProbe(Object activity, long seq) throws Throwable {
+        long probeStart = System.nanoTime();
         Object window = activity.getClass().getMethod("getWindow").invoke(activity);
         Object decor = window.getClass().getMethod("getDecorView").invoke(window);
         if (!(decor instanceof View)) return;
@@ -677,10 +717,21 @@ public final class LaunchMain {
             windows.append("{\"z\":").append(z)
                     .append(",\"window\":\"").append(jesc(label)).append("\"}");
             int[] budget = new int[]{PROBE_NODE_BUDGET};
+            // Each root is built in its own buffer: a throw can never leave a
+            // half-written object in the shared `nodes` array (W36: the missing
+            // comma/partial root made every two-window sample invalid JSON, so
+            // the host silently kept the last single-window sample).
+            StringBuilder one = new StringBuilder(4096);
             try {
-                appendViewJson(root, nodes, budget, truncated, label);
-            } catch (Throwable ignored) {
-                // A probe must never disturb the app; skip one bad window.
+                appendViewJson(root, one, budget, truncated, label);
+            } catch (Throwable t) {
+                // A probe must never disturb the app; skip one bad window, but
+                // say which window failed and why (W36).
+                probeError("window", seq, label, t);
+            }
+            if (one.length() > 0) {
+                if (nodes.length() > 0) nodes.append(',');
+                nodes.append(one);
             }
             z++;
         }
@@ -688,10 +739,16 @@ public final class LaunchMain {
             // The Activity decor was not in mViews (window not attached yet):
             // keep the old single-window sample rather than an empty tree.
             int[] budget = new int[]{PROBE_NODE_BUDGET};
+            StringBuilder one = new StringBuilder(4096);
             try {
-                appendViewJson((View) decor, nodes, budget, truncated, "main");
-            } catch (Throwable ignored) {
+                appendViewJson((View) decor, one, budget, truncated, "main");
+            } catch (Throwable t) {
+                probeError("decor-fallback", seq, "main", t);
                 return;
+            }
+            if (one.length() > 0) {
+                if (nodes.length() > 0) nodes.append(',');
+                nodes.append(one);
             }
         }
         StringBuilder j = new StringBuilder(nodes.length() + 512);
@@ -699,8 +756,10 @@ public final class LaunchMain {
                 .append(",\"time\":").append(System.currentTimeMillis())
                 .append(",\"windows\":[").append(windows).append("]")
                 .append(",\"tree\":{\"nodes\":[").append(nodes).append(']')
+                .append(",\"window_count\":").append(z)
                 .append(",\"node_budget\":").append(PROBE_NODE_BUDGET)
                 .append(",\"truncated\":").append(truncated[0])
+                .append(",\"emit_us\":").append((System.nanoTime() - probeStart) / 1000)
                 .append("}}");
         System.out.println(j);
         System.out.flush();
@@ -742,6 +801,25 @@ public final class LaunchMain {
                     sProbeWindowsLogged = true;
                     System.out.println("ACOSLAUNCH MARK window-views count=" + out.size());
                 }
+                if (out.size() != sProbeRootCount) {
+                    // W36 diagnostic: the root list is the one thing a missing
+                    // dialog depends on; print every change with the stock
+                    // class names, never infer the count.
+                    sProbeRootCount = out.size();
+                    StringBuilder r = new StringBuilder("ACOSPROBE-ROOTS {\"count\":")
+                            .append(out.size()).append(",\"views\":[");
+                    for (int i = 0; i < out.size(); i++) {
+                        if (i > 0) r.append(',');
+                        View v = out.get(i);
+                        r.append("{\"z\":").append(i)
+                                .append(",\"class\":\"").append(jesc(v.getClass().getName()))
+                                .append("\",\"window\":\"").append(jesc(windowLabel(v, i)))
+                                .append("\"}");
+                    }
+                    r.append("]}");
+                    System.out.println(r);
+                    System.out.flush();
+                }
                 return out;
             }
         } catch (Throwable ignored) {
@@ -750,6 +828,8 @@ public final class LaunchMain {
     }
 
     static volatile boolean sProbeWindowsLogged;
+    /** W36 diagnostic: last root count printed by {@link #windowViews()}. */
+    static int sProbeRootCount = -1;
 
     /** A stable window label from ViewRootImpl's own LayoutParams (read-only). */
     static String windowLabel(View root, int z) {
@@ -775,8 +855,16 @@ public final class LaunchMain {
         return title + "#" + z;
     }
 
-    /** W31: how many nodes one window's probe sample may carry (hard cap). */
-    static final int PROBE_NODE_BUDGET = 160;
+    /**
+     * How many nodes one window's probe sample may carry (hard cap).
+     *
+     * <p>W31 measured the old 160-node cap truncating the Gaten release home
+     * screen (160/160/160, `truncated:true`). W36 raised it to a measured
+     * budget that carries the full Gaten tree and any realistic dialog; the
+     * flag stays honest at the new cap. Probe cost is measured per sample in
+     * `emit_us` on the probe line.
+     */
+    static final int PROBE_NODE_BUDGET = 2000;
 
     static void appendViewJson(View v, StringBuilder out, int[] budget, boolean[] truncated,
             String window) {

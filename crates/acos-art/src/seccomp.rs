@@ -483,58 +483,66 @@ pub fn require_guard(run_dir: &Path) -> Result<String> {
 }
 
 /// Compile the freestanding stub and write the blob into `<data>/seccomp/`.
-/// Cached by content hash (same scheme as [`crate::build_shim`]).
+/// The compile and the blob are built **once** in the shared content-addressed
+/// build cache (key: stub source, blob bytes, audit action, compiler); a launch
+/// only installs the two artefacts.
 pub fn build_guest(dest_dir: &Path) -> Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(dest_dir)?;
-    let so = dest_dir.join("libacos_seccomp_guest.so");
-    let blob = dest_dir.join("seccomp.bpf");
-    let src = dest_dir.join("seccomp_guest.c");
     let action = audit_action();
     // S6: the Landlock plan is written every time (it is a text file, not a
     // compiled artefact) and removed when this kernel has no Landlock, so a
     // run never ships a plan the kernel cannot enforce.
     let landlock = crate::landlock::write_plan(dest_dir)?;
     let blob_bytes = build_blob_with(&action);
-    let hash = crate::simple_hash(GUEST_SOURCE)
-        ^ (blob_bytes.len() as u64)
-        ^ (action.to_u64()).wrapping_mul(0x9e37_79b9)
-        ^ (landlock as u64).wrapping_mul(0x85eb_ca6b)
-        ^ 0x5ec0_0000;
-    let stamp = dest_dir.join("seccomp.hash");
-    let up_to_date = std::fs::read_to_string(&stamp)
-        .map(|s| s.trim() == hash.to_string())
-        .unwrap_or(false)
-        && so.is_file()
-        && blob.is_file();
-    if up_to_date {
-        return Ok((so, blob));
-    }
-    std::fs::write(&src, GUEST_SOURCE)?;
-    std::fs::write(&blob, &blob_bytes)?;
     let cc = std::env::var("CC").unwrap_or_else(|_| "clang".to_string());
-    let st = Command::new(&cc)
-        .args([
-            "-nostdlib",
-            "-ffreestanding",
-            "-fno-builtin",
-            "-fPIC",
-            "-shared",
-            "-O2",
-            "-Wall",
-            "-o",
-        ])
-        .arg(&so)
-        .arg(&src)
-        .status()
-        .map_err(|e| Error::Tool(format!("running {cc}: {e}")))?;
-    if !st.success() {
-        return Err(Error::Tool(format!(
-            "{cc} failed to build the seccomp guest guard ({})",
-            src.display()
-        )));
-    }
-    std::fs::write(&stamp, format!("{hash}\n"))?;
-    Ok((so, blob))
+    let mut parts: Vec<Vec<u8>> = vec![
+        b"acos-art/seccomp-guest/v2".to_vec(),
+        GUEST_SOURCE.as_bytes().to_vec(),
+        blob_bytes.clone(),
+        format!("action={}", action.to_u64()).into_bytes(),
+        format!("landlock={landlock}").into_bytes(),
+        crate::build_cache::file_id(Path::new(&cc)).into_bytes(),
+    ];
+    parts.push(b"-nostdlib -ffreestanding -fPIC -shared -O2".to_vec());
+    let key = crate::build_cache::digest_owned(&parts);
+    let built = crate::build_cache::ensure(
+        &key,
+        &["libacos_seccomp_guest.so", "seccomp.bpf"],
+        |stage| {
+            let src = stage.join("seccomp_guest.c");
+            std::fs::write(&src, GUEST_SOURCE)?;
+            std::fs::write(stage.join("seccomp.bpf"), &blob_bytes)?;
+            let st = Command::new(&cc)
+                .args([
+                    "-nostdlib",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fPIC",
+                    "-shared",
+                    "-O2",
+                    "-Wall",
+                    "-o",
+                ])
+                .arg(stage.join("libacos_seccomp_guest.so"))
+                .arg(&src)
+                .status()
+                .map_err(|e| Error::Tool(format!("running {cc}: {e}")))?;
+            if !st.success() {
+                return Err(Error::Tool(format!(
+                    "{cc} failed to build the seccomp guest guard ({})",
+                    src.display()
+                )));
+            }
+            std::fs::remove_file(&src)?;
+            Ok(())
+        },
+    )?;
+    let installed = crate::build_cache::install(
+        &built,
+        &["libacos_seccomp_guest.so", "seccomp.bpf"],
+        dest_dir,
+    )?;
+    Ok((installed[0].clone(), installed[1].clone()))
 }
 
 #[cfg(test)]

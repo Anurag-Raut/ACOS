@@ -1,0 +1,3 @@
+apk	samples	median_emit_us	max_emit_us	max_nodes	windows	truncated	node_budget
+counter	145	134	215	12	[1]	[False]	2000
+gaten-release	142	3025	3998	244	[1]	[False]	2000

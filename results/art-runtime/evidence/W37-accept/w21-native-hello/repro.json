@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.1.0",
+  "apk_path": "fixtures/build/apps/native-hello.apk",
+  "apk_sha256": "8191fbd1de95d6f225a628747e4e438105bc1256f126e48f839953caf83274ff",
+  "scenario_path": "scenarios/w21-native-hello.yaml",
+  "scenario_sha256": "bf8f4e2e7951554817f9b9f8d064dff1512defc0918b549800171ea58549095a",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

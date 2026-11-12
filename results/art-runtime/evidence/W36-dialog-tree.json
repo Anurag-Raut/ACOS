@@ -1,0 +1,162 @@
+{
+ "note": "W36 item 1: the dialog window is in the live tree in z-order. Steps 1-6 (0-based 0-5) pass; the OK tap is blocked only by the acos-cli single-window input offset (request in W36.md).",
+ "probe_before_dialog": {
+  "probe_seq": 4,
+  "window_count": 1,
+  "windows": [
+   "main"
+  ],
+  "node_budget": 2000,
+  "truncated": false,
+  "emit_us": 148,
+  "window_labels": [
+   "main"
+  ],
+  "dialog": {},
+  "status": [
+   "Idle"
+  ]
+ },
+ "probe_after_dialog": {
+  "probe_seq": 104,
+  "window_count": 2,
+  "windows": [
+   "main",
+   "window-2#1"
+  ],
+  "node_budget": 2000,
+  "truncated": false,
+  "emit_us": 254,
+  "window_labels": [
+   "main",
+   "window-2#1"
+  ],
+  "dialog": {
+   "android:id/message": {
+    "text": "Are you sure?",
+    "bounds": "[42,181][734,238]",
+    "bounds_on_screen": "[194,1157][886,1214]"
+   },
+   "android:id/button1": {
+    "text": "OK",
+    "bounds": "[534,318][702,460]",
+    "bounds_on_screen": "[686,1294][854,1436]"
+   }
+  },
+  "status": [
+   "Idle"
+  ]
+ },
+ "probe_after_local_tap": {
+  "probe_seq": 224,
+  "window_count": 1,
+  "windows": [
+   "main"
+  ],
+  "node_budget": 2000,
+  "truncated": false,
+  "emit_us": 55,
+  "window_labels": [
+   "main"
+  ],
+  "dialog": {},
+  "status": [
+   "Dialog confirmed"
+  ]
+ },
+ "local_tap_proof": {
+  "sent": "{\"cmd\":\"tap\",\"x\":618,\"y\":389} (dialog-window-local OK centre)",
+  "result": "status text became \"Dialog confirmed\"; dialog root gone"
+ },
+ "offset_arithmetic": {
+  "main_window_offset": [
+   0,
+   128
+  ],
+  "dialog_window_offset": [
+   152,
+   976
+  ],
+  "engine_currently_uses": [
+   0,
+   128
+  ],
+  "dialog_ok_screen_centre": [
+   770,
+   1365
+  ],
+  "engine_sends_to_dialog_channel": [
+   770,
+   1237
+  ],
+  "correct_dialog_local": [
+   618,
+   389
+  ]
+ },
+ "scenario": {
+  "status": "fail",
+  "verdict": "fail",
+  "failure": {
+   "code": "ASSERTION_FAILED",
+   "error": {
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text exactly \"Dialog confirmed\", got text \"Idle\" / hint \"\"",
+    "retryable": false
+   },
+   "step_index": 7,
+   "summary": "step 7 (assert_text) fail"
+  },
+  "steps": {
+   "00-launch.json": {
+    "step": "launch",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "01-assert_text.json": {
+    "step": "assert_text",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "02-tap.json": {
+    "step": "tap",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "03-assert_log.json": {
+    "step": "assert_log",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "04-assert_text.json": {
+    "step": "assert_text",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "05-assert_text.json": {
+    "step": "assert_text",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "06-tap.json": {
+    "step": "tap",
+    "status": "pass",
+    "code": null,
+    "error": null
+   },
+   "07-assert_text.json": {
+    "step": "assert_text",
+    "status": "fail",
+    "code": "ASSERTION_FAILED",
+    "error": "expected text exactly \"Dialog confirmed\", got text \"Idle\" / hint \"\""
+   }
+  }
+ }
+}

@@ -1067,20 +1067,146 @@ public final class AppMain {
 
     // ------------------------------------------------------------------ tree
 
+    /** Per-window node budget for the session tree (same measured cap as the
+     * live probe: the W31 160-node cap truncated the Gaten release home). */
+    static final int TREE_NODE_BUDGET = 2000;
+
+    /**
+     * W36: the session tree is a **window forest**, like the live probe.
+     *
+     * <p>W32 proved a dialog window attaches host-side and finishes drawing,
+     * but `SessionMain` published `dumpTree(decor)` — the Activity decor only —
+     * so no selector could ever see `android:id/message` on the session path.
+     * Roots come from `WindowManagerGlobal` in AOSP z-order (oldest/bottom
+     * first), the Activity decor is labelled `main`, and every node carries its
+     * `window` and `bounds_on_screen`. The per-window budget is reported
+     * honestly with `truncated`.
+     */
     static String dumpTree(View v) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"bounds\":\"").append(bounds(v)).append("\",\"nodes\":[");
-        dumpNode(v, sb);
-        sb.append("]}");
+        StringBuilder nodes = new StringBuilder(4096);
+        StringBuilder windows = new StringBuilder(256);
+        boolean[] truncated = new boolean[]{false};
+        int[] budget = new int[]{TREE_NODE_BUDGET};
+        java.util.List<View> roots = windowViews();
+        if (roots == null || roots.isEmpty()) {
+            roots = new java.util.ArrayList<View>();
+            roots.add(v);
+        }
+        boolean sawMain = false;
+        int z = 0;
+        for (View root : roots) {
+            if (root == null) continue;
+            String label;
+            if (root == v) {
+                label = "main";
+                sawMain = true;
+            } else {
+                label = windowLabelOf(root, z);
+            }
+            if (windows.length() > 0) windows.append(',');
+            windows.append("{\"z\":").append(z)
+                    .append(",\"window\":\"").append(esc(label)).append("\"}");
+            StringBuilder one = new StringBuilder(4096);
+            try {
+                dumpNode(root, one, budget, truncated, label);
+            } catch (Throwable t) {
+                note("tree window " + label + " skipped: " + t);
+                one.setLength(0);
+            }
+            if (one.length() > 0) {
+                if (nodes.length() > 0) nodes.append(',');
+                nodes.append(one);
+            }
+            z++;
+        }
+        if (!sawMain) {
+            StringBuilder one = new StringBuilder(4096);
+            try {
+                dumpNode(v, one, budget, truncated, "main");
+            } catch (Throwable t) {
+                note("tree main skipped: " + t);
+            }
+            if (one.length() > 0) {
+                if (nodes.length() > 0) nodes.append(',');
+                nodes.append(one);
+            }
+        }
+        StringBuilder sb = new StringBuilder(nodes.length() + windows.length() + 512);
+        sb.append("{\"bounds\":\"").append(bounds(v)).append("\",\"windows\":[")
+                .append(windows).append("],\"nodes\":[").append(nodes).append(']')
+                .append(",\"node_budget\":").append(TREE_NODE_BUDGET)
+                .append(",\"truncated\":").append(truncated[0]).append('}');
         return sb.toString();
     }
 
-    static void dumpNode(View v, StringBuilder sb) {
+    /** All attached roots from stock `WindowManagerGlobal` (`getWindowViews`
+     * then the private `mViews` fallback the image also uses). */
+    static java.util.List<View> windowViews() {
+        try {
+            Class<?> wmg = Class.forName("android.view.WindowManagerGlobal");
+            Object instance = wmg.getMethod("getInstance").invoke(null);
+            Object views = null;
+            try {
+                views = wmg.getMethod("getWindowViews").invoke(instance);
+            } catch (Throwable ignored) {
+            }
+            if (!(views instanceof java.util.List)) {
+                Field f = wmg.getDeclaredField("mViews");
+                f.setAccessible(true);
+                views = f.get(instance);
+            }
+            if (views instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<Object> raw = (java.util.List<Object>) views;
+                java.util.List<View> out = new java.util.ArrayList<View>();
+                for (Object o : raw) if (o instanceof View) out.add((View) o);
+                return out;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    /** Stable window label from ViewRootImpl's own LayoutParams (read-only). */
+    static String windowLabelOf(View root, int z) {
+        String title = "";
+        Object type = null;
+        try {
+            Method m = Class.forName("android.view.View").getMethod("getViewRootImpl");
+            Object vr = m.invoke(root);
+            if (vr != null) {
+                Field af = vr.getClass().getDeclaredField("mWindowAttributes");
+                af.setAccessible(true);
+                Object attrs = af.get(vr);
+                if (attrs != null) {
+                    Field tf = attrs.getClass().getField("title");
+                    Object t = tf.get(attrs);
+                    if (t != null) title = t.toString();
+                    Field ty = attrs.getClass().getField("type");
+                    type = ty.get(attrs);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (title == null || title.length() == 0) {
+            title = "window-" + (type == null ? "?" : type);
+        }
+        return title + "#" + z;
+    }
+
+    static void dumpNode(View v, StringBuilder sb, int[] budget, boolean[] truncated,
+            String window) {
+        if (budget[0]-- <= 0) {
+            truncated[0] = true;
+            return;
+        }
         sb.append("{\"class\":\"").append(v.getClass().getName()).append("\"");
         sb.append(",\"id\":\"").append(idName(v)).append("\"");
         String text = v instanceof TextView ? String.valueOf(((TextView) v).getText()) : "";
         sb.append(",\"text\":\"").append(esc(text)).append("\"");
+        sb.append(",\"window\":\"").append(esc(window)).append("\"");
         sb.append(",\"bounds\":\"").append(bounds(v)).append("\"");
+        sb.append(",\"bounds_on_screen\":\"").append(screenBounds(v)).append("\"");
         sb.append(",\"measured\":\"").append(v.getMeasuredWidth()).append('x')
           .append(v.getMeasuredHeight()).append("\"");
         sb.append(",\"clickable\":").append(v.isClickable());
@@ -1100,16 +1226,30 @@ public final class AppMain {
         }
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
-            sb.append(",\"children\":[");
-            for (int i = 0; i < g.getChildCount(); i++) {
-                if (i > 0) sb.append(',');
-                dumpNode(g.getChildAt(i), sb);
+            StringBuilder kids = new StringBuilder();
+            boolean first = true;
+            int n = g.getChildCount();
+            for (int i = 0; i < n; i++) {
+                if (budget[0] <= 0) {
+                    truncated[0] = true;
+                    break;
+                }
+                View child = g.getChildAt(i);
+                if (child == null) continue;
+                StringBuilder one = new StringBuilder();
+                dumpNode(child, one, budget, truncated, window);
+                if (one.length() == 0) continue;
+                if (!first) kids.append(',');
+                kids.append(one);
+                first = false;
             }
-            sb.append(']');
+            sb.append(",\"children\":[").append(kids).append(']');
         }
         sb.append('}');
     }
 
+    /** Window-local bounds: the accumulated left/top the host InputChannel
+     * MotionEvents use (`getLocationInWindow` equivalent, same as W27). */
     static String bounds(View v) {
         int x = 0, y = 0;
         View c = v;
@@ -1120,6 +1260,17 @@ public final class AppMain {
             c = (View) c.getParent();
         }
         return "[" + x + "," + y + "][" + (x + v.getWidth()) + "," + (y + v.getHeight()) + "]";
+    }
+
+    /** Stock display-space bounds (`getLocationOnScreen`), never inferred. */
+    static String screenBounds(View v) {
+        int[] loc = new int[2];
+        try {
+            v.getLocationOnScreen(loc);
+        } catch (Throwable ignored) {
+        }
+        return "[" + loc[0] + "," + loc[1] + "][" + (loc[0] + v.getWidth()) + ","
+                + (loc[1] + v.getHeight()) + "]";
     }
 
     static String idName(View v) {

@@ -1175,29 +1175,16 @@ pub fn render_guest_sources() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Build `dev.acos.art.AppMain` (javac + d8) into `<data>/app/guest`, cached by
-/// source hash. Also returns the SDK paths used, for the result diagnostics.
+/// Build `dev.acos.art.AppMain` (javac + d8) into `<data>/app/guest`. The
+/// compile happens **once** per (sources, toolchain) in the shared
+/// content-addressed build cache; later launches only install `classes.dex`.
 pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     let src_dir = PathBuf::from(GUEST_SOURCE);
     let out_dir = root.data.join("app/guest");
-    fs::create_dir_all(&out_dir)?;
     let sources = render_guest_sources();
     if sources.is_empty() {
         return Err(Error::Layout(format!("no guest Java sources under {}", src_dir.display())));
     }
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    for p in &sources {
-        hash = fnv(hash, p.to_string_lossy().as_bytes());
-        hash = fnv(hash, &fs::read(p)?);
-    }
-    let stamp = out_dir.join(".hash");
-    let dex = out_dir.join("classes.dex");
-    let up_to_date = dex.is_file()
-        && fs::read_to_string(&stamp).map(|s| s.trim() == hash.to_string()).unwrap_or(false);
-    if up_to_date {
-        return Ok(GuestDex { dex_dir: out_dir, cached: true });
-    }
-
     let sdk = android_sdk()?;
     let android_jar = sdk.join("platforms/android-34/android.jar");
     if !android_jar.is_file() {
@@ -1207,80 +1194,97 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
         )));
     }
     let d8 = find_tool(&sdk, "d8")?;
-    let classes = out_dir.join("classes");
-    let _ = fs::remove_dir_all(&classes);
-    fs::create_dir_all(&classes)?;
-    let mut javac = Command::new(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
-    javac
-        .args(["-nowarn", "-source", "11", "-target", "11"])
-        .arg("-cp")
-        .arg(&android_jar)
-        .arg("-d")
-        .arg(&classes)
-        .args(&sources);
-    let out = javac.output()?;
-    if !out.status.success() {
-        return Err(Error::Tool(format!(
-            "javac failed for the render-app guest:\n{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        )));
+    let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
+    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/render-guest/v2".to_vec()];
+    for p in &sources {
+        parts.push(p.to_string_lossy().as_bytes().to_vec());
+        parts.push(fs::read(p)?);
     }
-    let class_files = walk(&classes, "class");
-    let out = Command::new(&d8)
-        .arg("--lib")
-        .arg(&android_jar)
-        .args(["--min-api", "34", "--output"])
-        .arg(&out_dir)
-        .args(&class_files)
-        .output()?;
-    if !out.status.success() || !dex.is_file() {
-        return Err(Error::Tool(format!(
-            "d8 failed for the render-app guest (status {:?}):\n{}{}",
-            out.status.code(),
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        )));
+    for tool in [&android_jar, &d8, &javac] {
+        parts.push(crate::build_cache::file_id(tool).into_bytes());
     }
-    fs::write(&stamp, format!("{hash}\n"))?;
-    let _ = fs::remove_dir_all(&classes);
-    Ok(GuestDex { dex_dir: out_dir, cached: false })
+    parts.push(b"--min-api 34".to_vec());
+    let key = crate::build_cache::digest_owned(&parts);
+    let built = crate::build_cache::ensure(&key, &["classes.dex"], |stage| {
+        let classes = stage.join("classes");
+        fs::create_dir_all(&classes)?;
+        let out = Command::new(&javac)
+            .args(["-nowarn", "-source", "11", "-target", "11"])
+            .arg("-cp")
+            .arg(&android_jar)
+            .arg("-d")
+            .arg(&classes)
+            .args(&sources)
+            .output()
+            .map_err(|e| Error::Tool(format!("running {}: {e}", javac.display())))?;
+        if !out.status.success() {
+            return Err(Error::Tool(format!(
+                "javac failed for the render-app guest:\n{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
+        let class_files = walk(&classes, "class");
+        let out = Command::new(&d8)
+            .arg("--lib")
+            .arg(&android_jar)
+            .args(["--min-api", "34", "--output"])
+            .arg(stage)
+            .args(&class_files)
+            .output()
+            .map_err(|e| Error::Tool(format!("running {}: {e}", d8.display())))?;
+        if !out.status.success() || !stage.join("classes.dex").is_file() {
+            return Err(Error::Tool(format!(
+                "d8 failed for the render-app guest (status {:?}):\n{}{}",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
+        fs::remove_dir_all(&classes)?;
+        Ok(())
+    })?;
+    let cached = built.reused;
+    crate::build_cache::install(&built, &["classes.dex"], &out_dir)?;
+    Ok(GuestDex { dex_dir: out_dir, cached })
 }
 
-/// Compile `shim/render_shim.c` with the NDK's bionic clang (cached by source
-/// hash) into `<data>/app/libacosart.so`.
+/// Compile `shim/render_shim.c` with the NDK's bionic clang **once** into the
+/// shared content-addressed build cache and install it as
+/// `<data>/app/libacosart.so`.
 ///
 /// It has to be a *bionic* object: it is loaded into the ART process, calls
 /// `dlsym` on bionic's linker namespace and is entered through JNI's `JNIEnv`.
 pub fn build_render_shim(root: &ArtRoot) -> Result<PathBuf> {
     let dir = root.data.join("app");
-    fs::create_dir_all(&dir)?;
-    let out = dir.join("libacosart.so");
-    let src = dir.join("render_shim.c");
-    let hash = fnv(0xcbf2_9ce4_8422_2325, RENDER_SHIM_SOURCE.as_bytes());
-    let stamp = dir.join("libacosart.hash");
-    if out.is_file()
-        && fs::read_to_string(&stamp).map(|s| s.trim() == hash.to_string()).unwrap_or(false)
-    {
-        return Ok(out);
-    }
-    fs::write(&src, RENDER_SHIM_SOURCE)?;
     let clang = ndk_clang()?;
-    let st = Command::new(&clang)
-        .args(["-O2", "-fPIC", "-shared", "-Wall", "-Wno-unused-parameter", "-o"])
-        .arg(&out)
-        .arg(&src)
-        .arg("-ldl")
-        .status()?;
-    if !st.success() {
-        return Err(Error::Tool(format!(
-            "{} failed to build {}",
-            clang.display(),
-            src.display()
-        )));
-    }
-    fs::write(&stamp, format!("{hash}\n"))?;
-    Ok(out)
+    let key = crate::build_cache::digest(&[
+        b"acos-art/render-shim/v2",
+        RENDER_SHIM_SOURCE.as_bytes(),
+        crate::build_cache::file_id(&clang).as_bytes(),
+    ]);
+    let built = crate::build_cache::ensure(&key, &["libacosart.so"], |stage| {
+        let src = stage.join("render_shim.c");
+        fs::write(&src, RENDER_SHIM_SOURCE)?;
+        let st = Command::new(&clang)
+            .args(["-O2", "-fPIC", "-shared", "-Wall", "-Wno-unused-parameter", "-o"])
+            .arg(stage.join("libacosart.so"))
+            .arg(&src)
+            .arg("-ldl")
+            .status()
+            .map_err(|e| Error::Tool(format!("running {}: {e}", clang.display())))?;
+        if !st.success() {
+            return Err(Error::Tool(format!(
+                "{} failed to build {}",
+                clang.display(),
+                src.display()
+            )));
+        }
+        fs::remove_file(&src)?;
+        Ok(())
+    })?;
+    let installed = crate::build_cache::install(&built, &["libacosart.so"], &dir)?;
+    Ok(installed[0].clone())
 }
 
 // --------------------------------------------------------------- apk metadata
