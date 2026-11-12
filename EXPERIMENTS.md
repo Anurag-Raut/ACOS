@@ -446,6 +446,46 @@ viewBox defect and an insets defect — MEASURED (two defects open)
   fine — RN's JS responder path or the app's `GatenAppInfo.setOnboardingStep`
   native call is next).
 
+## E2.8 — Exec-path early heap release: one post-first-frame ART collection — MEASURED
+
+- **Date / commit:** 2026-11-12; `d1a541e` + the Z7 worktree changes (`zygote-z7-lifetime`).
+- **Question / goal:** the Z6 review found the zygote's memory win only appears after ART's
+  +10 s post-fork footprint schedule; can the *exec path itself* (today's production path) be given
+  its own cheap heap release, and how much whole-system memory and verified-task throughput does
+  it recover without a zygote?
+- **Method:** one release binary, `counter.apk`, real ART. Arm (a) = today's exec path, no knobs.
+  Arm (a') = the same path with `ACOS_ART_GC_AFTER_FIRST_FRAME=1`: right after the guest's first
+  live frame a daemon thread calls `System.gc()` then
+  `VMRuntime.getRuntime().requestConcurrentGC()`. Lifetime-matched whole-system ΣPss at 0.5/2/5/15/
+  60 s after each child's first frame at N=5 and N=10 (two interleaved reps, N child-anchored
+  snapshots per cell); a P5-style agent loop (launch → inspect → tap → assert → reset/relaunch,
+  N=10, 5.2 min per arm, fresh launch per task) with the whole-tree PSS integral as denominator.
+- **Inputs:** `fixtures/build/apps/counter.apk`; API-34 sysroot `/home/Qui/Projects/acos/.cache/art`;
+  x86_64 host; `CARGO_TARGET_DIR=.cache/z7-target`, release.
+- **Result:**
+  * Whole-system ΣPss at N=10, 0.5/2/5/15/60 s: (a) 900.6 / 903.9 / 925.1 / 904.0 / 956.8 MiB;
+    (a') 613.3 / 617.3 / 617.2 / 619.4 / 630.7 MiB → **−31.9 % / −31.7 % / −33.3 % / −31.5 % /
+    −34.1 %**. At N=5: 508.3…540.8 → 381.1…390.3 MiB (−24.9 to −27.8 %).
+  * Loop N=10 ≥5 min: (a) 210/210 tasks, 45.0 tasks/GiB-min, p50/p95 9.04/15.07 s;
+    (a') 210/210 tasks, **67.7 tasks/GiB-min** (+50.4 %), p50/p95 8.85/15.06 s; 0 false passes.
+  * `System.gc()` alone is inert on this image: `art.gc.gc-count` 3 → 3, 0 ms, no ΣPss change.
+    `requestConcurrentGC` moves the count 3 → 4 and returns the pages within one 1 s sample.
+- **Finding (proven vs hypothesis):** an explicit ART background collection at the first frame is
+  a real exec-path optimisation: it recovers ~287 MiB whole-system at N=10 and ~50 % more verified
+  tasks/GiB-min. Proven for the counter fixture, this image and this host. Hypothesis, not measured:
+  the same gain on heavier apps, whether a target-footprint argv flag is cheaper or safer, and
+  whether a production reset can issue the request without a guest-side hook.
+- **Fidelity / evidence:** MEASURED on real ART, `real-ART` fidelity, 0 false passes.
+  `results/art-runtime/Z7.md`; `results/art-runtime/evidence/Z7/{run-lifetime.sh,run-loop.sh,
+  run-cycles.sh,run-form.sh,summarize.py,summary.json,table.txt}`; bulky raw JSONs were removed
+  after the batch, the committed summary carries every cell.
+- **Regression / false pass:** every task verified `0` → real tap → `1` plus a non-empty C1
+  screenshot; a task that only acknowledges is not a pass. No false passes in 210+210 tasks.
+- **Conclusion / next:** keep the hook as an off-by-default research seam
+  (`ACOS_ART_GC_AFTER_FIRST_FRAME`, listed in `docs/SECURITY.md`). It applies to production's exec
+  path without a zygote; the zygote comparison (Z7) uses it as the fair denominator, because the
+  gate must compare against an optimised current implementation, not an unoptimised one.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -460,6 +500,8 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | M8 tap → settled | strict 955 ms (event) / fast 70.9 ms | main P11 | P1, P11 | 2026-11-12 |
 | Memory / extra session | 100.9 MiB cgroup (pre-W1); zygote research 22.2 MiB Pss | O2; Z6 | O2, Z6 | 2026-11-12 |
 | Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
+| Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 |
+| Teardown (`acos_destroy`) | ~20 ms lifecycle, 300 ms bound then group kill | main GL1 | E2.7 | 2026-11-12 |
 | False passes | 0 | all | P1–P11 | 2026-11-12 |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))

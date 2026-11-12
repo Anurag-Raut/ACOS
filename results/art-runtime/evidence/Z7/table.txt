@@ -1,0 +1,44 @@
+LIFETIME whole-system SumPss (MiB, median of reps; [min,max])
+n arm age0.5 age2 age5 age15 age60
+5 a  506.2[491.3,525.3] 509.0[490.9,528.0] 514.4[500.5,533.3] 511.9[495.3,532.5] 536.0[518.0,563.5]
+5 ap 375.0[374.3,387.3] 376.8[375.1,388.1] 376.7[372.5,388.8] 378.3[374.0,392.1] 390.2[383.6,397.0]
+5 c  419.4[408.8,420.8] 426.0[419.1,429.7] 429.4[419.5,430.1] 286.8[277.6,288.1] 287.8[277.3,288.1]
+5 cp 283.6[273.1,283.7] 283.9[273.4,283.9] 294.9[284.4,295.0] 292.7[282.3,292.8] 296.1[285.6,296.2]
+10 a  899.3[893.5,907.8] 904.3[896.2,911.5] 925.8[917.4,932.8] 901.0[894.5,913.6] 954.7[949.5,964.1]
+10 ap 612.7[610.1,616.5] 617.0[613.4,621.3] 616.7[613.8,620.7] 618.5[617.1,621.6] 630.0[627.9,633.5]
+10 c  650.6[632.4,658.3] 651.5[637.8,663.2] 652.6[647.9,664.3] 377.8[347.6,379.5] 377.7[345.1,379.3]
+10 cp 366.2[359.1,370.4] 368.6[364.3,380.9] 382.4[380.3,393.6] 384.6[378.3,389.2] 391.6[385.0,396.5]
+
+SAVINGS % (positive = less memory than the baseline)
+n5 t0.5: a: vs_a=+0.0 vs_ap=-35.0 | ap: vs_a=+25.9 vs_ap=+0.0 | c: vs_a=+17.1 vs_ap=-11.8 | cp: vs_a=+44.0 vs_ap=+24.4
+n5 t2: a: vs_a=+0.0 vs_ap=-35.1 | ap: vs_a=+26.0 vs_ap=+0.0 | c: vs_a=+16.3 vs_ap=-13.1 | cp: vs_a=+44.2 vs_ap=+24.7
+n5 t5: a: vs_a=+0.0 vs_ap=-36.6 | ap: vs_a=+26.8 vs_ap=+0.0 | c: vs_a=+16.5 vs_ap=-14.0 | cp: vs_a=+42.7 vs_ap=+21.7
+n5 t15: a: vs_a=+0.0 vs_ap=-35.3 | ap: vs_a=+26.1 vs_ap=+0.0 | c: vs_a=+44.0 vs_ap=+24.2 | cp: vs_a=+42.8 vs_ap=+22.6
+n5 t60: a: vs_a=+0.0 vs_ap=-37.4 | ap: vs_a=+27.2 vs_ap=+0.0 | c: vs_a=+46.3 vs_ap=+26.2 | cp: vs_a=+44.8 vs_ap=+24.1
+n10 t0.5: a: vs_a=+0.0 vs_ap=-46.8 | ap: vs_a=+31.9 vs_ap=+0.0 | c: vs_a=+27.7 vs_ap=-6.2 | cp: vs_a=+59.3 vs_ap=+40.2
+n10 t2: a: vs_a=+0.0 vs_ap=-46.6 | ap: vs_a=+31.8 vs_ap=+0.0 | c: vs_a=+28.0 vs_ap=-5.6 | cp: vs_a=+59.2 vs_ap=+40.3
+n10 t5: a: vs_a=+0.0 vs_ap=-50.1 | ap: vs_a=+33.4 vs_ap=+0.0 | c: vs_a=+29.5 vs_ap=-5.8 | cp: vs_a=+58.7 vs_ap=+38.0
+n10 t15: a: vs_a=+0.0 vs_ap=-45.7 | ap: vs_a=+31.4 vs_ap=+0.0 | c: vs_a=+58.1 vs_ap=+38.9 | cp: vs_a=+57.3 vs_ap=+37.8
+n10 t60: a: vs_a=+0.0 vs_ap=-51.5 | ap: vs_a=+34.0 vs_ap=+0.0 | c: vs_a=+60.4 vs_ap=+40.0 | cp: vs_a=+59.0 vs_ap=+37.8
+
+LOOP N=10 (P5-style round: fresh launch per task)
+a  tasks=210 wall=323.05s rounds=21 tasks/min=39.0 tasks/GiB-min(PSS)=45.0 PSS-GiB-min=4.66781 peak=955.6MiB p50=9040.7ms p95=15065.8ms net=44.3 exits_clean=21/21 zygote_liveness=see_cycles_n5
+ap tasks=210 wall=321.9s rounds=21 tasks/min=39.14 tasks/GiB-min(PSS)=67.7 PSS-GiB-min=3.10187 peak=889.7MiB p50=8846.0ms p95=15059.8ms net=65.2 exits_clean=21/21 zygote_liveness=see_cycles_n5
+c  tasks=160 wall=319.86s rounds=16 tasks/min=30.01 tasks/GiB-min(PSS)=70.5 PSS-GiB-min=2.26807 peak=693.4MiB p50=9902.8ms p95=16350.8ms net=67.5 exits_clean=0/16 zygote_liveness=see_cycles_n5
+cp tasks=160 wall=318.67s rounds=16 tasks/min=30.13 tasks/GiB-min(PSS)=103.6 PSS-GiB-min=1.54442 peak=624.8MiB p50=9610.1ms p95=16177.2ms net=98.0 exits_clean=0/16 zygote_liveness=see_cycles_n5
+
+CYCLES N=5 (20 fixed launch->verify->reset rounds per arm)
+a  rounds=20 tasks=100 wall=162.36s tasks/GiB-min(PSS)=74.7 exits_clean=20/20 zygote_alive_after_close=0 zygote_fds=None threads=None rss_kib_range=None
+ap rounds=20 tasks=100 wall=162.9s tasks/GiB-min(PSS)=104.1 exits_clean=20/20 zygote_alive_after_close=0 zygote_fds=None threads=None rss_kib_range=None
+c  rounds=20 tasks=100 wall=274.92s tasks/GiB-min(PSS)=85.8 exits_clean=0/20 zygote_alive_after_close=0 zygote_fds=[42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42] threads=[6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6] rss_kib_range=[146684, 149384]
+cp rounds=20 tasks=100 wall=271.8s tasks/GiB-min(PSS)=131.9 exits_clean=0/20 zygote_alive_after_close=0 zygote_fds=[42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42] threads=[6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6] rss_kib_range=[146520, 149240]
+
+FORM-VALIDATION lifetime/correctness
+n2-a: n=2 arm=a verdict=pass verified=2/2 failures=0
+n2-ap: n=2 arm=ap verdict=pass verified=2/2 failures=0
+n2-c: n=2 arm=c verdict=pass verified=2/2 failures=0
+n2-cp: n=2 arm=cp verdict=pass verified=2/2 failures=0
+n5-a: n=5 arm=a verdict=fail verified=3/5 failures=2
+n5-ap: n=5 arm=ap verdict=fail verified=3/5 failures=2
+n5-c: n=5 arm=c verdict=pass verified=5/5 failures=0
+n5-cp: n=5 arm=cp verdict=fail verified=2/5 failures=3

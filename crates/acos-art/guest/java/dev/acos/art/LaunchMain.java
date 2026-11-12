@@ -1050,6 +1050,13 @@ public final class LaunchMain {
                                 public void run() {
                                     try {
                                         emitProbe(activity, n, why);
+                                        // Z7: the first emitted sample is the
+                                        // host's `ready` (first frame). Optionally
+                                        // run ART's own explicit-GC/trim path now
+                                        // instead of waiting for the post-fork
+                                        // footprint schedule. Inert unless the
+                                        // launcher forwarded the knob.
+                                        if (n == 1) maybeEarlyRelease();
                                     } catch (Throwable t) {
                                         // A probe must never disturb the app, but it
                                         // must not hide its own failure either
@@ -1144,6 +1151,93 @@ public final class LaunchMain {
         System.err.println(line);
         System.out.flush();
         System.err.flush();
+    }
+
+    /**
+     * Z7 (research seam, OFF by default): after the first live frame, run the
+     * real ART release paths once on a daemon thread.
+     *
+     * <p>{@code ACOS_ART_GC_AFTER_FIRST_FRAME=1} calls {@code System.gc()},
+     * which reaches {@code Heap::CollectGarbage(kGcCauseExplicit)}; an explicit
+     * GC makes {@code GarbageCollector::ShouldEagerlyReleaseMemoryToOS()} true,
+     * so the CC collector's {@code ClearFromSpace}/{@code ReleaseFreeRegions}
+     * returns the freed region space to the OS immediately (the same release
+     * Z6 measured 10 s after a zygote fork).
+     *
+     * <p>{@code ACOS_ART_TRIM_AFTER_FIRST_FRAME=1} then calls the hidden
+     * {@code dalvik.system.VMRuntime.getRuntime().trimHeap()} reflectively
+     * ({@code VMRuntime_trimHeap} -> {@code Heap::Trim}); reflection keeps the
+     * production dex compilable against the public SDK stubs and makes a
+     * missing hidden API a recorded no-op, never a crash.
+     */
+    static void maybeEarlyRelease() {
+        final boolean gc = System.getenv("ACOS_ART_GC_AFTER_FIRST_FRAME") != null;
+        final boolean trim = System.getenv("ACOS_ART_TRIM_AFTER_FIRST_FRAME") != null;
+        if (!gc && !trim) return;
+        final long delayMs = envLong("ACOS_ART_GC_DELAY_MS", 0L);
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                long t0 = System.nanoTime();
+                if (delayMs > 0) {
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                long c0 = runtimeStat("art.gc.gc-count");
+                System.out.println("ACOSLAUNCH EARLY_RELEASE start gc=" + gc + " trim=" + trim
+                        + " delay_ms=" + delayMs + " gc_count_before=" + c0);
+                System.out.flush();
+                if (gc) {
+                    try {
+                        System.gc();
+                    } catch (Throwable x) {
+                        System.err.println("ACOSLAUNCH EARLY_RELEASE gc_error " + x);
+                    }
+                    // On this image `System.gc()` is inert (Z7 measured:
+                    // gc-count 3 -> 3, 0 ms), so the release is requested
+                    // through ART's own asynchronous GC entry point. The GC it
+                    // schedules is a background CC collection; the process is
+                    // not jank-perceptible, so the collector takes the eager
+                    // `ReleaseFreeRegions` branch (the same release AOSP's
+                    // post-fork path performs at +10 s).
+                    try {
+                        Class<?> vm = Class.forName("dalvik.system.VMRuntime");
+                        Object rt = vm.getMethod("getRuntime").invoke(null);
+                        vm.getMethod("requestConcurrentGC").invoke(rt);
+                    } catch (Throwable x) {
+                        System.err.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
+                    }
+                }
+                if (trim) {
+                    try {
+                        Class<?> vm = Class.forName("dalvik.system.VMRuntime");
+                        Object rt = vm.getMethod("getRuntime").invoke(null);
+                        vm.getMethod("trimHeap").invoke(rt);
+                    } catch (Throwable x) {
+                        System.err.println("ACOSLAUNCH EARLY_RELEASE trim_error " + x);
+                    }
+                }
+                long c1 = runtimeStat("art.gc.gc-count");
+                System.out.println("ACOSLAUNCH EARLY_RELEASE done ms="
+                        + (System.nanoTime() - t0) / 1000000L
+                        + " gc_count_after=" + c1);
+                System.out.flush();
+            }
+        }, "acos-early-release");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** One ART runtime statistic (`art.gc.gc-count`), or -1 when unavailable. */
+    static long runtimeStat(String name) {
+        try {
+            String v = android.os.Debug.getRuntimeStat(name);
+            return v == null ? -1L : Long.parseLong(v.trim());
+        } catch (Throwable x) {
+            return -1L;
+        }
     }
 
     static long envLong(String name, long fallback) {

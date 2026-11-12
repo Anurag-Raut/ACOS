@@ -1,0 +1,1296 @@
+{
+ "cycles_n5": {
+  "a": {
+   "exits_clean_rounds": 20,
+   "rounds": 20,
+   "tasks_per_gib_min_pss": 74.7,
+   "verdict": "pass",
+   "verified_tasks": 100,
+   "wall_s": 162.36,
+   "zygote_alive_after_close_rounds": 0,
+   "zygote_fds": null,
+   "zygote_rss_kib_range": null,
+   "zygote_threads": null
+  },
+  "ap": {
+   "exits_clean_rounds": 20,
+   "rounds": 20,
+   "tasks_per_gib_min_pss": 104.1,
+   "verdict": "pass",
+   "verified_tasks": 100,
+   "wall_s": 162.9,
+   "zygote_alive_after_close_rounds": 0,
+   "zygote_fds": null,
+   "zygote_rss_kib_range": null,
+   "zygote_threads": null
+  },
+  "c": {
+   "exits_clean_rounds": 0,
+   "rounds": 20,
+   "tasks_per_gib_min_pss": 85.8,
+   "verdict": "pass",
+   "verified_tasks": 100,
+   "wall_s": 274.92,
+   "zygote_alive_after_close_rounds": 0,
+   "zygote_fds": [
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42
+   ],
+   "zygote_rss_kib_range": [
+    146684,
+    149384
+   ],
+   "zygote_threads": [
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "cp": {
+   "exits_clean_rounds": 0,
+   "rounds": 20,
+   "tasks_per_gib_min_pss": 131.9,
+   "verdict": "pass",
+   "verified_tasks": 100,
+   "wall_s": 271.8,
+   "zygote_alive_after_close_rounds": 0,
+   "zygote_fds": [
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42,
+    42
+   ],
+   "zygote_rss_kib_range": [
+    146520,
+    149240
+   ],
+   "zygote_threads": [
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+   ]
+  }
+ },
+ "form": {
+  "n2-a": {
+   "arm": "a",
+   "failures": [],
+   "n": 2,
+   "sessions": 2,
+   "verdict": "pass",
+   "verified": 2
+  },
+  "n2-ap": {
+   "arm": "ap",
+   "failures": [],
+   "n": 2,
+   "sessions": 2,
+   "verdict": "pass",
+   "verified": 2
+  },
+  "n2-c": {
+   "arm": "c",
+   "failures": [],
+   "n": 2,
+   "sessions": 2,
+   "verdict": "pass",
+   "verified": 2
+  },
+  "n2-cp": {
+   "arm": "cp",
+   "failures": [],
+   "n": 2,
+   "sessions": 2,
+   "verdict": "pass",
+   "verified": 2
+  },
+  "n5-a": {
+   "arm": "a",
+   "failures": [
+    "session 0: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 2, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-a/s0/live-frames/acos-c1-layer3-frame-7-g7-c2.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511355421, 'probe_seq': 251, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 251, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 180, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 3, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-a/s0/live-frames/acos-c1-layer3-frame-9-g9-c3.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511385630, 'probe_seq': 374, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 374, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 96, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30023.82, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30419.44, 'tag': 0}",
+    "session 3: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 5, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-a/s3/live-frames/acos-c1-layer3-frame-7-g7-c5.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511389180, 'probe_seq': 387, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 387, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 118, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 6, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-a/s3/live-frames/acos-c1-layer3-frame-9-g9-c6.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511419393, 'probe_seq': 510, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 510, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 102, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30028.73, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30418.5, 'tag': 3}"
+   ],
+   "n": 5,
+   "sessions": 5,
+   "verdict": "fail",
+   "verified": 3
+  },
+  "n5-ap": {
+   "arm": "ap",
+   "failures": [
+    "session 0: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 2, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-ap/s0/live-frames/acos-c1-layer3-frame-7-g7-c2.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511482079, 'probe_seq': 251, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 251, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 127, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 3, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-ap/s0/live-frames/acos-c1-layer3-frame-9-g9-c3.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511512325, 'probe_seq': 374, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 374, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 53, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30026.35, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30472.17, 'tag': 0}",
+    "session 2: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 4, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-ap/s2/live-frames/acos-c1-layer3-frame-7-g7-c4.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511514657, 'probe_seq': 383, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 383, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 108, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 5, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-ap/s2/live-frames/acos-c1-layer3-frame-9-g9-c5.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511544850, 'probe_seq': 506, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 506, 'settled': True, 'tree_age_ms': 151}, 'tree': {'emit_us': 128, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30009.72, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30434.24, 'tag': 2}"
+   ],
+   "n": 5,
+   "sessions": 5,
+   "verdict": "fail",
+   "verified": 3
+  },
+  "n5-c": {
+   "arm": "c",
+   "failures": [],
+   "n": 5,
+   "sessions": 5,
+   "verdict": "pass",
+   "verified": 5
+  },
+  "n5-cp": {
+   "arm": "cp",
+   "failures": [
+    "session 1: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 3, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s1/live-frames/acos-c1-layer3-frame-7-g7-c3.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511700951, 'probe_seq': 261, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 261, 'settled': True, 'tree_age_ms': 50}, 'tree': {'emit_us': 136, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 4, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s1/live-frames/acos-c1-layer3-frame-9-g9-c4.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511731230, 'probe_seq': 383, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 383, 'settled': True, 'tree_age_ms': 121}, 'tree': {'emit_us': 152, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30012.43, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30559.77, 'tag': 1}",
+    "session 2: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 4, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s2/live-frames/acos-c1-layer3-frame-7-g7-c4.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511732333, 'probe_seq': 388, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 388, 'settled': True, 'tree_age_ms': 12}, 'tree': {'emit_us': 231, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 5, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s2/live-frames/acos-c1-layer3-frame-9-g9-c5.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511762428, 'probe_seq': 510, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 510, 'settled': True, 'tree_age_ms': 126}, 'tree': {'emit_us': 130, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30024.84, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30523.9, 'tag': 2}",
+    "session 3: task not verified: {'steps': {'tree_initial': {'buffer_generation': 7, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 7, 'frame_seq': 5, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s3/live-frames/acos-c1-layer3-frame-7-g7-c5.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511763123, 'probe_seq': 511, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 511, 'settled': True, 'tree_age_ms': 2}, 'tree': {'emit_us': 199, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}, 'tree_after': {'buffer_generation': 9, 'buffer_id': 8589934592, 'capture_label': 'ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)', 'capture_source': 'acos-c1-buffer', 'cmd': 'tree', 'frame_number': 9, 'frame_seq': 6, 'height': 2209, 'layer_id': 3, 'layer_name': 'composite(1)', 'md5': '001a6665b419e7ee6a2908d6354cf081', 'non_zero_pixels': 2385720, 'ok': True, 'pixels': True, 'pixels_fnv1a': '9c9ee6ef8634ffe4', 'png': '/home/Qui/Projects/acos/.cache/z7-runs/form/n5-cp/s3/live-frames/acos-c1-layer3-frame-9-g9-c6.png', 'png_bytes': 9545882, 'probe_at_ms': 1794511793212, 'probe_seq': 633, 'producer_id': 1, 'settle': {'bound': 'strict-quiet', 'meaning': 'mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply', 'mode': 'strict', 'probe_seq': 633, 'settled': True, 'tree_age_ms': 111}, 'tree': {'emit_us': 132, 'node_budget': 2000, 'nodes': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,0][1080,2209]', 'bounds_on_screen': '[0,128][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[0,147][1080,2209]', 'bounds_on_screen': '[0,275][1080,2337]', 'checked': False, 'children': [{'bounds': '[42,189][1038,307]', 'bounds_on_screen': '[42,317][1038,435]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': True, 'hint': 'Name', 'id': 'dev.acos.fixtures.formvalidation:id/name', 'selected': False, 'text': 'Name', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,307][1038,425]', 'bounds_on_screen': '[42,435][1038,553]', 'checked': False, 'class': 'android.widget.EditText', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': 'Email', 'id': 'dev.acos.fixtures.formvalidation:id/email', 'selected': False, 'text': 'Email', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,425][273,551]', 'bounds_on_screen': '[42,553][273,679]', 'checked': False, 'class': 'android.widget.Button', 'clickable': True, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/submit', 'selected': False, 'text': 'Submit', 'visibility': 0, 'window': 'main'}, {'bounds': '[42,551][42,602]', 'bounds_on_screen': '[42,679][42,730]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'dev.acos.fixtures.formvalidation:id/error', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.LinearLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.FrameLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/content', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[0,0][1080,147]', 'bounds_on_screen': '[0,128][1080,275]', 'checked': False, 'children': [{'bounds': '[42,38][420,109]', 'bounds_on_screen': '[42,166][420,237]', 'checked': False, 'class': 'android.widget.TextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': 'Form Validation', 'visibility': 0, 'window': 'main'}, {'bounds': '[1080,0][1080,147]', 'bounds_on_screen': '[1080,128][1080,275]', 'checked': False, 'children': [], 'class': 'android.widget.ActionMenuView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'android.widget.Toolbar', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}, {'bounds': '[0,0][0,0]', 'bounds_on_screen': '[0,128][0,128]', 'checked': False, 'children': [], 'class': 'com.android.internal.widget.ActionBarContextView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_context_bar', 'selected': False, 'text': '', 'visibility': 8, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarContainer', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/action_bar_container', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.widget.ActionBarOverlayLayout', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': 'android:id/decor_content_parent', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'class': 'com.android.internal.policy.DecorView', 'clickable': False, 'content_description': '', 'enabled': True, 'focused': False, 'hint': '', 'id': '', 'selected': False, 'text': '', 'visibility': 0, 'window': 'main'}], 'truncated': False, 'window_count': 1, 'windows': [{'window': 'main', 'z': 0}]}, 'width': 1080}}, 'tap_ms': 30013.81, 'tap_ok': False, 'screenshot_md5': '001a6665b419e7ee6a2908d6354cf081', 'screenshot_ok': True, 'initial': 'Name', 'after': 'Name', 'verified': False, 'task_ms': 30409.56, 'tag': 3}"
+   ],
+   "n": 5,
+   "sessions": 5,
+   "verdict": "fail",
+   "verified": 2
+  }
+ },
+ "lifetime": {
+  "n10-a": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.503,
+      0.656
+     ],
+     "private_dirty_median_mib": 757.4,
+     "pss_median_mib": 899.3,
+     "pss_per_rep": [
+      893.5,
+      907.8,
+      899.3
+     ],
+     "pss_range_mib": [
+      893.5,
+      907.8
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      15.001,
+      15.168
+     ],
+     "private_dirty_median_mib": 756.7,
+     "pss_median_mib": 901.0,
+     "pss_per_rep": [
+      894.5,
+      913.6,
+      901.0
+     ],
+     "pss_range_mib": [
+      894.5,
+      913.6
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      2.002,
+      2.168
+     ],
+     "private_dirty_median_mib": 761.3,
+     "pss_median_mib": 904.3,
+     "pss_per_rep": [
+      896.2,
+      911.5,
+      904.3
+     ],
+     "pss_range_mib": [
+      896.2,
+      911.5
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      5.0,
+      5.172
+     ],
+     "private_dirty_median_mib": 782.8,
+     "pss_median_mib": 925.8,
+     "pss_per_rep": [
+      917.4,
+      932.8,
+      925.8
+     ],
+     "pss_range_mib": [
+      917.4,
+      932.8
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      60.003,
+      60.176
+     ],
+     "private_dirty_median_mib": 811.1,
+     "pss_median_mib": 954.7,
+     "pss_per_rep": [
+      949.5,
+      964.1,
+      954.7
+     ],
+     "pss_range_mib": [
+      949.5,
+      964.1
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "a.json",
+    "a.json",
+    "a.json"
+   ]
+  },
+  "n10-ap": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.419,
+      0.718
+     ],
+     "private_dirty_median_mib": 469.5,
+     "pss_median_mib": 612.7,
+     "pss_per_rep": [
+      610.1,
+      616.5,
+      612.7
+     ],
+     "pss_range_mib": [
+      610.1,
+      616.5
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      14.919,
+      15.236
+     ],
+     "private_dirty_median_mib": 473.6,
+     "pss_median_mib": 618.5,
+     "pss_per_rep": [
+      617.1,
+      621.6,
+      618.5
+     ],
+     "pss_range_mib": [
+      617.1,
+      621.6
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      1.919,
+      2.225
+     ],
+     "private_dirty_median_mib": 474.3,
+     "pss_median_mib": 617.0,
+     "pss_per_rep": [
+      613.4,
+      621.3,
+      617.0
+     ],
+     "pss_range_mib": [
+      613.4,
+      621.3
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      4.919,
+      5.224
+     ],
+     "private_dirty_median_mib": 473.7,
+     "pss_median_mib": 616.7,
+     "pss_per_rep": [
+      613.8,
+      620.7,
+      616.7
+     ],
+     "pss_range_mib": [
+      613.8,
+      620.7
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      59.919,
+      60.238
+     ],
+     "private_dirty_median_mib": 484.8,
+     "pss_median_mib": 630.0,
+     "pss_per_rep": [
+      627.9,
+      633.5,
+      630.0
+     ],
+     "pss_range_mib": [
+      627.9,
+      633.5
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "ap.json",
+    "ap.json",
+    "ap.json"
+   ]
+  },
+  "n10-c": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.509,
+      0.771
+     ],
+     "private_dirty_median_mib": 465.4,
+     "pss_median_mib": 650.6,
+     "pss_per_rep": [
+      650.6,
+      658.3,
+      632.4
+     ],
+     "pss_range_mib": [
+      632.4,
+      658.3
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      15.01,
+      15.306
+     ],
+     "private_dirty_median_mib": 186.6,
+     "pss_median_mib": 377.8,
+     "pss_per_rep": [
+      377.8,
+      379.5,
+      347.6
+     ],
+     "pss_range_mib": [
+      347.6,
+      379.5
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      2.01,
+      2.272
+     ],
+     "private_dirty_median_mib": 468.4,
+     "pss_median_mib": 651.5,
+     "pss_per_rep": [
+      651.5,
+      663.2,
+      637.8
+     ],
+     "pss_range_mib": [
+      637.8,
+      663.2
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      5.01,
+      5.278
+     ],
+     "private_dirty_median_mib": 469.4,
+     "pss_median_mib": 652.6,
+     "pss_per_rep": [
+      652.6,
+      664.3,
+      647.9
+     ],
+     "pss_range_mib": [
+      647.9,
+      664.3
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      60.011,
+      60.246
+     ],
+     "private_dirty_median_mib": 186.4,
+     "pss_median_mib": 377.7,
+     "pss_per_rep": [
+      377.7,
+      379.3,
+      345.1
+     ],
+     "pss_range_mib": [
+      345.1,
+      379.3
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "c.json",
+    "c.json",
+    "c.json"
+   ]
+  },
+  "n10-cp": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.493,
+      0.743
+     ],
+     "private_dirty_median_mib": 176.1,
+     "pss_median_mib": 366.2,
+     "pss_per_rep": [
+      359.1,
+      370.4,
+      366.2
+     ],
+     "pss_range_mib": [
+      359.1,
+      370.4
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      14.992,
+      15.24
+     ],
+     "private_dirty_median_mib": 195.1,
+     "pss_median_mib": 384.6,
+     "pss_per_rep": [
+      378.3,
+      389.2,
+      384.6
+     ],
+     "pss_range_mib": [
+      378.3,
+      389.2
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      1.993,
+      2.25
+     ],
+     "private_dirty_median_mib": 181.1,
+     "pss_median_mib": 368.6,
+     "pss_per_rep": [
+      364.3,
+      380.9,
+      368.6
+     ],
+     "pss_range_mib": [
+      364.3,
+      380.9
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      4.992,
+      5.252
+     ],
+     "private_dirty_median_mib": 199.2,
+     "pss_median_mib": 382.4,
+     "pss_per_rep": [
+      382.4,
+      393.6,
+      380.3
+     ],
+     "pss_range_mib": [
+      380.3,
+      393.6
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      59.992,
+      60.249
+     ],
+     "private_dirty_median_mib": 202.1,
+     "pss_median_mib": 391.6,
+     "pss_per_rep": [
+      385.0,
+      396.5,
+      391.6
+     ],
+     "pss_range_mib": [
+      385.0,
+      396.5
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "cp.json",
+    "cp.json",
+    "cp.json"
+   ]
+  },
+  "n5-a": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.497,
+      0.58
+     ],
+     "private_dirty_median_mib": 360.8,
+     "pss_median_mib": 506.2,
+     "pss_per_rep": [
+      491.3,
+      525.3,
+      506.2
+     ],
+     "pss_range_mib": [
+      491.3,
+      525.3
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      14.997,
+      15.065
+     ],
+     "private_dirty_median_mib": 364.8,
+     "pss_median_mib": 511.9,
+     "pss_per_rep": [
+      495.3,
+      532.5,
+      511.9
+     ],
+     "pss_range_mib": [
+      495.3,
+      532.5
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      1.998,
+      2.08
+     ],
+     "private_dirty_median_mib": 363.5,
+     "pss_median_mib": 509.0,
+     "pss_per_rep": [
+      490.9,
+      528.0,
+      509.0
+     ],
+     "pss_range_mib": [
+      490.9,
+      528.0
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      4.996,
+      5.072
+     ],
+     "private_dirty_median_mib": 369.0,
+     "pss_median_mib": 514.4,
+     "pss_per_rep": [
+      500.5,
+      533.3,
+      514.4
+     ],
+     "pss_range_mib": [
+      500.5,
+      533.3
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      59.997,
+      60.059
+     ],
+     "private_dirty_median_mib": 388.7,
+     "pss_median_mib": 536.0,
+     "pss_per_rep": [
+      518.0,
+      563.5,
+      536.0
+     ],
+     "pss_range_mib": [
+      518.0,
+      563.5
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "a.json",
+    "a.json",
+    "a.json"
+   ]
+  },
+  "n5-ap": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.512,
+      0.557
+     ],
+     "private_dirty_median_mib": 240.3,
+     "pss_median_mib": 375.0,
+     "pss_per_rep": [
+      375.0,
+      387.3,
+      374.3
+     ],
+     "pss_range_mib": [
+      374.3,
+      387.3
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      15.012,
+      15.05
+     ],
+     "private_dirty_median_mib": 242.0,
+     "pss_median_mib": 378.3,
+     "pss_per_rep": [
+      378.3,
+      392.1,
+      374.0
+     ],
+     "pss_range_mib": [
+      374.0,
+      392.1
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      2.011,
+      2.053
+     ],
+     "private_dirty_median_mib": 242.0,
+     "pss_median_mib": 376.8,
+     "pss_per_rep": [
+      376.8,
+      388.1,
+      375.1
+     ],
+     "pss_range_mib": [
+      375.1,
+      388.1
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      5.011,
+      5.054
+     ],
+     "private_dirty_median_mib": 242.0,
+     "pss_median_mib": 376.7,
+     "pss_per_rep": [
+      376.7,
+      388.8,
+      372.5
+     ],
+     "pss_range_mib": [
+      372.5,
+      388.8
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      60.012,
+      60.062
+     ],
+     "private_dirty_median_mib": 249.3,
+     "pss_median_mib": 390.2,
+     "pss_per_rep": [
+      383.6,
+      397.0,
+      390.2
+     ],
+     "pss_range_mib": [
+      383.6,
+      397.0
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "ap.json",
+    "ap.json",
+    "ap.json"
+   ]
+  },
+  "n5-c": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.5,
+      0.583
+     ],
+     "private_dirty_median_mib": 229.7,
+     "pss_median_mib": 419.4,
+     "pss_per_rep": [
+      408.8,
+      419.4,
+      420.8
+     ],
+     "pss_range_mib": [
+      408.8,
+      420.8
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      15.0,
+      15.078
+     ],
+     "private_dirty_median_mib": 98.2,
+     "pss_median_mib": 286.8,
+     "pss_per_rep": [
+      277.6,
+      288.1,
+      286.8
+     ],
+     "pss_range_mib": [
+      277.6,
+      288.1
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      2.0,
+      2.075
+     ],
+     "private_dirty_median_mib": 239.8,
+     "pss_median_mib": 426.0,
+     "pss_per_rep": [
+      419.1,
+      429.7,
+      426.0
+     ],
+     "pss_range_mib": [
+      419.1,
+      429.7
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      5.0,
+      5.076
+     ],
+     "private_dirty_median_mib": 240.2,
+     "pss_median_mib": 429.4,
+     "pss_per_rep": [
+      419.5,
+      430.1,
+      429.4
+     ],
+     "pss_range_mib": [
+      419.5,
+      430.1
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      59.999,
+      60.073
+     ],
+     "private_dirty_median_mib": 97.9,
+     "pss_median_mib": 287.8,
+     "pss_per_rep": [
+      277.3,
+      287.8,
+      288.1
+     ],
+     "pss_range_mib": [
+      277.3,
+      288.1
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "c.json",
+    "c.json",
+    "c.json"
+   ]
+  },
+  "n5-cp": {
+   "cells": {
+    "0.5": {
+     "child_age_range_s": [
+      0.501,
+      0.579
+     ],
+     "private_dirty_median_mib": 93.5,
+     "pss_median_mib": 283.6,
+     "pss_per_rep": [
+      273.1,
+      283.6,
+      283.7
+     ],
+     "pss_range_mib": [
+      273.1,
+      283.7
+     ],
+     "reps": 3
+    },
+    "15": {
+     "child_age_range_s": [
+      14.998,
+      15.085
+     ],
+     "private_dirty_median_mib": 102.7,
+     "pss_median_mib": 292.7,
+     "pss_per_rep": [
+      282.3,
+      292.7,
+      292.8
+     ],
+     "pss_range_mib": [
+      282.3,
+      292.8
+     ],
+     "reps": 3
+    },
+    "2": {
+     "child_age_range_s": [
+      2.0,
+      2.073
+     ],
+     "private_dirty_median_mib": 93.8,
+     "pss_median_mib": 283.9,
+     "pss_per_rep": [
+      273.4,
+      283.9,
+      283.9
+     ],
+     "pss_range_mib": [
+      273.4,
+      283.9
+     ],
+     "reps": 3
+    },
+    "5": {
+     "child_age_range_s": [
+      4.999,
+      5.074
+     ],
+     "private_dirty_median_mib": 104.8,
+     "pss_median_mib": 294.9,
+     "pss_per_rep": [
+      284.4,
+      294.9,
+      295.0
+     ],
+     "pss_range_mib": [
+      284.4,
+      295.0
+     ],
+     "reps": 3
+    },
+    "60": {
+     "child_age_range_s": [
+      60.0,
+      60.073
+     ],
+     "private_dirty_median_mib": 106.0,
+     "pss_median_mib": 296.1,
+     "pss_per_rep": [
+      285.6,
+      296.1,
+      296.2
+     ],
+     "pss_range_mib": [
+      285.6,
+      296.2
+     ],
+     "reps": 3
+    }
+   },
+   "files": [
+    "cp.json",
+    "cp.json",
+    "cp.json"
+   ]
+  }
+ },
+ "loop_n10": {
+  "a": {
+   "exits_clean_rounds": 21,
+   "failures": [],
+   "job_cgroup_memory_current_gib_min": 0.53374,
+   "latency_ms": {
+    "max": 16975.7,
+    "mean": 8517.1,
+    "min": 1814.7,
+    "n": 210,
+    "p50": 9040.7,
+    "p95": 15065.8
+   },
+   "net_anon_shmem_gib_min": 4.74461,
+   "pss_gib_min": 4.66781,
+   "pss_peak_mib": 955.6,
+   "rounds": 21,
+   "tasks_per_gib_min_net": 44.3,
+   "tasks_per_gib_min_pss": 45.0,
+   "tasks_per_min": 39.0,
+   "verdict": "pass",
+   "verified_tasks": 210,
+   "wall_s": 323.05,
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
+  },
+  "ap": {
+   "exits_clean_rounds": 21,
+   "failures": [],
+   "job_cgroup_memory_current_gib_min": 1.06978,
+   "latency_ms": {
+    "max": 16172.1,
+    "mean": 8511.3,
+    "min": 1816.9,
+    "n": 210,
+    "p50": 8846.0,
+    "p95": 15059.8
+   },
+   "net_anon_shmem_gib_min": 3.21933,
+   "pss_gib_min": 3.10187,
+   "pss_peak_mib": 889.7,
+   "rounds": 21,
+   "tasks_per_gib_min_net": 65.2,
+   "tasks_per_gib_min_pss": 67.7,
+   "tasks_per_min": 39.14,
+   "verdict": "pass",
+   "verified_tasks": 210,
+   "wall_s": 321.9,
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
+  },
+  "c": {
+   "exits_clean_rounds": 0,
+   "failures": [],
+   "job_cgroup_memory_current_gib_min": 0.49853,
+   "latency_ms": {
+    "max": 16782.9,
+    "mean": 9337.5,
+    "min": 2228.3,
+    "n": 160,
+    "p50": 9902.8,
+    "p95": 16350.8
+   },
+   "net_anon_shmem_gib_min": 2.36875,
+   "pss_gib_min": 2.26807,
+   "pss_peak_mib": 693.4,
+   "rounds": 16,
+   "tasks_per_gib_min_net": 67.5,
+   "tasks_per_gib_min_pss": 70.5,
+   "tasks_per_min": 30.01,
+   "verdict": "pass",
+   "verified_tasks": 160,
+   "wall_s": 319.86,
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
+  },
+  "cp": {
+   "exits_clean_rounds": 0,
+   "failures": [],
+   "job_cgroup_memory_current_gib_min": 0.99527,
+   "latency_ms": {
+    "max": 16822.8,
+    "mean": 9288.5,
+    "min": 2244.6,
+    "n": 160,
+    "p50": 9610.1,
+    "p95": 16177.2
+   },
+   "net_anon_shmem_gib_min": 1.63273,
+   "pss_gib_min": 1.54442,
+   "pss_peak_mib": 624.8,
+   "rounds": 16,
+   "tasks_per_gib_min_net": 98.0,
+   "tasks_per_gib_min_pss": 103.6,
+   "tasks_per_min": 30.13,
+   "verdict": "pass",
+   "verified_tasks": 160,
+   "wall_s": 318.67,
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
+  }
+ },
+ "savings": {
+  "5": {
+   "0.5": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -35.0
+    },
+    "ap": {
+     "vs_a_pct": 25.9,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 17.1,
+     "vs_ap_pct": -11.8
+    },
+    "cp": {
+     "vs_a_pct": 44.0,
+     "vs_ap_pct": 24.4
+    }
+   },
+   "15": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -35.3
+    },
+    "ap": {
+     "vs_a_pct": 26.1,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 44.0,
+     "vs_ap_pct": 24.2
+    },
+    "cp": {
+     "vs_a_pct": 42.8,
+     "vs_ap_pct": 22.6
+    }
+   },
+   "2": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -35.1
+    },
+    "ap": {
+     "vs_a_pct": 26.0,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 16.3,
+     "vs_ap_pct": -13.1
+    },
+    "cp": {
+     "vs_a_pct": 44.2,
+     "vs_ap_pct": 24.7
+    }
+   },
+   "5": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -36.6
+    },
+    "ap": {
+     "vs_a_pct": 26.8,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 16.5,
+     "vs_ap_pct": -14.0
+    },
+    "cp": {
+     "vs_a_pct": 42.7,
+     "vs_ap_pct": 21.7
+    }
+   },
+   "60": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -37.4
+    },
+    "ap": {
+     "vs_a_pct": 27.2,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 46.3,
+     "vs_ap_pct": 26.2
+    },
+    "cp": {
+     "vs_a_pct": 44.8,
+     "vs_ap_pct": 24.1
+    }
+   }
+  },
+  "10": {
+   "0.5": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -46.8
+    },
+    "ap": {
+     "vs_a_pct": 31.9,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 27.7,
+     "vs_ap_pct": -6.2
+    },
+    "cp": {
+     "vs_a_pct": 59.3,
+     "vs_ap_pct": 40.2
+    }
+   },
+   "15": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -45.7
+    },
+    "ap": {
+     "vs_a_pct": 31.4,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 58.1,
+     "vs_ap_pct": 38.9
+    },
+    "cp": {
+     "vs_a_pct": 57.3,
+     "vs_ap_pct": 37.8
+    }
+   },
+   "2": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -46.6
+    },
+    "ap": {
+     "vs_a_pct": 31.8,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 28.0,
+     "vs_ap_pct": -5.6
+    },
+    "cp": {
+     "vs_a_pct": 59.2,
+     "vs_ap_pct": 40.3
+    }
+   },
+   "5": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -50.1
+    },
+    "ap": {
+     "vs_a_pct": 33.4,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 29.5,
+     "vs_ap_pct": -5.8
+    },
+    "cp": {
+     "vs_a_pct": 58.7,
+     "vs_ap_pct": 38.0
+    }
+   },
+   "60": {
+    "a": {
+     "vs_a_pct": 0.0,
+     "vs_ap_pct": -51.5
+    },
+    "ap": {
+     "vs_a_pct": 34.0,
+     "vs_ap_pct": 0.0
+    },
+    "c": {
+     "vs_a_pct": 60.4,
+     "vs_ap_pct": 40.0
+    },
+    "cp": {
+     "vs_a_pct": 59.0,
+     "vs_ap_pct": 37.8
+    }
+   }
+  }
+ }
+}
