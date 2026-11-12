@@ -10,9 +10,15 @@ One phase per invocation, always inside
                       and wakeups/s over a 60 s window per N
   --phase loop1       full P5 agent loop at N=1 (reuses P5's harness)
   --phase loop5       full P5 agent loop at N=5
+  --phase loop10      full P5 agent loop at N=10 (16G guarded arm)
   --phase cold        M3 cold start (page cache evicted per rep; reuses P7)
   --phase p11         P11 settle-lab false passes (reuses P11's harness)
   --phase scenarios   scenarios/p11-*.yaml sweep through `acos verify`
+
+Every launch carries the process-wide animation arm (`--animations on|off`,
+default on = the product default; `off` is P12's agent-facing functional-test
+mode). Strict replies are gated on `settled:true` (a P12 timeout is never a
+pass) and every strict input/tree row records `pixels_changed`.
 
 Each phase writes one JSON with raw sample arrays. `--merge` pools the reps into
 results/bench/baseline-<UTC>.json (+ .md) and derives the per-metric noise
@@ -226,6 +232,13 @@ METRICS = {
         "method": "verified tasks / cgroup GiB-min integral (benchlib.sample_integral) "
                   "over the cohort",
     },
+    "loop_n1_tasks_per_gib_min_net": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=1 (anon+shmem)",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / integral of the job's cgroup anon+shmem only "
+                  "(label-matched with M1/M2; excludes page cache charged to the "
+                  "cgroup, which is file cache read by whichever phase ran first)",
+    },
     "loop_n5_ms": {
         "metric": "agent loop", "label": "full agent loop latency, N=5",
         "unit": "ms/task", "category": "latency", "direction": "lower",
@@ -245,6 +258,40 @@ METRICS = {
         "metric": "agent loop", "label": "verified tasks/GiB-min, N=5",
         "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
         "method": "verified tasks / cgroup GiB-min integral, 5 concurrent sessions",
+    },
+    "loop_n5_tasks_per_gib_min_net": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=5 (anon+shmem)",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / integral of the job's cgroup anon+shmem only "
+                  "(label-matched with M1/M2; excludes page cache charged to the "
+                  "cgroup, which is file cache read by whichever phase ran first)",
+    },
+    "loop_n10_ms": {
+        "metric": "agent loop", "label": "full agent loop latency, N=10",
+        "unit": "ms/task", "category": "latency", "direction": "lower",
+        "method": "same P5 loop with 10 concurrent sessions in one serve",
+    },
+    "loop_n10_verified_rate": {
+        "metric": "agent loop", "label": "verified task rate, N=10",
+        "unit": "fraction", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / measured tasks, 10 concurrent sessions",
+    },
+    "loop_n10_tasks_per_s": {
+        "metric": "agent loop", "label": "verified tasks/s, N=10",
+        "unit": "tasks/s", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cohort wall, 10 concurrent sessions",
+    },
+    "loop_n10_tasks_per_gib_min": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=10",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cgroup GiB-min integral, 10 concurrent sessions",
+    },
+    "loop_n10_tasks_per_gib_min_net": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=10 (anon+shmem)",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / integral of the job's cgroup anon+shmem only "
+                  "(label-matched with M1/M2; excludes page cache charged to the "
+                  "cgroup, which is file cache read by whichever phase ran first)",
     },
     "cpu_idle_n1_pct": {
         "metric": "CPU", "label": "idle CPU, N=1",
@@ -561,8 +608,34 @@ def finish_samples(samples):
     return samples
 
 
+# --------------------------------------------------------------------------- #
+# Animation arm (H14). Every launch in this process carries the arm, so a
+# measurement is never a mix of sessions started in different modes. The
+# default is the product default ("on"); "off" is the agent-facing
+# functional-test mode (P12), not a product default change.
+# --------------------------------------------------------------------------- #
+ARM = {"animations": "on"}
+
+
+def set_arm(value):
+    value = (value or "on").strip().lower()
+    if value not in ("on", "off"):
+        raise SystemExit("acos-bench: --animations must be on|off (got %r)" % value)
+    ARM["animations"] = value
+    os.environ["ACOS_BENCH_ANIMATIONS"] = value
+
+
+def with_arm(tool, args):
+    """Attach the animation arm to any launch-shaped request."""
+    if tool == "acos_launch":
+        args = dict(args)
+        args.setdefault("animations", ARM["animations"])
+    return args
+
+
 def launch(d, base, settle, apk=COUNTER, **extra):
     args = {"base": base, "apk": str(apk), "settle": settle}
+    args.setdefault("animations", ARM["animations"])
     args.update(extra)
     return d.call("acos_launch", args)
 
@@ -586,6 +659,7 @@ def new_base(tag, i):
 # Phase: latency (M4/M6/M5/M7/M8/ack/teardown)
 # --------------------------------------------------------------------------- #
 def phase_latency(args):
+    set_arm(getattr(args, "animations", "on"))
     reps = args.reps
     scratch = Path(args.scratch)
     if scratch.exists():
@@ -623,8 +697,13 @@ def phase_latency(args):
                                                   "max_nodes": 2000})
                 vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
                 ok = ok and count_text(vtree) == "0"
+                # P12: a timed-out settle is not a pass, even when the tree looks
+                # right; the reply says settled:false / bound:timeout.
+                ok = ok and settle.get("settled") is not False
                 add(samples, "m4_launch_%s_ms" % mode, r["wall_ms"], ok,
                     {"bound": settle.get("bound"), "settled": settle.get("settled"),
+                     "pixels_changed": settle.get("pixels_changed"),
+                     "animations": value.get("animations"),
                      "nodes": len(nodes_of(tree_of(value))),
                      "verify_ok": count_text(vtree) == "0"})
                 destroy(d, base, teardowns, "m4-%s" % mode)
@@ -652,11 +731,15 @@ def phase_latency(args):
                 ok = bool(env.get("ok") and value.get("state_reset")
                           and value.get("data_cleared") and count_text(tree) == "0"
                           and count_text(vtree) == "0"
-                          and count_text(before) not in (None, "0"))
+                          and count_text(before) not in (None, "0")
+                          and settle.get("settled") is not False)
                 if i == 0:
                     continue
                 add(samples, "m6_reset_%s_ms" % mode, r["wall_ms"], ok,
                     {"bound": settle.get("bound"),
+                     "settled": settle.get("settled"),
+                     "pixels_changed": settle.get("pixels_changed"),
+                     "animations": value.get("animations"),
                      "before": count_text(before), "after": count_text(tree)})
             destroy(d, base, teardowns, "m6-%s" % mode)
 
@@ -687,7 +770,8 @@ def phase_latency(args):
                 nodes = len(nodes_of(tree))
                 own_count = count_text(tree)
                 ok = bool(env.get("ok") and nodes > 0
-                          and not value.get("truncated"))
+                          and not value.get("truncated")
+                          and settle.get("settled") is not False)
                 if mode == "fast":
                     vr = d.call("acos_observe_tree", {"base": base,
                                                       "settle": "strict",
@@ -698,7 +782,10 @@ def phase_latency(args):
                     continue
                 add(samples, "m7_tree_%s_ms" % mode, r["wall_ms"], ok,
                     {"nodes": nodes, "count": own_count,
-                     "bound": settle.get("bound"), "truncated": value.get("truncated")})
+                     "bound": settle.get("bound"),
+                     "settled": settle.get("settled"),
+                     "pixels_changed": settle.get("pixels_changed"),
+                     "truncated": value.get("truncated")})
             checks["m7_%s_good" % mode] = sum(
                 1 for e in samples.get("m7_tree_%s_ms" % mode, {}).get("extra", [])
                 if e.get("count") is not None)
@@ -715,6 +802,7 @@ def phase_latency(args):
                 # strict replies name the settled frame, fast replies name the
                 # state commit; state_changed is only present on the fast path.
                 ok = bool(env.get("ok") and settle.get("state_changed") is not False
+                          and settle.get("settled") is not False
                           and (settle.get("frame_ms") is not None
                                or settle.get("first_change_ms") is not None))
                 taps_expected += 1
@@ -724,7 +812,10 @@ def phase_latency(args):
                     {"ack_ms": settle.get("ack_ms"),
                      "first_change_ms": settle.get("first_change_ms"),
                      "frame_ms": settle.get("frame_ms"),
-                     "bound": settle.get("bound")})
+                     "bound": settle.get("bound"),
+                     "settled": settle.get("settled"),
+                     "pixels_changed": settle.get("pixels_changed"),
+                     "animations": (env.get("result") or {}).get("animations")})
                 if settle.get("ack_ms") is not None:
                     add(samples, "tap_ack_ms", settle.get("ack_ms"), ok)
             if cpu0 is not None:
@@ -755,7 +846,8 @@ def phase_latency(args):
                 settle = (env.get("result") or {}).get("settle") or {}
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
                 vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
-                ok = bool(env.get("ok") and node_text(vtree, "error") == FORM_ERROR)
+                ok = bool(env.get("ok") and node_text(vtree, "error") == FORM_ERROR
+                          and settle.get("settled") is not False)
                 if i == 0:
                     continue
                 add(samples, "m8_tap_form_%s_ms" % mode, r["wall_ms"], ok,
@@ -763,6 +855,8 @@ def phase_latency(args):
                      "first_change_ms": settle.get("first_change_ms"),
                      "frame_ms": settle.get("frame_ms"),
                      "bound": settle.get("bound"),
+                     "settled": settle.get("settled"),
+                     "pixels_changed": settle.get("pixels_changed"),
                      "error": node_text(vtree, "error")})
                 if settle.get("ack_ms") is not None:
                     add(samples, "tap_ack_ms", settle.get("ack_ms"), ok)
@@ -770,8 +864,10 @@ def phase_latency(args):
         destroy(d, base, teardowns, "m8-form")
 
         checks["teardown_verified"] = sum(1 for row in teardowns if row.get("verified"))
+        # A failed destroy reply can carry no lifecycle label; sorting a set that
+        # mixes str and None raised TypeError and truncated the phase record.
         checks["teardown_lifecycles"] = sorted(
-            set(row.get("lifecycle") for row in teardowns))
+            {row.get("lifecycle") for row in teardowns if row.get("lifecycle")})
     except Exception as exc:  # noqa: BLE001 -- a phase fault is recorded, never faked
         errors.append("%s: %s" % (type(exc).__name__, exc))
     finally:
@@ -797,7 +893,8 @@ def phase_latency(args):
         "schema": "acos-bench-phase/2", "phase": "latency", "utc": utc(),
         "acos": args.acos, "binary_sha256": benchlib.sha256_file(args.acos),
         "host_before": host_now(), "host_after": host_now(),
-        "env": {"ACOS_STRICT_SETTLE": os.environ.get("ACOS_STRICT_SETTLE", "default")},
+        "env": {"ACOS_STRICT_SETTLE": os.environ.get("ACOS_STRICT_SETTLE", "default"),
+                "animations": ARM["animations"]},
         "samples": samples, "teardowns": teardowns, "checks": checks,
         "ok": ok, "errors": errors,
         "survivors": d2_warm.survivors(scratch) if Path(scratch).exists() else [],
@@ -834,6 +931,7 @@ def make_reference(d, scratch):
 # Phase: memory (M1/M2 + idle CPU/wakeups N=1/5/10)
 # --------------------------------------------------------------------------- #
 def phase_memory(args):
+    set_arm(getattr(args, "animations", "on"))
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -955,6 +1053,7 @@ def phase_memory(args):
 # Phase: P5 agent loop (reuses results/.../P5/p5_loop.py)
 # --------------------------------------------------------------------------- #
 def phase_loop(args):
+    set_arm(getattr(args, "animations", "on"))
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -966,6 +1065,15 @@ def phase_loop(args):
     try:
         p5 = load_module("h6_p5_loop", P5_LOOP)
         p5.APK = COUNTER
+        # The P5 harness builds its own launch arguments; give every launch in
+        # the loop the bench's animation arm (H14). Wrapping the runner keeps the
+        # harness untouched and leaves the arm visible in every phase doc.
+        original_call = p5.TaskRunner.call
+
+        def call_with_arm(self, step, tool, args, pngs_before):
+            return original_call(self, step, tool, with_arm(tool, args), pngs_before)
+
+        p5.TaskRunner.call = call_with_arm
         loops = args.loops or (22 if args.n == 1 else 6)
         argv = ["--acos", args.acos, "--out", str(out_json),
                 "--scratch", str(scratch), "--n", str(args.n),
@@ -997,6 +1105,10 @@ def phase_loop(args):
             bool(doc.get("ok")), thr)
         add(samples, "loop_n%d_tasks_per_gib_min" % args.n,
             thr.get("verified_tasks_per_gib_min"), bool(doc.get("ok")), thr)
+        add(samples, "loop_n%d_tasks_per_gib_min_net" % args.n,
+            thr.get("verified_tasks_per_gib_min_net"), bool(doc.get("ok")),
+            {k: thr.get(k) for k in ("verified_tasks_per_gib_min",
+                                     "verified_tasks_per_gib_min_net")})
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))
     finally:
@@ -1011,6 +1123,8 @@ def phase_loop(args):
                                    ("verified", "measured_tasks", "false_pass",
                                     "throughput", "memory", "loop_total",
                                     "loop_wall_total", "loop", "failed_tasks")},
+        "env": {"animations": ARM["animations"], "loops": args.loops or
+                (22 if args.n == 1 else 6)},
         "failures": [
             {"agent": task.get("agent"), "index": task.get("index"),
              "pre_text": task.get("pre_text"), "post_text": task.get("post_text"),
@@ -1030,6 +1144,7 @@ def phase_loop(args):
 # Phase: M3 cold start (reuses P7's fadvise eviction and M3 cohort)
 # --------------------------------------------------------------------------- #
 def phase_cold(args):
+    set_arm(getattr(args, "animations", "on"))
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -1049,7 +1164,7 @@ def phase_cold(args):
 
             def call(self, tool, args):
                 if tool == "acos_launch":
-                    args = dict(args, pixels=True)
+                    args = dict(args, pixels=True, animations=ARM["animations"])
                 return super().call(tool, args)
 
         p7.Daemon = PixelDaemon
@@ -1092,6 +1207,7 @@ def phase_cold(args):
 # Phase: P11 settle-lab false passes (reuses P11's harness)
 # --------------------------------------------------------------------------- #
 def phase_p11(args):
+    set_arm(getattr(args, "animations", "on"))
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -1127,6 +1243,8 @@ def phase_p11(args):
                 timeouts += summary.get("timeouts") or 0
         checks["cases"] = cases
         checks["mode"] = mode
+        checks["animations"] = "on (P11 harness launches its own sessions; the "
+        "animations:off corpus is an open follow-up, see EXPERIMENTS.md E2.9)"
         add(samples, "p11_false_passes", false_passes, false_passes == 0,
             {"early_renders": early_renders, "cases": len(cases)})
         checks["early_renders"] = early_renders
@@ -1153,6 +1271,7 @@ def phase_p11(args):
 # Phase: scenarios/p11-*.yaml sweep through `acos verify`
 # --------------------------------------------------------------------------- #
 def phase_scenarios(args):
+    set_arm(getattr(args, "animations", "on"))
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -1182,6 +1301,7 @@ def phase_scenarios(args):
             proc = subprocess.run(
                 [args.acos, "verify", "--scenario", str(scenario),
                  "--apk", str(apk), "--engine", "art",
+                 "--animations", ARM["animations"],
                  "--artifacts", str(out_dir), "--json"],
                 capture_output=True, text=True, timeout=400)
             out_json.write_text(proc.stdout)
@@ -1219,6 +1339,7 @@ def phase_scenarios(args):
         "schema": "acos-bench-phase/2", "phase": "scenarios", "utc": utc(),
         "acos": args.acos, "binary_sha256": benchlib.sha256_file(args.acos),
         "host_before": host_now(), "host_after": host_now(),
+        "env": {"animations": ARM["animations"]},
         "samples": samples, "scenarios": rows,
         "ok": not errors, "errors": errors,
     }
@@ -1318,8 +1439,23 @@ def merge(args):
                      "phases": phases, "meta": meta})
     # Pool the raw values per metric; keep each rep's p50 for the threshold.
     pooled = {}
+    LOOP_NET = {"loop1": 1, "loop5": 5, "loop10": 10}
     for rep in reps:
         for phase in rep["phases"].values():
+            # The anon+shmem tasks/GiB-min variant lives in the P5 document's
+            # throughput block (the harness has always computed it); lift it into
+            # the merged metrics when the phase predates the explicit sample.
+            n = LOOP_NET.get(phase.get("phase"))
+            if n is not None:
+                net = ((phase.get("p5") or {}).get("throughput") or {}).get(
+                    "verified_tasks_per_gib_min_net")
+                key = "loop_n%d_tasks_per_gib_min_net" % n
+                if net is not None and key not in (phase.get("samples") or {}):
+                    target = pooled.setdefault(key, {"values": [], "rep_p50": [],
+                                                     "ok": 0, "bad": 0, "extra": []})
+                    target["values"].append(round(float(net), 3))
+                    target["rep_p50"].append(round(float(net), 3))
+                    target["ok"] += 1
             for key, block in (phase.get("samples") or {}).items():
                 if key not in METRICS:
                     continue
@@ -1357,7 +1493,7 @@ def merge(args):
         for name, phase in rep["phases"].items():
             group = group_of.get(name, {})
             ok_flag = bool(phase.get("ok"))
-            if name in ("loop1", "loop5"):
+            if name in ("loop1", "loop5", "loop10"):
                 p5 = phase.get("p5") or {}
                 ok_flag = (not p5.get("false_pass")) and bool(p5.get("measured_tasks"))
             phase_rows.append({
@@ -1393,6 +1529,7 @@ def merge(args):
         "mode": args.mode,
         "reps": len(reps),
         "env": {"ACOS_STRICT_SETTLE": os.environ.get("ACOS_STRICT_SETTLE", "default"),
+                "animations": ARM["animations"],
                 "ACOS_FONT_DIR": os.environ.get("ACOS_FONT_DIR"),
                 "host": "AMD Ryzen 9 9950X, 32 threads, 61908 MiB"},
         "metrics": metrics,
@@ -1431,8 +1568,10 @@ def render_markdown(doc):
     lines.append("Command: `tools/bench/acos-bench.sh --reps %d` (branch `%s`, commit "
                  "`%s`)." % (doc["reps"], doc.get("branch"), (doc.get("commit") or "")[:12]))
     lines.append("")
-    lines.append("Mode `%s`; `ACOS_STRICT_SETTLE=%s`; binary sha256 `%s`."
+    lines.append("Mode `%s`; `ACOS_STRICT_SETTLE=%s`; `animations=%s`; binary "
+                 "sha256 `%s`."
                  % (doc["mode"], doc["env"]["ACOS_STRICT_SETTLE"],
+                    doc["env"].get("animations", "on"),
                     (doc.get("binary_sha256") or "")[:16]))
     lines.append("")
     lines.append("Host: %s. Noisy phases: %d/%d (load1 > 4 or MemAvailable < 20 GiB; "
@@ -1509,6 +1648,12 @@ def compare(args):
             print("acos-bench --compare: no merged run at %s: %s" % (args.out, exc))
             return 2
     rows = compare_rows(base, cur)
+    base_arm = (base.get("env") or {}).get("animations", "on")
+    cur_arm = (cur.get("env") or {}).get("animations", "on")
+    if base_arm != cur_arm:
+        print("acos-bench --compare: animation arms differ (baseline %s, current "
+              "%s); deltas are an A/B result, not a regression gate."
+              % (base_arm, cur_arm))
     print("baseline %s (%s) vs current %s (%s)"
           % (base.get("utc"), (base.get("commit") or "")[:12],
              cur.get("utc"), (cur.get("commit") or "")[:12]))
@@ -1550,7 +1695,7 @@ def run_bundle(args):
     out_dir.mkdir(parents=True, exist_ok=True)
     handlers = {
         "latency": phase_latency, "memory": phase_memory,
-        "loop1": phase_loop, "loop5": phase_loop,
+        "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
         "scenarios": phase_scenarios,
     }
@@ -1572,6 +1717,8 @@ def run_bundle(args):
             sub.n = 1
         elif phase == "loop5":
             sub.n = 5
+        elif phase == "loop10":
+            sub.n = 10
         t0 = time.time()
         try:
             doc = handlers[phase](sub)
@@ -1599,7 +1746,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--phase", choices=["latency", "memory", "loop1", "loop5",
-                                        "cold", "p11", "scenarios"])
+                                        "loop10", "cold", "p11", "scenarios"])
     ap.add_argument("--bundle", default="",
                     help="comma-separated phases run in one lock acquisition")
     ap.add_argument("--acos", default=str(REPO / "target/release/acos"))
@@ -1619,7 +1766,11 @@ def main(argv=None):
     ap.add_argument("--mode", default="full")
     ap.add_argument("--compare", default="")
     ap.add_argument("--from-run", default="")
+    ap.add_argument("--animations", default=os.environ.get("ACOS_BENCH_ANIMATIONS", "on"),
+                    choices=["on", "off"],
+                    help="animation arm for every launch (H14); default = product default on")
     args = ap.parse_args(argv)
+    set_arm(args.animations)
     if args.merge:
         return merge(args)
     if args.compare and not args.phase and not args.bundle:
@@ -1634,12 +1785,12 @@ def main(argv=None):
         raise SystemExit("acos-bench: missing binary %s" % args.acos)
     handler = {
         "latency": phase_latency, "memory": phase_memory,
-        "loop1": phase_loop, "loop5": phase_loop,
+        "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
         "scenarios": phase_scenarios,
     }[args.phase]
-    if args.phase in ("loop1", "loop5"):
-        args.n = 1 if args.phase == "loop1" else 5
+    if args.phase in ("loop1", "loop5", "loop10"):
+        args.n = {"loop1": 1, "loop5": 5, "loop10": 10}[args.phase]
     doc = handler(args)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

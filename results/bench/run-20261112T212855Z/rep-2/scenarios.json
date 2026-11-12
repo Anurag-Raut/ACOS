@@ -1,0 +1,242 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/b2/target/release/acos",
+  "binary_sha256": "c824013b2b043a0659bfffd6deb3ba4c0c8da300b0f048ba3319cb6e6d57647a",
+  "bundle_wall_s": 28.343,
+  "env": {
+    "animations": "on"
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 2.52,
+    "loadavg15": 4.52,
+    "loadavg5": 4.18,
+    "mem_available_gib": 47.01,
+    "mem_available_mib": 48134.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
+        "comm": "bash",
+        "pid": 3006935
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "2/2688",
+    "used_mib": 13774.6,
+    "used_pct": 22.25,
+    "utc": "2026-11-12T21:45:23+00:00"
+  },
+  "host_before": {
+    "loadavg1": 2.52,
+    "loadavg15": 4.52,
+    "loadavg5": 4.18,
+    "mem_available_gib": 47.01,
+    "mem_available_mib": 48133.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
+        "comm": "bash",
+        "pid": 3006935
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      }
+    ],
+    "runnable": "2/2688",
+    "used_mib": 13775.5,
+    "used_pct": 22.25,
+    "utc": "2026-11-12T21:45:23+00:00"
+  },
+  "ok": true,
+  "phase": "scenarios",
+  "samples": {
+    "p11_scenarios_failed": {
+      "bad": 0,
+      "extra": [
+        {
+          "scenarios": 12
+        }
+      ],
+      "median": 0.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.0,
+        "n": 1,
+        "p5": 0.0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "count",
+      "values": [
+        0.0
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 7,
+      "rc": 0,
+      "scenario": "p11-activity",
+      "total": 7,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-anim",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 5,
+      "rc": 0,
+      "scenario": "p11-background",
+      "total": 5,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-chain",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 5,
+      "rc": 0,
+      "scenario": "p11-delay1000",
+      "total": 5,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-delay200",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-delay40",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 6,
+      "rc": 0,
+      "scenario": "p11-dialog",
+      "total": 6,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-layout-transition",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-list-smooth",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "non_pass",
+      "failed_steps": 1,
+      "ok": true,
+      "passed": 2,
+      "rc": 1,
+      "scenario": "p11-progress-timeout",
+      "total": 3,
+      "verdict": "timeout"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 13,
+      "rc": 0,
+      "scenario": "p11-rapid-taps",
+      "total": 13,
+      "verdict": "pass"
+    }
+  ],
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T21:45:23+00:00"
+}

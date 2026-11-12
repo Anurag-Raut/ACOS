@@ -1,12 +1,13 @@
 {
-  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
-  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
-  "branch": "bench-h6-baseline",
-  "commit": "32a0708fcca35218bccb1083a35880c8c621e332",
-  "commit_subject": "build-apps: device smoke install is opt-in (ACOS_DEVICE_SMOKE=1 + ANDROID_SERIAL); never auto-install on an attached phone",
+  "acos": "/home/Qui/Projects/acos/.cache/b2/target/release/acos",
+  "binary_sha256": "c824013b2b043a0659bfffd6deb3ba4c0c8da300b0f048ba3319cb6e6d57647a",
+  "branch": "bench-b2-rebaseline",
+  "commit": "49587033ac8450ffb0d333933ac96f32a89afe73",
+  "commit_subject": "Merge branch 'bench-h6-baseline' (H6: one-command bench for all metrics with regression compare; pre-H2 Stage 1 baseline)",
   "env": {
-    "ACOS_FONT_DIR": "/home/Qui/Projects/acos/.cache/boot/android-34/fonts",
+    "ACOS_FONT_DIR": null,
     "ACOS_STRICT_SETTLE": "default",
+    "animations": "on",
     "host": "AMD Ryzen 9 9950X, 32 threads, 61908 MiB"
   },
   "metrics": {
@@ -16,26 +17,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "active CPU, 20 strict counter taps",
-      "max": 46.164,
-      "mean": 45.641999999999996,
+      "max": 49.281,
+      "mean": 46.83566666666667,
       "method": "utime+stime delta over the serve tree during the M8 strict counter cohort (20 taps, ~20 s)",
       "metric": "CPU",
-      "min": 44.985,
+      "min": 44.277,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 45.777,
-      "p95": 46.1253,
-      "rep_deviation_pct": 1.73,
+      "p50": 46.949,
+      "p95": 49.047799999999995,
+      "rep_deviation_pct": 5.69,
       "rep_p50": [
-        46.164,
-        45.777,
-        44.985
+        49.281,
+        46.949,
+        44.277
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 2.3179762762959637,
+      "spread_pct": 9.59253658224882,
       "threshold_abs": 0.2,
-      "threshold_pct": 10.0,
+      "threshold_pct": 12,
       "unit": "% of one core"
     },
     "cpu_idle_n10_pct": {
@@ -44,26 +45,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU, N=10",
-      "max": 4.521,
-      "mean": 4.385333333333333,
+      "max": 6.272,
+      "mean": 5.4959999999999996,
       "method": "same 60 s utime+stime window at N=10",
       "metric": "CPU",
-      "min": 4.17,
+      "min": 4.935,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 4.465,
-      "p95": 4.5154,
-      "rep_deviation_pct": 6.61,
+      "p50": 5.281,
+      "p95": 6.1729,
+      "rep_deviation_pct": 18.77,
       "rep_p50": [
-        4.17,
-        4.521,
-        4.465
+        6.272,
+        4.935,
+        5.281
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 7.075027995520698,
+      "spread_pct": 22.785457299753844,
       "threshold_abs": 0.2,
-      "threshold_pct": 14,
+      "threshold_pct": 38,
       "unit": "% of one core"
     },
     "cpu_idle_n10_per_session_pct": {
@@ -72,26 +73,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU per session, N=10",
-      "max": 0.452,
-      "mean": 0.4386666666666667,
+      "max": 0.627,
+      "mean": 0.5493333333333333,
       "method": "idle CPU N=10 / 10",
       "metric": "CPU",
-      "min": 0.417,
+      "min": 0.493,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 0.447,
-      "p95": 0.4515,
-      "rep_deviation_pct": 6.71,
+      "p50": 0.528,
+      "p95": 0.6171,
+      "rep_deviation_pct": 18.75,
       "rep_p50": [
-        0.417,
-        0.452,
-        0.447
+        0.627,
+        0.493,
+        0.528
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 7.046979865771819,
+      "spread_pct": 22.840909090909086,
       "threshold_abs": 0.2,
-      "threshold_pct": 14,
+      "threshold_pct": 38,
       "unit": "% of one core/session"
     },
     "cpu_idle_n1_pct": {
@@ -100,26 +101,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU, N=1",
-      "max": 0.631,
-      "mean": 0.6143333333333333,
+      "max": 0.713,
+      "mean": 0.658,
       "method": "/proc/<pid>/stat utime+stime over a 60 s idle window, summed over the serve tree (guests included)",
       "metric": "CPU",
-      "min": 0.598,
+      "min": 0.614,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 0.614,
-      "p95": 0.6293,
-      "rep_deviation_pct": 2.77,
+      "p50": 0.647,
+      "p95": 0.7064,
+      "rep_deviation_pct": 10.2,
       "rep_p50": [
-        0.631,
-        0.598,
-        0.614
+        0.647,
+        0.614,
+        0.713
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.837133550488591,
+      "spread_pct": 13.771251931993827,
       "threshold_abs": 0.2,
-      "threshold_pct": 10.0,
+      "threshold_pct": 21,
       "unit": "% of one core"
     },
     "cpu_idle_n1_per_session_pct": {
@@ -128,26 +129,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU per session, N=1",
-      "max": 0.631,
-      "mean": 0.6143333333333333,
+      "max": 0.713,
+      "mean": 0.658,
       "method": "idle CPU N=1 / 1",
       "metric": "CPU",
-      "min": 0.598,
+      "min": 0.614,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 0.614,
-      "p95": 0.6293,
-      "rep_deviation_pct": 2.77,
+      "p50": 0.647,
+      "p95": 0.7064,
+      "rep_deviation_pct": 10.2,
       "rep_p50": [
-        0.631,
-        0.598,
-        0.614
+        0.647,
+        0.614,
+        0.713
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.837133550488591,
+      "spread_pct": 13.771251931993827,
       "threshold_abs": 0.2,
-      "threshold_pct": 10.0,
+      "threshold_pct": 21,
       "unit": "% of one core/session"
     },
     "cpu_idle_n5_pct": {
@@ -156,26 +157,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU, N=5",
-      "max": 2.508,
-      "mean": 2.458,
+      "max": 2.836,
+      "mean": 2.699666666666667,
       "method": "same 60 s utime+stime window at N=5",
       "metric": "CPU",
-      "min": 2.424,
+      "min": 2.493,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 2.442,
-      "p95": 2.5014,
-      "rep_deviation_pct": 2.7,
+      "p50": 2.77,
+      "p95": 2.8293999999999997,
+      "rep_deviation_pct": 10.0,
       "rep_p50": [
-        2.424,
-        2.442,
-        2.508
+        2.836,
+        2.493,
+        2.77
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 3.095823095823082,
+      "spread_pct": 11.144404332129946,
       "threshold_abs": 0.2,
-      "threshold_pct": 10.0,
+      "threshold_pct": 21,
       "unit": "% of one core"
     },
     "cpu_idle_n5_per_session_pct": {
@@ -184,26 +185,26 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle CPU per session, N=5",
-      "max": 0.502,
-      "mean": 0.4916666666666667,
+      "max": 0.567,
+      "mean": 0.54,
       "method": "idle CPU N=5 / 5",
       "metric": "CPU",
-      "min": 0.485,
+      "min": 0.499,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 0.488,
-      "p95": 0.5006,
-      "rep_deviation_pct": 2.87,
+      "p50": 0.554,
+      "p95": 0.5656999999999999,
+      "rep_deviation_pct": 9.93,
       "rep_p50": [
-        0.485,
-        0.488,
-        0.502
+        0.567,
+        0.499,
+        0.554
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 3.135245901639352,
+      "spread_pct": 11.046931407942223,
       "threshold_abs": 0.2,
-      "threshold_pct": 10.0,
+      "threshold_pct": 20,
       "unit": "% of one core/session"
     },
     "loop_n1_ms": {
@@ -212,24 +213,24 @@
       "category": "latency",
       "direction": "lower",
       "label": "full agent loop latency, N=1",
-      "max": 1448.11,
-      "mean": 1436.8173333333334,
+      "max": 1437.617,
+      "mean": 1427.8280000000002,
       "method": "P5 loop: launch->tree->find->tap->settle->screenshot->verify->reset; sum of the 7 request walls per verified task",
       "metric": "agent loop",
-      "min": 1424.356,
+      "min": 1421.993,
       "min_pct": 5.0,
       "n": 3,
       "ok": 3,
-      "p50": 1437.986,
-      "p95": 1447.0975999999998,
-      "rep_deviation_pct": 0.95,
+      "p50": 1423.874,
+      "p95": 1436.2427,
+      "rep_deviation_pct": 0.97,
       "rep_p50": [
-        1424.356,
-        1437.986,
-        1448.11
+        1437.617,
+        1421.993,
+        1423.874
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 1.4867043211825273,
+      "spread_pct": 0.9875592924654848,
       "threshold_abs": 2.0,
       "threshold_pct": 5.0,
       "unit": "ms/task"
@@ -240,26 +241,54 @@
       "category": "throughput",
       "direction": "higher",
       "label": "verified tasks/GiB-min, N=1",
-      "max": 284.157,
-      "mean": 281.618,
+      "max": 294.929,
+      "mean": 284.984,
       "method": "verified tasks / cgroup GiB-min integral (benchlib.sample_integral) over the cohort",
       "metric": "agent loop",
-      "min": 280.166,
+      "min": 276.503,
       "min_pct": 8.0,
       "n": 3,
       "ok": 3,
-      "p50": 280.531,
-      "p95": 283.7944,
-      "rep_deviation_pct": 1.29,
+      "p50": 283.52,
+      "p95": 293.7881,
+      "rep_deviation_pct": 4.02,
       "rep_p50": [
-        284.157,
-        280.531,
-        280.166
+        276.503,
+        283.52,
+        294.929
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 1.280393254221462,
+      "spread_pct": 5.849111173814893,
       "threshold_abs": 0.0,
-      "threshold_pct": 8.0,
+      "threshold_pct": 9,
+      "unit": "tasks/GiB-min"
+    },
+    "loop_n1_tasks_per_gib_min_net": {
+      "bad": 0,
+      "capped": false,
+      "category": "throughput",
+      "direction": "higher",
+      "label": "verified tasks/GiB-min, N=1 (anon+shmem)",
+      "max": 954.183,
+      "mean": 921.0659999999999,
+      "method": "verified tasks / integral of the job's cgroup anon+shmem only (label-matched with M1/M2; excludes page cache charged to the cgroup, which is file cache read by whichever phase ran first)",
+      "metric": "agent loop",
+      "min": 903.713,
+      "min_pct": 8.0,
+      "n": 3,
+      "ok": 3,
+      "p50": 905.302,
+      "p95": 949.2949,
+      "rep_deviation_pct": 5.4,
+      "rep_p50": [
+        903.713,
+        905.302,
+        954.183
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 5.017441693490128,
+      "threshold_abs": 0.0,
+      "threshold_pct": 11,
       "unit": "tasks/GiB-min"
     },
     "loop_n1_tasks_per_s": {
@@ -268,24 +297,24 @@
       "category": "throughput",
       "direction": "higher",
       "label": "verified tasks/s, N=1",
-      "max": 0.659,
-      "mean": 0.647,
+      "max": 0.66,
+      "mean": 0.6536666666666667,
       "method": "verified tasks / cohort wall (P5 definition)",
       "metric": "agent loop",
-      "min": 0.628,
+      "min": 0.648,
       "min_pct": 8.0,
       "n": 3,
       "ok": 3,
-      "p50": 0.654,
-      "p95": 0.6585,
-      "rep_deviation_pct": 3.98,
+      "p50": 0.653,
+      "p95": 0.6593,
+      "rep_deviation_pct": 1.07,
       "rep_p50": [
-        0.659,
-        0.654,
-        0.628
+        0.653,
+        0.66,
+        0.648
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.266055045871548,
+      "spread_pct": 1.6539050535987625,
       "threshold_abs": 0.0,
       "threshold_pct": 8.0,
       "unit": "tasks/s"
@@ -302,12 +331,13 @@
       "metric": "agent loop",
       "min": 1.0,
       "min_pct": 8.0,
-      "n": 2,
-      "ok": 2,
+      "n": 3,
+      "ok": 3,
       "p50": 1.0,
       "p95": 1.0,
       "rep_deviation_pct": 0.0,
       "rep_p50": [
+        1.0,
         1.0,
         1.0
       ],
@@ -318,85 +348,113 @@
       "unit": "fraction"
     },
     "loop_n5_ms": {
-      "bad": 1,
+      "bad": 0,
       "capped": false,
       "category": "latency",
       "direction": "lower",
       "label": "full agent loop latency, N=5",
-      "max": 1431.533,
-      "mean": 1423.8966666666665,
+      "max": 1428.67,
+      "mean": 1426.8980000000001,
       "method": "same P5 loop with 5 concurrent sessions in one serve",
       "metric": "agent loop",
-      "min": 1420.003,
+      "min": 1423.891,
       "min_pct": 5.0,
       "n": 3,
-      "ok": 2,
-      "p50": 1420.154,
-      "p95": 1430.3950999999997,
-      "rep_deviation_pct": 0.8,
+      "ok": 3,
+      "p50": 1428.133,
+      "p95": 1428.6163000000001,
+      "rep_deviation_pct": 0.3,
       "rep_p50": [
-        1420.003,
-        1420.154,
-        1431.533
+        1428.67,
+        1423.891,
+        1428.133
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.7306954034562256,
+      "spread_pct": 0.30116942889772214,
       "threshold_abs": 2.0,
       "threshold_pct": 5.0,
       "unit": "ms/task"
     },
     "loop_n5_tasks_per_gib_min": {
-      "bad": 1,
+      "bad": 0,
       "capped": false,
       "category": "throughput",
       "direction": "higher",
       "label": "verified tasks/GiB-min, N=5",
-      "max": 677.729,
-      "mean": 665.3090000000001,
+      "max": 670.491,
+      "mean": 667.23,
       "method": "verified tasks / cgroup GiB-min integral, 5 concurrent sessions",
       "metric": "agent loop",
-      "min": 654.211,
+      "min": 663.636,
       "min_pct": 8.0,
       "n": 3,
-      "ok": 2,
-      "p50": 663.987,
-      "p95": 676.3548000000001,
-      "rep_deviation_pct": 2.07,
+      "ok": 3,
+      "p50": 667.563,
+      "p95": 670.1981999999999,
+      "rep_deviation_pct": 0.59,
       "rep_p50": [
-        654.211,
-        677.729,
-        663.987
+        663.636,
+        670.491,
+        667.563
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 3.1877431335252226,
+      "spread_pct": 0.9241824367138339,
+      "threshold_abs": 0.0,
+      "threshold_pct": 8.0,
+      "unit": "tasks/GiB-min"
+    },
+    "loop_n5_tasks_per_gib_min_net": {
+      "bad": 0,
+      "capped": false,
+      "category": "throughput",
+      "direction": "higher",
+      "label": "verified tasks/GiB-min, N=5 (anon+shmem)",
+      "max": 888.326,
+      "mean": 869.7156666666666,
+      "method": "verified tasks / integral of the job's cgroup anon+shmem only (label-matched with M1/M2; excludes page cache charged to the cgroup, which is file cache read by whichever phase ran first)",
+      "metric": "agent loop",
+      "min": 855.044,
+      "min_pct": 8.0,
+      "n": 3,
+      "ok": 3,
+      "p50": 865.777,
+      "p95": 886.0711,
+      "rep_deviation_pct": 2.6,
+      "rep_p50": [
+        855.044,
+        865.777,
+        888.326
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 3.4597592682642295,
       "threshold_abs": 0.0,
       "threshold_pct": 8.0,
       "unit": "tasks/GiB-min"
     },
     "loop_n5_tasks_per_s": {
-      "bad": 1,
+      "bad": 0,
       "capped": false,
       "category": "throughput",
       "direction": "higher",
       "label": "verified tasks/s, N=5",
-      "max": 2.703,
-      "mean": 2.6656666666666666,
+      "max": 2.694,
+      "mean": 2.6816666666666666,
       "method": "verified tasks / cohort wall, 5 concurrent sessions",
       "metric": "agent loop",
-      "min": 2.617,
+      "min": 2.672,
       "min_pct": 8.0,
       "n": 3,
-      "ok": 2,
-      "p50": 2.677,
-      "p95": 2.7003999999999997,
-      "rep_deviation_pct": 2.24,
+      "ok": 3,
+      "p50": 2.679,
+      "p95": 2.6925,
+      "rep_deviation_pct": 0.56,
       "rep_p50": [
-        2.617,
-        2.703,
-        2.677
+        2.679,
+        2.694,
+        2.672
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 2.8912962271198905,
+      "spread_pct": 0.7390817469204777,
       "threshold_abs": 0.0,
       "threshold_pct": 8.0,
       "unit": "tasks/s"
@@ -413,12 +471,13 @@
       "metric": "agent loop",
       "min": 1.0,
       "min_pct": 8.0,
-      "n": 2,
-      "ok": 2,
+      "n": 3,
+      "ok": 3,
       "p50": 1.0,
       "p95": 1.0,
       "rep_deviation_pct": 0.0,
       "rep_p50": [
+        1.0,
         1.0,
         1.0
       ],
@@ -434,26 +493,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M1 idle memory, 1 app",
-      "max": 100.402,
-      "mean": 98.29866666666668,
+      "max": 67.04,
+      "mean": 66.635,
       "method": "cgroup v2 memory.stat anon+shmem (job scope + guest scopes, sampler's own anon+shmem charged back), 60 s after first frame, N=1",
       "metric": "M1",
-      "min": 95.56,
+      "min": 66.344,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 98.934,
-      "p95": 100.2552,
-      "rep_deviation_pct": 3.41,
+      "p50": 66.521,
+      "p95": 66.9881,
+      "rep_deviation_pct": 0.78,
       "rep_p50": [
-        100.402,
-        95.56,
-        98.934
+        67.04,
+        66.344,
+        66.521
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.404754684941474,
+      "spread_pct": 0.9416575216848873,
       "threshold_abs": 0.5,
-      "threshold_pct": 7,
+      "threshold_pct": 3.0,
       "unit": "MiB"
     },
     "m1_idle_pss_mib": {
@@ -462,26 +521,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M1 idle memory, 1 app (Pss)",
-      "max": 242.793,
-      "mean": 231.322,
+      "max": 210.389,
+      "mean": 205.74933333333334,
       "method": "sum of Pss over the serve process tree (smaps_rollup), 60 s after first frame, N=1; shared pages divided by mapping count",
       "metric": "M1",
-      "min": 223.63,
+      "min": 196.606,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 227.543,
-      "p95": 241.268,
-      "rep_deviation_pct": 6.7,
+      "p50": 210.253,
+      "p95": 210.3754,
+      "rep_deviation_pct": 6.49,
       "rep_p50": [
-        227.543,
-        223.63,
-        242.793
+        210.253,
+        210.389,
+        196.606
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 7.579534417670509,
+      "spread_pct": 5.89989203483422,
       "threshold_abs": 0.5,
-      "threshold_pct": 14,
+      "threshold_pct": 13,
       "unit": "MiB"
     },
     "m2_per_session_anon_shmem_n1": {
@@ -490,26 +549,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 memory per extra session, N=1",
-      "max": 98.848,
-      "mean": 96.73433333333332,
+      "max": 65.481,
+      "mean": 65.07233333333333,
       "method": "(cgroup anon+shmem N=1 - bare daemon) / 1, 60 s idle",
       "metric": "M2",
-      "min": 94.006,
+      "min": 64.781,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 97.349,
-      "p95": 98.6981,
-      "rep_deviation_pct": 3.43,
+      "p50": 64.955,
+      "p95": 65.4284,
+      "rep_deviation_pct": 0.81,
       "rep_p50": [
-        98.848,
-        94.006,
-        97.349
+        65.481,
+        64.781,
+        64.955
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.476471252914767,
+      "spread_pct": 0.9699022400122874,
       "threshold_abs": 0.5,
-      "threshold_pct": 7,
+      "threshold_pct": 3.0,
       "unit": "MiB/session"
     },
     "m2_per_session_anon_shmem_n10": {
@@ -518,24 +577,24 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 memory per extra session, N=10",
-      "max": 98.263,
-      "mean": 97.741,
+      "max": 65.883,
+      "mean": 65.557,
       "method": "(cgroup anon+shmem N=10 - bare daemon) / 10, 60 s idle",
       "metric": "M2",
-      "min": 97.301,
+      "min": 65.196,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 97.659,
-      "p95": 98.20260000000002,
-      "rep_deviation_pct": 0.62,
+      "p50": 65.592,
+      "p95": 65.8539,
+      "rep_deviation_pct": 0.6,
       "rep_p50": [
-        97.659,
-        98.263,
-        97.301
+        65.196,
+        65.592,
+        65.883
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.8865542346327601,
+      "spread_pct": 0.9426454445663965,
       "threshold_abs": 0.5,
       "threshold_pct": 3.0,
       "unit": "MiB/session"
@@ -546,26 +605,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 memory per extra session, N=5",
-      "max": 98.36,
-      "mean": 97.52466666666668,
+      "max": 65.437,
+      "mean": 65.27066666666667,
       "method": "(cgroup anon+shmem N=5 - bare daemon) / 5, 60 s idle",
       "metric": "M2",
-      "min": 96.186,
+      "min": 65.158,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 98.028,
-      "p95": 98.32679999999999,
-      "rep_deviation_pct": 1.88,
+      "p50": 65.217,
+      "p95": 65.41499999999999,
+      "rep_deviation_pct": 0.34,
       "rep_p50": [
-        98.36,
-        98.028,
-        96.186
+        65.217,
+        65.158,
+        65.437
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 1.9959603378626314,
+      "spread_pct": 0.3850223101338514,
       "threshold_abs": 0.5,
-      "threshold_pct": 4,
+      "threshold_pct": 3.0,
       "unit": "MiB/session"
     },
     "m2_per_session_pss_n1": {
@@ -574,26 +633,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 Pss per session, N=1",
-      "max": 228.832,
-      "mean": 217.21433333333334,
+      "max": 196.177,
+      "mean": 191.37833333333333,
       "method": "(system-wide sum Pss of the session tree - bare daemon Pss) / 1; Pss divides a shared page by mapping count, so at N=1 the single session carries the whole boot-image/framework file share",
       "metric": "M2",
-      "min": 209.523,
+      "min": 182.548,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 213.288,
-      "p95": 227.2776,
-      "rep_deviation_pct": 7.29,
+      "p50": 195.41,
+      "p95": 196.1003,
+      "rep_deviation_pct": 6.58,
       "rep_p50": [
-        213.288,
-        209.523,
-        228.832
+        195.41,
+        196.177,
+        182.548
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 8.147715764599987,
+      "spread_pct": 6.277109666854304,
       "threshold_abs": 0.5,
-      "threshold_pct": 15,
+      "threshold_pct": 14,
       "unit": "MiB/session"
     },
     "m2_per_session_pss_n10": {
@@ -602,26 +661,26 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 Pss per session, N=10",
-      "max": 96.598,
-      "mean": 94.72266666666667,
+      "max": 62.91,
+      "mean": 62.64566666666667,
       "method": "(sum Pss of sessions - bare daemon Pss) / 10; see M2 Pss N=1",
       "metric": "M2",
-      "min": 93.376,
+      "min": 62.391,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 94.194,
-      "p95": 96.3576,
-      "rep_deviation_pct": 2.55,
+      "p50": 62.636,
+      "p95": 62.8826,
+      "rep_deviation_pct": 0.44,
       "rep_p50": [
-        93.376,
-        96.598,
-        94.194
+        62.391,
+        62.636,
+        62.91
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 3.0785400343970943,
+      "spread_pct": 0.745737275688106,
       "threshold_abs": 0.5,
-      "threshold_pct": 6,
+      "threshold_pct": 3.0,
       "unit": "MiB/session"
     },
     "m2_per_session_pss_n5": {
@@ -630,24 +689,24 @@
       "category": "memory",
       "direction": "lower",
       "label": "M2 Pss per session, N=5",
-      "max": 108.344,
-      "mean": 107.64966666666668,
+      "max": 77.73,
+      "mean": 76.94533333333334,
       "method": "(sum Pss of sessions - bare daemon Pss) / 5; see M2 Pss N=1",
       "metric": "M2",
-      "min": 106.87,
+      "min": 76.309,
       "min_pct": 3.0,
       "n": 3,
       "ok": 3,
-      "p50": 107.735,
-      "p95": 108.2831,
-      "rep_deviation_pct": 0.8,
+      "p50": 76.797,
+      "p95": 77.6367,
+      "rep_deviation_pct": 1.21,
       "rep_p50": [
-        106.87,
-        107.735,
-        108.344
+        77.73,
+        76.797,
+        76.309
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 1.2313547129530784,
+      "spread_pct": 1.665299425758828,
       "threshold_abs": 0.5,
       "threshold_pct": 3.0,
       "unit": "MiB/session"
@@ -658,110 +717,110 @@
       "category": "latency",
       "direction": "lower",
       "label": "M3 cold start -> first correct screen",
-      "max": 459.731,
-      "mean": 404.70076666666665,
+      "max": 464.827,
+      "mean": 409.79288333333335,
       "method": "nothing running, page cache evicted per rep (posix_fadvise, fincore-proved) -> spawn acos serve -> acos_launch -> reply tree is count=0 and a following strict tree still reads 0",
       "metric": "M3",
-      "min": 388.897,
+      "min": 390.524,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 405.914,
-      "p95": 414.14025,
-      "rep_deviation_pct": 0.28,
+      "p50": 411.1805,
+      "p95": 430.55075,
+      "rep_deviation_pct": 1.0,
       "rep_p50": [
-        405.1035,
-        406.24749999999995,
-        404.9345
+        411.3325,
+        407.2205,
+        411.7635
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 5.325586207915962,
+      "spread_pct": 9.195268258100771,
       "threshold_abs": 2.0,
       "threshold_pct": 5.0,
       "unit": "ms"
     },
     "m4_launch_fast_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "M4 warm launch (fast)",
-      "max": 1107.947,
-      "mean": 188.79686666666666,
+      "max": 588.19,
+      "mean": 266.28753333333333,
       "method": "acos_launch settle=fast (probe-fresh label recorded) -> reply tree count=0 + post-frame strict tree count=0",
       "metric": "M4",
-      "min": 156.819,
+      "min": 171.402,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 174.5755,
-      "p95": 196.04035,
-      "rep_deviation_pct": 0.69,
+      "p50": 203.16899999999998,
+      "p95": 489.96635,
+      "rep_deviation_pct": 100.94,
       "rep_p50": [
-        174.905,
-        173.512,
-        174.71800000000002
+        203.16899999999998,
+        408.2505,
+        174.948
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 21.73151444503953,
+      "spread_pct": 155.89942363254238,
       "threshold_abs": 2.0,
-      "threshold_pct": 5.0,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "m4_launch_strict_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "M4 warm launch (strict)",
-      "max": 357.614,
-      "mean": 309.64793333333336,
+      "max": 874.788,
+      "mean": 410.8310333333333,
       "method": "warm daemon, app not running -> acos_launch settle=strict -> reply tree count=0 + post-frame strict tree count=0; destroy between reps",
       "metric": "M4",
-      "min": 292.664,
+      "min": 304.791,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 308.9895,
-      "p95": 314.5814499999999,
-      "rep_deviation_pct": 0.27,
+      "p50": 336.04150000000004,
+      "p95": 640.9026499999999,
+      "rep_deviation_pct": 61.48,
       "rep_p50": [
-        309.0285,
-        308.18050000000005,
-        309.25149999999996
+        336.04150000000004,
+        542.6279999999999,
+        323.7455
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 4.518519237708686,
+      "spread_pct": 99.6325156267901,
       "threshold_abs": 2.0,
-      "threshold_pct": 5.0,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "m5_screenshot_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "M5 fresh screenshot (PNG)",
-      "max": 26.18,
-      "mean": 24.36415,
+      "max": 44.229,
+      "mean": 26.989516666666667,
       "method": "acos_observe {png:true} on a held session; PNG magic + newer frame_seq + meaningful frame required",
       "metric": "M5",
-      "min": 23.131,
+      "min": 23.309,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 24.32,
-      "p95": 25.7544,
-      "rep_deviation_pct": 3.49,
+      "p50": 24.9135,
+      "p95": 37.33445,
+      "rep_deviation_pct": 24.28,
       "rep_p50": [
-        24.9145,
-        24.075,
-        23.807000000000002
+        23.987000000000002,
+        30.963,
+        24.9135
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 9.409128289473683,
+      "spread_pct": 55.29813153511148,
       "threshold_abs": 2.0,
-      "threshold_pct": 7,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "m6_reset_fast_ms": {
@@ -770,26 +829,26 @@
       "category": "latency",
       "direction": "lower",
       "label": "M6 reset -> first correct screen (fast)",
-      "max": 227.541,
-      "mean": 204.70076666666668,
+      "max": 712.031,
+      "mean": 226.2054,
       "method": "acos_reset settle=fast; state_reset + data_cleared + count=0 in the reply and in a following strict tree",
       "metric": "M6",
-      "min": 179.258,
+      "min": 176.793,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 210.12900000000002,
-      "p95": 212.88835,
-      "rep_deviation_pct": 6.53,
+      "p50": 209.93099999999998,
+      "p95": 302.70804999999984,
+      "rep_deviation_pct": 5.78,
       "rep_p50": [
-        196.68349999999998,
-        211.3145,
-        210.4255
+        215.91950000000003,
+        209.93099999999998,
+        197.7865
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 14.88131100419266,
+      "spread_pct": 57.860844753752346,
       "threshold_abs": 2.0,
-      "threshold_pct": 14,
+      "threshold_pct": 12,
       "unit": "ms"
     },
     "m6_reset_strict_ms": {
@@ -798,54 +857,54 @@
       "category": "latency",
       "direction": "lower",
       "label": "M6 reset -> first correct screen (strict)",
-      "max": 362.064,
-      "mean": 340.67245,
+      "max": 826.857,
+      "mean": 358.69848333333334,
       "method": "count=1 strictly read -> acos_reset settle=strict -> reply tree count=0 + following strict tree count=0",
       "metric": "M6",
-      "min": 312.792,
+      "min": 315.796,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 341.5925,
-      "p95": 359.78145,
-      "rep_deviation_pct": 0.13,
+      "p50": 332.8025,
+      "p95": 468.07045,
+      "rep_deviation_pct": 3.65,
       "rep_p50": [
-        341.5925,
-        341.5195,
-        342.0195
+        346.9685,
+        343.53499999999997,
+        330.9985
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 11.481545994130435,
+      "spread_pct": 44.25797582650371,
       "threshold_abs": 2.0,
-      "threshold_pct": 5.0,
+      "threshold_pct": 8,
       "unit": "ms"
     },
     "m7_tree_fast_ms": {
       "bad": 0,
-      "capped": true,
+      "capped": false,
       "category": "latency",
       "direction": "lower",
       "label": "M7 UI tree with text (fast)",
-      "max": 0.659,
-      "mean": 0.43828333333333336,
+      "max": 0.746,
+      "mean": 0.4988,
       "method": "acos_observe_tree settle=fast; the fast tree must show the same count text as a strict read (no stale tree)",
       "metric": "M7",
-      "min": 0.276,
+      "min": 0.274,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 0.4395,
-      "p95": 0.594,
-      "rep_deviation_pct": 29.93,
+      "p50": 0.4805,
+      "p95": 0.6891999999999999,
+      "rep_deviation_pct": 12.8,
       "rep_p50": [
-        0.316,
-        0.4555,
-        0.451
+        0.5555000000000001,
+        0.508,
+        0.443
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 70.76222980659841,
+      "spread_pct": 77.74193548387095,
       "threshold_abs": 2.0,
-      "threshold_pct": 40.0,
+      "threshold_pct": 26,
       "unit": "ms"
     },
     "m7_tree_strict_ms": {
@@ -854,54 +913,54 @@
       "category": "latency",
       "direction": "lower",
       "label": "M7 UI tree with text (strict)",
-      "max": 41.93,
-      "mean": 41.113616666666665,
+      "max": 41.86,
+      "mean": 41.175333333333334,
       "method": "acos_observe_tree settle=strict on a held session; tree has nodes and text, not truncated",
       "metric": "M7",
-      "min": 40.86,
+      "min": 40.731,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 41.1035,
-      "p95": 41.416250000000005,
-      "rep_deviation_pct": 0.34,
+      "p50": 41.1415,
+      "p95": 41.6541,
+      "rep_deviation_pct": 0.22,
       "rep_p50": [
-        41.1055,
-        41.168,
-        40.966
+        41.155,
+        41.066,
+        41.215
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 1.2779933582298553,
+      "spread_pct": 1.6929377878784204,
       "threshold_abs": 2.0,
       "threshold_pct": 5.0,
       "unit": "ms"
     },
     "m8_tap_counter_fast_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "M8 tap -> settled, counter (fast)",
-      "max": 60.219,
-      "mean": 49.53051666666667,
+      "max": 99.088,
+      "mean": 56.72313333333333,
       "method": "acos_tap settle=fast; same state_changed/final-count checks",
       "metric": "M8",
-      "min": 42.871,
+      "min": 28.414,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 44.2575,
-      "p95": 59.55505,
-      "rep_deviation_pct": 1.48,
+      "p50": 56.105999999999995,
+      "p95": 93.1286,
+      "rep_deviation_pct": 27.88,
       "rep_p50": [
-        43.546499999999995,
-        43.790499999999994,
-        44.44
+        66.637,
+        52.1095,
+        44.3035
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 37.4580579562786,
+      "spread_pct": 104.01106833493745,
       "threshold_abs": 2.0,
-      "threshold_pct": 5.0,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "m8_tap_counter_strict_ms": {
@@ -910,24 +969,24 @@
       "category": "latency",
       "direction": "lower",
       "label": "M8 tap -> settled, counter (strict)",
-      "max": 978.646,
-      "mean": 955.5959166666667,
+      "max": 1106.869,
+      "mean": 958.9800666666666,
       "method": "acos_tap {id:inc} settle=strict on counter, one session; every tap must report state_changed and the final strict count must equal the tap count",
       "metric": "M8",
-      "min": 936.326,
+      "min": 940.708,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 955.7155,
-      "p95": 969.97755,
-      "rep_deviation_pct": 0.73,
+      "p50": 956.1099999999999,
+      "p95": 977.61295,
+      "rep_deviation_pct": 0.24,
       "rep_p50": [
-        952.3335,
-        960.018,
-        953.014
+        954.6189999999999,
+        956.877,
+        954.5015
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 3.005041772368439,
+      "spread_pct": 3.6303354216564965,
       "threshold_abs": 2.0,
       "threshold_pct": 5.0,
       "unit": "ms"
@@ -938,26 +997,26 @@
       "category": "latency",
       "direction": "lower",
       "label": "M8 tap -> settled, form (fast)",
-      "max": 48.424,
-      "mean": 45.49781666666667,
+      "max": 105.841,
+      "mean": 47.12505,
       "method": "empty form, tap submit settle=fast; same strict post-check",
       "metric": "M8",
-      "min": 43.353,
+      "min": 43.866,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 45.039500000000004,
-      "p95": 48.1424,
-      "rep_deviation_pct": 2.64,
+      "p50": 45.5325,
+      "p95": 48.84454999999998,
+      "rep_deviation_pct": 0.94,
       "rep_p50": [
-        46.319,
-        44.5835,
-        45.1265
+        45.804,
+        45.301,
+        45.730999999999995
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 9.87000299736899,
+      "spread_pct": 10.044912974249105,
       "threshold_abs": 2.0,
-      "threshold_pct": 6,
+      "threshold_pct": 5.0,
       "unit": "ms"
     },
     "m8_tap_form_strict_ms": {
@@ -966,26 +1025,26 @@
       "category": "latency",
       "direction": "lower",
       "label": "M8 tap -> settled, form (strict)",
-      "max": 981.683,
-      "mean": 947.3903166666666,
+      "max": 1123.978,
+      "mean": 962.85445,
       "method": "empty form, tap submit settle=strict; following strict tree must read error='Name is required'; fast reset (unmeasured) before each rep",
       "metric": "M8",
-      "min": 940.146,
+      "min": 929.063,
       "min_pct": 5.0,
       "n": 60,
       "ok": 60,
-      "p50": 947.788,
-      "p95": 949.62355,
-      "rep_deviation_pct": 0.32,
+      "p50": 944.6605,
+      "p95": 1084.47145,
+      "rep_deviation_pct": 2.8,
       "rep_p50": [
-        948.7835,
-        948.1065000000001,
-        945.098
+        943.712,
+        970.0985000000001,
+        942.9475
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.8549749522045111,
+      "spread_pct": 15.375470870222689,
       "threshold_abs": 2.0,
-      "threshold_pct": 5.0,
+      "threshold_pct": 6,
       "unit": "ms"
     },
     "p11_false_passes": {
@@ -1050,11 +1109,11 @@
       "category": "latency",
       "direction": "lower",
       "label": "tap acknowledgement (settle.ack_ms)",
-      "max": 5.0,
-      "mean": 5.0,
+      "max": 7.0,
+      "mean": 4.966666666666667,
       "method": "input ack latency reported in the tap reply's settle block (counter + form, strict and fast)",
       "metric": "tap ack",
-      "min": 5.0,
+      "min": 0.0,
       "min_pct": 5.0,
       "n": 240,
       "ok": 240,
@@ -1074,12 +1133,12 @@
     },
     "teardown_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "acos_destroy teardown_ms (GL1)",
-      "max": 18.0,
-      "mean": 11.67283950617284,
+      "max": 70.0,
+      "mean": 13.981481481481481,
       "method": "reply teardown.teardown_ms for a live counter session (lifecycle label recorded); 20 samples",
       "metric": "teardown",
       "min": 10.0,
@@ -1087,51 +1146,51 @@
       "n": 162,
       "ok": 162,
       "p50": 12.0,
-      "p95": 13.0,
-      "rep_deviation_pct": 8.33,
+      "p95": 22.799999999999955,
+      "rep_deviation_pct": 33.33,
       "rep_p50": [
+        13.0,
+        16.0,
         12.0,
         12.0,
         12.0,
-        12.0,
-        11.0,
-        12.5
+        12.0
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 25.0,
+      "spread_pct": 98.33333333333294,
       "threshold_abs": 2.0,
-      "threshold_pct": 17,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "teardown_wall_ms": {
       "bad": 0,
-      "capped": false,
+      "capped": true,
       "category": "latency",
       "direction": "lower",
       "label": "acos_destroy wall",
-      "max": 23.888,
-      "mean": 16.69975925925926,
+      "max": 86.257,
+      "mean": 20.052666666666667,
       "method": "client wall of acos_destroy incl. teardown evidence",
       "metric": "teardown",
-      "min": 13.84,
+      "min": 13.943,
       "min_pct": 5.0,
       "n": 162,
       "ok": 162,
-      "p50": 16.576,
-      "p95": 18.63105,
-      "rep_deviation_pct": 3.64,
+      "p50": 17.371499999999997,
+      "p95": 32.38209999999998,
+      "rep_deviation_pct": 40.02,
       "rep_p50": [
-        16.694,
-        16.868000000000002,
-        16.9535,
-        16.53,
-        16.171,
-        17.302999999999997
+        18.488500000000002,
+        24.0745,
+        17.3395,
+        15.7445,
+        17.046999999999997,
+        16.141
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 21.718146718146716,
+      "spread_pct": 96.37653628068952,
       "threshold_abs": 2.0,
-      "threshold_pct": 8,
+      "threshold_pct": 40.0,
       "unit": "ms"
     },
     "wakeups_idle_n10_per_s": {
@@ -1140,24 +1199,24 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle wakeups/s, N=10",
-      "max": 160.92,
-      "mean": 160.8853333333333,
+      "max": 161.817,
+      "mean": 161.714,
       "method": "same voluntary_ctxt_switches window at N=10",
       "metric": "CPU",
-      "min": 160.856,
+      "min": 161.637,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 160.88,
-      "p95": 160.916,
-      "rep_deviation_pct": 0.02,
+      "p50": 161.688,
+      "p95": 161.8041,
+      "rep_deviation_pct": 0.08,
       "rep_p50": [
-        160.92,
-        160.856,
-        160.88
+        161.688,
+        161.817,
+        161.637
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.035803083043266945,
+      "spread_pct": 0.10019296422740473,
       "threshold_abs": 0.2,
       "threshold_pct": 10.0,
       "unit": "voluntary ctxt switches/s"
@@ -1168,24 +1227,24 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle wakeups/s, N=1",
-      "max": 34.108,
-      "mean": 34.056666666666665,
+      "max": 34.224,
+      "mean": 34.163000000000004,
       "method": "voluntary_ctxt_switches delta over the 60 s idle window, summed over the serve tree; proxy for wakeups (perf unavailable)",
       "metric": "CPU",
-      "min": 34.025,
+      "min": 34.127,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 34.037,
-      "p95": 34.100899999999996,
-      "rep_deviation_pct": 0.21,
+      "p50": 34.138,
+      "p95": 34.215399999999995,
+      "rep_deviation_pct": 0.25,
       "rep_p50": [
-        34.037,
-        34.025,
-        34.108
+        34.224,
+        34.138,
+        34.127
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.21946705056262297,
+      "spread_pct": 0.2557267561075398,
       "threshold_abs": 0.2,
       "threshold_pct": 10.0,
       "unit": "voluntary ctxt switches/s"
@@ -1196,24 +1255,24 @@
       "category": "cpu",
       "direction": "lower",
       "label": "idle wakeups/s, N=5",
-      "max": 90.55,
-      "mean": 90.495,
+      "max": 90.855,
+      "mean": 90.782,
       "method": "same voluntary_ctxt_switches window at N=5",
       "metric": "CPU",
-      "min": 90.434,
+      "min": 90.72,
       "min_pct": 10.0,
       "n": 3,
       "ok": 3,
-      "p50": 90.501,
-      "p95": 90.5451,
-      "rep_deviation_pct": 0.07,
+      "p50": 90.771,
+      "p95": 90.8466,
+      "rep_deviation_pct": 0.09,
       "rep_p50": [
-        90.501,
-        90.434,
-        90.55
+        90.771,
+        90.855,
+        90.72
       ],
       "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
-      "spread_pct": 0.11535784134981743,
+      "spread_pct": 0.13385332319793491,
       "threshold_abs": 0.2,
       "threshold_pct": 10.0,
       "unit": "voluntary ctxt switches/s"
@@ -1222,19 +1281,39 @@
   "mode": "full",
   "noisy_phases": [
     {
+      "phase": "cold",
+      "rep": 1
+    },
+    {
+      "phase": "latency",
+      "rep": 1
+    },
+    {
+      "phase": "memory",
+      "rep": 1
+    },
+    {
+      "phase": "cold",
+      "rep": 2
+    },
+    {
+      "phase": "latency",
+      "rep": 2
+    },
+    {
+      "phase": "loop1",
+      "rep": 2
+    },
+    {
+      "phase": "loop5",
+      "rep": 2
+    },
+    {
       "phase": "loop1",
       "rep": 3
     },
     {
       "phase": "loop5",
-      "rep": 3
-    },
-    {
-      "phase": "p11",
-      "rep": 3
-    },
-    {
-      "phase": "scenarios",
       "rep": 3
     }
   ],
@@ -1249,10 +1328,10 @@
     {
       "bundle": "a1",
       "errors": [],
-      "host_after_loadavg1": 1.38,
-      "host_before_loadavg1": 1.38,
-      "host_before_mem_avail_gib": 47.09,
-      "noisy": false,
+      "host_after_loadavg1": 6.76,
+      "host_before_loadavg1": 6.76,
+      "host_before_mem_avail_gib": 45.86,
+      "noisy": true,
       "ok": true,
       "other_acos": [
         {
@@ -1266,46 +1345,86 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && nohup setsid bash -c 'tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 240",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
           "comm": "bash",
-          "pid": 2647121
+          "pid": 2924073
         },
         {
-          "cmd": "bash -c tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos",
+          "cmd": "bash tools/guarded.sh --mem 8G --time 1500 -- cargo build --release --offline -p acos-cli -p acos-art",
           "comm": "bash",
-          "pid": 2647123
+          "pid": 2928360
         },
         {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos-se",
-          "comm": "bash",
-          "pid": 2647124
+          "cmd": "/usr/bin/timeout -k 5 1500 cargo build --release --offline -p acos-cli -p acos-art",
+          "comm": "timeout",
+          "pid": 2928371
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && python3 - <<'PY'\np='research/h2/first_action.py'\ns=open(p).read()\ns=s.replace('''            gc = os.p",
-          "comm": "bash",
-          "pid": 2649310
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+          "comm": "cargo",
+          "pid": 2928372
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/v1 && git stash push -q -m v1-b3 -- crates tools && cat > /home/Qui/Projects/acos/.cache/v1/tests-base.sh <<",
           "comm": "bash",
-          "pid": 2653186
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
-          "comm": "bash",
-          "pid": 2653190
+          "pid": 2937793
         }
       ],
       "phase": "cold",
-      "queue_wait_s": 18,
+      "queue_wait_s": 0,
       "rep": 1,
-      "wall_s": 9.721
+      "wall_s": 9.86
     },
     {
       "bundle": "a1",
       "errors": [],
-      "host_after_loadavg1": 1.27,
-      "host_before_loadavg1": 1.27,
+      "host_after_loadavg1": 7.36,
+      "host_before_loadavg1": 7.36,
+      "host_before_mem_avail_gib": 46.39,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
+          "comm": "bash",
+          "pid": 2924073
+        },
+        {
+          "cmd": "bash tools/guarded.sh --mem 8G --time 1500 -- cargo build --release --offline -p acos-cli -p acos-art",
+          "comm": "bash",
+          "pid": 2928360
+        },
+        {
+          "cmd": "/usr/bin/timeout -k 5 1500 cargo build --release --offline -p acos-cli -p acos-art",
+          "comm": "timeout",
+          "pid": 2928371
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+          "comm": "cargo",
+          "pid": 2928372
+        }
+      ],
+      "phase": "latency",
+      "queue_wait_s": 0,
+      "rep": 1,
+      "wall_s": 148.113
+    },
+    {
+      "bundle": "a2",
+      "errors": [],
+      "host_after_loadavg1": 3.82,
+      "host_before_loadavg1": 3.82,
       "host_before_mem_avail_gib": 47.26,
       "noisy": false,
       "ok": true,
@@ -1321,47 +1440,22 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && nohup setsid bash -c 'tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 240",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
           "comm": "bash",
-          "pid": 2647121
-        },
-        {
-          "cmd": "bash -c tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos",
-          "comm": "bash",
-          "pid": 2647123
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos-se",
-          "comm": "bash",
-          "pid": 2647124
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && python3 - <<'PY'\np='research/h2/first_action.py'\ns=open(p).read()\ns=s.replace('''            gc = os.p",
-          "comm": "bash",
-          "pid": 2649310
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
-          "comm": "bash",
-          "pid": 2653186
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
-          "comm": "bash",
-          "pid": 2653190
+          "pid": 2945009
         }
       ],
-      "phase": "latency",
-      "queue_wait_s": 18,
+      "phase": "loop1",
+      "queue_wait_s": 64,
       "rep": 1,
-      "wall_s": 143.304
+      "wall_s": 32.472
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 1.6,
-      "host_before_loadavg1": 1.6,
-      "host_before_mem_avail_gib": 46.69,
+      "host_after_loadavg1": 3.38,
+      "host_before_loadavg1": 3.38,
+      "host_before_mem_avail_gib": 47.21,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1376,85 +1470,23 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
           "comm": "bash",
-          "pid": 2664324
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
-          "comm": "bash",
-          "pid": 2664337
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k2-target CARGO_BUILD_JOBS=8 && cargo test --re",
-          "comm": "bash",
-          "pid": 2664565
-        },
-        {
-          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release -p acos-cli -p acos-art -p acos-services --offline",
-          "comm": "cargo",
-          "pid": 2664566
-        }
-      ],
-      "phase": "loop1",
-      "queue_wait_s": 242,
-      "rep": 1,
-      "wall_s": 32.192
-    },
-    {
-      "bundle": "a2",
-      "errors": [
-        "P5 loop not all-verified: verified=24 measured=25 false_pass=0"
-      ],
-      "host_after_loadavg1": 1.65,
-      "host_before_loadavg1": 1.65,
-      "host_before_mem_avail_gib": 46.59,
-      "noisy": false,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
-          "comm": "bash",
-          "pid": 2664324
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
-          "comm": "bash",
-          "pid": 2664337
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k2-target CARGO_BUILD_JOBS=8 && cargo test --re",
-          "comm": "bash",
-          "pid": 2664565
-        },
-        {
-          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release -p acos-cli -p acos-art -p acos-services --offline",
-          "comm": "cargo",
-          "pid": 2664566
+          "pid": 2945009
         }
       ],
       "phase": "loop5",
-      "queue_wait_s": 242,
+      "queue_wait_s": 64,
       "rep": 1,
-      "wall_s": 9.562
+      "wall_s": 9.717
     },
     {
       "bundle": "mem",
       "errors": [],
-      "host_after_loadavg1": 0.34,
-      "host_before_loadavg1": 0.34,
-      "host_before_mem_avail_gib": 47.41,
-      "noisy": false,
+      "host_after_loadavg1": 8.29,
+      "host_before_loadavg1": 6.14,
+      "host_before_mem_avail_gib": 45.02,
+      "noisy": true,
       "ok": true,
       "other_acos": [
         {
@@ -1468,32 +1500,72 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
           "comm": "bash",
-          "pid": 2678455
+          "pid": 2952856
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && rm -rf /home/Qui/Projects/acos/.cache/p12/after-rebase && mkdir -p /home/Qui/Projects/acos/.cache/p12",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
           "comm": "bash",
-          "pid": 2686342
+          "pid": 2953562
         },
         {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/r3/target; tools/guarded.sh --mem 8G --time 600",
           "comm": "bash",
-          "pid": 2686345
+          "pid": 2967567
+        },
+        {
+          "cmd": "bash tools/guarded.sh --mem 8G --time 600 -- cargo test --release --offline -p acos-art crash::",
+          "comm": "bash",
+          "pid": 2967569
+        },
+        {
+          "cmd": "/usr/bin/timeout -k 5 600 cargo test --release --offline -p acos-art crash::",
+          "comm": "timeout",
+          "pid": 2967580
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release --offline -p acos-art crash::",
+          "comm": "cargo",
+          "pid": 2967581
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k3/target nohup bash -c 'cargo test --release --offlin",
+          "comm": "bash",
+          "pid": 2968050
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k3/target nohup bash -c 'cargo test --release --offlin",
+          "comm": "bash",
+          "pid": 2968051
+        },
+        {
+          "cmd": "bash -c cargo test --release --offline -p acos-cli -p acos-art -p acos-services -p acos-aidl > /home/Qui/Projects/acos/.cache/k3/tests.log 2>&1; echo RC=$? >> /",
+          "comm": "bash",
+          "pid": 2968053
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release --offline -p acos-cli -p acos-art -p acos-services -p acos-aidl",
+          "comm": "cargo",
+          "pid": 2968054
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name acos_art --edition=2021 crates/acos-art/src/lib.rs --error-format=json --jso",
+          "comm": "rustc",
+          "pid": 2968745
         }
       ],
       "phase": "memory",
-      "queue_wait_s": 294,
+      "queue_wait_s": 28,
       "rep": 1,
-      "wall_s": 219.212
+      "wall_s": 219.562
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 1.86,
-      "host_before_loadavg1": 1.86,
-      "host_before_mem_avail_gib": 47.07,
+      "host_after_loadavg1": 1.57,
+      "host_before_loadavg1": 1.57,
+      "host_before_mem_avail_gib": 47.24,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1508,27 +1580,272 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
           "comm": "bash",
-          "pid": 2664324
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
-          "comm": "bash",
-          "pid": 2664337
+          "pid": 2945009
         }
       ],
       "phase": "p11",
-      "queue_wait_s": 242,
+      "queue_wait_s": 64,
       "rep": 1,
-      "wall_s": 94.637
+      "wall_s": 90.374
+    },
+    {
+      "bundle": "a2",
+      "errors": [],
+      "host_after_loadavg1": 1.21,
+      "host_before_loadavg1": 1.21,
+      "host_before_mem_avail_gib": 47.23,
+      "noisy": false,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
+          "comm": "bash",
+          "pid": 2945009
+        }
+      ],
+      "phase": "scenarios",
+      "queue_wait_s": 64,
+      "rep": 1,
+      "wall_s": 28.022
+    },
+    {
+      "bundle": "a1",
+      "errors": [],
+      "host_after_loadavg1": 6.5,
+      "host_before_loadavg1": 6.5,
+      "host_before_mem_avail_gib": 46.84,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
+          "comm": "bash",
+          "pid": 2952856
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
+          "comm": "bash",
+          "pid": 2953562
+        },
+        {
+          "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r3/crashtest && cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && cat > /home/Qui/Projects/acos/.cache/r3/crasht",
+          "comm": "bash",
+          "pid": 2978971
+        }
+      ],
+      "phase": "cold",
+      "queue_wait_s": 17,
+      "rep": 2,
+      "wall_s": 9.745
+    },
+    {
+      "bundle": "a1",
+      "errors": [],
+      "host_after_loadavg1": 6.96,
+      "host_before_loadavg1": 6.96,
+      "host_before_mem_avail_gib": 46.14,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
+          "comm": "bash",
+          "pid": 2952856
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && unset ACOS_BOOT_DIR && ex",
+          "comm": "bash",
+          "pid": 2953562
+        },
+        {
+          "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r3/crashtest && cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && cat > /home/Qui/Projects/acos/.cache/r3/crasht",
+          "comm": "bash",
+          "pid": 2978971
+        }
+      ],
+      "phase": "latency",
+      "queue_wait_s": 17,
+      "rep": 2,
+      "wall_s": 160.688
+    },
+    {
+      "bundle": "a2",
+      "errors": [],
+      "host_after_loadavg1": 4.31,
+      "host_before_loadavg1": 4.31,
+      "host_before_mem_avail_gib": 46.86,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
+          "comm": "bash",
+          "pid": 3006935
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/target/debug/acos serve --idle-timeout 2",
+          "comm": "acos",
+          "pid": 3007471
+        }
+      ],
+      "phase": "loop1",
+      "queue_wait_s": 11,
+      "rep": 2,
+      "wall_s": 32.143
+    },
+    {
+      "bundle": "a2",
+      "errors": [],
+      "host_after_loadavg1": 4.2,
+      "host_before_loadavg1": 4.2,
+      "host_before_mem_avail_gib": 46.38,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
+          "comm": "bash",
+          "pid": 3006935
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && ONLY=$(python3 -c \"\nimport json,os\nm=json.load(open('/home/Qui/Projects/acos/.cache/corpus/k1/manifest",
+          "comm": "bash",
+          "pid": 3008083
+        }
+      ],
+      "phase": "loop5",
+      "queue_wait_s": 11,
+      "rep": 2,
+      "wall_s": 9.668
+    },
+    {
+      "bundle": "mem",
+      "errors": [],
+      "host_after_loadavg1": 1.72,
+      "host_before_loadavg1": 1.72,
+      "host_before_mem_avail_gib": 46.81,
+      "noisy": false,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+          "comm": "bash",
+          "pid": 3010730
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
+          "comm": "bash",
+          "pid": 3015873
+        }
+      ],
+      "phase": "memory",
+      "queue_wait_s": 72,
+      "rep": 2,
+      "wall_s": 218.8
+    },
+    {
+      "bundle": "a2",
+      "errors": [],
+      "host_after_loadavg1": 2.05,
+      "host_before_loadavg1": 2.05,
+      "host_before_mem_avail_gib": 46.54,
+      "noisy": false,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2016927
+        },
+        {
+          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+          "comm": "acos",
+          "pid": 2112986
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
+          "comm": "bash",
+          "pid": 3006935
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+          "comm": "bash",
+          "pid": 3010730
+        }
+      ],
+      "phase": "p11",
+      "queue_wait_s": 11,
+      "rep": 2,
+      "wall_s": 87.292
     },
     {
       "bundle": "a2",
       "errors": [],
       "host_after_loadavg1": 2.52,
       "host_before_loadavg1": 2.52,
-      "host_before_mem_avail_gib": 47.29,
+      "host_before_mem_avail_gib": 47.01,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1543,32 +1860,27 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && sed -i 's#\\$W/target/release/acos-art#/home/Qui/Projects/acos/.cache/r3/target/release/acos-art#' /hom",
           "comm": "bash",
-          "pid": 2664324
+          "pid": 3006935
         },
         {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2664337
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k2-target CARGO_BUILD_JOBS=8 && cargo build --r",
-          "comm": "bash",
-          "pid": 2676028
+          "pid": 3010730
         }
       ],
       "phase": "scenarios",
-      "queue_wait_s": 242,
-      "rep": 1,
-      "wall_s": 33.643
+      "queue_wait_s": 11,
+      "rep": 2,
+      "wall_s": 28.343
     },
     {
       "bundle": "a1",
       "errors": [],
-      "host_after_loadavg1": 0.65,
-      "host_before_loadavg1": 0.65,
-      "host_before_mem_avail_gib": 47.25,
+      "host_after_loadavg1": 1.74,
+      "host_before_loadavg1": 1.74,
+      "host_before_mem_avail_gib": 46.78,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1583,42 +1895,22 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2678455
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task H2-validation -- tools/guarded.sh --mem 8G --time 600 -- bash -c validation () \n{ \n    local dir=$OUT/validation;",
-          "comm": "bash",
-          "pid": 2690893
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && rm -rf /home/Qui/Projects/acos/.cache/k2/runs-gotify && mkdir -p /home/Qui/Projects/acos/.cache/k2/run",
-          "comm": "bash",
-          "pid": 2691769
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
-          "comm": "bash",
-          "pid": 2694950
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
-          "comm": "bash",
-          "pid": 2694955
+          "pid": 3010730
         }
       ],
       "phase": "cold",
-      "queue_wait_s": 61,
-      "rep": 2,
-      "wall_s": 9.807
+      "queue_wait_s": 133,
+      "rep": 3,
+      "wall_s": 9.882
     },
     {
       "bundle": "a1",
       "errors": [],
-      "host_after_loadavg1": 0.68,
-      "host_before_loadavg1": 0.68,
-      "host_before_mem_avail_gib": 47.25,
+      "host_after_loadavg1": 1.71,
+      "host_before_loadavg1": 1.71,
+      "host_before_mem_avail_gib": 46.52,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1633,43 +1925,23 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2678455
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task H2-validation -- tools/guarded.sh --mem 8G --time 600 -- bash -c validation () \n{ \n    local dir=$OUT/validation;",
-          "comm": "bash",
-          "pid": 2690893
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && rm -rf /home/Qui/Projects/acos/.cache/k2/runs-gotify && mkdir -p /home/Qui/Projects/acos/.cache/k2/run",
-          "comm": "bash",
-          "pid": 2691769
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
-          "comm": "bash",
-          "pid": 2694950
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
-          "comm": "bash",
-          "pid": 2694955
+          "pid": 3010730
         }
       ],
       "phase": "latency",
-      "queue_wait_s": 61,
-      "rep": 2,
-      "wall_s": 143.209
+      "queue_wait_s": 133,
+      "rep": 3,
+      "wall_s": 141.918
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 0.88,
-      "host_before_loadavg1": 0.88,
-      "host_before_mem_avail_gib": 47.49,
-      "noisy": false,
+      "host_after_loadavg1": 6.02,
+      "host_before_loadavg1": 6.02,
+      "host_before_mem_avail_gib": 46.67,
+      "noisy": true,
       "ok": true,
       "other_acos": [
         {
@@ -1683,28 +1955,23 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2754573
-        },
-        {
-          "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
-          "comm": "bash",
-          "pid": 2755361
+          "pid": 3010730
         }
       ],
       "phase": "loop1",
-      "queue_wait_s": 1802,
-      "rep": 2,
-      "wall_s": 32.462
+      "queue_wait_s": 123,
+      "rep": 3,
+      "wall_s": 32.747
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 0.9,
-      "host_before_loadavg1": 0.9,
-      "host_before_mem_avail_gib": 47.37,
-      "noisy": false,
+      "host_after_loadavg1": 5.48,
+      "host_before_loadavg1": 5.48,
+      "host_before_mem_avail_gib": 46.67,
+      "noisy": true,
       "ok": true,
       "other_acos": [
         {
@@ -1718,32 +1985,22 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2754573
-        },
-        {
-          "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
-          "comm": "bash",
-          "pid": 2755361
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && ACOS_BIN=/home/Qui/Projects/acos/.cache/h2-target/release/acos ACOS_ART_BIN=/home/Qui/Projects/acos/.c",
-          "comm": "bash",
-          "pid": 2781151
+          "pid": 3010730
         }
       ],
       "phase": "loop5",
-      "queue_wait_s": 1802,
-      "rep": 2,
-      "wall_s": 9.635
+      "queue_wait_s": 123,
+      "rep": 3,
+      "wall_s": 9.745
     },
     {
       "bundle": "mem",
       "errors": [],
-      "host_after_loadavg1": 0.72,
-      "host_before_loadavg1": 0.72,
-      "host_before_mem_avail_gib": 47.18,
+      "host_after_loadavg1": 0.47,
+      "host_before_loadavg1": 0.47,
+      "host_before_mem_avail_gib": 46.77,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1758,22 +2015,27 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2790018
+          "pid": 3010730
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && python3 - <<'EOF'\np='crates/acos-binder-peer/native/binder_driver.c'\ns=open(p).read()\ns=s.replace(''' ",
+          "comm": "bash",
+          "pid": 3065427
         }
       ],
       "phase": "memory",
-      "queue_wait_s": 96,
-      "rep": 2,
-      "wall_s": 219.246
+      "queue_wait_s": 41,
+      "rep": 3,
+      "wall_s": 219.288
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 0.54,
-      "host_before_loadavg1": 0.54,
-      "host_before_mem_avail_gib": 47.57,
+      "host_after_loadavg1": 2.64,
+      "host_before_loadavg1": 2.64,
+      "host_before_mem_avail_gib": 46.66,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1788,32 +2050,27 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2754573
+          "pid": 3010730
         },
         {
-          "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/r3/target && tools/guarded.sh --mem 8G --time 6",
           "comm": "bash",
-          "pid": 2755361
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && ACOS_BIN=/home/Qui/Projects/acos/.cache/h2-target/release/acos ACOS_ART_BIN=/home/Qui/Projects/acos/.c",
-          "comm": "bash",
-          "pid": 2781151
+          "pid": 3060931
         }
       ],
       "phase": "p11",
-      "queue_wait_s": 1802,
-      "rep": 2,
-      "wall_s": 95.845
+      "queue_wait_s": 123,
+      "rep": 3,
+      "wall_s": 88.361
     },
     {
       "bundle": "a2",
       "errors": [],
-      "host_after_loadavg1": 0.59,
-      "host_before_loadavg1": 0.59,
-      "host_before_mem_avail_gib": 47.45,
+      "host_after_loadavg1": 1.65,
+      "host_before_loadavg1": 1.65,
+      "host_before_mem_avail_gib": 46.68,
       "noisy": false,
       "ok": true,
       "other_acos": [
@@ -1828,300 +2085,25 @@
           "pid": 2112986
         },
         {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
           "comm": "bash",
-          "pid": 2754573
+          "pid": 3010730
         },
         {
-          "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
+          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/r3 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/r3/target && tools/guarded.sh --mem 8G --time 6",
           "comm": "bash",
-          "pid": 2755361
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && ACOS_BIN=/home/Qui/Projects/acos/.cache/h2-target/release/acos ACOS_ART_BIN=/home/Qui/Projects/acos/.c",
-          "comm": "bash",
-          "pid": 2781151
+          "pid": 3060931
         }
       ],
       "phase": "scenarios",
-      "queue_wait_s": 1802,
-      "rep": 2,
-      "wall_s": 29.459
-    },
-    {
-      "bundle": "a1",
-      "errors": [],
-      "host_after_loadavg1": 2.25,
-      "host_before_loadavg1": 2.25,
-      "host_before_mem_avail_gib": 47.08,
-      "noisy": false,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        }
-      ],
-      "phase": "cold",
-      "queue_wait_s": 5,
+      "queue_wait_s": 123,
       "rep": 3,
-      "wall_s": 9.755
-    },
-    {
-      "bundle": "a1",
-      "errors": [],
-      "host_after_loadavg1": 1.93,
-      "host_before_loadavg1": 1.93,
-      "host_before_mem_avail_gib": 46.7,
-      "noisy": false,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        }
-      ],
-      "phase": "latency",
-      "queue_wait_s": 5,
-      "rep": 3,
-      "wall_s": 143.561
-    },
-    {
-      "bundle": "a2",
-      "errors": [],
-      "host_after_loadavg1": 8.17,
-      "host_before_loadavg1": 8.17,
-      "host_before_mem_avail_gib": 45.53,
-      "noisy": true,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        },
-        {
-          "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
-          "comm": "bash",
-          "pid": 2811298
-        },
-        {
-          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
-          "comm": "cargo",
-          "pid": 2811301
-        },
-        {
-          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name acos_art --edition=2021 crates/acos-art/src/lib.rs --error-format=json --jso",
-          "comm": "rustc",
-          "pid": 2817460
-        }
-      ],
-      "phase": "loop1",
-      "queue_wait_s": 3,
-      "rep": 3,
-      "wall_s": 33.759
-    },
-    {
-      "bundle": "a2",
-      "errors": [],
-      "host_after_loadavg1": 7.45,
-      "host_before_loadavg1": 7.45,
-      "host_before_mem_avail_gib": 45.99,
-      "noisy": true,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        },
-        {
-          "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
-          "comm": "bash",
-          "pid": 2811298
-        },
-        {
-          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
-          "comm": "cargo",
-          "pid": 2811301
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_p11_corpus.sh <<'EOF'\n#!/usr/bin/env bash\n# P11 settle-lab",
-          "comm": "bash",
-          "pid": 2819001
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 2400 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
-          "comm": "bash",
-          "pid": 2819006
-        }
-      ],
-      "phase": "loop5",
-      "queue_wait_s": 3,
-      "rep": 3,
-      "wall_s": 9.743
-    },
-    {
-      "bundle": "mem",
-      "errors": [],
-      "host_after_loadavg1": 1.99,
-      "host_before_loadavg1": 1.99,
-      "host_before_mem_avail_gib": 47.36,
-      "noisy": false,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/v1 && cat > /home/Qui/Projects/acos/.cache/v1/env.sh <<'EOF'\nexport ACOS_FONT_DIR=/home/Qui/Projects/acos/.c",
-          "comm": "bash",
-          "pid": 2842478
-        }
-      ],
-      "phase": "memory",
-      "queue_wait_s": 59,
-      "rep": 3,
-      "wall_s": 219.524
-    },
-    {
-      "bundle": "a2",
-      "errors": [],
-      "host_after_loadavg1": 5.8,
-      "host_before_loadavg1": 5.8,
-      "host_before_mem_avail_gib": 46.18,
-      "noisy": true,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_p11_corpus.sh <<'EOF'\n#!/usr/bin/env bash\n# P11 settle-lab",
-          "comm": "bash",
-          "pid": 2819001
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 2400 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
-          "comm": "bash",
-          "pid": 2819006
-        }
-      ],
-      "phase": "p11",
-      "queue_wait_s": 3,
-      "rep": 3,
-      "wall_s": 95.896
-    },
-    {
-      "bundle": "a2",
-      "errors": [],
-      "host_after_loadavg1": 6.96,
-      "host_before_loadavg1": 6.96,
-      "host_before_mem_avail_gib": 45.0,
-      "noisy": true,
-      "ok": true,
-      "other_acos": [
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2016927
-        },
-        {
-          "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
-          "comm": "acos",
-          "pid": 2112986
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
-          "comm": "bash",
-          "pid": 2790018
-        },
-        {
-          "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_p11_corpus.sh <<'EOF'\n#!/usr/bin/env bash\n# P11 settle-lab",
-          "comm": "bash",
-          "pid": 2819001
-        },
-        {
-          "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 2400 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
-          "comm": "bash",
-          "pid": 2819006
-        }
-      ],
-      "phase": "scenarios",
-      "queue_wait_s": 3,
-      "rep": 3,
-      "wall_s": 30.126
+      "wall_s": 28.212
     }
   ],
   "profile": "release",
   "reps": 3,
   "schema": "acos-bench-baseline/2",
   "tool": "tools/bench/acos-bench.sh",
-  "utc": "2026-11-12T21:13:32+00:00"
+  "utc": "2026-11-12T22:31:15+00:00"
 }

@@ -807,47 +807,167 @@ screen — MEASURED (false pass found; one layout wall open)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 
-All rows below are the H6 baseline on **pre-H2** main `32a0708` (3 reps, release,
-`ACOS_STRICT_SETTLE=event`), unless the row says otherwise. H2 (early GC) was
-merged after that build; re-baseline on merged main.
+**Rows are current main `4958703` restated by B2 (E3.2): 3 repetitions of
+`tools/bench/acos-bench.sh`, release, animations **on** (the product default),
+`ACOS_STRICT_SETTLE` at the tree default (event-only, P12), early GC on (H2).
+The pre-H2 rows they replace are in `results/bench/baseline-pre-h2.json` and
+§3 of `results/bench/B2.md`.** Memory rows state their type: **cgroup
+anon+shmem** (job scope + guest scopes, sampler charged back) and **ΣPss** are
+never mixed. `tasks/GiB-min` is quoted in both denominators where they differ:
+**page cache included** (cgroup `memory.current`, the bench's historical
+headline) and **anon+shmem** (label-matched with M1/M2).
 
 | Metric | Best value | Config / commit | Experiment | Date | Δ / why |
 |---|---|---|---|---|---|
-| M3 cold start | **406 ms (page cache evicted)** | main `32a0708` pre-H2 | H6 | 2026-11-13 | −12.3 % vs 463 warm-cache (P11 event settle + P10 probe) |
-| M4 warm launch | **strict 309 ms / fast 175 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | −29.8 % / −5.1 % (event settle) |
-| M5 screenshot | **24.3 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | tie with 24.4 (P2/W1) |
-| M6 reset | **strict 342 ms / fast 210 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | strict −26.2 % (event settle); fast +7.7 % inside 14 % noise, A/B needed |
-| M7 UI tree | **strict 41.1 ms / fast 0.44 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | strict −72.8 % (P11 event settle removed the 150 ms quiet window); fast +0.24 ms absolute |
-| M8 tap → settled | **counter 956 ms strict / 44.3 ms fast; form 948 / 45.0 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | counter fast −37.6 %; strict unchanged (framework press/elevation animator) |
-| Tap acknowledgement | **5 ms** | main `32a0708` pre-H2 | H6 | 2026-11-13 | tie (P1) |
-| Memory / extra session | **97.3 (N=1) / 98.0 (N=5) / 97.7 (N=10) MiB cgroup anon+shmem**; Pss 213/108/94 MiB | main `32a0708` pre-H2 | H6 | 2026-11-13 | −2.8 % at N=5 vs O2 100.9; M1 98.9 vs 117.5 (W1/O2) |
-| Idle CPU / wakeups | **0.61 / 2.44 / 4.47 %** of one core at N=1/5/10 (0.61/0.49/0.45 per session); **34 / 90 / 161** wakeups/s | main `32a0708` pre-H2 | H6 | 2026-11-13 | new rows; wakeups ~16 s⁻¹ per session at N≥5 |
-| Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `32a0708` pre-H2 | H6 | 2026-11-13 | −33…−40 % vs 18–20 (GL1) |
-| Agent loop | **1.438 s/task; 0.654 tasks/s, 280.5 tasks/GiB-min (N=1); 2.677 tasks/s, 664.0 tasks/GiB-min (N=5)** | main `32a0708` pre-H2 | H6 | 2026-11-13 | −34.9 % latency; +105 % / +253 % tasks/GiB-min (P9/P10/P11/W1/O2) |
-| False passes | **0** (P11 0/105; scenarios 0/12; loop 0) | main `32a0708` pre-H2 | H6 | 2026-11-13 | must stay 0; N=5 loop verified 74/75 (H16) |
-| Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
-| Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
-| Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
-| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | post-H6 (current main) |
-| M8 tap → settled | strict 955 ms (event, animations on); **182 ms p50 with `animations: off`** (P12 counter step incl. ~78 ms capture) / fast 70.9 ms | main P11, P12 | P1, P11, P12 E2.9 | 2026-11-13 | P12 animations:off (current main) |
+| M3 cold start | **411 ms (page cache evicted)** | main `4958703` (H2+P12) | B2, E3.2 | 2026-11-13 | pre-H2 406 ms — tie; P12 event settle already in the pre-H2 build's path |
+| M4 warm launch | **strict 336 ms / fast 203 ms** (clean reps 324 / 175) | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 309/175; rep 2 ran at load1 6–11, clean rep ties 175 ms |
+| M5 screenshot | **24.9 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 24.3 (tie) |
+| M6 reset | **strict 333 ms / fast 210 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 342/210 — −2.6 % / tie |
+| M7 UI tree | **strict 41.1 ms / fast 0.48 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 41.1/0.44 — tie |
+| M8 tap → settled (animations on) | **counter 956 ms strict / 56.1 ms fast (clean-rep 44.3); form 944.7 / 45.5 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 956/44.3/948/45.0 — tie; the ~0.9 s framework press animator is unchanged |
+| M8 tap → settled (animations off) | **counter 132 ms strict; form 113–154 ms** (7.25× / 6.13×) | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | P12 switch; `first_change_ms` 55–56 ms unchanged, the animator is what disappears |
+| Tap acknowledgement | **5 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | tie (P1) |
+| M1 idle memory, 1 app | **66.5 MiB cgroup anon+shmem** (ΣPss 210 MiB) | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 98.9 MiB — **−32.8 %** (H2 early GC) |
+| Memory / extra session | **64.96 / 65.22 / 65.59 MiB cgroup anon+shmem** at N=1/5/10; ΣPss 195.4 / 76.8 / 62.6 MiB | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 97.3/98.0/97.7 cgroup and 213/108/94 Pss — **−33 %** anon+shmem, −29/−33 % ΣPss at N=5/N=10 |
+| Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
+| Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
+| Agent loop (animations on) | **1423.9 ms/task; 0.653 tasks/s, 283.5 (page cache) / 905.3 (anon+shmem) tasks/GiB-min at N=1; 1428.1 ms, 2.679 tasks/s, 667.6 / 865.8 at N=5** | main `4958703` | B2, E3.2 | 2026-11-13 | latency tie with pre-H2; **anon+shmem GiB-min +45.7 % (N=1) / +49.8 % (N=5) from H2**, invisible in the page-cache denominator (+1.1 %/+0.5 %) |
+| Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 536 ms / 6.42 / 4728 at N=5; 538 ms / 11.09 / 4822 at N=10** | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | 2.67–2.75× latency, ~5.5× anon+shmem tasks/GiB-min; loop becomes reset-bound (48 %); not a default change |
+| False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
+| Agent loop N=10 reliability | **not reliable yet**: 14–50/50 verified across five H14 arm runs, failures are `GUEST_EXITED` (0 false passes) | main `4958703`, 10 sessions / one serve | H14, E3.3 | 2026-11-13 | new row; see Backlog H17 |
+| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | unchanged by H2/P12 |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
+Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per
+GiB of agent-visible (cgroup anon+shmem) memory**. The 2026-11-12 snapshot ranked
+memory per session #1; H2 has since taken 32 MiB/session off it, the loop is
+tap-bound at the default and reset-bound with animations off, and the GiB
+denominator is now the per-task **boot/relaunch transient**, not steady state.
+
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
-| H13 | **Memory per session (98 MiB, flat N=1/5/10) is the GiB denominator.** Enable B3's shared uncompressed boot image first (−13.6 MiB/session, measured), then ART post-first-frame trim / zygote CoW (Z6: −25–60 % at N≥5) | M2, tasks/GiB-min | −14 % (B3) … −50 % | high (B3) / medium (zygote) | low (B3 flag) / medium | medium (fixed image address/ASLR; zygote security F1) | **#1** |
-| H14 | **Strict tap is 65 % of the loop (926–940 ms):** the framework press/elevation `ValueAnimator` draws ~0.9 s. Adopt P12 `animations:off` for non-assertion steps and/or strict only for assertions (fast for navigation) | M8, loop | 1.44 s → ~0.55 s; +2.3× tasks/GiB-min | high | low | medium (verification semantics: fast never backs an assertion) | **#2, after P12** |
-| H15 | **Reset is 24 % of the loop (342 ms):** fresh ART boot + framework + Activity + strict bind. Zygote/shared image, or fast reset for non-asserting steps | M6, loop | −150–200 ms (−10…14 % loop) | medium-high | medium | medium | **#3; overlaps H9's zygote arm** |
-| H16 | **N=5 strict assert flake:** 1/75 tasks failed the post-tap count on a strict tree, false_pass 0, did not reproduce (25/25 in reps 2–3). Reproduce with the recorded failing-task steps; check probe/store race under concurrency | loop verified rate | 74/75 → 100 % | medium | low | low | needs-investigation |
-| H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
-| H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
-| H4 | Idle CPU: 0.45–0.61 % per session and ~16 wakeups s⁻¹ per session (N=10: 4.5 %, 161 s⁻¹). Remove the 250 ms probe fallback and per-session timers | CPU, wakeups | lower wakeups; small at N=10 now | medium | low | low | queued (after H9/H10) |
-| H5 | Agent loop with animations:off + event settle | loop | 2.2 → <0.8 s | medium-high | low | low | **folded into H14** |
-| H6 | Nightly metric regression bench | all | guard | high | done | low | **done**: `tools/bench/acos-bench.sh` + `BASELINE.json` |
+| H15 | **The reset/relaunch is the loop's next wall: 342 ms (24 %) with animations on, 245–343 ms (48 %) with animations off** — fresh ART boot + framework + Activity + strict bind, per task. Zygote/shared boot image (B3 `-Xnorelocate` −13.6 MiB/session measured) or a fast reset for non-asserting steps | M6, loop, tasks/GiB-min | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | medium-high | medium | medium (fixed image address / ASLR, zygote F1) | **#1, was #3** |
+| H13 | **Memory per session is now 65 MiB anon+shmem, flat N=1/5/10.** Finish it: B3 shared uncompressed image (−13.6 MiB/session measured), then zygote CoW (Z6 −25–60 % at N≥5) | M2, tasks/GiB-min (anon+shmem) | −14 % (B3) … −25 % | high (B3) / medium (zygote) | low (B3 flag) / medium | medium | **#2, was #1** (H2 took the first 32 MiB) |
+| H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.25× taps, 2.7× loop, ~5.5× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
+| H17 | **N=10 verified loop is unreliable:** 14–50/50 verified across five H14 arms, all failures honest (`GUEST_EXITED` on reset/observe with 10 concurrent sessions in one serve), 0 false passes. The idle 10-session memory phase is clean, so it is the concurrent reset/relaunch path, not capacity | loop verified rate at N≥8 | 100 % | medium | low–medium | low | **new, needs-investigation** |
+| H16 | **N=5 strict assert flake** (H6: 1/75). Not reproduced in B2 (63/63 N=1, 75/75 N=5, plus 150+ H14 tasks) | loop verified rate | — | low now | low | low | **not reproduced in B2** (H6 saw 1/75 at N=5: a strict post-tap count read that did not see the tap; false_pass stayed 0). Twelve B2/H14 loop cohorts, 0 failures of that shape; the N≥8 failure mode is H17 instead |
+| H9 | **Form-validation N=5 under host load:** 3/5 `:id/name` taps hit the 30 s bound with early GC off *and* on (Z7/H2). B2 saw the same shape on a different path: with load1 10.4 a fast reset failed 20/20 in 0.009 ms (arm-off-r1) | loop correctness | remove a load-sensitive input/relaunch stall | high (reproduced) | medium | low | backlog (evidence `results/art-runtime/H2.md` §5, `results/bench/B2.md` §6) |
+| H4 | Idle CPU **5.28 %** of one core and 161.7 wakeups/s at N=10 (0.53 %/session; wakeups ~16 s⁻¹/session at N≥5). Remove the 250 ms probe fallback and per-session timers | CPU, wakeups | lower wakeups; small at N=10 now | medium | low | low | queued (after H15) |
+| H5 | Agent loop with animations:off + event settle | loop | 2.2 → <0.8 s | medium-high | low | low | **done (folded into H14)** |
+| H6 | Nightly metric regression bench | all | guard | high | done | low | **done + re-baselined on current main (B2): `BASELINE.json`, anon+shmem GiB-min rows added** |
 | H7 | Shrink per-session boot-image private memory | M2 | −10–25 MiB | medium | medium | medium | **folded into H13** (B3 is the measured first step) |
-| H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (M5 is 2 % of the loop) |
-| H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | backlog (evidence `results/art-runtime/H2.md` §5) |
-| H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
+| H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
+| H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
+
+## E3.2 — B2: re-baseline on current main (H2 + P12) and the GiB-denominator correction — MEASURED (accepted)
+
+- **Experiment ID / name:** B2 — Stage-1 close-out re-baseline on merged main.
+- **Responsible agent:** B2 (worktree `bench-b2-rebaseline`, off `main` `4958703`).
+- **Bottleneck investigated:** the whole Stage-1 metric set was last measured on a build *before* H2's
+  early-GC default and P12's settle/verify changes; the stored baseline could not gate regressions on
+  the shipped tree, and the leaderboard mixed builds.
+- **Baseline (p50/p95, pre-H2 `32a0708`, `results/bench/baseline-pre-h2.json`):** M3 406 ms, M4
+  309/175, M5 24.3, M6 342/210, M7 41.1/0.44, M8 956/44.3 (counter) and 948/45.0 (form), tap ack 5,
+  teardown 12, M1 98.9 MiB, M2 97.3/98.0/97.7 MiB cgroup (Pss 213/108/94), idle CPU 0.61/2.44/4.47 %,
+  wakeups 34/90/161 s⁻¹, loop 1438.0 ms/task with 280.5 (N=1)/664.0 (N=5) tasks/GiB-min, 0 false passes.
+- **Hypothesis + proposed solution:** nothing in P12 should move a p50 (it changes semantics and
+  evidence), and H2's −29 MiB/session must show up as −32 MiB in cgroup anon+shmem at every N, with the
+  loop's latency unchanged. Re-run the H6 bench unchanged apart from the fixes the current tree needs
+  (`settled:true` gating, `pixels_changed`/`animations` evidence fields, `--task`/`--scratch-root`,
+  `loop10`, an anon+shmem tasks/GiB-min metric), and accept the result as the new baseline.
+- **Implementation + commits:** `tools/bench/acos_bench.py`, `tools/bench/acos-bench.sh`,
+  `results/bench/B2.md`, `results/bench/BASELINE.json`, `results/bench/baseline-20261112T212855Z.{json,md}`,
+  raw samples `results/bench/run-20261112T212855Z/`, kept-as-was `results/bench/baseline-pre-h2.json`.
+  No `crates/**` change. Binary `acos` sha256 `c824013b…` (release, `main` `4958703`).
+- **Benchmark method + environment + host load:** 3 interleaved repetitions, 7 phases, one
+  `run-exclusive.sh --task B2` + `guarded.sh` (8G; memory 16G) acquisition per phase group, every
+  acquisition < 10 min (max 219.6 s). Scratch `.cache/b2/`. Host: Ryzen 9 9950X, 32 threads, 61,908 MiB;
+  9/21 phases `noisy` (load1 4.2–11.1 from four concurrent agents; rep 2's `latency` phase is the only
+  materially distorted one), MemAvailable 45–47 GiB, queue waits 0–133 s. Pooled n = 60 per latency
+  metric, 63/75 loop tasks, 3 samples per memory/CPU row.
+- **Before/after p50/p95:** M1 **98.9 → 66.5 MiB**, M2 **97.3/98.0/97.7 → 65.0/65.2/65.6 MiB** cgroup
+  anon+shmem (ΣPss 107.7/94.2 → 76.8/62.6 at N=5/N=10); everything else within its derived threshold:
+  M3 411 (+1.3 %), M4 336/203 (clean reps 324/175 — tie), M5 24.9, M6 333/210, M7 41.1/0.48,
+  M8 956/56.1 and 944.7/45.5 (clean-rep fast 44.3 — tie), tap ack 5, teardown 12, loop
+  **1423.9 ms/task / 0.653 tasks·s⁻¹** (N=1) and 1428.1 / 2.679 (N=5); tasks/GiB-min **283.5/667.6**
+  in the historical page-cache denominator (+1.1 %/+0.5 %) and **905.3/865.8** in the anon+shmem one
+  (**+45.7 %/+49.8 %**); idle CPU 0.65/2.77/5.28 % (wakeups 34.1/90.8/161.7 unchanged); 0 false passes
+  (P11 0/105, scenarios 0/12, loop 0, verified 63/63 N=1 and 75/75 N=5).
+- **Result:** **accepted**; `results/bench/BASELINE.json` is now the current-main document and the
+  pre-H2 one is kept verbatim. `--compare` pre-H2 → current exits 0 ("no regression beyond the
+  per-metric noise thresholds").
+- **Why it worked / what it found:** the only real change is H2's, and it lands exactly at the size H2
+  claimed, in the *cgroup* anon+shmem number (not just Pss) — so it is returned anonymous memory, not
+  shared-file accounting. P12 moved semantics only (event-only strict with no quiet escape hatch,
+  pixel guard off with `pixels_changed` stated, verify failing a timed-out settle: the negative control
+  is an honest `timeout`), which is visible in the reply fields the bench now records, not in p50s.
+  The run also produced a **metric correction**: the historical tasks/GiB-min denominator (cgroup
+  `memory.current`) is dominated by page cache charged to whichever phase read the image first
+  (≈95 MiB average on a clean acquisition, ≈600 MiB when a latency phase precedes the loop in the same
+  cgroup), which is why it showed H2 as +1 % while the label-matched anon+shmem denominator shows
+  +46/+50 %. Both variants are now baseline rows.
+- **Trade-offs / regressions:** none beyond noise. The two rows that look worse (M4 fast +16 %,
+  M8 counter fast +27 %) are repetition 2 running at load1 6–11; their clean repetitions tie pre-H2
+  exactly and the derived thresholds cap at 40 %, so they are reported as unresolved-under-load rather
+  than as regressions. Idle CPU at N=10 is +18 % (4.5 → 5.3 %) inside a 38 % band with a 4.9–6.3 %
+  rep spread — worth one quiet-host re-run before it means anything.
+- **Follow-ups:** H14 (E3.3, same session); H17 (N=10 loop reliability); H15 (reset/relaunch) promoted
+  to #1; H13 demoted to #2; re-run the P11 corpus with `animations:off`.
+- **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED; `results/bench/B2.md`,
+  `results/bench/BASELINE.json`, `results/bench/baseline-20261112T212855Z.{json,md}`,
+  `results/bench/run-20261112T212855Z/`. Regression: none. False pass: none.
+
+## E3.3 — H14: `animations: off` for functional tests (agent-facing mode) — MEASURED (accepted as a mode, not as a default)
+
+- **Experiment ID / name:** H14 — per-session animation scales off as the functional-check mode.
+- **Responsible agent:** B2 (same worktree/build as E3.2).
+- **Bottleneck investigated:** the strict tap→settled step was 65 % of the agent loop (927–966 ms) because
+  the framework Button press/elevation `ValueAnimator` draws for ~0.9 s after every tap and the
+  event-only strict settle waits for it. P12 shipped the switch (`acos_launch {animations:"off"}`),
+  never measured end-to-end in the loop.
+- **Baseline (p50):** animations on — M8 counter 956 ms, M8 form 945 ms, M4 strict 336 ms, M6 strict
+  333 ms, loop 1438 ms/task at N=1 / 1432 at N=5 / 1437 at N=10, 0.65/2.55/3.31 tasks·s⁻¹,
+  905/866 tasks/GiB-min (anon+shmem), 0 false passes.
+- **Hypothesis + proposed solution:** with the animator scaled to 0, tap→settled drops to the
+  state-change + one-frame time (~100–150 ms) and the loop falls to ~0.55 s (2.4–2.7×), with no
+  verification-semantics change because every assertion still runs on a strict, settled tree.
+  Measure both arms on the same binary with one dial (`animations`), interleaved, 3 reps.
+- **Implementation + commits:** tool only — `--animations on|off` threaded to every launch
+  (latency/memory phases, a wrapper on the P5 harness's launch call, P7's cold phase, `acos verify`
+  for the scenario sweep) plus `loop10`; no product code, no default change. `tools/bench/**`,
+  `results/bench/B2.md` §5.
+- **Benchmark method + environment + host load:** 3 interleaved repetitions per arm
+  (`on,off`/`off,on`/`on,off`), one 16G acquisition per arm per rep containing
+  `latency,loop1,loop5,loop10` (n=20 per latency metric per rep, 21/25/50 loop tasks), task B2, real
+  ART, release `c824013b`. Load1 0.85–10.4 across arms (rep 1's off arm ran at 10.4 and its fast-reset
+  cohort failed 20/20 — reported, not deleted); queue 7–230 s; every acquisition < 10 min.
+- **Before/after p50/p95:** M8 tap counter **960.5 → 132.4 ms (7.25×, p95 968 → 141.7)**, M8 form
+  **945.6 → 154.4 ms (6.13×)**, M4 strict **310.6 → 240.5 ms**, M6 unchanged within noise. Agent loop
+  **1437.5 → 522.7 ms/task (2.75×, p95 522.7)** at N=1, **1432.0 → 536.6 (2.67×)** at N=5,
+  **1436.6 → 538.0 (2.67×)** at N=10; throughput **0.65 → 1.79**, **2.55 → 6.42**, **3.31 → 11.09**
+  tasks·s⁻¹. Verified tasks/GiB-min in the anon+shmem denominator **901 → 5239 (5.8×)**,
+  **793 → 4728 (~5.5×)**, **438 → 4822 (~9×, on-arm N=10 unreliable)**; the page-cache-inclusive
+  denominator cannot answer this (page cache is charged to the phase that read the image first) and is
+  reported as invalid for the arms. 0 false passes in every arm.
+- **Result:** **accepted as an agent-facing mode** ("use `animations:off` for functional checks"), with
+  the product default unchanged (`on`). Also **accepted as a metric finding**: the loop becomes
+  reset-bound (48 % reset, 22 % tap, 24 % three tree reads) instead of tap-bound, which is why H15 is
+  now the #1 backlog item.
+- **Why it worked:** the animator scale is the framework's own path (`ValueAnimator.setDurationScale`
+  plus `IWindowManager.getCurrentAnimatorScale`), so press/elevation/ripple all stop; the state change
+  still happens (`first_change_ms` 55–56 ms, unchanged) and strict settle still requires a real draw
+  after the action (`pixels_changed:true` on every strict row).
+- **Trade-offs / regressions:** nothing in the shipped default. The mode must not back animation or
+  transition tests (documented in `docs/AGENT_API.md` §8.6.5). Under the page-cache GiB denominator
+  there is no throughput gain to point at; under the anon+shmem one there is ~5.5×. N=10 verified rate
+  is not reliable in either arm (`GUEST_EXITED`, 0 false passes) — H17.
+- **Follow-ups:** H17 (N=10 concurrent reset/relaunch); H15 (reset is now the wall); P11 corpus with
+  `animations:off`; consider exposing the mode as the default for `acos verify` functional scenarios
+  (owner decision, not taken here).
+- **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED, 0 false passes;
+  `results/bench/B2.md` §5, `.cache/b2/h14/arm-{on,off}-r{1,2,3}.{json,md}`,
+  `.cache/b2/h14/run-arm-*/rep-1/loop*.json`, `.cache/b2/logs/h14-ab.sh`.

@@ -1,0 +1,2289 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/b2/target/release/acos",
+  "binary_sha256": "c824013b2b043a0659bfffd6deb3ba4c0c8da300b0f048ba3319cb6e6d57647a",
+  "bundle_wall_s": 218.8,
+  "checks": {
+    "bare": {
+      "net_anon_shmem_mib": 1.563,
+      "net_max_mib": 1.563,
+      "net_min_mib": 1.563,
+      "net_samples": 30,
+      "pss_pids": 1,
+      "session_pss": [],
+      "session_pss_mib": 0,
+      "sessions": 0,
+      "sum_pss_mib": 6.784
+    },
+    "job_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3016922-i11432730.scope",
+    "n1": {
+      "bare_pss_mib": 6.784,
+      "idle": {
+        "cpu_pct": 0.614,
+        "cpu_s": 0.37,
+        "pids": 5,
+        "seconds": 60.227,
+        "wake_pids": 5,
+        "wakeups": 2056,
+        "wakeups_per_s": 34.138
+      },
+      "mem_samples": [
+        {
+          "net_anon_shmem_mib": 65.708,
+          "net_max_mib": 66.512,
+          "net_min_mib": 65.684,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 184.683
+            }
+          ],
+          "session_pss_mib": 184.683,
+          "sessions": 1,
+          "sum_pss_mib": 192.11
+        },
+        {
+          "net_anon_shmem_mib": 66.223,
+          "net_max_mib": 67.028,
+          "net_min_mib": 65.794,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 202.901
+            }
+          ],
+          "session_pss_mib": 202.901,
+          "sessions": 1,
+          "sum_pss_mib": 210.329
+        },
+        {
+          "net_anon_shmem_mib": 66.039,
+          "net_max_mib": 66.852,
+          "net_min_mib": 66.023,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 203.733
+            }
+          ],
+          "session_pss_mib": 203.733,
+          "sessions": 1,
+          "sum_pss_mib": 211.161
+        },
+        {
+          "net_anon_shmem_mib": 66.16,
+          "net_max_mib": 66.977,
+          "net_min_mib": 66.133,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 203.021
+            }
+          ],
+          "session_pss_mib": 203.021,
+          "sessions": 1,
+          "sum_pss_mib": 210.449
+        },
+        {
+          "net_anon_shmem_mib": 66.074,
+          "net_max_mib": 67.375,
+          "net_min_mib": 66.043,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 203.543
+            }
+          ],
+          "session_pss_mib": 203.543,
+          "sessions": 1,
+          "sum_pss_mib": 210.971
+        },
+        {
+          "net_anon_shmem_mib": 66.372,
+          "net_max_mib": 67.188,
+          "net_min_mib": 66.352,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 204.477
+            }
+          ],
+          "session_pss_mib": 204.477,
+          "sessions": 1,
+          "sum_pss_mib": 211.904
+        },
+        {
+          "net_anon_shmem_mib": 66.504,
+          "net_max_mib": 67.324,
+          "net_min_mib": 66.375,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 203.781
+            }
+          ],
+          "session_pss_mib": 203.781,
+          "sessions": 1,
+          "sum_pss_mib": 211.209
+        },
+        {
+          "net_anon_shmem_mib": 66.316,
+          "net_max_mib": 67.231,
+          "net_min_mib": 66.285,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 204.338
+            }
+          ],
+          "session_pss_mib": 204.338,
+          "sessions": 1,
+          "sum_pss_mib": 211.766
+        },
+        {
+          "net_anon_shmem_mib": 66.528,
+          "net_max_mib": 67.437,
+          "net_min_mib": 66.41,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 190.025
+            }
+          ],
+          "session_pss_mib": 190.025,
+          "sessions": 1,
+          "sum_pss_mib": 197.219
+        },
+        {
+          "net_anon_shmem_mib": 66.63,
+          "net_max_mib": 67.657,
+          "net_min_mib": 66.614,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 191.464
+            }
+          ],
+          "session_pss_mib": 191.464,
+          "sessions": 1,
+          "sum_pss_mib": 198.657
+        },
+        {
+          "net_anon_shmem_mib": 66.715,
+          "net_max_mib": 67.379,
+          "net_min_mib": 66.539,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 190.756
+            }
+          ],
+          "session_pss_mib": 190.756,
+          "sessions": 1,
+          "sum_pss_mib": 198.047
+        },
+        {
+          "net_anon_shmem_mib": 66.777,
+          "net_max_mib": 67.368,
+          "net_min_mib": 66.641,
+          "net_samples": 30,
+          "pss_pids": 5,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 191.393
+            }
+          ],
+          "session_pss_mib": 191.393,
+          "sessions": 1,
+          "sum_pss_mib": 198.586
+        }
+      ],
+      "n": 1,
+      "net_anon_shmem_mib": 66.344,
+      "per_session_anon_shmem_mib": 64.781,
+      "per_session_pss_incremental_mib": 196.177,
+      "per_session_pss_mib": 202.961,
+      "session_pss_mib": 202.961,
+      "sum_pss_mib": 210.389
+    },
+    "n10": {
+      "bare_pss_mib": 6.784,
+      "idle": {
+        "cpu_pct": 4.935,
+        "cpu_s": 3.01,
+        "pids": 41,
+        "seconds": 60.989,
+        "wake_pids": 41,
+        "wakeups": 9869,
+        "wakeups_per_s": 161.817
+      },
+      "mem_samples": [
+        {
+          "net_anon_shmem_mib": 652.717,
+          "net_max_mib": 657.04,
+          "net_min_mib": 650.59,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.17
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.665
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.758
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.708
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 63.528
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 61.77
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 61.829
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.822
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.632
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.26
+            }
+          ],
+          "session_pss_mib": 630.142,
+          "sessions": 10,
+          "sum_pss_mib": 638.542
+        },
+        {
+          "net_anon_shmem_mib": 652.5,
+          "net_max_mib": 659.972,
+          "net_min_mib": 651.537,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 63.443
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 62.962
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.156
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.013
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 64.177
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 62.328
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 62.481
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.119
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.038
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 61.561
+            }
+          ],
+          "session_pss_mib": 627.278,
+          "sessions": 10,
+          "sum_pss_mib": 635.382
+        },
+        {
+          "net_anon_shmem_mib": 656.786,
+          "net_max_mib": 657.837,
+          "net_min_mib": 652.188,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.088
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.505
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.688
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.646
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 63.47
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.152
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 61.774
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 63.029
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.858
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.479
+            }
+          ],
+          "session_pss_mib": 631.689,
+          "sessions": 10,
+          "sum_pss_mib": 638.354
+        },
+        {
+          "net_anon_shmem_mib": 655.415,
+          "net_max_mib": 660.838,
+          "net_min_mib": 653.743,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 63.385
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 62.903
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 64.488
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 64.446
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 64.274
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 62.531
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 62.583
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.326
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.14
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 61.787
+            }
+          ],
+          "session_pss_mib": 630.863,
+          "sessions": 10,
+          "sum_pss_mib": 637.655
+        },
+        {
+          "net_anon_shmem_mib": 657.234,
+          "net_max_mib": 660.879,
+          "net_min_mib": 653.817,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.189
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.708
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.891
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.755
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 63.685
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.078
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.231
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.869
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.788
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.318
+            }
+          ],
+          "session_pss_mib": 633.512,
+          "sessions": 10,
+          "sum_pss_mib": 641.616
+        },
+        {
+          "net_anon_shmem_mib": 656.475,
+          "net_max_mib": 662.257,
+          "net_min_mib": 655.03,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 63.587
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 62.984
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 64.421
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 64.277
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 64.204
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 62.391
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 62.553
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.292
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.113
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 61.737
+            }
+          ],
+          "session_pss_mib": 630.559,
+          "sessions": 10,
+          "sum_pss_mib": 638.87
+        },
+        {
+          "net_anon_shmem_mib": 659.594,
+          "net_max_mib": 662.844,
+          "net_min_mib": 656.094,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.118
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.638
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.715
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.672
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 63.502
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.31
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.37
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 63.098
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.926
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.554
+            }
+          ],
+          "session_pss_mib": 633.903,
+          "sessions": 10,
+          "sum_pss_mib": 641.899
+        },
+        {
+          "net_anon_shmem_mib": 657.73,
+          "net_max_mib": 664.949,
+          "net_min_mib": 656.726,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 63.274
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 64.303
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 64.5
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 64.329
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 64.263
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 62.473
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 62.609
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.255
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.167
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.945
+            }
+          ],
+          "session_pss_mib": 633.118,
+          "sessions": 10,
+          "sum_pss_mib": 641.116
+        },
+        {
+          "net_anon_shmem_mib": 659.207,
+          "net_max_mib": 665.094,
+          "net_min_mib": 657.5,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.338
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.736
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.919
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.774
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 63.704
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.145
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.3
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 63.042
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 62.862
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.491
+            }
+          ],
+          "session_pss_mib": 634.311,
+          "sessions": 10,
+          "sum_pss_mib": 642.618
+        },
+        {
+          "net_anon_shmem_mib": 661.341,
+          "net_max_mib": 666.22,
+          "net_min_mib": 658.725,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.117
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 64.873
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 64.992
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 64.911
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 64.731
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.039
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.1
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 62.849
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 64.173
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 63.819
+            }
+          ],
+          "session_pss_mib": 640.604,
+          "sessions": 10,
+          "sum_pss_mib": 648.602
+        },
+        {
+          "net_anon_shmem_mib": 661.605,
+          "net_max_mib": 668.008,
+          "net_min_mib": 659.832,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 64.204
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 63.717
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 63.902
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 63.746
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 61.728
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.396
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.535
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 63.192
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 63.104
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 62.641
+            }
+          ],
+          "session_pss_mib": 633.165,
+          "sessions": 10,
+          "sum_pss_mib": 641.262
+        },
+        {
+          "net_anon_shmem_mib": 660.093,
+          "net_max_mib": 663.273,
+          "net_min_mib": 657.805,
+          "net_samples": 30,
+          "pss_pids": 41,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 65.578
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 64.975
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 65.191
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 65.013
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 62.993
+            },
+            {
+              "launcher_pid": 3021319,
+              "pids": 4,
+              "pss_mib": 63.133
+            },
+            {
+              "launcher_pid": 3021357,
+              "pids": 4,
+              "pss_mib": 63.299
+            },
+            {
+              "launcher_pid": 3021450,
+              "pids": 4,
+              "pss_mib": 64.306
+            },
+            {
+              "launcher_pid": 3021509,
+              "pids": 4,
+              "pss_mib": 64.091
+            },
+            {
+              "launcher_pid": 3021550,
+              "pids": 4,
+              "pss_mib": 61.804
+            }
+          ],
+          "session_pss_mib": 640.383,
+          "sessions": 10,
+          "sum_pss_mib": 648.695
+        }
+      ],
+      "n": 10,
+      "net_anon_shmem_mib": 657.482,
+      "per_session_anon_shmem_mib": 65.592,
+      "per_session_pss_incremental_mib": 62.636,
+      "per_session_pss_mib": 63.314,
+      "session_pss_mib": 633.1415,
+      "sum_pss_mib": 641.189
+    },
+    "n5": {
+      "bare_pss_mib": 6.784,
+      "idle": {
+        "cpu_pct": 2.493,
+        "cpu_s": 1.51,
+        "pids": 21,
+        "seconds": 60.558,
+        "wake_pids": 21,
+        "wakeups": 5502,
+        "wakeups_per_s": 90.855
+      },
+      "mem_samples": [
+        {
+          "net_anon_shmem_mib": 325.13,
+          "net_max_mib": 326.258,
+          "net_min_mib": 323.117,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 75.948
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 76.822
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.229
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 77.995
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 77.943
+            }
+          ],
+          "session_pss_mib": 386.937,
+          "sessions": 5,
+          "sum_pss_mib": 394.487
+        },
+        {
+          "net_anon_shmem_mib": 325.955,
+          "net_max_mib": 331.566,
+          "net_min_mib": 323.614,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.883
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.815
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 79.056
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.829
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.664
+            }
+          ],
+          "session_pss_mib": 393.247,
+          "sessions": 5,
+          "sum_pss_mib": 400.899
+        },
+        {
+          "net_anon_shmem_mib": 324.935,
+          "net_max_mib": 329.004,
+          "net_min_mib": 324.778,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.181
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.209
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 79.863
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 79.633
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 79.467
+            }
+          ],
+          "session_pss_mib": 394.353,
+          "sessions": 5,
+          "sum_pss_mib": 401.901
+        },
+        {
+          "net_anon_shmem_mib": 326.469,
+          "net_max_mib": 328.173,
+          "net_min_mib": 324.321,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.989
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 79.033
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 79.168
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.93
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.768
+            }
+          ],
+          "session_pss_mib": 393.888,
+          "sessions": 5,
+          "sum_pss_mib": 401.437
+        },
+        {
+          "net_anon_shmem_mib": 327.615,
+          "net_max_mib": 328.418,
+          "net_min_mib": 325.027,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.29
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 79.564
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 79.805
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 79.477
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 79.416
+            }
+          ],
+          "session_pss_mib": 395.552,
+          "sessions": 5,
+          "sum_pss_mib": 403.101
+        },
+        {
+          "net_anon_shmem_mib": 327.34,
+          "net_max_mib": 333.11,
+          "net_min_mib": 325.551,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.731
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.894
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 79.141
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.81
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.741
+            }
+          ],
+          "session_pss_mib": 393.317,
+          "sessions": 5,
+          "sum_pss_mib": 400.969
+        },
+        {
+          "net_anon_shmem_mib": 326.914,
+          "net_max_mib": 330.398,
+          "net_min_mib": 326.773,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.132
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.146
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.31
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.063
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.03
+            }
+          ],
+          "session_pss_mib": 389.681,
+          "sessions": 5,
+          "sum_pss_mib": 397.232
+        },
+        {
+          "net_anon_shmem_mib": 327.368,
+          "net_max_mib": 330.129,
+          "net_min_mib": 326.97,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 76.417
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 77.455
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 77.604
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 77.453
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.58
+            }
+          ],
+          "session_pss_mib": 387.509,
+          "sessions": 5,
+          "sum_pss_mib": 395.162
+        },
+        {
+          "net_anon_shmem_mib": 327.924,
+          "net_max_mib": 330.638,
+          "net_min_mib": 326.942,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 76.953
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.092
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.158
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.01
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 77.874
+            }
+          ],
+          "session_pss_mib": 389.087,
+          "sessions": 5,
+          "sum_pss_mib": 396.638
+        },
+        {
+          "net_anon_shmem_mib": 328.508,
+          "net_max_mib": 333.512,
+          "net_min_mib": 327.821,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 76.248
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 77.39
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.961
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.815
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.777
+            }
+          ],
+          "session_pss_mib": 390.191,
+          "sessions": 5,
+          "sum_pss_mib": 397.842
+        },
+        {
+          "net_anon_shmem_mib": 328.961,
+          "net_max_mib": 331.004,
+          "net_min_mib": 328.356,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 77.062
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.197
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.373
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.107
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.097
+            }
+          ],
+          "session_pss_mib": 389.836,
+          "sessions": 5,
+          "sum_pss_mib": 397.388
+        },
+        {
+          "net_anon_shmem_mib": 328.587,
+          "net_max_mib": 332.297,
+          "net_min_mib": 328.504,
+          "net_samples": 30,
+          "pss_pids": 21,
+          "session_pss": [
+            {
+              "launcher_pid": 3016963,
+              "pids": 4,
+              "pss_mib": 76.449
+            },
+            {
+              "launcher_pid": 3019052,
+              "pids": 4,
+              "pss_mib": 78.732
+            },
+            {
+              "launcher_pid": 3019091,
+              "pids": 4,
+              "pss_mib": 78.9
+            },
+            {
+              "launcher_pid": 3019129,
+              "pids": 4,
+              "pss_mib": 78.65
+            },
+            {
+              "launcher_pid": 3019167,
+              "pids": 4,
+              "pss_mib": 78.62
+            }
+          ],
+          "session_pss_mib": 391.351,
+          "sessions": 5,
+          "sum_pss_mib": 398.903
+        }
+      ],
+      "n": 5,
+      "net_anon_shmem_mib": 327.354,
+      "per_session_anon_shmem_mib": 65.158,
+      "per_session_pss_incremental_mib": 76.797,
+      "per_session_pss_mib": 78.154,
+      "session_pss_mib": 390.77099999999996,
+      "sum_pss_mib": 398.3725
+    },
+    "teardown_verified": 10
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 1.72,
+    "loadavg15": 3.64,
+    "loadavg5": 2.4,
+    "mem_available_gib": 46.79,
+    "mem_available_mib": 47913.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
+        "comm": "bash",
+        "pid": 3015873
+      }
+    ],
+    "runnable": "2/2698",
+    "used_mib": 13995.0,
+    "used_pct": 22.61,
+    "utc": "2026-11-12T21:50:15+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.72,
+    "loadavg15": 3.64,
+    "loadavg5": 2.4,
+    "mem_available_gib": 46.81,
+    "mem_available_mib": 47934.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k3 && cat > /home/Qui/Projects/acos/.cache/k3/run-rest.sh <<'EOS'\n#!/usr/bin/env bash\ncd /home/Qui/.paseo/wo",
+        "comm": "bash",
+        "pid": 3010730
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/l1 && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_CACHE=/home/Qui/Project",
+        "comm": "bash",
+        "pid": 3015873
+      }
+    ],
+    "runnable": "4/2698",
+    "used_mib": 13974.7,
+    "used_pct": 22.57,
+    "utc": "2026-11-12T21:50:15+00:00"
+  },
+  "ok": true,
+  "phase": "memory",
+  "sampler_errors": [],
+  "samples": {
+    "cpu_idle_n10_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 4.935,
+          "cpu_s": 3.01,
+          "pids": 41,
+          "seconds": 60.989,
+          "wake_pids": 41,
+          "wakeups": 9869,
+          "wakeups_per_s": 161.817
+        }
+      ],
+      "median": 4.935,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 4.935,
+        "mean": 4.935,
+        "median": 4.935,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 4.935,
+        "n": 1,
+        "p5": 4.935,
+        "p50": 4.935,
+        "p95": 4.935,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        4.935
+      ]
+    },
+    "cpu_idle_n10_per_session_pct": {
+      "bad": 0,
+      "median": 0.493,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.493,
+        "mean": 0.493,
+        "median": 0.493,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.493,
+        "n": 1,
+        "p5": 0.493,
+        "p50": 0.493,
+        "p95": 0.493,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core/session",
+      "values": [
+        0.493
+      ]
+    },
+    "cpu_idle_n1_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 0.614,
+          "cpu_s": 0.37,
+          "pids": 5,
+          "seconds": 60.227,
+          "wake_pids": 5,
+          "wakeups": 2056,
+          "wakeups_per_s": 34.138
+        }
+      ],
+      "median": 0.614,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.614,
+        "mean": 0.614,
+        "median": 0.614,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.614,
+        "n": 1,
+        "p5": 0.614,
+        "p50": 0.614,
+        "p95": 0.614,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        0.614
+      ]
+    },
+    "cpu_idle_n1_per_session_pct": {
+      "bad": 0,
+      "median": 0.614,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.614,
+        "mean": 0.614,
+        "median": 0.614,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.614,
+        "n": 1,
+        "p5": 0.614,
+        "p50": 0.614,
+        "p95": 0.614,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core/session",
+      "values": [
+        0.614
+      ]
+    },
+    "cpu_idle_n5_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 2.493,
+          "cpu_s": 1.51,
+          "pids": 21,
+          "seconds": 60.558,
+          "wake_pids": 21,
+          "wakeups": 5502,
+          "wakeups_per_s": 90.855
+        }
+      ],
+      "median": 2.493,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 2.493,
+        "mean": 2.493,
+        "median": 2.493,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 2.493,
+        "n": 1,
+        "p5": 2.493,
+        "p50": 2.493,
+        "p95": 2.493,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        2.493
+      ]
+    },
+    "cpu_idle_n5_per_session_pct": {
+      "bad": 0,
+      "median": 0.499,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.499,
+        "mean": 0.499,
+        "median": 0.499,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.499,
+        "n": 1,
+        "p5": 0.499,
+        "p50": 0.499,
+        "p95": 0.499,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core/session",
+      "values": [
+        0.499
+      ]
+    },
+    "m1_idle_mem_mib": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 1
+        }
+      ],
+      "median": 66.344,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 66.344,
+        "mean": 66.344,
+        "median": 66.344,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 66.344,
+        "n": 1,
+        "p5": 66.344,
+        "p50": 66.344,
+        "p95": 66.344,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB",
+      "values": [
+        66.344
+      ]
+    },
+    "m1_idle_pss_mib": {
+      "bad": 0,
+      "median": 210.389,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 210.389,
+        "mean": 210.389,
+        "median": 210.389,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 210.389,
+        "n": 1,
+        "p5": 210.389,
+        "p50": 210.389,
+        "p95": 210.389,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB",
+      "values": [
+        210.389
+      ]
+    },
+    "m2_per_session_anon_shmem_n1": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 1
+        }
+      ],
+      "median": 64.781,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 64.781,
+        "mean": 64.781,
+        "median": 64.781,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 64.781,
+        "n": 1,
+        "p5": 64.781,
+        "p50": 64.781,
+        "p95": 64.781,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        64.781
+      ]
+    },
+    "m2_per_session_anon_shmem_n10": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 10
+        }
+      ],
+      "median": 65.592,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 65.592,
+        "mean": 65.592,
+        "median": 65.592,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 65.592,
+        "n": 1,
+        "p5": 65.592,
+        "p50": 65.592,
+        "p95": 65.592,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        65.592
+      ]
+    },
+    "m2_per_session_anon_shmem_n5": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 5
+        }
+      ],
+      "median": 65.158,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 65.158,
+        "mean": 65.158,
+        "median": 65.158,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 65.158,
+        "n": 1,
+        "p5": 65.158,
+        "p50": 65.158,
+        "p95": 65.158,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        65.158
+      ]
+    },
+    "m2_per_session_pss_n1": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 1,
+          "session_pss_mib": 202.961
+        }
+      ],
+      "median": 196.177,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 196.177,
+        "mean": 196.177,
+        "median": 196.177,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 196.177,
+        "n": 1,
+        "p5": 196.177,
+        "p50": 196.177,
+        "p95": 196.177,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        196.177
+      ]
+    },
+    "m2_per_session_pss_n10": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 10,
+          "session_pss_mib": 633.1415
+        }
+      ],
+      "median": 62.636,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 62.636,
+        "mean": 62.636,
+        "median": 62.636,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 62.636,
+        "n": 1,
+        "p5": 62.636,
+        "p50": 62.636,
+        "p95": 62.636,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        62.636
+      ]
+    },
+    "m2_per_session_pss_n5": {
+      "bad": 0,
+      "extra": [
+        {
+          "n": 5,
+          "session_pss_mib": 390.77099999999996
+        }
+      ],
+      "median": 76.797,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 76.797,
+        "mean": 76.797,
+        "median": 76.797,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 76.797,
+        "n": 1,
+        "p5": 76.797,
+        "p50": 76.797,
+        "p95": 76.797,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "MiB/session",
+      "values": [
+        76.797
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 12.0,
+      "n": 10,
+      "ok": 10,
+      "stats": {
+        "ci95_high": 12.0,
+        "ci95_low": 11.0,
+        "cv": 0.07269603816479032,
+        "max": 13.0,
+        "mean": 11.6,
+        "median": 12.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 10.0,
+        "n": 10,
+        "p5": 10.45,
+        "p50": 12.0,
+        "p95": 12.549999999999999,
+        "resamples": 2000,
+        "spread": 0.17499999999999996,
+        "spread_pct": 17.499999999999996,
+        "stdev": 0.8432740427115678
+      },
+      "unit": "ms",
+      "values": [
+        12.0,
+        11.0,
+        12.0,
+        13.0,
+        12.0,
+        12.0,
+        11.0,
+        12.0,
+        10.0,
+        11.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 15.7445,
+      "n": 10,
+      "ok": 10,
+      "stats": {
+        "ci95_high": 16.681,
+        "ci95_low": 15.1165,
+        "cv": 0.07267778963030874,
+        "max": 17.596,
+        "mean": 15.8554,
+        "median": 15.7445,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 13.943,
+        "n": 10,
+        "p5": 14.32055,
+        "p50": 15.7445,
+        "p95": 17.4736,
+        "resamples": 2000,
+        "spread": 0.2002635841087364,
+        "spread_pct": 20.02635841087364,
+        "stdev": 1.1523354257043972
+      },
+      "unit": "ms",
+      "values": [
+        17.324,
+        16.567,
+        17.596,
+        16.467,
+        16.038,
+        15.2,
+        13.943,
+        14.782,
+        15.451,
+        15.186
+      ]
+    },
+    "wakeups_idle_n10_per_s": {
+      "bad": 0,
+      "median": 161.817,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 161.817,
+        "mean": 161.817,
+        "median": 161.817,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 161.817,
+        "n": 1,
+        "p5": 161.817,
+        "p50": 161.817,
+        "p95": 161.817,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "voluntary ctxt switches/s",
+      "values": [
+        161.817
+      ]
+    },
+    "wakeups_idle_n1_per_s": {
+      "bad": 0,
+      "median": 34.138,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 34.138,
+        "mean": 34.138,
+        "median": 34.138,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 34.138,
+        "n": 1,
+        "p5": 34.138,
+        "p50": 34.138,
+        "p95": 34.138,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "voluntary ctxt switches/s",
+      "values": [
+        34.138
+      ]
+    },
+    "wakeups_idle_n5_per_s": {
+      "bad": 0,
+      "median": 90.855,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 90.855,
+        "mean": 90.855,
+        "median": 90.855,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 90.855,
+        "n": 1,
+        "p5": 90.855,
+        "p50": 90.855,
+        "p95": 90.855,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "voluntary ctxt switches/s",
+      "values": [
+        90.855
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.324
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.567
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.596
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 16.467
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.038
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 15.2
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 13.943
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 14.782
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.451
+    },
+    {
+      "code": null,
+      "label": "memory-n10",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.186
+    }
+  ],
+  "utc": "2026-11-12T21:50:15+00:00"
+}
