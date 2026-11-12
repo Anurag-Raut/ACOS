@@ -98,6 +98,37 @@ class Session:
                 skipped.append(raw)
 
 
+CLK_TCK = os.sysconf("SC_CLK_TCK")
+T0 = None
+
+
+def read_cpu(pid):
+    """Cumulative CPU ticks of one pid: utime+stime+cutime+cstime.
+
+    Reaped children roll into cutime/cstime of their reaper, which is inside
+    the sampled subtree, so the sum is the tree's cumulative host CPU.
+    """
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            line = f.read().decode("utf-8", "replace")
+    except OSError:
+        return 0
+    rest = line[line.rfind(")") + 2:].split()
+    try:
+        return sum(int(rest[i]) for i in (11, 12, 13, 14))
+    except (IndexError, ValueError):
+        return 0
+
+
+def cpu_snapshot(root):
+    pids = subtree(root)
+    ticks = sum(read_cpu(p) for p in pids)
+    driver = read_cpu(root)
+    return {"seconds": round(ticks / CLK_TCK, 3),
+            "driver_seconds": round(driver / CLK_TCK, 3),
+            "processes": len(pids)}
+
+
 def launch_env(mode, session_dir=None, plan=None, n=None, zygote_build=None, out_dir=None, tag=None):
     env = dict(os.environ)
     env.update(
@@ -113,6 +144,10 @@ def launch_env(mode, session_dir=None, plan=None, n=None, zygote_build=None, out
               "ACOS_ZYGOTE_PLAN_DIR", "ACOS_ZYGOTE_N"):
         env.pop(k, None)
     if mode == "zygote":
+        if os.environ.get("ACOS_ZYGOTE_NO_STUB"):
+            env["ACOS_ZYGOTE_NO_STUB"] = "1"
+        else:
+            env.pop("ACOS_ZYGOTE_NO_STUB", None)
         env["ACOS_ZYGOTE_SESSION"] = session_dir
         if plan is not None:
             env["ACOS_ZYGOTE_PLAN_DIR"] = plan
@@ -301,7 +336,9 @@ def _run_session(sess, tag, report, ready_timeout):
             ready = json.loads(raw)
             break
     rec = {"tag": tag, "ready": ready,
-           "ready_ms": round((time.perf_counter() - started) * 1000.0, 1), "steps": {}}
+           "ready_ms": round((time.perf_counter() - started) * 1000.0, 1),
+           "t_ready_ms": round((time.perf_counter() - (T0 or started)) * 1000.0, 1),
+           "steps": {}}
     report["sessions"][tag] = rec
     if not ready or not ready.get("ok"):
         fail(f"launch did not reach a live frame: {ready}")
@@ -353,6 +390,11 @@ def main():
     ap.add_argument("--json", required=True)
     ap.add_argument("--zygote", default=os.path.join(CACHE, "z4-build"))
     ap.add_argument("--timeout", type=float, default=240.0)
+    ap.add_argument("--label", default="",
+                    help="arm label recorded in the report (a/b/c)")
+    ap.add_argument("--settle", type=float, default=0.5,
+                    help="seconds to hold all N sessions after the last tap before the "
+                         "memory sample (0.5 = Z4's method; 60 = D-M2's steady state)")
     args = ap.parse_args()
 
     root = os.path.abspath(args.out)
@@ -363,7 +405,11 @@ def main():
             os.makedirs(os.path.join(plan, str(k), "run"), exist_ok=True)
             os.makedirs(os.path.join(plan, str(k), "sock"), exist_ok=True)
 
-    report = {"mode": args.mode, "n": args.n, "sessions": {}, "failures": [],
+    report = {"mode": args.mode, "arm": args.label, "n": args.n, "sessions": {},
+              "failures": [],
+              "knobs": {k: os.environ.get(k) for k in (
+                  "ACOS_SHARED_BOOT_IMAGE", "ACOS_ZYGOTE_APP", "ACOS_ZYGOTE_NO_STUB")
+                  if os.environ.get(k)},
               "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     procs = {}
     sessions = {}
@@ -378,7 +424,10 @@ def main():
         )
         sessions[tag] = Session(procs[tag], args.timeout)
 
+    global T0
     t_start = time.perf_counter()
+    T0 = t_start
+    report["cpu_at_start"] = cpu_snapshot(os.getpid())
     if args.mode == "normal":
         for k in range(args.n):
             start(k)
@@ -403,6 +452,22 @@ def main():
         print(f"[{k}] initial done", flush=True)
     report["ready_ms_max"] = max((s.get("ready_ms", 0) for s in report["sessions"].values()),
                                  default=0)
+    # Host CPU-seconds to bring N sessions up (driver start -> every session
+    # ready), both including and excluding the driver's own CPU.
+    snap = cpu_snapshot(os.getpid())
+    report["cpu_all_ready"] = snap
+    start = report["cpu_at_start"]
+    report["cpu_bringup_seconds"] = round(snap["seconds"] - start["seconds"], 3)
+    report["cpu_bringup_seconds_no_driver"] = round(
+        (snap["seconds"] - snap["driver_seconds"])
+        - (start["seconds"] - start["driver_seconds"]), 3)
+    report["all_ready_ms"] = round((time.perf_counter() - t_start) * 1000.0, 1)
+    t_ready = [report["sessions"][k].get("t_ready_ms") for k in range(args.n)]
+    report["sessions_ready_ms_from_spawn"] = t_ready
+    if t_ready and t_ready[0] is not None and t_ready[-1] is not None:
+        report["first_session_ready_ms"] = t_ready[0]
+        report["per_extra_session_ready_ms"] = (
+            round((t_ready[-1] - t_ready[0]) / (args.n - 1), 1) if args.n > 1 else None)
     if report["failures"]:
         finish(procs, sessions, report, args)
         return
@@ -465,14 +530,37 @@ def main():
     report["fork_to_sandbox_ms"] = {str(k): v for k, v in (fork_ms.get("sandbox", {}) or {}).items()}
 
     # Held-after-tap memory snapshot of this driver's whole process tree.
-    time.sleep(0.5)
-    report["memory"] = sample_memory(os.getpid(), f"{args.mode}-n{args.n}")
+    time.sleep(args.settle)
+    report["settle_s"] = args.settle
+    report["memory"] = sample_memory(os.getpid(), f"{args.mode}-n{args.n}")    # Z5 steady-state liveness: after a long settle, prove every session is still
+    # interactive and still isolated *after* the memory sample (so the sample stays
+    # an idle reading). A second tap must read 2 in that session only.
+    if args.settle >= 5:
+        for k in range(args.n):
+            tap(sessions[k], report["sessions"][k])
+            got = read_count(sessions[k], report["sessions"][k], f"tree_after_settle_tap_{k}")
+            report["sessions"][k]["count_after_settle_tap"] = got
+            if got != "2":
+                report["failures"].append(
+                    f"session {k}: count after settle+tap {got!r}, expected '2'")
+            for j in range(k + 1, args.n):
+                other = read_count(sessions[j], report["sessions"][j],
+                                   f"tree_settle_isolated_after_tap_{k}")
+                if other != "1":
+                    report["failures"].append(
+                        f"session {j}: count {other!r} changed after a post-settle tap of {k}")
+        print(f"[{args.label}-n{args.n}] post-settle liveness+isolation done", flush=True)
+
     report["total_ms"] = round((time.perf_counter() - t_start) * 1000.0, 1)
     finish(procs, sessions, report, args)
 
 
 def finish(procs, sessions, report, args):
+    # Z5: arm (c)'s `close` can hang the launcher (killing the shared zygote leaves a thread in a
+    # futex wait; see Z5-gate.md §5), so teardown waits are bounded hard. All measurements are taken
+    # before this point, so the shorter bound cannot change a number.
     for k, sess in sessions.items():
+        sess.timeout = 20.0
         try:
             reply, _, _ = sess.call({"cmd": "close"})
             report["sessions"].setdefault(k, {})["close"] = {"ok": bool(reply.get("ok"))}
@@ -485,7 +573,7 @@ def finish(procs, sessions, report, args):
         except Exception:
             pass
         try:
-            exits[k] = p.wait(timeout=60)
+            exits[k] = p.wait(timeout=20)
         except subprocess.TimeoutExpired:
             p.kill()
             exits[k] = p.wait()
