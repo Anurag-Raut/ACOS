@@ -214,6 +214,11 @@ pub struct BindApplicationData {
 /// The synthetic activity token used by the in-process launch flow.
 pub const FIXTURE_ACTIVITY_TOKEN: u64 = 0xabc;
 
+/// Bit 32 of a binder id: the peer's `JAVA_TAG` (`acos-binder-peer`), i.e. a
+/// binder object owned by the guest JVM. Activity tokens minted by the guest's
+/// `ActivityThread` arrive with this bit set; host-minted binder ids do not.
+const GUEST_JAVA_BINDER_TAG: u64 = 1 << 32;
+
 /// One activity record.
 #[derive(Debug, Clone)]
 pub struct ActivityRecord {
@@ -687,37 +692,94 @@ impl AtmsState {
         Ok(())
     }
 
+    /// Adopt a guest-minted activity token (W38).
+    ///
+    /// The guest's `ActivityThread` keys its `ActivityClientRecord` on the
+    /// `IBinder` the launch `ClientTransaction` carried; that binder is created
+    /// in the guest (`new Binder()`), so the host has never seen it. The first
+    /// `IActivityClientController` callback for an unknown, non-zero token
+    /// adopts it: the pending launch the host recorded for `startActivity` (if
+    /// any) is bound to the real token, which replaces the host's placeholder
+    /// token in `AmsState`'s task stack. The synthetic fixture record is dropped
+    /// so the real activity is the only one this process owns.
+    ///
+    /// Returns whether the token is now known.
+    fn adopt_activity(&mut self, token: u64) -> bool {
+        if token == 0 {
+            return false;
+        }
+        if !self.process.as_ref().is_some_and(|p| p.attached) {
+            return false;
+        }
+        if self.activities.iter().any(|a| a.token == token) {
+            return true;
+        }
+        // Only a token the peer tagged as a guest-owned Java binder
+        // (`acos-binder-peer`'s `JAVA_TAG`, bit 32) can be an activity token the
+        // guest minted. The other adoption route is a launch this host recorded
+        // and the guest is now materialising. Anything else stays an error: an
+        // arbitrary number must never become an activity.
+        let guest_binder = token & GUEST_JAVA_BINDER_TAG != 0;
+        let (name, placeholder) = match self.ams.adopt_launch_token(token) {
+            Some((old, class)) => (class, Some(old)),
+            None if guest_binder => ("activity".to_string(), None),
+            None => return false,
+        };
+        if let Some(old) = placeholder {
+            self.activities.retain(|a| a.token != old);
+        }
+        self.activities.retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
+        self.activities.push(ActivityRecord::new(token, name.clone()));
+        self.log_event(
+            "ActivityManagerAdopt",
+            acos_protocol::LogLevel::Debug,
+            format!("token={token:#x} activity={name}"),
+        );
+        // Also on the launcher's stderr: the adoption is the answer to W31's
+        // `no activity for token 0x0`, so a live run must show it directly.
+        eprintln!("acos-services: ActivityManagerAdopt token={token:#x} activity={name}");
+        true
+    }
+
+    /// Index of the record for `token`, adopting a guest-minted token first.
+    fn ensure_known(&mut self, token: u64) -> Result<usize> {
+        if let Some(index) = self.activities.iter().position(|a| a.token == token) {
+            return Ok(index);
+        }
+        if self.adopt_activity(token) {
+            if let Some(index) = self.activities.iter().position(|a| a.token == token) {
+                return Ok(index);
+            }
+        }
+        Err(ServiceError::IllegalState {
+            component: "atms",
+            detail: format!("no activity for token {token:#x}"),
+        })
+    }
+
     /// Report `activityResumed`.
     pub fn activity_resumed(&mut self, token: u64, resumed: bool) -> Result<()> {
-        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
-            return Err(ServiceError::IllegalState {
-                component: "atms",
-                detail: format!("no activity for token {token:#x}"),
-            });
-        };
+        let index = self.ensure_known(token)?;
         self.activities[index].resumed = resumed;
         Ok(())
     }
 
     /// Report `activityIdle` (launch complete).
     pub fn activity_idle(&mut self, token: u64) -> Result<()> {
-        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
-            return Err(ServiceError::IllegalState {
-                component: "atms",
-                detail: format!("no activity for token {token:#x}"),
-            });
-        };
+        let index = self.ensure_known(token)?;
         self.activities[index].idle = true;
         Ok(())
     }
 
     /// Report `activityPaused`.
     pub fn activity_paused(&mut self, token: u64) -> Result<()> {
+        self.ensure_known(token)?;
         self.transition(token, Transition::Pause).map(|_| ())
     }
 
     /// Report `activityStopped` (with saved state).
     pub fn activity_stopped(&mut self, token: u64, saved_clicks: Option<u32>) -> Result<()> {
+        self.ensure_known(token)?;
         if let Some(clicks) = saved_clicks {
             self.save_instance_state(token, clicks);
         }
@@ -726,6 +788,7 @@ impl AtmsState {
 
     /// Report `activityDestroyed`.
     pub fn activity_destroyed(&mut self, token: u64) -> Result<()> {
+        self.ensure_known(token)?;
         self.transition(token, Transition::Destroy).map(|_| ())
     }
 
@@ -739,13 +802,12 @@ impl AtmsState {
 
     /// `finishActivity` (the app asked to finish).
     pub fn finish_activity(&mut self, token: u64) -> Result<()> {
-        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
-            return Err(ServiceError::IllegalState {
-                component: "atms",
-                detail: format!("no activity for token {token:#x}"),
-            });
-        };
+        let index = self.ensure_known(token)?;
         self.activities[index].finished = true;
+        // Keep `AmsState`'s task stack in step: the finished Activity leaves the
+        // task, so the record below it is the new top (what the guest's
+        // destroy+resume transactions return to).
+        self.ams.finish_activity(token);
         Ok(())
     }
 
@@ -910,6 +972,17 @@ impl AtmsService {
         if let Ok(mut s) = self.state.lock() {
             s.attach_application(app_thread, seq, package);
         }
+    }
+
+    /// Seed the component table `startActivity` resolves against (W38).
+    ///
+    /// The host's ATMS state starts empty, so a component launch decoded from
+    /// `IActivityTaskManager.startActivity` resolved to `START_NOT_FOUND` even
+    /// when the APK declared the target. The launcher calls this once, before
+    /// the guest boots, with the same APK it installs in the PMS.
+    pub fn seed_manifest_from_apk(&mut self, apk: &std::path::Path) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        state.ams.manifests.add_apk(apk, crate::pms::FIXTURE_UID)
     }
 
     /// The dynamic receiver registrations recorded so far, oldest first, with

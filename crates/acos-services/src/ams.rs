@@ -921,6 +921,39 @@ impl AmsState {
         Ok(START_SUCCESS)
     }
 
+    /// Bind a real (guest-minted) activity token to the pending launch the host
+    /// recorded for it (W38).
+    ///
+    /// `startActivity` records the launch under the host's placeholder token;
+    /// the app thread keys its record on the `IBinder` the launch transaction
+    /// carried, which is created in the guest. The first `activityResumed` for
+    /// an unknown token adopts it here: the placeholder is rewritten in the task
+    /// stack and the class is returned so the ATMS record carries the truth. The
+    /// launch leaves `pending_launches` because the guest materialised it (it is
+    /// no longer work the runtime owes).
+    pub fn adopt_launch_token(&mut self, real: u64) -> Option<(u64, String)> {
+        if self.activities.iter().any(|a| a.token == real) {
+            return None;
+        }
+        if self.pending_launches.is_empty() {
+            return None;
+        }
+        let pending = self.pending_launches.remove(0);
+        for activity in &mut self.activities {
+            if activity.token == pending.token {
+                activity.token = real;
+            }
+        }
+        for task in &mut self.tasks {
+            for token in &mut task.activities {
+                if *token == pending.token {
+                    *token = real;
+                }
+            }
+        }
+        Some((pending.token, pending.class))
+    }
+
     /// `finishActivity`: pop the activity from its task. Returns whether the
     /// token existed and was unfinished.
     pub fn finish_activity(&mut self, token: u64) -> bool {

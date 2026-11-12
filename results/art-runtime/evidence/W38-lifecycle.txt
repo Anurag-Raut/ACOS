@@ -1,0 +1,17 @@
+Main.onCreate
+Main.onStart
+Main.onResume
+Main.send message=Hello
+Main.onPause
+Second.onCreate
+Second.received=Hello
+Second.onStart
+Second.onResume
+Main.onStop
+Main.onSaveInstanceState message=Hello
+Second.finish
+Second.onPause
+Second.onStop
+Second.onDestroy
+Main.onStart
+Main.onResume

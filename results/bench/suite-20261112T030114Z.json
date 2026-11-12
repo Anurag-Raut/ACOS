@@ -1,0 +1,244 @@
+{
+  "engine": "art",
+  "host_gate": {
+    "art_lock_checked": false,
+    "art_lock_held": null,
+    "last_art_run": "task=W33 started_utc=2026-11-12T03:01:09Z finished_utc=2026-11-12T03:01:14Z elapsed_s=5 queue_wait_s=0 rc=0 cmd=/home/Qui/Projects/acos/tools/guarded.sh --mem 8G --time 900 -- /home/Qui/Projects/acos/.cache/w39-target/release/acos verify --scenario /home/Qui/Projects/acos/scenarios/v2-art-counter.yaml --apk /home/Qui/Projects/acos/fixtures/build/apps/counter.apk --engine art --artifacts /home/Qui/Projects/acos/.cache/bench-d2/20261112T030016Z/artifacts/lat-003/verify --json",
+    "limits": {
+      "loadavg1_max": 4.0,
+      "min_avail_gib": 30.0
+    },
+    "loadavg1": 2.23,
+    "loadavg15": 1.72,
+    "loadavg5": 1.61,
+    "mem_available_gib": 47.21,
+    "mem_available_mib": 48340.9,
+    "mem_total_gib": 60.46,
+    "ok": true,
+    "reasons": [],
+    "utc": "2026-11-12T03:01:14+00:00"
+  },
+  "inside_exclusive_lock": true,
+  "m11": {
+    "acos_bar_with_noise": 25.62,
+    "cgroup_source": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3843760-i7929635.scope",
+    "false_pass_zeroes_m11": false,
+    "formula": "M11 = verified_good / sum(job_gib_min); job_gib_min = integral(memory.current_bytes/2^30 dt_s/60) per job cgroup; if false_pass > 0 then M11 := 0",
+    "gate_eligible": false,
+    "gate_eligible_reason": "W30 correctness run: N=1, rounds=1 (the gateable N=10 x 3-round number comes from the bench-session suite, advisor items 1/3)",
+    "job_gib_min": 0.014521,
+    "legacy_derivation": "((206 MiB / 10) + 112.1 MiB) / 1024 * (19 s / 60) = 0.0410 GiB*min/task => 24.4 tasks/GiB*min",
+    "legacy_derived_bar_tasks_per_gib_min": 24.4,
+    "m11_above_legacy_bar": true,
+    "m11_tasks_per_gib_min": 68.8658,
+    "n_concurrent": 1,
+    "note": "job_gib_min is filled from per-job cgroup memory.current samples when the runner is inside a finite-memory guarded scope; otherwise it stays null rather than being estimated.",
+    "rounds": 1,
+    "verified_tasks": 1
+  },
+  "n_concurrent": 1,
+  "provenance": {
+    "binaries": [
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-12T02:53:39+00:00",
+        "not_eligible_reason": "debug build: NOT_VERDICT_ELIGIBLE (debug inflates wall time and anon memory)",
+        "path": "/home/Qui/Projects/acos/target/debug/acos",
+        "profile": "debug",
+        "profile_source": "path heuristic (debug)",
+        "sha256": "822497febffc25787f507c2ad5f4dd939c21177c7e2f9549553490cb7d75ea4a",
+        "sha256_16": "822497febffc2578",
+        "size_bytes": 63540800,
+        "verdict_eligible": false
+      },
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-12T02:53:39+00:00",
+        "not_eligible_reason": "debug build: NOT_VERDICT_ELIGIBLE (debug inflates wall time and anon memory)",
+        "path": "/home/Qui/Projects/acos/target/debug/acos-art",
+        "profile": "debug",
+        "profile_source": "path heuristic (debug)",
+        "sha256": "3eee5c3112f214db935930f27fc39491d9d1d186dcbd513a9d7b58b3a52b746c",
+        "sha256_16": "3eee5c3112f214db",
+        "size_bytes": 14938512,
+        "verdict_eligible": false
+      }
+    ],
+    "engine": "art",
+    "git_dirty": true,
+    "git_dirty_files": 125,
+    "git_head": "c183d34fd666f57743ed821a7a5cfb97c461cf33",
+    "git_head_subject": "W34: engine settle rework (guest settle 3 s, bounded settle_after_input, state change needs pixel AND structure change): suite wall 1.55x faster, false_pass 0; frozen VM: Activity.getDlWarning -> null (regression from truthful FLAG_DEBUGGABLE)",
+    "git_status_porcelain_sha256": "54580b37f3f39af82ac879f94114aab4dc7316703e656c493eb8a756e0507c1d",
+    "host": {
+      "loadavg1": 2.13,
+      "loadavg15": 1.72,
+      "loadavg5": 1.6,
+      "mem_available_gib": 47.75,
+      "mem_available_mib": 48899.0,
+      "mem_total_gib": 60.46,
+      "mem_total_mib": 61908.7,
+      "nproc": 32,
+      "runnable": "1/2684",
+      "used_mib": 13009.7,
+      "used_pct": 21.01
+    },
+    "host_gate": {
+      "art_lock_checked": false,
+      "art_lock_held": null,
+      "last_art_run": "task=W33 started_utc=2026-11-12T03:01:09Z finished_utc=2026-11-12T03:01:14Z elapsed_s=5 queue_wait_s=0 rc=0 cmd=/home/Qui/Projects/acos/tools/guarded.sh --mem 8G --time 900 -- /home/Qui/Projects/acos/.cache/w39-target/release/acos verify --scenario /home/Qui/Projects/acos/scenarios/v2-art-counter.yaml --apk /home/Qui/Projects/acos/fixtures/build/apps/counter.apk --engine art --artifacts /home/Qui/Projects/acos/.cache/bench-d2/20261112T030016Z/artifacts/lat-003/verify --json",
+      "limits": {
+        "loadavg1_max": 4.0,
+        "min_avail_gib": 30.0
+      },
+      "loadavg1": 2.23,
+      "loadavg15": 1.72,
+      "loadavg5": 1.61,
+      "mem_available_gib": 47.21,
+      "mem_available_mib": 48340.9,
+      "mem_total_gib": 60.46,
+      "ok": true,
+      "reasons": [],
+      "utc": "2026-11-12T03:01:14+00:00"
+    },
+    "method": "BENCHMARKS.md section 11 (benchlib.py)",
+    "not_verdict_eligible_reason": "declared build profile is debug, not release",
+    "profile": "debug",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "schema": "acos-bench-provenance/1",
+    "stamp": "20261112T030114Z",
+    "suite": "acos-agent-tasks-12",
+    "utc": "2026-11-12T03:01:22+00:00",
+    "verdict_eligible": false
+  },
+  "rounds": 1,
+  "schema": "acos-suite/1",
+  "stamp": "20261112T030114Z",
+  "suite": "acos-agent-tasks-12",
+  "summary": {
+    "contaminated_host_gate": false,
+    "coverage": "1/1",
+    "false_fail_count": 0,
+    "false_fail_detail": [],
+    "false_pass_count": 0,
+    "good_fail": 0,
+    "good_pass": 1,
+    "task_ok_count": 1,
+    "tasks_expressible": 1,
+    "tasks_total": 1,
+    "tasks_unsupported": 0,
+    "unsupported_ids": [],
+    "verified_tasks": 1,
+    "wrong_fail_expected": 1,
+    "wrong_pass": 0
+  },
+  "tasks": [
+    {
+      "apk": "fixtures/build/apps/fragments-nav.apk",
+      "apk_sha256_actual": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790",
+      "apk_sha256_declared": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790",
+      "app": "fragments-nav",
+      "error": null,
+      "false_pass": false,
+      "good": {
+        "error": null,
+        "expected": "pass",
+        "expected_error": null,
+        "false_pass": false,
+        "mem": {
+          "cgroup_gib_min": 0.005683257,
+          "cgroup_peak_mib": 173.938,
+          "metric": "cgroup memory.current (sampled 100 ms)"
+        },
+        "process_wall_ms": 3807,
+        "process_wall_ms_p50": 3807.0,
+        "runs": [
+          {
+            "artifacts": "/home/Qui/Projects/acos/.cache/w30-suite/20261112T030114Z/T06-good/r1",
+            "cgroup_gib_min": 0.005683257,
+            "cgroup_peak_mib": 173.938,
+            "engine_timing": null,
+            "error": null,
+            "process_wall_ms": 3807,
+            "rc": 0,
+            "round": 1,
+            "stderr_tail": null,
+            "verdict": "pass",
+            "wall_ms": 3186
+          }
+        ],
+        "scenario": "T06-nav-good.yaml",
+        "scenario_sha256": "9a2724a0fc1999545f27f3974f16d2963123773df6026d87a0022515b133db19",
+        "task_ok": true,
+        "variant": "good",
+        "verdict": "pass",
+        "wall_ms": 3186,
+        "wall_ms_p50": 3186.0
+      },
+      "id": "T06",
+      "mapping": "fragments-nav.apk: Show Beta replaces the fragment screen, the framework Back path pops the back stack and updates the header (popped=true). Wrong twin: assert the pre-back screen state after Back.",
+      "reason": null,
+      "status": "ACTIVE",
+      "task_ok": true,
+      "title": "tap -> new screen -> back",
+      "unsupported": [
+        "two-activity.apk (tap Go -> DetailActivity -> back) is not expressible: the tap surfaces UNSUPPORTED_ANDROID_API because IActivityTaskManager.startActivity has no multi-Activity path in the launcher. Verified by a probe run, not assumed."
+      ],
+      "verbs": [
+        "launch",
+        "assert_text",
+        "tap",
+        "back"
+      ],
+      "verdict": "pass",
+      "wall_ms": 6377,
+      "wrong": {
+        "error": {
+          "code": "ASSERTION_FAILED",
+          "message": "expected text exactly \"current=Beta\", got text \"popped=true\" / hint \"\"",
+          "step": "assert_text",
+          "step_index": 4
+        },
+        "expected": "fail",
+        "expected_error": "ASSERTION_FAILED",
+        "false_pass": false,
+        "mem": {
+          "cgroup_gib_min": 0.008837735,
+          "cgroup_peak_mib": 219.23,
+          "metric": "cgroup memory.current (sampled 100 ms)"
+        },
+        "process_wall_ms": 3807,
+        "process_wall_ms_p50": 3807.0,
+        "runs": [
+          {
+            "artifacts": "/home/Qui/Projects/acos/.cache/w30-suite/20261112T030114Z/T06-wrong/r1",
+            "cgroup_gib_min": 0.008837735,
+            "cgroup_peak_mib": 219.23,
+            "engine_timing": null,
+            "error": {
+              "code": "ASSERTION_FAILED",
+              "message": "expected text exactly \"current=Beta\", got text \"popped=true\" / hint \"\"",
+              "step": "assert_text",
+              "step_index": 4
+            },
+            "process_wall_ms": 3807,
+            "rc": 1,
+            "round": 1,
+            "stderr_tail": null,
+            "verdict": "fail",
+            "wall_ms": 3191
+          }
+        ],
+        "scenario": "T06-nav-wrong.yaml",
+        "scenario_sha256": "940fe1c6ab85d4b4ecf2f9105e81b4014c980fc8ecd9f908c52898a192f9b19d",
+        "task_ok": true,
+        "variant": "wrong",
+        "verdict": "fail",
+        "wall_ms": 3191,
+        "wall_ms_p50": 3191.0
+      }
+    }
+  ],
+  "utc_finish": "2026-11-12T03:01:22+00:00",
+  "utc_start": "2026-11-12T03:01:14+00:00"
+}

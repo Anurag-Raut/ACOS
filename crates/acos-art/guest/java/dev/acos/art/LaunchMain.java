@@ -282,6 +282,12 @@ public final class LaunchMain {
         fAppThread.setAccessible(true);
         IBinder appThread = (IBinder) fAppThread.get(thread);
         if (appThread == null) throw new IllegalStateException("ActivityThread.mAppThread == null");
+        // W38: keep the real `IApplicationThread` interface object and the
+        // ActivityThread so the AMS stand-in can deliver stock
+        // `ClientTransaction`s in-process (with real `Binder` activity tokens,
+        // which `Parcel.marshall()` refuses to carry over the peer byte pipe).
+        sThread = thread;
+        sClient = iatClient(appThread);
 
         byte[] bind = buildBindApplicationRequest();
         pushToPeer(1, bind);
@@ -1023,6 +1029,11 @@ public final class LaunchMain {
     static volatile boolean sActivityResumed;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
+    /** W38: the app's `IApplicationThread` interface object and its ActivityThread. */
+    static Object sClient;
+    static Object sThread;
+    /** W38: token of the activity on top of the guest stack (a real Binder). */
+    static IBinder sCurrentToken;
 
     /**
      * W27 item 3: replace the cached `IActivityTaskManager` service with a
@@ -1058,15 +1069,53 @@ public final class LaunchMain {
                             String n = m.getName();
                             if (n.startsWith("startActivity") || n.startsWith("startActivities")) {
                                 String call = "android.app.IActivityTaskManager." + n;
+                                android.content.Intent intent = n.startsWith("startActivities")
+                                        ? null : findIntent(a);
+                                if (intent == null || intent.getComponent() == null) {
+                                    // No component to launch truthfully: keep the
+                                    // W27 structured marker and fabricate nothing.
+                                    System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
+                                            + "\"call\":\"" + esc(call) + "\","
+                                            + "\"detail\":\"the request has no explicit component and ACOS "
+                                            + "has no package-manager Intent resolution; no Activity was fabricated\"}");
+                                    System.out.flush();
+                                    return m.getReturnType() == int.class ? 0 : null;
+                                }
+                                // Record it host-side first (W35 decodes the
+                                // Intent and `AmsState` records the launch),
+                                // then deliver what AMS would deliver.
+                                Object result;
+                                try {
+                                    result = m.invoke(delegate, a);
+                                } catch (java.lang.reflect.InvocationTargetException e) {
+                                    throw e.getCause() == null ? e : e.getCause();
+                                }
+                                int code = (result instanceof Integer) ? (Integer) result : 0;
+                                if (code != 0) {
+                                    // The host refused the launch (START_*): do
+                                    // not launch and do not report success.
+                                    System.out.println("ACOSLAUNCH MARK start-activity-refused call="
+                                            + esc(call) + " code=" + code);
+                                    System.out.flush();
+                                    return result;
+                                }
+                                try {
+                                    if (launchLocalActivity(intent)) return result;
+                                } catch (Throwable t) {
+                                    System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
+                                            + "\"call\":\"" + esc(call) + "\","
+                                            + "\"detail\":\"stock ClientTransaction delivery failed: "
+                                            + esc(String.valueOf(unwrap(t))) + "\"}");
+                                    System.out.flush();
+                                    // START_CANCELED, never a fabricated success.
+                                    return m.getReturnType() == int.class ? 2 : null;
+                                }
                                 System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
                                         + "\"call\":\"" + esc(call) + "\","
-                                        + "\"detail\":\"second-Activity Intent launch is not implemented; "
-                                        + "the guest stayed alive and no Activity was fabricated\"}");
+                                        + "\"detail\":\"the Intent names a component this process cannot "
+                                        + "launch; no Activity was fabricated\"}");
                                 System.out.flush();
-                                Class<?> rt = m.getReturnType();
-                                if (rt == int.class) return 0; // ActivityManager.START_SUCCESS
-                                if (rt == boolean.class) return Boolean.TRUE;
-                                return null;
+                                return m.getReturnType() == int.class ? 2 : null;
                             }
                             try {
                                 return m.invoke(delegate, a);
@@ -1092,6 +1141,15 @@ public final class LaunchMain {
             }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    /** The first `android.content.Intent` argument of a startActivity call. */
+    static android.content.Intent findIntent(Object[] args) {
+        if (args == null) return null;
+        for (Object a : args) {
+            if (a instanceof android.content.Intent) return (android.content.Intent) a;
+        }
+        return null;
     }
 
     /** `Looper.setMessageLogging`: the framework's own message trace. */
@@ -1187,12 +1245,21 @@ public final class LaunchMain {
         }
         // ---- the AMS step: one ClientTransaction to the app thread ---------
         awaitFrameProbe();
+        // W38: the activity token is a real `Binder` created here, exactly as
+        // `ActivityRecord.token` is a real binder in system_server. It has to be
+        // delivered in-process (`IApplicationThread.scheduleTransaction` on the
+        // local interface object): a parcel carrying a binder object cannot be
+        // marshalled across the peer's byte pipe, which is why the token used to
+        // be null (`no activity for token 0x0`). The transaction items are still
+        // the framework's own (`LaunchActivityItem` + `ResumeActivityItem`).
         IBinder token = new android.os.Binder();
         try {
-            byte[] txn = buildScheduleTransactionRequest(appThread, token, app);
-            pushToPeer(3, txn);
-            System.out.println("ACOSLAUNCH MARK schedule-transaction-pushed bytes=" + txn.length
-                    + " activity=" + sActivity + " token=local-binder");
+            Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
+            scheduleLocal(tx);
+            sCurrentToken = token;
+            System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
+                    + sActivity + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
+                    + " transport=local-iapplicationthread");
         } catch (Throwable x) {
             System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
             x.printStackTrace(System.out);
@@ -1921,13 +1988,26 @@ public final class LaunchMain {
      * defaults `ActivityThread` itself would use for an unset field.
      */
     static Object buildActivityInfo(ApplicationInfo appInfo) throws Throwable {
+        return buildActivityInfoNamed(appInfo, sActivity);
+    }
+
+    /**
+     * W38: the `ActivityInfo` for one class of the launched package, so the
+     * second-Activity launch transaction carries the target's own name instead
+     * of the launcher entry's. Fields the manifest would supply for the target
+     * (theme, label, launchMode) keep the platform defaults the launcher already
+     * uses when the manifest does not set them.
+     */
+    static Object buildActivityInfoNamed(ApplicationInfo appInfo, String activity) throws Throwable {
         Class<?> cls = Class.forName("android.content.pm.ActivityInfo");
         Object ai = cls.getDeclaredConstructor().newInstance();
         setFieldForce(cls, ai, "applicationInfo", appInfo);
-        setFieldForce(cls, ai, "name", sActivity);
+        setFieldForce(cls, ai, "name", activity);
         setFieldForce(cls, ai, "packageName", sPkg);
         setFieldForce(cls, ai, "taskAffinity", sPkg);
-        setFieldForce(cls, ai, "targetActivity", sTargetActivity.isEmpty() ? null : sTargetActivity);
+        boolean first = activity.equals(sActivity);
+        setFieldForce(cls, ai, "targetActivity",
+                first && !sTargetActivity.isEmpty() ? sTargetActivity : null);
         setFieldForce(cls, ai, "permission", null);
         setFieldForce(cls, ai, "launchMode", 0);
         setFieldForce(cls, ai, "theme", sAppTheme); // manifest theme; 0 = platform default
@@ -1966,9 +2046,42 @@ public final class LaunchMain {
      */
     static byte[] buildScheduleTransactionRequest(IBinder appThread, IBinder token, Object app)
             throws Throwable {
-        ApplicationInfo appInfo = buildAppInfo();
-        Object activityInfo = buildActivityInfo(appInfo);
+        Object client = iatClient(appThread);
+        Object tx = buildLaunchTransaction(client, token, app, sActivity);
+        Parcel p = Parcel.obtain();
+        try {
+            p.writeInterfaceToken("android.app.IApplicationThread");
+            p.writeTypedObject((android.os.Parcelable) tx, 0);
+            System.out.println("ACOSLAUNCH MARK transaction-marshalled items=launch+resume activity="
+                    + sActivity + " bytes=" + p.dataSize());
+            return p.marshall();
+        } finally {
+            p.recycle();
+        }
+    }
 
+    /** The real `IApplicationThread` interface object for the local app thread. */
+    static Object iatClient(IBinder appThread) throws Throwable {
+        Class<?> stub = Class.forName("android.app.IApplicationThread$Stub");
+        return stub.getMethod("asInterface", IBinder.class).invoke(null, appThread);
+    }
+
+    /**
+     * Deliver one stock `ClientTransaction` to the app thread through the real
+     * `IApplicationThread.scheduleTransaction` on the local binder. No parcel is
+     * built: binders (the activity token) travel as objects, and the framework's
+     * own `TransactionExecutor` runs the items on the main thread.
+     */
+    static void scheduleLocal(Object tx) throws Throwable {
+        Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        java.lang.reflect.Method m = iatCls.getMethod("scheduleTransaction", ctxCls);
+        m.setAccessible(true);
+        m.invoke(sClient, tx);
+    }
+
+    /** The current and override `Configuration` a launch item carries. */
+    static Configuration[] currentAndOverrideConfig(Object app) throws Throwable {
         Configuration base = new Configuration();
         base.densityDpi = 420;
         base.screenWidthDp = 411;
@@ -1988,23 +2101,37 @@ public final class LaunchMain {
         // An empty delta is not a zeroed Configuration: `Configuration.updateFrom`
         // only applies set fields, so an empty one is a no-op overlay.
         override.setTo(new Configuration());
+        return new Configuration[]{curConfig, override};
+    }
+
+    /**
+     * The `ClientTransaction` a launch carries: the framework's
+     * `LaunchActivityItem` callback plus the `ResumeActivityItem` lifecycle
+     * request, keyed on `token` — the same shape `LaunchMain.watch` delivered
+     * for the first Activity and `startActivity` now delivers for the next one.
+     */
+    static Object buildLaunchTransaction(Object client, IBinder token, Object app, String activity)
+            throws Throwable {
+        ApplicationInfo appInfo = buildAppInfo();
+        Object activityInfo = buildActivityInfoNamed(appInfo, activity);
+        Configuration[] cfg = currentAndOverrideConfig(app);
 
         android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
         intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
-        intent.setComponent(new ComponentName(sPkg, sActivity));
+        intent.setComponent(new ComponentName(sPkg, activity));
         intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        return buildLaunchTransactionForIntent(client, token, app, intent, activityInfo, cfg);
+    }
 
+    static Object buildLaunchTransactionForIntent(Object client, IBinder token, Object app,
+            android.content.Intent intent, Object activityInfo, Configuration[] cfg) throws Throwable {
         Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
-        Class<?> itemCls = Class.forName("android.app.servertransaction.ClientTransactionItem");
         Class<?> iatCls = Class.forName("android.app.IApplicationThread");
-        Class<?> iatStub = Class.forName("android.app.IApplicationThread$Stub");
         Class<?> launchCls = Class.forName("android.app.servertransaction.LaunchActivityItem");
         Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
 
-        Object client = iatStub.getMethod("asInterface", IBinder.class).invoke(null, appThread);
-        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class).invoke(null, client, null);
-
-        Object launchItem = obtainItem(launchCls, intent, activityInfo, curConfig, override);
+        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class).invoke(null, client, token);
+        Object launchItem = obtainItem(launchCls, intent, activityInfo, cfg[0], cfg[1]);
         Object resumeItem = obtainResume(resumeCls);
         // This image's `ClientTransaction` has no public `addTransactionItem`:
         // the items live in the two private fields the executor reads
@@ -2014,21 +2141,202 @@ public final class LaunchMain {
         callbacks.add(launchItem);
         setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
         setPrivateField(ctxCls, tx, "mLifecycleStateRequest", resumeItem);
-        // Present on newer images (the bundled-item shape); a no-op here.
         setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
         System.out.println("ACOSLAUNCH MARK transaction-items launch=" + launchItem.getClass().getName()
                 + " resume=" + resumeItem.getClass().getName());
+        return tx;
+    }
 
-        Parcel p = Parcel.obtain();
-        try {
-            p.writeInterfaceToken("android.app.IApplicationThread");
-            p.writeTypedObject((android.os.Parcelable) tx, 0);
-            System.out.println("ACOSLAUNCH MARK transaction-marshalled items=launch+resume activity="
-                    + sActivity + " bytes=" + p.dataSize());
-            return p.marshall();
-        } finally {
-            p.recycle();
+    /** The `ClientTransaction` that carries only a lifecycle-state request. */
+    static Object lifecycleTransaction(IBinder token, Object lifecycleItem) throws Throwable {
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class).invoke(null, sClient, token);
+        setPrivateField(ctxCls, tx, "mActivityCallbacks", new java.util.ArrayList<Object>());
+        setPrivateField(ctxCls, tx, "mLifecycleStateRequest", lifecycleItem);
+        setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", new java.util.ArrayList<Object>());
+        return tx;
+    }
+
+    /**
+     * Call one lifecycle item's own `obtain(...)` for this image's parameter
+     * list: booleans in order from `booleans`, ints `0`, everything else null
+     * (the same runtime-shaped matching `obtainItem` uses). The shape is logged
+     * so a future image's change is a marker, not a silent wrong transition.
+     */
+    static Object obtainPrimitiveItem(Class<?> cls, boolean[] booleans) throws Throwable {
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            Class<?>[] types = m.getParameterTypes();
+            boolean primitivesOnly = true;
+            for (Class<?> t : types) {
+                if (t != boolean.class && t != int.class) primitivesOnly = false;
+            }
+            if (!primitivesOnly) continue;
+            m.setAccessible(true);
+            Object[] args = new Object[types.length];
+            int bi = 0;
+            StringBuilder shape = new StringBuilder();
+            for (int i = 0; i < types.length; i++) {
+                if (types[i] == boolean.class) {
+                    args[i] = booleans[Math.min(bi++, booleans.length - 1)];
+                } else {
+                    args[i] = 0;
+                }
+                shape.append(' ').append(i).append(':').append(types[i].getSimpleName());
+            }
+            System.out.println("ACOSLAUNCH MARK obtain-shape " + cls.getSimpleName() + shape);
+            try {
+                return m.invoke(null, args);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw e.getCause() != null ? e.getCause() : e;
+            }
         }
+        throw new NoSuchMethodException(cls.getName() + ".obtain(primitives)");
+    }
+
+    /**
+     * W38: start the Activity the app asked for through the stock path.
+     *
+     * <p>The request has already been recorded host-side by
+     * `IActivityTaskManager.startActivity`; this delivers what AMS delivers next:
+     * pause the current Activity (its own `ClientTransaction`, because a
+     * transaction carries one token), then a `LaunchActivityItem` +
+     * `ResumeActivityItem` for a **new real `Binder` token**. Nothing is
+     * fabricated when the component is unknown — the caller keeps the
+     * structured unsupported path.
+     */
+    static boolean launchLocalActivity(android.content.Intent intent) throws Throwable {
+        android.content.ComponentName cn = intent.getComponent();
+        if (cn == null) return false;
+        String activity = cn.getClassName();
+        String pkg = cn.getPackageName();
+        if (!sPkg.equals(pkg)) return false;
+
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+        IBinder previous = sCurrentToken;
+        if (previous != null) {
+            Object pauseItem = obtainPrimitiveItem(pauseCls, new boolean[]{false, false, false, false});
+            scheduleLocal(lifecycleTransaction(previous, pauseItem));
+            System.out.println("ACOSLAUNCH MARK activity-paused-for-launch token=binder:"
+                    + Integer.toHexString(System.identityHashCode(previous)) + " activity=" + activity);
+        }
+        IBinder token = new android.os.Binder();
+        ApplicationInfo appInfo = buildAppInfo();
+        Object activityInfo = buildActivityInfoNamed(appInfo, activity);
+        Configuration[] cfg = currentAndOverrideConfig(null);
+        Object tx = buildLaunchTransactionForIntent(sClient, token, null, intent, activityInfo, cfg);
+        scheduleLocal(tx);
+        sCurrentToken = token;
+        if (previous != null) {
+            startStopWatcher(token, previous);
+            startFinishWatcher(token, previous);
+        }
+        System.out.println("ACOSLAUNCH MARK start-activity-launched component=" + pkg + "/" + activity
+                + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
+                + " previous=binder:" + (previous == null ? "null"
+                        : Integer.toHexString(System.identityHashCode(previous))));
+        System.out.flush();
+        return true;
+    }
+
+    /** The live `Activity` object for a token, from `ActivityThread.mActivities`. */
+    static Object activityForToken(IBinder token) {
+        Object activities = get(sThread, "mActivities");
+        if (!(activities instanceof java.util.Map)) return null;
+        Object record = ((java.util.Map<?, ?>) activities).get(token);
+        return record == null ? null : get(record, "activity");
+    }
+
+    /**
+     * W38: stop the Activity the new one replaced, once the new one is up.
+     *
+     * <p>Stock AMS pauses the top before the launch and sends
+     * `StopActivityItem(showWindow=false)` for it when the new Activity is
+     * visible. The launch transaction only reaches resume, so this waits for the
+     * second Activity to be resumed, lets its first traversal run, and then
+     * delivers the stop transaction for the old token — a real `Main.onStop`,
+     * not a fabricated one. (Visibility is a frame/traversal here; stock uses
+     * `ActivityRecord.nowVisible`.)
+     */
+    static void startStopWatcher(final IBinder token, final IBinder previous) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long deadline = System.currentTimeMillis() + 10000;
+                    Object activity = null;
+                    while (System.currentTimeMillis() < deadline) {
+                        activity = activityForToken(token);
+                        if (activity != null && Boolean.TRUE.equals(get(activity, "mResumed"))) break;
+                        Thread.sleep(10);
+                    }
+                    if (activity == null) {
+                        System.out.println("ACOSLAUNCH MARK stop-watcher-no-activity");
+                        return;
+                    }
+                    // Let `handleResumeActivity` and the first traversal finish.
+                    Thread.sleep(200);
+                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+                    Object stopItem = obtainPrimitiveItem(stopCls, new boolean[]{false});
+                    scheduleLocal(lifecycleTransaction(previous, stopItem));
+                    System.out.println("ACOSLAUNCH MARK activity-stopped-after-launch token=binder:"
+                            + Integer.toHexString(System.identityHashCode(previous)));
+                    System.out.flush();
+                } catch (Throwable x) {
+                    System.out.println("ACOSLAUNCH MARK stop-watcher-error " + x);
+                    x.printStackTrace(System.out);
+                }
+            }
+        }, "acos-stop-watcher");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * W38: watch the Activity just launched and, when it has finished
+     * (`Activity.finish()` → `IActivityClientController.finishActivity` succeeded
+     * host-side), send the two transactions AMS sends next: `DestroyActivityItem`
+     * for it, then `ResumeActivityItem` for the Activity below it.
+     */
+    static void startFinishWatcher(final IBinder token, final IBinder previous) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long deadline = System.currentTimeMillis() + 60000;
+                    Object activity = null;
+                    while (System.currentTimeMillis() < deadline) {
+                        activity = activityForToken(token);
+                        if (activity != null && Boolean.TRUE.equals(get(activity, "mFinished"))) break;
+                        Thread.sleep(10);
+                    }
+                    if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                        System.out.println("ACOSLAUNCH MARK finish-watcher-timeout");
+                        return;
+                    }
+                    Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
+                    Object destroyItem = obtainPrimitiveItem(destroyCls,
+                            new boolean[]{true, false, false});
+                    scheduleLocal(lifecycleTransaction(token, destroyItem));
+                    System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                            + Integer.toHexString(System.identityHashCode(token)));
+                    Thread.sleep(20);
+                    Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
+                    scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
+                    sCurrentToken = previous;
+                    System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
+                            + Integer.toHexString(System.identityHashCode(previous)));
+                    System.out.flush();
+                } catch (Throwable x) {
+                    System.out.println("ACOSLAUNCH MARK finish-watcher-error " + x);
+                    x.printStackTrace(System.out);
+                }
+            }
+        }, "acos-finish-watcher");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**

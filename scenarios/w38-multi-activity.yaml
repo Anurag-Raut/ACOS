@@ -1,0 +1,103 @@
+# w38-multi-activity: the stock second-Activity path, end to end short of rotate.
+#
+# W38 outcome (2): `IActivityTaskManager.startActivity` is recorded host-side and
+# the guest receives a stock `ClientTransaction` (pause of the top, then
+# `LaunchActivityItem` + `ResumeActivityItem`) for a **new real Binder token**;
+# `finish()` on the second Activity destroys it and resumes the first.
+#
+# This is `scenarios/multi-activity.yaml` steps 0-13 (the same fixture, the same
+# bounds): the first half of that scenario passes strictly with W38, and the
+# remaining steps (`rotate`) are the ART engine's pre-existing unsupported
+# capability, not this path. Kept separate so the multi-Activity regression can
+# be run on its own.
+version: 1
+name: w38-multi-activity
+description: >-
+  Launch multi-activity, send "Hello" to SecondActivity, verify the received
+  text and the second window's frame, finish SecondActivity, and verify the back
+  stack returned to MainActivity with the typed message preserved.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Message}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^Main.onCreate$'
+        - '^Main.onStart$'
+        - '^Main.onResume$'
+
+  - tap:
+      selector: {id: message}
+  - type:
+      selector: {id: message}
+      text: Hello
+  - tap:
+      selector: {id: send}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Main.send message=Hello$'
+        - '^Second.onCreate$'
+        - '^Second.received=Hello$'
+
+  - assert_text:
+      selector: {id: received}
+      text: {exact: "Received: Hello"}
+
+  # The second window is on screen (C1 frame of the new Activity's window).
+  - capture:
+      name: second-activity
+      format: png
+      fresh: true
+
+  # ---- finish returns to the first Activity through the back stack --------
+  - tap:
+      selector: {id: finish}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Second.finish$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+
+  - assert_no_crash: {}

@@ -306,6 +306,20 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         if let Err(e) = host.install_package_from_apk(&apk_for_peer) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
         }
+        // W38 (flagged, minimal): the guest's `startActivity` is resolved by the
+        // host ATMS before it records a `PendingLaunch`; seed the same APK's
+        // component table the PMS just got, so an explicit-component launch is
+        // `START_SUCCESS` instead of `START_NOT_FOUND`.
+        if let Ok(object) = host.ensure("android.app.IActivityTaskManager") {
+            if let Some(atms) = object
+                .as_any_mut()
+                .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            {
+                if let Err(e) = atms.seed_manifest_from_apk(&apk_for_peer) {
+                    eprintln!("acos-art: launch: seed_manifest_from_apk failed: {e}");
+                }
+            }
+        }
         (host, handles)
     };
     let (peer_host, live) = live_handles;
