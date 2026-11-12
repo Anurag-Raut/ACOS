@@ -1295,7 +1295,7 @@ public final class LaunchMain {
             // the host silently kept the last single-window sample).
             StringBuilder one = new StringBuilder(4096);
             try {
-                appendViewJson(root, one, budget, truncated, label);
+                appendViewJson(root, one, budget, truncated, label, rootOrigin(root));
             } catch (Throwable t) {
                 // A probe must never disturb the app; skip one bad window, but
                 // say which window failed and why (W36).
@@ -1313,7 +1313,8 @@ public final class LaunchMain {
             int[] budget = new int[]{PROBE_NODE_BUDGET};
             StringBuilder one = new StringBuilder(4096);
             try {
-                appendViewJson((View) decor, one, budget, truncated, "main");
+                appendViewJson((View) decor, one, budget, truncated, "main",
+                        rootOrigin((View) decor));
             } catch (Throwable t) {
                 probeError("decor-fallback", seq, "main", t);
                 return;
@@ -1463,8 +1464,120 @@ public final class LaunchMain {
      */
     static final int PROBE_NODE_BUDGET = 2000;
 
+    /** The window root's screen origin (`getGlobalVisibleRect` is root-local). */
+    static int[] rootOrigin(View root) {
+        int[] origin = new int[2];
+        try {
+            root.getLocationOnScreen(origin);
+        } catch (Throwable ignored) {
+        }
+        return origin;
+    }
+
+    /**
+     * The display rect a window/visible rect is clipped against:
+     * `[0,0,w,h]` in display pixels, or all zeros when the display metrics are
+     * unavailable (then no display clipping is applied).
+     */
+    static final int[] sDisplayBounds = new int[]{0, 0, 0, 0};
+    static boolean sDisplayBoundsProbed;
+
+    static int[] displayBounds(View v) {
+        if (!sDisplayBoundsProbed) {
+            sDisplayBoundsProbed = true;
+            try {
+                android.util.DisplayMetrics m = v.getResources().getDisplayMetrics();
+                if (m != null && m.widthPixels > 0 && m.heightPixels > 0) {
+                    sDisplayBounds[2] = m.widthPixels;
+                    sDisplayBounds[3] = m.heightPixels;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return sDisplayBounds;
+    }
+
+    /**
+     * The visible rect of `v` in **display** pixels, or null when nothing of it
+     * can be seen.
+     *
+     * <p>This is the framework's own `View.getGlobalVisibleRect(Rect)`: it starts
+     * from the view's own rect and asks every parent to clip it
+     * (`ViewGroup.getChildVisibleRect` — scroll offsets and pager/scroll-clip),
+     * so a warm-mounted page parked at `x=+displayWidth` comes back empty. The
+     * rect it returns is in the *root view's* coordinate space, so the root's
+     * screen origin is added and the result is clipped to the display: a view
+     * outside the window/display is not visible to the user either.
+     */
+    static int[] visibleRectOnScreen(View v, int[] rootOrigin) {
+        try {
+            android.graphics.Rect r = new android.graphics.Rect();
+            if (!v.getGlobalVisibleRect(r) || r.isEmpty()) return null;
+            int left = rootOrigin[0] + r.left;
+            int top = rootOrigin[1] + r.top;
+            int right = rootOrigin[0] + r.right;
+            int bottom = rootOrigin[1] + r.bottom;
+            int[] d = displayBounds(v);
+            if (d[2] > d[0] && d[3] > d[1]) {
+                if (left < d[0]) left = d[0];
+                if (top < d[1]) top = d[1];
+                if (right > d[2]) right = d[2];
+                if (bottom > d[3]) bottom = d[3];
+            }
+            if (right <= left || bottom <= top) return null;
+            return new int[]{left, top, right, bottom};
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Cached framework `View#isVisibleToUser()` (`public @hide`, API 16+). */
+    static java.lang.reflect.Method sVisibleToUser;
+    static boolean sVisibleToUserProbed;
+
+    /**
+     * The framework's own "can the user see this view?" — `View.isVisibleToUser()`
+     * is exactly the check `AccessibilityNodeInfo.setVisibleToUser` /
+     * UiAutomator publish: attached (and window visible), the view and every
+     * ancestor VISIBLE with alpha &gt; 0, and
+     * `getGlobalVisibleRect()` non-empty (not clipped away by an ancestor).
+     *
+     * <p>The method is `public @hide`; reflection is the same read-only access
+     * every other private framework read on this path uses. When it is
+     * unavailable the fallback reproduces the same checks through public API
+     * (`isShown`, `getAlpha`, `getGlobalVisibleRect`), so the answer never
+     * silently degrades to "visible".
+     */
+    static boolean visibleToUser(View v) {
+        if (!sVisibleToUserProbed) {
+            sVisibleToUserProbed = true;
+            try {
+                sVisibleToUser = View.class.getMethod("isVisibleToUser");
+                sVisibleToUser.setAccessible(true);
+            } catch (Throwable ignored) {
+                sVisibleToUser = null;
+            }
+        }
+        if (sVisibleToUser != null) {
+            try {
+                Object r = sVisibleToUser.invoke(v);
+                if (r instanceof Boolean) return ((Boolean) r).booleanValue();
+            } catch (Throwable ignored) {
+                // One honest fallback below; do not retry the lookup per node.
+                sVisibleToUser = null;
+            }
+        }
+        try {
+            if (!v.isShown() || v.getAlpha() <= 0f) return false;
+            android.graphics.Rect r = new android.graphics.Rect();
+            return v.getGlobalVisibleRect(r) && !r.isEmpty();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     static void appendViewJson(View v, StringBuilder out, int[] budget, boolean[] truncated,
-            String window) {
+            String window, int[] rootOrigin) {
         if (budget[0]-- <= 0) {
             truncated[0] = true;
             return;
@@ -1556,6 +1669,11 @@ public final class LaunchMain {
         } catch (Throwable t) {
             selected = false;
         }
+        // User-visible means "on screen", not "VISIBLE flag set": a warm-mounted
+        // pager page at x=+displayWidth reports VISIBLE but the user cannot see
+        // it. The rect is the framework's clipped global rect in display space.
+        int[] visibleRect = visibleRectOnScreen(v, rootOrigin);
+        boolean visible = visibleRect != null && visibleToUser(v);
         out.append("{\"class\":\"").append(jesc(cls)).append('"')
                 .append(",\"id\":\"").append(jesc(idName)).append('"')
                 .append(",\"text\":\"").append(jesc(text)).append('"')
@@ -1568,6 +1686,12 @@ public final class LaunchMain {
                 .append(",\"bounds_on_screen\":\"[").append(screen[0]).append(',')
                 .append(screen[1]).append("][").append(screen[0] + v.getWidth())
                 .append(',').append(screen[1] + v.getHeight()).append("]\"")
+                .append(",\"visible_bounds\":\"")
+                .append(visibleRect == null ? ""
+                        : "[" + visibleRect[0] + "," + visibleRect[1] + "]["
+                                + visibleRect[2] + "," + visibleRect[3] + "]")
+                .append('"')
+                .append(",\"visible\":").append(visible)
                 .append(",\"visibility\":").append(vis)
                 .append(",\"clickable\":").append(clickable)
                 .append(",\"enabled\":").append(enabled)
@@ -1588,7 +1712,7 @@ public final class LaunchMain {
                 View child = g.getChildAt(i);
                 if (child == null) continue;
                 StringBuilder one = new StringBuilder();
-                appendViewJson(child, one, budget, truncated, window);
+                appendViewJson(child, one, budget, truncated, window, rootOrigin);
                 if (one.length() == 0) continue;
                 if (!first) kids.append(',');
                 kids.append(one);

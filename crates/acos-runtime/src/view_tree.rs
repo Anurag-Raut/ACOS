@@ -40,7 +40,13 @@ pub struct ViewNode {
     /// Screen bounds `[left, top, right, bottom]` in pixels, or all zeros when
     /// the framework could not report a location.
     pub bounds: [i32; 4],
-    /// Whether the node currently reports itself shown.
+    /// The part of `bounds` the user can see (clipped to the window), in screen
+    /// pixels. `None` when the node is not visible to the user.
+    pub visible_bounds: Option<[i32; 4]>,
+    /// Whether the node is visible *to the user*
+    /// ([`View.isVisibleToUser`](https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/core/java/android/view/View.java):
+    /// attached with a visible window, it and all ancestors VISIBLE with alpha
+    /// above zero, and its global visible rect not clipped away by an ancestor).
     pub visible: bool,
     /// `View.isEnabled()`.
     pub enabled: bool,
@@ -151,6 +157,7 @@ pub fn append_toasts(
             text: toast.text.clone(),
             content_desc: String::new(),
             bounds: [0, top, width, bottom],
+            visible_bounds: Some([0, top, width, bottom]),
             visible: true,
             enabled: true,
             focused: false,
@@ -276,7 +283,8 @@ pub fn walk(vm: &mut Vm, max_nodes: usize) -> Result<ViewTree, TreeError> {
             }
         };
         windows += 1;
-        if let Some(node) = walker.node(view, 0, 0) {
+        let root_bounds = root_bounds(walker.vm, view);
+        if let Some(node) = walker.node(view, 0, 0, root_bounds) {
             nodes.push(node);
         }
         if walker.emitted >= walker.budget {
@@ -307,7 +315,13 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    fn node(&mut self, view: Handle, parent_x: i32, parent_y: i32) -> Option<ViewNode> {
+    fn node(
+        &mut self,
+        view: Handle,
+        parent_x: i32,
+        parent_y: i32,
+        root_bounds: [i32; 4],
+    ) -> Option<ViewNode> {
         if self.emitted >= self.budget {
             self.truncated = true;
             return None;
@@ -350,7 +364,16 @@ impl Walker<'_> {
             .unwrap_or((parent_x.saturating_add(left), parent_y.saturating_add(top)));
         let bounds = [sx, sy, sx.saturating_add(width), sy.saturating_add(height)];
 
-        let visible = bool_call(self.vm, view, "isShown", "()Z", &[]).unwrap_or(true);
+        // `isVisibleToUser()` is the framework's own answer to "can the user see
+        // this view" (attachment, window visibility, ancestor visibility, alpha,
+        // and ancestor clipping via `getGlobalVisibleRect`). `isShown()` alone
+        // ignores clipping and is what let off-screen pager pages report
+        // `visible: true` (GR2 W4). Fall back to `isShown()` only if the
+        // framework method is absent from this boot classpath.
+        let visible = bool_call(self.vm, view, "isVisibleToUser", "()Z", &[])
+            .or_else(|| bool_call(self.vm, view, "isShown", "()Z", &[]))
+            .unwrap_or(false);
+        let visible_bounds = visible_bounds(bounds, root_bounds, visible);
         let enabled = bool_call(self.vm, view, "isEnabled", "()Z", &[]).unwrap_or(true);
         let focused = bool_call(self.vm, view, "isFocused", "()Z", &[]).unwrap_or(false);
         let clickable = bool_call(self.vm, view, "isClickable", "()Z", &[]).unwrap_or(false);
@@ -389,7 +412,7 @@ impl Walker<'_> {
                 ) else {
                     continue;
                 };
-                if let Some(node) = self.node(child, sx, sy) {
+                if let Some(node) = self.node(child, sx, sy, root_bounds) {
                     children.push(node);
                 }
             }
@@ -402,6 +425,7 @@ impl Walker<'_> {
             text,
             content_desc,
             bounds,
+            visible_bounds,
             visible,
             enabled,
             focused,
@@ -412,6 +436,38 @@ impl Walker<'_> {
             children,
         })
     }
+}
+
+/// The root view's own rect on screen, the window rect a node is clipped to.
+fn root_bounds(vm: &mut Vm, root: Handle) -> [i32; 4] {
+    let left = int_call(vm, root, "getLeft", "()I").unwrap_or(0);
+    let top = int_call(vm, root, "getTop", "()I").unwrap_or(0);
+    let width = int_call(vm, root, "getWidth", "()I").unwrap_or(0);
+    let height = int_call(vm, root, "getHeight", "()I").unwrap_or(0);
+    let (sx, sy) = location_on_screen(vm, root).unwrap_or((left, top));
+    [sx, sy, sx.saturating_add(width), sy.saturating_add(height)]
+}
+
+/// The user-visible rect of `bounds` clipped to the window rect, or `None` when
+/// the node is not visible to the user or nothing of it falls inside the window.
+///
+/// The *flag* is the framework's (`isVisibleToUser`, which also accounts for
+/// ancestor scroll/clip); this rect is the window/display clip. When the window
+/// rect is unknown (all zeros) the node's own bounds are the visible rect.
+fn visible_bounds(bounds: [i32; 4], root: [i32; 4], visible: bool) -> Option<[i32; 4]> {
+    if !visible {
+        return None;
+    }
+    if root[2] <= root[0] || root[3] <= root[1] {
+        return Some(bounds);
+    }
+    let clipped = [
+        bounds[0].max(root[0]),
+        bounds[1].max(root[1]),
+        bounds[2].min(root[2]),
+        bounds[3].min(root[3]),
+    ];
+    (clipped[2] > clipped[0] && clipped[3] > clipped[1]).then_some(clipped)
 }
 
 /// Call `obj.name(sig)` and keep the object result; any failure is `None` and

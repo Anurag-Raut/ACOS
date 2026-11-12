@@ -391,7 +391,7 @@ Read the UI tree/text and frame metadata. In the CLI/MCP JSON the frame is at
     "package": "dev.acos.fixtures.helloviews",
     "truncated": false,
     "text_available": true,
-    "nodes": [{"id": "n1", "class": "android.widget.TextView", "resource_id": "dev.acos.fixtures.helloviews:id/result", "text": "clicks: 0", "content_desc": "", "bounds": [42, 612, 175, 663], "visible": true, "enabled": true, "focused": false, "clickable": false, "scrollable": false, "checked": false, "children": [], "package": "dev.acos.fixtures.helloviews"}]
+    "nodes": [{"id": "n1", "class": "android.widget.TextView", "resource_id": "dev.acos.fixtures.helloviews:id/result", "text": "clicks: 0", "content_desc": "", "bounds": [42, 612, 175, 663], "visible_bounds": [42, 612, 175, 663], "visible": true, "enabled": true, "focused": false, "clickable": false, "scrollable": false, "checked": false, "children": [], "package": "dev.acos.fixtures.helloviews"}]
   },
   "text": "android.widget.TextView | dev.acos.fixtures.helloviews:id/result | clicks: 0 | [42,612][175,663]"
 }
@@ -1626,11 +1626,23 @@ thing that makes `observe` a pass:
 * `--tree`/`--text` walk the live framework `View` hierarchy of the session VM
   (`WindowManagerGlobal` → `ViewRootImpl`/`mViews` → `ViewGroup.getChildAt`) and
   return `result.tree` with `nodes` (`id`, `class`, `resource_id`, `text`,
-  `content_desc`, `bounds`, `visible`, `enabled`, `focused`, `clickable`,
-  `scrollable`, `checked`, `package`, `children`), `result.windows` and
-  `result.truncated`; `--text` adds the flat `result.text` rendering. No
-  screenshot is required or taken. Bounds are the framework's own
+  `content_desc`, `bounds`, `visible_bounds`, `visible`, `enabled`, `focused`,
+  `clickable`, `scrollable`, `checked`, `package`, `children`), `result.windows`
+  and `result.truncated`; `--text` adds the flat `result.text` rendering. No
+  screenshot is required or taken. `bounds` are the framework's own
   `getLocationOnScreen` result, i.e. the same coordinates `uiautomator` reports.
+  `visible` means **visible to the user** (Android `View.isVisibleToUser()`:
+  shown — it and all ancestors `VISIBLE` and attached — and its global visible
+  rect, clipped by every ancestor scroll/pager and by the window/display, is
+  non-empty); `visible_bounds` is that clipped rect in display pixels (absent
+  when nothing is visible). A warm-mounted but off-screen node (a pager's next
+  page) therefore stays in the tree with `visible: false` and no
+  `visible_bounds`. Selector steps (`assert_visible`, `assert_text`,
+  `assert_not_visible`, `state`, `wait_for`, `tap`) match only user-visible nodes
+  by default (`selector.include_invisible: true` opts into invisible ones for
+  diagnostics); a selector that matches only an invisible node fails with
+  `ELEMENT_OFFSCREEN` naming its bounds, and a tap lands on the centre of the
+  node's `visible_bounds`, never outside it.
   Before the app adds a root window this is `status: unsupported`,
   `error.code: UNSUPPORTED_BACKEND`, `error.details.reason: "not_ready"`
   (`no_view_hierarchy_api` when the boot classpath lacks the root list), so an

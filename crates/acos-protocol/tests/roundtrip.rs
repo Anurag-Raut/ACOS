@@ -56,6 +56,7 @@ fn selector() -> Selector {
         class: Some("android.widget.TextView".to_string()),
         bounds: Some(bounds()),
         index: Some(0),
+        include_invisible: true,
     }
 }
 

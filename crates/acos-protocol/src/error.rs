@@ -162,6 +162,12 @@ pub enum ErrorCode {
     AssertionFailed,
     /// A selector matched no node.
     ElementNotFound,
+    /// A selector matched only nodes that are **not visible to the user** (for
+    /// example a warm-mounted pager page parked off screen, or a node clipped
+    /// away by an ancestor). The node exists in the tree but the user cannot see
+    /// it, so it is never a pass for `wait_for`/`assert_text`/`assert_visible`/
+    /// `tap`; the error names the off-screen match and its bounds.
+    ElementOffscreen,
     /// A selector matched nothing in a tree the probe reported as truncated
     /// (`UiTree::truncated`, any window). The node may exist beyond the
     /// sampled prefix, so this is not proof of absence.
@@ -386,6 +392,7 @@ impl ErrorCode {
             ErrorCode::AppNotResponding => "APP_NOT_RESPONDING",
             ErrorCode::AssertionFailed => "ASSERTION_FAILED",
             ErrorCode::ElementNotFound => "ELEMENT_NOT_FOUND",
+            ErrorCode::ElementOffscreen => "ELEMENT_OFFSCREEN",
             ErrorCode::TreeTruncated => "TREE_TRUNCATED",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
@@ -563,6 +570,9 @@ impl ErrorCode {
             ErrorCode::ElementNotFound => {
                 "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation."
             }
+            ErrorCode::ElementOffscreen => {
+                "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass."
+            }
             ErrorCode::TreeTruncated => {
                 "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
             }
@@ -713,6 +723,7 @@ impl ErrorCode {
             | ErrorCode::AppNotResponding => ErrorClass::AppCrash,
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
+            | ErrorCode::ElementOffscreen
             | ErrorCode::TreeTruncated
             | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
 
@@ -749,6 +760,7 @@ impl ErrorCode {
         match self {
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
+            | ErrorCode::ElementOffscreen
             | ErrorCode::TreeTruncated
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
@@ -963,6 +975,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::AppNotResponding,
     ErrorCode::AssertionFailed,
     ErrorCode::ElementNotFound,
+    ErrorCode::ElementOffscreen,
     ErrorCode::TreeTruncated,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,

@@ -2603,19 +2603,29 @@ impl SessionBackend for ArtSession {
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
         let tree = self.require_cached_tree()?;
-        let node = tree
-            .find_one(&Selector::by_text(text))
-            .ok_or_else(|| BackendError::Failed {
-                code: acos_protocol::ErrorCode::AssertionFailed,
-                detail: format!("no node with text {text:?} in the live ART tree"),
-            })?
-            .clone();
-        let bounds = node.bounds;
-        self.tap_in_window(
-            &node.window,
-            (bounds.left() + bounds.right()) / 2,
-            (bounds.top() + bounds.bottom()) / 2,
-        )
+        let selector = Selector::by_text(text);
+        let node = match tree.find_one(&selector) {
+            Some(node) => node,
+            None => {
+                if let Some(offscreen) = tree.find_invisible(&selector) {
+                    return Err(BackendError::Failed {
+                        code: acos_protocol::ErrorCode::ElementOffscreen,
+                        detail: format!(
+                            "text {text:?} matches only a node that is not visible to the user (bounds {}, visible_bounds {}); scroll it into view first",
+                            offscreen.bounds,
+                            offscreen.visible_bounds
+                                .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+                        ),
+                    });
+                }
+                return Err(BackendError::Failed {
+                    code: acos_protocol::ErrorCode::ElementNotFound,
+                    detail: format!("no node with text {text:?} in the live ART tree"),
+                });
+            }
+        };
+        let (x, y) = node.tap_point();
+        self.tap_in_window(&node.window, x, y)
     }
 
     fn type_text(&mut self, text: &str) -> Result<(), BackendError> {

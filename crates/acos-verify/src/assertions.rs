@@ -58,6 +58,9 @@ impl Evaluated {
 }
 
 /// Find the matching node and its document index.
+///
+/// The selector's own visibility policy applies: only user-visible nodes match
+/// unless `selector.include_invisible` is set (see [`Selector::accepts_node`]).
 fn locate<'a>(observation: &'a SessionObservation, selector: &acos_protocol::Selector) -> Option<(usize, &'a UiNode)> {
     let index = observation
         .tree
@@ -66,9 +69,76 @@ fn locate<'a>(observation: &'a SessionObservation, selector: &acos_protocol::Sel
         .position(|node| {
             let mut probe = selector.clone();
             probe.index = None;
-            probe.matches_node(node)
+            probe.accepts_node(node)
         })?;
     observation.tree.all_nodes().get(index).map(|node| (index, *node))
+}
+
+/// Locate a node even when it is not visible to the user (`assert_not_visible`
+/// and `assert_state {visible: false}` are checks *about* invisibility).
+fn locate_including_invisible<'a>(
+    observation: &'a SessionObservation,
+    selector: &acos_protocol::Selector,
+) -> Option<(usize, &'a UiNode)> {
+    let mut probe = selector.clone();
+    probe.include_invisible = true;
+    locate(observation, &probe)
+}
+
+/// The failure for a selector that matched only nodes the user cannot see.
+///
+/// This is the class of false pass GR2 W4 measured: the pager's warm-mounted
+/// next page is in the tree at `x=+displayWidth`, so a text/`wait_for` selector
+/// used to match content that is not on screen. It is never a pass; the error
+/// names the off-screen node and its bounds so the caller can scroll first.
+pub fn offscreen_error(
+    kind: &str,
+    selector: &acos_protocol::Selector,
+    observation: &SessionObservation,
+) -> Evaluated {
+    let node = observation.tree.find_invisible(selector);
+    let described = node
+        .map(|node| {
+            format!(
+                "text {:?} content_desc {:?} class {} bounds {} visible_bounds {} in window {:?}",
+                node.text,
+                node.content_desc,
+                node.class,
+                node.bounds,
+                node.visible_bounds
+                    .map_or_else(|| "<none>".to_string(), |b| b.to_string()),
+                node.window
+            )
+        })
+        .unwrap_or_else(|| "an invisible node".to_string());
+    Evaluated::fail(
+        kind,
+        node.map(|node| vec![node.id.clone()]).unwrap_or_default(),
+        AssertionDiff {
+            expected: json!({"selector": selector, "visible": true}),
+            actual: node.map_or(Value::Null, |node| {
+                json!({
+                    "id": node.id,
+                    "text": node.text,
+                    "content_desc": node.content_desc,
+                    "bounds": node.bounds,
+                    "visible_bounds": node.visible_bounds,
+                    "visible": node.visible,
+                    "window": node.window,
+                })
+            }),
+            path: node.map(|_| node_path(0, "visible")),
+            detail: Some(format!(
+                "selector matched only a node that is not visible to the user ({described}); scroll it into view first"
+            )),
+        },
+        BackendError::Failed {
+            code: ErrorCode::ElementOffscreen,
+            detail: format!(
+                "selector {selector:?} matched no visible node, but it matches a node that is not visible to the user ({described}); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass"
+            ),
+        },
+    )
 }
 
 fn node_path(index: usize, field: &str) -> String {
@@ -127,6 +197,9 @@ pub fn element_missing(
 /// Evaluate a `text` assertion (optional exact bounds).
 pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) -> Evaluated {
     let Some((index, node)) = locate(observation, &assertion.selector) else {
+        if observation.tree.find_invisible(&assertion.selector).is_some() {
+            return offscreen_error("text", &assertion.selector, observation);
+        }
         return Evaluated::fail(
             "text",
             Vec::new(),
@@ -195,6 +268,9 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
 /// Evaluate a `visible` assertion (optional exact bounds).
 pub fn eval_visible(assertion: &VisibilityAssertion, observation: &SessionObservation) -> Evaluated {
     let Some((index, node)) = locate(observation, &assertion.selector) else {
+        if observation.tree.find_invisible(&assertion.selector).is_some() {
+            return offscreen_error("visible", &assertion.selector, observation);
+        }
         return Evaluated::fail(
             "visible",
             Vec::new(),
@@ -250,7 +326,10 @@ pub fn eval_not_visible(
     assertion: &VisibilityAssertion,
     observation: &SessionObservation,
 ) -> Evaluated {
-    let Some((index, node)) = locate(observation, &assertion.selector) else {
+    // `not_visible` is a check *about* invisibility, so it must be able to see
+    // the invisible node it is asserting about (otherwise every off-screen node
+    // would trivially "pass" as "absent", which is the same lie in reverse).
+    let Some((index, node)) = locate_including_invisible(observation, &assertion.selector) else {
         // Absent is the expected state.
         return Evaluated::pass("not_visible", Vec::new(), Some("node absent".to_string()));
     };
@@ -271,12 +350,28 @@ pub fn eval_not_visible(
             },
         );
     }
-    Evaluated::pass("not_visible", matched, None)
+    Evaluated::pass(
+        "not_visible",
+        matched,
+        Some(format!(
+            "node is present in the tree but not visible to the user (bounds {}, visible_bounds {})",
+            node.bounds,
+            node.visible_bounds
+                .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+        )),
+    )
 }
 
 /// Evaluate a `state` assertion (all specified flags must match).
 pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) -> Evaluated {
-    let Some((index, node)) = locate(observation, &assertion.selector) else {
+    // A state check about an explicitly invisible node (`visible: false`) must
+    // be able to reach it; every other state check matches visible nodes only.
+    let located = if assertion.visible == Some(false) {
+        locate_including_invisible(observation, &assertion.selector)
+    } else {
+        locate(observation, &assertion.selector)
+    };
+    let Some((index, node)) = located else {
         return Evaluated::fail(
             "state",
             Vec::new(),
@@ -515,6 +610,106 @@ mod tests {
             evaluated.result.diff.as_ref().unwrap().path.as_deref(),
             Some("nodes[0].bounds")
         );
+    }
+
+    /// GR2 W4: a warm-mounted page parked off screen is in the tree but is not a
+    /// match, and `assert_visible` on it is `ELEMENT_OFFSCREEN`, never a pass.
+    fn offscreen_observation() -> SessionObservation {
+        let visible = UiNode::new("n1", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
+            .with_text("Page one")
+            .with_visible_bounds(Bounds::new(42, 317, 196, 368));
+        let mut hidden =
+            UiNode::new("n2", "android.widget.TextView", Bounds::new(1122, 317, 1239, 368))
+                .with_text("Hidden");
+        hidden.visible = false;
+        let frame = FrameMeta::new(1, "2026-11-13T10:00:00.000Z", "req:launch:0", 1080, 2400, 420, "abc", true);
+        let tree = UiTree::new(
+            frame.clone(),
+            "dev.acos.fixtures.offscreenpager",
+            vec![visible, hidden],
+        );
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "dev.acos.fixtures.offscreenpager".to_string(),
+            frame,
+            tree,
+            screenshot_png: None,
+            crashed: None,
+            input: None,
+        }
+    }
+
+    #[test]
+    fn assert_visible_on_an_offscreen_node_is_element_offscreen_not_a_pass() {
+        let observation = offscreen_observation();
+        let evaluated = eval_visible(
+            &VisibilityAssertion {
+                selector: Selector::by_text("Hidden"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &observation,
+        );
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.error.as_ref().unwrap().code(),
+            ErrorCode::ElementOffscreen
+        );
+        let detail = evaluated.error.as_ref().unwrap().to_protocol_error().message;
+        assert!(detail.contains("1122"), "names the off-screen bounds: {detail}");
+        // The old false pass: the node used to be `visible: true`, so this hit.
+        assert!(observation.tree.find_invisible(&Selector::by_text("Hidden")).is_some());
+        assert!(observation.tree.find_one(&Selector::by_text("Hidden")).is_none());
+    }
+
+    #[test]
+    fn assert_not_visible_sees_the_present_but_offscreen_node() {
+        let evaluated = eval_not_visible(
+            &VisibilityAssertion {
+                selector: Selector::by_text("Hidden"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &offscreen_observation(),
+        );
+        assert!(evaluated.result.passed);
+        let message = evaluated.result.message.as_deref().unwrap_or_default();
+        assert!(
+            message.contains("not visible to the user"),
+            "honest message, not 'absent': {message}"
+        );
+    }
+
+    #[test]
+    fn assert_text_on_an_offscreen_node_is_element_offscreen() {
+        let evaluated = eval_text(
+            &TextAssertion {
+                selector: Selector::by_text("Hidden"),
+                text: TextMatch::exact("Hidden"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &offscreen_observation(),
+        );
+        assert!(!evaluated.result.passed);
+        assert_eq!(
+            evaluated.error.as_ref().unwrap().code(),
+            ErrorCode::ElementOffscreen
+        );
+    }
+
+    #[test]
+    fn selectors_match_the_visible_node_first() {
+        let observation = offscreen_observation();
+        let matched = observation
+            .tree
+            .find_one(&Selector::by_text("Page one"))
+            .expect("the on-screen node matches");
+        assert!(matched.visible);
+        // A selector that only matches the off-screen node matches nothing.
+        let mut both = Selector::by_text("Hidden");
+        both.include_invisible = true;
+        assert_eq!(observation.tree.find_all(&both).len(), 1);
     }
 
     #[test]
