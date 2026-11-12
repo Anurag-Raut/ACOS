@@ -588,6 +588,66 @@ viewBox defect and an insets defect — MEASURED (two defects open)
   `NameNotFoundException` error class, `TaskDescription` drawable codec,
   `IPackageInstaller` read methods.
 
+## E13.2 — Gaten past onboarding on real ART: the press runs, and the tree lies about the
+screen — MEASURED (false pass found; one layout wall open)
+
+- **Date / commit:** 2026-11-13; GR2 worktree `gaten-gr2-onboarding` (off `main` `5b8189b`, GR1
+  merged). Engine unchanged.
+- **Question / goal:** GR1 §7 item 1 said the onboarding press is delivered and `handled` but the
+  screen never advances, suspecting `GatenAppInfo.setOnboardingStep` (a `SharedPreferences` write),
+  a missing binder call, a JS thread that does not drain, or an animation that never commits. Which
+  layer is responsible, and does the owner flow (welcome → Skip ×3 → Home → Analytics) verify?
+- **Inputs / method:** the same read-only x86_64 release APK (`f344272`, sha256 `e04c7ffc…`);
+  `acos launch --engine art --keep --reference` + `tap`/`observe`/`logs` per step, `acos verify
+  --engine art scenarios/gaten-home.yaml`; the app's own JS read (read-only) in `.cache/gaten/src-dev`
+  (`WelcomeScreen`, `OnboardingFlow.write`, `GatenAppInfoModule.kt`); the guest prefs file on the
+  host; logcat via `acos logs`. Six launches, all under `run-exclusive.sh` + `guarded.sh --mem 8G`.
+- **Baseline (before GR2):** GR1 stopped at the welcome screen; every tap on it reported
+  `NO_FRESH_FRAME` and its "after" capture was the welcome screen with its own loop animation
+  running, which looked like "the tap did nothing".
+- **Hypothesis:** the native write or the JS press is broken.
+- **Result:** rejected. `tap "Set up Gaten"` advances to onboarding page 1 (`1 / 3`) and the skip
+  pages advance 1→2→3→Home; after the first Skip the guest's own
+  `<data>/runs/<id>/app-data/com.gaten/shared_prefs/gaten_settings.xml` holds
+  `<int name="onboarding_step" value="1" />`, so `apply()` and the promise both work.
+  `scenarios/gaten-home.yaml` ran **14/14 steps, rc=0** (15.7 s, 14 frames, `artifact_validation ok`)
+  and reached Home. GR1's "after" image was the welcome screen's highlight loop, not a transition.
+- **Second measurement (the false pass):** the Analytics step passed while its own bound frame was
+  still Home. Two ACOS defects do it: **(a)** `tap {text: contains "Analytics"}` resolves to a
+  *duplicate* label row at `y 2151..2188` (a hidden copy of the bar) whose centre `(351,2169)` lies
+  inside the **Home** segment, whereas the real pressable is `content_desc "Analytics"` at
+  `[516,2151][690,2316]` (tap `(603,2233)` selects the tab for real); **(b)** the guest tree reports
+  the pager's off-screen, warm-mounted Analytics page (`x=1080..2160`) with `visible: true`, so
+  `wait_for "Accuracy"` passes in 13 ms on content that is not on screen. The `tap` step then passes
+  with "no visual change; no state change claimed" — the verifier records that assertion but does
+  not enforce it.
+- **Finding (proven):** the onboarding "wall" was an observation artefact, not a defect: press, JS
+  handler, `SharedPreferences` write and page transitions all work on real ART. The flow now verifies
+  end to end, but Analytics is proven only by pixels, not by the scenario. Three ACOS-side walls are
+  named and sized: the tree's `visible` semantics (off-screen pages), the duplicate bar row that makes
+  text selectors ambiguous, and a tap step that may pass with no change.
+- **Third finding (new, open):** 2 of 6 launches paint wrong — a text-fragment layout offset of
+  exactly one display width (`+1080 px`, the pager's next-page offset) so a button reads "Set up" and
+  the highlighted `<Text>` spans vanish (`evidence/GR2/gaten-welcome-broken.png`), and one launch
+  painted nothing at all for 60 s with an empty text tree (`gaten-white.png`,
+  `verify3/frames/1.png`). Tree and pixels agree with each other and both are wrong: layout, not the
+  probe, in the same layer as GR1 §5.2(A) (the guest has no per-view canvas). One launch also wedged
+  on the second Skip tap with no reply for >7 min (no guest crash marker).
+- **Fidelity / evidence:** `art-reference` (real ART guest, host-observed pixels);
+  `results/gaten/GR2.md`, `results/gaten/evidence/GR2/*.png` (welcome, pages 1–3, Home, the false
+  Analytics capture, the real Analytics tab, the two broken paints). Verdict, trees, steps, logcat in
+  `.cache/gr2/{verify1,verify3,run1…run5}/` (gitignored).
+- **Regression / false pass:** the scenario's Analytics tap now names the tab bar's own pressable
+  (`content_desc: {exact: Analytics}`) instead of a text node; the false pass itself needs the tree
+  fix below. No Gaten source, bundle or APK changed; no ACOS engine change was needed for the
+  functional wall.
+- **Conclusion / next:** (1) make the in-guest tree probe visibility-aware (clipped bounds vs the
+  display) so off-screen pager pages are not `visible` and selectors/`wait_for` cannot match them —
+  this kills the whole false-pass class; (2) give the scenario `tap` a way to demand a state change
+  (or enforce the `state_change` assertion it already records); (3) then the +1080 px fragment
+  layout / first-paint defect, which is the same work item as the per-view HWUI canvas, and is the
+  reason a green run is still luck-dependent.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).

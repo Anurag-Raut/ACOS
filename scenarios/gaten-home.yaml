@@ -40,6 +40,15 @@ steps:
   - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}
   - assert_text: {selector: {text: {contains: "Recently looked up"}}, text: {contains: "Recently looked up"}}
   - capture: {name: gaten-home, format: png, fresh: true}
-  - tap: {selector: {text: {contains: Analytics}}}
+  # The tab bar's own pressable, not a text node: the tree also carries the
+  # (warm-mounted, off-screen) Analytics *page*, whose "Analytics" text sits at
+  # x=1080..2160 and whose centre falls inside the Home segment. A text selector
+  # therefore taps Home and the step still "passes" (input delivered, nothing
+  # claimed) — see results/gaten/GR2.md W3. `content_desc` names the pressable.
+  - tap: {selector: {content_desc: {exact: Analytics}}}
   - wait_for: {selector: {text: {contains: "Accuracy"}}, timeout_ms: 30000}
+  # The selected flag is the tab bar's real state, but `assert_state` has no
+  # `selected` flag (docs/AGENT_API.md §9), and the text above is also true on the
+  # off-screen page, so this step cannot prove the switch by assertion yet — the
+  # capture below is the evidence (results/gaten/GR2.md W3/W4).
   - capture: {name: gaten-analytics, format: png, fresh: true}
