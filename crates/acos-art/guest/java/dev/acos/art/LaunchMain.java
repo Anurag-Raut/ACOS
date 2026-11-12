@@ -2861,7 +2861,7 @@ public final class LaunchMain {
     static byte[] buildBindApplicationRequest() throws Throwable {
         ApplicationInfo ai = buildAppInfo();
 
-        Object providerList = providerList();
+        Object providerList = providerList(ai);
 
         Configuration cfg = displayConfiguration();
 
@@ -2921,10 +2921,71 @@ public final class LaunchMain {
         }
     }
 
-    static Object providerList() throws Throwable {
+    /**
+     * K3c: the app's own manifest-declared content providers, in the shape
+     * {@code ActivityThread.handleBindApplication} consumes.
+     *
+     * <p>A real device's AMS fills {@code BindApplicationData.providers} from
+     * {@code generateApplicationProvidersLocked} — every {@code <provider>} of
+     * the package whose {@code android:process} resolves to this process. The
+     * framework then runs {@code installContentProviders}: for each entry it
+     * instantiates the class through {@code AppComponentFactory},
+     * {@code attachInfo} (which runs {@code ContentProvider.onCreate}) and
+     * reports the holder back through
+     * {@code IActivityManager.publishContentProviders}. That is the stock order:
+     * providers come up <em>after</em> {@code Application.attachBaseContext} and
+     * <em>before</em> {@code Application.onCreate}, and nothing here calls a
+     * provider by hand.
+     *
+     * <p>Before K3c this returned an empty list, so androidx.startup and
+     * WorkManager's {@code InitializationProvider} never existed and
+     * {@code ProcessLifecycleInitializer} could not be initialized lazily
+     * (io.element.android.x, K2 §6).
+     *
+     * <p>The spec is host-parsed from the APK's AndroidManifest.xml
+     * ({@code acos-services::pms::PmsState}, the same model PMS answers
+     * {@code getProviderInfo} from): one record per provider, newline
+     * separated, fields {@code class|authorities|permission|exported|grantUri}.
+     * The host
+     * already dropped providers whose {@code android:process} is not this
+     * process, exactly as {@code AMS.generateApplicationProvidersLocked} does.
+     * Nothing is invented: a provider the manifest does not declare cannot
+     * appear here.
+     */
+    static Object providerList(ApplicationInfo ai) throws Throwable {
+        java.util.List<Object> list = new java.util.ArrayList<Object>();
+        String spec = System.getenv("ACOSLAUNCH_PROVIDERS");
+        if (spec != null && spec.length() > 0) {
+            for (String rec : spec.split("\n")) {
+                if (rec.length() == 0) continue;
+                String[] f = rec.split("\\|", -1);
+                if (f.length < 4) continue;
+                android.content.pm.ProviderInfo pi = new android.content.pm.ProviderInfo();
+                pi.name = f[0];
+                pi.packageName = sPkg;
+                pi.authority = f[1];
+                pi.readPermission = f[2].length() == 0 ? null : f[2];
+                pi.writePermission = f[2].length() == 0 ? null : f[2];
+                pi.exported = "1".equals(f[3]);
+                pi.grantUriPermissions = f.length > 4 && "1".equals(f[4]);
+                pi.processName = sPkg;
+                pi.applicationInfo = ai;
+                pi.enabled = true;
+                pi.initOrder = 0;
+                pi.isSyncable = false;
+                pi.multiprocess = false;
+                // An empty Bundle, not null: a provider whose metadata a
+                // manifest does not declare still has an empty metadata map,
+                // and `androidx.startup`'s own discovery reads it.
+                pi.metaData = new android.os.Bundle();
+                list.add(pi);
+            }
+        }
+        System.out.println("ACOSLAUNCH MARK providers count=" + list.size());
+        System.out.flush();
         Class<?> cls = Class.forName("android.content.pm.ProviderInfoList");
         Method fromList = cls.getMethod("fromList", java.util.List.class);
-        return fromList.invoke(null, new ArrayList<Object>());
+        return fromList.invoke(null, list);
     }
 
     // ------------------------------------------------------ conformance probe

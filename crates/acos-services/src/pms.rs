@@ -749,6 +749,15 @@ impl FeatureTable {
             .unwrap_or(false)
     }
 
+    /// Every feature the table declares, in declaration order.
+    #[must_use]
+    pub fn declared(&self) -> Vec<(&str, bool)> {
+        self.features
+            .iter()
+            .map(|(name, enabled)| (name.as_str(), *enabled))
+            .collect()
+    }
+
     /// Override a feature (test/scenario hook).
     pub fn set(&mut self, name: impl Into<String>, enabled: bool) {
         let name = name.into();
@@ -987,7 +996,11 @@ impl PmsState {
                     read_permission: permission.clone(),
                     write_permission: permission.clone(),
                     exported,
-                    grant_uri_permissions: false,
+                    // `androidx.core.content.FileProvider.attachInfo` throws
+                    // `SecurityException("Provider must grant uri permissions")`
+                    // when the provider is exported and this manifest bit is
+                    // absent; it is `android:grantUriPermissions`, default false.
+                    grant_uri_permissions: c.grant_uri_permissions.unwrap_or(false),
                     init_order: 0,
                 });
             }
@@ -1232,15 +1245,31 @@ impl ServiceObject for PmsService {
             package: state.package.clone(),
         });
         let reply = match method.name.as_str() {
+            // K3b: an unknown package is **not** an error on the wire. The
+            // image's `IPackageManager` replies with a null `ApplicationInfo`/
+            // `PackageInfo` and the client (`ApplicationPackageManager`,
+            // `getApplicationInfoAsUser`/`getPackageInfoAsUser`) raises
+            // `PackageManager.NameNotFoundException` itself. Sending a parcel
+            // exception here made the app see `IllegalArgumentException`
+            // instead of the exception it catches, which is what stopped vlc on
+            // `getPackageInfo("com.google.android.gsf")` (K2 §6).
             "getApplicationInfo" => {
                 let package = args.first().and_then(Value::as_str);
-                let info = Self::lookup(&state, package).map(|p| p.application.clone())?;
-                vec![Value::TypedObject(info.to_parcelable())]
+                let info = match Self::lookup(&state, package) {
+                    Ok(p) => p.application.to_parcelable(),
+                    Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
+                    Err(e) => return Err(e),
+                };
+                vec![Value::TypedObject(info)]
             }
             "getPackageInfo" => {
                 let package = args.first().and_then(Value::as_str);
-                let info = Self::lookup(&state, package)?.clone();
-                vec![Value::TypedObject(info.to_parcelable())]
+                let info = match Self::lookup(&state, package) {
+                    Ok(p) => p.to_parcelable(),
+                    Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
+                    Err(e) => return Err(e),
+                };
+                vec![Value::TypedObject(info)]
             }
             "getActivityInfo" => {
                 let component = args.first().and_then(Value::as_parcelable);
@@ -1304,6 +1333,32 @@ impl ServiceObject for PmsService {
             "hasSystemFeature" => {
                 let name = args.first().and_then(Value::as_str).unwrap_or_default();
                 vec![Value::Bool(state.features.has(name))]
+            }
+            // `getSystemAvailableFeatures() : ParceledListSlice<FeatureInfo>`.
+            // The answer is the declared feature table, so
+            // `PackageManager.getSystemAvailableFeatures()` on this device
+            // returns exactly what `hasSystemFeature` would confirm — no feature
+            // is listed that is not also answered true, and a `false` entry
+            // stays absent (the platform omits disabled features).
+            "getSystemAvailableFeatures" => {
+                let items = state
+                    .features
+                    .declared()
+                    .into_iter()
+                    .filter(|(_, enabled)| *enabled)
+                    .map(|(name, _)| {
+                        Value::Parcelable(Parcelable::ordered(
+                            "android.content.pm.FeatureInfo",
+                            vec![
+                                Value::Str(Some(name.to_string())),
+                                Value::Int(0), // version
+                                Value::Int(0), // reqGlEsVersion
+                                Value::Int(0), // flags
+                            ],
+                        ))
+                    })
+                    .collect();
+                vec![Value::Parcelable(crate::parcelable::parceled_list_of(items))]
             }
             "notifyDexLoad" => {
                 // `Map<String,String>` after the package name: W26's

@@ -588,6 +588,104 @@ viewBox defect and an insets defect — MEASURED (two defects open)
   `NameNotFoundException` error class, `TaskDescription` drawable codec,
   `IPackageInstaller` read methods.
 
+## E5.5 — K3b: an unknown package is a null PMS reply, not a parcel exception — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-13 `9df9e71`, `e4910f1` (branch `compat-k3-walls`, off `main` `1013832`).
+- **Agent / bottleneck:** K3; K2's PMS error-class wall (`org.videolan.vlc`,
+  `org.fdroid.fdroid`): ACOS answered `getPackageInfo`/`getApplicationInfo` for
+  an uninstalled package with a parcel exception, so the app's own
+  `catch (NameNotFoundException)` never ran.
+- **Baseline (K2):** vlc's first failing call was
+  `getPackageInfo("com.google.android.gsf")` raising ACOS's structured
+  "unknown service name"; fdroid the same class.
+- **Hypothesis + solution:** the image's PMS returns a **null**
+  `PackageInfo`/`ApplicationInfo` and `ApplicationPackageManager` raises
+  `NameNotFoundException` client-side (AOSP
+  `ApplicationPackageManager.getPackageInfoAsUser`/`getApplicationInfoAsUser`).
+  Answer the same: typed null, nothing else changes.
+- **Method:** targeted batch (vlc, fdroid, element, termux) then the full
+  corpus (`runs-default`), guarded, one `acos serve` per app.
+- **Result:** both apps leave the wall and complete
+  `Application.onCreate`; vlc's next wall is the `activity_onboarding`
+  `ConstraintLayout` inflation, fdroid's is
+  `IPackageManager.getSystemAvailableFeatures` (code 99, no `FeatureInfo`
+  codec). No app regressed: the full corpus reproduces K2's funnel exactly
+  (42 process start, 41 `onCreate` entered, **16** completed, 12–13 first frame,
+  12 tree/screenshot, 7 tap; the 7 full-ladder apps are the same set as K2 and
+  the only first-frame difference between two runs of the same binary is
+  `com.libreweatherrn`'s React Native/WebView race).
+- **Fidelity / evidence:** `results/compat/K3.md` §1,
+  `crates/acos-services/tests/k3_walls.rs`
+  (`unknown_package_is_a_null_package_info_not_an_exception`,
+  `the_known_package_still_answers`).
+- **Result:** accepted. **Trade-offs:** none measured; the
+  `checkService`-for-unknown-name path was already `null` and is unchanged.
+
+## E5.6 — K3c: deliver the app's own providers through the framework (measured, OFF by default) — MEASURED (seam; blocked by two named gaps)
+
+- **Date / commit:** 2026-11-13 `40ffc61`, `6803a68`.
+- **Agent / bottleneck:** K3; K2 §6's "missing app providers": the bind request
+  carried an empty `ProviderInfoList`, so `ActivityThread.installContentProviders`
+  never ran and no `<provider>` of the APK existed.
+- **Baseline (K2):** `io.element.android.x` failed at
+  `ProcessLifecycleInitializer cannot be initialized lazily`; FileProvider,
+  WorkManager and Sentry providers did not exist in any app.
+- **Hypothesis + solution:** use the framework's own path. The host parses the
+  APK's providers from the same typed manifest PMS answers `getProviderInfo`
+  from (dropping providers whose `android:process` is not this process, the
+  `AMS.generateApplicationProvidersLocked` filter), the guest builds real
+  `ProviderInfo` objects, and `handleBindApplication` instantiates, `onCreate`s
+  and publishes them between `Application.attachBaseContext` and
+  `Application.onCreate`. Two platform behaviours this exposed are now
+  implemented: `publishContentProviders`' `List<ContentProviderHolder>` (the
+  decoded table had the `java.util.List` erasure) and `BaseBundle`'s empty
+  bundle (a single `0` int, no `BNDL` magic).
+- **Method:** targeted batches (vlc, fdroid, element, termux) and a full corpus
+  with delivery on (`runs-final`), then the shipping default with delivery off
+  (`runs-default`).
+- **Result (delivery ON):** the framework path works end to end.
+  `io.element.android.x` now **runs `InitializationProvider`** — the next
+  failure is the provider's own code raising `DSN is required`, which is
+  manifest `<meta-data>` (`io.sentry.dsn`) that PMS does not send.
+  `de.westnordost.streetcomplete` gains its first frame. vlc, fdroid and termux
+  keep the K3b gain and reach activity inflation. But three apps regress
+  because two gaps sit *after* delivery: editor and libreweatherrn die in
+  `FileProvider.attachInfo` (`Missing android.support.FILE_PROVIDER_PATHS
+  meta-data`), and joplin dies publishing its holder
+  (`BinderProxy.transactNative` → "Unknown error"). Funnel with delivery on: 11/42 first
+  frame (vs 13 with it off) — the three regressions above; with the shipping
+  default (off) the corpus is K2's 13/42.
+- **Fidelity / evidence:** `results/compat/K3.md` §2,
+  `crates/acos-services/tests/k3_walls.rs` (bundle + holder decode),
+  `.cache/k3/runs-final` (on) and `.cache/k3/runs-default` (off).
+- **Result:** the delivery itself **accepted as correct and verified**, shipped
+  **off** (`ACOS_ART_APP_PROVIDERS=on` enables it). **Why off:** it is a net
+  regression until the two blockers land, and K3 must not regress K2.
+  **Follow-ups (sized in K3.md §3):** (1) manifest `<meta-data>` → `Bundle` in
+  `ApplicationInfo`/`ProviderInfo` and in PMS `resolveContentProvider`
+  (recovers editor, libreweatherrn, element); (2) app-published
+  `IContentProvider` binder marshal in `publishContentProviders` (recovers
+  joplin).
+
+## E5.7 — K3a: the remaining walls, classified with a capability and a cost — MEASURED (classified, not shimmed)
+
+- **Date / commit:** 2026-11-13 (same branch; no code change beyond the naming
+  in `tools/compat/k1-analyze.py`).
+- **Agent / bottleneck:** K3; K1/K2's R5/R6 walls.
+- **Result:** three families stay blocked, each named by the app's own
+  exception and sized in `results/compat/K3.md` §3: **AndroidKeyStore**
+  (dot.gallery, tailscale — needs keystore2 *and* a keymaster backend, so a
+  shim would fabricate key material and break the core promise), **GL/BLAST**
+  (shatteredpixeldungeon, mindustry, supertuxkart — needs a real EGL/GLES driver
+  and BLAST producer), **WebView provider** (calendar, libreweatherrn — provider
+  discovery plus a real Chromium provider). New next walls the corpus named:
+  `IWindowSession.getWindowInsets` (113, fluffychat), layout/theme inflation
+  (vlc, termux, gotify — R2's track).
+- **Fidelity / evidence:** `results/compat/K3.md` §3 and the per-app crash
+  lines in `.cache/k3/runs-default`.
+- **Result:** classified honestly; no fake success anywhere. **Cost:** each is
+  weeks-scale; `<meta-data>` (E5.6 follow-up) is the cheap one.
+
 ## E13.2 — Gaten past onboarding on real ART: the press runs, and the tree lies about the
 screen — MEASURED (false pass found; one layout wall open)
 
@@ -1100,7 +1198,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10** | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | 2.71–2.84× latency, 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min at N=1/5/10; loop becomes reset-bound (48 %); not a default change |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **not reliable yet**: 14–50/50 verified across five H14 arm runs, failures are `GUEST_EXITED` (0 false passes) | main `4958703`, 10 sessions / one serve | H14, E3.3 | 2026-11-13 | new row; see Backlog H17 |
-| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | unchanged by H2/P12 |
+| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) — K3 measured with a 13/42 first frame in one run and 12/42 (the RN/WebView flicker) in the second, `onCreate` completed 15→**16/42**; first frame p50 647–652 ms / p90 1050–1115 ms (K2 581/1056) | K3 `9df9e71`,`40ffc61` (provider delivery measured but off) | K3/K3b–K3a, E5.5–E5.7 | 2026-11-13 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
@@ -1128,9 +1226,11 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H7 | Shrink per-session boot-image private memory | M2 | −10–25 MiB | medium | medium | medium | **folded into H13** (B3 is the measured first step) |
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
-| K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
-| K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |
-| K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
+| K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
+| K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
+| K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | **implemented + measured `40ffc61` (E5.6), OFF by default (`ACOS_ART_APP_PROVIDERS=on`); blocked by K3d/K3e** |
+| K3d | manifest `<meta-data>` → `Bundle` in `ApplicationInfo`/`ProviderInfo` and in PMS `resolveContentProvider` | compat | unblocks K3c (editor, libreweatherrn, element) | high (K3 measured the failure) | medium | low | next (E5.6 follow-up 1) |
+| K3e | app-published `IContentProvider` binder in `publishContentProviders` fails to marshal (`BinderProxy.transactNative` "Unknown error", joplin) | compat | unblocks K3c for joplin | medium | medium | medium | next (E5.6 follow-up 2) |
 | T1 | **Legacy frozen-VM test drift:** 15 `acos-runtime` / `acos-framework-natives` / `acos-vm` (inflate_layout) integration tests (counter_interaction, app_matrix_interaction, pms golden, theme_resolution `static_overlay_overrides_framework_bool`, m2 lifecycle, wms/toast/notifications) fail against freshly rebuilt fixtures. Identical on pre-V1 main `9787616`, so pre-existing; the goldens predate the current fixture build (e.g. PMS `app.flags` +0x42 debuggable/allowClearUserData; framework bool now 0xFFFFFFFF). Not the ART product path (all ART gates green). Decide: refresh goldens vs. retire frozen-VM tests | test-suite health | `cargo test --workspace` green | high | low | low | queued (found 2026-11-13 during V1 merge) |
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |

@@ -137,6 +137,33 @@ pub fn read_args_override(
             skip_remaining(parcel);
             Ok(Some(vec![Value::Str(package), Value::Skipped]))
         }
+        // K3c: `publishContentProviders(IApplicationThread, List<ContentProviderHolder>)`
+        // is how `ActivityThread.installContentProviders` reports the providers
+        // it just created. The decoded table lost the generic (the image's
+        // proxy writes an `ArrayList` through `writeTypedList`, so the DEX
+        // type is the erasure `java.util.List`); the AIDL declaration is
+        // `List<ContentProviderHolder>`, so the element class is transcribed
+        // here rather than inferred from a register type that cannot carry it.
+        ("android.app.IActivityManager", 31) => {
+            let thread = parcel.read_strong_binder()?;
+            let count = parcel.read_int32()?;
+            let mut holders = Vec::new();
+            for _ in 0..count.max(0) {
+                let present = parcel.read_int32()?;
+                if present == 0 {
+                    holders.push(Value::Parcelable(Parcelable::Null));
+                } else {
+                    holders.push(Value::Parcelable(parcelable::read_payload(
+                        "android.app.ContentProviderHolder",
+                        parcel,
+                    )?));
+                }
+            }
+            Ok(Some(vec![
+                Value::Binder(thread),
+                Value::List(Some(holders)),
+            ]))
+        }
         _ => Ok(None),
     }
 }

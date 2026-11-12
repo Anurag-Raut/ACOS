@@ -122,6 +122,9 @@ pub struct Component {
     pub launch_mode: Option<String>,
     pub process: Option<String>,
     pub permission: Option<String>,
+    /// `android:grantUriPermissions` (`<provider>` only); `None` when absent,
+    /// which is the platform default `false`.
+    pub grant_uri_permissions: Option<bool>,
     pub label: Option<String>,
     pub label_ref: Option<u32>,
     pub intent_filters: Vec<IntentFilter>,
@@ -406,6 +409,7 @@ fn parse_components(parent: &XmlNode, kind: ComponentKind, package: &str) -> Vec
             launch_mode: attr_string(node, "launchMode"),
             process: attr_string(node, "process"),
             permission: attr_string(node, "permission"),
+            grant_uri_permissions: attr_bool(node, "grantUriPermissions"),
             label,
             label_ref,
             intent_filters,
