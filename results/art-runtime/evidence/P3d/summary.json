@@ -1,0 +1,48 @@
+{
+  "strict": {
+    "n": 30,
+    "p50": 151.31,
+    "p95": 151.7,
+    "min": 151.04,
+    "max": 151.94,
+    "good": 30
+  },
+  "fast": {
+    "n": 30,
+    "p50": 0.2,
+    "p95": 0.22,
+    "min": 0.2,
+    "max": 0.25,
+    "good": 30
+  },
+  "freshness": {
+    "reps": 20,
+    "fast_matches": 20,
+    "strict_matches": 20,
+    "fast_wall_ms_max": 2.646,
+    "fast_wall_ms_p50": 2.53
+  },
+  "survivors": [
+    {
+      "pid": 1527726,
+      "comm": "bash",
+      "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/perf-p3b-tree && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && ACOS=/home/Qui/Projects/acos/.cache/p3b-target/release/acos && tools/art-runtime/run-exclusive"
+    },
+    {
+      "pid": 1527727,
+      "comm": "bash",
+      "cmd": "bash tools/art-runtime/run-exclusive.sh --task P3b -- tools/guarded.sh --mem 8G --time 900 -- python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evide"
+    },
+    {
+      "pid": 1527735,
+      "comm": "bash",
+      "cmd": "bash tools/guarded.sh --mem 8G --time 900 -- python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evidence/P3d/tree-latency.json --scratch /home/Qui/Pro"
+    },
+    {
+      "pid": 1527744,
+      "comm": "timeout",
+      "cmd": "/usr/bin/timeout -k 5 900 python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evidence/P3d/tree-latency.json --scratch /home/Qui/Projects/acos/.cache/p"
+    }
+  ],
+  "contaminated": false
+}

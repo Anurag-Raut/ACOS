@@ -564,6 +564,10 @@ public final class LaunchMain {
 
     // ------------------------------------------------------- live UI probe (W10)
 
+    /** P3b: wakeup for the probe thread, so a host request is not a 50 ms wait. */
+    static final Object sProbeWake = new Object();
+    static boolean sProbeRequested = false;
+
     /**
      * W10: a periodic read-only view-tree sample for the interactive session.
      *
@@ -589,11 +593,40 @@ public final class LaunchMain {
      * {@code hint} always carries the hint itself, so a consumer that wants
      * the literal text is not forced through the fallback. Nothing is
      * invoked; the only calls are getters.
+     *
+     * <p>P3b: the 50 ms cadence is a fallback. A host `PROBE` line on stdin (or
+     * the wake object) schedules one sample immediately; the walk itself never
+     * runs per draw.
      */
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
+        // P3b: the host writes one `PROBE` line to the guest's stdin when a
+        // fast tree needs a sample now. The control thread only wakes the
+        // probe thread; it never walks or mutates the view tree itself.
+        Thread control = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(System.in));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.trim().equalsIgnoreCase("PROBE")) {
+                            synchronized (sProbeWake) {
+                                sProbeRequested = true;
+                                sProbeWake.notifyAll();
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    // No stdin (one-shot launches) is normal.
+                }
+            }
+        }, "acos-probe-control");
+        control.setDaemon(true);
+        control.start();
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -637,8 +670,16 @@ public final class LaunchMain {
                             }
                         });
                     }
+                    // The 50 ms poll is the fallback cadence (canvas/background
+                    // draws). A host `PROBE` request or a dirty view wakes this
+                    // wait immediately; no probe runs per draw (P3b).
                     try {
-                        Thread.sleep(50);
+                        synchronized (sProbeWake) {
+                            if (!sProbeRequested) {
+                                sProbeWake.wait(50);
+                            }
+                            sProbeRequested = false;
+                        }
                     } catch (InterruptedException e) {
                         return;
                     }

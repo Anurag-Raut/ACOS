@@ -1,0 +1,2170 @@
+{
+  "schema": "acos-p3d-tree/1",
+  "utc": "2026-11-12T10:47:17+00:00",
+  "n": 30,
+  "warmup": 2,
+  "apk_sha256": "e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366",
+  "acos": "/home/Qui/Projects/acos/.cache/p3b-target/release/acos",
+  "host_before": {
+    "mem_total_mib": 61908.7,
+    "mem_available_mib": 41354.5,
+    "mem_total_gib": 60.46,
+    "mem_available_gib": 40.39,
+    "used_mib": 20554.2,
+    "used_pct": 33.2,
+    "loadavg1": 1.05,
+    "loadavg5": 2.19,
+    "loadavg15": 3.01,
+    "runnable": "1/3163",
+    "utc": "2026-11-12T10:47:17+00:00"
+  },
+  "ok": true,
+  "strict": [
+    {
+      "wall_ms": 151.389,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 50,
+        "settled": true,
+        "tree_age_ms": 10
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:20.520Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": true
+    },
+    {
+      "wall_ms": 151.523,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 53,
+        "settled": true,
+        "tree_age_ms": 11
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:20.671Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": true
+    },
+    {
+      "wall_ms": 151.323,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 56,
+        "settled": true,
+        "tree_age_ms": 13
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:20.823Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.299,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 59,
+        "settled": true,
+        "tree_age_ms": 13
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:20.975Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.294,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 62,
+        "settled": true,
+        "tree_age_ms": 15
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.126Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.367,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 65,
+        "settled": true,
+        "tree_age_ms": 16
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.277Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.307,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 68,
+        "settled": true,
+        "tree_age_ms": 18
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.429Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.566,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 71,
+        "settled": true,
+        "tree_age_ms": 19
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.580Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.571,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 74,
+        "settled": true,
+        "tree_age_ms": 20
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.732Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.303,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 77,
+        "settled": true,
+        "tree_age_ms": 22
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:21.884Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.467,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 80,
+        "settled": true,
+        "tree_age_ms": 23
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.035Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.534,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 83,
+        "settled": true,
+        "tree_age_ms": 25
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.187Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.654,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 86,
+        "settled": true,
+        "tree_age_ms": 26
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.339Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.383,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 89,
+        "settled": true,
+        "tree_age_ms": 27
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.490Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.391,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 92,
+        "settled": true,
+        "tree_age_ms": 29
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.642Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.441,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 95,
+        "settled": true,
+        "tree_age_ms": 30
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.793Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.468,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 98,
+        "settled": true,
+        "tree_age_ms": 32
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:22.945Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.181,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 101,
+        "settled": true,
+        "tree_age_ms": 33
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.096Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.176,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 104,
+        "settled": true,
+        "tree_age_ms": 34
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.247Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.077,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 107,
+        "settled": true,
+        "tree_age_ms": 35
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.398Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.04,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 110,
+        "settled": true,
+        "tree_age_ms": 36
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.550Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.1,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 113,
+        "settled": true,
+        "tree_age_ms": 37
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.701Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.299,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 116,
+        "settled": true,
+        "tree_age_ms": 38
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:23.852Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.235,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 119,
+        "settled": true,
+        "tree_age_ms": 39
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.004Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.217,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 122,
+        "settled": true,
+        "tree_age_ms": 41
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.155Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.225,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 125,
+        "settled": true,
+        "tree_age_ms": 41
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.306Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.182,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 128,
+        "settled": true,
+        "tree_age_ms": 42
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.458Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.382,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 131,
+        "settled": true,
+        "tree_age_ms": 44
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.609Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.94,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 134,
+        "settled": true,
+        "tree_age_ms": 46
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.761Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.739,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 137,
+        "settled": true,
+        "tree_age_ms": 48
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:24.913Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.306,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 140,
+        "settled": true,
+        "tree_age_ms": 48
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.065Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 151.514,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "strict-quiet",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 0
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.216Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    }
+  ],
+  "fast": [
+    {
+      "wall_ms": 0.432,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 1
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.217Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": true
+    },
+    {
+      "wall_ms": 0.294,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 1
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.217Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": true
+    },
+    {
+      "wall_ms": 0.253,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 1
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.217Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.223,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.218Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.206,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.218Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.205,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.218Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.212,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.218Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.201,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 3
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.219Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.201,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 3
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.219Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.197,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 3
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.219Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.216,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 3
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.219Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.206,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 4
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.220Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.204,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 4
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.220Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.2,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 4
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.220Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.204,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 4
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.220Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.204,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 4
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.221Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.203,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.221Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.199,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.221Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.201,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.221Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.205,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.221Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.203,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 6
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.222Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.199,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 6
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.222Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.199,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 6
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.222Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.201,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 6
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.222Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.199,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 7
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.223Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.213,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 7
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.223Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.2,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 7
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.223Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.203,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 7
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.223Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.2,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 8
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.224Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.199,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 8
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.224Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.198,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 8
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.224Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    },
+    {
+      "wall_ms": 0.203,
+      "ok": true,
+      "nodes": 12,
+      "text_nodes": 4,
+      "count": "0",
+      "truncated": false,
+      "settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 144,
+        "settled": true,
+        "tree_age_ms": 8
+      },
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-12T10:47:25.224Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "md5": ""
+      },
+      "error": null,
+      "good": true,
+      "warmup": false
+    }
+  ],
+  "freshness": [
+    {
+      "rep": 1,
+      "expected": "1",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "1",
+      "fast_wall_ms": 2.581,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 146,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "1",
+      "strict_wall_ms": 937.6,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 2,
+      "expected": "2",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "2",
+      "fast_wall_ms": 0.514,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 166,
+        "settled": true,
+        "tree_age_ms": 7
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "2",
+      "strict_wall_ms": 953.224,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 3,
+      "expected": "3",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "3",
+      "fast_wall_ms": 0.443,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 187,
+        "settled": true,
+        "tree_age_ms": 9
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "3",
+      "strict_wall_ms": 922.185,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 4,
+      "expected": "4",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "4",
+      "fast_wall_ms": 2.592,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 207,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "4",
+      "strict_wall_ms": 951.706,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 5,
+      "expected": "5",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "5",
+      "fast_wall_ms": 2.5,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 228,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "5",
+      "strict_wall_ms": 936.393,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 6,
+      "expected": "6",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "6",
+      "fast_wall_ms": 2.542,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 248,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "6",
+      "strict_wall_ms": 966.351,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 7,
+      "expected": "7",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "7",
+      "fast_wall_ms": 2.376,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 270,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "7",
+      "strict_wall_ms": 936.565,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 8,
+      "expected": "8",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "8",
+      "fast_wall_ms": 0.505,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 290,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "8",
+      "strict_wall_ms": 951.727,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 9,
+      "expected": "9",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "9",
+      "fast_wall_ms": 2.613,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 311,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "9",
+      "strict_wall_ms": 921.203,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 10,
+      "expected": "10",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "10",
+      "fast_wall_ms": 2.412,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 331,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "10",
+      "strict_wall_ms": 951.544,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 11,
+      "expected": "11",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "11",
+      "fast_wall_ms": 2.626,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 352,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "11",
+      "strict_wall_ms": 936.47,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 12,
+      "expected": "12",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "12",
+      "fast_wall_ms": 2.547,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 373,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "12",
+      "strict_wall_ms": 921.48,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 13,
+      "expected": "13",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "13",
+      "fast_wall_ms": 2.403,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 393,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "13",
+      "strict_wall_ms": 951.719,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 14,
+      "expected": "14",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "14",
+      "fast_wall_ms": 2.381,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 414,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "14",
+      "strict_wall_ms": 936.614,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 15,
+      "expected": "15",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "15",
+      "fast_wall_ms": 2.549,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 434,
+        "settled": true,
+        "tree_age_ms": 1
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "15",
+      "strict_wall_ms": 951.532,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 16,
+      "expected": "16",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "16",
+      "fast_wall_ms": 2.428,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 455,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "16",
+      "strict_wall_ms": 936.463,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 17,
+      "expected": "17",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "17",
+      "fast_wall_ms": 0.305,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 475,
+        "settled": true,
+        "tree_age_ms": 5
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "17",
+      "strict_wall_ms": 951.336,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 18,
+      "expected": "18",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "18",
+      "fast_wall_ms": 2.601,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 496,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "18",
+      "strict_wall_ms": 936.84,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 19,
+      "expected": "19",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "19",
+      "fast_wall_ms": 2.53,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 516,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "19",
+      "strict_wall_ms": 966.247,
+      "strict_good": true,
+      "strict_matches": true
+    },
+    {
+      "rep": 20,
+      "expected": "20",
+      "tap_ok": true,
+      "tap_state_changed": true,
+      "fast_count": "20",
+      "fast_wall_ms": 2.646,
+      "fast_settle": {
+        "bound": "probe-fresh",
+        "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+        "mode": "fast",
+        "probe_seq": 537,
+        "settled": true,
+        "tree_age_ms": 2
+      },
+      "fast_good": true,
+      "fast_matches": true,
+      "strict_count": "20",
+      "strict_wall_ms": 936.909,
+      "strict_good": true,
+      "strict_matches": true
+    }
+  ],
+  "serve_rc": -15,
+  "survivors": [
+    {
+      "pid": 1527726,
+      "comm": "bash",
+      "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/perf-p3b-tree && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && ACOS=/home/Qui/Projects/acos/.cache/p3b-target/release/acos && tools/art-runtime/run-exclusive"
+    },
+    {
+      "pid": 1527727,
+      "comm": "bash",
+      "cmd": "bash tools/art-runtime/run-exclusive.sh --task P3b -- tools/guarded.sh --mem 8G --time 900 -- python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evide"
+    },
+    {
+      "pid": 1527735,
+      "comm": "bash",
+      "cmd": "bash tools/guarded.sh --mem 8G --time 900 -- python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evidence/P3d/tree-latency.json --scratch /home/Qui/Pro"
+    },
+    {
+      "pid": 1527744,
+      "comm": "timeout",
+      "cmd": "/usr/bin/timeout -k 5 900 python3 results/art-runtime/evidence/P3d/p3d_tree.py --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos --out results/art-runtime/evidence/P3d/tree-latency.json --scratch /home/Qui/Projects/acos/.cache/p"
+    }
+  ],
+  "host_after": {
+    "mem_total_mib": 61908.7,
+    "mem_available_mib": 41245.0,
+    "mem_total_gib": 60.46,
+    "mem_available_gib": 40.28,
+    "used_mib": 20663.7,
+    "used_pct": 33.38,
+    "loadavg1": 1.11,
+    "loadavg5": 2.09,
+    "loadavg15": 2.95,
+    "runnable": "1/3183",
+    "utc": "2026-11-12T10:47:46+00:00"
+  },
+  "contaminated": false,
+  "utc_finished": "2026-11-12T10:47:46+00:00"
+}

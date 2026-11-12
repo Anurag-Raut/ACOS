@@ -934,12 +934,19 @@ fn label_frame(result: &mut Value, session: &ArtSession) {
     let Some((seq, md5, captured_at)) = session.frame_info() else {
         return;
     };
+    let (_, buffer_generation, frame_number) = session
+        .frame_identity_meta()
+        .unwrap_or((seq, None, None));
     if let Some(object) = result.as_object_mut() {
         object.entry("frame".to_string()).or_insert_with(|| {
             json!({
                 "frame_seq": seq,
                 "md5": md5,
                 "captured_at": captured_at,
+                // P3b: a tree-only reply carries no PNG, so its identity is the
+                // C1 store counter/producer frame number, never a copied buffer.
+                "buffer_generation": buffer_generation,
+                "frame_number": frame_number,
             })
         });
         object.insert("last_frame_seq".into(), json!(session.last_frame_seq()));
@@ -1053,8 +1060,12 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
         .get("max_nodes")
         .and_then(Value::as_u64)
         .unwrap_or(2000) as usize;
+    // P3b: the tree verb consumes P1's settle vocabulary. `strict` is the
+    // default and unchanged; `fast` is for inspection/navigation, labelled in
+    // the reply, and never accepted by an assertion.
+    let settle = requested_settle(args)?;
     let t_begin = m5_now_us();
-    let tree = session.tree()?;
+    let tree = session.tree_with_settle(settle)?;
     let t_tree = m5_now_us();
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
     let t_end = m5_now_us();
@@ -1081,18 +1092,20 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
         "max_nodes": max_nodes,
         "node_count": node_count,
         "tree": tree_value,
+        "settle": session.last_tree_settle().cloned(),
     }))
 }
 
 fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
     let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
+    let settle = requested_settle(args)?;
     let path = args
         .get("screenshot")
         .and_then(Value::as_str)
         .map(PathBuf::from);
     if want_tree || want_text {
-        let tree = session.tree()?;
+        let tree = session.tree_with_settle(settle)?;
         let mut result = json!({
             "package": session.package(),
             "stage_reached": "first_frame",
@@ -1113,6 +1126,7 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
         if want_text {
             result["text"] = json!(flat_text(&tree));
         }
+        result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
