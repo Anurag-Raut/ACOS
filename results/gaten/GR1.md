@@ -70,6 +70,9 @@ is an `art_error`/`BackendError` from the ART session (structured `GUEST_EXITED`
 | `gaten-art-01-welcome-settled.png` | same screen 2 s later (buffers still advancing) |
 | `gaten-art-02-after-setup.png` | 2 s after `tap "Set up Gaten"`: the welcome screen is animating out |
 | `tree-first-screen.json` | the live view tree of the first screen (trimmed to text/desc + bounds) |
+| `svg-probe.json` | the svg-viewbox probe's numbers on ACOS + the HW-acceleration experiment |
+| `visual/welcome/{device,acos,diff,side-by-side}.png`, `metrics.json`, `elements.json` | phone-matched welcome comparison (SSIM 0.8485) and the per-element table |
+| `visual/{page1,page2,page3,home,analytics}/device.png` | the device's reference screens ACOS has not reached yet |
 
 Timings (host wall clock, `run-exclusive.sh` + `guarded.sh --mem 8G`): `acos-art launch` ready line
 **714 ms** after spawn; `acos verify --engine art` launch step **1559 ms**; `acos launch --engine art`
@@ -197,3 +200,73 @@ inside a `58,2210..1022,2310` pressable) matches the pixels that were drawn, and
 `tap` at the label's centre is accepted by the input channel (`gesture.acks[0].handled=true`,
 `latency_us ≈ 15 100`). Coordinate mapping is therefore consistent; the failure to advance is not
 a coordinate error (the same tap at the same display coordinates drives the device build).
+
+## 6. Hypothesis ledger, second half (visual verification)
+
+| observation | hypothesis | prediction | experiment | result | verdict |
+|---|---|---|---|---|---|
+| all taps on the welcome screen are `NO_FRESH_FRAME` and the screen never leaves the welcome timeline | the settle rule, not the tap, is failing | a screenshot right after the tap shows motion; the input ack says handled | `tap` reply `gesture.acks[0].handled=true`, `latency_us 15 100`; next frame differs | **confirmed**: the tap is delivered and handled; the settle detector cannot bind a "quiet" frame while Reanimated animates |
+| the welcome flow still does not advance after 3 attempts (default and phone-matched geometry) | the JS press handler never runs (so the settle is a symptom, not the cause) | the app's `onboardingStep` write is absent and no retry UI appears | each tap re-triggers the same screen; the caption timeline keeps running; no error surface in the tree | **open** — next wall (§7) |
+| SVG ink 2.5× too large and clipped at the top of the frame | react-native-svg scales by density twice (RN's `PixelRatio` wrong) or the layout box is wrong | the box is wrong ⇒ layout; the box is right ⇒ drawing | tree: wordmark `SvgView` box `[58,60][328,176]` = 270×116 px (expected 271×116); probe: `canvas=1080x2292` for `view=270x116` | **rejected the layout/metrics branch, confirmed the drawing branch**: the canvas is the window, so `canvas.getWidth()` is not the view's |
+| ACOS footer 60 px lower than the device with an identical button size | a bottom inset the device reports and ACOS does not | a nav inset change moves it | `--nav-inset 60` run: button unchanged (`visual/welcome/elements.json` last column) | **confirmed** the inset is missing, **rejected** the "nav inset value" fix: ACOS carves the window (`DecorView [0,108][1080,2400]`) instead of reporting insets, so the value cannot reach the app |
+| requesting `FLAG_HARDWARE_ACCELERATED` should restore per-view canvases if HWUI exists | the guest has no HWUI path | either per-view canvases or a failed boot | `ACOSLAUNCH_APP_FLAGS=0x02000000` on the probe | **confirmed the absence**: guest exits status 1 before its first live frame |
+
+## 7. What still fails, in order (next wall first)
+
+1. **Onboarding press does not advance (functional wall).** The tap is delivered, handled, and
+   changes the frame, but `WelcomeScreen`'s "Set up Gaten" never leaves the page and no retry
+   surface appears, so `GatenAppInfo.setOnboardingStep` (a TurboModule call that writes a
+   `SharedPreferences` int) is the first suspect, then RN's JS responder path for the press. Until
+   this works, Home/Analytics cannot be driven on ACOS — this is the wall between "Gaten renders"
+   and "the owner's flow verifies".
+2. **Per-view canvas / HWUI (visual wall).** §5.2 (A). One fix removes the wordmark overflow and
+   every SVG/canvas-drawing library's mis-scale; the regression test is
+   `scenarios/svg-viewbox.yaml` (red).
+3. **Window model: carved vs inset (visual wall).** §5.2 (B). Full-display app window + reported
+   insets (108 px status, 24 dp gesture bar) also removes the 118 dp difference in
+   `Configuration.screenHeightDp` (842 vs 960) that `useWindowDimensions().height` consumers see.
+4. **Settle on animated screens (harness).** `tap` on a continuously animating app reports
+   `NO_FRESH_FRAME` after the frame-wait budget even though the tap landed; a `tap` that asserts a
+   *post-tap* frame (as `capture: fresh` does) is the shape that works. Not a Gaten defect.
+5. **Guest teardown** is GL1's (observed again here: `acos-art launch` does not exit within 120 s
+   after `close` on this app; the host kills it). Not touched.
+
+## 8. Limits of this run
+
+* The phone was used read-only except for installing/removing `com.gaten.acosref`; the owner's
+  `com.gaten` was never launched, and its accessibility service stayed as it was. Note:
+  `tools/build-apps.sh` has an unconditional device smoke test — one run of it attempted
+  `adb install` of `dev.acos.fixtures.helloviews` while the phone was attached; it failed on a
+  signature mismatch and the script aborted on the first failure, so **nothing was installed or
+  upgraded**, and the script was not run again with the phone attached.
+* WCAG/accessibility and text-input flows were not exercised on ACOS (no home screen yet).
+* `uiautomator dump` is unavailable to this task: another agent's session holds the
+  UiAutomation connection (`UiAutomationService … already registered!`, agent-device reports the
+  device "claimed by session … /tmp/enhanced-download-pr"). Per-element bounds therefore come
+  from the ACOS tree and from measuring the device PNGs directly; both are recorded.
+* SSIM is a global 8×8-window mean over grayscale, computed here (no scikit-image on the host);
+  it is a summary, not a verdict — the per-element table is the evidence.
+* Latencies were measured while several other agents were running ART jobs on the same host
+  (`run-exclusive.sh` queue waits of 1–10 min are excluded from the numbers quoted above).
+
+## 9. Validation run (this worktree, at the GR1 head)
+
+`cargo test --release -p acos-cli -p acos-art -p acos-services --offline` → **rc=0**, 64 test
+binaries green, including `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm`
+(the worktree-only failure needs a 108-byte socket path; this run used a short path and passed).
+
+`acos verify --engine art` gates (`results/gaten/GR1-gates.txt`):
+
+| scenario | rc | status |
+|---|---|---|
+| `scenarios/v2-art-counter.yaml` | 0 | pass |
+| `scenarios/w22-counter-reset.yaml` | 0 | pass |
+| `scenarios/w54-dialog-pixels.yaml` | 0 | pass |
+| `scenarios/w42-back-frame.yaml` | 0 | pass |
+| `scenarios/w15-dialog-menu.yaml` | 0 | pass |
+| `scenarios/suite/T03-render-good.yaml` | 0 | pass (byte-exact pixel baseline still matches: the geometry plumbing left the defaults alone) |
+| `scenarios/suite/T03-render-wrong.yaml` | 1 | fail — the expected failure |
+| `scenarios/svg-viewbox.yaml` (new, red by design) | 1 | fail: `canvasIsViewPx=false`, `canvas=1080x2209` for a `270x116` view |
+
+`scenarios/gaten-home.yaml` (new) is the owner-flow definition of done; it passes its first two
+steps (first frame + welcome texts) and stops at the onboarding tap (§7 item 1).
