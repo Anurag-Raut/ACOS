@@ -3061,6 +3061,20 @@ fn wait_for_event_settled(
             last_wake = Instant::now();
         }
         if Instant::now() >= deadline {
+            // A timeout must still state the pixel fact (true|false), even when
+            // no candidate sample was valid. Recompute against the pre-action
+            // capture; a tree request has no pre-action capture and reports
+            // `true` (no pixel claim).
+            let pixels_changed = last_pixels_changed.unwrap_or_else(|| match previous_fnv {
+                None => true,
+                Some(previous) => {
+                    let current = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|c| c.fnv1a)
+                    };
+                    current != Some(previous) && current.is_some()
+                }
+            });
             trace_host(
                 probe_state,
                 &format!("settle event timeout reason={last_reason} gen={generation}"),
@@ -3076,7 +3090,7 @@ fn wait_for_event_settled(
                     bound: "timeout",
                     rule: Some("event"),
                     reason: Some(last_reason),
-                    pixels_changed: last_pixels_changed,
+                    pixels_changed: Some(pixels_changed),
                 },
             };
         }
