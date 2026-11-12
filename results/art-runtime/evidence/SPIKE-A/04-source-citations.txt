@@ -1,0 +1,209 @@
+=== boot sequence, from .cache/aosp (android-14.0.0_r75) ===
+--- main_surfaceflinger.cpp: ProcessState/threadpool + addService + init order
+       1	    // When SF is launched in its own process, limit the number of
+       2	    // binder threads to 4.
+       3	    ProcessState::self()->setThreadPoolMaxThreadCount(4);
+       4	
+       5	    // Set uclamp.min setting on all threads, maybe an overkill but we want
+       6	    // to cover important threads like RenderEngine.
+       7	    if (SurfaceFlinger::setSchedAttr(true) != NO_ERROR) {
+       8	        ALOGW("Failed to set uclamp.min during boot: %s", strerror(errno));
+       9	    }
+      10	    // start the thread pool
+      11	    sp<ProcessState> ps(ProcessState::self());
+      12	    ps->startThreadPool();
+      13	
+      14	    // initialize before clients can connect
+      15	    flinger->init();
+      16	
+      17	    // publish surface flinger
+      18	    sp<IServiceManager> sm(defaultServiceManager());
+      19	    sm->addService(String16(SurfaceFlinger::getServiceName()), flinger, false,
+      20	                   IServiceManager::DUMP_FLAG_PRIORITY_CRITICAL | IServiceManager::DUMP_FLAG_PROTO);
+      21	
+      22	    // publish gui::ISurfaceComposer, the new AIDL interface
+      23	    sp<SurfaceComposerAIDL> composerAIDL = sp<SurfaceComposerAIDL>::make(flinger);
+      24	    if (FlagManager::getInstance().misc1()) {
+      25	        composerAIDL->setMinSchedulerPolicy(SCHED_FIFO, newPriority);
+      26	    }
+      27	    sm->addService(String16("SurfaceFlingerAIDL"), composerAIDL, false,
+      28	                   IServiceManager::DUMP_FLAG_PRIORITY_CRITICAL | IServiceManager::DUMP_FLAG_PROTO);
+      29	
+      30	    startDisplayService(); // dependency on SF getting registered above
+--- SurfaceFlinger.cpp:821 init(): RenderEngine::create is the FIRST HAL-ish call
+void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
+    ATRACE_CALL();
+    ALOGI(  "SurfaceFlinger's main thread ready to run. "
+            "Initializing graphics H/W...");
+    addTransactionReadyFilters();
+    Mutex::Autolock lock(mStateLock);
+
+    // Get a RenderEngine for the given display / config (can't fail)
+    // TODO(b/77156734): We need to stop casting and use HAL types when possible.
+    // Sending maxFrameBufferAcquiredBuffers as the cache size is tightly tuned to single-display.
+    auto builder = renderengine::RenderEngineCreationArgs::Builder()
+                           .setPixelFormat(static_cast<int32_t>(defaultCompositionPixelFormat))
+                           .setImageCacheSize(maxFrameBufferAcquiredBuffers)
+                           .setEnableProtectedContext(enable_protected_contents(false))
+                           .setPrecacheToneMapperShaderOnly(false)
+                           .setSupportsBackgroundBlur(mSupportsBlur)
+                           .setContextPriority(
+                                   useContextPriority
+                                           ? renderengine::RenderEngine::ContextPriority::REALTIME
+                                           : renderengine::RenderEngine::ContextPriority::MEDIUM);
+    chooseRenderEngineType(builder);
+    mRenderEngine = renderengine::RenderEngine::create(builder.build());
+    mCompositionEngine->setRenderEngine(mRenderEngine.get());
+    mMaxRenderTargetSize =
+            std::min(getRenderEngine().getMaxTextureSize(), getRenderEngine().getMaxViewportDims());
+
+        enableHalVirtualDisplays(true);
+    }
+
+    // Process hotplug for displays connected at boot.
+    LOG_ALWAYS_FATAL_IF(!configureLocked(),
+                        "Initial display configuration failed: HWC did not hotplug");
+
+    // Commit primary display.
+    sp<const DisplayDevice> display;
+    if (const auto indexOpt = mCurrentState.getDisplayIndex(getPrimaryDisplayIdLocked())) {
+        const auto& displays = mCurrentState.displays;
+
+        const auto& token = displays.keyAt(*indexOpt);
+        const auto& state = displays.valueAt(*indexOpt);
+
+        processDisplayAdded(token, state);
+        mDrawingState.displays.add(token, state);
+
+        display = getDefaultDisplayDeviceLocked();
+    }
+
+    LOG_ALWAYS_FATAL_IF(!display, "Failed to configure the primary display");
+    LOG_ALWAYS_FATAL_IF(!getHwComposer().isConnected(display->getPhysicalId()),
+                        "Primary display is disconnected");
+
+--- SurfaceFlinger.cpp:820 configureLocked gate (HWC hotplug required at boot)
+bool SurfaceFlinger::configureLocked() {
+    std::vector<HotplugEvent> events;
+    {
+        std::lock_guard<std::mutex> lock(mHotplugMutex);
+        events = std::move(mPendingHotplugEvents);
+    }
+
+    for (const auto [hwcDisplayId, connection] : events) {
+        if (auto info = getHwComposer().onHotplug(hwcDisplayId, connection)) {
+            const auto displayId = info->id;
+            const bool connected = connection == hal::Connection::CONNECTED;
+
+            if (const char* const log =
+                        processHotplug(displayId, hwcDisplayId, connected, std::move(*info))) {
+                ALOGI("%s display %s (HAL ID %" PRIu64 ")", log, to_string(displayId).c_str(),
+                      hwcDisplayId);
+            }
+        }
+    }
+
+    return !events.empty();
+}
+--- HWComposer.h:475 primary display requirement
+    void dump(std::string& out) const override;
+
+    Hwc2::Composer* getComposer() const override { return mComposer.get(); }
+
+    hal::HWDisplayId getPrimaryHwcDisplayId() const override {
+        LOG_ALWAYS_FATAL_IF(!mPrimaryHwcDisplayId, "Missing HWC primary display");
+        return *mPrimaryHwcDisplayId;
+    }
+
+    PhysicalDisplayId getPrimaryDisplayId() const override {
+        const auto id = toPhysicalDisplayId(getPrimaryHwcDisplayId());
+        LOG_ALWAYS_FATAL_IF(!id, "Missing primary display");
+        return *id;
+    }
+
+    virtual bool isHeadless() const override { return !mPrimaryHwcDisplayId; }
+
+--- AidlComposerHal.cpp:234-252 service discovery + createClient (LOG_ALWAYS_FATAL otherwise)
+bool AidlComposer::isDeclared(const std::string& serviceName) {
+    return AServiceManager_isDeclared(instance(serviceName).c_str());
+}
+
+AidlComposer::AidlComposer(const std::string& serviceName) {
+    // This only waits if the service is actually declared
+    mAidlComposer = AidlIComposer::fromBinder(
+            ndk::SpAIBinder(AServiceManager_waitForService(instance(serviceName).c_str())));
+    if (!mAidlComposer) {
+        LOG_ALWAYS_FATAL("Failed to get AIDL composer service");
+        return;
+    }
+
+    if (!mAidlComposer->createClient(&mAidlComposerClient).isOk()) {
+        LOG_ALWAYS_FATAL("Can't create AidlComposerClient, fallback to HIDL");
+        return;
+    }
+
+    addReader(translate<Display>(kSingleReaderKey));
+--- ComposerHal.cpp:28-34 composer3 AIDL first, HIDL 2.x fallback
+
+Composer::~Composer() = default;
+
+std::unique_ptr<Composer> Composer::create(const std::string& serviceName) {
+    if (AidlComposer::isDeclared(serviceName)) {
+        return std::make_unique<AidlComposer>(serviceName);
+    }
+
+    return std::make_unique<HidlComposer>(serviceName);
+}
+--- SurfaceFlinger.cpp:795 chooseRenderEngineType (only GL or VK)
+void chooseRenderEngineType(renderengine::RenderEngineCreationArgs::Builder& builder) {
+    char prop[PROPERTY_VALUE_MAX];
+    property_get(PROPERTY_DEBUG_RENDERENGINE_BACKEND, prop, "");
+
+    if (strcmp(prop, "skiagl") == 0) {
+        builder.setThreaded(renderengine::RenderEngine::Threaded::NO)
+                .setGraphicsApi(renderengine::RenderEngine::GraphicsApi::GL);
+    } else if (strcmp(prop, "skiaglthreaded") == 0) {
+        builder.setThreaded(renderengine::RenderEngine::Threaded::YES)
+                .setGraphicsApi(renderengine::RenderEngine::GraphicsApi::GL);
+    } else if (strcmp(prop, "skiavk") == 0) {
+        builder.setThreaded(renderengine::RenderEngine::Threaded::NO)
+                .setGraphicsApi(renderengine::RenderEngine::GraphicsApi::VK);
+    } else if (strcmp(prop, "skiavkthreaded") == 0) {
+        builder.setThreaded(renderengine::RenderEngine::Threaded::YES)
+                .setGraphicsApi(renderengine::RenderEngine::GraphicsApi::VK);
+    } else {
+        const auto kVulkan = renderengine::RenderEngine::GraphicsApi::VK;
+        const bool useVulkan = FlagManager::getInstance().vulkan_renderengine() &&
+                renderengine::RenderEngine::canSupport(kVulkan);
+        builder.setGraphicsApi(useVulkan ? kVulkan : renderengine::RenderEngine::GraphicsApi::GL);
+    }
+}
+
+// Do not call property_set on main thread which will be blocked by init
+// Use StartPropertySetThread instead.
+--- SurfaceFlinger.cpp:752-762 bootFinished waits for window + inputflinger (after init)
+
+    // wait patiently for the window manager death
+    const String16 name("window");
+    mWindowManager = defaultServiceManager()->waitForService(name);
+    if (mWindowManager != 0) {
+        mWindowManager->linkToDeath(sp<IBinder::DeathRecipient>::fromExisting(this));
+    }
+
+    // stop boot animation
+    // formerly we would just kill the process, but we now ask it to exit so it
+    // can choose where to stop the animation.
+    property_set("service.bootanim.exit", "1");
+
+    const int LOGTAG_SF_STOP_BOOTANIM = 60110;
+    LOG_EVENT_LONG(LOGTAG_SF_STOP_BOOTANIM,
+                   ns2ms(systemTime(SYSTEM_TIME_MONOTONIC)));
+
+    sp<IBinder> input(defaultServiceManager()->waitForService(String16("inputflinger")));
+
+    static_cast<void>(mScheduler->schedule([=, this]() FTL_FAKE_GUARD(kMainThreadContext) {
+        if (input == nullptr) {
+            ALOGE("Failed to link to input service");
+        } else {
+            mInputFlinger = interface_cast<os::IInputFlinger>(input);
+        }
