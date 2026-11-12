@@ -218,3 +218,36 @@ fn an_unknown_channel_is_null_not_an_error() {
         Value::TypedObject(Parcelable::Null)
     ));
 }
+
+
+/// The dispatcher's create-call override decodes the real channel list when the
+/// image bytes are understood, and falls back to consuming it opaquely rather
+/// than rejecting the transaction.
+#[test]
+fn create_request_decodes_or_falls_back_without_rejecting() {
+    let m = method("android.app.INotificationManager", "createNotificationChannels");
+    let slice = parceled_list_of(vec![Value::Parcelable(channel("messages", None))]);
+    let mut request = acos_services::codec::build_request(
+        "android.app.INotificationManager",
+        m,
+        &[
+            Value::Str(Some("pkg".into())),
+            Value::TypedObject(slice),
+        ],
+    )
+    .expect("request builds");
+    request.set_data_position(0);
+    request
+        .enforce_interface("android.app.INotificationManager")
+        .expect("interface token");
+    let values = acos_services::codec::read_args_override(
+        "android.app.INotificationManager",
+        m.code,
+        &mut request,
+    )
+    .expect("override")
+    .expect("override applies");
+    assert!(values[1].as_parcelable().is_some(), "the channel slice decoded");
+
+
+}

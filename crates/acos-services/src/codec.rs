@@ -75,27 +75,35 @@ pub fn read_args_override(
             Ok(Some(read_notify_dex_load(parcel)?))
         }
         // K2: `ParceledListSlice<NotificationChannel>` is the last argument of
-        // the notification create calls. Its element codec depends on
-        // `NotificationChannel(Parcel)`, which is decoded by the service; the
-        // dispatcher only needs to consume the slice so the service can answer
-        // "accepted" instead of rejecting the request at decode time.
-        ("android.app.INotificationManager", 30 | 31) => {
+        // the notification create calls. Decode it with the real
+        // `NotificationChannel` codec when that codec can follow the image
+        // bytes (so the service can store the channels); if a field this image
+        // writes is not modelled, consume the slice opaquely and still let the
+        // service answer, exactly as a real NMS accepts the call.
+        ("android.app.INotificationManager", 30 | 31 | 32) => {
+            let decoded = acos_aidl::lookup(interface, code).and_then(|method| {
+                let mut probe = parcel.clone();
+                read_args(&mut probe, &method.args, interface, &method.name)
+                    .ok()
+                    .map(|values| (values, probe.data_position()))
+            });
+            if let Some((values, position)) = decoded {
+                parcel.set_data_position(position);
+                return Ok(Some(values));
+            }
             let package = parcel.read_string16()?;
-            skip_remaining(parcel);
-            Ok(Some(vec![
-                Value::Str(package),
-                Value::Skipped,
-            ]))
-        }
-        ("android.app.INotificationManager", 32) => {
-            let package = parcel.read_string16()?;
-            let uid = parcel.read_int32()?;
-            skip_remaining(parcel);
-            Ok(Some(vec![
-                Value::Str(package),
-                Value::Int(uid),
-                Value::Skipped,
-            ]))
+            if code == 32 {
+                let uid = parcel.read_int32()?;
+                skip_remaining(parcel);
+                Ok(Some(vec![
+                    Value::Str(package),
+                    Value::Int(uid),
+                    Value::Skipped,
+                ]))
+            } else {
+                skip_remaining(parcel);
+                Ok(Some(vec![Value::Str(package), Value::Skipped]))
+            }
         }
         // K2: `setDynamicShortcuts`/`addDynamicShortcuts`/`updateShortcuts`
         // carry a `ParceledListSlice<ShortcutInfo>` followed by the user id.
