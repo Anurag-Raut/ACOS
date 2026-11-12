@@ -286,7 +286,11 @@ def main():
     with open(os.path.join(out, "00-inspect.json"), "w") as f:
         json.dump(insp_json, f, indent=1)
     result = insp_json.get("result") or {}
-    inspect_ok = bool(insp_json.get("ok")) and bool(result.get("launcher_activity"))
+    # An alias launcher (`<activity-alias>` with MAIN/LAUNCHER) is resolved by
+    # the ART launch path (acos_services::manifest_resolve) but not by
+    # `acos inspect` (acos-apk::manifest), so a missing launcher_activity here
+    # is recorded, not treated as an inspect failure.
+    inspect_ok = bool(insp_json.get("ok"))
     report["inspect"] = {
         "ok": inspect_ok,
         "wall_ms": insp_ms,
