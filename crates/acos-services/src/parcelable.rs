@@ -1454,7 +1454,14 @@ fn unsupported(class: &str) -> ServiceError {
 // ---------------------------------------------------------------------------
 
 /// Read a parcelable payload (no `writeTypedObject` presence marker).
+///
+/// `android.content.Intent` is not a flat field list (it recurses through
+/// `selector`/`originalIntent`, and its `ComponentName` has **no** presence
+/// word), so it has a dynamic codec of its own — see [`read_intent`].
 pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
+    if class == INTENT_CLASS {
+        return read_intent(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
     for field in spec.fields {
@@ -1475,6 +1482,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
             detail: "null payload".into(),
         });
     };
+    if class == INTENT_CLASS {
+        return write_intent(parcel, value);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
         return Err(ServiceError::BadReply {
@@ -2153,6 +2163,268 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
 }
 
 /// The Android 14 `BaseBundle` magic header (`"BNDL"`).
+// ---------------------------------------------------------------------------
+// android.content.Intent (W35)
+// ---------------------------------------------------------------------------
+
+/// The codec key for `android.content.Intent`.
+pub const INTENT_CLASS: &str = "android.content.Intent";
+/// `android.content.ComponentName` (the *typed-object* shape: two String16s).
+const COMPONENT_CLASS: &str = "android.content.ComponentName";
+/// `android.graphics.Rect` (four ints, used for `Intent.mSourceBounds`).
+const RECT_CLASS: &str = "android.graphics.Rect";
+/// `android.net.Uri` — declared on this image only as the **static**
+/// `writeToParcel(Parcel, Uri)`; the body is not decodable from the image, so a
+/// non-null `Intent.mData` is a structured refusal, never a guessed body.
+const URI_CLASS: &str = "android.net.Uri";
+/// `android.content.ClipData` — no codec exists; a present clip is refused.
+const CLIP_DATA_CLASS: &str = "android.content.ClipData";
+
+/// Field indices in the [`Parcelable::Ordered`] value [`read_intent`] returns
+/// and [`write_intent`] consumes, in `Intent.writeToParcel` order.
+pub const INTENT_ACTION: usize = 0;
+/// `mData` (`Value::Str(None)` = a null `Uri`).
+pub const INTENT_DATA: usize = 1;
+/// `mType`.
+pub const INTENT_TYPE: usize = 2;
+/// `mIdentifier`.
+pub const INTENT_IDENTIFIER: usize = 3;
+/// `mFlags`.
+pub const INTENT_FLAGS: usize = 4;
+/// `mPackage`.
+pub const INTENT_PACKAGE: usize = 5;
+/// `mComponent` (a `ComponentName` parcelable, or `Null`).
+pub const INTENT_COMPONENT: usize = 6;
+/// `mSourceBounds` (a `Rect` parcelable, or `Null`).
+pub const INTENT_SOURCE_BOUNDS: usize = 7;
+/// `mCategories` (`StringList`).
+pub const INTENT_CATEGORIES: usize = 8;
+/// `mSelector` (a nested `Intent`, or `Null`).
+pub const INTENT_SELECTOR: usize = 9;
+/// `mClipData` (`Null` only).
+pub const INTENT_CLIP_DATA: usize = 10;
+/// `mContentUserHint`.
+pub const INTENT_CONTENT_USER_HINT: usize = 11;
+/// `mExtras` (`Bundle`).
+pub const INTENT_EXTRAS: usize = 12;
+/// `mOriginalIntent` (a nested `Intent`, or `Null`).
+pub const INTENT_ORIGINAL: usize = 13;
+/// Number of fields the codec produces.
+pub const INTENT_FIELDS: usize = 14;
+
+/// Deepest `selector`/`originalIntent` nesting accepted. A real Intent nests at
+/// most two; the cap keeps a hostile parcel from recursing without bound.
+pub const MAX_INTENT_DEPTH: usize = 4;
+/// Largest accepted `mCategories` count.
+pub const MAX_INTENT_CATEGORIES: i32 = 1024;
+
+/// Write an `android.content.Intent` payload (no `writeTypedObject` marker).
+///
+/// The order is the image's `Landroid/content/Intent;->writeToParcel` sequence
+/// (W32 §3), and the two wire traps are honoured:
+///
+/// * every Intent-level string is **String8** (`writeString8`);
+/// * `ComponentName` here is the *static* writer, so a null component is a
+///   **single null String16** (no presence word) and a present one is two
+///   String16s — not the typed-object shape.
+pub fn write_intent(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let Parcelable::Ordered { class, values } = value else {
+        return Err(unsupported(INTENT_CLASS));
+    };
+    if class != INTENT_CLASS || values.len() != INTENT_FIELDS {
+        return Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: INTENT_CLASS.into(),
+            detail: format!("expected {INTENT_FIELDS} fields, got {}", values.len()),
+        });
+    }
+    parcel.write_string8_opt(expect_str(&values[INTENT_ACTION])?)?;
+    match expect_str(&values[INTENT_DATA])? {
+        // A null `Uri` is `writeInt(0)`; a non-null one goes through the static
+        // `Uri.writeToParcel`, whose body this image does not pin.
+        Some(uri) => {
+            let _ = uri;
+            return Err(unsupported(URI_CLASS));
+        }
+        None => parcel.write_int32(0),
+    }
+    parcel.write_string8_opt(expect_str(&values[INTENT_TYPE])?)?;
+    parcel.write_string8_opt(expect_str(&values[INTENT_IDENTIFIER])?)?;
+    parcel.write_int32(expect_int(&values[INTENT_FLAGS])?);
+    parcel.write_string8_opt(expect_str(&values[INTENT_PACKAGE])?)?;
+    match expect_parcelable(&values[INTENT_COMPONENT])? {
+        Parcelable::Null => parcel.write_string16_opt(None)?,
+        Parcelable::Ordered { values, .. } if values.len() == 2 => {
+            parcel.write_string16_opt(expect_str(&values[0])?)?;
+            parcel.write_string16_opt(expect_str(&values[1])?)?;
+        }
+        other => {
+            return Err(ServiceError::BadReply {
+                interface: "parcelable".into(),
+                method: INTENT_CLASS.into(),
+                detail: format!("component must be two String16s, got {other:?}"),
+            })
+        }
+    };
+    match expect_parcelable(&values[INTENT_SOURCE_BOUNDS])? {
+        Parcelable::Null => parcel.write_int32(0),
+        Parcelable::Ordered { values, .. } if values.len() == 4 => {
+            parcel.write_int32(1);
+            for v in values {
+                parcel.write_int32(expect_int(v)?);
+            }
+        }
+        other => {
+            return Err(ServiceError::BadReply {
+                interface: "parcelable".into(),
+                method: INTENT_CLASS.into(),
+                detail: format!("sourceBounds must be four ints, got {other:?}"),
+            })
+        }
+    }
+    match &values[INTENT_CATEGORIES] {
+        Value::StringList(None) | Value::StringArray(None) => parcel.write_int32(0),
+        Value::StringList(Some(items)) | Value::StringArray(Some(items)) => {
+            parcel.write_int32(i32::try_from(items.len()).unwrap_or(i32::MAX));
+            for item in items {
+                parcel.write_string8_opt(item.as_deref())?;
+            }
+        }
+        other => {
+            return Err(ServiceError::BadReply {
+                interface: "parcelable".into(),
+                method: INTENT_CLASS.into(),
+                detail: format!("categories must be a String list, got {other:?}"),
+            })
+        }
+    }
+    write_nested_intent(parcel, &values[INTENT_SELECTOR])?;
+    match expect_parcelable(&values[INTENT_CLIP_DATA])? {
+        Parcelable::Null => parcel.write_int32(0),
+        _ => return Err(unsupported(CLIP_DATA_CLASS)),
+    }
+    parcel.write_int32(expect_int(&values[INTENT_CONTENT_USER_HINT])?);
+    write_bundle(parcel, expect_bundle(&values[INTENT_EXTRAS])?)?;
+    write_nested_intent(parcel, &values[INTENT_ORIGINAL])
+}
+
+fn write_nested_intent(parcel: &mut Parcel, value: &Value) -> Result<()> {
+    match expect_parcelable(value)? {
+        Parcelable::Null => {
+            parcel.write_int32(0);
+            Ok(())
+        }
+        nested @ Parcelable::Ordered { .. } => {
+            parcel.write_int32(1);
+            write_intent(parcel, nested)
+        }
+        other => Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: INTENT_CLASS.into(),
+            detail: format!("nested intent must be an Intent or null, got {other:?}"),
+        }),
+    }
+}
+
+/// Read an `android.content.Intent` payload (no `writeTypedObject` marker).
+pub fn read_intent(parcel: &mut Parcel) -> Result<Parcelable> {
+    read_intent_at(parcel, 0)
+}
+
+fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
+    if depth > MAX_INTENT_DEPTH {
+        return Err(ServiceError::BadRequest {
+            interface: INTENT_CLASS.into(),
+            method: "readFromParcel".into(),
+            detail: format!("Intent nesting deeper than {MAX_INTENT_DEPTH}"),
+        });
+    }
+    let action = parcel.read_string8()?;
+    // `Uri`: `readInt` presence, then the static `Uri.writeToParcel` body. The
+    // image's dex does not pin that body, so a non-null `data` Uri is refused
+    // with a structured code instead of a guessed string read that would
+    // misalign every field after it.
+    let data_present = parcel.read_int32()?;
+    if data_present != 0 {
+        return Err(unsupported(URI_CLASS));
+    }
+    let type_ = parcel.read_string8()?;
+    let identifier = parcel.read_string8()?;
+    let flags = parcel.read_int32()?;
+    let package = parcel.read_string8()?;
+    // `ComponentName.writeToParcel(ComponentName, Parcel)` (static): a null
+    // component is one null String16 — **no presence word**.
+    let component = match parcel.read_string16()? {
+        None => Value::Parcelable(Parcelable::Null),
+        Some(package) => {
+            let class = parcel.read_string16()?;
+            Value::Parcelable(Parcelable::ordered(
+                COMPONENT_CLASS,
+                vec![Value::Str(Some(package)), Value::Str(class)],
+            ))
+        }
+    };
+    let source_bounds = if parcel.read_int32()? != 0 {
+        let mut values = Vec::with_capacity(4);
+        for _ in 0..4 {
+            values.push(Value::Int(parcel.read_int32()?));
+        }
+        Value::Parcelable(Parcelable::ordered(RECT_CLASS, values))
+    } else {
+        Value::Parcelable(Parcelable::Null)
+    };
+    let count = parcel.read_int32()?;
+    if count > MAX_INTENT_CATEGORIES {
+        return Err(ServiceError::BadRequest {
+            interface: INTENT_CLASS.into(),
+            method: "readFromParcel".into(),
+            detail: format!("category count {count} exceeds {MAX_INTENT_CATEGORIES}"),
+        });
+    }
+    let categories = if count <= 0 {
+        Value::StringList(None)
+    } else {
+        let mut items = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            items.push(parcel.read_string8()?);
+        }
+        Value::StringList(Some(items))
+    };
+    let selector = read_nested_intent(parcel, depth)?;
+    if parcel.read_int32()? != 0 {
+        return Err(unsupported(CLIP_DATA_CLASS));
+    }
+    let content_user_hint = parcel.read_int32()?;
+    let extras = Value::Bundle(read_bundle(parcel)?);
+    let original = read_nested_intent(parcel, depth)?;
+    Ok(Parcelable::ordered(
+        INTENT_CLASS,
+        vec![
+            Value::Str(action),
+            Value::Str(None),
+            Value::Str(type_),
+            Value::Str(identifier),
+            Value::Int(flags),
+            Value::Str(package),
+            component,
+            source_bounds,
+            categories,
+            selector,
+            Value::Parcelable(Parcelable::Null),
+            Value::Int(content_user_hint),
+            extras,
+            original,
+        ],
+    ))
+}
+
+fn read_nested_intent(parcel: &mut Parcel, depth: usize) -> Result<Value> {
+    if parcel.read_int32()? == 0 {
+        return Ok(Value::Parcelable(Parcelable::Null));
+    }
+    Ok(Value::Parcelable(read_intent_at(parcel, depth + 1)?))
+}
+
 pub const BUNDLE_MAGIC: u32 = 0x4c44_4e42;
 
 /// Write a `writeBundle` payload in the real `BaseBundle` layout.

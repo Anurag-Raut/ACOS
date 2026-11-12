@@ -230,6 +230,47 @@ impl WmsState {
         Some(binding)
     }
 
+    /// Push a window's z-order, frame origin and dim amount into the compositor
+    /// registry (**W35**).
+    ///
+    /// Those three values are the *window manager's*: the guest never puts a
+    /// window frame, a z-order against other windows or a dim layer on the
+    /// layer wire (`layer_state_t` has x/y/z but not the frame origin, and there
+    /// is no dim in `gui::WindowInfo` beyond `FLAG_DIM_BEHIND` in
+    /// `layoutParamsFlags` — the dim layer is `mDimLayer`, which the real
+    /// `WindowManagerService` owns). The C1 composite therefore reads them from
+    /// here: on every `relayout`, so a dialog that appears, moves or dims is
+    /// what the next captured frame shows.
+    ///
+    /// `false` when the window or the layer is unknown (never a fabricated
+    /// placement).
+    pub fn publish_layer_placement(
+        &self,
+        binding: SurfaceLayerBinding,
+        window: WindowId,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> bool {
+        let Some(record) = self.wm.windows.get(&window) else {
+            return false;
+        };
+        let dim_amount = if record.params.flags & crate::surface_client::FLAG_DIM_BEHIND != 0 {
+            record.params.dim_amount.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let placement = crate::surface_client::LayerPlacement {
+            x: record.frame.left,
+            y: record.frame.top,
+            z: i32::try_from(record.z).unwrap_or(i32::MAX),
+            alpha: record.params.alpha.clamp(0.0, 1.0),
+            dim_amount,
+        };
+        let mut state = compositor
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.set_layer_placement(binding.handle, placement)
+    }
+
     /// `IWindowSession.addToDisplayAsUser`.
     pub fn add_to_display_as_user(
         &mut self,

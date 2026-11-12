@@ -145,6 +145,20 @@ pub const MAX_COMPOSERS: u32 = 256;
 pub const MAX_DISPLAYS: u32 = 16;
 /// Largest accepted top-level `uncacheBuffers` count.
 pub const MAX_UNCACHE_BUFFERS: u32 = 1024;
+/// Largest number of layers one C1 composite may draw. A live session has two
+/// or three (Activity, dialog, popup); 16 leaves room for a menu with submenus
+/// and still bounds the per-frame work a hostile guest can ask for.
+pub const MAX_COMPOSITE_LAYERS: usize = 16;
+/// Largest total of the layers' own buffers a composite may read, in bytes.
+/// Four 64 MiB frames; a real session is 9.6 MiB per layer.
+pub const MAX_COMPOSITE_INPUT_BYTES: u64 = 256 * 1024 * 1024;
+
+/// `WindowManager.LayoutParams.FLAG_DIM_BEHIND`, as the image writes it in
+/// `gui::WindowInfo.layoutParamsFlags`. The dim **layer** is the window
+/// manager's (`mDimLayer` in the real `WindowManagerService`), so ACOS draws it
+/// from the host's own `LayoutParams` (`flags` + `dimAmount`) at composite
+/// time; see [`SurfaceState::capture_composite`].
+pub const FLAG_DIM_BEHIND: i32 = 0x0000_0002;
 
 /// `layer_state_t` change flags used by this task.
 pub mod what {
@@ -207,6 +221,12 @@ pub struct FrameCapture {
     pub fnv1a: u64,
     /// Pixels with any non-zero byte (0 means a blank buffer).
     pub non_zero_pixels: usize,
+    /// How many layers this frame is composed of (1 for a single-layer pass
+    /// through, more once a dialog/popup is visible).
+    pub layers: u32,
+    /// `true` when `rgba` is the composite of the visible layers in z-order,
+    /// `false` when it is one layer's buffer passed through unchanged.
+    pub composite: bool,
 }
 
 /// The newest buffer a layer has posted.
@@ -254,6 +274,119 @@ impl LatestBuffer {
         }
     }
 }
+
+/// The compositor-visible placement of one layer, in display coordinates.
+///
+/// The guest sends everything a *client* can know on the wire
+/// (`layer_state_t.x/y/z`, `gui::WindowInfo.alpha`); the window's frame origin,
+/// its z-order against other windows and its dim amount belong to the window
+/// manager, so the host's `WmsState` pushes those into the registry on every
+/// `relayout` ([`crate::wms::WmsState::publish_layer_placement`]). A placement
+/// overrides the guest's own values.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerPlacement {
+    /// Frame left edge on the display.
+    pub x: i32,
+    /// Frame top edge on the display.
+    pub y: i32,
+    /// Z-order (higher draws later; stock: `windows.len()+1` at add time).
+    pub z: i32,
+    /// Window alpha (`WindowManager.LayoutParams.alpha`).
+    pub alpha: f32,
+    /// Dim amount drawn *below* this layer (`0.0` = no dim layer).
+    pub dim_amount: f32,
+}
+
+/// The layer geometry a client can set on its own surface
+/// (`SurfaceControl.Transaction.setPosition`/`setLayer`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LayerGeometry {
+    /// `layer_state_t.x` (pixels).
+    pub x: i32,
+    /// `layer_state_t.y` (pixels).
+    pub y: i32,
+    /// `layer_state_t.z`.
+    pub z: i32,
+}
+
+/// Why a C1 composite could not be produced. Structured, never a blank frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompositeError {
+    /// No layer has posted a buffer yet.
+    NoFrame,
+    /// More visible layers than [`MAX_COMPOSITE_LAYERS`].
+    TooManyLayers {
+        /// Layers offered.
+        layers: usize,
+        /// The cap.
+        max: usize,
+    },
+    /// The union of the layer frames is larger than
+    /// [`MAX_BUFFER_DIMENSION`] on a side, or degenerate.
+    CanvasTooLarge {
+        /// Union width.
+        width: i64,
+        /// Union height.
+        height: i64,
+    },
+    /// The composite (or the layers it reads) is larger than the byte caps.
+    BytesTooLarge {
+        /// Bytes required.
+        bytes: u64,
+        /// The cap that refused it.
+        max: u64,
+    },
+    /// A layer buffer's format is not RGBA_8888-class (the only layout a C1
+    /// capture can interpret).
+    UnsupportedFormat {
+        /// The image's `HAL_PixelFormat`.
+        format: i32,
+    },
+    /// A layer's buffer could not be read in full.
+    Unreadable {
+        /// C1 layer id.
+        layer_id: i32,
+    },
+}
+
+impl CompositeError {
+    /// The stable code for evidence lines.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::NoFrame => "COMPOSITE_NO_FRAME",
+            Self::TooManyLayers { .. } => "COMPOSITE_TOO_MANY_LAYERS",
+            Self::CanvasTooLarge { .. } => "COMPOSITE_CANVAS_TOO_LARGE",
+            Self::BytesTooLarge { .. } => "COMPOSITE_BYTES_TOO_LARGE",
+            Self::UnsupportedFormat { .. } => "COMPOSITE_UNSUPPORTED_FORMAT",
+            Self::Unreadable { .. } => "COMPOSITE_UNREADABLE",
+        }
+    }
+}
+
+impl std::fmt::Display for CompositeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoFrame => write!(f, "no layer has posted a buffer"),
+            Self::TooManyLayers { layers, max } => {
+                write!(f, "{layers} visible layers exceeds the cap of {max}")
+            }
+            Self::CanvasTooLarge { width, height } => {
+                write!(f, "composite canvas {width}x{height} is out of bounds")
+            }
+            Self::BytesTooLarge { bytes, max } => {
+                write!(f, "composite needs {bytes} bytes, cap is {max}")
+            }
+            Self::UnsupportedFormat { format } => {
+                write!(f, "layer buffer format {format} is not RGBA_8888")
+            }
+            Self::Unreadable { layer_id } => {
+                write!(f, "layer {layer_id}'s buffer could not be read in full")
+            }
+        }
+    }
+}
+
 
 /// `BufferData::generateReleaseCallbackId()`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -313,6 +446,13 @@ pub struct LayerRecord {
     /// `BufferData` buffer, across all layers. A capture is a new observation
     /// when this is greater than the previous capture's value.
     pub latest_generation: u64,
+    /// The client's own position/z for this layer (`setPosition`/`setLayer`).
+    pub geometry: LayerGeometry,
+    /// Window alpha from `gui::WindowInfo` (1.0 when the transaction carried no
+    /// window info, i.e. a BLAST child layer).
+    pub alpha: f32,
+    /// The window manager's placement, when this layer is a window surface.
+    pub placement: Option<LayerPlacement>,
 }
 
 /// A `GraphicBuffer` the client sent inline, kept so a later `client_cache_t`
@@ -453,6 +593,43 @@ impl SurfaceState {
         );
     }
 
+    /// The placement a composite draws `layer` with.
+    ///
+    /// A window's *window surface* is the layer `IWindowSession.relayout`
+    /// creates and the window manager places; the buffers an app draws arrive on
+    /// the **BLAST child** the client creates under it (`bbq-wrapper`, W5), whose
+    /// own transactions carry no frame and no z. So the placement is inherited
+    /// from the nearest ancestor that has one (bounded depth, no cycles).
+    /// Without an ancestor placement the client's own `layer_state_t.x/y/z` (and
+    /// `gui::WindowInfo.alpha`) is the honest answer.
+    #[must_use]
+    fn placement_of(&self, layer: &LayerRecord) -> LayerPlacement {
+        const MAX_DEPTH: usize = 8;
+        let mut current = layer;
+        for _ in 0..MAX_DEPTH {
+            if let Some(placement) = current.placement {
+                return placement;
+            }
+            let Some(parent) = current.parent else {
+                break;
+            };
+            let Some(next) = self.layers.get(&parent.0) else {
+                break;
+            };
+            if next.handle == current.handle {
+                break;
+            }
+            current = next;
+        }
+        LayerPlacement {
+            x: layer.geometry.x,
+            y: layer.geometry.y,
+            z: layer.geometry.z,
+            alpha: layer.alpha,
+            dim_amount: 0.0,
+        }
+    }
+
     /// C1's monotonic buffer store counter (0 = no frame has landed yet).
     #[must_use]
     pub fn latest_generation(&self) -> u64 {
@@ -479,44 +656,233 @@ impl SurfaceState {
     /// preview renderer. `None` means no buffer has landed yet.
     #[must_use]
     pub fn capture_latest(&self) -> Option<FrameCapture> {
-        use std::os::unix::fs::FileExt;
+        match self.capture_composite() {
+            Ok(frame) => Some(frame),
+            Err(err) => {
+                // Fail closed with a named code. `None` means "no frame" to the
+                // caller, so the *reason* must be visible in the host log
+                // instead of the frame silently missing from the evidence.
+                if !matches!(err, CompositeError::NoFrame) {
+                    eprintln!("ACOSC1 composite refused: {} ({err})", err.code());
+                }
+                None
+            }
+        }
+    }
 
-        let (layer, buffer) = self.newest_frame_layer()?;
-        // Decode already rejects an out-of-bounds geometry; repeat the bound
-        // here because `LatestBuffer` is public and a capture must never turn a
-        // declared size into an allocation the host pays for.
-        let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)?;
-        let size = usize::try_from(bytes).ok()?;
-        if size == 0 {
-            return None;
+    /// The frame the app shows: **every visible layer in z-order**, composited.
+    ///
+    /// W35 replaces the W10/W32 "newest buffer of one layer" rule. A dialog,
+    /// popup or menu is its own top-level `TYPE_APPLICATION` window with its own
+    /// compositor layer and a frame above the Activity (W32 §1), so capturing
+    /// one layer loses it. The inputs are the state C1 already decoded:
+    ///
+    /// * pixels — each layer's newest stored `GraphicBuffer` (memfd);
+    /// * crop — `BufferData.crop`/`layer_state_t.bufferCrop` (empty = whole
+    ///   buffer);
+    /// * position/z — the window manager's placement when the layer is a window
+    ///   surface ([`LayerPlacement`], pushed on `relayout`), else the client's
+    ///   own `layer_state_t.x/y/z`;
+    /// * alpha — `WindowManager.LayoutParams.alpha` (window layers) or
+    ///   `gui::WindowInfo.alpha` for a layer the guest positions itself;
+    /// * dim — the dialog's `FLAG_DIM_BEHIND` + `dimAmount` from the host's own
+    ///   `LayoutParams`. The image sends those two values (never a dim layer:
+    ///   the dim layer is the *window manager's*, `mDimLayer` in the real
+    ///   `WindowManagerService`, and the window manager is the host here), so
+    ///   the dim is drawn per its flags: the canvas already drawn is darkened by
+    ///   `dimAmount` before the window above it is drawn. Stock bounds the dim
+    ///   layer to the display, so the whole canvas is dimmed.
+    ///
+    /// The canvas is the union of the visible layer frames. A single full-window
+    /// layer at the origin passes through unchanged (its own stride included),
+    /// so a one-layer session's frame stays byte-identical to W10–W32.
+    ///
+    /// Every guest-controlled shape is bounded ([`MAX_COMPOSITE_LAYERS`],
+    /// [`MAX_COMPOSITE_INPUT_BYTES`], the S7 [`MAX_BUFFER_DIMENSION`]/
+    /// [`MAX_BUFFER_BYTES`] ceilings); a refusal is a structured
+    /// [`CompositeError`], never a blank or partial frame.
+    pub fn capture_composite(&self) -> Result<FrameCapture, CompositeError> {
+        let mut layers: Vec<(&LayerRecord, &LatestBuffer, LayerPlacement)> = self
+            .layers
+            .values()
+            .filter_map(|layer| {
+                let buffer = layer.latest.as_ref()?;
+                let placement = self.placement_of(layer);
+                (placement.alpha > 0.0).then_some((layer, buffer, placement))
+            })
+            .collect();
+        if layers.is_empty() {
+            return Err(CompositeError::NoFrame);
         }
+        if layers.len() > MAX_COMPOSITE_LAYERS {
+            return Err(CompositeError::TooManyLayers {
+                layers: layers.len(),
+                max: MAX_COMPOSITE_LAYERS,
+            });
+        }
+        // Bottom-to-top. The tie-break on layer id keeps a frame reproducible
+        // even when two layers share a z.
+        layers.sort_by_key(|(layer, _, p)| (p.z, layer.layer_id));
+
+        let mut min_x = i64::MAX;
+        let mut min_y = i64::MAX;
+        let mut max_x = i64::MIN;
+        let mut max_y = i64::MIN;
+        let mut input_bytes = 0u64;
+        for (_, buffer, p) in &layers {
+            let (crop_left, crop_top, width, height) = drawn_region(buffer);
+            let x0 = i64::from(p.x) + i64::from(crop_left);
+            let y0 = i64::from(p.y) + i64::from(crop_top);
+            min_x = min_x.min(x0);
+            min_y = min_y.min(y0);
+            max_x = max_x.max(x0 + i64::from(width));
+            max_y = max_y.max(y0 + i64::from(height));
+            let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)
+                .ok_or(CompositeError::CanvasTooLarge {
+                    width: i64::from(buffer.width),
+                    height: i64::from(buffer.height),
+                })?;
+            input_bytes = input_bytes.saturating_add(bytes);
+        }
+        let canvas_width = max_x - min_x;
+        let canvas_height = max_y - min_y;
+        if canvas_width <= 0 || canvas_height <= 0 {
+            // Every visible layer is an empty crop: there is nothing to show.
+            return Err(CompositeError::NoFrame);
+        }
+        if canvas_width > i64::from(MAX_BUFFER_DIMENSION) || canvas_height > i64::from(MAX_BUFFER_DIMENSION)
+        {
+            return Err(CompositeError::CanvasTooLarge {
+                width: canvas_width,
+                height: canvas_height,
+            });
+        }
+        let row = (canvas_width as u64).saturating_mul(4);
+        let bytes = row.saturating_mul(canvas_height as u64);
+        if bytes > MAX_BUFFER_BYTES {
+            return Err(CompositeError::BytesTooLarge {
+                bytes,
+                max: MAX_BUFFER_BYTES,
+            });
+        }
+        if input_bytes > MAX_COMPOSITE_INPUT_BYTES {
+            return Err(CompositeError::BytesTooLarge {
+                bytes: input_bytes,
+                max: MAX_COMPOSITE_INPUT_BYTES,
+            });
+        }
+
+        // One layer, at the origin, whole buffer, opaque: the W10–W32
+        // pass-through (the buffer's own stride is preserved).
+        if let [(layer, buffer, p)] = layers[..] {
+            let (crop_left, crop_top, width, height) = drawn_region(buffer);
+            if p.x == 0
+                && p.y == 0
+                && p.dim_amount <= 0.0
+                && p.alpha >= 1.0
+                && crop_left == 0
+                && crop_top == 0
+                && width == buffer.width
+                && height == buffer.height
+            {
+                return Self::capture_layer(layer, buffer)
+                    .ok_or(CompositeError::Unreadable { layer_id: layer.layer_id });
+            }
+        }
+
+        let width = canvas_width as u32;
+        let height = canvas_height as u32;
+        let row = width as usize * 4;
+        // One line per composited frame under `ACOSC1_TRACE=1` (the same
+        // env-gated instrument style as `ACOS_WMS_TRACE`): the layer ids, the
+        // placements the composite drew with and the canvas origin. This is
+        // what makes "the dialog is in the frame, at its window's frame" a
+        // measurable statement instead of a guess.
+        if std::env::var_os("ACOSC1_TRACE").is_some() {
+            let list: Vec<String> = layers
+                .iter()
+                .map(|(layer, buffer, p)| {
+                    format!(
+                        "layer{}({}x{} z={} at {},{}{} parent={:?})",
+                        layer.layer_id,
+                        buffer.width,
+                        buffer.height,
+                        p.z,
+                        p.x,
+                        p.y,
+                        if p.dim_amount > 0.0 {
+                            format!(" dim={}", p.dim_amount)
+                        } else {
+                            String::new()
+                        },
+                        layer.parent.map(|h| h.0)
+                    )
+                })
+                .collect();
+            eprintln!(
+                "ACOSC1 composite {}x{} origin=({},{}) of {}",
+                width,
+                height,
+                min_x,
+                min_y,
+                list.join(" + ")
+            );
+        }
+        let mut canvas = vec![0u8; row * height as usize];
+        let (top_layer, top_buffer) = {
+            let (layer, buffer, _) = layers[layers.len() - 1];
+            (layer.layer_id, buffer)
+        };
+        let mut drawn = 0u32;
+        for (layer, buffer, p) in layers {
+            if buffer.format != 1 {
+                return Err(CompositeError::UnsupportedFormat {
+                    format: buffer.format,
+                });
+            }
+            if p.dim_amount > 0.0 && drawn > 0 {
+                dim_canvas(&mut canvas, p.dim_amount.clamp(0.0, 1.0));
+            }
+            let pixels = read_buffer_pixels(buffer)
+                .ok_or(CompositeError::Unreadable { layer_id: layer.layer_id })?;
+            let (crop_left, crop_top, crop_width, crop_height) = drawn_region(buffer);
+            let spec = DrawSpec {
+                crop: (crop_left, crop_top, crop_width, crop_height),
+                dst_x: i64::from(p.x) + i64::from(crop_left) - min_x,
+                dst_y: i64::from(p.y) + i64::from(crop_top) - min_y,
+                alpha: (p.alpha.clamp(0.0, 1.0) * 255.0).round() as u32,
+            };
+            blend_layer(&mut canvas, row, width, height, &pixels, buffer, &spec);
+            drawn += 1;
+        }
+        let (fnv1a, non_zero_pixels) = hash_pixels(&canvas);
+        Ok(FrameCapture {
+            layer_id: top_layer,
+            layer_name: format!("composite({drawn})"),
+            width,
+            height,
+            // The composite's rows are packed: `width * 4` bytes, no stride
+            // padding.
+            stride: width,
+            format: 1,
+            frame_number: top_buffer.frame_number,
+            buffer_id: top_buffer.buffer_id,
+            producer_id: top_buffer.producer_id,
+            generation: self.buffer_generations,
+            row_bytes: row,
+            rgba: canvas,
+            fnv1a,
+            non_zero_pixels,
+            layers: drawn,
+            composite: true,
+        })
+    }
+
+    /// The pre-W35 capture: one layer's stored buffer, read in full.
+    fn capture_layer(layer: &LayerRecord, buffer: &LatestBuffer) -> Option<FrameCapture> {
+        let pixels = read_buffer_pixels(buffer)?;
         let row = buffer.row_bytes();
-        let owned = rustix::io::dup(buffer.fd()).ok()?;
-        let file = std::fs::File::from(owned);
-        let mut pixels = vec![0u8; size];
-        let mut read = 0usize;
-        while read < size {
-            match file.read_at(&mut pixels[read..], read as u64) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => read += n,
-            }
-        }
-        if read != size {
-            // A short read is not a frame: never hand a partial image to a
-            // capture/report as if it were the app's pixels.
-            return None;
-        }
-        let mut hash = 0xcbf2_9ce4_8422_2325u64;
-        let mut non_zero = 0usize;
-        for px in pixels.chunks_exact(4) {
-            for b in px {
-                hash ^= u64::from(*b);
-                hash = hash.wrapping_mul(0x0100_0000_01b3);
-            }
-            if px.iter().any(|b| *b != 0) {
-                non_zero += 1;
-            }
-        }
+        let (fnv1a, non_zero_pixels) = hash_pixels(&pixels);
         Some(FrameCapture {
             layer_id: layer.layer_id,
             layer_name: layer.name.clone(),
@@ -530,9 +896,26 @@ impl SurfaceState {
             generation: layer.latest_generation,
             row_bytes: row,
             rgba: pixels,
-            fnv1a: hash,
-            non_zero_pixels: non_zero,
+            fnv1a,
+            non_zero_pixels,
+            layers: 1,
+            composite: false,
         })
+    }
+
+    /// Record the window manager's placement for a layer (W35).
+    ///
+    /// Called on every `relayout` so a dialog's frame, a window's z-order and the
+    /// dim amount follow the window, not the guest's own transaction. Returns
+    /// `false` when the handle is not a layer of this registry.
+    pub fn set_layer_placement(&mut self, handle: BinderId, placement: LayerPlacement) -> bool {
+        match self.layers.get_mut(&handle.0) {
+            Some(layer) => {
+                layer.placement = Some(placement);
+                true
+            }
+            None => false,
+        }
     }
 
     /// A layer by its handle binder.
@@ -600,6 +983,9 @@ impl SurfaceState {
             transactions: 0,
             posted_frames: Vec::new(),
             latest_generation: 0,
+            geometry: LayerGeometry::default(),
+            alpha: 1.0,
+            placement: None,
         };
         self.layers.insert(handle.0, record);
         self.stats.entry(handle.0).or_default();
@@ -958,6 +1344,32 @@ pub struct LayerState {
     pub buffer: Option<BufferData>,
     /// `layer_state_t.listeners`.
     pub listeners: Vec<ListenerCallbacks>,
+    /// `gui::WindowInfo`, when the transaction carried one (`null` for a plain
+    /// BLAST child layer).
+    pub window_info: Option<WindowInfo>,
+}
+
+/// The fields of `gui::WindowInfo` this compositor uses.
+///
+/// The image's struct is **older than r75** (no `contentSize`, no
+/// `canOccludePresentation`); [`read_window_info`] consumes the whole shape and
+/// keeps only what a C1 composite needs. `layoutParamsFlags` is where the
+/// dialog's `FLAG_DIM_BEHIND` arrives, and `alpha` is the only alpha the image
+/// puts on the wire — `layer_state_t` itself has no alpha field in this tag.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WindowInfo {
+    /// `WindowInfo.id` (the window id).
+    pub id: i32,
+    /// `WindowInfo.name` (String16).
+    pub name: String,
+    /// `WindowInfo.layoutParamsFlags`.
+    pub layout_params_flags: i32,
+    /// `WindowInfo.layoutParamsType`.
+    pub layout_params_type: i32,
+    /// `WindowInfo.frame` (the window frame on the display).
+    pub frame: Rect,
+    /// `WindowInfo.alpha`.
+    pub alpha: f32,
 }
 
 /// One decoded `BufferData`.
@@ -1057,7 +1469,29 @@ fn apply_layer_state(
         transactions: 0,
         posted_frames: Vec::new(),
         latest_generation: 0,
+        geometry: LayerGeometry::default(),
+        alpha: 1.0,
+        placement: None,
     });
+
+    // The client's own geometry (W35): `Transaction.setPosition`/`setLayer`
+    // land in `layer_state_t.x/y/z`. They are the honest fallback when no window
+    // manager placement exists (a layer the guest owns directly); a window
+    // layer's placement is pushed by `WmsState::publish_layer_placement`.
+    if layer.what & (what::POSITION | what::LAYER) != 0 {
+        if let Some(record) = state.layers.get_mut(&handle.0) {
+            record.geometry = LayerGeometry {
+                x: layer.x.round() as i32,
+                y: layer.y.round() as i32,
+                z: layer.z,
+            };
+        }
+    }
+    if let Some(info) = &layer.window_info {
+        if let Some(record) = state.layers.get_mut(&handle.0) {
+            record.alpha = info.alpha.clamp(0.0, 1.0);
+        }
+    }
 
     // A transaction can name the same listener/callback id both on the layer
     // (`layer_state_t.listeners`) and at the top level
@@ -1298,6 +1732,137 @@ fn try_clone(meta: &GraphicBufferMeta) -> Option<OwnedFd> {
 
 /// `stride * 4 * height`, checked, and `None` when the geometry is outside the
 /// S7 bounds (dimension/stride ceilings, byte ceiling, or arithmetic overflow).
+/// The part of `buffer` a composite draws: its crop when the transaction
+/// carried a non-empty one (clamped to the buffer), else the whole buffer.
+fn drawn_region(buffer: &LatestBuffer) -> (u32, u32, u32, u32) {
+    let mut left = 0u32;
+    let mut top = 0u32;
+    let mut right = buffer.width;
+    let mut bottom = buffer.height;
+    if let Some(crop) = buffer.crop {
+        if crop.right > crop.left && crop.bottom > crop.top {
+            left = left.max(crop.left.max(0).unsigned_abs()).min(right);
+            top = top.max(crop.top.max(0).unsigned_abs()).min(bottom);
+            right = right.min(crop.right.max(0).unsigned_abs()).max(left);
+            bottom = bottom.min(crop.bottom.max(0).unsigned_abs()).max(top);
+        }
+    }
+    (left, top, right - left, bottom - top)
+}
+
+/// Copy one layer's stored buffer out of its memfd.
+///
+/// The bytes are read through **this process's own dup** of the guest's
+/// `GraphicBuffer` fd, never from a device framebuffer. A short read is not a
+/// frame (`None`), and the geometry is bounded before it becomes an allocation.
+fn read_buffer_pixels(buffer: &LatestBuffer) -> Option<Vec<u8>> {
+    use std::os::unix::fs::FileExt;
+
+    let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)?;
+    let size = usize::try_from(bytes).ok()?;
+    if size == 0 {
+        return None;
+    }
+    let owned = rustix::io::dup(buffer.fd()).ok()?;
+    let file = std::fs::File::from(owned);
+    let mut pixels = vec![0u8; size];
+    let mut read = 0usize;
+    while read < size {
+        match file.read_at(&mut pixels[read..], read as u64) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => read += n,
+        }
+    }
+    (read == size).then_some(pixels)
+}
+
+/// FNV-1a over the pixels plus the count of pixels with any non-zero byte.
+fn hash_pixels(pixels: &[u8]) -> (u64, usize) {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    let mut non_zero = 0usize;
+    for px in pixels.chunks_exact(4) {
+        for b in px {
+            hash ^= u64::from(*b);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+        if px.iter().any(|b| *b != 0) {
+            non_zero += 1;
+        }
+    }
+    (hash, non_zero)
+}
+
+/// Darken the pixels already drawn by `amount` (`0.0..=1.0`), the window
+/// manager's dim layer for a window with `FLAG_DIM_BEHIND`.
+fn dim_canvas(canvas: &mut [u8], amount: f32) {
+    let keep = (1.0 - amount).clamp(0.0, 1.0);
+    for px in canvas.chunks_exact_mut(4) {
+        for channel in &mut px[..3] {
+            *channel = (f32::from(*channel) * keep).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Where one layer's pixels go on the canvas.
+struct DrawSpec {
+    /// Source region in buffer pixels `(left, top, width, height)`.
+    crop: (u32, u32, u32, u32),
+    /// Canvas column of the source region's left edge.
+    dst_x: i64,
+    /// Canvas row of the source region's top edge.
+    dst_y: i64,
+    /// Layer alpha, `0..=255`.
+    alpha: u32,
+}
+
+/// Blend one layer's pixels into the canvas, source-over, alpha-weighted.
+fn blend_layer(
+    canvas: &mut [u8],
+    row: usize,
+    canvas_width: u32,
+    canvas_height: u32,
+    pixels: &[u8],
+    buffer: &LatestBuffer,
+    spec: &DrawSpec,
+) {
+    let (crop_left, crop_top, crop_width, crop_height) = spec.crop;
+    let stride = buffer.stride as usize;
+    for sy in 0..crop_height as usize {
+        let dy = spec.dst_y + sy as i64;
+        if dy < 0 || dy >= i64::from(canvas_height) {
+            continue;
+        }
+        let src_row = (crop_top as usize + sy) * stride * 4;
+        let dst_row = dy as usize * row;
+        for sx in 0..crop_width as usize {
+            let dx = spec.dst_x + sx as i64;
+            if dx < 0 || dx >= i64::from(canvas_width) {
+                continue;
+            }
+            let src = src_row + (crop_left as usize + sx) * 4;
+            let Some(src_px) = pixels.get(src..src + 4) else {
+                return;
+            };
+            // The layer's own alpha times the pixel's alpha, per the image's
+            // premultiplied-free RGBA_8888 layout.
+            let a = spec.alpha * u32::from(src_px[3]) / 255;
+            let dst = dst_row + dx as usize * 4;
+            let dst_px = &mut canvas[dst..dst + 4];
+            if a >= 255 {
+                dst_px.copy_from_slice(src_px);
+                continue;
+            }
+            let inv = 255 - a;
+            for channel in 0..3 {
+                dst_px[channel] = ((u32::from(src_px[channel]) * a
+                    + u32::from(dst_px[channel]) * inv)
+                    / 255) as u8;
+            }
+            dst_px[3] = (a + u32::from(dst_px[3]) * inv / 255) as u8;
+        }
+    }
+}
+
 fn checked_buffer_bytes(width: u32, height: u32, stride: u32) -> Option<u64> {
     if width > MAX_BUFFER_DIMENSION
         || height > MAX_BUFFER_DIMENSION
@@ -1675,7 +2240,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         let _ = data.read_float().map_err(perr)?;
     }
     if dbg { eprintln!("ACOSDBG ls color at {}", data.data_position()); }
-    read_window_info(data)?;
+    let window_info = read_window_info(data)?;
     if dbg { eprintln!("ACOSDBG ls windowinfo at {}", data.data_position()); }
 
     let transparent_region_size = data.read_int32().map_err(perr)?;
@@ -1841,6 +2406,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         drop_input_mode,
         buffer,
         listeners,
+        window_info,
     })
 }
 
@@ -2132,21 +2698,22 @@ fn read_nullable_surface_control(data: &mut Parcel) -> SResult<()> {
 }
 
 /// The image's `gui::WindowInfo` (older than r75: no `contentSize`, no
-/// trailing `canOccludePresentation`).
-fn read_window_info(data: &mut Parcel) -> SResult<()> {
+/// trailing `canOccludePresentation`). Returns `None` for the `int32 0` "no
+/// window info" marker a BLAST child layer's transaction carries.
+fn read_window_info(data: &mut Parcel) -> SResult<Option<WindowInfo>> {
     if data.read_int32().map_err(perr)? == 0 {
-        return Ok(());
+        return Ok(None);
     }
     let _token = data.read_strong_binder().map_err(perr)?;
     let _dispatching_timeout = data.read_int64().map_err(perr)?;
-    let _id = data.read_int32().map_err(perr)?;
-    let _name = data.read_string16().map_err(perr)?;
-    let _layout_params_flags = data.read_int32().map_err(perr)?;
-    let _layout_params_type = data.read_int32().map_err(perr)?;
-    read_rect(data)?; // frame
+    let id = data.read_int32().map_err(perr)?;
+    let name = data.read_string16().map_err(perr)?.unwrap_or_default();
+    let layout_params_flags = data.read_int32().map_err(perr)?;
+    let layout_params_type = data.read_int32().map_err(perr)?;
+    let frame = read_rect(data)?;
     let _surface_inset = data.read_int32().map_err(perr)?;
     let _global_scale = data.read_float().map_err(perr)?;
-    let _alpha = data.read_float().map_err(perr)?;
+    let alpha = data.read_float().map_err(perr)?;
     for _ in 0..6 {
         let _ = data.read_float().map_err(perr)?; // transform
     }
@@ -2166,7 +2733,14 @@ fn read_window_info(data: &mut Parcel) -> SResult<()> {
     let _crop_handle = data.read_strong_binder().map_err(perr)?;
     let _window_token = data.read_strong_binder().map_err(perr)?;
     let _focus_transfer_target = data.read_strong_binder().map_err(perr)?;
-    Ok(())
+    Ok(Some(WindowInfo {
+        id,
+        name,
+        layout_params_flags,
+        layout_params_type,
+        frame,
+        alpha,
+    }))
 }
 
 fn read_layer_metadata(data: &mut Parcel) -> SResult<()> {

@@ -44,23 +44,26 @@ use crate::value::{Bundle, Parcelable, Value};
 // Intent facts
 // ---------------------------------------------------------------------------
 
-/// The ordered field layout `ams_java` reduces a real `Intent` into.
+/// The field indices of the facts AMS reads out of an `android.content.Intent`.
 ///
-/// `Intent.writeToParcel` starts with `mAction` (String), `mData` (Uri as a
-/// `String`), `mPackage` (String), `mComponent` (`ComponentName`), the category
-/// list and the extras `Bundle`. ACOS only needs that prefix, so the typed
-/// reduction keeps exactly those six slots.
-pub const INTENT_FIELD_ACTION: usize = 0;
-/// `Intent.mDataString` (the `Uri` rendered as a string).
-pub const INTENT_FIELD_DATA: usize = 1;
+/// Since W35 the `Intent` parcelable is the **real** wire shape
+/// (`parcelable::read_intent`/`write_intent`, `Intent.writeToParcel` order), so
+/// these are that codec's indices — not a reduced six-slot prefix:
+/// `action, data, type, identifier, flags, package, component, sourceBounds,
+/// categories, selector, clipData, contentUserHint, extras, originalIntent`.
+/// A caller that reduces an Intent by hand must produce the same 14 fields
+/// (`to_parcelable` does), or `startActivity` resolves the wrong slot.
+pub const INTENT_FIELD_ACTION: usize = crate::parcelable::INTENT_ACTION;
+/// `Intent.mData` (rendered as a string; a non-null Uri is refused by the codec).
+pub const INTENT_FIELD_DATA: usize = crate::parcelable::INTENT_DATA;
 /// `Intent.mPackage`.
-pub const INTENT_FIELD_PACKAGE: usize = 2;
-/// `Intent.mComponent` (`android.content.ComponentName`, 2 fields).
-pub const INTENT_FIELD_COMPONENT: usize = 3;
-/// `Intent.mCategories` (`String[]`).
-pub const INTENT_FIELD_CATEGORIES: usize = 4;
+pub const INTENT_FIELD_PACKAGE: usize = crate::parcelable::INTENT_PACKAGE;
+/// `Intent.mComponent` (`android.content.ComponentName`, 2 String16 fields).
+pub const INTENT_FIELD_COMPONENT: usize = crate::parcelable::INTENT_COMPONENT;
+/// `Intent.mCategories` (a String list).
+pub const INTENT_FIELD_CATEGORIES: usize = crate::parcelable::INTENT_CATEGORIES;
 /// `Intent.mExtras` (`Bundle`).
-pub const INTENT_FIELD_EXTRAS: usize = 5;
+pub const INTENT_FIELD_EXTRAS: usize = crate::parcelable::INTENT_EXTRAS;
 
 /// The typed intent facts the AMS state machine resolves against.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -160,8 +163,11 @@ impl IntentFacts {
         }
     }
 
-    /// Encode the typed facts in the order [`from_parcelable`](Self::from_parcelable)
-    /// reads. Used by tests and by `ams_java` when it hands facts across.
+    /// Encode the typed facts as the real `android.content.Intent` parcelable
+    /// (all [`crate::parcelable::INTENT_FIELDS`] fields, in wire order), which is
+    /// what [`from_parcelable`](Self::from_parcelable) reads and what
+    /// `parcelable::write_intent` can serialise. Used by tests and by `ams_java`
+    /// when it hands facts across.
     #[must_use]
     pub fn to_parcelable(&self) -> Parcelable {
         let component = self.component.as_ref().map(|(package, class)| {
@@ -174,18 +180,24 @@ impl IntentFacts {
             )
         });
         Parcelable::ordered(
-            "android.content.Intent",
+            crate::parcelable::INTENT_CLASS,
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
+                Value::Str(None),           // type
+                Value::Str(None),           // identifier
+                Value::Int(0),              // flags
                 Value::Str(self.package.clone()),
-                component
-                    .map(Value::TypedObject)
-                    .unwrap_or(Value::TypedObject(Parcelable::Null)),
-                Value::StringArray(Some(
+                Value::Parcelable(component.unwrap_or(Parcelable::Null)),
+                Value::Parcelable(Parcelable::Null), // sourceBounds
+                Value::StringList(Some(
                     self.categories.iter().cloned().map(Some).collect(),
                 )),
+                Value::Parcelable(Parcelable::Null), // selector
+                Value::Parcelable(Parcelable::Null), // clipData
+                Value::Int(-2),                      // contentUserHint
                 Value::Bundle(Some(encode_extras(&self.extras))),
+                Value::Parcelable(Parcelable::Null), // originalIntent
             ],
         )
     }

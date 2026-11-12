@@ -755,12 +755,19 @@ impl ServiceObject for WindowSessionService {
                 // but cannot get a BLAST surface — the framework's own
                 // "invalid SurfaceControl" path, never a fabricated layer.
                 if let Some(compositor) = self.compositor.clone() {
-                    if state.bind_surface_layer(&mut r.surface, &compositor).is_none() {
-                        eprintln!(
+                    match state.bind_surface_layer(&mut r.surface, &compositor) {
+                        None => eprintln!(
                             "{DESCRIPTOR}: relayout: no compositor layer bound for window {}; \
                              replying with the placeholder SurfaceControl",
                             window.0
-                        );
+                        ),
+                        // W35: the window's z-order, frame origin and dim amount
+                        // are the window manager's, so the composite reads them
+                        // from here (every relayout, so a moved/resized window
+                        // moves in the next frame).
+                        Some(binding) => {
+                            state.publish_layer_placement(binding, window.0, &compositor);
+                        }
                     }
                 }
                 crate::exception::write_no_exception(reply);
