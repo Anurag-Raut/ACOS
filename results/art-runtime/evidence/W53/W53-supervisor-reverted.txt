@@ -1,0 +1,8 @@
+# W53 evidence: the supervisor variant of the product fix was reverted — it broke the S3 orphan guarantee
+
+test result: ok. 68 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it ... ok
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.65s
+
+(guest + bwrap alive 3 s after the launcher was SIGKILLed; the supervisor sh sat between systemd-run and bwrap)

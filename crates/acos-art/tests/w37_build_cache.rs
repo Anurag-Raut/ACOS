@@ -2,14 +2,18 @@
 //! running the builder again, (b) detect a corrupted entry and rebuild it, and
 //! (c) serialise a cold cohort so N concurrent builders compile once.
 //!
-//! Everything lives under `.cache/w37-tests/` (never `/tmp`). Run with
-//! `--test-threads=1` because `ACOS_ART_BUILD_CACHE` is process-global.
+//! Everything lives under `.cache/w37-tests/` (never `/tmp`). `ACOS_ART_BUILD_CACHE`
+//! is process-global, so every test (a) takes a process-wide lock, (b) points the
+//! cache at its **own** throw-away root and (c) holds both for its lifetime. That
+//! makes this binary safe under plain `cargo test` (W53: running in parallel used
+//! to let one test observe another's root, or `off`, and fail on a cache HIT it
+//! did not create).
 
 use acos_art::build_cache;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 fn scratch(tag: &str) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.cache/w37-tests");
@@ -19,14 +23,22 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-fn use_cache(dir: &Path) {
-    std::env::set_var("ACOS_ART_BUILD_CACHE", dir);
+/// The process-global cache env, held for the whole test body.
+static CACHE_ENV: Mutex<()> = Mutex::new(());
+
+/// Take the env lock, create this test's own scratch root under `.cache` and
+/// point `ACOS_ART_BUILD_CACHE` at it. The guard must live as long as the test.
+fn isolate(tag: &str) -> (MutexGuard<'static, ()>, PathBuf, PathBuf) {
+    let guard = CACHE_ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = scratch(tag);
+    let root = dir.join("cache");
+    std::env::set_var("ACOS_ART_BUILD_CACHE", &root);
+    (guard, dir, root)
 }
 
 #[test]
 fn second_build_is_a_cache_hit() {
-    let dir = scratch("reuse");
-    use_cache(&dir.join("cache"));
+    let (_env, dir, root) = isolate("reuse");
     let runs = Arc::new(AtomicUsize::new(0));
     let key = build_cache::digest(&[b"w37-test/reuse"]);
 
@@ -43,7 +55,8 @@ fn second_build_is_a_cache_hit() {
     assert_eq!(runs.load(Ordering::SeqCst), 1);
     // Staging is inside the cache root (never /tmp), as the directives require.
     let staged = first.staged_from.as_deref().expect("a build has a staging dir");
-    assert!(staged.starts_with(build_cache::cache_root().join(".tmp")), "{}", staged.display());
+    assert!(staged.starts_with(root.join(".tmp")), "{}", staged.display());
+    assert_eq!(build_cache::cache_root(), root, "the isolated root is what the cache uses");
 
     let dest = dir.join("dest1");
     build_cache::install(&first, &["artifact.bin"], &dest).unwrap();
@@ -64,8 +77,7 @@ fn second_build_is_a_cache_hit() {
 
 #[test]
 fn corrupted_entry_is_detected_and_rebuilt() {
-    let dir = scratch("corrupt");
-    use_cache(&dir.join("cache"));
+    let (_env, dir, _root) = isolate("corrupt");
     let key = build_cache::digest(&[b"w37-test/corrupt"]);
     let runs = Arc::new(AtomicUsize::new(0));
 
@@ -117,8 +129,7 @@ fn corrupted_entry_is_detected_and_rebuilt() {
 
 #[test]
 fn cold_cohort_compiles_once() {
-    let dir = scratch("single-flight");
-    use_cache(&dir.join("cache"));
+    let (_env, _dir, _root) = isolate("single-flight");
     let key = build_cache::digest(&[b"w37-test/single-flight"]);
     let runs = Arc::new(AtomicUsize::new(0));
 
@@ -155,8 +166,7 @@ fn cold_cohort_compiles_once() {
 
 #[test]
 fn install_replaces_a_stale_copy_atomically() {
-    let dir = scratch("install");
-    use_cache(&dir.join("cache"));
+    let (_env, dir, _root) = isolate("install");
     let key = build_cache::digest(&[b"w37-test/install"]);
     let built = build_cache::ensure(&key, &["shim.so"], |stage| {
         fs::write(stage.join("shim.so"), b"fresh").unwrap();
@@ -182,6 +192,9 @@ fn install_replaces_a_stale_copy_atomically() {
 
 #[test]
 fn disabled_cache_builds_but_never_publishes() {
+    // Same lock as `isolate`, but `off` instead of a directory: no other test in
+    // this binary may switch the cache back on while this one runs.
+    let _env = CACHE_ENV.lock().unwrap_or_else(|e| e.into_inner());
     let dir = scratch("disabled");
     let root = dir.join("cache");
     std::env::set_var("ACOS_ART_BUILD_CACHE", "off");

@@ -4,12 +4,14 @@
 //! byte flip, missing file, or an unlisted extra file. The image digest that
 //! keys them must follow the extracted sysroot, not just its path.
 //!
-//! Everything lives under `.cache/w39-tests/` (never `/tmp`). Run with
-//! `--test-threads=1` because `ACOS_ART_BUILD_CACHE` is process-global.
+//! Everything lives under `.cache/w39-tests/` (never `/tmp`). `ACOS_ART_BUILD_CACHE`
+//! is process-global, so each test takes a process-wide lock and points the cache
+//! at its own throw-away root: safe under plain `cargo test` (W53).
 
 use acos_art::build_cache;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 fn scratch(tag: &str) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.cache/w39-tests");
@@ -19,8 +21,16 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-fn use_cache(dir: &Path) {
-    std::env::set_var("ACOS_ART_BUILD_CACHE", dir);
+/// The process-global cache env, held for the whole test body.
+static CACHE_ENV: Mutex<()> = Mutex::new(());
+
+/// Take the env lock, create this test's own scratch root and point
+/// `ACOS_ART_BUILD_CACHE` at it. Hold the guard for the whole test.
+fn isolate(tag: &str) -> (MutexGuard<'static, ()>, PathBuf) {
+    let guard = CACHE_ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = scratch(tag);
+    std::env::set_var("ACOS_ART_BUILD_CACHE", dir.join("cache"));
+    (guard, dir)
 }
 
 /// A linkerconfig-shaped source tree: top-level configs plus per-APEX files.
@@ -39,8 +49,7 @@ fn write_tree(dir: &Path, marker: &str) {
 
 #[test]
 fn tree_entry_reuses_every_nested_file() {
-    let dir = scratch("tree-reuse");
-    use_cache(&dir.join("cache"));
+    let (_env, dir) = isolate("tree-reuse");
     let key = build_cache::digest(&[b"w39-test/tree-reuse"]);
     let src = dir.join("src");
     write_tree(&src, "v1");
@@ -69,8 +78,7 @@ fn tree_entry_reuses_every_nested_file() {
 
 #[test]
 fn corrupted_nested_file_is_detected_and_reports_miss() {
-    let dir = scratch("tree-corrupt");
-    use_cache(&dir.join("cache"));
+    let (_env, dir) = isolate("tree-corrupt");
     let key = build_cache::digest(&[b"w39-test/tree-corrupt"]);
     let src = dir.join("src");
     write_tree(&src, "v1");
@@ -95,8 +103,7 @@ fn corrupted_nested_file_is_detected_and_reports_miss() {
 
 #[test]
 fn unlisted_extra_file_is_a_corrupt_entry() {
-    let dir = scratch("tree-extra");
-    use_cache(&dir.join("cache"));
+    let (_env, dir) = isolate("tree-extra");
     let key = build_cache::digest(&[b"w39-test/tree-extra"]);
     let src = dir.join("src");
     write_tree(&src, "v1");
@@ -113,8 +120,7 @@ fn unlisted_extra_file_is_a_corrupt_entry() {
 
 #[test]
 fn publish_tree_skips_stamps_and_logs() {
-    let dir = scratch("tree-skip");
-    use_cache(&dir.join("cache"));
+    let (_env, dir) = isolate("tree-skip");
     let key = build_cache::digest(&[b"w39-test/tree-skip"]);
     let src = dir.join("src");
     write_tree(&src, "v1");

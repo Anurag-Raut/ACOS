@@ -275,6 +275,58 @@ struct ProbeRun {
     cg: RunCgroup,
     cg_path: PathBuf,
     run: RunDir,
+    /// `(oom_kill, memory.peak)` latched by the in-scope observer (W53).
+    events: (u64, u64),
+}
+
+/// W53: `memory.events` lives in the scope's transient cgroup and is removed
+/// with it, so a sampler in this process races the teardown (27.5 % of OOM
+/// events were lost on a loaded host). The payload is therefore this
+/// observer: it ignores TERM (the bomb is killed by the kernel with SIGKILL),
+/// records the cgroup, runs the probe, and latches the scope's counters into
+/// `<info>.final` before the unit stops. Same construction as
+/// `tests/sandbox_s5.rs`; see `results/art-runtime/W53.md`.
+fn write_scope_observer(dir: &Path) -> PathBuf {
+    let script = dir.join("scope-observer.sh");
+    std::fs::write(
+        &script,
+        r#"#!/bin/sh
+trap '' TERM INT HUP
+info="$1"; shift
+cat /proc/self/cgroup > "$info" 2>/dev/null || exit 90
+"$@"; rc=$?
+rel=$(sed -n 's|^0::||p' "$info")
+if [ -n "$rel" ] && [ -d "/sys/fs/cgroup$rel" ]; then
+    {
+        cat "/sys/fs/cgroup$rel/memory.events" 2>/dev/null
+        echo "memory.peak $(cat "/sys/fs/cgroup$rel/memory.peak" 2>/dev/null || echo 0)"
+    } > "$info.final.tmp" 2>/dev/null && mv "$info.final.tmp" "$info.final" 2>/dev/null
+fi
+exit $rc
+"#,
+    )
+    .expect("write the observer");
+    std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    script
+}
+
+/// `(oom_kill, memory.peak)` from a scope snapshot; missing/garbage reads 0.
+fn parse_scope_events(info: &Path) -> (u64, u64) {
+    let path = PathBuf::from(format!("{}.final", info.display()));
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let mut oom = 0;
+    let mut peak = 0;
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        let key = parts.next().unwrap_or_default();
+        let value = parts.next().and_then(|v| v.parse::<u64>().ok());
+        match (key, value) {
+            ("oom_kill", Some(v)) => oom = oom.max(v),
+            ("memory.peak", Some(v)) => peak = peak.max(v),
+            _ => {}
+        }
+    }
+    (oom, peak)
 }
 
 fn spawn_probe(
@@ -290,8 +342,12 @@ fn spawn_probe(
     let err_host = run.path().join("probe.stderr");
     let out = std::fs::File::create(&out_host).expect("probe stdout file");
     let err = std::fs::File::create(&err_host).expect("probe stderr file");
-    let cmd = guest_command(root, run.path(), &probe, mode);
-    let mut cg = RunCgroup::prepare(limits, run.path().join("cgroup")).expect("user scope");
+    let guest = guest_command(root, run.path(), &probe, mode);
+    let info = run.path().join("cgroup");
+    let observer = write_scope_observer(&dir);
+    let mut cmd = Command::new("/bin/sh");
+    cmd.arg(&observer).arg(&info).arg(guest.get_program()).args(guest.get_args());
+    let mut cg = RunCgroup::prepare(limits, &info).expect("user scope");
     let mut wrapped = cg.wrap(&cmd).unwrap();
     // `wrap` rebuilds the command, so the stdio must be set on the *wrapped*
     // one (the process actually spawned; the scope's children inherit it).
@@ -327,9 +383,18 @@ fn run_probe(
         std::thread::sleep(Duration::from_millis(5));
     };
     cg.sample();
+    // The observer latches the counters before it exits; bounded poll (a latch,
+    // not a sleep: the file exists by the time the scope payload was reaped).
+    let info = run.path().join("cgroup");
+    let settle = Instant::now() + Duration::from_secs(5);
+    let mut events = parse_scope_events(&info);
+    while events.1 == 0 && Instant::now() < settle {
+        std::thread::sleep(Duration::from_millis(5));
+        events = parse_scope_events(&info);
+    }
     let stdout = std::fs::read_to_string(&out_host).unwrap_or_default();
     let stderr = std::fs::read_to_string(&err_host).unwrap_or_default();
-    Some(ProbeRun { status, stdout, stderr, cg, cg_path, run })
+    Some(ProbeRun { status, stdout, stderr, cg, cg_path, run, events })
 }
 
 fn assert_line(stdout: &str, needle: &str) {
@@ -548,22 +613,29 @@ fn memory_bomb_in_the_guest_is_oom_killed_at_the_cap() {
     };
     let host_min = sampler.join().unwrap_or_else(|_| host_available_mb());
     let host_after = host_available_mb();
-    let peak_mb = p.cg.peak_bytes() as f64 / 1024.0 / 1024.0;
+    let (snap_oom, snap_peak) = p.events;
+    let peak_mb = snap_peak as f64 / 1024.0 / 1024.0;
     let max = std::fs::read_to_string(p.cg_path.join("memory.max")).unwrap_or_default();
     eprintln!(
-        "memory bomb: peak={peak_mb:.0} MiB max={} oom_kills={} status={:?} host_before={host_before:.0} MiB after={host_after:.0} MiB",
+        "memory bomb: peak={peak_mb:.0} MiB (live sample {:.0} MiB) max={} oom_kills={} \
+         (live sample {}) status={:?} host_before={host_before:.0} MiB after={host_after:.0} MiB",
+        p.cg.peak_bytes() as f64 / 1024.0 / 1024.0,
         max.trim(),
+        snap_oom,
         p.cg.oom_kills(),
         p.status,
     );
     eprintln!("guest stdout: {:?}", p.stdout);
     // The cap must bite: either the memcg OOM killer killed the bomb (the
     // common case) or the charge failed and the allocator returned NULL (the
-    // kernel refusing memory is a denial either way); both are bounded.
+    // kernel refusing memory is a denial either way); both are bounded. The
+    // OOM counter is read from the in-scope observer (W53), not from a sampler
+    // that can lose it to the scope teardown.
     assert!(
-        p.cg.oom_kills() >= 1 || p.stdout.contains("malloc failed"),
-        "the cgroup cap must stop the bomb (peak {peak_mb:.0} MiB, oom_kills {})",
-        p.cg.oom_kills()
+        snap_oom >= 1 || p.stdout.contains("malloc failed"),
+        "the cgroup cap must stop the bomb (peak {peak_mb:.0} MiB, oom_kills {snap_oom}, \
+         status {:?})",
+        p.status
     );
     assert!(
         peak_mb <= 256.0,

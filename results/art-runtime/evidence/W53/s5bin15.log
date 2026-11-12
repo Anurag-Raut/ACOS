@@ -1,0 +1,915 @@
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158086/bomb-observer.sh: line 6: 158100 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158271/bomb-observer.sh: line 6: 158285 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158431/bomb-observer.sh: line 6: 158445 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158550/bomb-observer.sh: line 6: 158569 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158747/bomb-observer.sh: line 6: 158769 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-158876/bomb-observer.sh: line 6: 158890 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159015/bomb-observer.sh: line 6: 159029 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159141/bomb-observer.sh: line 6: 159290 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159307/bomb-observer.sh: line 6: 159321 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159429/bomb-observer.sh: line 6: 159452 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159595/bomb-observer.sh: line 6: 159609 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-159709/bomb-observer.sh: line 6: 159723 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-160088/bomb-observer.sh: line 6: 160161 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.13s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-160343/bomb-observer.sh: line 6: 160607 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-160631/bomb-observer.sh: line 6: 160653 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+

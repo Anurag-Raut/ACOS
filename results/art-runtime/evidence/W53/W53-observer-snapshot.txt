@@ -1,0 +1,22 @@
+# W53 evidence: in-scope observer latches the kernel's OOM counter (test-side)
+
+date -u: 2026-11-12T05:12:44Z
+
+## A sample snapshot the test now asserts on (`<info>.final`)
+```
+low 0
+high 0
+max 40
+oom 1
+oom_kill 1
+oom_group_kill 0
+sock_throttled 0
+memory.peak 134217728
+```
+
+## The scope the snapshot was taken in no longer exists
+```
+gone /user.slice/user-1000.slice/user@1000.service/app.slice/run-p85361-i8491978.scope
+gone /user.slice/user-1000.slice/user@1000.service/app.slice/run-p85387-i8504221.scope
+gone /user.slice/user-1000.slice/user@1000.service/app.slice/run-p85411-i8403975.scope
+```

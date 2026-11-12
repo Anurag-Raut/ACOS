@@ -190,7 +190,15 @@ fn scan_procs() -> Vec<Proc> {
         }
         let Ok(start) = fields[19].parse::<u64>() else { continue };
         let cmd = read_cmdline(&dir);
-        if !PATTERNS.iter().any(|p| comm.contains(p) || cmd.contains(p)) {
+        // Match the process NAME, not "any command line that mentions it": on a
+        // shared host `cargo build -p acos-art` (and every `bash -c … acos-art`
+        // from another agent) matched the old cmdline test and was reported as a
+        // leaked guest (W53; `guest_crash_still_removes_the_run_root` failed with
+        // another agent's build in the list). A leaked launcher/guest/bwrap always
+        // carries the binary name in `comm`, so the teeth are unchanged. The guest
+        // runs inside bwrap with guest-side paths, so no repo-path test is possible
+        // for it.
+        if !PATTERNS.iter().any(|p| comm.contains(p)) {
             continue;
         }
         // Every desktop has flatpak/snap bwrap wrappers coming and going; an ART

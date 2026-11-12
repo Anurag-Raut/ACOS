@@ -13,6 +13,11 @@
 //!    preloaded guard records `DENY syscall=<nr>` in the run's
 //!    `out/seccomp.log`.
 //!
+//! The allocator-bomb test observes `memory.events` from *inside* the scope (a
+//! test-owned observer script), because the transient scope's cgroup - and with
+//! it the kernel's OOM counter - is removed the moment the payload exits (W53:
+//! live-only sampling lost the counter in 12/20 runs under load).
+//!
 //! Scratch lives under `.cache/s5-tests/` (never `/tmp`); the probe is built
 //! there with the host `cc` and bound read-only into the guest.
 //!
@@ -99,15 +104,77 @@ fn refuses_to_run_when_no_cgroup_can_be_created() {
     );
 }
 
+/// An in-scope observer for the allocator bomb (W53, test-only).
+///
+/// `memory.events:oom_kill` lives in the transient scope's cgroup and disappears
+/// with it: `systemd-run --scope` removes the directory when the payload exits,
+/// and systemd's stop path SIGTERMs whatever is left as soon as it sees the
+/// kernel's OOM. A sampler in *this* process therefore races the teardown — 40 %
+/// of samples were lost on a loaded host (12/20 measured), so the old test was
+/// green or red by luck. This script IS the scope's payload: it ignores TERM
+/// (the bomb is killed with SIGKILL, so that changes nothing about the OOM),
+/// waits for the bomb, and latches the scope's own counters into `<info>.final`
+/// before it exits. The kernel fact is then read from a file that outlives the
+/// scope, and the assertion is about the kernel, not about sampler timing.
+fn write_bomb_observer(dir: &Path) -> PathBuf {
+    let script = dir.join("bomb-observer.sh");
+    std::fs::write(
+        &script,
+        r#"#!/bin/sh
+# $0 observer, $1 = cgroup info file, $@ = command
+trap '' TERM INT HUP
+info="$1"; shift
+cat /proc/self/cgroup > "$info" 2>/dev/null || exit 90
+"$@"; rc=$?
+rel=$(sed -n 's|^0::||p' "$info")
+if [ -n "$rel" ] && [ -d "/sys/fs/cgroup$rel" ]; then
+    {
+        cat "/sys/fs/cgroup$rel/memory.events" 2>/dev/null
+        echo "memory.peak $(cat "/sys/fs/cgroup$rel/memory.peak" 2>/dev/null || echo 0)"
+    } > "$info.final.tmp" 2>/dev/null && mv "$info.final.tmp" "$info.final" 2>/dev/null
+fi
+exit $rc
+"#,
+    )
+    .expect("write the observer");
+    std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    script
+}
+
+/// `(oom_kill, memory.peak)` from a scope counter snapshot. `memory.events`
+/// lines are `key value`; a missing/garbage file reads as `(0, 0)`.
+fn parse_snapshot(path: &Path) -> (u64, u64) {
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let mut oom = 0;
+    let mut peak = 0;
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        let key = parts.next().unwrap_or_default();
+        let value = parts.next().and_then(|v| v.parse::<u64>().ok());
+        match (key, value) {
+            ("oom_kill", Some(v)) => oom = oom.max(v),
+            ("memory.peak", Some(v)) => peak = peak.max(v),
+            _ => {}
+        }
+    }
+    (oom, peak)
+}
+
 #[test]
 fn allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched() {
     let _g = guard();
     let dir = scratch("alloc-bomb");
     let limits = MemoryLimits { mem_bytes: 128 * 1024 * 1024, pids_max: 64 };
-    let mut cg = RunCgroup::prepare(limits, dir.join("cgroup-info"))
+    let info = dir.join("cgroup-info");
+    let mut cg = RunCgroup::prepare(limits, &info)
         .expect("this host must provide a user scope (see S5.md)");
+    let observer = write_bomb_observer(&dir);
     let mut sh = Command::new("/bin/sh");
-    sh.args(["-c", "exec python3 -c 'x=[]\nwhile True: x.append(bytearray(8*1024*1024))'"]);
+    sh.arg(&observer).arg(&info).args([
+        "/bin/sh",
+        "-c",
+        "exec python3 -c 'x=[]\nwhile True: x.append(bytearray(8*1024*1024))'",
+    ]);
     let mut wrapped = cg.wrap(&sh).unwrap();
     let host_before = host_available_mb();
     let mut child = wrapped.spawn().expect("spawn inside the scope");
@@ -131,8 +198,28 @@ fn allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched() {
     };
     cg.sample();
     let host_after = host_available_mb();
-    let peak_mb = cg.peak_bytes() as f64 / 1024.0 / 1024.0;
-    assert!(cg.oom_kills() >= 1, "memory.events must record the OOM kill (peak {peak_mb:.0} MiB)");
+    // The observer writes the snapshot before it exits; poll bounded (it is a
+    // latch, not a sleep: a missing file is a failure, not a longer wait).
+    let snap_path = PathBuf::from(format!("{}.final", info.display()));
+    let settle = Instant::now() + Duration::from_secs(5);
+    let mut snap = parse_snapshot(&snap_path);
+    while snap.0 == 0 && Instant::now() < settle {
+        std::thread::sleep(Duration::from_millis(5));
+        snap = parse_snapshot(&snap_path);
+    }
+    let raw = std::fs::read_to_string(&snap_path).unwrap_or_default();
+    let peak_mb = snap.1 as f64 / 1024.0 / 1024.0;
+    assert!(
+        snap.0 >= 1,
+        "the scope's memory.events must record the OOM kill (status {status:?}, cgroup {} \
+         exists={}, live sample peak={:.0} MiB oom={}, snapshot {} => {:?})",
+        cg_path.display(),
+        cg_path.exists(),
+        cg.peak_bytes() as f64 / 1024.0 / 1024.0,
+        cg.oom_kills(),
+        snap_path.display(),
+        raw.trim()
+    );
     assert!(
         peak_mb <= 128.0 * 1.5,
         "the scope's peak ({peak_mb:.0} MiB) must stay near the 128 MiB limit"
@@ -143,13 +230,39 @@ fn allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched() {
     );
     assert!(
         host_before - host_after < 512.0,
-        "host MemAvailable moved {:.0} MiB (before {host_before:.0}, after {host_after:.0})",
-        host_before - host_after
+        "host MemAvailable moved {:.0} MiB (before {host_before:.0}, after {host_after:.0}); \
+         the scope's own peak was {peak_mb:.0} MiB of a {} MiB cap, oom_kill {} (this host is \
+         shared, so a move here is only evidence when the scope stayed under its cap)",
+        host_before - host_after,
+        limits.mem_bytes / 1024 / 1024,
+        snap.0
     );
+    let survivors = processes_in(&cg_path);
     assert!(
-        processes_in(&cg_path).is_empty(),
-        "no process may survive the OOM-killed scope"
+        survivors.is_empty(),
+        "no process may survive the OOM-killed scope: {:?} (cgroup {} exists={})",
+        survivors,
+        cg_path.display(),
+        cg_path.exists()
     );
+}
+
+/// Teeth for the snapshot parser: a wrong/garbled counter must not read as a
+/// kill (`oom_kill` and `memory.peak` are line-oriented `key value` pairs).
+#[test]
+fn snapshot_parser_reads_only_real_counters() {
+    let dir = scratch("snapshot-parser");
+    let f = dir.join("events");
+    std::fs::write(
+        &f,
+        "low 3\nhigh 0\nmax 7\noom 0\noom_kill 2\noom_group_kill 0\n\
+         memory.peak 134217728\n",
+    )
+    .unwrap();
+    assert_eq!(parse_snapshot(&f), (2, 134_217_728));
+    std::fs::write(&f, "oom_kill\nmemory.peak x\ngarbage\n").unwrap();
+    assert_eq!(parse_snapshot(&f), (0, 0));
+    assert_eq!(parse_snapshot(&dir.join("missing")), (0, 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -299,4 +412,26 @@ fn forbidden_syscall_is_denied_and_logged_in_the_guest() {
 #[test]
 fn default_memory_limit_is_two_gib() {
     assert_eq!(DEFAULT_MEM_MAX, 2 * 1024 * 1024 * 1024);
+}
+
+/// W53: `memory.events` must be read from inside the scope (see
+/// [`write_bomb_observer`]); this asserts the observer really is the payload and
+/// that it propagates the exit status the product's `split_exit_status` expects.
+#[test]
+fn scope_observer_is_the_payload_and_propagates_the_exit_status() {
+    let _g = guard();
+    let dir = scratch("scope-observer");
+    let limits = MemoryLimits { mem_bytes: 128 * 1024 * 1024, pids_max: 64 };
+    let info = dir.join("cgroup-info");
+    let mut cg = RunCgroup::prepare(limits, &info).expect("user scope");
+    let observer = write_bomb_observer(&dir);
+    let mut sh = Command::new("/bin/sh");
+    sh.arg(&observer).arg(&info).args(["/bin/sh", "-c", "exit 7"]);
+    let mut wrapped = cg.wrap(&sh).unwrap();
+    let status = wrapped.status().expect("run in the scope");
+    assert_eq!(status.code(), Some(7), "the payload's exit status is propagated");
+    cg.sample();
+    let (oom, peak) = parse_snapshot(&PathBuf::from(format!("{}.final", info.display())));
+    assert_eq!(oom, 0, "a clean run records no OOM kill");
+    assert!(peak > 0, "the observer publishes the scope's final peak");
 }

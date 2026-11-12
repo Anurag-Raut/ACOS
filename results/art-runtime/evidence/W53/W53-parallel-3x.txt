@@ -1,0 +1,33 @@
+# W53 evidence: parallel `cargo test -p acos-art` — three consecutive green runs
+date -u: 2026-11-12T05:24:41Z
+
+Each run = default parallel test threads, 13 test binaries (12 targets + doc/main),
+68 lib tests + cleanup 7 + launch_hang 4 + memory_caps 6 + priority 1 +
+sandbox_s5 7 + sandbox_s6 5 + w31 3 + w37 5 + w39 5 + w43 4 = 115 tests.
+
+parallel-nff.log (--no-fail-fast, complete target list):
+     Running unittests src/lib.rs (acos_art-4981a593e392c6a9)	test result: ok. 68 passed; 0 failed; 0 ignored; 0 measure
+     Running unittests src/main.rs (acos_art-5f9160794529d2f1)	test result: ok. 0 passed; 0 failed; 0 ignored; 0 measure
+     Running tests/cleanup.rs (cleanup-cbfbb1d81029afbb)	test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 f
+     Running tests/launch_hang.rs (launch_hang-a73db32ae6f521b7)	test result: ok. 4 passed; 0 failed; 0 ignored; 0 measu
+     Running tests/memory_caps.rs (memory_caps-5e6cda973dc44245)	test result: ok. 6 passed; 0 failed; 0 ignored; 0 measu
+     Running tests/priority_adapter.rs (priority_adapter-a4199e45ef5c71c9)	test result: ok. 1 passed; 0 failed; 0 ignore
+     Running tests/sandbox_s5.rs (sandbox_s5-84c12bb3a90a439a)	test result: ok. 7 passed; 0 failed; 0 ignored; 0 measure
+     Running tests/sandbox_s6.rs (sandbox_s6-cb0e6d86ec91a6f5)	test result: ok. 5 passed; 0 failed; 0 ignored; 0 measure
+     Running tests/w31_tree_evidence.rs (w31_tree_evidence-7169e8e7ca1551e9)	test result: ok. 3 passed; 0 failed; 0 igno
+     Running tests/w37_build_cache.rs (w37_build_cache-3d8de4fe76b0ac2e)	test result: ok. 5 passed; 0 failed; 0 ignored;
+     Running tests/w39_stage_cache.rs (w39_stage_cache-1ee77e6652e4c8cb)	test result: ok. 5 passed; 0 failed; 0 ignored;
+     Running tests/w43_session_exit.rs (w43_session_exit-33e07f507053de04)	test result: ok. 4 passed; 0 failed; 0 ignore
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s	
+
+par3-2.log: rc=0, 13/13 binaries ok
+par3-3.log: rc=0, 13/13 binaries ok
+
+## Interrupted runs and why (never retried to hide a failure)
+- par3-1: cleanup::guest_crash_still_removes_the_run_root listed a LIVE W52 cohort
+  process: comm=acos-art cmd=.cache/w52-target/release/acos-art launch --apk
+  fixtures/build/apps/form-validation.apk --until activity-resumed --out
+  .cache/w52-suite/20261112T052313Z/T07-wrong/r2/art-frames
+- parallel-final.log: same class, a LIVE W50 run (.cache/w50-target-wt/release/acos-art launch).
+- set A2/A3 (earlier): my own `cargo build -p acos-art` command line (old scan), and the
+  sandbox_s6 OOM-counter flake (fixed, see W53-sandbox-s6-observer.txt).

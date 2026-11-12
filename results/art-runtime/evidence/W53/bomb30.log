@@ -1,0 +1,240 @@
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157579-i8474151.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157575/bomb-observer.sh: line 6: 157582 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157592-i8506447.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157588/bomb-observer.sh: line 6: 157595 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157605-i8526484.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157601/bomb-observer.sh: line 6: 157608 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157618-i8477676.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157614/bomb-observer.sh: line 6: 157621 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157631-i8578289.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157627/bomb-observer.sh: line 6: 157634 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157644-i8593669.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157640/bomb-observer.sh: line 6: 157647 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157657-i8585823.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157653/bomb-observer.sh: line 6: 157660 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157670-i8574557.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157666/bomb-observer.sh: line 6: 157673 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157683-i8530894.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157679/bomb-observer.sh: line 6: 157686 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157696-i8501945.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157692/bomb-observer.sh: line 6: 157699 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157709-i8530897.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157705/bomb-observer.sh: line 6: 157712 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157722-i8578306.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157718/bomb-observer.sh: line 6: 157725 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157735-i8493668.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157731/bomb-observer.sh: line 6: 157738 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157748-i8506452.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157744/bomb-observer.sh: line 6: 157751 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157761-i8530899.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157757/bomb-observer.sh: line 6: 157764 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157774-i8565802.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157770/bomb-observer.sh: line 6: 157777 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157787-i8589802.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157783/bomb-observer.sh: line 6: 157790 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157800-i8474152.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157796/bomb-observer.sh: line 6: 157803 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157813-i8534319.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157809/bomb-observer.sh: line 6: 157816 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157826-i8501965.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157822/bomb-observer.sh: line 6: 157829 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157839-i8501966.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157835/bomb-observer.sh: line 6: 157842 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157852-i8589810.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157848/bomb-observer.sh: line 6: 157855 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157865-i8506459.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157861/bomb-observer.sh: line 6: 157868 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.03s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157878-i8565816.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157874/bomb-observer.sh: line 6: 157881 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157891-i8569809.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157887/bomb-observer.sh: line 6: 157894 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157904-i8474153.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157900/bomb-observer.sh: line 6: 157907 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157917-i8589813.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157913/bomb-observer.sh: line 6: 157920 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.04s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157930-i8497458.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157926/bomb-observer.sh: line 6: 157933 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157943-i8482521.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157939/bomb-observer.sh: line 6: 157946 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.05s
+
+
+running 1 test
+alloc bomb: cgroup=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p157956-i8589817.scope
+/home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-157952/bomb-observer.sh: line 6: 157959 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.06s
+

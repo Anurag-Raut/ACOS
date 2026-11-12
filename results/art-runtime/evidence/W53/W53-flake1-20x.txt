@@ -1,0 +1,45 @@
+# W53 evidence: flake 1 — 20 reps of the S5 allocator-bomb test under load (4 niced spin loops)
+
+Test binary: .cache/w53-target/debug/deps/sandbox_s5-84c12bb3a90a439a sha256=b04a6df7975da89c0d4ddd867bf3d459afd3f7019560209e792b0e64aaeb21a8
+
+start 2026-11-12T05:11:08Z loadavg=4.55
+rep 1 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 2 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 3 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 4 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 5 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 6 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 7 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 8 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 9 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 10 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 11 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 12 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 13 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 14 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 15 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 16 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 17 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 18 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 19 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+rep 20 rc=0 at 2026-11-12T05:11:08Z loadavg=4.55
+done rc_ok=20/20 2026-11-12T05:11:08Z
+
+test result lines: 20 ok, 0 failed
+
+## pre-fix (live-only sampler) probe, 20 reps in the same load window
+reps=20 missed_oom=3
+## earlier 20-rep run (same test, supervisor variant, 1 build error excluded)
+start 2026-11-12T05:05:37Z loadavg=10.05
+probe done 2026-11-12T05:05:39Z
+rep 1 rc=101 at 2026-11-12T05:05:44Z loadavg=11.01
+done 2026-11-12T05:05:56Z
+## run 1 of the 20-rep loop before the fix (pre-observer test): failure text
+thread 'allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched' panicked at crates/acos-art/tests/sandbox_s5.rs:168:5:
+no process may survive the OOM-killed scope
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--
+thread 'allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched' panicked at crates/acos-art/tests/sandbox_s5.rs:146:5:
+memory.events must record the OOM kill (peak 127 MiB, status ExitStatus(unix_wait_status(15)), cgroup /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p85099-i8384512.scope exists=false, snapshot /home/Qui/Projects/acos/.cache/s5-tests/alloc-bomb-85094/cgroup-info.final => "")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--

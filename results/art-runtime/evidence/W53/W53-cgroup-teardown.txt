@@ -1,0 +1,44 @@
+# W53 evidence: the transient scope's memory.events is gone before a parent sampler can read it
+
+date -u: 2026-11-12T05:12:44Z
+
+## 1. Probe: pre-fix sampler semantics (live reads only, break on child exit)
+
+Runs: 20 + 20, OOM events missed: 8 + 3
+
+```
+rep=1 exit=-9 t=0.072s cg_alive=True events_after_exit=[low 0 high 0 max 45 oom 1 oom_kill 1 oom_group_kill 0 sock_throttled 0] peak=134217728 polls=20 saw_oom=1
+rep=2 exit=-9 t=0.061s cg_alive=True events_after_exit=[low 0 high 0 max 38 oom 1 oom_kill 1 oom_group_kill 0 sock_throttled 0] peak=134217728 polls=11 saw_oom=0
+rep=3 exit=-9 t=0.056s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=16 saw_oom=1
+rep=4 exit=-9 t=0.040s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=11 saw_oom=1
+rep=5 exit=-9 t=0.040s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=9 saw_oom=0
+rep=6 exit=-9 t=0.044s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=9 saw_oom=1
+rep=7 exit=-9 t=0.052s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=9 saw_oom=1
+rep=8 exit=-9 t=0.055s cg_alive=False events_after_exit=[ERR 2] peak=ERR polls=11 saw_oom=1
+...
+```
+
+## 2. Why: the scope cgroup is removed with the payload (journal + fs)
+
+```
+Nov 12 10:32:00 arch systemd[1027]: run-p84974-i8447997.scope: The kernel OOM killer killed some processes in this unit.
+Nov 12 10:32:00 arch systemd[1027]: run-p84974-i8447997.scope: Failed with result 'oom-kill'.
+Nov 12 10:32:00 arch systemd[1027]: run-p84974-i8447997.scope: Consumed 18ms CPU time over 18ms wall clock time, 128M memory peak.
+Nov 12 10:32:00 arch systemd[1027]: run-p85099-i8384512.scope: The kernel OOM killer killed some processes in this unit.
+Nov 12 10:32:00 arch systemd[1027]: run-p85099-i8384512.scope: Failed with result 'oom-kill'.
+Nov 12 10:32:00 arch systemd[1027]: run-p85099-i8384512.scope: Consumed 19ms CPU time over 20ms wall clock time, 128M memory peak.
+```
+
+Observed after the bomb exited (test scratch):
+```
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108365-i8541132.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108483-i8532803.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108560-i8465202.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108620-i8532811.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108675-i8532815.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108720-i8556828.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108762-i8428973.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108794-i8556840.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108829-i8541153.scope
+      1 gone  /user.slice/user-1000.slice/user@1000.service/app.slice/run-p108862-i8465214.scope
+```
