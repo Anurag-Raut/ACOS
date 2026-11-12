@@ -486,6 +486,108 @@ viewBox defect and an insets defect — MEASURED (two defects open)
   path without a zygote; the zygote comparison (Z7) uses it as the fair denominator, because the
   gate must compare against an optimised current implementation, not an unoptimised one.
 
+## E5.1 — K2/R4: guest crash evidence carries the cause chain and stack — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-12 `fea6d68`.
+- **Agent / bottleneck:** K2; the K1 corpus had 9 apps whose first failing call
+  was hidden behind a framework wrapper (`Unable to create application …`).
+- **Baseline:** K1 `guest_crash` was one line, host-truncated at 600 chars; no
+  cause chain, no stack, no logd tail.
+- **Hypothesis + solution:** print `exception`, `stack` and `causes[]` from the
+  fatal throwable in `LaunchMain`, keep the whole line in `acos-art`, and attach
+  `logd_tail`/`stdout_tail`/`stderr_tail` to `session-exit.json`.
+- **Method:** targeted re-run of 9 hidden-cause apps (`runs-r4`), one guarded
+  batch, host RAM ≤ 27 %.
+- **Result:** all 9 reclassified. `com.fsck.k9` → missing `power` service;
+  `com.nextcloud.client` → missing `account`; `com.dot.gallery`,
+  `de.westnordost.streetcomplete`, `org.breezyweather`, `org.fdroid.basic` →
+  `jobscheduler`; `me.zhanghai.android.files` → `lateinit application`;
+  `io.element.android.x` → `ProcessLifecycleInitializer`; `net.mullvad` →
+  notification channels. No funnel change by design.
+- **Fidelity / evidence:** `results/compat/K2.md` §2,
+  `.cache/k2/runs-r4/<pkg>/art-sessions/*/art-frames/session-exit.json`.
+- **Result:** accepted. **Trade-offs:** larger `session-exit.json` (K2 lines are
+  still bounded at 32 KiB), no behaviour change. **Follow-up:** include the
+  signal/native trail for the remaining SIGABRT/exits.
+
+## E5.2 — K2/R1: publish the services Android always publishes — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-12 `335612c` (+`8f2c52d`, `546993a`).
+- **Agent / bottleneck:** K2; R1 was K1's largest wall (13/42 apps), a null
+  where Android never returns one.
+- **Baseline:** K1 first frame 5/42; 13 apps died on
+  `IStorageManager.getVolumeList` null (5), `getSystemService(JobScheduler)`
+  null (5), `ShortcutManager` null (1), `PowerManager`/`AccountManager` null
+  (2 through DI wrappers).
+- **Hypothesis + solution:** real `StorageVolume` model (one mounted emulated
+  volume), real `IJobScheduler`/`IShortcutService`/`IPowerManager`/
+  `IAccountManager`/`IThermalService`/`IAlarmManager` stubs, `netstats` binder
+  and `permissionmgr` alias. Offline single-user answers, never fabricated
+  passes.
+- **Method:** R1-only targeted batch (13 apps), then full corpus after the
+  follow-up codec fix; guarded 8G, batch 42.
+- **Result:** all 13 left their original null call. Full ladder gained editor,
+  coffee, money.manager, markor; AppManager and mullvad reached
+  tree+screenshot; antennapod now completes onCreate and resumes. Full corpus
+  funnel after the combined wall chain: first frame **13/42 (31.0 %)** from
+  5/42, tap **7/42 (16.7 %)** from 2/42.
+- **Fidelity / evidence:** `results/compat/K2.md` §3,
+  `.cache/k2/runs-final2/`, `results/compat/k2-results.json`.
+- **Result:** accepted. **Trade-offs/regression:** publishing JobScheduler and
+  Shortcut exposed missing `JobInfo`/`ShortcutInfo` payload codecs; `8f2c52d`
+  consumes those list arguments opaquely and the platform answer (success) is
+  returned. Feeder and Aegis were restored (Aegis now full pass).
+  **Follow-up:** real filesystem provisioning for
+  `/storage/emulated/0/Android/data/<pkg>` (plain).
+
+## E5.3 — K2/R2: notification channel parcels and get-channel queries — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-12 `f4500ce`, correction `b71f5e0`.
+- **Agent / bottleneck:** K2; 6/42 apps (14 %) were rejected at
+  `INotificationManager.createNotificationChannels`.
+- **Baseline:** `IllegalArgumentException: bad request for …createNotificationChannels`
+  (no `ParceledListSlice`/`NotificationChannel` codec); get-channel 42/53
+  unsupported.
+- **Hypothesis + solution:** implement `ParceledListSlice` inline decoding and
+  the API-34 `NotificationChannel`/Group `writeByte`-presence layouts, store
+  channels per package, answer 42/53/list/counts, accept cancel/enqueue.
+- **Method:** targeted 6-app batch, then 19-app R2/R3 batch, full corpus final;
+  parcel round-trip tests (`tests/k2_notification.rs`) run without the corpus.
+- **Result:** all 6 left the create call; kdeconnect reached the full ladder.
+  gotify → MaterialButton inflate; anki → app exit 10; tailscale →
+  AndroidKeyStore; vlc → PMS error-class/`com.google.android.gsf`; wikipedia →
+  alarm resolved then signal; fdroid.basic → permission/IntentSender.
+- **Fidelity / evidence:** `results/compat/K2.md` §4,
+  `crates/acos-services/tests/k2_notification.rs`.
+- **Result:** accepted. **Why it worked:** the first correction (AudioAttributes
+  field order) was exactly the image-reader mismatch that produced K1's "bad
+  string" error. **Trade-offs:** channels are stored per app run (no persistent
+  notification DB, like a fresh device); no status bar is rendered.
+
+## E5.4 — K2/R3: answer the read-only AMS/PMS/ATMS/connectivity queries — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-12 `9ea2923`.
+- **Agent / bottleneck:** K2; 7/42 apps blocked on a read-only transaction the
+  tables knew but no handler answered.
+- **Baseline:** 7 first-failing `UNSUPPORTED_ANDROID_API` transactions
+  (`getMemoryInfo` 77, `getRunningAppProcesses` 86, `getTaskForActivity` 22,
+  `getRequestedOrientation` 30, `getPackageInstaller` 133,
+  `getPermissionControllerPackageName` 140, `getNetworkCapabilities` 16).
+- **Hypothesis + solution:** answer each with the device's real offline state:
+  `/proc/meminfo`, empty process list, task id 1/-1, unresolved orientation,
+  empty installer, the AOSP permission-controller package, null network
+  capabilities; parcel codecs for MemoryInfo/InstallSourceInfo/Network/Messenger.
+- **Method:** full corpus final2, guarded; unit round-trips in `tests/k2_r3.rs`.
+- **Result:** money.manager full ladder; AppManager and joplin render + tree +
+  screenshot; fluffychat/termux/unciv/owncloud/aurora moved to their next
+  (mutating/app) wall. No new false pass.
+- **Fidelity / evidence:** `results/compat/K2.md` §5, `tests/k2_r3.rs`.
+- **Result:** accepted. **Trade-offs:** `requestNetwork`, `setRequestedOrientation`
+  and installer mutations remain structured unsupported (they change device
+  state or need a codec/callback that does not exist). **Follow-up:** PMS
+  `NameNotFoundException` error class, `TaskDescription` drawable codec,
+  `IPackageInstaller` read methods.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -502,7 +604,8 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 |
 | Teardown (`acos_destroy`) | ~20 ms lifecycle, 300 ms bound then group kill | main GL1 | E2.7 | 2026-11-12 |
-| False passes | 0 | all | P1–P11 | 2026-11-12 |
+| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `335612c…546993a` | K2/R1–R3 | 2026-11-12 |
+| False passes | 0 | all | P1–P11, K2 | 2026-11-12 |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
@@ -516,3 +619,6 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | H7 | Shrink per-session boot-image private memory (26.3 MiB decompressed per session) without a warm pool | M2 | −10–25 MiB | medium | medium | medium (ASLR/B3) | backlog |
 | H8 | Faster PNG (SIMD deflate) or region/downscaled screenshots for agents | M5 | 24 → 10–15 ms | medium | medium | low | backlog |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
+| H9 | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
+| H10 | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |
+| H11 | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
