@@ -254,17 +254,18 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     // image, the property table, `/linkerconfig`) are read-only in the guest.
     let run = root.new_run_dir("render")?;
 
-    // The APK and the guest classpath live under /data, which the sandbox
-    // already binds read-write.
-    let app_dir = root.data.join("app");
-    fs::create_dir_all(&app_dir)?;
+    // The APK is mapped by ART/AssetManager, so it is this run's own copy in the
+    // private run root (H17): a concurrent launch must never truncate the bytes
+    // another guest holds mapped. It is bound over the shared `/data/app/<name>`
+    // below, so the guest argv is unchanged.
     let apk_name = opts
         .apk
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_else(|| "app.apk".to_string());
-    let apk = app_dir.join(&apk_name);
-    fs::copy(&opts.apk, &apk)?;
+    let apk = run.dir("app").join(&apk_name);
+    stage_apk(&opts.apk, &apk)?;
+    ensure_apk_mountpoint(&root.data, &apk_name, &opts.apk)?;
 
     let package = match &opts.package {
         Some(p) => p.clone(),
@@ -324,6 +325,8 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
+    // H17: this run's APK shadows the (read-only) shared `/data/app` entry.
+    sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
     // Software gralloc interposer (built into the sysroot by
     // `tools/art-sysroot.sh --shim`; G1). Loaded last, so the substrate's
     // libraries resolve against it.
@@ -1169,6 +1172,64 @@ fn is_static_android_overlay(apk: &Path) -> Result<bool> {
         }
     }
     Ok(targets_android && is_static)
+}
+
+/// Stage the APK at the path a guest will open and `mmap`.
+///
+/// H17: ART and `AssetManager` map classes/resources straight out of the APK, so
+/// the file a running guest holds must never be rewritten under it. The launcher
+/// used to copy every launch into the **shared** `<data>/app/<name>`, i.e. it
+/// truncated the exact bytes every other session's guest had mapped (a concurrent
+/// fault became `SIGBUS`, and a same-named APK from another session could be
+/// served), and a starting guest could map a half-copied file. Each call site now
+/// stages its **own** copy into its private run root and binds that file over
+/// `/data/app/<name>`; the copy is atomic anyway (temp + rename), so even a
+/// shared destination could not be observed truncated.
+pub(crate) fn stage_apk(from: &Path, to: &Path) -> Result<()> {
+    if to.is_file() {
+        // Already staged? Compare by size first, then bytes: the shared mount
+        // point is written once, the per-run target is always fresh.
+        if let (Ok(a), Ok(b)) = (fs::metadata(from), fs::metadata(to)) {
+            if a.len() == b.len() && fs::read(from)? == fs::read(to)? {
+                return Ok(());
+            }
+        }
+    }
+    if let Some(dir) = to.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = to
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "app.apk".to_string());
+    let tmp = to.with_file_name(format!(
+        ".{name}.stage-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    // A stream copy (never a read-into-RAM) followed by the atomic publish: a
+    // reader either has the old inode or the complete new one.
+    fs::copy(from, &tmp)?;
+    fs::rename(&tmp, to)?;
+    Ok(())
+}
+
+/// Make sure the shared `/data/app/<name>` path exists, as the mount point for
+/// the per-run APK bind above.
+///
+/// bwrap cannot create a file inside a read-only bind, and the shared
+/// `/data/app` is bound read-only, so the destination must already exist. It is
+/// written **once** and never rewritten: every guest sees its own copy bound
+/// over it, and no guest can be handed a torn or another session's APK.
+pub(crate) fn ensure_apk_mountpoint(data: &Path, name: &str, from: &Path) -> Result<()> {
+    let shared = data.join("app");
+    fs::create_dir_all(&shared)?;
+    let at = shared.join(name);
+    if at.exists() {
+        return Ok(());
+    }
+    stage_apk(from, &at)
 }
 
 /// Hard-link `from` to `to` (same filesystem: both live under the repo), falling

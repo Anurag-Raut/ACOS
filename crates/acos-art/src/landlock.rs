@@ -120,7 +120,11 @@ pub fn write_plan(dir: &Path) -> Result<bool> {
         acos_sandbox::landlock_guest_plan(READ_ONLY_ROOTS, READ_WRITE_ROOTS).map_err(|e| {
             Error::LandlockUnavailable(format!("cannot assemble the guest ruleset: {e}"))
         })?;
-    std::fs::write(&plan_path, bytes)?;
+    // H17: this file is bind-mounted read-only into every guest of the cohort and
+    // read by the guard constructor at start. Rewriting it in place could hand a
+    // starting guest an empty file (`ERR landlock=plan-missing`, exit 126), so it
+    // is published atomically.
+    crate::publish_atomic(&plan_path, &bytes)?;
     Ok(true)
 }
 

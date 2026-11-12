@@ -535,10 +535,10 @@ impl Props {
     }
 
     pub fn write(&self, path: &Path) -> Result<()> {
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        fs::write(path, self.to_string()).map_err(Error::Io)
+        // H17: this table is read by every guest of a concurrent cohort, so it
+        // is published atomically and only when it changed (see
+        // [`crate::publish_atomic`]).
+        crate::publish_atomic(path, self.to_string().as_bytes())
     }
 }
 

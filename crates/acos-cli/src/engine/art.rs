@@ -1106,6 +1106,13 @@ impl ArtSession {
             ),
         })?;
         let _pid = child.id();
+        dm6_trace(serde_json::json!({
+            "event": "spawn",
+            "session": artifacts.display().to_string(),
+            "pid": _pid,
+            "process_group": _pid,
+            "unix_ms": now_unix_ms(),
+        }));
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().expect("piped stdout");
         let stderr = child.stderr.take().expect("piped stderr");
@@ -1410,7 +1417,20 @@ impl ArtSession {
     pub fn liveness(&mut self) -> Option<GuestExit> {
         if let Some(child) = self.child.as_mut() {
             match child.try_wait() {
-                Ok(Some(status)) => return Some(GuestExit::from_status("exited", Some(status))),
+                Ok(Some(status)) => {
+                    let exit = GuestExit::from_status("exited", Some(status));
+                    dm6_trace(serde_json::json!({
+                        "event": "liveness.dead",
+                        "session": self.artifacts.display().to_string(),
+                        "pid": child.id(),
+                        "process_group": self.process_group,
+                        "state": exit.state,
+                        "exit_code": exit.exit_code,
+                        "signal": exit.signal,
+                        "unix_ms": now_unix_ms(),
+                    }));
+                    return Some(exit);
+                }
                 Ok(None) => {
                     if self.closed {
                         return Some(GuestExit::from_status("closed", None));
@@ -2179,6 +2199,12 @@ impl ArtSession {
     fn kill_group(&mut self) {
         if let Some(mut child) = self.child.take() {
             let pid = child.id() as i32;
+            dm6_trace(serde_json::json!({
+                "event": "drop.kill",
+                "session": self.artifacts.display().to_string(),
+                "pid": pid,
+                "unix_ms": now_unix_ms(),
+            }));
             let _ = child.kill();
             // SAFETY: `pid` is the direct child's pid and the child was spawned
             // into its own process group (`process_group(0)`), so `-pid` names
@@ -2203,6 +2229,12 @@ impl ArtSession {
         let Some(group) = self.process_group else {
             return;
         };
+        dm6_trace(serde_json::json!({
+            "event": "sigkill.group",
+            "session": self.artifacts.display().to_string(),
+            "process_group": group,
+            "unix_ms": now_unix_ms(),
+        }));
         // SAFETY: `group` was the child's own process group id
         // (`process_group(0)`), so `-group` names that group and no other.
         unsafe {
@@ -2300,6 +2332,7 @@ impl ArtSession {
         // control flow changes.
         dm6_trace(serde_json::json!({
             "event": "stop",
+            "session": self.artifacts.display().to_string(),
             "process_group": self.process_group,
             "path": path.as_str(),
             "exit_ms": exit_ms,
