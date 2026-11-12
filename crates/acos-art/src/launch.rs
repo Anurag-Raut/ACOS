@@ -211,19 +211,37 @@ pub type PrebuiltHost = (
     acos_services::registry::LiveHandles,
 );
 
-/// ZM2: opt-in glibc controls for the launcher's frame-sized capture buffers.
+/// W1: the launcher's frame-sized capture buffers go through `mmap`, so a
+/// free returns them to the OS instead of leaving them committed in a glibc
+/// worker-thread arena. glibc's dynamic threshold otherwise grows past a
+/// 9.9 MiB capture buffer, and its top-trim never runs in those arenas; ZM2
+/// measured that as 16.29 MiB of a 20.48 MiB launcher at N=5, still resident
+/// long after the buffers were dropped. 128 KiB is the value ZM2 measured
+/// (``ACOS_ART_MALLOC_MMAP_THRESHOLD_KB=128``): launcher 20.48 -> 4.01 MiB at
+/// N=5 with identical PNGs and no latency cost.
+const DEFAULT_MMAP_THRESHOLD_KB: i32 = 128;
+
+/// Install the launcher's allocator defaults, then apply the ZM2 test knobs.
+///
+/// The default (`M_MMAP_THRESHOLD = 128 KiB`) is **always** applied, before any
+/// thread is spawned, so the production path needs no environment variable.
 ///
 /// * `ACOS_ART_MALLOC_ARENA_MAX=N` -> `mallopt(M_ARENA_MAX, N)` (1 = every
 ///   thread allocates from the main arena, so `malloc_trim` can reach it).
 /// * `ACOS_ART_MALLOC_MMAP_THRESHOLD_KB=N` -> `mallopt(M_MMAP_THRESHOLD, N*1024)`
-///   (128 = frame buffers are mmap'd and returned on free).
+///   (overrides the default: 128 = frame buffers are mmap'd and returned on
+///   free).
 /// * `ACOS_ART_MALLOC_TRIM_THRESHOLD_KB=N` -> `mallopt(M_TRIM_THRESHOLD, N*1024)`.
 ///
-/// `ACOS_ART_TRIM_AFTER_CAPTURE=1` (in `capture_c1`) calls `malloc_trim(0)`.
-/// Nothing here runs unless one of the variables is set.
+/// `ACOS_ART_TRIM_AFTER_CAPTURE=1` (in `capture_c1`) still calls
+/// `malloc_trim(0)`; it is not needed with the threshold above.
 fn apply_malloc_controls() {
     #[cfg(target_env = "gnu")]
     unsafe {
+        libc::mallopt(
+            libc::M_MMAP_THRESHOLD,
+            DEFAULT_MMAP_THRESHOLD_KB.saturating_mul(1024),
+        );
         let int_env = |name: &str| -> Option<i32> {
             std::env::var(name)
                 .ok()
@@ -247,11 +265,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
     // the exec -> activity-resumed wall. Inert unless ACOS_ART_STAGE_TIMING=1.
     crate::stage("launch-entry");
-    // ZM2 quick-win knobs (all unset by default; unset => no allocator call at
-    // all, so the launch path is byte-identical). The launcher's frame-sized
-    // capture buffers are allocated per screenshot; glibc keeps freed
-    // large chunks resident (including in the PNG encoder thread's arena).
-    // See results/art-runtime/ZM2.md §4.1.
+    // W1: frame-sized capture buffers must be mmap-backed (and the ZM2 knobs
+    // still apply on top). This runs before any thread or allocation below, so
+    // every later capture buffer is covered. See results/art-runtime/ZM2.md
+    // §4.1 for the retention this removes.
     apply_malloc_controls();
     // W16: the synthetic `IInputManager` devices carry the image's native
     // `KeyCharacterMap` payload built from the stock `/system/usr/keychars/*.kcm`
@@ -2161,11 +2178,9 @@ fn capture_c1(
         );
         p3_trace("art", "art.capture_total", t_capture, t_end, "");
     }
-    // ZM2 quick-win knob (off by default): a capture allocates ~3 frame-sized
-    // buffers (read, composite canvas, filtered rows) and glibc keeps the
-    // freed large chunks resident (its dynamic mmap threshold grows). Trimming
-    // after the capture returns them to the OS; with the variable unset the
-    // capture path is byte-identical to before.
+    // ZM2 quick-win knob (off by default): trim after a capture. W1's default
+    // mmap threshold already returns the frame buffers on free, so this is now
+    // only a measurement knob, not part of the production path.
     if std::env::var_os("ACOS_ART_TRIM_AFTER_CAPTURE").is_some() {
         #[cfg(target_env = "gnu")]
         unsafe {
@@ -3788,19 +3803,11 @@ fn encode_png_rgba_into(
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
-    let mut filtered = Vec::with_capacity((row + 1).saturating_mul(height as usize));
-    for y in 0..height as usize {
-        filtered.push(0u8);
-        let start = y * stride_bytes;
-        let end = start + row;
-        if end <= rgba.len() {
-            filtered.extend_from_slice(&rgba[start..end]);
-        } else {
-            filtered.resize(filtered.len() + row, 0);
-        }
-    }
+    let filtered_len = row
+        .saturating_add(1)
+        .saturating_mul(height as usize);
     let t_filter = m5_now_us();
-    m5_trace("art.encode_filter", t0, t_filter, "");
+    m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
     sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&width.to_be_bytes());
@@ -3808,33 +3815,46 @@ fn encode_png_rgba_into(
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
     png_chunk(sink, b"IHDR", &ihdr, crc32);
 
-    // The zlib stream is written straight to the sink in stored blocks: no
-    // intermediate 9.5 MB buffer exists to be copied again, and the IDAT CRC is
-    // accumulated over the same bytes as they are emitted (P2).
-    let block_count = filtered.len().div_ceil(65_535);
-    let idat_len = 2 + block_count * 5 + filtered.len() + 4;
+    // The zlib stream is written straight to the sink in stored blocks: the
+    // logical "filtered" byte stream (a zero filter byte then one row of pixels
+    // per row) is read straight from `rgba`, so no full-frame copy exists. Both
+    // the IDAT CRC and the Adler-32 are folded over the same bytes as they are
+    // emitted (W1 removed the last frame-sized `filtered` buffer).
+    let block_count = filtered_len.div_ceil(65_535);
+    let idat_len = 2 + block_count * 5 + filtered_len + 4;
     sink(&(idat_len as u32).to_be_bytes());
     sink(b"IDAT");
     let mut crc = Crc32Stream::new();
     crc.update(b"IDAT");
     emit_checked(sink, &mut crc, &[0x78, 0x01]);
+    let mut adler = Adler32::new();
     let mut offset = 0usize;
-    while offset < filtered.len() {
-        let len = (filtered.len() - offset).min(65_535);
-        let final_block = offset + len == filtered.len();
+    while offset < filtered_len {
+        let len = (filtered_len - offset).min(65_535);
+        let final_block = offset + len == filtered_len;
         let mut header = [0u8; 5];
         header[0] = if final_block { 1 } else { 0 };
         header[1..3].copy_from_slice(&(len as u16).to_le_bytes());
         header[3..5].copy_from_slice(&(!(len as u16)).to_le_bytes());
         emit_checked(sink, &mut crc, &header);
-        emit_checked(sink, &mut crc, &filtered[offset..offset + len]);
+        emit_filtered_range(
+            sink,
+            &mut crc,
+            &mut adler,
+            rgba,
+            row,
+            stride_bytes,
+            height as usize,
+            offset,
+            len,
+        );
         offset += len;
     }
     let t_stored = m5_now_us();
     m5_trace("art.encode_stored", t_filter, t_stored, "");
-    let adler = adler32(&filtered);
+    let adler = adler.finish();
     let t_adler = m5_now_us();
-    m5_trace("art.encode_adler32", t_stored, t_adler, "");
+    m5_trace("art.encode_adler32", t_stored, t_adler, "streamed=1");
     emit_checked(sink, &mut crc, &adler.to_be_bytes());
     let t_crc = m5_now_us();
     let crc = crc.finish();
@@ -3849,7 +3869,71 @@ fn encode_png_rgba_into(
     m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
     png_chunk(sink, b"IEND", &[], crc32);
     m5_trace("art.encode_total", t0, m5_now_us(), "");
-    drop(filtered);
+}
+
+/// Emit `len` bytes of the logical filtered stream starting at `offset`.
+///
+/// The stream is `[0, row pixels]` per row, with `stride_bytes - row` bytes of
+/// the source skipped between rows. A row whose end is past `rgba` is emitted
+/// as zeros, exactly as the old buffered encoder did. Each piece is folded into
+/// the IDAT CRC and the Adler-32 in the same pass, so `rgba` is never copied
+/// into a frame-sized buffer.
+#[allow(clippy::too_many_arguments)]
+fn emit_filtered_range(
+    sink: &mut dyn FnMut(&[u8]),
+    crc: &mut Crc32Stream,
+    adler: &mut Adler32,
+    rgba: &[u8],
+    row: usize,
+    stride_bytes: usize,
+    height: usize,
+    mut offset: usize,
+    mut len: usize,
+) {
+    const ZEROS: [u8; 4096] = [0u8; 4096];
+    let filtered_row = row.saturating_add(1);
+    if filtered_row == 0 {
+        return;
+    }
+    while len > 0 {
+        let y = offset / filtered_row;
+        let within = offset % filtered_row;
+        let take = (filtered_row - within).min(len);
+        if within == 0 {
+            emit_checked_adler(sink, crc, adler, &[0u8]);
+        }
+        let pixel_off = within.saturating_sub(1);
+        let pixel_len = take - usize::from(within == 0);
+        if pixel_len > 0 {
+            let row_start = y.saturating_mul(stride_bytes);
+            let row_end = row_start.saturating_add(row);
+            let start = row_start.saturating_add(pixel_off);
+            if y < height && row_end <= rgba.len() && start + pixel_len <= rgba.len() {
+                emit_checked_adler(sink, crc, adler, &rgba[start..start + pixel_len]);
+            } else {
+                let mut left = pixel_len;
+                while left > 0 {
+                    let n = left.min(ZEROS.len());
+                    emit_checked_adler(sink, crc, adler, &ZEROS[..n]);
+                    left -= n;
+                }
+            }
+        }
+        offset += take;
+        len -= take;
+    }
+}
+
+/// Emit `bytes`, folding them into both the chunk CRC and the zlib Adler-32.
+fn emit_checked_adler(
+    sink: &mut dyn FnMut(&[u8]),
+    crc: &mut Crc32Stream,
+    adler: &mut Adler32,
+    bytes: &[u8],
+) {
+    sink(bytes);
+    crc.update(bytes);
+    adler.update(bytes);
 }
 
 /// Emit `bytes` and fold them into the chunk CRC in the same call.
@@ -3972,22 +4056,48 @@ fn crc32(data: &[u8]) -> u32 {
 /// the largest block for which `b` cannot overflow a `u32` from a reduced state.
 const ADLER_NMAX: usize = 5552;
 
-fn adler32(data: &[u8]) -> u32 {
-    let mut a = 1u32;
-    let mut b = 0u32;
-    let mut rest = data;
-    while !rest.is_empty() {
-        let n = rest.len().min(ADLER_NMAX);
-        let (block, tail) = rest.split_at(n);
-        for &byte in block {
-            a += u32::from(byte);
-            b += a;
-        }
-        a %= 65_521;
-        b %= 65_521;
-        rest = tail;
+/// Incremental Adler-32 over the zlib stream's filtered bytes. Calling
+/// [`Adler32::update`] on arbitrary slices gives the same result as
+/// [`adler32`] on their concatenation: both reduce modulo 65521 at the same
+/// block boundaries and the sums are associative modulo 65521.
+struct Adler32 {
+    a: u32,
+    b: u32,
+}
+
+impl Adler32 {
+    fn new() -> Self {
+        Adler32 { a: 1, b: 0 }
     }
-    (b << 16) | a
+
+    fn update(&mut self, data: &[u8]) {
+        let mut a = self.a;
+        let mut b = self.b;
+        let mut rest = data;
+        while !rest.is_empty() {
+            let n = rest.len().min(ADLER_NMAX);
+            let (block, tail) = rest.split_at(n);
+            for &byte in block {
+                a += u32::from(byte);
+                b += a;
+            }
+            a %= 65_521;
+            b %= 65_521;
+            rest = tail;
+        }
+        self.a = a;
+        self.b = b;
+    }
+
+    fn finish(self) -> u32 {
+        (self.b << 16) | self.a
+    }
+}
+
+fn adler32(data: &[u8]) -> u32 {
+    let mut adler = Adler32::new();
+    adler.update(data);
+    adler.finish()
 }
 
 /// Undo bwrap's `128+signal` remap and return the guest's real termination.

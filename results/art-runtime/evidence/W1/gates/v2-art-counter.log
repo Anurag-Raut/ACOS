@@ -1,0 +1,4 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  artifacts: /home/Qui/Projects/acos/.cache/w1-after/artifacts/v2-art-counter
+  steps: 11

@@ -230,6 +230,29 @@ fn whole_png_bytes_are_identical_to_the_old_encoder() {
     assert_eq!(&new_png[..8], b"\x89PNG\r\n\x1a\n");
 }
 
+/// A stride wider than the row, and a pixel buffer that is short of the last
+/// rows, must still produce the old encoder's bytes (the buffered encoder
+/// emits an all-zero row whenever that row's end is past the buffer).
+#[test]
+fn stride_padding_and_short_rows_match_the_old_encoder() {
+    let mut rng = Rng::new(0xAC05_0003_0000_0001);
+    for (width, height, stride, bytes) in [
+        (17u32, 5u32, 23u32, 23 * 4 * 5),
+        (17, 5, 23, 23 * 4 * 5 - 13),
+        (1, 3, 1, 1 * 4 * 3 - 2),
+        (0, 2, 0, 0),
+    ] {
+        let rgba = rng.fill(bytes);
+        let new = encode_png_rgba_with(width, height, stride, &rgba, crc32, adler32);
+        let old = encode_png_rgba_old(width, height, stride, &rgba, crc32_oracle, adler32_oracle);
+        assert_eq!(
+            new, old,
+            "PNG differs for {width}x{height} stride {stride} with {} bytes",
+            rgba.len()
+        );
+    }
+}
+
 /// The streamed encoder (P2) writes the same file as the pre-P2 encoder, chunk
 /// for chunk, for the real canvas size.
 #[test]

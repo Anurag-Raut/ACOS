@@ -1,0 +1,22 @@
+M5 warm screenshot wall latency (ms), D-M5 probe, release, real ART.
+round binary n p50 p95
+a base 30 27.58 32.46
+a after 30 24.34 25.18
+b base 30 23.63 62.87
+b after 30 24.61 29.33
+c base 40 25.34 29.49
+c after 40 24.40 32.00
+d base 40 24.22 29.90
+d after 40 27.44 30.37
+median-of-rounds p50: before 24.78 after 24.51 delta -1.1%
+median-of-rounds p95: before 31.18 after 29.85 delta -4.3%
+
+Stage p50 (us) from the least-loaded pair (round a):
+base art_composite 11208
+base art_encode 13776
+base art_png_write 1402
+base art_md5 11516
+after art_composite 10164
+after art_encode 12791
+after art_png_write 914
+after art_md5 10743
