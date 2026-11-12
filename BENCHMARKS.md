@@ -1832,3 +1832,88 @@ On 2026-11-12T01:07:23Z the pipeline ran end to end on a release build of the wo
 not a performance result**; one run per row, no repetitions, no legacy comparison. Detail:
 `results/art-runtime/W29.md`.
 
+
+---
+
+## 12. ART vs legacy ACVM (D2, measured 2026-11-12)
+
+**Status:** the first D2 table measured on the **real ART engine with release
+binaries** (W33). It supersedes §9.8 for the ART verdict; §9.x stays Rust-VM
+history and §11 remains the binding method. The raw record is
+`results/bench/d2-20261112T012430Z.json` (+ `.md`, every sample and per-rep host
+load); harness `tools/art-runtime/bench-d2.sh` (uses `tools/benchlib.py`).
+
+**Method record**
+
+```yaml
+date: 2026-11-12T01:24:30Z -> 2026-11-12T01:44:46Z (full run; smoke 01:22:53-01:24:12Z)
+engine: art                      # every row is `acos verify --engine art`
+profile: release                 # debug/unknown refused before any guest starts (exit 5)
+git_head: ae42670ecedce69ab88a0fa5522b397121351c5b  # HEAD advanced to 21eead4 after the run (other agents); binary sha256 identifies the run build
+git_dirty: true, 66 files, git status --porcelain sha256 c972c36d09c1a206...
+binaries: {acos: e8d016395545a8d468a54697de3426a8c494d4cc1f4d1f42428246571a515400,
+           acos-art: 9861d313eda3c052bac78fcc02801d497f73fffbfd7fc4fa69e5b7717dd04582}
+apk: fixtures/build/apps/counter.apk sha256 e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366
+scenario: scenarios/v2-art-counter.yaml sha256 cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0
+reps: 20 latency samples, 5 memory reps per (N), suite 1 run/task
+lock: one ART run per run-exclusive.sh acquisition (never held across reps;
+      other agents' W30/W31/W32 ART runs interleaved, queue waits up to 274 s)
+host: loadavg1 rose 0.6 -> 16.81 during the run (other agents), MemAvailable
+      stayed 43.1-43.8 GiB; every contaminated sample/rep is recorded and
+      excluded from verdicts (M2 5/5 N=5 reps, M9 7/10 N=10+N=20 reps)
+rules: spread=(p95-p5)/p50; >15% => NOISY, never PASS; noise=max(spread,5%);
+       TIE is not a PASS; type/state mismatch => NOT_COMPARABLE; missing =>
+       NOT_MEASURED. Nothing estimated.
+```
+
+| # | Metric | ACOS-ART (release) | n | 95% CI of p50 | spread | legacy ACVM | same type+state | verdict | reason |
+|---|---|---|---|---|---|---|---|---|---|
+| M1 | Fixed idle core (anon+shmem, 60 s settle) | not measured | – | – | – | 206.0 MiB anon+shmem settled 60 s | yes | **NOT_MEASURED** | no held ART session that lives 60 s after first frame; `acos verify` exits after its assertion (§11.7) |
+| M2 | Per-session N=5, anon+shmem (legacy-comparable) | 93.13 MiB/session (at exit) | 5 | 91.11..93.25 | 2.0% | 78.7 MiB anon+shmem warm, settled 60 s | no | **NOT_COMPARABLE** | same type name, but ACOS value is at-exit/cold-process, not settled 60 s warm; marginal (Σ5−Σ1)/4 = 92.9 MiB; cgroup peak/session N=1 103.5, N=5 102.9 MiB (p50 over sessions that reached a guest cgroup) |
+| M3 | Cold start → first correct frame | **258.0 ms** | 20 | 256.5..259.5 | 7.2% | 3.620 s cold core→first shot | yes | **PASS** | 14.0× faster; engine-timer cold-process (step ms to first frame + measured timer overhead; host exec/lock excluded), count=0 assertion binds correctness |
+| M4 | Worker create → correct frame (warm) | not measured | – | – | – | 1.297 s warm | yes | **NOT_MEASURED** | needs a pre-booted warm ART guest pool (advisor item 7); every task boots a fresh guest |
+| M5 | Fresh screenshot retrieval | 252.0 ms | 20 | 251.0..253.0 | 6.4% | 66.5 ms warm, no PNG write | no | **NOT_COMPARABLE** | capture step in a cold-process session, includes the PNG write; legacy row is warm retrieval without a write |
+| M6 | Reset → ready | not measured (app Reset tap→assert 1375 ms) | – | – | – | 748.1 ms warm | yes | **NOT_MEASURED** | the ART launch engine has no session reset command; tapping the app's Reset is not reset→ready |
+| M7 | UI tree with text | 2.0 ms | 20 | 1.5..2.0 | 52.5% | 538 ms warm one-shot (4.1 ms persistent) | no | **NOT_COMPARABLE** (also NOISY) | first live-tree assert in a cold-process session; warm held-session tree row does not exist yet |
+| M8 | Action → state | 1365.5 ms | 20 | 1356.0..1370.0 | 1.7% | not published | – | **NOT_MEASURED** | capability verified 20/20 (tap Increment 0→1 bound to a fresh frame); legacy never published a scalar, so no D2 ratio exists |
+| M9 | Concurrent workloads | N=10: 102.5 MiB/session cgroup peak (35/50 pass), N=20: 102.0 (44/100 pass) | 35 sessions | 101.9..102.8 (N=10) | 5.4% | scorecard, no scalar | no | **NOT_MEASURED** | legacy M9 is not a scalar; distinct-count independence not implemented. Failures are structured `INTERNAL`/`LIVE_FRAME_UNAVAILABLE` while the launcher compiles the binder shim and D8 guest under concurrency (clang bus error / pthread EAGAIN) = harness contention, not app behaviour |
+| M10 | End-to-end verify wall | 2175.0 ms p50 | 3 | 243..4372 | 170.9% | ~19 s (U2 loop, install-bound, warm) | no | **NOT_COMPARABLE** (also NOISY) | ACOS value is `acos verify` on prebuilt APKs (no build/install stage), cold process; only T01/T02/T11 are expressible in `scenarios/suite/INDEX.yaml` today (3/3 pass) |
+| M11 | Verified tasks / GiB-minute | not measured | – | – | – | not published (derived bound 24.4) | – | **NOT_MEASURED** | needs the T01–T12 suite at N=10 × 3 rounds with per-job cgroup integrals; this run's suite is N=1 wall-only and the N=10 cohorts run counter, not the suite (W30 owns that runner) |
+
+**Verdict counts: 1 PASS (M3), 4 NOT_COMPARABLE (M2, M5, M7, M10), 6
+NOT_MEASURED (M1, M4, M6, M8, M9, M11), 0 TIE/FAIL, false passes 0.** No
+NOT_COMPARABLE or NOT_MEASURED row is a win. The single PASS is a real ART
+result at a stated scope; every other row names exactly why it cannot be
+compared or measured yet.
+
+**What this changes**
+
+* The D2 table now exists **on ART** (W33). §9.8's "9 PASS / 2 FAIL" is a Rust-VM
+  result and is no longer the ART verdict.
+* M5's old FAIL/PASS flip cannot recur silently: this row is measured (252 ms)
+  but is **NOT_COMPARABLE** until a warm no-write retrieval row exists.
+* M9 is measured but not gateable: under concurrency the **launcher recompiles
+  the binder shim and D8-compiles each guest** (scratch under `/tmp`, not
+  `.cache/`), which fails with `INTERNAL`/`LIVE_FRAME_UNAVAILABLE` at high N and
+  high host load. That is the next correctness/cost blocker, not a memory
+  result. It also explains the N=10/20 pass fractions above.
+* M1/M2's legacy-comparable column (anon+shmem settled 60 s) needs the held or
+  warm session from advisor item 7; M4/M6 need the same pool plus an ART reset.
+
+**Reproduce** (`bench-release.sh` builds; `.cache/w33-target` used here):
+
+```sh
+tools/art-runtime/bench-release.sh --target-dir .cache/w33-target --check
+tools/art-runtime/bench-d2.sh --target-dir .cache/w33-target --no-build
+# smoke (not a verdict): tools/art-runtime/bench-d2.sh --quick --target-dir .cache/w33-target --no-build
+# debug refusal (shown in results/art-runtime/W33.md):
+tools/art-runtime/bench-d2.sh --bin-dir target/debug --no-build --quick   # exit 5, no guest started
+```
+
+**Residuals:** (1) M3's timer excludes host exec/lock/guard startup (~25 ms
+measured engine-timer overhead is included; the number is conservative relative
+to a full exec→frame wall and must be re-measured when the harness starts the
+timer at exec); (2) the suite is 3 expressible tasks, so M10 n=3 and M11 has no
+N=10 denominator; (3) no warm pool / held session, so M1/M2/M4/M6/M7 remain
+cross-state; (4) the launcher's per-session shim+D8 compile under `/tmp` is a
+concurrency and scratch-location defect to fix before M9/M11 can be gateable.
