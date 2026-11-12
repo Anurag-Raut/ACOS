@@ -771,7 +771,13 @@ impl ServiceHost {
             }
         }
 
-        let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
+        // W26: a handful of methods have an image-verified argument layout that
+        // differs from the generated table (the scan could not follow a `Map`
+        // writer). Prefer the verified layout; `None` means the table is right.
+        let args = match codec::read_args_override(&descriptor, method.code, data)? {
+            Some(args) => args,
+            None => codec::read_args(data, &method.args, &descriptor, &method.name)?,
+        };
         let args_summary = trace::summary_args(&args);
 
         let object = self.ensure_for_binder(binder, &descriptor)?;

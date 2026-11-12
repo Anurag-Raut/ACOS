@@ -348,6 +348,21 @@ impl AtmsState {
             .push(Event::lifecycle(seq, ts, state, activity));
     }
 
+    /// Append a guest log line to the protocol event stream.
+    ///
+    /// Diagnostics that arrive over binder (a WTF report, a dropped
+    /// permission, ...) are user-visible app behaviour on a phone because
+    /// logcat records them. In ACOS the same information has to reach the
+    /// guest log through the event stream, otherwise it is silently lost.
+    pub fn log_event(&mut self, tag: &str, level: acos_protocol::LogLevel, message: String) {
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        let ts = self.clock_ms;
+        self.clock_ms += 1;
+        self.protocol_events
+            .push(Event::log(seq, ts, tag.to_string(), level, message));
+    }
+
     /// Record an attach and emit `process_started`.
     pub fn attach_application(&mut self, app_thread: u64, seq: i64, package: &str) {
         self.process = Some(ProcessRecord {
@@ -810,6 +825,33 @@ impl ServiceObject for AtmsService {
                 );
                 vec![]
             }
+            (AtmsInterface::ActivityManager, "handleApplicationWtf") => {
+                // `handleApplicationWtf(IBinder app, String tag, boolean
+                // system, ParcelableCrashInfo crashInfo, int immediateCallerPid)`.
+                // Stock AMS shows the crash dialog and returns "should the
+                // process be killed". ACOS has no dialog: it records the WTF as
+                // a guest log line (so the first error of a crashing app is
+                // visible in the ACOS log instead of vanishing) and answers
+                // `false`, i.e. keep the process alive — the framework's own
+                // default `ApplicationThread` handler
+                // (`Thread.setDefaultUncaughtExceptionHandler` →
+                // `RuntimeInit`/`LoggingHandler`) has already logged the
+                // stack, and killing the guest here would lose the rest of the
+                // launch for no fidelity gain.
+                let tag = args
+                    .get(1)
+                    .and_then(Value::as_str)
+                    .unwrap_or("WTF")
+                    .to_string();
+                let crash = args.get(3).and_then(Value::as_parcelable);
+                let detail = describe_crash_info(crash);
+                state.log_event(
+                    "ActivityManagerWtf",
+                    acos_protocol::LogLevel::Warn,
+                    format!("{tag}: {detail}"),
+                );
+                vec![Value::Bool(false)]
+            }
             (AtmsInterface::ActivityManager, "finishAttachApplication") => {
                 let seq = args.first().and_then(Value::as_long).unwrap_or(0);
                 let data = state.finish_attach_application(seq)?;
@@ -1011,6 +1053,42 @@ impl ServiceObject for AtmsService {
 
 fn binder_u64(v: Option<&Value>) -> u64 {
     v.and_then(Value::as_binder).map(|b| b.0).unwrap_or(0)
+}
+
+/// One-line description of a decoded `ParcelableCrashInfo` for the guest log.
+///
+/// Field indices follow `parcelable::SPECS` (which follows the image's
+/// `CrashInfo.writeToParcel`): 0 handler class, 1 exception class, 2 message,
+/// 3 throw file, 4 throw class, 5 throw method, 6 throw line, 7 stack trace,
+/// 8 crash tag.
+fn describe_crash_info(crash: Option<&Parcelable>) -> String {
+    let Some(p) = crash else {
+        return "null crash info".into();
+    };
+    let field = |i: usize| {
+        p.field(i)
+            .and_then(Value::as_str)
+            .map(std::string::ToString::to_string)
+    };
+    let class = field(1).unwrap_or_else(|| "<no exception class>".into());
+    let message = field(2).unwrap_or_default();
+    let mut out = class;
+    if !message.is_empty() {
+        out.push_str(": ");
+        out.push_str(&message);
+    }
+    if let Some(line) = p.field(6).and_then(Value::as_int) {
+        if line > 0 {
+            out.push_str(&format!(" (line {line})"));
+        }
+    }
+    let stack = field(7).unwrap_or_default();
+    let head: Vec<&str> = stack.lines().take(8).collect();
+    if !head.is_empty() {
+        out.push_str(" | ");
+        out.push_str(&head.join(" | "));
+    }
+    out.chars().take(600).collect()
 }
 
 // ---------------------------------------------------------------------------

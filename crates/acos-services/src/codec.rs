@@ -50,6 +50,105 @@ pub fn read_args(
     Ok(out)
 }
 
+/// Transaction code of `IPackageManager.notifyDexLoad` on the API-34 image
+/// (`IPackageManager$Stub$Proxy.notifyDexLoad`, `const/16 v4, #int 106`).
+pub const IPACKAGE_MANAGER_NOTIFY_DEX_LOAD: u32 = 106;
+
+/// Image-verified argument layouts for the few methods whose generated
+/// `acos-aidl` table entry does not match the image's writer.
+///
+/// The generated tables are produced by scanning the image's `<Interface>$Stub`
+/// bytecode. Where the scan could not follow a `Map`/`forEach` body it recorded
+/// a shape that is *self-consistent* but wrong, and the transaction then fails
+/// at decode time with a `Str16` underflow (W25 §4 blocker 5). The image is the
+/// ground truth (`docs/AGENT_RESOURCES.md` §2), so the exact layouts live here,
+/// next to the codec, and the dispatcher prefers them over the table.
+///
+/// `None` means "the generated table is correct, use it".
+pub fn read_args_override(
+    interface: &str,
+    code: u32,
+    parcel: &mut Parcel,
+) -> Result<Option<Vec<Value>>> {
+    match (interface, code) {
+        ("android.content.pm.IPackageManager", IPACKAGE_MANAGER_NOTIFY_DEX_LOAD) => {
+            Ok(Some(read_notify_dex_load(parcel)?))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// `notifyDexLoad(String loadingPackageName, in Map<String,String>
+/// classLoaderContextMap, String loaderIsa)`.
+///
+/// Read from the image (`classes.dex`,
+/// `Landroid/content/pm/IPackageManager$Stub$Proxy;->notifyDexLoad`):
+///
+/// ```text
+/// writeString(loadingPackageName)
+/// writeInt(map == null ? -1 : map.size())
+/// per entry (for each, in iteration order): writeString(key); writeString(value)
+/// writeString(loaderIsa)
+/// transact(106, data, null, FLAG_ONEWAY)      // fire-and-forget
+/// ```
+///
+/// The generated table recorded `[Str16, I32, I32, Str16]` — the map count then
+/// one word read as an int and one string read out of the first key's bytes,
+/// which is the `need 13107296 byte(s) at 124, have 128` underflow W25 captured
+/// on a 31-dex APK. A `-1` count is a null map and is kept as `Value::Map(None)`.
+fn read_notify_dex_load(parcel: &mut Parcel) -> Result<Vec<Value>> {
+    let bad = |detail: String| ServiceError::BadRequest {
+        interface: "android.content.pm.IPackageManager".to_string(),
+        method: "notifyDexLoad".to_string(),
+        detail,
+    };
+    let package = parcel
+        .read_string16()
+        .map_err(|e| bad(format!("arg 0 (loadingPackageName): {e}")))?;
+    let count = parcel
+        .read_int32()
+        .map_err(|e| bad(format!("arg 1 (classLoaderContextMap count): {e}")))?;
+    if count < -1 {
+        return Err(bad(format!(
+            "arg 1 (classLoaderContextMap count): {count} is neither -1 nor a size"
+        )));
+    }
+    let mut entries = Vec::new();
+    if count >= 0 {
+        let count = count as usize;
+        // Each entry writes two `String16`s, so it needs at least 8 bytes on the
+        // wire (2 length words for two empty strings). A garbage count is
+        // rejected before it can drive a large allocation or a long loop.
+        let needed = count.saturating_mul(8);
+        if needed > parcel.data_avail() {
+            return Err(bad(format!(
+                "arg 1 (classLoaderContextMap): {count} entries need at least {needed} byte(s), have {}",
+                parcel.data_avail()
+            )));
+        }
+        for index in 0..count {
+            let key = parcel
+                .read_string16()
+                .map_err(|e| bad(format!("arg 1 entry {index} key: {e}")))?;
+            let value = parcel
+                .read_string16()
+                .map_err(|e| bad(format!("arg 1 entry {index} value: {e}")))?;
+            entries.push((
+                crate::value::DynamicValue::String(key),
+                crate::value::DynamicValue::String(value),
+            ));
+        }
+    }
+    let loader = parcel
+        .read_string16()
+        .map_err(|e| bad(format!("arg 2 (loaderIsa): {e}")))?;
+    Ok(vec![
+        Value::Str(package),
+        Value::Map(if count < 0 { None } else { Some(entries) }),
+        Value::Str(loader),
+    ])
+}
+
 /// Write a reply value list in decoded order.
 pub fn write_reply(
     parcel: &mut Parcel,
@@ -460,6 +559,69 @@ fn expect_list(v: &Value) -> Result<Option<&[Value]>> {
 
 /// Encode the request side of a measured call exactly as the framework proxy
 /// would: interface token then each decoded argument.
+/// Write the argument list for a method with an image-verified layout (see
+/// [`read_args_override`]). `Ok(false)` means "no override, use the table".
+///
+/// This is the writer side of the same seam: a caller that builds a request by
+/// hand (the replay oracle in `tests/replay.rs`) must produce the image's bytes,
+/// not the table's.
+pub fn write_args_override(
+    interface: &str,
+    code: u32,
+    args: &[Value],
+    parcel: &mut Parcel,
+) -> Result<bool> {
+    match (interface, code) {
+        ("android.content.pm.IPackageManager", IPACKAGE_MANAGER_NOTIFY_DEX_LOAD) => {
+            let bad = |detail: String| ServiceError::BadRequest {
+                interface: interface.to_string(),
+                method: "notifyDexLoad".to_string(),
+                detail,
+            };
+            let [package, map, loader] = args else {
+                return Err(bad(format!("expected 3 args, got {}", args.len())));
+            };
+            let Value::Str(package) = package else {
+                return Err(bad("arg 0 is not a String".into()));
+            };
+            let Value::Str(loader) = loader else {
+                return Err(bad("arg 2 is not a String".into()));
+            };
+            parcel
+                .write_string16_opt(package.as_deref())
+                .map_err(ServiceError::Parcel)?;
+            let Value::Map(entries) = map else {
+                return Err(bad("arg 1 is not a Map".into()));
+            };
+            match entries {
+                None => parcel.write_int32(-1),
+                Some(entries) => {
+                    parcel.write_int32(
+                        i32::try_from(entries.len())
+                            .map_err(|_| bad("map too large".into()))?,
+                    );
+                    for (key, value) in entries {
+                        for side in [key, value] {
+                            let crate::value::DynamicValue::String(s) = side else {
+                                return Err(bad("map entry is not String->String".into()));
+                            };
+                            parcel
+                                .write_string16_opt(s.as_deref())
+                                .map_err(ServiceError::Parcel)?;
+                        }
+                    }
+                }
+            }
+            parcel
+                .write_string16_opt(loader.as_deref())
+                .map_err(ServiceError::Parcel)?;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Build a request parcel (interface token + decoded args) for a measured call.
 pub fn build_request(
     interface: &str,
     method: &acos_aidl::MethodInfo,
@@ -469,7 +631,9 @@ pub fn build_request(
     parcel
         .write_interface_token(interface)
         .map_err(ServiceError::Parcel)?;
-    write_reply(&mut parcel, &method.args, args, interface, &method.name)?;
+    if !write_args_override(interface, method.code, args, &mut parcel)? {
+        write_reply(&mut parcel, &method.args, args, interface, &method.name)?;
+    }
     Ok(parcel)
 }
 

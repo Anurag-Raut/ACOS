@@ -922,8 +922,9 @@ pub struct PmsState {
     pub services: Vec<ServiceInfo>,
     /// uid -> package.
     pub uid_packages: Vec<(i32, String)>,
-    /// dex-load notifications (oneway, recorded).
-    pub dex_loads: Vec<(String, String)>,
+    /// dex-load notifications (oneway, recorded) as
+    /// `(package, loaderIsa, classLoaderContextMap size)`.
+    pub dex_loads: Vec<(String, String, usize)>,
     /// installer package (null = side-loaded).
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
@@ -1261,9 +1262,19 @@ impl ServiceObject for PmsService {
                 vec![Value::Bool(state.features.has(name))]
             }
             "notifyDexLoad" => {
+                // `Map<String,String>` after the package name: W26's
+                // `codec::read_args_override` decodes the image's writer
+                // (`writeInt(size)` + size x `writeString(key), writeString(value)`),
+                // which the generated table had as `[I32, I32]`.
                 let package = args.first().and_then(Value::as_str).unwrap_or_default();
+                let dex_files = match args.get(1) {
+                    Some(Value::Map(map)) => map.as_ref().map_or(0, Vec::len),
+                    _ => 0,
+                };
                 let loader = args.get(2).and_then(Value::as_str).unwrap_or_default();
-                state.dex_loads.push((package.to_string(), loader.to_string()));
+                state
+                    .dex_loads
+                    .push((package.to_string(), loader.to_string(), dex_files));
                 Vec::new()
             }
             "checkPermission" => {

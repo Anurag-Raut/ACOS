@@ -66,7 +66,18 @@ fn launch_cases() -> Vec<Case> {
             name: "IPackageManager.notifyDexLoad",
             interface: "android.content.pm.IPackageManager",
             method: "notifyDexLoad",
-            args: vec![s(pkg), Value::Int(0), Value::Int(0), s("x86_64")],
+            // W26: the image writes `Map<String,String>` here (count + pairs),
+            // not the generated table's `[I32, I32]`.
+            args: vec![
+                s(pkg),
+                Value::Map(Some(vec![(
+                    acos_services::value::DynamicValue::String(Some(
+                        "/data/app/~~x==/base.apk!/classes.dex".into(),
+                    )),
+                    acos_services::value::DynamicValue::String(Some("PCL[]".into())),
+                )])),
+                s("x86_64"),
+            ],
         },
         Case {
             name: "IActivityManager.checkPermission",

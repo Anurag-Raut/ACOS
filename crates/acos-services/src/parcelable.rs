@@ -1314,6 +1314,40 @@ pub static SPECS: &[ParcelableSpec] = &[
         ])],
         verification: Verification::Curated,
     },
+    // W26: `IActivityManager.handleApplicationWtf` carries an
+    // `ApplicationErrorReport$ParcelableCrashInfo`, which has no
+    // `writeToParcel` of its own — it inherits `CrashInfo`'s
+    // (`ParcelableCrashInfo` is a `Parcelable` wrapper). Field order read from
+    // the image's `classes.dex`,
+    // `Landroid/app/ApplicationErrorReport$CrashInfo;->writeToParcel`:
+    //
+    //   writeString(exceptionHandlerClassName)
+    //   writeString(exceptionClassName)
+    //   writeString(exceptionMessage)
+    //   writeString(throwFileName)
+    //   writeString(throwClassName)
+    //   writeString(throwMethodName)
+    //   writeInt(throwLineNumber)
+    //   writeString(stackTrace)
+    //   writeString(crashTag)          <- API 34 only (not in older tags)
+    //
+    // `readFromParcel` (`CrashInfo(Parcel)`, same dex) mirrors it field for
+    // field, so the wire is order-exact and has no presence markers.
+    ParcelableSpec {
+        class: "android.app.ApplicationErrorReport$ParcelableCrashInfo",
+        fields: &[
+            FieldOp::Str16, // exceptionHandlerClassName
+            FieldOp::Str16, // exceptionClassName
+            FieldOp::Str16, // exceptionMessage
+            FieldOp::Str16, // throwFileName
+            FieldOp::Str16, // throwClassName
+            FieldOp::Str16, // throwMethodName
+            FieldOp::Int,   // throwLineNumber
+            FieldOp::Str16, // stackTrace
+            FieldOp::Str16, // crashTag
+        ],
+        verification: Verification::Curated,
+    },
 ];
 
 /// Look up a spec by dotted class name.

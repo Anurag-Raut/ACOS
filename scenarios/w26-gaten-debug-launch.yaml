@@ -1,0 +1,51 @@
+# W26: the Gaten **debug** APK launch row, on the host-side service fixes.
+#
+# This is `scenarios/w25-gaten-launch.yaml` with the *diagnostic* APK: the
+# original debug artifact's launcher entry is an `<activity-alias>`, which the
+# ART launcher cannot resolve yet (W25 §4 blocker 3, owned by a later agent).
+# `.cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk` is the same APK
+# with exactly one binary-XML edit — the enabled alias becomes a plain
+# `<activity android:name="com.gaten.app.MainActivity">` — plus `zipalign`
+# (hashes and the patch script are in W25 §6). The original file is untouched.
+#
+# With `sensorservice` published (W26) this row runs to the first frame-less
+# failure in ~0.3 s instead of ~12 s: see results/art-runtime/W26.md §3. The
+# first error is now `IActivityManager.registerReceiverWithFeature` (missing
+# `IntentFilter` parcelable codec), which is the next wall — not a launch
+# failure of this scenario being hidden here.
+version: 1
+name: w26-gaten-debug-launch
+description: >-
+  Launch Gaten (com.gaten, RN 0.86 + Hermes + Compose + ML Kit, debug x86_64)
+  from the manifest-patched diagnostic APK on real ART, with the W26
+  sensorservice/notifyDexLoad/handleApplicationWtf fixes in the service layer.
+app: .cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk
+engine: native-preferred
+fallback: report-only
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 2048
+  wall_ms: 300000
+steps:
+  - launch:
+      activity: com.gaten.app/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {class: android.widget.FrameLayout}
+      timeout_ms: 60000
+
+  - capture:
+      name: gaten-first-frame
+      format: png
+      fresh: true

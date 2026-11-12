@@ -121,6 +121,14 @@ pub const NAMES: &[(&str, &str)] = &[
     // compositor up as `getService("SurfaceFlinger")`, so the name must resolve
     // to the `android.gui.ISurfaceComposer` node `compositor_client` installs.
     ("SurfaceFlinger", "android.gui.ISurfaceComposer"),
+    // W26: the framework's `SystemSensorManager` (React Native debug builds
+    // reach it in the dev-support shake detector) asks for `sensorservice`
+    // during `nativeCreate`. Answering null makes libbinder's
+    // `ServiceManagerShim::getService` retry `checkService` for 5000 ms per
+    // lookup (`.cache/aosp/native/libs/binder/IServiceManager.cpp:309`), which
+    // spent ~11.9 s of the launcher's 12 s resume budget (W25 §blocker 2). The
+    // minimal stock-shaped server lives in `misc::SensorServer`.
+    ("sensorservice", "android.gui.SensorServer"),
 ];
 
 /// Descriptor for a `ServiceManager` name.
@@ -357,6 +365,16 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
             Box::new(crate::misc::FutureService::new(Arc::clone(&future_service)))
                 as Box<dyn ServiceObject>
         },
+    );
+    // W26: the sensor server (see the `NAMES` entry above for why it exists).
+    // It is a raw node (`android.gui.*` has no decoded table) published under
+    // the `ServiceManager` name the framework asks for, so `checkService`
+    // answers on the first try and `SensorManager` never enters its retry loop.
+    let sensors = Arc::new(Mutex::new(crate::misc::SensorState::default()));
+    host.register_dynamic_named(
+        "sensorservice",
+        crate::misc::SENSOR_SERVER_DESCRIPTOR,
+        Box::new(crate::misc::SensorServer::new(Arc::clone(&sensors))),
     );
     let contentservice = Arc::clone(&settings);
     host.register(
