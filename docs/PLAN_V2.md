@@ -73,3 +73,35 @@ Source: `docs/OWNER_DIRECTION_2026-11-11.md` §7. The phases above carry these p
 - Postpone speculative optimisation.
 
 Decisive test (owner): `counter.apk` -> real Activity on ART -> UI -> view tree -> tap Increment -> 0 becomes 1 -> fresh screenshot -> verify -> reset -> rerun. Real ART, no Rust-VM fallback, no offline-render shortcut. Current status is recorded in `STATUS.md`.
+
+
+## 7. Night plan 2026-11-12 (owner): Stages 1–3
+
+Priorities in order: correctness/security/APK compatibility > minimum memory per extra
+session > fast end-to-end verified agent execution > CPU/concurrency > individual ops.
+Objective: verified agent tasks per second per GiB. No warm pool / spare ART processes.
+Every experiment (pass or fail) goes in `EXPERIMENTS.md` (hill-climb fields, Leaderboard,
+Backlog). Escalate only architecture changes with real security/compat/memory trade-offs.
+
+**In flight:** GR1 (Gaten on real ART + Moto G35 visual verification), GL1 (session
+lifetime), P12 (event-only settle, animations flag, settle_timeout_ms), K1 (F-Droid compat
+corpus), Z7 (zygote gate on the real loop).
+
+**Stage 1 — Consolidation and baseline.** Integrate GR1/GL1/P12/K1/Z7 with tests+gates;
+verify Gaten render/tree/tap/navigation and persistent sessions/cleanup; evaluate Z7 at
+N=5/10 + security review (ZS F1–F3) before any zygote adoption (owner decision); re-measure
+M1–M8 + agent loop + CPU (p50/p95, memory/session, total, CPU, false passes, compat);
+reproducible baseline; automated regression bench (H6). Exit: validated, documented baseline.
+
+**Stage 2 — Hill climbing (experiment-driven).** Loop: profile → biggest bottleneck →
+hypothesis → isolated change → A/B under the ART lock with host load recorded, N=1/5/10 →
+keep only if better with 0 false passes and no compat/isolation regression → record →
+next. Order: memory/session, agent loop, idle CPU, ART init + sandbox launch (without
+steady-state memory), tree/settle, screenshot, reset/cleanup, shared runtime resources.
+Run until diminishing returns.
+
+**Stage 3 — Real-agent scale and compatibility.** N=1/5/10/20, idle and active; full
+workflows (launch → tree → find → tap/type → settle → screenshot → verify → reset) on Gaten +
+K1 corpus; track memory/session, total memory, CPU + wakeups, p50/p95, tasks/s,
+tasks/GiB-min, launch/reset, compat rate, render correctness, isolation/reliability; feed
+concurrency-only bottlenecks back to Stage 2. Compatibility fixes (K2…) run in parallel.

@@ -24,6 +24,15 @@ Each entry uses this template:
 - **Conclusion / next:** what changes, or why the path is stopped
 ```
 
+**Hill-climb entries (from 2026-11-12, owner-mandated; every experiment, failed or not):**
+add these fields to the template above: Experiment ID + name; responsible agent;
+bottleneck investigated; baseline (p50/p95); hypothesis + proposed solution;
+implementation + commits; benchmark method + environment + host load; before/after
+p50/p95, memory, CPU, correctness (false passes); result = accepted | rejected |
+inconclusive | needs-investigation; why it worked/failed; trade-offs/regressions;
+follow-ups. Keep logs/artifacts under `results/hill/<ID>/`. Update the
+**Leaderboard** and **Backlog** sections below in the same commit.
+
 Rules: no fixed sleeps in timed paths; state the memory metric type; pair/
 interleave A/B; zero false passes; never exceed the 85 % RAM guard; record the
 host state; label fidelity on every result. Read-only audits must not mutate the
@@ -323,3 +332,33 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
   with no non-determinism (`results/oracle/dexprogs-nondeterminism.txt`).
 - **Conclusion / next:** `physical-device` still not captured; bind the renderer
   to the framework graphics natives (M3).
+
+
+## Leaderboard (best measured configuration per metric; update on every accepted experiment)
+
+Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
+
+| Metric | Best value | Config / commit | Experiment | Date |
+|---|---|---|---|---|
+| M3 cold start | 463 ms (482 evicted) | main P7/P8 | P7, P8 | 2026-11-12 |
+| M4 warm launch | strict 440 ms / fast 184 ms | main P9 (pre-event re-measure pending) | P9 | 2026-11-12 |
+| M5 screenshot | 24.4 ms | main P2/W1 | P2 | 2026-11-12 |
+| M6 reset | strict 463 ms / fast 195 ms | main P9 | P9 | 2026-11-12 |
+| M7 UI tree | strict 151 ms (pre-event) / fast 0.2 ms | main P3d/P10 | P3d, P10 | 2026-11-12 |
+| M8 tap → settled | strict 955 ms (event) / fast 70.9 ms | main P11 | P1, P11 | 2026-11-12 |
+| Memory / extra session | 100.9 MiB cgroup (pre-W1); zygote research 22.2 MiB Pss | O2; Z6 | O2, Z6 | 2026-11-12 |
+| Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
+| False passes | 0 | all | P1–P11 | 2026-11-12 |
+
+## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
+
+| ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
+|---|---|---|---|---|---|---|---|
+| H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins (M7, M5 fast PNG) | M4/M6/M7/M5 | −30–60 % strict | high | low | low | queued |
+| H2 | Early post-first-frame concurrent GC (Z7 finding) on the exec path | M1/M2 | −23–30 MiB/session | high (measured in Z7) | low | low | after Z7 |
+| H4 | CPU per idle session: remove 250 ms fallback poll and other timers | CPU, wakeups | large at N≥10 | medium | low | low | queued |
+| H5 | Agent loop with animations:off + event settle | loop latency | 2.2 s → <0.8 s | medium-high | low | low | after P12 |
+| H6 | Nightly metric regression bench | all | guard | high | medium | low | queued |
+| H7 | Shrink per-session boot-image private memory (26.3 MiB decompressed per session) without a warm pool | M2 | −10–25 MiB | medium | medium | medium (ASLR/B3) | backlog |
+| H8 | Faster PNG (SIMD deflate) or region/downscaled screenshots for agents | M5 | 24 → 10–15 ms | medium | medium | low | backlog |
+| H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
