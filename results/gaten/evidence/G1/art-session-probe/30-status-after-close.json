@@ -1,0 +1,47 @@
+{
+ "envelope": {
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "error": {
+   "class": "harness",
+   "code": "GUEST_EXITED",
+   "details": {
+    "discarded_frame": {
+     "captured_at": "2026-11-12T17:07:33.651Z",
+     "frame_seq": 5,
+     "md5": "",
+     "served": false
+    },
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence_label": "none",
+    "guest_exit": {
+     "exit_code": null,
+     "signal": 9,
+     "state": "exited"
+    },
+    "launch_hint": "call acos_launch with this session id to start a fresh guest",
+    "session_exit": {
+     "guest_exit": null,
+     "guest_signal": 9,
+     "source": "acos-art child exit status (no session-exit.json)"
+    },
+    "session_exit_path": "/home/Qui/Projects/acos/.cache/gaten-g1/rt-counter3/art-sessions/s_cli/art-frames/session-exit.json",
+    "trust": "trusted",
+    "verb": "acos_status"
+   },
+   "hint": "The guest process ended. `acos_launch` on this session id relaunches a fresh guest (it never returns the dead session's frame). Read details.session_exit / details.guest_exit and the session's logcat before retrying the same app.",
+   "message": "GUEST_EXITED: the ART guest for session `s_cli` is not alive (exited: signal 9), so `acos_status` has no live frame to observe; the cached frame was discarded, not served",
+   "retryable": false
+  },
+  "fidelity": "art-reference",
+  "metrics": {
+   "wall_ms": 0
+  },
+  "ok": false,
+  "request_id": "req_g1",
+  "session_id": "s_cli",
+  "status": "error"
+ },
+ "id": 1
+}

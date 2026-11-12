@@ -1,0 +1,125 @@
+{
+  "request_id": "req_21533c_18e75af67d1af8e4",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "ui.tree"
+  ],
+  "result": {
+    "engine": "rust-vm, frozen",
+    "engine_frozen": true,
+    "evidence": {
+      "frame": "guest-asserted",
+      "logs": "guest-asserted",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "none",
+    "nodes": 12,
+    "note": "the frozen Rust VM produced this reply; it is not real ART",
+    "ops": 35,
+    "package": "",
+    "react_native": true,
+    "renderer": false,
+    "session_id": "s_cli",
+    "stage_reached": "ui_tree",
+    "tree": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "class": "RCTRawText",
+                        "clickable": false,
+                        "tag": 3,
+                        "text": "Hello ACOS"
+                      }
+                    ],
+                    "class": "RCTText",
+                    "clickable": false,
+                    "tag": 5,
+                    "testID": "hello-text",
+                    "text": "Hello ACOS"
+                  },
+                  {
+                    "children": [
+                      {
+                        "class": "RCTRawText",
+                        "clickable": false,
+                        "tag": 7,
+                        "text": "React Native + Hermes"
+                      }
+                    ],
+                    "class": "RCTText",
+                    "clickable": false,
+                    "tag": 9,
+                    "text": "React Native + Hermes"
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "class": "RCTRawText",
+                            "clickable": false,
+                            "tag": 13,
+                            "text": "TAP ME"
+                          }
+                        ],
+                        "class": "RCTText",
+                        "clickable": false,
+                        "tag": 15,
+                        "text": "TAP ME"
+                      }
+                    ],
+                    "class": "RCTView",
+                    "clickable": true,
+                    "tag": 17,
+                    "testID": "hello-button"
+                  },
+                  {
+                    "children": [
+                      {
+                        "class": "RCTRawText",
+                        "clickable": false,
+                        "tag": 19,
+                        "text": "count: 2"
+                      }
+                    ],
+                    "class": "RCTText",
+                    "clickable": false,
+                    "tag": 23,
+                    "testID": "count-text",
+                    "text": "count: 2"
+                  }
+                ],
+                "class": "RCTView",
+                "clickable": false,
+                "tag": 25,
+                "testID": "hello-root"
+              }
+            ],
+            "class": "RCTView",
+            "clickable": false,
+            "tag": 27
+          }
+        ],
+        "class": "",
+        "clickable": false,
+        "tag": 44261
+      }
+    ],
+    "truncated": false,
+    "trust": "trusted",
+    "windows": 1
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

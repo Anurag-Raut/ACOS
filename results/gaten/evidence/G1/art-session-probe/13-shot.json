@@ -1,0 +1,58 @@
+{
+ "envelope": {
+  "backend": "acos-native",
+  "capabilities_used": [
+   "ui.frame",
+   "ui.screenshot"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+   "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_g1",
+  "result": {
+   "engine": "art",
+   "engine_frozen": false,
+   "evidence": {
+    "frame": "host-observed",
+    "input_acks": "guest-asserted",
+    "logs": "guest-asserted",
+    "state_change": "host-observed",
+    "tree": "guest-asserted"
+   },
+   "evidence_label": "host-pixel",
+   "frame": {
+    "bytes": 9545882,
+    "captured_at": "2026-11-12T17:07:32.445Z",
+    "frame_seq": 3,
+    "height": 2209,
+    "md5": "39d1e4e3633d98d76b992edb4b250a78",
+    "meaningful": true,
+    "previous_seq": 2,
+    "width": 1080
+   },
+   "last_frame_seq": 3,
+   "package": "dev.acos.fixtures.counter",
+   "screenshot": {
+    "bytes": 9545882,
+    "frame_seq": 3,
+    "path": "/home/Qui/Projects/acos/.cache/gaten-g1/counter3/13-shot.png"
+   },
+   "session_id": "s_cli",
+   "stage_reached": "first_frame",
+   "timing": {
+    "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+    "read": {
+     "absorb_ms": 23,
+     "guest_command_ms": 23
+    },
+    "total_ms": 24
+   },
+   "trust": "trusted"
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+ },
+ "id": 3
+}

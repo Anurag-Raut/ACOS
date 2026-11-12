@@ -1,0 +1,63 @@
+{
+  "request_id": "req_2152ca_18e75af551b90a4d",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "apk.inspect",
+    "lifecycle",
+    "ui.tree"
+  ],
+  "result": {
+    "activity": null,
+    "classes_loaded": 0,
+    "engine": "native-child",
+    "engine_frozen": false,
+    "events": [
+      "react_native=1",
+      "nodes=12",
+      "ops=19"
+    ],
+    "evidence": {
+      "frame": "host-observed",
+      "logs": "guest-asserted",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "none",
+    "frame": null,
+    "natives": 85,
+    "note": "the confined native child produced this reply",
+    "package": "",
+    "peak_rss_bytes": 0,
+    "reached_stage": "ui_tree",
+    "real_boot": true,
+    "renderer": false,
+    "stages": [
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "apk_parsed",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "rn_bridge",
+        "status": "ok"
+      },
+      {
+        "blocker": null,
+        "ok": true,
+        "stage": "ui_tree",
+        "status": "ok"
+      }
+    ],
+    "trust": "trusted",
+    "wall_ms": 1976
+  },
+  "metrics": {
+    "wall_ms": 1976
+  }
+}
