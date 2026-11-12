@@ -1,0 +1,3154 @@
+{
+  "arm": "on",
+  "definition": "nothing running -> acos serve + acos_launch -> first frame byte-identical to the verified count-0 reference",
+  "evicted_bytes_mean": 14645930.666666666,
+  "page_cache_dropped": true,
+  "phase": "M3-cold-cache",
+  "rows": [
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8119779997505248,
+      "destroy_clean": true,
+      "destroy_wall_ms": 83.12764699803665,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 8683520,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 503.976984473411,
+      "host": {
+        "loadavg1": 0.9,
+        "loadavg15": 1.49,
+        "loadavg5": 1.17,
+        "mem_available_gib": 37.54,
+        "mem_available_mib": 38440.8,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "2/3397",
+        "used_mib": 23467.9,
+        "used_pct": 37.91
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 502.000093460083,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 500.7923009980004,
+      "m3_ms": 677.2687350166962,
+      "m_ms": 502.7691920113284,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 464 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.08960001287050545,
+      "rep": 0,
+      "rss_after_prewarm_kb": 11980,
+      "rss_ready_kb": 10560,
+      "utc": "2026-11-12T11:11:48.335+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8093539983965456,
+      "destroy_clean": true,
+      "destroy_wall_ms": 55.32506402232684,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 480.98174153710715,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.55,
+        "mem_available_mib": 38453.0,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3392",
+        "used_mib": 23455.8,
+        "used_pct": 37.89
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 479.0000915527344,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 477.4809680238832,
+      "m3_ms": 654.9881729879417,
+      "m_ms": 479.46261800825596,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 123 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.05861101089976728,
+      "rep": 1,
+      "rss_after_prewarm_kb": 12100,
+      "rss_ready_kb": 10564,
+      "utc": "2026-11-12T11:11:49.137+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8266159750055522,
+      "destroy_clean": true,
+      "destroy_wall_ms": 66.77639400004409,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 469.9891791387927,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.58,
+        "mem_available_mib": 38485.9,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3391",
+        "used_mib": 23422.9,
+        "used_pct": 37.83
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 467.9999351501465,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 466.3602539803833,
+      "m3_ms": 643.564124009572,
+      "m_ms": 468.34949796902947,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 120 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.060003018006682396,
+      "rep": 2,
+      "rss_after_prewarm_kb": 12036,
+      "rss_ready_kb": 10628,
+      "utc": "2026-11-12T11:11:49.890+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8099549924954772,
+      "destroy_clean": true,
+      "destroy_wall_ms": 69.4751709816046,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 467.9706091119442,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.59,
+        "mem_available_mib": 38488.9,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3391",
+        "used_mib": 23419.8,
+        "used_pct": 37.83
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 466.0000801086426,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 463.7463869876228,
+      "m3_ms": 641.8545689957682,
+      "m_ms": 465.71691599092446,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 118 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.06512299296446145,
+      "rep": 3,
+      "rss_after_prewarm_kb": 12420,
+      "rss_ready_kb": 10524,
+      "utc": "2026-11-12T11:11:50.641+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8399819964542985,
+      "destroy_clean": true,
+      "destroy_wall_ms": 45.32160400412977,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 492.03862753347494,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.44,
+        "mem_available_mib": 38343.6,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "10/3433",
+        "used_mib": 23565.1,
+        "used_pct": 38.06
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 490.00000953674316,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 487.6038740039803,
+      "m3_ms": 666.9614499842282,
+      "m_ms": 489.6424920007121,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 125 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.0697519863024354,
+      "rep": 4,
+      "rss_after_prewarm_kb": 12028,
+      "rss_ready_kb": 10540,
+      "utc": "2026-11-12T11:11:51.397+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.881641015643254,
+      "destroy_clean": true,
+      "destroy_wall_ms": 57.52379499608651,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 480.1913310366217,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.27,
+        "mem_available_mib": 38164.8,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "14/3457",
+        "used_mib": 23744.0,
+        "used_pct": 38.35
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 478.0001640319824,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 476.3922579877544,
+      "m3_ms": 653.3543310069945,
+      "m_ms": 478.5834249923937,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 125 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.060744991060346365,
+      "rep": 5,
+      "rss_after_prewarm_kb": 11976,
+      "rss_ready_kb": 9852,
+      "utc": "2026-11-12T11:11:52.153+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8295619811397046,
+      "destroy_clean": true,
+      "destroy_wall_ms": 59.74612000863999,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 472.99808711977676,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.5,
+        "mem_available_mib": 38398.1,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3383",
+        "used_mib": 23510.6,
+        "used_pct": 37.98
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 470.99995613098145,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 469.7201520029921,
+      "m3_ms": 651.9100279838312,
+      "m_ms": 471.7182829917874,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 122 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.057900004321709275,
+      "rep": 6,
+      "rss_after_prewarm_kb": 11964,
+      "rss_ready_kb": 10476,
+      "utc": "2026-11-12T11:11:52.910+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8518039723858237,
+      "destroy_clean": true,
+      "destroy_wall_ms": 53.39121399447322,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 480.0579196307808,
+      "host": {
+        "loadavg1": 0.83,
+        "loadavg15": 1.48,
+        "loadavg5": 1.15,
+        "mem_available_gib": 37.47,
+        "mem_available_mib": 38367.3,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3374",
+        "used_mib": 23541.4,
+        "used_pct": 38.03
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 477.9999256134033,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 476.6127949988004,
+      "m3_ms": 658.7106460065115,
+      "m_ms": 478.6707890161779,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 121 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.06183699588291347,
+      "rep": 7,
+      "rss_after_prewarm_kb": 12128,
+      "rss_ready_kb": 10132,
+      "utc": "2026-11-12T11:11:53.663+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8796070071402937,
+      "destroy_clean": true,
+      "destroy_wall_ms": 39.50305300531909,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 492.10045352810994,
+      "host": {
+        "loadavg1": 0.76,
+        "loadavg15": 1.47,
+        "loadavg5": 1.13,
+        "mem_available_gib": 37.43,
+        "mem_available_mib": 38328.0,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3382",
+        "used_mib": 23580.8,
+        "used_pct": 38.09
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 490.00000953674316,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 488.68570098420605,
+      "m3_ms": 671.63825998432,
+      "m_ms": 490.7861449755728,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 122 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.09800601401366293,
+      "rep": 8,
+      "rss_after_prewarm_kb": 12024,
+      "rss_ready_kb": 10468,
+      "utc": "2026-11-12T11:11:54.424+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8481770239304751,
+      "destroy_clean": true,
+      "destroy_wall_ms": 42.79841898824088,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 489.05506753362715,
+      "host": {
+        "loadavg1": 0.76,
+        "loadavg15": 1.47,
+        "loadavg5": 1.13,
+        "mem_available_gib": 37.47,
+        "mem_available_mib": 38369.9,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "2/3384",
+        "used_mib": 23538.8,
+        "used_pct": 38.02
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 486.9999885559082,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 485.7779390003998,
+      "m3_ms": 668.3548769797198,
+      "m_ms": 487.83301797811873,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 121 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.07075400208123028,
+      "rep": 9,
+      "rss_after_prewarm_kb": 11908,
+      "rss_ready_kb": 10416,
+      "utc": "2026-11-12T11:11:55.186+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 1.8553310073912144,
+      "destroy_clean": true,
+      "destroy_wall_ms": 38.33685599965975,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 494.04032400343567,
+      "host": {
+        "loadavg1": 0.76,
+        "loadavg15": 1.47,
+        "loadavg5": 1.13,
+        "mem_available_gib": 37.48,
+        "mem_available_mib": 38376.4,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3385",
+        "used_mib": 23532.3,
+        "used_pct": 38.01
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 492.0001029968262,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 489.7721070155967,
+      "m3_ms": 673.5577030049171,
+      "m_ms": 491.8123280222062,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 123 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.09198399493470788,
+      "rep": 10,
+      "rss_after_prewarm_kb": 11960,
+      "rss_ready_kb": 10520,
+      "utc": "2026-11-12T11:11:55.947+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    },
+    {
+      "accepted_on": "launch",
+      "arm": "on",
+      "daemon_start_ms": 2.1224470110610127,
+      "destroy_clean": true,
+      "destroy_wall_ms": 90.94854598515667,
+      "evicted_after_bytes": 0,
+      "evicted_before_bytes": 15187968,
+      "fadvise": {
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 2351104,
+          "size": 2350507
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 602112,
+          "size": 598461
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 4304896,
+          "size": 4303311
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 823296,
+          "size": 822201
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3661824,
+          "size": 3659952
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2465792,
+          "size": 2463208
+        },
+        "/home/Qui/.paseo/worktrees/3oxa6xao/perf-p8-prewarm/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 492.3469431232661,
+      "host": {
+        "loadavg1": 0.76,
+        "loadavg15": 1.47,
+        "loadavg5": 1.13,
+        "mem_available_gib": 37.5,
+        "mem_available_mib": 38401.7,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3384",
+        "used_mib": 23507.0,
+        "used_pct": 37.97
+      },
+      "launch_count_text": "0",
+      "launch_frame_landed_ms": 489.99977111816406,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_tree_ok": true,
+      "launch_wall_ms": 487.63117502676323,
+      "m3_ms": 671.3847900100518,
+      "m_ms": 489.97834703186527,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "prewarm_log": "warmed 37 files, 63.7 MiB in 121 ms (cap 64.0 MiB, 15 skipped, 0 missing, 0 read errors)",
+      "prewarm_wait_ms": 0.0642910017631948,
+      "rep": 11,
+      "rss_after_prewarm_kb": 12124,
+      "rss_ready_kb": 10556,
+      "utc": "2026-11-12T11:11:56.708+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12
+    }
+  ],
+  "utc": "2026-11-12T11:11:57.519+00:00"
+}
