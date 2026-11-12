@@ -1,0 +1,25 @@
+{
+  "request_id": "req_219183_18e75b3a7baa01d8",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "error": {
+    "code": "UNSUPPORTED_RN_DRIVER",
+    "class": "unsupported",
+    "message": "rn driver failed at mount: UnsupportedApi { api: \"Lcom/facebook/react/internal/AndroidChoreographerProvider;\", at: \"\" } | ACOS_RN_BRIDGE {\"phase\":\"begin\"} | ACOS_RN_BRIDGE {\"phase\":\"main-looper\",\"detail\":\"Looper (main, tid 1) {3ba}\"}",
+    "hint": "Read details.stage: the RN bridge mounted but the Java driver failed. The RN Paper bridge is single-threaded; do not re-run main on a live session.",
+    "retryable": false,
+    "details": {
+      "engine": "native-child",
+      "engine_frozen": false,
+      "evidence_label": "guest-asserted",
+      "trust": "trusted"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

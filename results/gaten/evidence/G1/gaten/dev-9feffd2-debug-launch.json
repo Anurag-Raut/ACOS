@@ -1,0 +1,25 @@
+{
+  "request_id": "req_213697_18e75aca3c2198d4",
+  "ok": false,
+  "status": "error",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "error": {
+    "code": "INTERNAL",
+    "class": "harness",
+    "message": "confined child closed stdout",
+    "hint": "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass.",
+    "retryable": false,
+    "details": {
+      "engine": "native-child",
+      "engine_frozen": false,
+      "evidence_label": "guest-asserted",
+      "trust": "trusted"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

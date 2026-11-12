@@ -1,0 +1,303 @@
+{
+ "envelope": {
+  "backend": "acos-native",
+  "capabilities_used": [
+   "ui.tree"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+   "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_g1",
+  "result": {
+   "engine": "art",
+   "engine_frozen": false,
+   "evidence": {
+    "frame": "host-observed",
+    "input_acks": "guest-asserted",
+    "logs": "guest-asserted",
+    "state_change": "host-observed",
+    "tree": "guest-asserted"
+   },
+   "evidence_label": "guest-asserted",
+   "frame": {
+    "buffer_generation": 59,
+    "captured_at": "2026-11-12T17:07:33.651Z",
+    "frame_number": 59,
+    "frame_seq": 5,
+    "identity": "C1 buffer metadata (no pixel copy)",
+    "md5": "",
+    "pixels": false
+   },
+   "last_frame_seq": 5,
+   "max_nodes": 2000,
+   "node_count": 12,
+   "package": "dev.acos.fixtures.counter",
+   "session_id": "s_cli",
+   "settle": {
+    "bound": "strict-quiet",
+    "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 49,
+    "settled": true,
+    "tree_age_ms": 151
+   },
+   "stage_reached": "first_frame",
+   "timing": {
+    "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+    "read": {
+     "absorb_ms": 0,
+     "guest_command_ms": 151
+    },
+    "total_ms": 151
+   },
+   "tree": {
+    "max_nodes": 2000,
+    "nodes": [
+     {
+      "bounds": "[0,128][1080,2337]",
+      "checked": false,
+      "children": [
+       {
+        "bounds": "[0,128][1080,2337]",
+        "checked": false,
+        "children": [
+         {
+          "bounds": "[0,275][1080,2337]",
+          "checked": false,
+          "children": [
+           {
+            "bounds": "[0,275][1080,2337]",
+            "checked": false,
+            "children": [
+             {
+              "bounds": "[42,317][63,368]",
+              "checked": false,
+              "children": [],
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "hint": "",
+              "id": "n4_dev.acos.fixtures.counter:id/count",
+              "package": "",
+              "resource_id": "dev.acos.fixtures.counter:id/count",
+              "scrollable": false,
+              "selected": false,
+              "text": "1",
+              "visible": true,
+              "window": "main"
+             },
+             {
+              "bounds": "[42,368][273,494]",
+              "checked": false,
+              "children": [],
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "hint": "",
+              "id": "n4_dev.acos.fixtures.counter:id/inc",
+              "package": "",
+              "resource_id": "dev.acos.fixtures.counter:id/inc",
+              "scrollable": false,
+              "selected": false,
+              "text": "Increment",
+              "visible": true,
+              "window": "main"
+             },
+             {
+              "bounds": "[42,494][273,620]",
+              "checked": false,
+              "children": [],
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "hint": "",
+              "id": "n4_dev.acos.fixtures.counter:id/reset",
+              "package": "",
+              "resource_id": "dev.acos.fixtures.counter:id/reset",
+              "scrollable": false,
+              "selected": false,
+              "text": "Reset",
+              "visible": true,
+              "window": "main"
+             }
+            ],
+            "class": "android.widget.LinearLayout",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "hint": "",
+            "id": "n3_",
+            "package": "",
+            "resource_id": "",
+            "scrollable": false,
+            "selected": false,
+            "text": "",
+            "visible": true,
+            "window": "main"
+           }
+          ],
+          "class": "android.widget.FrameLayout",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "hint": "",
+          "id": "n2_android:id/content",
+          "package": "",
+          "resource_id": "android:id/content",
+          "scrollable": false,
+          "selected": false,
+          "text": "",
+          "visible": true,
+          "window": "main"
+         },
+         {
+          "bounds": "[0,128][1080,275]",
+          "checked": false,
+          "children": [
+           {
+            "bounds": "[0,128][1080,275]",
+            "checked": false,
+            "children": [
+             {
+              "bounds": "[42,166][231,237]",
+              "checked": false,
+              "children": [],
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "hint": "",
+              "id": "n4_",
+              "package": "",
+              "resource_id": "",
+              "scrollable": false,
+              "selected": false,
+              "text": "Counter",
+              "visible": true,
+              "window": "main"
+             },
+             {
+              "bounds": "[1080,128][1080,275]",
+              "checked": false,
+              "children": [],
+              "class": "android.widget.ActionMenuView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "hint": "",
+              "id": "n4_",
+              "package": "",
+              "resource_id": "",
+              "scrollable": false,
+              "selected": false,
+              "text": "",
+              "visible": true,
+              "window": "main"
+             }
+            ],
+            "class": "android.widget.Toolbar",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "hint": "",
+            "id": "n3_android:id/action_bar",
+            "package": "",
+            "resource_id": "android:id/action_bar",
+            "scrollable": false,
+            "selected": false,
+            "text": "",
+            "visible": true,
+            "window": "main"
+           },
+           {
+            "bounds": "[0,128][0,128]",
+            "checked": false,
+            "children": [],
+            "class": "com.android.internal.widget.ActionBarContextView",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "hint": "",
+            "id": "n3_android:id/action_context_bar",
+            "package": "",
+            "resource_id": "android:id/action_context_bar",
+            "scrollable": false,
+            "selected": false,
+            "text": "",
+            "visible": false,
+            "window": "main"
+           }
+          ],
+          "class": "com.android.internal.widget.ActionBarContainer",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "hint": "",
+          "id": "n2_android:id/action_bar_container",
+          "package": "",
+          "resource_id": "android:id/action_bar_container",
+          "scrollable": false,
+          "selected": false,
+          "text": "",
+          "visible": true,
+          "window": "main"
+         }
+        ],
+        "class": "com.android.internal.widget.ActionBarOverlayLayout",
+        "clickable": false,
+        "content_desc": "",
+        "enabled": true,
+        "focused": false,
+        "hint": "",
+        "id": "n1_android:id/decor_content_parent",
+        "package": "",
+        "resource_id": "android:id/decor_content_parent",
+        "scrollable": false,
+        "selected": false,
+        "text": "",
+        "visible": true,
+        "window": "main"
+       }
+      ],
+      "class": "com.android.internal.policy.DecorView",
+      "clickable": false,
+      "content_desc": "",
+      "enabled": true,
+      "focused": false,
+      "hint": "",
+      "id": "n0_",
+      "package": "",
+      "resource_id": "",
+      "scrollable": false,
+      "selected": false,
+      "text": "",
+      "visible": true,
+      "window": "main"
+     }
+    ],
+    "truncated": false
+   },
+   "truncated": false,
+   "trust": "trusted",
+   "windows": 1
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+ },
+ "id": 5
+}

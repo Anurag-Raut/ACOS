@@ -1,0 +1,63 @@
+tag	step	rc	ms	file
+oldrel	launch	1	818	01-launch.json
+oldrel	status	0	4	02-status.json
+oldrel	tree	1	2	03-tree.json
+oldrel	screenshot1	1	2	04-first.png.json
+oldrel	logs	0	2	05-logs.json
+oldrel	final-tree	1	2	90-final-tree.json
+oldrel	final-shot	1	2	91-final.png.json
+oldrel	final-status	0	2	92-final-status.json
+dev1	launch	1	10408	01-launch.json
+dev1	status	1	3	02-status.json
+dev1	tree	1	2	03-tree.json
+dev1	screenshot1	1	2	04-first.png.json
+dev1	logs	1	3	05-logs.json
+dev1	final-tree	1	2	90-final-tree.json
+dev1	final-shot	1	2	91-final.png.json
+dev1	final-status	1	2	92-final-status.json
+gatenrel	launch	1	488	01-launch.json
+gatenrel	status	0	3	02-status.json
+gatenrel	tree	1	3	03-tree.json
+gatenrel	shot1	1	2	04-shot1.json
+gatenrel	logs	0	2	05-logs.json
+gatenrel	final-tree	1	2	90-tree.json
+gatenrel	final-shot	1	2	91-shot.png
+gatenrel	final-status	0	1	92-status.json
+counter-keep	launch	0	440	01-launch.json
+counter-keep	status	1	3	02-status.json
+counter-keep	tree	1	2	03-tree.json
+counter-keep	shot1	1	2	04-shot1.json
+counter-keep	logs	1	1	05-logs.json
+counter-keep	final-tree	1	2	90-tree.json
+counter-keep	final-shot	1	2	91-shot.png
+counter-keep	final-status	1	2	92-status.json
+rnhello	launch	0	2005	01-launch.json
+rnhello	status	0	2	02-status.json
+rnhello	tree	0	3	03-tree.json
+rnhello	shot1	1	2	04-shot1.json
+rnhello	logs	0	2	05-logs.json
+rnhello	final-tree	0	2	90-tree.json
+rnhello	final-shot	1	2	91-shot.png
+rnhello	final-status	0	2	92-status.json
+rnhello	tree0	0	2
+rnhello	tap_testid	0	1492
+rnhello	tree1	0	3
+rnhello	tap_text	0	1504
+rnhello	tree2	0	3
+rnhello	frame	1	3
+rnhello	logs	0	3
+counter-sticky	launch	0	454	10-launch.json
+counter-sticky	status	0	1	11-status.json
+counter-sticky	observe-tree	0	153	12-tree.json
+counter-sticky	observe-screenshot	0	24	13-shot.png
+counter-sticky	tap --text Increment	0	1052	20-tap-text.json
+counter-sticky	observe-tree (after tap)	0	151	21-tree-after-tap.json
+counter-sticky	observe-screenshot (after tap)	0	30	22-after-tap.png
+counter-sticky	status (after launch connection closed)	1	1	30-status-after-close.json (GUEST_EXITED)
+gatenrel-f344272	launch	1	401	01-launch.json
+gatenrel-f344272	status	0	3	02-status.json
+gatenrel-f344272	tree	1	2	03-tree.json
+gatenrel-f344272	shot1	1	2	04-shot1.json
+gatenrel-f344272	final-tree	1	2	90-tree.json
+gatenrel-f344272	final-shot	1	2	91-shot.png
+gatenrel-f344272	final-status	0	1	92-status.json

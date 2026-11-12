@@ -1,0 +1,25 @@
+{
+  "request_id": "req_2152eb_18e75af5c9af82e3",
+  "ok": false,
+  "status": "unsupported",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "error": {
+    "code": "UNSUPPORTED_RN_NO_RENDERER",
+    "class": "unsupported",
+    "message": "the RN bridge registers no native view managers, so UIImplementation never lays out or draws; use observe --tree",
+    "hint": "This RN bridge registers no native view managers, so UIImplementation never lays out or draws. Use observe --tree and tap --text/--testID; do not expect a pixel frame.",
+    "retryable": false,
+    "details": {
+      "engine": "rust-vm, frozen",
+      "engine_frozen": true,
+      "evidence_label": "guest-asserted",
+      "trust": "trusted"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}
