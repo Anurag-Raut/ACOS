@@ -1,0 +1,74 @@
+# W39 cache markers: warmup launch (cold cache) then launch 1 (all HIT)
+
+## launch warmup
+acos-art: stage launch-entry exec=0ms
+acos-art: stage ensure-data exec=0ms
+acos-art: stage ensure-data exec=0ms
+acos-art: build-cache HIT ea881911630d /home/Qui/Projects/acos/.cache/art/build-cache/ea881911630dc7d5cc628ac753667067d6b96f618dcc0512b6507c7051ae3fc6 (1 file(s), tree)
+acos-art: stage linkerconfig-hit exec=0ms
+acos-art: stage linkerconfig exec=0ms
+acos-art: build-cache HIT 7186b7a7f804 /home/Qui/Projects/acos/.cache/art/build-cache/7186b7a7f8049073080714d2e7d9e6d961b218ba304eb8d740e7fcbac3bec699
+acos-art: stage classpath-hit exec=0ms
+acos-art: stage classpath exec=0ms
+acos-art: build-cache HIT 50c099ef9302 /home/Qui/Projects/acos/.cache/art/build-cache/50c099ef9302b2e9aa9f89478307b851042c9ab80ed1ba7d49aa9eef8d1338f5
+acos-art: stage guest-dex exec=10ms
+acos-art: build-cache HIT 6b1a5f698439 /home/Qui/Projects/acos/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4
+acos-art: stage render-shim exec=10ms
+acos-art: build-cache HIT 0968d8ddbf99 /home/Qui/Projects/acos/.cache/art/build-cache/0968d8ddbf992df42d4a8a2d34fbe1ed8f64f1ea091a98d7e3cdc257d656aa1d
+acos-art: stage art-shim exec=10ms
+acos-art: build-cache HIT 713c2119f282 /home/Qui/Projects/acos/.cache/art/build-cache/713c2119f282fa6dd731b5a80cc7ea817e0429a014b69916a143cbd5dceb589a
+acos-art: stage binder-driver exec=10ms
+acos-art: stage run-dir exec=10ms
+acos-art: stage apk-stage exec=10ms
+acos-art: stage native-libs exec=10ms
+acos-art: stage overlays-list exec=10ms
+acos-art: stage overlay-enter GoogleConfigOverlay exec=10ms
+acos-art: stage overlay-enter GoogleWebViewOverlay exec=10ms
+acos-art: stage overlay-enter LargeScreenConfigOverlay exec=10ms
+acos-art: stage overlay-enter PixelConfigOverlayCommon exec=10ms
+acos-art: stage overlay-enter framework-res__auto_generated_rro_product exec=30ms
+acos-art: build-cache STORE e0dfcc372ec3 -> /home/Qui/Projects/acos/.cache/art/build-cache/e0dfcc372ec363a8719c370bdabd267f1ccaea6c7209cb0752033f66b98a5bb2 (tree)
+acos-art: stage overlays-done exec=30ms
+acos-art: stage overlays exec=30ms
+acos-art: launch: static overlays: 1 applied (1 idmaps generated, 0 cached, 1084 B)
+acos-art: stage props-logd exec=30ms
+acos-art: stage peer-setup exec=30ms
+acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
+acos-art: stage guest-exec exec=30ms
+acos-art: stage guest-spawned exec=50ms
+acos-art: stage guest-exit exec=370ms
+acos-art: stage teardown exec=480ms
+
+## launch 1
+acos-art: stage launch-entry exec=0ms
+acos-art: stage ensure-data exec=0ms
+acos-art: stage ensure-data exec=0ms
+acos-art: build-cache HIT ea881911630d /home/Qui/Projects/acos/.cache/art/build-cache/ea881911630dc7d5cc628ac753667067d6b96f618dcc0512b6507c7051ae3fc6 (1 file(s), tree)
+acos-art: stage linkerconfig-hit exec=0ms
+acos-art: stage linkerconfig exec=0ms
+acos-art: build-cache HIT 7186b7a7f804 /home/Qui/Projects/acos/.cache/art/build-cache/7186b7a7f8049073080714d2e7d9e6d961b218ba304eb8d740e7fcbac3bec699
+acos-art: stage classpath-hit exec=0ms
+acos-art: stage classpath exec=0ms
+acos-art: build-cache HIT 50c099ef9302 /home/Qui/Projects/acos/.cache/art/build-cache/50c099ef9302b2e9aa9f89478307b851042c9ab80ed1ba7d49aa9eef8d1338f5
+acos-art: stage guest-dex exec=0ms
+acos-art: build-cache HIT 6b1a5f698439 /home/Qui/Projects/acos/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4
+acos-art: stage render-shim exec=0ms
+acos-art: build-cache HIT 0968d8ddbf99 /home/Qui/Projects/acos/.cache/art/build-cache/0968d8ddbf992df42d4a8a2d34fbe1ed8f64f1ea091a98d7e3cdc257d656aa1d
+acos-art: stage art-shim exec=0ms
+acos-art: build-cache HIT 713c2119f282 /home/Qui/Projects/acos/.cache/art/build-cache/713c2119f282fa6dd731b5a80cc7ea817e0429a014b69916a143cbd5dceb589a
+acos-art: stage binder-driver exec=0ms
+acos-art: stage run-dir exec=0ms
+acos-art: stage apk-stage exec=0ms
+acos-art: stage native-libs exec=0ms
+acos-art: stage overlays-list exec=0ms
+acos-art: build-cache HIT e0dfcc372ec3 /home/Qui/Projects/acos/.cache/art/build-cache/e0dfcc372ec363a8719c370bdabd267f1ccaea6c7209cb0752033f66b98a5bb2 (2 file(s), tree)
+acos-art: stage overlays-done exec=0ms
+acos-art: stage overlays exec=0ms
+acos-art: launch: static overlays: 1 applied (0 idmaps generated, 1 from the image cache, 1084 B)
+acos-art: stage props-logd exec=10ms
+acos-art: stage peer-setup exec=10ms
+acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
+acos-art: stage guest-exec exec=10ms
+acos-art: stage guest-spawned exec=30ms
+acos-art: stage guest-exit exec=350ms
+acos-art: stage teardown exec=450ms

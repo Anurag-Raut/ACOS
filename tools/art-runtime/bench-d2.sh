@@ -661,6 +661,19 @@ def main():
     rows.append(None)  # M9 placed after the cohorts are measured
     rows.append(None)  # M10 placed after the suite is measured
 
+    def m9_failure_note(p10, t10, p20, t20):
+        """W39: the W33 sentence about clang bus errors / pthread EAGAIN was a
+        cold-cohort compiler storm; the W37 build-once cache removed it. State
+        what this run actually saw, and never blame the app for a session
+        failure."""
+        failed = (t10 - p10) + (t20 - p20)
+        if failed == 0:
+            return ("No session failed (N=10 %d/%d, N=20 %d/%d): the W37 build-once cache "
+                    "removed the cold-cohort compiler storm, so the old clang bus error / "
+                    "pthread EAGAIN explanation no longer applies." % (p10, t10, p20, t20))
+        return ("%d of %d sessions failed; the structured error of each failure is in the "
+                "run JSON, and a failure is never re-labelled as app behaviour." % (failed, t10 + t20))
+
     # ---- cohorts: M2/M9, one acquisition per rep ----
     coh = {}
     for n in COHORTS:
@@ -770,13 +783,9 @@ def main():
                               "virtual displays), not a scalar of this type; ACOS correctness "
                               "here is N=10 %d/%d and N=20 %d/%d passes, but independent state "
                               "with a distinct count k per session is not implemented, and the "
-                              "legacy-comparable workset column does not exist. All observed "
-                              "session failures are structured INTERNAL / LIVE_FRAME_UNAVAILABLE "
-                              "while the launcher compiles the binder shim and D8-compiles the "
-                              "launch guest under concurrency (clang bus error / pthread EAGAIN); "
-                              "that is harness contention, not app behaviour. cgroup peak per "
-                              "session is reported, never compared to legacy anon+shmem."
-                              % (p10, t10, p20, t20),)),
+                              "legacy-comparable workset column does not exist. %s cgroup peak "
+                              "per session is reported, never compared to legacy anon+shmem."
+                              % (p10, t10, p20, t20, m9_failure_note(p10, t10, p20, t20)),)),
         m9st["p50"] if m9st else None, m9st,
         "N=10 %d/%d passes, cgroup peak %s MiB/session; N=20 %d/%d passes, cgroup peak %s "
         "MiB/session (one acquisition per rep; %d rep(s) per N)"

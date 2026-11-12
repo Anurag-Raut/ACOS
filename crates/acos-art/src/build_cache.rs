@@ -641,6 +641,257 @@ fn verify(dir: &Path, files: &[&str]) -> std::result::Result<(), String> {
     Ok(())
 }
 
+/// Identity of an extracted image for per-sysroot cache entries
+/// (`linkerconfig`, `derive_classpath`, the static-RRO idmaps).
+///
+/// Hashes the sysroot's `READY` stamp and its `MANIFEST.txt` (the file list
+/// with sizes and sha256 prefixes written by `tools/art-sysroot.sh`), so a
+/// re-extracted or repaired sysroot is a different key and no derived file is
+/// ever reused across images. 248 KB is hashed once per process and memoised:
+/// every launch asks for the same sysroot.
+pub fn image_digest(sysroot: &Path) -> String {
+    use std::sync::{Mutex, OnceLock};
+    type Memo = Option<(PathBuf, String, String)>;
+    static MEMO: OnceLock<Mutex<Memo>> = OnceLock::new();
+    let memo = MEMO.get_or_init(|| Mutex::new(None));
+    let stamp = format!(
+        "{}|{}",
+        file_id(&sysroot.join("READY")),
+        file_id(&sysroot.join("MANIFEST.txt"))
+    );
+    if let Ok(guard) = memo.lock() {
+        if let Some((p, s, d)) = guard.as_ref() {
+            if p == sysroot && *s == stamp {
+                return d.clone();
+            }
+        }
+    }
+    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/image/v1".to_vec()];
+    for rel in ["READY", "MANIFEST.txt"] {
+        let p = sysroot.join(rel);
+        match fs::read(&p) {
+            Ok(bytes) => parts.push(bytes),
+            Err(_) => parts.push(format!("{}|absent", p.display()).into_bytes()),
+        }
+    }
+    let out = digest_owned(&parts);
+    if let Ok(mut guard) = memo.lock() {
+        *guard = Some((sysroot.to_path_buf(), stamp, out.clone()));
+    }
+    out
+}
+
+// ------------------------------------------------------- W39: tree entries
+//
+// `linkerconfig` and the static-RRO idmaps write a directory (a top-level
+// config plus one `ld.config.txt` per APEX namespace, or one `.idmap` per
+// overlay), not a fixed file list. A tree entry hashes **every** file below
+// `dir` with its relative path in the manifest, so a stale or extra file in a
+// reused entry is detected exactly like a byte flip in a flat entry.
+
+/// Sorted relative paths of every regular file below `dir` (never
+/// `MANIFEST.sha256`; symlinks are followed, which is what the guest sees).
+fn walk_files(dir: &Path) -> Result<Vec<String>> {
+    fn walk(base: &Path, cur: &Path, out: &mut Vec<String>) -> Result<()> {
+        let rd = fs::read_dir(cur)?;
+        for e in rd.flatten() {
+            let p = e.path();
+            let ft = e.file_type()?;
+            if ft.is_dir() {
+                walk(base, &p, out)?;
+            } else if ft.is_file() || ft.is_symlink() && p.is_file() {
+                let rel = p
+                    .strip_prefix(base)
+                    .map_err(|_| Error::Tool(format!("{} is outside {}", p.display(), base.display())))?
+                .to_string_lossy()
+                .to_string();
+                if rel != MANIFEST {
+                    out.push(rel);
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn manifest_of_tree(dir: &Path) -> Result<String> {
+    let mut out = String::new();
+    for rel in walk_files(dir)? {
+        let p = dir.join(&rel);
+        out.push_str(&format!("{}  {}\n", sha256_hex(&fs::read(&p)?), rel));
+    }
+    if out.is_empty() {
+        return Err(Error::Tool(format!("build produced an empty tree in {}", dir.display())));
+    }
+    Ok(out)
+}
+
+/// Verify a tree entry: the manifest and the files on disk must name the same
+/// set (an extra file means a stale build), and every hash must match.
+fn verify_tree(dir: &Path) -> std::result::Result<Vec<String>, String> {
+    let text = fs::read_to_string(dir.join(MANIFEST)).map_err(|e| format!("no {MANIFEST}: {e}"))?;
+    let mut seen: Vec<(String, String)> = Vec::new();
+    for line in text.lines() {
+        let Some((hash, name)) = line.split_once("  ") else {
+            return Err(format!("malformed manifest line {line:?}"));
+        };
+        if name.is_empty()
+            || name.starts_with('/')
+            || name.split('/').any(|c| c.is_empty() || c == "." || c == "..")
+        {
+            return Err(format!("refusing manifest name {name:?}"));
+        }
+        let p = dir.join(name);
+        let bytes = fs::read(&p).map_err(|e| format!("{name} unreadable: {e}"))?;
+        if sha256_hex(&bytes) != hash {
+            return Err(format!("{name} hash mismatch"));
+        }
+        seen.push((name.to_string(), hash.to_string()));
+    }
+    let actual = walk_files(dir)
+        .map_err(|e| format!("cannot walk entry {}: {e}", dir.display()))?;
+    if actual.len() != seen.len() {
+        let extra: Vec<&String> = actual
+            .iter()
+            .filter(|a| !seen.iter().any(|(s, _)| s == *a))
+            .collect();
+        return Err(format!(
+            "manifest lists {} file(s), entry has {} (unlisted: {})",
+            seen.len(),
+            actual.len(),
+            if extra.is_empty() {
+                "none".to_string()
+            } else {
+                extra.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            }
+        ));
+    }
+    Ok(actual)
+}
+
+/// Install a verified tree entry into `dest_dir`: every file is written to a
+/// temporary name in its destination directory and `rename(2)`d into place, and
+/// an identical existing copy is left untouched (concurrent sessions sharing
+/// one `--data` tree never observe a partial tree). Returns the installed
+/// paths, sorted by relative name.
+pub fn reuse_tree_to(key: &str, dest_dir: &Path) -> Result<Option<Vec<PathBuf>>> {
+    if !enabled() {
+        return Ok(None);
+    }
+    let entry = cache_root().join(key);
+    if !entry.is_dir() {
+        return Ok(None);
+    }
+    let files = match verify_tree(&entry) {
+        Ok(f) => f,
+        Err(why) => {
+            eprintln!(
+                "acos-art: build-cache CORRUPT {} {} ({why}); rebuilding",
+                short(key),
+                entry.display()
+            );
+            let _ = fs::remove_dir_all(&entry);
+            return Ok(None);
+        }
+    };
+    let mut out = Vec::new();
+    for rel in &files {
+        let src = entry.join(rel);
+        let dest = dest_dir.join(rel);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let want = sha256_hex(&fs::read(&src)?);
+        let up_to_date = dest.is_file()
+            && fs::metadata(&dest).map(|m| m.len()).ok() == fs::metadata(&src).map(|m| m.len()).ok()
+            && fs::read(&dest).map(|d| sha256_hex(&d) == want).unwrap_or(false);
+        if !up_to_date {
+            let tmp = dest.with_file_name(format!(
+                ".{}.w39-{}-{}",
+                dest.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(),
+                std::process::id(),
+                SEQ.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::copy(&src, &tmp)?;
+            fs::rename(&tmp, &dest)?;
+        }
+        out.push(dest);
+    }
+    eprintln!(
+        "acos-art: build-cache HIT {} {} ({} file(s), tree)",
+        short(key),
+        entry.display(),
+        files.len()
+    );
+    Ok(Some(out))
+}
+
+/// Publish a directory built elsewhere under a lock the caller already holds
+/// (the linkerconfig / idmap builders write into `<data>` directly). `skip`
+/// names relative paths that are not part of the derived tree (stamps, logs,
+/// staged `.apk`s). An existing verified entry is left untouched: the inputs
+/// are in the key, so identical inputs always mean identical output.
+pub fn publish_tree_locked(
+    key: &str,
+    src_dir: &Path,
+    skip: &dyn Fn(&str) -> bool,
+) -> Result<Built> {
+    let root = cache_root();
+    let entry = root.join(key);
+    if !enabled() {
+        return Ok(Built {
+            dir: src_dir.to_path_buf(),
+            key: key.to_string(),
+            reused: false,
+            staged_from: None,
+        });
+    }
+    if entry.is_dir() && verify_tree(&entry).is_ok() {
+        return Ok(Built {
+            dir: entry,
+            key: key.to_string(),
+            reused: true,
+            staged_from: None,
+        });
+    }
+    fs::create_dir_all(root.join(".tmp"))?;
+    let stage = root.join(".tmp").join(format!(
+        "{key}-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = fs::remove_dir_all(&stage);
+    fs::create_dir_all(&stage)?;
+    for rel in walk_files(src_dir)? {
+        if skip(&rel) {
+            continue;
+        }
+        let dest = stage.join(&rel);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(src_dir.join(&rel), &dest)?;
+    }
+    fs::write(stage.join(MANIFEST), manifest_of_tree(&stage)?)?;
+    let _ = fs::remove_dir_all(&entry);
+    fs::rename(&stage, &entry)?;
+    eprintln!(
+        "acos-art: build-cache STORE {} -> {} (tree)",
+        short(key),
+        entry.display()
+    );
+    Ok(Built {
+        dir: entry,
+        key: key.to_string(),
+        reused: false,
+        staged_from: Some(stage),
+    })
+}
+
 /// Remove staging directories left by a killed builder (janitor hook).
 pub fn sweep_staging() -> Result<usize> {
     let tmp = cache_root().join(".tmp");

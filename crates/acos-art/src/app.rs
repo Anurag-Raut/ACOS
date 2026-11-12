@@ -955,7 +955,11 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
 
     let dest = root.data.join("overlay");
     fs::create_dir_all(&dest)?;
-    let target_crc = fnv(0xcbf2_9ce4_8422_2325, &fs::read(&target)?);
+    // W39: `framework-res.apk` is 33 MB and the sysroot `MANIFEST.txt` already
+    // hashes it, so the image digest (memoised per process) is the target's
+    // identity. Reading the APK again per launch cost ~25 ms of the launch wall.
+    let image_digest = crate::build_cache::image_digest(&root.sysroot);
+    let target_id = image_digest[..16].to_string();
 
     let mut apks: Vec<PathBuf> = fs::read_dir(&src)
         .map_err(|e| Error::Io(e))?
@@ -964,24 +968,84 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
         .filter(|p| p.extension().map(|x| x == "apk").unwrap_or(false))
         .collect();
     apks.sort();
-
+    // W39: the idmap set depends only on the image, the (small) static-RRO
+    // APKs, `idmap2` and the policy — never on the launched APK. Build it once
+    // into the shared content-addressed cache and install the verified tree
+    // (`<stem>.idmap`, `<stem>.idmap.key`) on later launches instead of running
+    // `aapt2` + a sandboxed `idmap2` again.
+    let idmap2 = root.sysroot.join("system/bin/idmap2");
+    let aapt2_id = android_sdk()
+        .and_then(|sdk| find_tool(&sdk, "aapt2"))
+        .map(|p| crate::build_cache::file_id(&p))
+        .unwrap_or_else(|_| "aapt2|absent".to_string());
+    let mut inputs: Vec<(PathBuf, String, String, Vec<u8>)> = Vec::new();
     for apk in apks {
         let name = apk
             .file_name()
             .map(|f| f.to_string_lossy().to_string())
             .unwrap_or_default();
         let stem = name.trim_end_matches(".apk").to_string();
-        let bytes = match fs::read(&apk) {
-            Ok(b) => b,
+        match fs::read(&apk) {
+            Ok(bytes) => inputs.push((apk, name, stem, bytes)),
             Err(e) => {
                 diagnostics.push(format!("overlay {name}: unreadable ({e}), skipped"));
-                continue;
             }
-        };
+        }
+    }
+    let mut key_parts: Vec<Vec<u8>> = vec![
+        b"acos-art/static-rro-idmaps/v1".to_vec(),
+        image_digest.clone().into_bytes(),
+        crate::build_cache::file_id(&idmap2).into_bytes(),
+        aapt2_id.into_bytes(),
+        b"--policy product".to_vec(),
+    ];
+    for (_, _, _, bytes) in &inputs {
+        key_parts.push(bytes.clone());
+    }
+    let cache_key = crate::build_cache::digest_owned(&key_parts);
+    let cached = crate::build_cache::enabled();
+    crate::stage("overlays-list");
+    if cached {
+        let _lock = crate::build_cache::lock(&cache_key)?;
+        if crate::build_cache::reuse_tree_to(&cache_key, &dest)?.is_some() {
+            for (apk, name, stem, _) in &inputs {
+                let idmap = dest.join(format!("{stem}.idmap"));
+                if !idmap.is_file() {
+                    continue;
+                }
+                // The idmap names `/data/overlay/<name>.apk`; stage it (hardlink).
+                stage_file(apk, &dest.join(name))?;
+                set.idmap_bytes += fs::metadata(&idmap).map(|m| m.len()).unwrap_or(0);
+                set.idmaps.push(format!("/data/overlay/{stem}.idmap"));
+                set.applied.push(name.clone());
+                set.host_idmaps.push(idmap);
+                set.cached += 1;
+            }
+            crate::stage("overlays-done");
+            diagnostics.push(format!(
+                "static overlays: {} applied (0 idmaps generated, {} from the image cache, {} B)",
+                set.applied.len(),
+                set.cached,
+                set.idmap_bytes
+            ));
+            return Ok(set);
+        }
+        // Miss: the published entry must be exactly this build, so drop a
+        // previous generation's idmaps (the staged `.apk`s are re-hardlinked).
+        for e in fs::read_dir(&dest)?.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.ends_with(".idmap") || name.ends_with(".idmap.key") {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+
+    for (apk, name, stem, bytes) in inputs {
+        crate::stage(&format!("overlay-enter {stem}"));
         let key = format!(
             "{}-{}-product",
             fnv(0xcbf2_9ce4_8422_2325, &bytes),
-            target_crc
+            target_id
         );
         let idmap = dest.join(format!("{stem}.idmap"));
         let key_file = dest.join(format!("{stem}.idmap.key"));
@@ -1053,6 +1117,12 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
         set.applied.push(name);
         set.host_idmaps.push(idmap);
     }
+    if cached {
+        crate::build_cache::publish_tree_locked(&cache_key, &dest, &|rel| {
+            rel.ends_with(".apk")
+        })?;
+    }
+    crate::stage("overlays-done");
 
     diagnostics.push(format!(
         "static overlays: {} applied ({} idmaps generated, {} cached, {} B)",

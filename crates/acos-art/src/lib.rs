@@ -215,6 +215,7 @@ impl ArtRoot {
                 eprintln!("acos-art: janitor removed {n} stale run dir(s)");
             }
         }
+        crate::stage("ensure-data");
         Ok(())
     }
 
@@ -349,6 +350,13 @@ impl ArtRoot {
     /// Generate `/linkerconfig/ld.config.txt` with the image's own
     /// `linkerconfig` binary (bionic then has the `system` and per-APEX
     /// namespaces `libnativeloader` requires).
+    ///
+    /// **W39:** the generated tree depends only on the image digest, the APEX
+    /// mount table and the `linkerconfig` binary — never on the APK. It is built
+    /// once into the W37 content-addressed build cache
+    /// (`<cache>/<key>/{ld.config.txt,apex.libraries.config.txt,<apex>/ld.config.txt}`)
+    /// and later launches install the verified tree instead of spawning the
+    /// bionic binary again (same lock / atomic-publish / verify rules).
     pub fn ensure_linkerconfig(&self, regen: bool) -> Result<()> {
         let ld = self.data.join("linkerconfig/ld.config.txt");
         // linkerconfig enumerates the APEX namespaces from the actual mounts,
@@ -361,6 +369,23 @@ impl ArtRoot {
             return Ok(());
         }
         self.ensure_data()?;
+        let dir = self.data.join("linkerconfig");
+        fs::create_dir_all(&dir)?;
+        let key = self.linkerconfig_cache_key(&mounts);
+        let cached = crate::build_cache::enabled();
+        if cached {
+            let _lock = crate::build_cache::lock(&key)?;
+            if !regen {
+                if crate::build_cache::reuse_tree_to(&key, &dir)?.is_some() {
+                    fs::write(&stamp, format!("{mounts}\n"))?;
+                    crate::stage("linkerconfig-hit");
+                    return Ok(());
+                }
+            }
+            // A miss rebuilds the whole derived tree; drop a previous sysroot's
+            // files so the published entry is exactly this run's output.
+            clear_derived_tree(&dir)?;
+        }
         // linkerconfig is a bionic binary: without the shim its CHECK failures
         // are invisible (liblog has nowhere to write) and it just aborts.
         crate::build_shim(&self.data.join("shim"))?;
@@ -386,7 +411,24 @@ impl ArtRoot {
             )));
         }
         fs::write(&stamp, format!("{mounts}\n"))?;
+        if cached {
+            crate::build_cache::publish_tree_locked(&key, &dir, &|rel| rel == ".mounts")?;
+        }
+        crate::stage("linkerconfig-built");
         Ok(())
+    }
+
+    /// Cache key of the generated `linkerconfig` tree: image digest + APEX mount
+    /// table + the `linkerconfig` binary identity + the invocation.
+    fn linkerconfig_cache_key(&self, mounts: &str) -> String {
+        let tool = self.host_path("/apex/com.android.runtime/bin/linkerconfig");
+        crate::build_cache::digest(&[
+            b"acos-art/linkerconfig/v1",
+            crate::build_cache::image_digest(&self.sysroot).as_bytes(),
+            mounts.as_bytes(),
+            crate::build_cache::file_id(&tool).as_bytes(),
+            b"--target /linkerconfig",
+        ])
     }
 
     /// Fingerprint of the APEX mount table (`/apex/<name>` set).
@@ -449,6 +491,18 @@ impl ArtRoot {
         if !regen && out.is_file() && self.classpaths().is_some() && self.classpath_env_is_fresh(&out) {
             return Ok(());
         }
+        let key = self.classpath_env_cache_key();
+        let cached = crate::build_cache::enabled();
+        if cached {
+            let _lock = crate::build_cache::lock(&key)?;
+            if !regen {
+                let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+                if crate::build_cache::reuse_to(&key, &["classpath"], &dir)?.is_some() {
+                    crate::stage("classpath-hit");
+                    return Ok(());
+                }
+            }
+        }
         let derive = "/apex/com.android.sdkext/bin/derive_classpath";
         if !self.host_path(derive).is_file() {
             return Err(Error::Layout(format!(
@@ -500,7 +554,25 @@ impl ArtRoot {
                 missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
             )));
         }
+        if cached {
+            let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+            crate::build_cache::publish_locked(&key, &dir, &["classpath"])?;
+        }
+        crate::stage("classpath-built");
         Ok(())
+    }
+
+    /// Cache key of `<data>/system/environ/classpath`: the image digest (the
+    /// classpath fragments live in the sysroot), the `derive_classpath` binary
+    /// identity and the invocation. APK-independent, so one entry serves every
+    /// launch against this image.
+    fn classpath_env_cache_key(&self) -> String {
+        let derive = self.host_path("/apex/com.android.sdkext/bin/derive_classpath");
+        crate::build_cache::digest(&[
+            b"acos-art/derive-classpath/v1",
+            crate::build_cache::image_digest(&self.sysroot).as_bytes(),
+            crate::build_cache::file_id(&derive).as_bytes(),
+        ])
     }
 
     fn classpath_env_is_fresh(&self, out: &Path) -> bool {
@@ -735,6 +807,26 @@ impl Drop for RunDir {
             ),
         }
     }
+}
+
+/// W39: empty a derived build directory (`<data>/linkerconfig`) before a cache
+/// miss rebuilds it, so the published entry never carries a previous sysroot's
+/// files. The directory itself stays (the sandbox binds it at `/linkerconfig`).
+fn clear_derived_tree(dir: &Path) -> Result<()> {
+    let rd = match fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(Error::Io(e)),
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            fs::remove_dir_all(&p)?;
+        } else {
+            fs::remove_file(&p)?;
+        }
+    }
+    Ok(())
 }
 
 /// `ACOS_ART_RUN_TTL_SECS` (default 30 min): how long an orphaned run dir is
@@ -1150,6 +1242,41 @@ impl<'a> Sandbox<'a> {
         b.args(a);
         Ok(b)
     }
+}
+
+// ---------------------------------------------------------------------------
+// W39: launch-wall stage markers
+// ---------------------------------------------------------------------------
+
+/// Print a stage marker for the launch/verify wall when `ACOS_ART_STAGE_TIMING`
+/// is set. Every marker carries the milliseconds since this process was
+/// `exec`'d (from `/proc/uptime` and this process's `starttime`), so a stage
+/// table is built from adjacent markers with no timer plumbed through call
+/// sites and no cost when the variable is absent.
+///
+/// ```text
+/// acos-art: stage linkerconfig exec=418ms
+/// ```
+pub fn stage(name: &str) {
+    if std::env::var_os("ACOS_ART_STAGE_TIMING").is_none() {
+        return;
+    }
+    eprintln!("acos-art: stage {name} exec={}ms", exec_elapsed_ms());
+}
+
+/// Milliseconds since this process started (`CLOCK_BOOTTIME` minus the process
+/// start tick); 10 ms granularity, which is well below every stage measured.
+fn exec_elapsed_ms() -> u128 {
+    let uptime = fs::read_to_string("/proc/uptime")
+        .ok()
+        .and_then(|s| s.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+        .unwrap_or(0.0);
+    let start_ticks = fs::read_to_string("/proc/self/stat")
+        .ok()
+        .and_then(|s| s.rfind(')').map(|i| s[i + 2..].to_string()))
+        .and_then(|rest| rest.split_whitespace().nth(19).and_then(|v| v.parse::<u64>().ok()))
+        .unwrap_or(0);
+    ((uptime * 1000.0) as u128).saturating_sub((start_ticks as u128) * 10)
 }
 
 /// The workspace root: `$ACOS_ROOT`, else the nearest ancestor of the cwd or

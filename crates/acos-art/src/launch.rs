@@ -157,6 +157,9 @@ pub struct UnsupportedCall {
 
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
+    // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
+    // the exec -> activity-resumed wall. Inert unless ACOS_ART_STAGE_TIMING=1.
+    crate::stage("launch-entry");
     // W16: the synthetic `IInputManager` devices carry the image's native
     // `KeyCharacterMap` payload built from the stock `/system/usr/keychars/*.kcm`
     // files. `acos-services` resolves them from `ACOS_KEYCHARS_DIR`; publish the
@@ -177,17 +180,24 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     }
     root.ensure_data()?;
     root.ensure_linkerconfig(false)?;
+    crate::stage("linkerconfig");
     root.ensure_classpath_env(false)?;
+    crate::stage("classpath");
 
     // Guest dex (contains AppMain, LaunchMain and LaunchMain$Instr), the
     // substrate JNI shim and the mini-root shim.
     let _guest = build_launch_guest(root)?;
+    crate::stage("guest-dex");
     let substrate = crate::app::build_render_shim(root)?;
+    crate::stage("render-shim");
     let art_shim = crate::build_shim(&root.data.join("shim"))?;
+    crate::stage("art-shim");
     let driver = build_driver(root)?;
+    crate::stage("binder-driver");
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
     let run = root.new_run_dir("launch")?;
+    crate::stage("run-dir");
 
     let app_dir = root.data.join("app");
     fs::create_dir_all(&app_dir)?;
@@ -199,6 +209,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let apk = app_dir.join(&apk_name);
     fs::copy(&opts.apk, &apk)?;
     let package = crate::app::apk_package(&opts.apk)?;
+    crate::stage("apk-stage");
 
     // W17: installd's native-library step. Stock Android extracts the APK's
     // `lib/<abi>/*.so` into `ApplicationInfo.nativeLibraryDir` at install time
@@ -224,6 +235,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         }
         acos_services::native_libs::NativeLibInstall::None => {}
     }
+    crate::stage("native-libs");
     // The declared `<application android:name>` class and `android:theme`.
     // Without the class the real `LoadedApk.makeApplication` instantiates
     // `android.app.Application` instead of the APK's own (W15: RN's
@@ -251,6 +263,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // `<data>/overlay`, which a run already sees read-only at `/data/overlay`.
     let mut overlay_diags = Vec::new();
     let overlays = crate::app::provision_overlays(root, &mut overlay_diags)?;
+    crate::stage("overlays");
     for d in &overlay_diags {
         eprintln!("acos-art: launch: {d}");
     }
@@ -272,6 +285,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
 
     crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
     let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
+    crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
     let sock = run.dir("sock").join("acos-launch.sock");
@@ -324,6 +338,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     };
     let (peer_host, live) = live_handles;
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
+    crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
             let client = loop {
@@ -583,6 +598,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::watchdog::note_guest_priority_gap("launch");
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
+    crate::stage("guest-exec");
     let started = Instant::now();
     // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
     // (fail-closed, exactly as on the `run`/`verify` route).
@@ -633,6 +649,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         },
     )?;
     let pid = child.id() as i32;
+    crate::stage("guest-spawned");
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
@@ -745,6 +762,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         cgroup.kill();
     }
     let wall_ms = started.elapsed().as_millis() as u64;
+    crate::stage("guest-exit");
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -778,6 +796,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     };
 
     let marker_path = staging.join("application-created.marker");
+    crate::stage("teardown");
     let marker = fs::read_to_string(&marker_path).ok();
     let activity_marker = fs::read_to_string(staging.join("activity-resumed.marker")).ok();
     let activity_failed_marker =
