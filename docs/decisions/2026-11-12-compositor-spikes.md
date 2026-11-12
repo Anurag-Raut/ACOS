@@ -34,6 +34,42 @@ SurfaceFlinger behaviour (ENGINEERING_POLICY ladder rung 1 before rung 5).
 5. W54's dialog fix and visual regression tests continue regardless. W50 (ART
    through `acos serve`) stays the priority.
 
+**Amendment (owner, 2026-11-12, later the same morning) — supersedes item 3
+and narrows item 2:**
+- No full graphics driver stack and no SwiftShader unless it is genuinely
+  necessary. **No Cuttlefish download and no GPU/display driver work yet.**
+- First priority: reuse Google's SurfaceFlinger layer-placement and composition
+  logic with ACOS's **existing software buffers** and minimal dependencies
+  (Spike B).
+- Spike A becomes an analysis spike: the **smallest headless configuration** of
+  stock SurfaceFlinger (virtual display, lightweight allocator, software-only
+  composition). Name the exact unavoidable dependencies and the estimated memory
+  cost, and design the smallest experiment that would prove it. Do not run
+  downloads or build drivers.
+- C1 keeps working throughout. Reuse Google's code wherever practical.
+
+**Amendment 2 (owner, 2026-11-12): memory thresholds for stock SurfaceFlinger.**
+The default preference is to reuse Google's implementation over maintaining C1,
+but memory efficiency is a primary ACOS requirement. Decision rule on the
+**measured complete incremental cost per session** (graphics backend,
+allocators, buffers and dependent services included):
+
+| added per session | decision |
+|---|---|
+| ~10–20 MiB | strongly preferred: use stock SurfaceFlinger |
+| 20–50 MiB | show the measured tradeoffs to the owner before deciding |
+| 50–100 MiB | strong justification plus owner approval required |
+| ≥ 100 MiB | rejected as the default architecture |
+
+Report the fixed shared memory separately from the additional per-session
+memory, and give totals at N=1, N=10 and N=20. First try stock SurfaceFlinger
+with ACOS's existing lightweight allocator, software buffers and a minimal
+headless display backend (spike-scope stubs under `.cache/` only). No
+SwiftShader or Cuttlefish integration or download unless proven necessary and
+approved. Investigate FrontEnd reuse inside C1 in parallel (Spike B). Existing
+functionality stays intact. One-hour rule per task; architectural decisions are
+escalated with evidence.
+
 **Report required after both spikes:** the AOSP components actually reused,
 the custom code that remains, memory and startup cost, compatibility and
 correctness, effort and dependencies, and scaling to N=10 and N=20
