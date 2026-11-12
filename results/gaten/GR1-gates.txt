@@ -1,0 +1,10 @@
+v2-art-counter rc=0 pass pass
+w22-counter-reset rc=0 pass pass
+w54-dialog-pixels rc=0 pass pass
+w42-back-frame rc=0 pass pass
+w15-dialog-menu rc=0 pass pass
+T03-render-good rc=0 pass pass
+T03-render-wrong rc=1 fail fail
+=== probe scenario (expected red)
+svg-viewbox rc=1 fail expected text containing "canvasIsViewPx=true", got text "view=270x116 canvas=1080x2209 density=2.625 canvasIsViewPx=fal
+rc=0

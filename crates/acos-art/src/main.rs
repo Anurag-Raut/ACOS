@@ -333,6 +333,11 @@ fn real_main() -> Result<ExitCode> {
                 until,
                 out,
                 timeout: Duration::from_secs(timeout),
+                width: size.0,
+                panel_height,
+                density_dpi: size.2,
+                status_inset,
+                nav_inset,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());

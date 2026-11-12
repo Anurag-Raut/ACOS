@@ -2415,12 +2415,47 @@ public final class LaunchMain {
      * `ldltr nrml long` for 411x842 dp. This is the framework's own
      * `Configuration.reduceScreenLayout` outcome, not a per-window rule.
      */
+    /**
+     * The panel the guest boots at: the ACOS reference device by default, or the
+     * reference *phone* when the caller forwards its geometry
+     * (`ACOSLAUNCH_WIDTH/_PANEL_HEIGHT/_DENSITY/_STATUS_INSET/_NAV_INSET`).
+     *
+     * <p>The engine forwards those variables from `ACOS_ART_*` so a verification
+     * run can be compared pixel-for-pixel with a physical device at the same
+     * density, insets and window size — the values the framework derives
+     * (`Configuration.screenWidthDp`, `DisplayInfo.appWidth`, the window frame)
+     * are computed from them rather than hardcoded, exactly as
+     * `DisplayMetrics`/`Configuration` do on a device.
+     */
+    static int PANEL_W = envInt("ACOSLAUNCH_WIDTH", 1080);
+    static int PANEL_H = envInt("ACOSLAUNCH_PANEL_HEIGHT", 2400);
+    static int DENSITY_DPI = envInt("ACOSLAUNCH_DENSITY", 420);
+    static int STATUS_INSET = envInt("ACOSLAUNCH_STATUS_INSET", 128);
+    static int NAV_INSET = envInt("ACOSLAUNCH_NAV_INSET", 63);
+    /** Device pixels the app area occupies (`appWidth`/`appHeight`). */
+    static int APP_W = PANEL_W;
+    static int APP_H = PANEL_H - STATUS_INSET - NAV_INSET;
+
+    static int envInt(String name, int fallback) {
+        try {
+            String v = System.getenv(name);
+            if (v != null && v.trim().length() > 0) return Integer.parseInt(v.trim());
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
+
+    /** dp for a device-pixel count at this density (framework rounding: px/density). */
+    static int dp(int px) {
+        return (int) Math.round(px * 160.0 / (double) DENSITY_DPI);
+    }
+
     static Configuration displayConfiguration() {
         Configuration cfg = new Configuration();
-        cfg.densityDpi = 420;
-        cfg.screenWidthDp = 411;
-        cfg.screenHeightDp = 842;
-        cfg.smallestScreenWidthDp = 411;
+        cfg.densityDpi = DENSITY_DPI;
+        cfg.screenWidthDp = dp(PANEL_W);
+        cfg.screenHeightDp = dp(PANEL_H);
+        cfg.smallestScreenWidthDp = dp(Math.min(PANEL_W, PANEL_H));
         cfg.orientation = Configuration.ORIENTATION_PORTRAIT;
         cfg.fontScale = 1.0f;
         cfg.setLocales(android.os.LocaleList.forLanguageTags("en-US"));
@@ -2522,12 +2557,12 @@ public final class LaunchMain {
             Class<?> cls = Class.forName("android.view.DisplayInfo");
             Object info = cls.getDeclaredConstructor().newInstance();
             for (String[] kv : new String[][]{
-                    {"displayId", "0"}, {"logicalWidth", "1080"},
-                    {"logicalHeight", "2400"}, {"appWidth", "1080"},
-                    {"appHeight", "2400"}, {"name", "Built-in Screen"},
+                    {"displayId", "0"}, {"logicalWidth", Integer.toString(PANEL_W)},
+                    {"logicalHeight", Integer.toString(PANEL_H)}, {"appWidth", Integer.toString(APP_W)},
+                    {"appHeight", Integer.toString(APP_H)}, {"name", "Built-in Screen"},
                     {"flags", "0"}, {"type", "0"},
                     {"rotation", "0"}, {"modeId", "0"},
-                    {"logicalDensityDpi", "420"}, {"state", "2"},
+                    {"logicalDensityDpi", Integer.toString(DENSITY_DPI)}, {"state", "2"},
                     {"colorMode", "0"}, {"installOrientation", "0"}}) {
                 String f = kv[0];
                 java.lang.reflect.Field fd = cls.getField(f);
@@ -2582,21 +2617,21 @@ public final class LaunchMain {
         Class<?> cls = Class.forName("android.view.DisplayInfo");
         Object info = cls.getDeclaredConstructor().newInstance();
         setField(cls, info, "displayId", 0);
-        setField(cls, info, "logicalWidth", 1080);
-        setField(cls, info, "logicalHeight", 2400);
-        setField(cls, info, "appWidth", 1080);
-        setField(cls, info, "appHeight", 2209);
-        setField(cls, info, "smallestNominalAppWidth", 1080);
-        setField(cls, info, "smallestNominalAppHeight", 2209);
-        setField(cls, info, "largestNominalAppWidth", 1080);
-        setField(cls, info, "largestNominalAppHeight", 2209);
+        setField(cls, info, "logicalWidth", PANEL_W);
+        setField(cls, info, "logicalHeight", PANEL_H);
+        setField(cls, info, "appWidth", APP_W);
+        setField(cls, info, "appHeight", APP_H);
+        setField(cls, info, "smallestNominalAppWidth", APP_W);
+        setField(cls, info, "smallestNominalAppHeight", APP_H);
+        setField(cls, info, "largestNominalAppWidth", APP_W);
+        setField(cls, info, "largestNominalAppHeight", APP_H);
         setField(cls, info, "name", "Built-in Screen");
         setField(cls, info, "flags", 0);
         setField(cls, info, "type", 1);
         setField(cls, info, "rotation", 0);
         setField(cls, info, "modeId", 1);
         setField(cls, info, "defaultModeId", 1);
-        setField(cls, info, "logicalDensityDpi", 420);
+        setField(cls, info, "logicalDensityDpi", DENSITY_DPI);
         setField(cls, info, "state", 2);
         setField(cls, info, "colorMode", 0);
         setField(cls, info, "installOrientation", 0);

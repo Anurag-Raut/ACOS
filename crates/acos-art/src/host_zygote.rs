@@ -228,11 +228,25 @@ pub fn run_template(
             for (name, value) in &slot.env {
                 std::env::set_var(name, value);
             }
+            // The warm-zygote child launches with the same display geometry the
+            // caller asked for (the engine forwards it as `ACOSLAUNCH_*`); the
+            // defaults keep the reference-device profile.
+            let geometry = |name: &str, fallback: u32| -> u32 {
+                std::env::var(name)
+                    .ok()
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(fallback)
+            };
             let child_opts = LaunchOpts {
                 apk: slot.apk.clone(),
                 until: slot.until.clone(),
                 out: Some(slot.out.clone()),
                 timeout: Duration::from_secs(slot.timeout_s.max(1)),
+                width: geometry("ACOSLAUNCH_WIDTH", 1080),
+                panel_height: geometry("ACOSLAUNCH_PANEL_HEIGHT", 2400),
+                density_dpi: geometry("ACOSLAUNCH_DENSITY", 420),
+                status_inset: geometry("ACOSLAUNCH_STATUS_INSET", 128),
+                nav_inset: geometry("ACOSLAUNCH_NAV_INSET", 63),
             };
             let host = prebuilt.take();
             let code = match crate::launch::launch_session(root, &child_opts, host, &shims) {

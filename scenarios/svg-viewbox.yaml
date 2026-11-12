@@ -1,0 +1,46 @@
+# svg-viewbox: the viewBox-to-view transform invariant (GR1 regression test).
+#
+# What it guards: react-native-svg's Android renderer computes its content
+# transform from `canvas.getWidth()/getHeight()` inside `View.onDraw`
+# (`SvgView.drawChildren`) and from `PathParser`'s density-scaled path data. That
+# arithmetic is only correct when the canvas handed to a view is measured in
+# *that view's* device pixels — which is what hardware-accelerated Android
+# guarantees, because `View.draw` records into the view's own `RenderNode`.
+#
+# The `svg-viewbox` fixture reproduces the arithmetic with plain framework APIs
+# and prints its inputs and outcome as text, so the invariant is checkable
+# without Gaten, react-native-svg, or a device:
+#
+#   view=270x116 canvas=… density=2.5 canvasIsViewPx=true … inkInsideView=true
+#
+# On the ACOS launch guest (software `ViewRootImpl` canvas) the canvas is the
+# window, so `canvasIsViewPx` is false and the ink overflows the view — the same
+# defect that draws Gaten's welcome wordmark ~4x too large (results/gaten/GR1.md
+# §5). This scenario is therefore RED on the engine as of GR1 and must stay in
+# the tree: it is the smallest reproduction of the open graphics-layer defect.
+#
+# Rebuild the fixture: tools/build-apps.sh (fixtures/build/apps/svg-viewbox.apk).
+version: 1
+name: svg-viewbox
+description: >-
+  Assert that a view's onDraw canvas is measured in that view's own device
+  pixels (the RN-SVG viewBox transform invariant) and that the density-scaled
+  viewBox ink stays inside the 270x116 px view.
+app: fixtures/build/apps/svg-viewbox.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 60000}
+steps:
+  - launch: {activity: dev.acos.fixtures.svgviewbox/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: svg_metrics}, timeout_ms: 10000}
+  - assert_text:
+      selector: {id: svg_metrics}
+      text: {contains: "canvasIsViewPx=true"}
+  - assert_text:
+      selector: {id: svg_metrics}
+      text: {contains: "inkInsideView=true"}
+  - capture: {name: svg-viewbox, format: png, fresh: true}
