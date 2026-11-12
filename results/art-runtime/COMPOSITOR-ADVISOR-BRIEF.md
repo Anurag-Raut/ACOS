@@ -1,5 +1,17 @@
 # Compositor direction: advisor brief (status as of 2026-11-12 05:18 UTC; Spike A update 05:55)
 
+> **CORRECTION 06:0x UTC: W54 found the real dialog cause** (`b845e8e`). It was **not** C1
+> and **not** `destinationFrame`; Spike B's hypothesis is rejected for this bug. The
+> trace shows `destination_frame` == the buffer size, crop empty and matrix identity.
+> ACOS's **WMS** (the system_server role) ignored `LayoutParams.surfaceInsets`:
+> relayout returned a 1024×513 surface where stock returns frame + 2·84 insets
+> (1192×681), and placed the layer at the frame rather than at frame − insets.
+> The guest's `ThreadedRenderer` therefore drew the card offset by the 84-px inset
+> and clipped at the buffer edge. The bug predates W47. Fixed in WMS. Host-pixel
+> assertions fail before the fix and pass after; 8 regression scenarios pass.
+> **Implication: neither B1 nor A1 would have prevented this bug.** It sits in our
+> WMS reimplementation, not the compositor.
+>
 > **UPDATE 05:55 UTC: Spike A is DONE** (`c3cd99c`, `results/art-runtime/SPIKE-A.md`). §5's
 > "Spike A" section below describes the plan; these are the results.
 > - The stock `surfaceflinger` **boots headless and stays alive** with the ACOS binder
