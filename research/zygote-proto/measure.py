@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
-"""Z1: measure the Zygote prototype.
+"""Z2: measure the sandboxed Zygote prototype.
 
-Starts research/zygote-proto/run.sh, waits until the parent reports HOLD_START
-(children idle after their work), samples /proc/<pid>/smaps_rollup and the
-grouped /proc/<pid>/smaps of the parent and every child, then reports
-Rss/Pss/Private_Dirty/Shared_Clean/Shared_Dirty plus the dalvik-specific
-mappings (boot image, zygote space, region/main/non-moving spaces).
+Starts research/zygote-proto/run.sh, waits until the parent reports HOLD_START,
+samples /proc/<pid>/smaps_rollup and the grouped /proc/<pid>/smaps of the parent
+and every process of the child tree, then reports Rss/Pss/Private_Dirty of the
+zygote, the ART apps (comm z2app) and the two sandbox helper processes
+(comm z2ns, z2init).
 
-    tools: python3 measure.py --n 2 --hold 6000 --preload 800 --out results/art-runtime/Z1-N2.json
-
-Everything runs under the ART lock: the caller wraps this script in
-tools/art-runtime/run-exclusive.sh + tools/guarded.sh (see results/art-runtime/Z1.md).
+    tools: python3 measure.py --n 2 --hold 6000 --preload 800 --out ...
+Everything runs under the ART lock (see results/art-runtime/Z2.md).
 """
 import argparse
 import json
 import os
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-ROOT = Path("/home/Qui/Projects/acos")
-RUN = ROOT / "research/zygote-proto/run.sh"
+HERE = Path(__file__).resolve().parent
+RUN = HERE / "run.sh"
+CACHE = Path(os.environ.get("ACOS_CACHE", "/home/Qui/Projects/acos/.cache"))
 
 ROLLUP = ["Rss", "Pss", "Private_Clean", "Private_Dirty", "Shared_Clean",
           "Shared_Dirty", "Swap"]
-# which smaps groups we care about, by name substring
 GROUPS = {
     "boot_image": ("boot.art", "boot.oat", "boot-framework", "boot-core"),
     "dalvik_zygote_space": ("dalvik-zygote",),
@@ -34,7 +31,6 @@ GROUPS = {
     "dalvik_main_space": ("dalvik-main space", "dalvik-non moving", "dalvik-LOS",
                           "dalvik-rosalloc"),
     "dalvik_all_anon": ("dalvik-",),
-    "zygote_flag": ("dalvik-zygote flag",),
 }
 
 
@@ -56,14 +52,14 @@ def rollup(pid):
 
 
 def smaps_grouped(pid):
-    """{group: {Rss,Pss,Private_Dirty,...}} summed over matching mappings."""
     tot = {g: dict((f, 0) for f in ("Rss", "Pss", "Private_Dirty", "Shared_Clean",
-                                    "Shared_Dirty", "Shared_Hugetlb")) for g in GROUPS}
+                                    "Shared_Dirty")) for g in GROUPS}
     seen = {g: 0 for g in GROUPS}
     cur = None
     for line in read_text("/proc/%d/smaps" % pid).splitlines():
         if re.match(r"^[0-9a-f]+-[0-9a-f]+ ", line):
-            cur = line.split(" ", 5)[5].strip() if len(line.split(" ", 5)) > 5 else "[anon]"
+            parts = line.split(" ", 5)
+            cur = parts[5].strip() if len(parts) > 5 else "[anon]"
             continue
         if not line or line[0] not in "RPSs" or cur is None:
             continue
@@ -79,27 +75,14 @@ def smaps_grouped(pid):
     return tot, seen
 
 
-def children_of(pid):
-    kids = []
-    for d in os.listdir("/proc"):
-        if not d.isdigit():
-            continue
-        st = read_text("/proc/%s/stat" % d)
-        if not st:
-            continue
-        try:
-            fields = st[st.rindex(")") + 2:].split()
-            ppid = int(fields[1])
-        except (ValueError, IndexError):
-            continue
-        if ppid == pid:
-            kids.append(int(d))
-    return kids
+def read_int_file(path, default=-1):
+    try:
+        return int(read_text(path).strip())
+    except ValueError:
+        return default
 
 
 def find_candidates():
-    """Every pid whose cmdline names our ZygoteMain (bwrap's supervisor carries a
-    copy of the target argv, so there can be more than one)."""
     out = []
     for d in os.listdir("/proc"):
         if not d.isdigit():
@@ -140,23 +123,8 @@ def subtree(roots):
     return seen
 
 
-def mapping_hist(pid):
-    """{name: {Rss,Pss,Private_Dirty}} for every mapping of one process."""
-    out = {}
-    cur = None
-    for line in read_text("/proc/%d/smaps" % pid).splitlines():
-        if re.match(r"^[0-9a-f]+-[0-9a-f]+ ", line):
-            parts = line.split(" ", 5)
-            cur = parts[5].strip() if len(parts) > 5 else "[anon]"
-            out.setdefault(cur, {"Rss": 0, "Pss": 0, "Private_Dirty": 0, "Shared_Clean": 0})
-            continue
-        if not line or cur is None or line[0] not in "RPSs":
-            continue
-        k, _, v = line.partition(":")
-        k = k.strip()
-        if k in ("Rss", "Pss", "Private_Dirty", "Shared_Clean"):
-            out[cur][k] += int(v.split()[0])
-    return out
+def comm(pid):
+    return read_text("/proc/%d/comm" % pid).strip()
 
 
 def sample(pids):
@@ -167,8 +135,8 @@ def sample(pids):
             continue
         g, seen = smaps_grouped(pid)
         rec[pid] = {"rollup": r, "groups": g, "mappings": seen,
-                    "names": mapping_hist(pid),
-                    "raw_smaps": read_text("/proc/%d/smaps" % pid),
+                    "comm": comm(pid),
+                    "threads": read_int_file("/proc/%d/status" % pid),
                     "cmdline": read_text("/proc/%d/cmdline" % pid).replace("\0", " ")[:120]}
     return rec
 
@@ -183,49 +151,58 @@ def main():
     ap.add_argument("--log", default="")
     args = ap.parse_args()
 
-    log = Path(args.log) if args.log else Path("/home/Qui/Projects/acos/.cache/z1/logs/run-n%d.log" % args.n)
+    log = Path(args.log) if args.log else CACHE / ("z2-logs/run-n%d.log" % args.n)
     log.parent.mkdir(parents=True, exist_ok=True)
     cmd = [str(RUN), "fork", str(args.n), str(args.hold), str(args.preload)]
     with open(log, "w") as fh:
         proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT)
         t0 = time.time()
-        start = None
-        while time.time() - t0 < 240:
+        while time.time() - t0 < 300:
             txt = read_text(log)
             if "HOLD_START" in txt or "PARENT_DONE" in txt or proc.poll() is not None:
-                start = time.time()
                 break
             time.sleep(0.05)
         time.sleep(args.settle)
         cands = find_candidates()
         allpids = subtree(cands) if cands else set()
         snap = sample(sorted(allpids))
-        # decide roles *while* the tree is alive: the ART parent is the largest
-        # process of the tree, its children are every other process with a
-        # non-trivial footprint (the rest is bwrap/supervisor glue)
+        # The ART zygote is the largest process of the tree (the app children
+        # are ~80 MB Rss, the zygote ~127 MB).
         parent = max(snap, key=lambda p: snap[p]["rollup"].get("Rss", 0)) if snap else None
-        pm = ppid_map()
-        kids = sorted(p for p in snap
-                      if parent and p != parent
-                      and snap[p]["rollup"].get("Rss", 0) > 10240)
+        roles = {}
+        for pid in snap:
+            if pid == parent:
+                roles[pid] = "zygote"
+            elif snap[pid]["comm"] == "z2app":
+                roles[pid] = "app"
+            elif snap[pid]["comm"] in ("z2ns", "z2init"):
+                roles[pid] = "sandbox-helper"
+            elif snap[pid]["rollup"].get("Rss", 0) > 10240:
+                roles[pid] = "other-large"
+            else:
+                roles[pid] = "other"
         proc.wait()
     text = read_text(log)
-
-    def field(name):
-        m = re.search(r"^%s(.*)$" % name, text, re.M)
-        return m.group(0).strip() if m else ""
 
     def numbers(key):
         return [int(x) for x in re.findall(r"%s=(\d+)" % key, text)]
 
+    def lines(prefix):
+        return re.findall(r"^%s.*$" % re.escape(prefix), text, re.M)
+
+    want = [p for p in snap if roles[p] in ("zygote", "app", "sandbox-helper", "other-large")]
     rec = {
         "n": args.n,
         "hold_ms": args.hold,
         "preload_limit": args.preload,
         "parent_pid": parent,
-        "child_pids": kids,
-        "snapshot": snap,
+        "roles": {str(p): roles[p] for p in snap},
+        "snapshot": {str(p): {"rollup": snap[p]["rollup"],
+                              "comm": snap[p]["comm"],
+                              "groups": snap[p]["groups"],
+                              "mappings": snap[p]["mappings"]} for p in want},
         "fork_to_post_fork_ms": numbers("fork_to_post_fork_ms"),
+        "sandbox_ms": numbers("sandbox_ms"),
         "fork_to_ready_ms": numbers("fork_to_ready_ms"),
         "cold": {"exec_to_main_ms": numbers("exec_to_main_ms"),
                  "exec_to_ready_ms": numbers("exec_to_ready_ms"),
@@ -234,72 +211,61 @@ def main():
             "inherited": sorted(set(re.findall(r"inherited=(-?\d+)", text))),
             "private": sorted(set(re.findall(r"private=(-?\d+)", text))),
             "ihash_String": sorted(set(re.findall(r"ihash_String=(-?\d+)", text))),
-            "threads": sorted(set(re.findall(r"threads=(\d+)", text))),
         },
+        "sandbox_rc": lines("sandbox_rc"),
+        "sandbox_ids": lines("sandbox_ids"),
+        "sandbox_ns": lines("sandbox_ns"),
+        "sandbox_seccomp": lines("sandbox_seccomp"),
+        "isolation": lines("iso_"),
+        "parent_private": lines("parent_private"),
+        "parent_ns": lines("parent_ns "),
         "gc_lines": re.findall(r"^gc pid=\d+.*$", text, re.M),
         "thread_lines": re.findall(r"^threads pid=\d+.*$", text, re.M),
         "reap_lines": re.findall(r"^(?:late_fork_)?reap\w+ .*$", text, re.M),
         "late_fork": re.findall(r"^late_fork .*$", text, re.M),
+        "child_exit": lines("child_exit"),
         "log": str(log),
     }
 
-    # table
-    print("\n== Z1 memory snapshot (N=%d children + parent, %s) ==" % (args.n, time.strftime("%H:%M:%S")))
-    hdr = "%-7s %-10s %9s %9s %9s %9s %9s" % ("pid", "role", "Rss", "Pss", "PrivDirty", "SharedCln", "SharedDirty")
+    print("\n== Z2 memory snapshot (N=%d, %s) ==" % (args.n, time.strftime("%H:%M:%S")))
+    hdr = "%-7s %-15s %-9s %9s %9s %9s %9s %9s" % (
+        "pid", "role", "comm", "Rss", "Pss", "PrivDirty", "SharedCln", "SharedDirty")
     print(hdr)
     totals = dict((k, 0) for k in ("Rss", "Pss", "Private_Dirty", "Shared_Clean", "Shared_Dirty"))
-    for pid, r in sorted(snap.items(), key=lambda kv: kv[0]):
-        role = "parent" if pid == parent else "child"
-        u = r["rollup"]
-        print("%-7d %-10s %9d %9d %9d %9d %9d" % (pid, role, u.get("Rss", 0), u.get("Pss", 0),
-                                                  u.get("Private_Dirty", 0), u.get("Shared_Clean", 0),
-                                                  u.get("Shared_Dirty", 0)))
-        for k in totals:
-            totals[k] += u.get(k, 0)
-    print("%-7s %-10s %9d %9d %9d %9d %9d" % ("TOTAL", "", totals["Rss"], totals["Pss"],
-                                              totals["Private_Dirty"], totals["Shared_Clean"],
-                                              totals["Shared_Dirty"]))
-    print("\n-- grouped mappings (KiB, summed over the processes above) --")
-    for g in GROUPS:
-        vals = dict((k, sum(r["groups"][g][k] for r in snap.values())) for k in
-                    ("Rss", "Pss", "Private_Dirty", "Shared_Clean"))
-        nmap = sum(r["mappings"][g] for r in snap.values())
-        if nmap:
-            print("%-22s maps=%-3d Rss=%-8d Pss=%-8d PrivDirty=%-8d SharedClean=%d"
-                  % (g, nmap, vals["Rss"], vals["Pss"], vals["Private_Dirty"], vals["Shared_Clean"]))
-    print("\n-- mapping names, per process (KiB; the dalvik/image ones only) --")
-    for pid, r in sorted(snap.items(), key=lambda kv: kv[0]):
-        role = "parent" if pid == parent else "child"
-        print(" %s %d:" % (role, pid))
-        for name, v in sorted(r["names"].items(), key=lambda kv: -kv[1]["Rss"]):
-            if v["Rss"] < 256:
-                continue
-            if not any(t in name for t in ("dalvik", "boot", "[heap]", "scudo", "libart")):
-                continue
-            print("    %-46s Rss=%-8d Pss=%-8d PrivDirty=%-6d SharedClean=%d"
-                  % (name, v["Rss"], v["Pss"], v["Private_Dirty"], v["Shared_Clean"]))
+    app_totals = dict((k, 0) for k in totals)
+    for pid in sorted(want, key=lambda p: (roles[p] != "zygote", p)):
+        u = snap[pid]["rollup"]
+        print("%-7d %-15s %-9s %9d %9d %9d %9d %9d" % (
+            pid, roles[pid], snap[pid]["comm"], u.get("Rss", 0), u.get("Pss", 0),
+            u.get("Private_Dirty", 0), u.get("Shared_Clean", 0), u.get("Shared_Dirty", 0)))
+        if roles[pid] in ("zygote", "app"):
+            for k in totals:
+                totals[k] += u.get(k, 0)
+        if roles[pid] == "app":
+            for k in app_totals:
+                app_totals[k] += u.get(k, 0)
+    print("%-7s %-15s %-9s %9d %9d %9d %9d %9d" % (
+        "TOTAL", "zygote+apps", "", totals["Rss"], totals["Pss"],
+        totals["Private_Dirty"], totals["Shared_Clean"], totals["Shared_Dirty"]))
+    print("%-7s %-15s %-9s %9d %9d %9d %9d %9d" % (
+        "TOTAL", "apps-only", "", app_totals["Rss"], app_totals["Pss"],
+        app_totals["Private_Dirty"], app_totals["Shared_Clean"], app_totals["Shared_Dirty"]))
     print("\n-- timing --")
     print("fork->post_fork ms:", rec["fork_to_post_fork_ms"])
+    print("sandbox setup ms  :", rec["sandbox_ms"])
     print("fork->ready ms    :", rec["fork_to_ready_ms"])
-    print("cold exec->main ms:", rec["cold"]["exec_to_main_ms"],
-          " cold exec->ready ms:", rec["cold"]["exec_to_ready_ms"])
     print("statics           :", rec["static_check"])
-    print("gc lines          :", len(rec["gc_lines"]))
-    for line in rec["gc_lines"]:
+    for line in rec["reap_lines"] + rec["child_exit"] + rec["late_fork"]:
         print("   ", line)
-    for line in rec["thread_lines"]:
-        print("   ", line)
-    for line in rec["reap_lines"] + rec["late_fork"]:
-        print("   ", line)
+    print("\n-- sandbox / isolation lines --")
+    for key in ("sandbox_rc", "sandbox_ids", "sandbox_ns", "sandbox_seccomp",
+                "parent_private", "parent_ns", "isolation"):
+        for line in rec[key]:
+            print("   ", line)
 
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        raw = Path(str(out) + ".smaps")
-        with open(raw, "w") as fh:
-            for pid, r in rec["snapshot"].items():
-                fh.write("### pid %d %s\n%s\n" % (pid, r.get("cmdline", ""), r.pop("raw_smaps", "")))
-        rec["raw_smaps_file"] = str(raw)
         out.write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
         print("\nwrote", out)
 
