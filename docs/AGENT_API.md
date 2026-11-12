@@ -443,6 +443,76 @@ Other action shapes:
 Common errors: `ELEMENT_NOT_FOUND`, `SESSION_NOT_FOUND`, `TIMEOUT`,
 `APP_NOT_RESPONDING`, `NO_DISPLAY`, `STALE_REF`.
 
+### 8.6.1 Settle modes: `fast` navigation vs `strict` verification (P1)
+
+`acos_tap`, `acos_text`, `acos_key` and an input `acos_action` accept an
+optional `settle` argument:
+
+```json
+{"base": {"request_id": "req_6", "session_id": "s_views"},
+ "id": "inc", "settle": "fast"}
+```
+
+* **`strict` (default, unchanged)** — the settled-frame rule: the C1 buffer
+  generation advanced, an in-guest tree probe saw the state the stored frame
+  belongs to, and no new buffer landed for 150 ms. Use it whenever the
+  observation is evidence.
+* **`fast`** — for navigation. The engine snapshots the tree *before* the input
+  is published, then binds the first probe tree that differs from that
+  baseline and the first C1 store after that probe sample. A framework
+  animation (for example a Button ripple) that keeps storing frames no longer
+  gates the reply, so the returned frame **may be mid-animation**. If no tree
+  change is observed within the bounded window
+  (`ACOSLAUNCH_FAST_WINDOW_MS`, default 100 ms = two 50 ms probe periods), the strict quiet rule runs
+  instead and the reply reports `state_changed: false`; fast never claims a
+  change it did not observe in the tree.
+
+Every input reply carries a `settle` object (also copied into
+`timing.input`):
+
+```json
+"settle": {
+  "mode": "fast",
+  "settled": true,
+  "ack_ms": 19,
+  "first_change_ms": 24,
+  "frame_ms": 39,
+  "state_changed": true,
+  "bound": "state-commit"
+}
+```
+
+| field | meaning |
+|---|---|
+| `mode` | `fast` or `strict`; the mode this observation was taken with |
+| `settled` | `true` only when a settled observation was returned; `false` on the documented no-fresh-frame failure |
+| `ack_ms` | publish → this gesture's own `FINISHED` acknowledgment. Focus/touch-mode acks queued at window attach are drained and discarded, never counted |
+| `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
+| `frame_ms` | publish → the C1 store the reply's frame is bound to (`null` when none) |
+| `state_changed` | in `fast` mode, the guest's tree-change verdict (`false` after a fallback); `null` in `strict`, where the host's pixel+tree comparison in `state_changed` on the input result is authoritative |
+| `bound` | `state-commit` / `quiet-fallback` (fast), `strict-quiet`, or `timeout` |
+
+An input verb can also return the tree in the same round trip:
+
+```json
+{"base": {"request_id": "req_6", "session_id": "s_views"},
+ "id": "inc", "settle": "fast", "observe": {"tree": true, "png": false}}
+```
+
+The reply then carries `tree` (plus `tree_max_nodes`, `tree_node_count`,
+`tree_truncated`) from the same settled acos-art reply that produced the ack,
+and the usual `frame` reference (`frame_seq`, `md5`, `captured_at`). No extra
+traversal is issued. `observe.png:true` is rejected on an input verb: use
+`acos_observe` for the PNG.
+
+**Assertions are always strict.** `acos_assert` rejects `settle:"fast"` with
+`INVALID_ARGUMENT`; `acos verify` assertions, `assert_screenshot` and
+`assert_region` never pass a settle option and always use the strict rule. A
+scenario cannot request fast for an assertion step. Acknowledgement is not
+success: a fast reply with `ack_ms` is still only a delivered input; the
+state change is whatever `settle.state_changed` (fast) or the host pixel+tree
+comparison (strict) actually measured.
+
 ### 8.7 `assert`
 
 Evaluate one assertion.

@@ -260,6 +260,11 @@ class Runner:
                 l for l in lines
                 if "BadParcelable" in l or "not fully consumed" in l
                 or "no root view" in l][:5]
+        if isinstance(value, dict) and isinstance(value.get("settle"), dict):
+            record["settle"] = value["settle"]
+            timing = value.get("timing") or {}
+            if isinstance(timing.get("input"), dict):
+                record["input_timing"] = timing["input"]
         if tool == "acos_observe" and isinstance(value, dict):
             shot = value.get("screenshot") or {}
             if isinstance(shot, dict):
@@ -288,10 +293,16 @@ class Runner:
                 args["apk"] = cfg["apk"]
             elif verb == "tap":
                 args["id"] = cfg["tap_id"]
+                if self.args.settle != "strict":
+                    args["settle"] = self.args.settle
             elif verb == "type":
                 args["text"] = cfg["type_text"]
+                if self.args.settle != "strict":
+                    args["settle"] = self.args.settle
             elif verb == "key":
                 args["code"] = 66  # KEYCODE_ENTER
+                if self.args.settle != "strict":
+                    args["settle"] = self.args.settle
             elif verb == "screenshot":
                 args.update({"tree": False, "text": False, "png": True,
                              "screenshot": str(shot_path)})
@@ -507,6 +518,8 @@ def main(argv=None):
     parser.add_argument("--loops", type=int, default=12)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--runs", type=int, default=2)
+    parser.add_argument("--settle", choices=("strict", "fast"), default="strict",
+                        help="P1 settle mode for tap/type/key (default: strict)")
     parser.add_argument("--strict", action="store_true",
                         help="exit 1 when any gate fails (default: report only)")
     parser.add_argument("--allow-dirty", action="store_true",

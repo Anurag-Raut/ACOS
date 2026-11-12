@@ -573,9 +573,37 @@ impl InputHost {
             let responses = lock(&self.state).drain_acks(*token)?;
             for response in responses {
                 if let ConsumerResponse::Finished(ack) = response {
+                    // P1/W59: the framework's `NativeInputEventReceiver`
+                    // acknowledges FOCUS and TOUCH_MODE with
+                    // `finishInputEvent(seq, true)`
+                    // (`android_view_InputEventReceiver.cpp`), so their
+                    // `FINISHED` replies sit queued from window attach until
+                    // the first input drains them. They are *not* this
+                    // gesture's acks: pushing them made the first tap return on
+                    // two stale acks (latency measured from attach) and charged
+                    // the tap's real acks to the next gesture. Only the
+                    // sequences this gesture published count.
+                    if !seqs.contains(&ack.seq) {
+                        if std::env::var_os("ACOS_INPUT_TRACE").is_some() {
+                            eprintln!(
+                                "ACOSI2 stale-ack token={:#x} seq={} handled={} latency_ms={} discarded",
+                                token.0,
+                                ack.seq,
+                                ack.handled,
+                                ack.latency
+                                    .map(|l| l.as_micros() as f64 / 1000.0)
+                                    .map(|ms| format!("{ms:.2}"))
+                                    .unwrap_or_else(|| "untracked".into())
+                            );
+                        }
+                        continue;
+                    }
                     acks.push(InjectedAck {
                         seq: ack.seq,
                         handled: ack.handled,
+                        // `InputChannelRegistry` measured publish -> this
+                        // matching `FINISHED`, so this is the real delivery
+                        // latency, never a stale ack's attach time.
                         latency_us: ack.latency.map(|l| l.as_micros() as u64),
                     });
                 }
@@ -790,4 +818,79 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[must_use]
 pub fn default_token(d: &InputDispatch) -> Option<BinderId> {
     d.newest_token()
+}
+
+#[cfg(test)]
+mod ack_accounting_tests {
+    use super::*;
+    use crate::input_channel::{InputMessage, LoopbackConsumer};
+
+    const TOKEN: BinderId = BinderId(0x7701);
+
+    /// P1/W59: focus and touch-mode are acknowledged when the window attaches,
+    /// before any gesture exists. Those `FINISHED` replies must be drained and
+    /// discarded, and the tap must report its *own* publish -> `FINISHED`
+    /// latency; counting the stale pair made the first tap look instantaneous
+    /// and the next gesture pay for it.
+    #[test]
+    fn stale_focus_and_touch_mode_acks_are_never_counted_as_the_taps() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/counter)/@0x10")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+
+        let mut stale = Vec::new();
+        for _ in 0..2 {
+            match guest.recv().expect("recv").expect("registration message") {
+                InputMessage::TouchMode { seq, .. } | InputMessage::Focus { seq, .. } => {
+                    stale.push(seq);
+                }
+                other => panic!("unexpected registration message {other:?}"),
+            }
+        }
+        for seq in &stale {
+            guest.send_finished(*seq, true).expect("stale ack");
+        }
+
+        let state = Arc::new(Mutex::new(dispatch));
+        let host = InputHost {
+            state: Arc::clone(&state),
+            relayout_tx: None,
+        };
+        let acker = thread::spawn(move || {
+            let mut acked = 0;
+            while acked < 2 {
+                while let Some(message) = guest.recv().expect("recv") {
+                    if let InputMessage::Motion { seq, .. } = message {
+                        guest.send_finished(seq, true).expect("tap ack");
+                        acked += 1;
+                    }
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let gesture = host
+            .tap(10.0, 20.0, Duration::from_secs(2))
+            .expect("tap");
+        acker.join().expect("acker");
+
+        assert_eq!(gesture.seqs.len(), 2);
+        assert_eq!(gesture.acks.len(), 2, "only the tap's own two acks");
+        let mut got: Vec<u32> = gesture.acks.iter().map(|ack| ack.seq).collect();
+        got.sort_unstable();
+        let mut want = gesture.seqs.clone();
+        want.sort_unstable();
+        assert_eq!(got, want, "the tap's own sequences, never the stale pair");
+        assert!(
+            gesture.acks.iter().all(|ack| !stale.contains(&ack.seq)),
+            "stale focus/touch-mode acks were counted as the tap's"
+        );
+        assert!(
+            gesture.acks.iter().all(|ack| ack.latency_us.is_some()),
+            "a matching ack carries its real publish -> FINISHED latency"
+        );
+    }
 }

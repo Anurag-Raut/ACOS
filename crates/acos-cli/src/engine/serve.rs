@@ -667,6 +667,14 @@ impl ServeEngine {
                 let p3_t_outcome = m5_now_us();
                 let mut result = result;
                 result["session_id"] = json!(id);
+                if matches!(
+                    tool,
+                    "acos_tap" | "acos_text" | "acos_key" | "acos_action"
+                ) {
+                    if let Err(error) = attach_observation(&mut session, &mut result, args) {
+                        return art_error(request_id, Some(id), trust, &error);
+                    }
+                }
                 label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -957,8 +965,29 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
     match tool {
         "acos_tap" | "acos_text" | "acos_key" | "acos_action" => {
             if let Some(input) = session.last_input_timing() {
+                let mut input_json = input.to_json();
+                // P1: copy the guest's settle block into `timing.input` as
+                // well as the reply's top-level `settle`, so either consumer
+                // sees the same five phase fields.
+                if let (Some(settle), Some(input_map)) =
+                    (session.last_input_settle(), input_json.as_object_mut())
+                {
+                    for key in [
+                        "mode",
+                        "settled",
+                        "ack_ms",
+                        "first_change_ms",
+                        "frame_ms",
+                        "state_changed",
+                        "bound",
+                    ] {
+                        if let Some(value) = settle.get(key) {
+                            input_map.insert(key.to_string(), value.clone());
+                        }
+                    }
+                }
                 if let Some(map) = timing.as_object_mut() {
-                    map.insert("input".into(), input.to_json());
+                    map.insert("input".into(), input_json);
                 }
             }
         }
@@ -1131,8 +1160,10 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
 }
 
 fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let settle = requested_settle(args)?;
     if let Some(id) = args.get("id").and_then(Value::as_str) {
         let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
+        session.set_settle_mode(settle);
         session.begin_input();
         let bounds = target.bounds;
         session.tap_in_window(
@@ -1143,6 +1174,7 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         return Ok(input_result(session, "tap", json!({"id": id})));
     }
     if let Some(text) = args.get("text").and_then(Value::as_str) {
+        session.set_settle_mode(settle);
         session.begin_input();
         session.tap_text(text)?;
         return Ok(input_result(session, "tap", json!({"text": text})));
@@ -1156,12 +1188,14 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
             detail: "acos_tap needs `id`, `text`, or both `x` and `y`".to_string(),
         });
     };
+    session.set_settle_mode(settle);
     session.begin_input();
     session.tap(x as i32, y as i32)?;
     Ok(input_result(session, "tap", json!({"x": x, "y": y})))
 }
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let settle = requested_settle(args)?;
     let Some(text) = args.get("text").and_then(Value::as_str) else {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
@@ -1182,6 +1216,7 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
              (tap it first). Raw keys are not injected into a non-editable view.",
         ));
     }
+    session.set_settle_mode(settle);
     session.begin_input();
     session.type_text(text)?;
     Ok(input_result(session, "text", json!({"text": text})))
@@ -1210,13 +1245,16 @@ fn is_editable_class(class: &str) -> bool {
 }
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let settle = requested_settle(args)?;
     let code = args.get("code").cloned().unwrap_or(Value::Null);
     let value = if let Some(name) = code.as_str() {
         let name = name.to_ascii_lowercase();
+        session.set_settle_mode(settle);
         session.begin_input();
         session.key(&name)?;
         json!({"key": name})
     } else if let Some(code) = code.as_i64() {
+        session.set_settle_mode(settle);
         session.begin_input();
         session.key_code_i32(code as i32)?;
         json!({"code": code})
@@ -1231,7 +1269,13 @@ fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 }
 
 fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
-    let action = args.get("action").cloned().unwrap_or(Value::Null);
+    let mut action = args.get("action").cloned().unwrap_or(Value::Null);
+    // A top-level `settle` applies to the inner input verb as well.
+    if let (Some(settle), Some(object)) =
+        (args.get("settle"), action.as_object_mut())
+    {
+        object.entry("settle").or_insert_with(|| settle.clone());
+    }
     let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
     match kind {
         "tap" => tap(session, &action),
@@ -1250,6 +1294,27 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
 /// a pass only when the node is found **and** its text matches; anything else is
 /// a structured failure (never a quiet `ok: true`).
 fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value, BackendError> {
+    // P1: an assertion is strict by construction. A caller may pass
+    // `settle:"strict"` (redundant); `settle:"fast"` is rejected rather than
+    // silently ignored, because fast frames may be mid-animation.
+    match args.get("settle").and_then(Value::as_str) {
+        None | Some("strict") => {}
+        Some("fast") => {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "acos_assert always uses strict settle: fast frames may be                          mid-animation and can never justify an assertion"
+                    .to_string(),
+            })
+        }
+        Some(other) => {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!(
+                    "settle must be \"fast\" or \"strict\" (got {other:?}); assertions only accept strict"
+                ),
+            })
+        }
+    }
     if trust == Trust::Untrusted {
         return Err(BackendError::Failed {
             code: ErrorCode::InsufficientHostEvidence,
@@ -1427,8 +1492,75 @@ fn reset(session: &mut ArtSession) -> Result<Value, BackendError> {
     }))
 }
 
+/// P1 part 3: `observe: {tree:true, png:false}` on an input verb.
+///
+/// The acos-art input reply already carries the settled tree and the bound C1
+/// frame; `absorb` caches both. Attaching the cached tree here returns ack +
+/// changed tree + frame reference in the **same** serve round trip, with no
+/// extra traversal. The frame reference itself is added by `label_frame`.
+fn attach_observation(
+    session: &mut ArtSession,
+    result: &mut Value,
+    args: &Value,
+) -> Result<(), BackendError> {
+    let Some(observe) = args.get("observe") else {
+        return Ok(());
+    };
+    let Some(observe) = observe.as_object() else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "observe must be an object, for example {\"tree\":true,\"png\":false}"
+                .to_string(),
+        });
+    };
+    let want_tree = observe.get("tree").and_then(Value::as_bool).unwrap_or(false);
+    let want_png = observe.get("png").and_then(Value::as_bool).unwrap_or(false);
+    if want_png {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "observe.png is not available on an input verb; the reply's `frame` \
+                     reference is returned and `acos_observe` serves the PNG"
+                .to_string(),
+        });
+    }
+    if !want_tree {
+        return Ok(());
+    }
+    let max_nodes = observe
+        .get("max_nodes")
+        .and_then(Value::as_u64)
+        .unwrap_or(2000) as usize;
+    let tree = session.ensure_bound_tree()?;
+    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    if let Some(object) = result.as_object_mut() {
+        object.insert("tree".into(), tree_value);
+        object.insert("tree_max_nodes".into(), json!(max_nodes));
+        object.insert("tree_node_count".into(), json!(node_count));
+        object.insert("tree_truncated".into(), json!(truncated));
+        object.insert(
+            "observe".into(),
+            json!({"tree": true, "png": false, "round_trip": "same-acos-art-reply"}),
+        );
+    }
+    Ok(())
+}
+
+fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
+    match args.get("settle").and_then(Value::as_str) {
+        None | Some("strict") => Ok("strict"),
+        Some("fast") => Ok("fast"),
+        Some(other) => Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "settle must be \"fast\" or \"strict\" (got {other:?})"
+            ),
+        }),
+    }
+}
+
 fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
     let delivery = session.last_input_delivery();
+    let settle = session.last_input_settle().cloned();
     let (delivered, state_changed, acks) = match delivery {
         Some(delivery) => (
             delivery.delivered,
@@ -1451,7 +1583,8 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
         "state_changed": state_changed,
         "acks": acks,
         "target": target,
-        "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison",
+        "settle": settle,
+        "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
     })
 }
 

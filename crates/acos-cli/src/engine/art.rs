@@ -155,6 +155,13 @@ pub struct ArtSession {
     last_input_timing: Option<InputTiming>,
     /// Host-observed phase timings of the most recent tree/capture command.
     last_phase: Option<PhaseTiming>,
+    /// P1: the guest's settle block for the most recent input (`mode`, `settled`,
+    /// `ack_ms`, `first_change_ms`, `frame_ms`, `state_changed`). Opaque JSON:
+    /// it is guest-reported and copied, never synthesised.
+    last_input_settle: Option<serde_json::Value>,
+    /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
+    /// verb; the default is strict.
+    settle_mode: &'static str,
     closed: bool,
 }
 
@@ -603,6 +610,16 @@ fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
     }
 }
 
+/// P1: the guest's own fast-mode verdict, when it reported one. `None` means
+/// strict mode, where the host's pixel+tree comparison remains authoritative.
+fn settle_state_changed(reply: &serde_json::Value) -> Option<bool> {
+    let settle = reply.get("settle")?;
+    if settle.get("mode").and_then(|v| v.as_str()) != Some("fast") {
+        return None;
+    }
+    settle.get("state_changed").and_then(|v| v.as_bool())
+}
+
 /// Structural signature of a UI tree: its nodes and their attributes, with no
 /// dependence on pixels, frame numbers or timestamps.
 fn tree_signature(tree: &UiTree) -> u64 {
@@ -862,6 +879,8 @@ impl ArtSession {
             settle: SettleStats::default(),
             last_input_timing: None,
             last_phase: None,
+            last_input_settle: None,
+            settle_mode: "strict",
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -1009,6 +1028,18 @@ impl ArtSession {
     /// Host-observed phase timings of the most recent input command.
     pub fn last_input_timing(&self) -> Option<&InputTiming> {
         self.last_input_timing.as_ref()
+    }
+
+    /// P1: set the settle mode for the next input command (`fast` navigation or
+    /// the default `strict`). Serve owns the per-verb choice; assertions never
+    /// call this with `fast`.
+    pub fn set_settle_mode(&mut self, mode: &'static str) {
+        self.settle_mode = if mode == "fast" { "fast" } else { "strict" };
+    }
+
+    /// P1: the guest's settle block for the most recent input, verbatim.
+    pub fn last_input_settle(&self) -> Option<&serde_json::Value> {
+        self.last_input_settle.as_ref()
     }
 
     /// Host-observed phase timings of the most recent tree/capture command.
@@ -1306,6 +1337,11 @@ impl ArtSession {
         request: serde_json::Value,
         context: &str,
     ) -> Result<(), BackendError> {
+        let mut request = request;
+        if let Some(object) = request.as_object_mut() {
+            object.insert("settle".into(), serde_json::json!(self.settle_mode));
+        }
+        self.last_input_settle = None;
         let started = Instant::now();
         let mut timing = InputTiming {
             frame_seq_before: self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
@@ -1357,7 +1393,15 @@ impl ArtSession {
                 // point-resolution traversal). Both verdicts then agree by
                 // construction: equal hashes are "delivered, no visual change",
                 // different hashes are a state change the executor also sees.
-                let visual_change = state_changed(baseline.as_ref(), self.cached.as_ref());
+                let mut visual_change = state_changed(baseline.as_ref(), self.cached.as_ref());
+                // P1: in fast mode the guest bound a probe sample that differs
+                // from the pre-action tree (or explicitly fell back without a
+                // change). That verdict wins so a mid-animation frame is never
+                // reported as a state change the tree did not show.
+                self.last_input_settle = reply.get("settle").cloned();
+                if let Some(changed) = settle_state_changed(&reply) {
+                    visual_change = changed;
+                }
                 self.last_input = Some(delivery(&reply, visual_change));
                 Ok(())
             }
@@ -1396,6 +1440,7 @@ impl ArtSession {
                     self.settle.recovered += 1;
                     self.settle.recovery_polls += 1;
                     self.settle.recovered_no_change += 1;
+                    self.last_input_settle = reply.get("settle").cloned();
                     self.last_input = Some(delivery(&reply, false));
                 } else {
                     self.settle_after_input(&reply, context)?;
@@ -1501,6 +1546,9 @@ impl ArtSession {
         }
         if budget_hit {
             self.settle.recovery_budget_hit += 1;
+        }
+        if self.last_input_settle.is_none() {
+            self.last_input_settle = reply.get("settle").cloned();
         }
         self.last_input = Some(InputDelivery {
             delivered: true,
