@@ -1,0 +1,58 @@
+{
+  "assertions": [
+    {
+      "diff": {
+        "actual": {
+          "distinct_colors": 1,
+          "frame_seq": 2,
+          "hash": "869ed904c16375f570ddac4b544936b94dca27dda7f31eaaab814c09606a2e34",
+          "region": [
+            100,
+            400,
+            100,
+            100
+          ]
+        },
+        "detail": "only 1 distinct colours, need >= 2",
+        "expected": {
+          "criteria": [
+            "min_distinct_colors=2"
+          ]
+        }
+      },
+      "kind": "region",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "duration_ms": 1615,
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "only 1 distinct colours, need >= 2",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/2.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/2.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-assert_region.json"
+    }
+  ],
+  "frame_seq": 2,
+  "index": 1,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "status": "fail",
+  "step": "assert_region",
+  "trust": "untrusted"
+}

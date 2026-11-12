@@ -18,30 +18,35 @@ Start/end stamps for the S7 work: see §6.
 
 ## 1. Overall verdict
 
-**NOT CERTIFIED for untrusted APKs today.** One host-safety defect in the window
-session is still open (a guest-declared `float[]` length is allocated unbounded,
-§4.2), and the probe/verdict channel cannot be made unforgeable in-process
-(§4.4). Both are small; §5 lists the exact conditions to move to
-**CERTIFIED-WITH-LIMITS**. Re-audit 2026-11-12 (§8.6): the `sizeCompatScale`
-defect is fixed and the verdict channel is fail-closed, but a **new gate-1
-blocker** remains (`parcelable.rs` `VAL_MAP` / `cursor.rs` guest-sized
-`Vec::with_capacity`), so the verdict is still **NOT CERTIFIED**; the exact
-remaining list is §8.7.
+**CERTIFIED-WITH-LIMITS (re-audit 2026-11-12, §8.6).** The S7 window-session
+`sizeCompatScale` defect is fixed, the gate-1 audit was repeated across
+`acos-services` / `acos-parcel` / `acos-binder-peer` and the remaining
+guest-sized allocations were bounded (`bebe650`; `gate1_bounds` 3/3 green), and
+the live hostile fixture exercises forged probes, a forged forest, probe spam,
+hostile layer/geometry counts and the `sizeCompatScale` bomb. Every §5 gate is
+met with evidence. The limits are explicit in §8.7: guest-asserted tree /
+markers / acks / logs can never justify an untrusted pass (host-observed pixels
+or input must corroborate), a frame fd may be an anonymous unlinked file rather
+than strictly `memfd` (§4.1), OCR is absent, and the 16-layer composite
+worst-case was not constructed (caps are enforced; hostile sessions measured
+67–80 MiB). The product path still refuses untrusted APKs by default; enabling
+them is an owner decision, not something this document does.
 
 | # | surface | verdict | basis |
 |---|---|---|---|
 | 1 | C1 compositor transaction (`android.ui.ISurfaceComposer` `SET_TRANSACTION_STATE`: `BufferData`, flattened `GraphicBuffer`, fds, ids, counts) | **CERTIFIED** (after S7) | `sandbox_c1` 9/9; 7/9 fail without the fix; `surface_client` 12/12 |
-| 2 | Window session (`addToDisplay*`, `relayout`, insets/config replies) | **NOT CERTIFIED** | `window_session.rs` allocates `vec![0.0f32; client_len]` from the request (§4.2). Everything else in the file is bounded/typed and covered by `window_session_*` tests |
+| 2 | Window session (`addToDisplay*`, `relayout`, insets/config replies) | **CERTIFIED** (after S7/W44) | `sizeCompatScale` is capped at 8 (`window_session.rs:373-381`); the live `i32::MAX` parcel is refused; the rest of the file is bounded/typed and covered by `window_session_*` tests |
 | 3 | Binder peer parcels → `ServiceHost` (malformed/oversized/fd-bomb to any service) | **CERTIFIED-WITH-LIMITS** | peer caps: `MAX_FRAME = 256 KiB`, `MAX_FDS = 16`; services decoders fail structured, never panic; not fuzzed at scale |
 | 4 | Input channel (guest → host acks) | **CERTIFIED-WITH-LIMITS** | fixed-size `FINISHED` (0x18) / `TIMELINE` (0x20) with exact-length checks, `MAX_POINTERS`; guest acks are guest-asserted (verdict trust, not containment) |
-| 5 | Probe / stdout / verdict channel (`ACOSPROBE`, `ACOSLAUNCH`, marker files) | **NOT CERTIFIED for verdict integrity** | the guest can print both prefixes and write its own marker files; containment is bounded (128 KiB line cap, tail caps) |
+| 5 | Probe / stdout / verdict channel (`ACOSPROBE`, `ACOSLAUNCH`, marker files) | **CERTIFIED-WITH-LIMITS for verdict integrity** | the guest can print both prefixes and write its own marker files, so they are labelled `guest-asserted`; untrusted tree/log/marker-only assertions fail closed (`INSUFFICIENT_HOST_EVIDENCE`); containment is bounded (8 MiB line cap, oversized lines drained/counted, tail caps) |
 | 6 | logd capture | **CERTIFIED-WITH-LIMITS** | 50 000-entry drop-oldest cap, `u16` tag/message lengths, datagram from the guest socket; the evidence file is guest-writable (S6 residual) |
 | 7 | gralloc/render/binder shims | **CERTIFIED-WITH-LIMITS** | S5/S6 guest corpus; the compositor now accepts only an anonymous regular file as a frame fd (§4.1) |
 
 The distinction that matters: **containment** (can a hostile guest allocate,
 read, kill or crash the host?) and **verdict integrity** (can it make ACOS
-report something untrue?). Item 5 is the only surface where containment is fine
-and integrity is not; item 2 is a containment defect.
+report something untrue?). Item 5 is containment-fine but integrity-limited by
+design (guest-asserted evidence is labelled and never sufficient alone); item 2
+was the last containment defect and is fixed.
 
 ## 2. Threat table (new surface)
 
@@ -55,10 +60,10 @@ and integrity is not; item 2 is a containment defect.
 | `setTransactionState` | composer / display / uncache / listener counts huge | ≤ 256 / 16 / 1024 / 64, rejected before the loop | CERTIFIED |
 | `setTransactionState` | duplicate/unknown buffer ids, cache eviction abuse | buffer cache is drop-oldest **16 entries**, layer handle pool **16**; an unknown cached id is a structured miss, never a blank frame | CERTIFIED |
 | fd exhaustion while storing | `dup` fails (`EMFILE`) | no panic: the cache entry is skipped and the frame is not stored (`try_clone` → `Option`) | CERTIFIED (defensive) |
-| window session `addToDisplay*` / `addToDisplayWithoutInputChannel` | `sizeCompatScale` length `i32::MAX` | **not bounded** (8 GiB `vec![0.0f32; len]`) | **NOT CERTIFIED** (P0, §4.2) |
+| window session `addToDisplay*` / `addToDisplayWithoutInputChannel` | `sizeCompatScale` length `i32::MAX` | capped at `MAX_SIZE_COMPAT_SCALE=8` before the allocation; structured refusal; live W44 parcel bomb refused | **CERTIFIED** (fixed after S7; §8.6) |
 | binder peer → any service | frame > 256 KiB, > 16 fds, malformed objects/offsets | peer rejects/caps; unused fd objects are dropped; decoders return structured errors | CERTIFIED-WITH-LIMITS |
 | input channel → host | arbitrary bytes where a `FINISHED`/`TIMELINE` reply is expected | exact size (0x18/0x20) + kind check; extra bytes rejected; pointer count ≤ `MAX_POINTERS` on the host→guest direction | CERTIFIED-WITH-LIMITS |
-| probe channel | app prints `ACOSPROBE {"seq":N,"tree":…}` to stdout; prints `ACOSLAUNCH {"outcome":"ok"…}`; writes `application-created.marker` / `activity-resumed.marker` | host accepts any probe line with the prefix (last `seq` wins) and reads the marker files from the guest-writable staging dir | **NOT CERTIFIED** for verdict integrity (§4.4) |
+| probe channel | app prints `ACOSPROBE {"seq":N,"tree":…}` to stdout; prints `ACOSLAUNCH {"outcome":"ok"…}`; writes `application-created.marker` / `activity-resumed.marker` | host still reads any probe line with the prefix (last `seq` wins) and the guest-written markers, but labels them `guest-asserted`; untrusted tree/log/marker-only assertions fail closed; 8 MiB line cap with oversized-line counting | **CERTIFIED-WITH-LIMITS for verdict integrity** (§8.6) |
 | logd | log spam, oversized tag/message, fake `OK guard=active` lines | 50 000-entry cap with drop counting; `u16` lengths; guard evidence file is guest-writable | CERTIFIED-WITH-LIMITS (§4.5) |
 | shim (gralloc/render/binder) | arbitrary guest code in the shim's address space | shim runs in the guest; the host only sees memfds and binder parcels (surface 1/3) | CERTIFIED-WITH-LIMITS |
 
@@ -331,52 +336,67 @@ The verdict channel is now fail-closed, but the §5 gate is not complete:
    third-party APKs remain refused.
 
 When items 1 and 4–5 are closed (and §4.2/§4.3/§4.5 residuals accepted or fixed),
-re-run the §6 verification and this section before changing the verdict.
+re-run the §6 verification and this section before changing the verdict. **W44
+closed item 1 on 2026-11-12** (live hostile parcels now in one APK); items 2–6
+are carried as the declared limits in §8.7.
 
-### 8.6 Re-audit 2026-11-12 (W44)
+### 8.6 Re-audit 2026-11-12 (W44, final)
 
-Audit basis: current `main` tree (`aa413a0` plus the W35/W36/W38/W40/W42
-working-tree changes present on 2026-11-12), not the S7/S8 snapshots. Start
-`date -u` **2026-11-12T03:31:44Z**. Every hostile run used our own fixtures and
-`ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`, under
+Audit basis: current tree at `6a12285` (W44 report) + `bebe650` (gate-1 bounds)
+and `22f82ed` (W42 layer teardown), not the S7/S8 snapshots. First W44 pass
+started `date -u` **2026-11-12T03:31:44Z** and found two unbounded allocations;
+the follow-up pass started **2026-11-12T04:04:18Z**, rebuilt
+`.cache/w44-target/release/{acos,acos-art}` and re-ran the gate audit, §6 and
+the live hostile scenarios. Final evidence timestamps: gate1_bounds
+**04:10:37–04:10:38Z**; §6 tests **04:06:31–04:09:07Z**; cleanup
+**04:10:22–04:10:33Z**; hostile parcel/forest/spam **04:09:16–04:09:30Z**;
+`counter` 11/11 **04:09:39–04:09:45Z**. Every hostile run used our own fixtures
+and `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`, under
 `tools/art-runtime/run-exclusive.sh --task W44*` +
-`tools/guarded.sh --mem 8G --time 900`. No third-party APK was run.
+`tools/guarded.sh --mem 8G --time 600|900`. No third-party APK was run.
 
-**Re-audit verdict: NOT CERTIFIED.** Gate 1 is still open: a guest-declared
-`HashMap` size in a `Bundle` is passed straight to `Vec::with_capacity`.
-`sizeCompatScale` itself is fixed, and every other gate below is met or met
-with the stated limits; the exact remaining list is in §8.7.
+**Re-audit verdict: CERTIFIED-WITH-LIMITS.** Every §5 gate is met with evidence
+from this run; the limits are named in §8.7. `CERTIFIED` (without limits) is not
+claimed because the guest-asserted evidence channel, the anonymous-unlinked
+frame-fd rule, OCR absence and the unmeasured 16-layer composite worst case are
+all real limits, even though containment is bounded.
 
 | §5 gate | status on the current code | file:line and evidence |
 |---|---|---|
-| 1. no guest length drives an allocation | **NOT MET** | `sizeCompatScale` is capped at 8 (`crates/acos-services/src/window_session.rs:373-381`) and the live parcel bomb is refused (`results/art-runtime/evidence/W44-hostile-parcel/art-frames/unsupported.jsonl`: `sizeCompatScale length 2147483647 exceeds 8`). **But** `read_dynamic`'s `VAL_MAP` allocates `Vec::with_capacity(size as usize)` from the wire before reading an entry (`crates/acos-services/src/parcelable.rs:2567`; `read_bundle` reaches it at `:2159`), and `CursorWindow::createFromParcel` does the same (`crates/acos-services/src/cursor.rs:357`). A 256 KiB peer frame can declare `i32::MAX`; that is a 34 GiB reservation. Other audited shapes are bounded: `surface_client.rs:2074`/`:2084` geometry, `:2976` callback ids, `:2739` GraphicBuffer header; `parcelable.rs` typed arrays are bounded by `parcel.remaining()`; `ime_wire.rs` and `input_channel.rs` have no guest-sized `Vec` (pointers capped at 16). |
-| 2. verdict integrity decision (§4.4/§7) | **MET WITH LIMITS** | `trust`/`evidence_provenance`/per-step labels in `crates/acos-cli/src/{trust,provenance}.rs`; untrusted tree/logs fail closed (`trust.rs:133-180`). Live 2026-11-12: forged two-window forest with `truncated:false` → `INSUFFICIENT_HOST_EVIDENCE` untrusted, `ELEMENT_NOT_FOUND` trusted (`results/art-runtime/evidence/W44-hostile-forest-{untrusted,trusted}/verdict.json`); forged text still fails the host-pixel region assertion (`S8-hostile-region`); trusted control still passes (`S8-hostile-trusted`). The markers, tree and input acks remain guest-asserted by design (§4.3/§4.5). |
-| 3. S1–S7 layers mandatory / fail closed | **MET** | `crates/acos-art/src/cgroup.rs` refuses on a missing cgroup (`CgroupUnavailable`), reads back `memory.max`, `cgroup.kill`; seccomp/Landlock/bwrap unchanged. 2026-11-12T03:57:07Z: `cargo test -p acos-art --test sandbox_s5 --test sandbox_s6` → **5 + 5 passed**. |
-| 4. per-session caps incl. composite and the 8 MiB probe line | **MET for the caps; worst-case composite not measured** | composite caps `MAX_COMPOSITE_LAYERS=16`, canvas ≤ 64 MiB, total input ≤ 256 MiB (`crates/acos-services/src/surface_client.rs:151-154`, enforced at `:840-915`); probe line read whole up to 8 MiB and oversized lines drained/counted (`crates/acos-art/src/launch.rs:1104`, `:1421-1484`). Hostile-session cgroup peak measured **81 MiB** (`W44-hostile-spam/art-frames/session-exit.json`, `memory.max=2048MiB`, `oom_kills=0`); the parcel run peaked **68 MiB** (`W44-hostile-parcel/.../session-exit.json`). The 16-layer × 64 MiB composite worst case was not constructed. |
-| 5. hostile exit teardown | **MET** | `crates/acos-art/src/launch.rs:1617-1626` (`kill_guest`: process group + `cgroup.kill`) and the teardown path at `:783-830`; `crates/acos-art/tests/cleanup.rs::guest_crash_still_removes_the_run_root` passed 2026-11-12T03:57:03Z. Live hostile parcel session: `guest_exit: 0`, no `acos-art`/`LaunchMain`/`bwrap` survivor from the W44 run. |
-| 6. live hostile fixture (our dex) | **MET** | `fixtures/apps/hostile-probe/**` + `fixtures/build-hostile-probe.sh` now build four signed variants: `.MainActivity` (forged probe/launch + two-window `truncated:false` forest + fake markers), `.ForestActivity` (missing node), `.SpamActivity` (>8 MiB line + 64 forged lines), `.ParcelActivity` (257 composer states, `0xffffffff` GraphicBuffer geometry, `i32::MAX` sizeCompatScale). Live host refusals: `results/art-runtime/evidence/W44-hostile-parcel/art-frames/unsupported.jsonl` — `composer count 257 exceeds 256`, `GraphicBuffer geometry 4294967295x4294967295 stride 4294967295 ... outside`, `sizeCompatScale length 2147483647 exceeds 8`. Spam trusted control parsed the last valid forged sample (`W44-hostile-spam-trusted`, `truncated:false`, id `probe-spam`); untrusted runs fail closed (`W44-hostile-{forest-untrusted,spam}`). |
-| 7. then mark CERTIFIED-WITH-LIMITS | **NOT REACHED** | blocked by gate 1. |
+| 1. no guest length drives an allocation | **MET** | `gate1_bounds` **3/3 passed** (04:10:37Z). `parcelable.rs:2571` caps `VAL_MAP` at `min(size, remaining/8)`; `cursor.rs:359` refuses `size > remaining`; `cursor.rs:530` caps projection at `min(count, remaining/4)`. Full audit: every `with_capacity` / `vec![..; n]` / `reserve` / `resize` / `repeat` in `acos-services`, `acos-parcel` and `acos-binder-peer` is either constant/host-sized or bounded by `check(total)` / `remaining` (see `results/art-runtime/W44.md` §2). `window_session.rs:373-381` caps `sizeCompatScale` at 8 and the live `i32::MAX` parcel is refused. `surface_client.rs` geometry/header/callback counts are bounded; `input_channel` pointers are capped at 16; `acos-binder-peer` frames are capped at `MAX_FRAME`/`MAX_FDS`. |
+| 2. verdict integrity decision (§4.4/§7) | **MET WITH LIMITS** | `trust`/`evidence_provenance`/per-step labels in `crates/acos-cli/src/{trust,provenance}.rs`; untrusted tree/logs fail closed (`trust.rs:133-180`). Live: forged two-window forest with `truncated:false` → `INSUFFICIENT_HOST_EVIDENCE` untrusted, `ELEMENT_NOT_FOUND` trusted (`W44-rerun-forest-{untrusted,trusted}/verdict.json`); forged text fails the host-pixel region assertion; spam untrusted fails closed, trusted control passes. Tree/markers/acks/logs remain guest-asserted (§4.3/§4.5). |
+| 3. S1–S7 layers mandatory / fail closed | **MET** | `crates/acos-art/src/cgroup.rs` refuses on a missing cgroup (`CgroupUnavailable`), reads back `memory.max`, `cgroup.kill`; seccomp/Landlock/bwrap unchanged. 04:06:31–04:09:07Z: `cargo test -p acos-art --test sandbox_s5 --test sandbox_s6` → **5 + 5 passed**. |
+| 4. per-session caps incl. composite and the 8 MiB probe line | **MET (with a measurement limit)** | composite caps `MAX_COMPOSITE_LAYERS=16`, canvas ≤ 64 MiB, total input ≤ 256 MiB (`surface_client.rs:151-154`, enforced `:840-915`); probe line read whole up to 8 MiB and oversized lines drained/counted (`acos-art/src/launch.rs:1104`, `:1421-1484`). Fresh hostile-session cgroup peaks: parcel **67 MiB**, spam **80 MiB** (`W44-rerun-*/art-frames/session-exit.json`, `memory.max=2048MiB`, `oom_kills=0`). The 16-layer × 64 MiB composite worst case was not constructed; the caps are enforced but that memory peak is a named limit. |
+| 5. hostile exit teardown | **MET** | `acos-art/src/launch.rs:1617-1626` (`kill_guest`: process group + `cgroup.kill`) and teardown path `:783-830`; `cleanup::guest_crash_still_removes_the_run_root` passed 04:10:22–04:10:33Z. Fresh hostile sessions: `guest_exit: 0`; no W44 `acos-art`/`LaunchMain`/`bwrap` survivor. |
+| 6. live hostile fixture (our dex) | **MET** | Four signed variants: `.MainActivity` (forged probe/launch + two-window `truncated:false` forest + fake markers), `.ForestActivity` (missing node), `.SpamActivity` (>8 MiB line + 64 forged lines), `.ParcelActivity` (257 composer states, `0xffffffff` GraphicBuffer geometry, `i32::MAX` sizeCompatScale). Fresh host refusals in `W44-rerun-parcel/art-frames/unsupported.jsonl`: `composer count 257 exceeds 256`, `GraphicBuffer geometry 4294967295x4294967295 stride 4294967295 ... outside`, `sizeCompatScale length 2147483647 exceeds 8`. Spam trusted control parsed the last valid forged sample (`truncated:false`, id `probe-spam`); untrusted forest/spam fail closed. |
+| 7. then mark CERTIFIED-WITH-LIMITS | **MET** | this section + §8.7; the product path still refuses untrusted APKs by default (no code change in this task). |
 
-### 8.7 Exact remaining list (2026-11-12)
+### 8.7 Limits of this certification (2026-11-12)
 
-1. **W42 (owner of `crates/acos-services`)**: bound the `VAL_MAP` count in
-   `crates/acos-services/src/parcelable.rs:2567` before the allocation, e.g.
-   `if size as usize > parcel.remaining() / 8 { return Err(ParcelError::BadLength { len: size as usize, max: parcel.remaining() / 8 }.into()); }`
-   and/or `Vec::with_capacity((size as usize).min(1024))`. Add a negative test
-   with a `Parcel` containing `VAL_MAP` and `size = i32::MAX` (must return
-   `BadRequest`/`BadLength`, never allocate). `read_bundle` (`:2159`) is the
-   reachable path; `Intent` extras are one caller.
-2. **W42**: the same class in `crates/acos-services/src/cursor.rs:357`
-   (`Vec::with_capacity(size_usize)` from a guest `CursorWindow` size). Cap it
-   by `parcel.remaining()` or a named `MAX_CURSOR_WINDOW_BYTES`; negative test
-   with `size = i32::MAX`.
-3. **W44/orchestrator**: re-run the gate 1 audit over
-   `window_session/surface_client/parcelable/ime_wire/input` after the two fixes,
-   then re-run the §6 verification, the W44 live hostile parcel run, and this
-   table. Only then may the verdict move to **CERTIFIED-WITH-LIMITS**.
+These are declared limits, not open gates; every one is labelled in evidence.
 
-Residuals that are accepted and already labelled, not blockers: anonymous
-non-memfd frame fds (§4.1), guest-asserted input acks (§4.3), guest-writable
-logd/marker evidence (§4.5), and OCR absent (§8.5 #4). Untrusted APKs remain
-refused in the product path; `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is a test-only
-override.
+1. **Guest-asserted evidence** — tree, lifecycle/launch markers, input `handled`
+   acks and logs are guest-reported. On an untrusted run they are labelled
+   `guest-asserted` and never justify a pass; only host-observed pixels
+   (`capture`/`assert_screenshot`/`assert_region`), host-injected input and the
+   static manifest can. OCR is absent, so a text claim needs an exact
+   pixel/region reference (`text_ocr` → `UNSUPPORTED_ASSERTION`).
+2. **Frame fd** — the compositor accepts an anonymous regular file
+   (`/memfd:…` or unlinked `… (deleted)`), not strictly a `memfd_create`
+   object (§4.1). A linked path is refused; an unlinked file the guest already
+   owns leaks nothing extra.
+3. **Logd / marker evidence** — guest-writable; provenance is `guest-asserted`
+   (§4.5). A host-side seccomp supervisor remains the attribution fix.
+4. **Composite worst case** — per-layer and aggregate caps are enforced
+   (16 layers, 64 MiB canvas, 256 MiB input), but the 16-layer × 64 MiB
+   construction was not run; measured hostile sessions peaked at 67–80 MiB.
+5. **Binder transactions** — labelled `host-observed` at run level, not yet
+   surfaced as a per-step artifact.
+6. **Product path** — untrusted APKs are still refused by default with
+   `UNTRUSTED_APK_NOT_CERTIFIED` unless the test-only
+   `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` override is set. Enabling them in the
+   product is an owner decision; this re-audit removes the technical gate-1
+   blocker but does not change the default.
+
+Residuals already accepted in earlier sections remain as described in §4.1,
+§4.3, §4.5 and §8.5.

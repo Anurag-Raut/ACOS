@@ -1,0 +1,20 @@
+{
+  "assertions": [],
+  "duration_ms": 1616,
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/00-launch.json"
+    }
+  ],
+  "index": 0,
+  "provenance": {
+    "frame": "host-observed",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "launch",
+  "trust": "untrusted"
+}

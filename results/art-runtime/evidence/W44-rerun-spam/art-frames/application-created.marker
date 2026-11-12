@@ -1,0 +1,9 @@
+package=dev.acos.fixtures.hostileprobe
+application=android.app.Application
+application_classloader_is_apk=true
+application_base=dev.acos.fixtures.hostileprobe//data/app/hostile-spam.apk
+instrumentation=android.app.Instrumentation
+instrumentation_source=framework (bind request instrumentationName=null)
+app_flags=0x10800046
+app_flags_source=manifest
+sourceDir=/data/app/hostile-spam.apk

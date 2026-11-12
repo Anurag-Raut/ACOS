@@ -1,0 +1,8 @@
+package=dev.acos.fixtures.hostileprobe
+activity=dev.acos.fixtures.hostileprobe.ParcelActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@e62b47a
+timeout_ms=12000
