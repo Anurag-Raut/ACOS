@@ -1551,11 +1551,10 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.os.UserHandle",
         fields: &[FieldOp::Int],
-        verification: Verification::Full,
-    },
-    ParcelableSpec {
-        class: "android.net.Uri",
-        fields: &[FieldOp::Str8],
+        // `UserHandle` has two overloads named `writeToParcel`; the DEX scanner
+        // follows the static helper, so this one is curated rather than
+        // prefix-verified. The wire form is one int (the user id), confirmed
+        // against the image's `UserHandle(Parcel)`.
         verification: Verification::Curated,
     },
     ParcelableSpec {
